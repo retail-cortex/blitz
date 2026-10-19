@@ -43,7 +43,7 @@ import {
 import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
-import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun } from "../gen/blitz/v1/workspace_pb";
+import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun, type RunEvalResponse } from "../gen/blitz/v1/workspace_pb";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
@@ -108,7 +108,8 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const [loaded, setLoaded] = useState(false);
   // The draft dialog: for which agent, and whether its cases go into the open eval.
   const [drafting, setDrafting] = useState<{ agent: string; append: boolean } | null>(null);
-  const stop = useRef<AbortController | null>(null);
+  // The stream following the run shown; aborting it only stops following: the run goes on in the service.
+  const following = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -134,7 +135,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
       () => {},
     );
   }, [workspace, refresh]);
-  useEffect(() => () => stop.current?.abort(), []);
+  useEffect(() => () => following.current?.abort(), []);
   // Opened for an agent (from its form): its eval, or a draft of one.
   useEffect(() => {
     if (!forAgent || !loaded) return;
@@ -149,7 +150,8 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const isNew = open === "";
   const dirty = open !== null && !sameEvalForm(form, base);
   const running = !!live && !live.run?.status.match(/passed|failed|stopped/);
-  useEffect(() => onDirty?.(dirty || running), [dirty, running, onDirty]);
+  // A run going on doesn't hold Studio open: it goes on in the service (EV-09a).
+  useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
   const loadRuns = useCallback(
     async (name: string) => {
@@ -170,14 +172,17 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
       setTab(to);
       setProblems([]);
       setExpanded(new Set(name === "" ? f.cases.map((c) => c.key) : []));
+      following.current?.abort();
       setLive(null);
       setShown("");
       setRuns([]);
       if (name) void loadRuns(name);
     });
   const close = () => {
-    if (running) return;
     leave(() => {
+      if (running) snack(t("desktop.evals.goes_on", { name: open ?? "" }));
+      following.current?.abort();
+      setLive(null);
       setOpen(null);
       void refresh();
     });
@@ -230,35 +235,59 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
     }
   };
 
-  // Runs the eval as saved: the run, then each result as it's scored.
-  const run = async (name: string, cases: number, agentCount: number) => {
+  // Follows a run into live: started (with its results so far), each
+  // result as it's scored, then finished. Leaving stops only the following.
+  const follow = async (name: string, total: number, events: (signal: AbortSignal) => AsyncIterable<RunEvalResponse>) => {
+    following.current?.abort();
     const ctl = new AbortController();
-    stop.current = ctl;
-    setTab("runs");
-    setShown("");
-    setLive({ run: null, results: [], total: cases * Math.max(1, agentCount) });
+    following.current = ctl;
+    setLive({ run: null, results: [], total });
     try {
-      for await (const res of workspaces.runEval({ workspace, name }, { signal: ctl.signal })) {
+      for await (const res of events(ctl.signal)) {
         const ev = res.event;
-        if (ev.case === "started") setLive((l) => l && { ...l, run: ev.value });
+        if (ev.case === "started") setLive((l) => l && { ...l, run: { ...ev.value, results: [] }, results: ev.value.results });
         else if (ev.case === "result") setLive((l) => l && { ...l, results: [...l.results, ev.value] });
         else if (ev.case === "finished") {
           setLive((l) => l && { ...l, run: ev.value, results: ev.value.results });
-          snack(t(`desktop.evals.run_${ev.value.status === "passed" ? "passed" : "failed"}`, { name, summary: summary(ev.value) }), { error: ev.value.status !== "passed" });
+          if (ev.value.status !== "stopped") snack(t(`desktop.evals.run_${ev.value.status === "passed" ? "passed" : "failed"}`, { name, summary: summary(ev.value) }), { error: ev.value.status !== "passed" });
         }
       }
     } catch (e) {
-      if (ctl.signal.aborted) setLive((l) => l && { ...l, run: l.run && { ...l.run, status: "stopped" } });
-      else {
-        setLive(null);
-        snack(message(e), { error: true });
-      }
+      if (ctl.signal.aborted) return; // left: the run goes on
+      setLive(null);
+      snack(message(e), { error: true });
     } finally {
-      stop.current = null;
-      void loadRuns(name);
-      void refresh();
+      if (following.current === ctl) following.current = null;
+    }
+    void loadRuns(name);
+    void refresh();
+  };
+  // Runs the eval as saved, in the background: it goes on if Studio is left.
+  const run = (name: string, cases: number, agentCount: number) => {
+    setTab("runs");
+    setShown("");
+    void follow(name, cases * Math.max(1, agentCount), (signal) => workspaces.runEval({ workspace, name, background: true }, { signal }));
+  };
+  const stopRun = async () => {
+    const id = live?.run?.id;
+    if (!id) return;
+    try {
+      await workspaces.stopEvalRun({ workspace, id });
+    } catch (e) {
+      snack(message(e), { error: true });
     }
   };
+  // A run going on when the eval opens (started here before, or elsewhere) is followed again.
+  const going = runs.find((r) => r.status === "running");
+  // The runs recorded: one going on shows above them, as it goes.
+  const past = runs.filter((r) => r.status !== "running");
+  useEffect(() => {
+    if (!going || !open || live) return;
+    const f = list.find((e) => e.name === open);
+    setTab("runs");
+    void follow(open, (f?.cases.length ?? 0) * Math.max(1, f?.agents.length ?? 0), (signal) => workspaces.watchEvalRun({ workspace, id: going.id }, { signal }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [going?.id, open]);
 
   const latest = live?.run?.results.length ? live.run.results : (live?.results ?? runs[0]?.results ?? []);
   const byCase = resultsByCase(latest);
@@ -362,11 +391,11 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
         {open !== null && (
           <>
             <div className="row slide-back">
-              <IconButton icon={mdiArrowLeft} label={t("desktop.evals.back")} onClick={close} disabled={running} />
+              <IconButton icon={mdiArrowLeft} label={t("desktop.evals.back")} onClick={close} />
               <h2 className="t-headline spacer ellipsis">{title}</h2>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
               {running ? (
-                <Button icon={mdiStop} onClick={() => stop.current?.abort()}>
+                <Button icon={mdiStop} disabled={!live?.run?.id} onClick={() => void stopRun()}>
                   {t("desktop.evals.stop")}
                 </Button>
               ) : (
@@ -534,12 +563,12 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                     <Results results={live.results} />
                   </section>
                 )}
-                {!live && runs.length === 0 && <p className="t-body-sm muted">{t("desktop.evals.no_runs")}</p>}
-                {runs.length > 0 && (
+                {!live && past.length === 0 && <p className="t-body-sm muted">{t("desktop.evals.no_runs")}</p>}
+                {past.length > 0 && (
                   <section className="stack" style={{ gap: 4 }}>
                     <span className="t-title-sm">{t("desktop.evals.past_runs")}</span>
                     <div className="list">
-                      {runs.map((r) => (
+                      {past.map((r) => (
                         <div key={r.id} className="stack" style={{ gap: 0 }}>
                           <div className="list-item">
                             <button type="button" className="row-open" aria-expanded={shown === r.id} onClick={() => setShown(shown === r.id ? "" : r.id)}>
@@ -591,7 +620,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                   {t("desktop.agents.revert")}
                 </Button>
               )}
-              <Button onClick={close} disabled={running}>
+              <Button onClick={close}>
                 {t("desktop.cancel")}
               </Button>
               <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || running || !form.name.trim() || (!dirty && !isNew)} onClick={() => void save()}>

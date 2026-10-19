@@ -114,6 +114,7 @@ export function Drawer({
   headerActions,
   className = "",
   dirty = false,
+  closeRequest = 0,
   children,
 }: {
   title: ReactNode;
@@ -126,6 +127,8 @@ export function Drawer({
   className?: string;
   /** Unsaved changes: closing asks first. */
   dirty?: boolean;
+  /** Bumped to close it from outside (its menu button again), as its ✕ does: asking first when dirty. */
+  closeRequest?: number;
   children: ReactNode;
 }) {
   const host = useContext(DrawerContext);
@@ -146,6 +149,13 @@ export function Drawer({
   useLayoutEffect(() => claim?.(me), [claim, me]);
   const close = useCallback(() => (host ? host.requestClose(me) : me.close()), [host, me]);
   const shown = !host || host.current === id;
+  // Only a request made while it's open: the count it opened with is old.
+  const closeAsked = useRef(closeRequest);
+  useEffect(() => {
+    if (closeRequest === closeAsked.current) return;
+    closeAsked.current = closeRequest;
+    close();
+  }, [closeRequest, close]);
 
   // Escape closes it when the focus is inside and no dialog is over it.
   useEffect(() => {

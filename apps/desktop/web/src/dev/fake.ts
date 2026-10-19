@@ -618,11 +618,61 @@ const fakeEvals: FakeEval[] = [
 const fakeEvalRuns: Record<string, { id: string; eval: string; status: string; started: ReturnType<typeof timestampFromDate>; results: MessageInitShape<typeof EvalResultSchema>[]; costUsd: number; counts: Record<string, number> }[]> = {
   returns: [{ id: "run-1", eval: "returns", status: "passed", started: timestampFromDate(new Date(Date.now() - 26 * 3600e3)), results: [], costUsd: 0.0072, counts: { pass: 5, warn: 1 } }],
 };
+type FakeEvalRun = (typeof fakeEvalRuns)[string][number];
+// Eval runs going on, by ID: they go on in the "service" when the page leaves (EV-09a).
+type FakeLiveEval = { run: FakeEvalRun; ended: boolean; stopped: boolean; waiters: (() => void)[] };
+const fakeLiveEvals = new Map<string, FakeLiveEval>();
+const fakeLiveFor = (name: string) => [...fakeLiveEvals.values()].filter((l) => l.run.eval === name).map((l) => ({ ...l.run, results: [...l.run.results] }));
 const fakeEvalFile = (workspace: string, e: FakeEval) => {
   const runs = fakeEvalRuns[e.name] ?? [];
-  const last = runs[runs.length - 1];
+  const last = fakeLiveFor(e.name)[0] ?? runs[runs.length - 1];
   return { ...e, path: `${workspace}/.agents/evals/${e.name}.md`, problem: "", lastRun: last && { ...last, results: [] } };
 };
+/** Starts an eval run that goes on by itself, a case every 0.7 s, until it ends or is stopped. */
+function startFakeEval(e: FakeEval): FakeLiveEval {
+  const live: FakeLiveEval = { run: { id: `run-${Date.now()}`, eval: e.name, status: "running", started: timestampFromDate(new Date()), results: [], costUsd: 0, counts: {} }, ended: false, stopped: false, waiters: [] };
+  const wake = () => live.waiters.splice(0).forEach((f) => f());
+  fakeLiveEvals.set(live.run.id, live);
+  void (async () => {
+    run: for (const c of e.cases) {
+      for (const agent of e.agents.length ? e.agents : ["blitz"]) {
+        await new Promise((r) => setTimeout(r, 700));
+        if (live.stopped) break run;
+        const miss = c.id === "tone" && agent === "reviewer";
+        const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
+        const status = score >= (c.threshold || 1) ? "pass" : c.scope;
+        live.run.results.push({ case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: c.type === "near" ? 0.0031 : 0.0009, duration: { seconds: BigInt(c.type === "near" ? 4 : 2), nanos: 300_000_000 } });
+        wake();
+      }
+    }
+    const results = live.run.results;
+    const failed = results.some((r) => r.status === "fail" || r.status === "error");
+    live.run = { ...live.run, status: live.stopped ? "stopped" : failed ? "failed" : "passed", costUsd: results.reduce((n, r) => n + (r.costUsd ?? 0), 0), counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status!]: (m[r.status!] ?? 0) + 1 }), {}) };
+    (fakeEvalRuns[e.name] ??= []).push(live.run);
+    live.ended = true;
+    fakeLiveEvals.delete(live.run.id);
+    wake();
+  })();
+  return live;
+}
+/** Follows a run: started with its results so far, each result after, then finished; until it ends or the caller leaves. */
+async function* followFakeEval(live: FakeLiveEval, signal: AbortSignal) {
+  if (!live.ended) yield { event: { case: "started" as const, value: { ...live.run, results: [...live.run.results] } } };
+  let sent = live.run.results.length;
+  for (;;) {
+    if (!live.ended)
+      await new Promise<void>((r) => {
+        live.waiters.push(r);
+        signal.addEventListener("abort", () => r(), { once: true });
+      });
+    if (signal.aborted) return;
+    while (sent < live.run.results.length && !live.ended) yield { event: { case: "result" as const, value: live.run.results[sent++] } };
+    if (live.ended) {
+      yield { event: { case: "finished" as const, value: live.run } };
+      return;
+    }
+  }
+}
 
 // Studio's guardrails: prompt injection with its defaults, secrets tuned,
 // limits switched off, and one of the workspace's own.
@@ -1539,7 +1589,7 @@ export function installFake() {
           fakeEvals.splice(i, 1);
           return {};
         },
-        listEvalRuns: ({ name }) => ({ runs: (fakeEvalRuns[name] ?? []).slice().reverse() }),
+        listEvalRuns: ({ name }) => ({ runs: [...fakeLiveFor(name), ...(fakeEvalRuns[name] ?? []).slice().reverse()] }),
         draftEvalCases: async ({ agent, existing }) => {
           await new Promise((r) => setTimeout(r, 900));
           const taken = new Set(existing.map((c) => c.id));
@@ -1553,28 +1603,26 @@ export function installFake() {
             ],
           };
         },
-        runEval: async function* ({ name }, ctx) {
+        runEval: async function* ({ name, background }, ctx) {
           const e = fakeEvals.find((x) => x.name === name);
           if (!e) throw new ConnectError(`no eval ${name}`, Code.NotFound);
-          const started = timestampFromDate(new Date());
-          yield { event: { case: "started" as const, value: { id: `run-${Date.now()}`, eval: name, status: "running", started } } };
-          const results = [];
-          for (const c of e.cases) {
-            for (const agent of e.agents.length ? e.agents : ["blitz"]) {
-              await new Promise((r) => setTimeout(r, 700));
-              if (ctx.signal.aborted) return;
-              const miss = c.id === "tone" && agent === "reviewer";
-              const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
-              const status = score >= (c.threshold || 1) ? "pass" : c.scope;
-              const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: c.type === "near" ? 0.0031 : 0.0009, duration: { seconds: BigInt(c.type === "near" ? 4 : 2), nanos: 300_000_000 } };
-              results.push(r);
-              yield { event: { case: "result" as const, value: r } };
-            }
-          }
-          const failed = results.some((r) => r.status === "fail" || r.status === "error");
-          const run = { id: `run-${Date.now()}`, eval: name, status: failed ? "failed" : "passed", started, results, costUsd: results.reduce((n, r) => n + r.costUsd, 0), counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {}) };
-          (fakeEvalRuns[name] ??= []).push(run);
+          const live = startFakeEval(e);
+          // Without background, it stops when the caller leaves (blitz eval).
+          if (!background) ctx.signal.addEventListener("abort", () => (live.stopped = true), { once: true });
+          yield* followFakeEval(live, ctx.signal);
+        },
+        watchEvalRun: async function* ({ id }, ctx) {
+          const live = fakeLiveEvals.get(id);
+          if (live) return yield* followFakeEval(live, ctx.signal);
+          const run = Object.values(fakeEvalRuns).flat().find((r) => r.id === id);
+          if (!run) throw new ConnectError(`no eval run ${id}`, Code.NotFound);
           yield { event: { case: "finished" as const, value: run } };
+        },
+        stopEvalRun: ({ id }) => {
+          const live = fakeLiveEvals.get(id);
+          if (!live) throw new ConnectError(`no eval run ${id}`, Code.NotFound);
+          live.stopped = true;
+          return {};
         },
         // Studio › Guardrails: the built-ins on or off, and the workspace's own.
         listGuardrails: ({ workspace }) => ({

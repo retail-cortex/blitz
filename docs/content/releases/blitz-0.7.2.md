@@ -11,6 +11,9 @@ weight: 1
 
 ### What's changed
 
+- **Evals keep running when you leave.** Start an eval, then close it or Studio and get on with something else: it carries on, and the list shows it running. Open it again to watch it finish, or stop it. Every case also has a time limit, so one that gets stuck is marked as an error and the run moves on.
+- **The Studio button opens and closes Studio.** Click it again to close Studio, as its ✕ does.
+
 - **The window talks to Blitz over HTTP/2.** Every request and live update now shares a single connection, so there's no longer a limit of six.
 - **The connection is encrypted, even on your own machine.** Each time the app starts, it makes a private certificate for that session only. The window trusts that one certificate and nothing else, so no other program on your computer can pose as Blitz, even if it grabs the same port.
 - **On Windows, Open Blitz opens the app.** The tray's **Open Blitz** now opens the Blitz app instead of an Edge window.

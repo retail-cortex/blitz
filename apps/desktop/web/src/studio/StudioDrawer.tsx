@@ -73,7 +73,7 @@ export const studioIcons: Record<StudioKind, string> = {
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, and its own secrets.
  */
-export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string; initial: StudioOpen; onClose: () => void; onWorkers?: () => void }) {
+export function StudioDrawer({ dir, initial, onClose, onWorkers, closeRequest }: { dir: string; initial: StudioOpen; onClose: () => void; onWorkers?: () => void; closeRequest?: number }) {
   const snack = useSnackbar();
   const [kind, setKind] = useState<StudioKind>(initial.kind);
   // Whether the kind's form holds unsaved changes: closing asks first.
@@ -144,6 +144,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
       onClose={onClose}
       className={`settings-drawer studio-drawer ${compact ? "is-compact" : ""}`}
       dirty={dirty}
+      closeRequest={closeRequest}
       headerActions={<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />}
     >
       <div className="settings">

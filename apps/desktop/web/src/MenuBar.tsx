@@ -72,6 +72,7 @@ export function MenuBar({
   onCommit,
   onHistory,
   onStudio,
+  studioOpen = false,
   onSearch,
   onSettings,
   onOpenWorkspace,
@@ -83,8 +84,10 @@ export function MenuBar({
   onCommit?: () => void;
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
-  /** Opens Studio on a kind. */
+  /** Opens Studio on a kind, or closes it when it's open (studioOpen). */
   onStudio?: (kind: StudioKind) => void;
+  /** Studio is open: its button shows it pressed. */
+  studioOpen?: boolean;
   onSearch: () => void;
   onSettings: (section: Section, scope?: string) => void;
   onOpenWorkspace: () => void;
@@ -172,7 +175,7 @@ export function MenuBar({
           )}
           {/* Studio: everything the workspace's .agents folder holds, in one drawer; a dot when a worker failed. */}
           {menus.includes("studio") && (
-            <button type="button" className="menubar-item" onClick={() => onStudio?.("overview")}>
+            <button type="button" className="menubar-item" aria-pressed={studioOpen} onClick={() => onStudio?.("overview")}>
               {t("desktop.studio")}
               {failed > 0 && <span className="dot menubar-dot" title={tn("desktop.switcher.failed_runs", failed)} />}
             </button>

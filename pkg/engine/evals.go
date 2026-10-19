@@ -38,10 +38,14 @@ import (
 // names, unattended, in a session of its own that's deleted after; its
 // output is scored against the expected one.
 
-// Each case's limits: model calls and time.
+// Each case's limits: model calls, the agent's time, the scoring's
+// time, and the whole case's (setting up and cleaning up included), so a
+// case that hangs ends as an error and the run goes on to the next.
 var (
-	evalMaxTurns = 25
-	evalTimeout  = 5 * time.Minute
+	evalMaxTurns     = 25
+	evalTimeout      = 5 * time.Minute
+	evalScoreTimeout = 2 * time.Minute
+	evalCaseTimeout  = evalTimeout + evalScoreTimeout + time.Minute
 )
 
 // ProjectEvalsDir is where the workspace's evals are: .agents/evals.
@@ -224,7 +228,13 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 	}
 	started := time.Now()
 	defer func() { r.Duration = time.Since(started) }()
+	run := ctx // the run's: stopping it isn't a timeout
+	ctx, cancel := context.WithTimeout(ctx, evalCaseTimeout)
+	defer cancel()
 	fail := func(err error) api.EvalResult {
+		if run.Err() == nil && ctx.Err() != nil {
+			err = fmt.Errorf("the case took longer than %s: %w", evalCaseTimeout, err)
+		}
 		r.Status, r.Reason = api.EvalError, err.Error()
 		r.Duration = time.Since(started)
 		return r
@@ -271,8 +281,14 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 		pass = evals.ExactMatch(c.Output, res.Output)
 		r.Score = map[bool]float64{true: 1}[pass]
 	} else {
-		s, why, spent, err := score(ctx, c, SecretRedactor(w.cfg).String(res.Output))
+		sctx, done := context.WithTimeout(ctx, evalScoreTimeout)
+		s, why, spent, err := score(sctx, c, SecretRedactor(w.cfg).String(res.Output))
+		timedOut := sctx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+		done()
 		r.CostUSD += spent
+		if timedOut {
+			return fail(fmt.Errorf("scoring took longer than %s", evalScoreTimeout))
+		}
 		if err != nil {
 			return fail(fmt.Errorf("scoring: %w", err))
 		}

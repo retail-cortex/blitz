@@ -2238,6 +2238,7 @@
     "desktop.evals.run": "Ejecutar",
     "desktop.evals.run_name": "Ejecutar {name}",
     "desktop.evals.stop": "Detener",
+    "desktop.evals.goes_on": "{name} sigue ejecutándose en segundo plano: ábrela de nuevo para seguirla.",
     "desktop.evals.save_first": "Guarda la evaluación para ejecutarla",
     "desktop.evals.cannot_run": "Corrige los problemas de la evaluación, o añade un caso, para ejecutarla",
     "desktop.evals.tabs": "Partes de la evaluación",

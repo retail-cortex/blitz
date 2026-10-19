@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -96,4 +97,45 @@ func TestRunEvalJudgeMissingAndStopped(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, api.EvalStopped, run.Status)
 	assert.Empty(t, run.Results)
+}
+
+// hangingEmbedder answers only when its context is done.
+type hangingEmbedder struct{}
+
+func (hangingEmbedder) Model() string { return "fake/hanging" }
+
+func (hangingEmbedder) Embed(ctx context.Context, _ []string) ([][]float32, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A case that hangs ends as its error when its time is up, scoring's or
+// the whole case's, and the run goes on to the next case and finishes.
+func TestRunEvalCaseTimeouts(t *testing.T) {
+	old, oldScore, oldCase := newEmbedder, evalScoreTimeout, evalCaseTimeout
+	t.Cleanup(func() { newEmbedder, evalScoreTimeout, evalCaseTimeout = old, oldScore, oldCase })
+	newEmbedder = func(context.Context, *config.Config, string) (search.Embedder, error) { return hangingEmbedder{}, nil }
+	for _, tc := range []struct {
+		name          string
+		score, inCase time.Duration
+		want          string
+	}{
+		{"scoring", 50 * time.Millisecond, time.Hour, "scoring took longer than 50ms"},
+		{"the whole case", time.Hour, 50 * time.Millisecond, "the case took longer than 50ms"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evalScoreTimeout, evalCaseTimeout = tc.score, tc.inCase
+			w, _ := openTestWith(t, nil, text("A blimp."), text("A dirigible."))
+			w.cfg.Search.EmbeddingModel = "fake/x"
+			writeEval(t, w, "vectors", "---\nnear: embedding\n---\n| ID | Prompt | Output | Output type | Threshold |\n|-|-|-|-|-|\n| a | Fly? | airship | Near | 0.8 |\n| b | Float? | airship | Near | 0.8 |\n")
+			run, err := w.RunEval(context.Background(), "vectors", api.EvalOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, api.EvalFailed, run.Status)
+			require.Len(t, run.Results, 2, "the second case ran after the first timed out")
+			for _, r := range run.Results {
+				assert.Equal(t, api.EvalError, r.Status)
+				assert.Contains(t, r.Reason, tc.want)
+			}
+		})
+	}
 }

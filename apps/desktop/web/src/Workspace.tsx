@@ -81,6 +81,8 @@ export function Workspace({
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
   const [agent, setAgent] = useState<ItemIntent | null>(null);
   const [studio, setStudio] = useState<StudioOpen | null>(null);
+  // The menu's Studio button toggles it: open, it closes as its ✕ does.
+  const [studioClose, setStudioClose] = useState(0);
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
@@ -249,7 +251,8 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
-          onStudio={(kind) => setStudio({ kind })}
+          onStudio={(kind) => (studio ? setStudioClose((n) => n + 1) : setStudio({ kind }))}
+          studioOpen={!!studio}
           onSearch={onSearch}
           onSettings={onSettings}
           onOpenWorkspace={onOpenWorkspace}
@@ -321,7 +324,7 @@ export function Workspace({
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
-      {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} />}
+      {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

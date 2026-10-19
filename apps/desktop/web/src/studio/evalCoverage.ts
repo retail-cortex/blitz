@@ -56,7 +56,7 @@ export async function runInBackground(workspace: string, names: string[], snack:
   let failed = 0;
   for (const name of names) {
     try {
-      for await (const res of workspaces.runEval({ workspace, name })) {
+      for await (const res of workspaces.runEval({ workspace, name, background: true })) {
         if (res.event.case === "finished" && res.event.value.status !== "passed") failed++;
       }
     } catch (e) {

@@ -244,9 +244,19 @@ service WorkspaceService {
   // Runs an eval: its cases (or those named) on each of its agents,
   // streaming each result as it's scored, then the finished run, which
   // is recorded. An eval with a problem, or no case to run, is
-  // FAILED_PRECONDITION (EVAL_NOT_RUNNABLE).
+  // FAILED_PRECONDITION (EVAL_NOT_RUNNABLE). With background, the run
+  // goes on when the stream ends (WatchEvalRun follows it again,
+  // StopEvalRun stops it); without, it stops with the stream.
   rpc RunEval(RunEvalRequest) returns (stream RunEvalResponse);
-  // Returns an eval's recorded runs, newest first.
+  // Follows an eval run: started (with its results so far), each result
+  // after, then finished. A run that has ended sends only finished; an
+  // unknown one is NOT_FOUND (EVAL_RUN_NOT_FOUND).
+  rpc WatchEvalRun(WatchEvalRunRequest) returns (stream RunEvalResponse);
+  // Stops an eval run going on: the results so far are recorded, as
+  // stopped (EVAL_RUN_NOT_FOUND when it isn't going on).
+  rpc StopEvalRun(StopEvalRunRequest) returns (StopEvalRunResponse);
+  // Returns an eval's runs, newest first: the one going on, if any, with
+  // its results so far, then those recorded.
   rpc ListEvalRuns(ListEvalRunsRequest) returns (ListEvalRunsResponse);
   // Drafts cases for an agent from its description and instructions,
   // beside the cases given, saving nothing. An unknown agent is
@@ -2569,7 +2579,7 @@ message EvalFile {
   repeated string allow = 7;
   repeated EvalCase cases = 8;
   string problem = 9;
-  // Its last run, if any (without its results).
+  // Its last run, if any (without its results): the one going on first.
   EvalRun last_run = 10;
 }
 
@@ -2662,7 +2672,26 @@ message RunEvalRequest {
   string name = 2;
   // The case IDs to run; none: every case.
   repeated string cases = 3;
+  // Keep running when this stream ends (Studio, which can be left while
+  // the run goes on); without, the run stops with it (blitz eval).
+  bool background = 4;
 }
+
+// Request message for WorkspaceService.WatchEvalRun.
+message WatchEvalRunRequest {
+  string workspace = 1;
+  // The run's ID (EvalRun.id).
+  string id = 2;
+}
+
+// Request message for WorkspaceService.StopEvalRun.
+message StopEvalRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.StopEvalRun.
+message StopEvalRunResponse {}
 
 // Response message for WorkspaceService.RunEval: the run as it starts,
 // each result, then the finished run.
