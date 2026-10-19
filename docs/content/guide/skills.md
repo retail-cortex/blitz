@@ -26,7 +26,7 @@ scripts:
 ---
 ```
 
-## Kinds of skill, and Harness
+## Kinds of skill, and Studio
 
 A skill is one of four kinds, from what its folder holds:
 
@@ -34,18 +34,18 @@ A skill is one of four kinds, from what its folder holds:
 |---|---|
 | Simple | `SKILL.md` alone |
 | With references | A `references/` folder: the agent reads its files when the skill calls for them (`read_skill_file`) |
-| With scripts | Python (`.py`), TypeScript (`.ts`), JavaScript (`.js`, `.mjs`), shell (`.sh`, macOS and Linux), cmd (`.cmd`, `.bat`, Windows) or PowerShell (`.ps1`, where `pwsh` is installed) files in `scripts/`, or scripts declared in the front matter, run sandboxed under the skills policy. A `requirements.txt` or `pyproject.toml` (Python) or `package.json` (JavaScript, TypeScript) gives them an isolated environment with those packages, installed once you approve: in Harness, the Scripts tab's **Packages** section adds and edits them |
+| With scripts | Python (`.py`), TypeScript (`.ts`), JavaScript (`.js`, `.mjs`), shell (`.sh`, macOS and Linux), cmd (`.cmd`, `.bat`, Windows) or PowerShell (`.ps1`, where `pwsh` is installed) files in `scripts/`, or scripts declared in the front matter, run sandboxed under the skills policy. A `requirements.txt` or `pyproject.toml` (Python) or `package.json` (JavaScript, TypeScript) gives them an isolated environment with those packages, installed once you approve: in Studio, the Scripts tab's **Packages** section adds and edits them |
 | Combines skills | `skills: [a, b]` in the front matter: activating it activates them too |
 
 `agents: [reviewer]` in the front matter offers a skill only to those agents.
 
-**Desktop:** **Harness › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
+**Desktop:** **Studio › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
 
 **In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
 
 ## Trigger phrases and scenarios
 
-**Trigger phrases** tell the agent what a skill is for, by example: `trigger_phrases: ["write the release notes", "what changed since the last release"]` in the front matter, or **Trigger phrases** under the description in Harness. They're examples, not commands: the agent matches a request to them by meaning, so "draft the notes for 2.4" brings in a skill whose phrase is "write the release notes". Skill search (`list_or_search_skills`) finds skills by them too.
+**Trigger phrases** tell the agent what a skill is for, by example: `trigger_phrases: ["write the release notes", "what changed since the last release"]` in the front matter, or **Trigger phrases** under the description in Studio. They're examples, not commands: the agent matches a request to them by meaning, so "draft the notes for 2.4" brings in a skill whose phrase is "write the release notes". Skill search (`list_or_search_skills`) finds skills by them too.
 
 **Scenarios** check that a skill works: that the agent picks it up when it should, leaves it alone when it shouldn't, and answers well. Each is a file in the skill's `scenarios/` folder, in [Castor](https://github.com/retail-cortex/castor)'s format, so a skill carries its tests wherever it's shared:
 
@@ -61,7 +61,7 @@ threshold: 0.8          # how close the answer must be, 0 to 1
 - Wishlists you can share.
 ```
 
-In Harness, a skill's **Scenarios** tab is the quickest way to make them:
+In Studio, a skill's **Scenarios** tab is the quickest way to make them:
 
 1. **Try it:** type what a user might ask and choose **Try**. The agent can use any skill, as in a chat, so you see whether it used this one ("It used release-notes" or "It didn't use release-notes") and what it said. **Give it the skill** tries only the answer.
 2. **Keep it:** when the result is what you want (or shows what it should have done), keep it as a scenario. It's filled in from the try: whether the skill should be used, the skills it used, and the answer as the one expected. Change anything before saving.
@@ -73,7 +73,7 @@ From a terminal or CI, `blitz eval --skill release-notes` runs them, and fails w
 
 A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a worker's run is refused.
 
-- **Desktop:** installing a registry skill with scripts opens the review; Harness › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
+- **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
 - Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.
 
 ## Skills from a registry

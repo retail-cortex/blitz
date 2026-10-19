@@ -23,8 +23,8 @@ So "workspace settings" are yours and private; "project settings" travel with th
 | [Extending](extending.md) | Project memory, hooks, custom commands, plugins |
 | [Workers](workers.md) | Prompts on a schedule, unattended, with only the permissions you give them |
 | [Workflows](workflows.md) | Steps run in order, each one's output the next one's input: `/name` in the chat, or built on a canvas |
-| [Workspace health](health.md) | Harness's Overview: what the workspace holds, how its runs go, and each item's grade, judged on the evidence |
-| [Evals](evals.md) | Cases that check your agents still answer as they should, from Harness or `blitz eval` in CI |
+| [Workspace health](health.md) | Studio's Overview: what the workspace holds, how its runs go, and each item's grade, judged on the evidence |
+| [Evals](evals.md) | Cases that check your agents still answer as they should, from Studio or `blitz eval` in CI |
 | [Skills](skills.md) | Agent Skills, the skills policy, sandboxed scripts |
 | [Search](search.md) | Web search providers, `/search web` and `/search session` |
 | [Images](images.md) | Attaching screenshots and pictures |
