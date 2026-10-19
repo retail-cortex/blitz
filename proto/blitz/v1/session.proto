@@ -550,4 +550,3 @@ message SessionTool {
 message ListSessionToolsResponse {
   repeated SessionTool tools = 1;
 }
-
