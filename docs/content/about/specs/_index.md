@@ -32,7 +32,7 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 020 | [cli](spec_cli_020.md) | Commands, flags, one-shot output formats, exit codes, `doctor`, `config` |
 | 021 | [service](spec_service_021.md) | `blitzd`, socket, Connect API, approval broker, login item |
 | 022 | [client](spec_client_022.md) | Attaching front ends to the service |
-| 023 | [workers](spec_workers_023.md) | `WORKER.md`, schedules, permissions, enabling, runs, scheduler |
+| 023 | [jobs](spec_workers_023.md) | `WORKER.md`, schedules, permissions, enabling, runs, scheduler |
 | 024 | [desktop](spec_desktop_024.md) | The desktop app and its page (the Wails shell until v0.6.5; the Electron app since, spec 038) |
 | 025 | [release](spec_release_025.md) | CI, reproducible and signed releases |
 | 026 | [backlog](spec_backlog_026.md) | What's missing: unimplemented requirements, verification still owed, and deliberate limitations |
@@ -45,7 +45,7 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 033 | [plugins](spec_plugins_033.md) | Bundles of skills, commands, agents, hooks and MCP servers: installing, pinning by hash, marketplaces, importing Claude Code and Gemini CLI plugins |
 | 034 | [vscode](spec_vscode_034.md) | The VS Code extension: the desktop app's chat in a view, attached to the service through a local proxy, approvals in the diff view, the selection and files as context |
 | 035 | [search](spec_search_035.md) | Workspace search: an index of the files, PDFs and notebooks, chats and notes, kept up by scans, searched by words (FTS5, BM25) from the desktop app, the CLI and the agent |
-| 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service and serves the desktop page on a loopback port, behind a one-time link, in an Edge app window |
+| 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service; until v0.7.1 it also served the desktop page to an Edge app window |
 | 037 | [visual editor](spec_visual_editor_037.md) | Draft: Markdown edited in its rendered form (TipTap), code blocks as CodeMirror editors, and language servers (gopls first) for the editor through a `LanguageService` on the service |
 | 038 | [electron](spec_electron_038.md) | The desktop app in Electron (one engine on every platform, a real app on Windows) over the page and `blitz-tray --serve` as its host; since v0.7.0 |
 | 039 | [secrets](spec_secrets_039.md) | The user's secrets in the system's keychain, named in prompts and settings as `{secrets:key}`; since v0.7.1 |

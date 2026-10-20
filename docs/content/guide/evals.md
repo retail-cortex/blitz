@@ -13,7 +13,7 @@ Evals belong with making an agent, so in Studio they come right after **Agents**
 
 1. **Write the agent** (or let another agent write it).
 2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Evals lists your agents without evals (not Blitz's built-in ones) with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
-3. **Run them.**
+3. **Run them.** A run goes on in the background: leave the eval, or close Studio, and it carries on. Open the eval again to follow it, or **Stop** it.
 4. **Refine.** When the agent misses cases, **Refine its instructions** has the model rewrite them with those cases in hand; you review the change, and it's saved to the agent.
 5. **Run again.** Later, saving the agent (or a skill its evals use) offers to run its evals again.
 
@@ -46,7 +46,7 @@ A line break in a cell is `<br>`; a `|` is `\|`. Text above and below the table 
 
 ## What a case may do
 
-Each case runs in a throwaway session, unattended. It can read the workspace, but **never changes files or runs commands**: those actions are refused, and listed with the result. Add `allow: [network]` for the web tools, or `allow: [mcp]` for MCP tools. A case stops after 25 model calls or 5 minutes, and your guardrails apply as in any turn.
+Each case runs in a throwaway session, unattended. It can read the workspace, but **never changes files or runs commands**: those actions are refused, and listed with the result. Add `allow: [network]` for the web tools, or `allow: [mcp]` for MCP tools. A case stops after 25 model calls or 5 minutes, scoring an answer after 2 minutes, and a case that runs over is marked as an error while the run goes on to the next. Your guardrails apply as in any turn.
 
 ## Running one
 

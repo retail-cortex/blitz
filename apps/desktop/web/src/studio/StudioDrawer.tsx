@@ -43,9 +43,11 @@ import { OverviewPane } from "./OverviewPane";
  * evals that prove it, what it follows (skills, rules, guardrails), what
  * runs (workflows, workers), and secrets.
  */
-export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workflows", "workers", "secrets"] as const;
+export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
+/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); secrets. */
+export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["secrets"]];
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -73,7 +75,25 @@ export const studioIcons: Record<StudioKind, string> = {
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, and its own secrets.
  */
-export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string; initial: StudioOpen; onClose: () => void; onWorkers?: () => void }) {
+export function StudioDrawer({
+  dir,
+  initial,
+  onClose,
+  onWorkers,
+  closeRequest,
+  ask,
+  onKind,
+}: {
+  dir: string;
+  initial: StudioOpen;
+  onClose: () => void;
+  onWorkers?: () => void;
+  closeRequest?: number;
+  /** A kind the menu bar's Studio menu asks for while it's open (n bumped each time): shown as a click on it would. */
+  ask?: { kind: StudioKind; n: number };
+  /** The kind shown, each time it changes (the menu ticks it). */
+  onKind?: (kind: StudioKind) => void;
+}) {
   const snack = useSnackbar();
   const [kind, setKind] = useState<StudioKind>(initial.kind);
   // Whether the kind's form holds unsaved changes: closing asks first.
@@ -91,6 +111,15 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
     setCompact(false);
     setKind(k);
   };
+  useEffect(() => onKind?.(kind), [kind, onKind]);
+  // Only a request made while it's open: the count it opened with is old.
+  const menuAsked = useRef(ask?.n ?? 0);
+  useEffect(() => {
+    if (!ask || ask.n === menuAsked.current) return;
+    menuAsked.current = ask.n;
+    if (ask.kind !== kind) choose(ask.kind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask?.n]);
   // Asked again for a workflow's run while open (the status bar, an
   // alert): back to Workflows, whose pane opens it.
   const asked = initial.intent?.n;
@@ -144,16 +173,20 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
       onClose={onClose}
       className={`settings-drawer studio-drawer ${compact ? "is-compact" : ""}`}
       dirty={dirty}
+      closeRequest={closeRequest}
       headerActions={<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />}
     >
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {studioKinds.map((k) => (
-            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
-              <Icon path={studioIcons[k]} />
-              <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
-            </button>
-          ))}
+          {studioGroups.map((group, i) => [
+            i > 0 && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
+            ...group.map((k) => (
+              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
+                <Icon path={studioIcons[k]} />
+                <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
+              </button>
+            )),
+          ])}
         </div>
         <GradesContext.Provider value={grades}>
         <div className="settings-pane" key={listed}>

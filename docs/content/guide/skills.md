@@ -43,9 +43,35 @@ A skill is one of four kinds, from what its folder holds:
 
 **In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
 
+## Trigger phrases and scenarios
+
+**Trigger phrases** tell the agent what a skill is for, by example: `trigger_phrases: ["write the release notes", "what changed since the last release"]` in the front matter, or **Trigger phrases** under the description in Studio. They're examples, not commands: the agent matches a request to them by meaning, so "draft the notes for 2.4" brings in a skill whose phrase is "write the release notes". Skill search (`list_or_search_skills`) finds skills by them too.
+
+**Scenarios** check that a skill works: that the agent picks it up when it should, leaves it alone when it shouldn't, and answers well. Each is a file in the skill's `scenarios/` folder, in [Castor](https://github.com/retail-cortex/castor)'s format, so a skill carries its tests wherever it's shared:
+
+```markdown
+---
+description: Notes from the log
+prompt: Write the release notes for v2.4
+executes: true          # it should use the skill; false: it shouldn't
+expected_skills: [release-notes]
+threshold: 0.8          # how close the answer must be, 0 to 1
+---
+## What's new
+- Wishlists you can share.
+```
+
+In Studio, a skill's **Scenarios** tab is the quickest way to make them:
+
+1. **Try it:** type what a user might ask and choose **Try**. The agent can use any skill, as in a chat, so you see whether it used this one ("It used release-notes" or "It didn't use release-notes") and what it said. **Give it the skill** tries only the answer.
+2. **Keep it:** when the result is what you want (or shows what it should have done), keep it as a scenario. It's filled in from the try: whether the skill should be used, the skills it used, and the answer as the one expected. Change anything before saving.
+3. **Run all** runs the skill's scenarios in the background. A scenario passes when the right skills were used and the answer is close enough to the one expected.
+
+From a terminal or CI, `blitz eval --skill release-notes` runs them, and fails when one does. Each scenario costs an agent turn and a judge's call. Trying a skill uses it as saved, so save your changes first.
+
 ## Reviewing a skill's scripts
 
-A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a worker's run is refused.
+A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a job's run is refused.
 
 - **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
 - Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.

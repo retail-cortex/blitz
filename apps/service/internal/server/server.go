@@ -56,6 +56,7 @@ type Server struct {
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
 	runs      runs          // background runs
+	evals     evalRuns      // eval runs going on
 	models    modelLists    // providers' models, for ListModels
 	act       activity      // requests served, for IdleFor
 	signins   signin.Runner // providers' sign-ins, one per provider at a time
@@ -123,6 +124,7 @@ func (s *Server) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 	s.stopRuns()
+	s.stopEvals()
 	s.mu.Lock()
 	open := s.workspaces
 	s.workspaces = map[string]*workspace{}

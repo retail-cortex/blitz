@@ -111,7 +111,7 @@ A delegated agent can also run **in the background**: `invoke_agent` with `backg
 - `/tasks` lists them (`/tasks show <id>`, `/tasks stop <id>`); the desktop app shows a card under the call, with **Show** and **Stop**. Exiting offers to stop or wait for them.
 - Limits: `tools.max_background_agents` (4 at once), `tools.background_agent_timeout` (30 minutes), `tools.background_agent_max_turns` (50 model calls) and `tools.background_agent_max_cost_usd` (none). Their cost counts in the session's.
 - `isolation: worktree` gives a task its own git worktree and branch, so its changes stay out of your checkout until you merge them; `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree[=name]`.
-- A background task can't start another, and [workers](workers.md) can't start them at all.
+- A background task can't start another, and [jobs](workers.md) can't start them at all.
 
 Not to be confused with **background runs**: `blitz --bg "<prompt>"` runs a whole prompt in the service, and `blitz agents` lists those runs ([the service](../products/service.md#background-runs)), not agent definitions.
 

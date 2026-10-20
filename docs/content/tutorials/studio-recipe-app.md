@@ -52,7 +52,7 @@ Then setup writes `.agents/AGENTS.md` (the stack, the Bazel commands, the layout
 
 ## 2. Open Studio
 
-**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Workflows, Workers, Secrets) and the selected kind beside it. It opens on **Overview**.
+**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Jobs, Workflows, Secrets) and the selected kind beside it. It opens on **Overview**.
 
 The Overview costs nothing to show, because it reads only what the workspace already records. Right after setup you'll see:
 
@@ -284,7 +284,7 @@ edges:
 
 The composer doesn't set schedules, because a schedule lives outside the workflow's file. Select nothing on the canvas, then **Schedule** › **Add a schedule**: *every weekday at 7:00*.
 
-The schedule is a **worker**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Studio › Workers** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the worker pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Workers](../guide/workers.md).
+The schedule is a **job**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Studio › Jobs** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the job pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Jobs](../guide/workers.md).
 
 ## 11. Grade the whole workspace
 
@@ -318,4 +318,4 @@ recipes/
     └── workers/                          # its weekday schedule
 ```
 
-Commit it. Everyone who opens the project gets the same agents, evals, skills, rules, guardrails and workflows. Secrets stay in each person's keychain, and the worker runs only where someone has enabled it. From here, build the app the [software developer tutorial](software-developer.md)'s way. Each feature then gets written in a workspace that tests its own agents, checks every turn and grades itself every night.
+Commit it. Everyone who opens the project gets the same agents, evals, skills, rules, guardrails and workflows. Secrets stay in each person's keychain, and the job runs only where someone has enabled it. From here, build the app the [software developer tutorial](software-developer.md)'s way. Each feature then gets written in a workspace that tests its own agents, checks every turn and grades itself every night.

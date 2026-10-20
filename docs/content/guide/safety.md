@@ -34,7 +34,7 @@ model = "gemini/gemini-4-argon"
 environment = "Our repositories are under github.com/acme; pushing branches is fine, pushing to main isn't. Hosts: *.acme.dev."
 ```
 
-A project's `.blitz/settings.toml` can't set it. Workers ignore the mode: they get exactly their own permissions.
+A project's `.blitz/settings.toml` can't set it. Jobs ignore the mode: they get exactly their own permissions.
 
 ## Permission rules
 

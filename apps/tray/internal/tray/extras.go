@@ -19,19 +19,18 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// The tray's MCP servers and Workers submenus (spec_mcp_009 MCP-48,
-// spec_workers_023 WK-90): what the running service says, as menu
-// entries, and what clicking one does. main draws them.
+// The tray's MCP servers submenu (spec_mcp_009 MCP-48) and what the menu's
+// entries do (the jobs and workflows are in each workspace's submenu,
+// menus.go; spec_workers_023 WK-90): what the running service says, as
+// menu entries, and what clicking one does. main draws them.
 
 // Extras is what the submenus show: the global MCP servers, every
 // workspace's workers and the runs going on.
@@ -79,6 +78,9 @@ const (
 	EnableWorker             // enable a worker at the hash reviewed (Hash)
 	DisableWorker            // disable a worker
 	ShowWorkers              // open the app on a workspace's workers
+	RunWorkflow              // run a workflow in the background (Name)
+	StopWorkflow             // stop a workflow's run (RunID)
+	ShowWorkflow             // open the app on a workflow's canvas (Name), on a run (RunID)
 )
 
 // Action is an entry's click.
@@ -92,12 +94,14 @@ type Action struct {
 }
 
 // Entry is a menu item: a title, a checkbox (Checked) or not, greyed out
-// (Disabled), what a click does, and a submenu.
+// (Disabled), its icon (Icon*, Dot*: main draws it), what a click does,
+// and a submenu.
 type Entry struct {
 	Title    string
 	Checkbox bool
 	Checked  bool
 	Disabled bool
+	Icon     string
 	Action   Action
 	Children []Entry
 }
@@ -115,70 +119,21 @@ func MCPEntries(e Extras) []Entry {
 	return out
 }
 
-// WorkerEntries are the Workers submenu: the runs going on, each stopped
-// by a click; then each worker with Run now, Enabled (only for one
-// enabled before at its current content: the others are reviewed in the
-// app) and Show in Blitz. Workers are named with their workspace when
-// there's more than one.
-func WorkerEntries(e Extras) []Entry {
-	var out []Entry
-	label := workerLabel(e.Workers)
-	for _, r := range e.Runs {
-		out = append(out, Entry{Title: i18n.T("tray.workers.stop", "name", label(r.Workspace, r.Worker)), Action: Action{Kind: StopRun, RunID: r.Id}})
-	}
-	if len(e.Workers) == 0 {
-		return append(out, Entry{Title: i18n.T("tray.workers.none"), Disabled: true})
-	}
-	for _, w := range e.Workers {
-		enabled := w.State == pb.WorkerState_WORKER_STATE_ENABLED
-		reviewed := enabled || w.State == pb.WorkerState_WORKER_STATE_DISABLED
-		toggle := Entry{Title: i18n.T("tray.workers.enabled"), Checkbox: true, Checked: enabled, Disabled: !reviewed}
-		if enabled {
-			toggle.Action = Action{Kind: DisableWorker, Workspace: w.Workspace, Name: w.Name}
-		} else if reviewed {
-			toggle.Action = Action{Kind: EnableWorker, Workspace: w.Workspace, Name: w.Name, Hash: w.Hash}
-		} else {
-			toggle.Title = i18n.T("tray.workers.review")
-		}
-		out = append(out, Entry{Title: label(w.Workspace, w.Name), Children: []Entry{
-			{Title: i18n.T("tray.workers.run_now"), Disabled: !reviewed, Action: Action{Kind: RunWorker, Workspace: w.Workspace, Name: w.Name}},
-			toggle,
-			{Title: i18n.T("tray.workers.show"), Action: Action{Kind: ShowWorkers, Workspace: w.Workspace}},
-		}})
-	}
-	return out
-}
-
-// workerLabel names a worker: its name, with its workspace's folder name
-// (Global for the home workspace's) before it when the workers come from
-// more than one workspace.
-func workerLabel(workers []*pb.Worker) func(workspace, name string) string {
-	spaces := map[string]bool{}
-	for _, w := range workers {
-		spaces[w.Workspace] = true
-	}
-	return func(workspace, name string) string {
-		if len(spaces) <= 1 {
-			return name
-		}
-		if config.IsHomeWorkspace("", workspace) {
-			return i18n.T("tray.workers.global") + " › " + name
-		}
-		return filepath.Base(workspace) + " › " + name
-	}
-}
-
 // Key identifies a menu's entries, to redraw it only when they change.
 func Key(entries []Entry) string { return fmt.Sprintf("%+v", entries) }
 
 // WorkersLink is the blitz:// link that opens the app on a workspace's
-// workers.
-func WorkersLink(workspace string) string {
-	return "blitz://workers?" + url.Values{"dir": {workspace}}.Encode()
+// jobs, on one job's details when name is given.
+func WorkersLink(workspace, name string) string {
+	q := url.Values{"dir": {workspace}}
+	if name != "" {
+		q.Set("worker", name)
+	}
+	return "blitz://workers?" + q.Encode()
 }
 
-// Do does what a click asks of the service at sock; ShowWorkers opens its
-// link with open.
+// Do does what a click asks of the service at sock; ShowWorkers and
+// ShowWorkflow open their links with open.
 func Do(ctx context.Context, sock string, a Action, open func(link string) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -197,7 +152,14 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 	case DisableWorker:
 		_, err = wc.DisableWorker(ctx, connect.NewRequest(&pb.DisableWorkerRequest{Workspace: a.Workspace, Name: a.Name}))
 	case ShowWorkers:
-		err = open(WorkersLink(a.Workspace))
+		err = open(WorkersLink(a.Workspace, a.Name))
+	case RunWorkflow:
+		// As the canvas's Run does: "/name" in the background, its input empty.
+		_, err = pb.NewSessionServiceClient(hc, socket.BaseURL).StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: a.Workspace, Turn: &pb.Turn{Text: "/" + a.Name}}))
+	case StopWorkflow:
+		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).StopWorkflowRun(ctx, connect.NewRequest(&pb.StopWorkflowRunRequest{Workspace: a.Workspace, Id: a.RunID}))
+	case ShowWorkflow:
+		err = open(WorkflowLink(a.Workspace, a.Name, a.RunID))
 	case NoAction:
 	default:
 		err = errors.New("no such action")

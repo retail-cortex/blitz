@@ -67,6 +67,10 @@ type SkillInfo struct {
 	// NeedsReview means its scripts, on disk, weren't reviewed and trusted
 	// with this content (new, changed, a registry's): each run asks first.
 	NeedsReview bool
+	// Triggers are its trigger phrases (spec_skills_013 SK-110);
+	// Scenarios how many scenarios/*.md it carries (SK-111).
+	Triggers  []string
+	Scenarios int
 }
 
 // SkillTool is a tool a skill needs.
@@ -97,6 +101,7 @@ type SkillSpec struct {
 	Name, Description, Tools string
 	Agents, Members          []string
 	Instructions             string
+	Triggers                 []string
 }
 
 // SkillFile is a skill as Studio edits it: what ListSkills says of it,

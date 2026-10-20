@@ -17,14 +17,15 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { SkillFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { activePackageFiles, emptySkillForm, filePath, packageKind, packageTemplate, formFromSkill, kindOf, languageOfScript, sameSkillForm, skillName, specFromForm, splitArgs, validSkillName } from "./skillForm";
+import { activePackageFiles, addTrigger, emptySkillForm, filePath, packageKind, packageTemplate, formFromSkill, kindOf, languageOfScript, sameSkillForm, scenarioName, skillName, specFromForm, splitArgs, validSkillName } from "./skillForm";
 
 describe("the skill form", () => {
   it("reads a skill, tools as a list, and writes it back", () => {
-    const f = create(SkillFileSchema, { spec: { name: "notes", description: "Notes", tools: "read_file  grep", agents: ["reviewer"], members: ["a"], instructions: "Do it." } });
+    const f = create(SkillFileSchema, { spec: { name: "notes", description: "Notes", tools: "read_file  grep", agents: ["reviewer"], members: ["a"], instructions: "Do it.", triggers: ["write notes"] } });
     const form = formFromSkill(f);
-    expect(form).toEqual({ name: "notes", description: "Notes", tools: ["read_file", "grep"], agents: ["reviewer"], members: ["a"], instructions: "Do it." });
-    expect(specFromForm({ ...form, name: " notes " })).toEqual({ name: "notes", description: "Notes", tools: "read_file grep", agents: ["reviewer"], members: ["a"], instructions: "Do it." });
+    expect(form).toEqual({ name: "notes", description: "Notes", tools: ["read_file", "grep"], agents: ["reviewer"], members: ["a"], instructions: "Do it.", triggers: ["write notes"] });
+    expect(specFromForm({ ...form, name: " notes " })).toEqual({ name: "notes", description: "Notes", tools: "read_file grep", agents: ["reviewer"], members: ["a"], instructions: "Do it.", triggers: ["write notes"] });
+    expect(sameSkillForm(form, { ...form, triggers: [] })).toBe(false);
     expect(sameSkillForm(form, { ...form, name: "notes " })).toBe(true);
     expect(sameSkillForm(form, { ...form, members: [] })).toBe(false);
     expect(formFromSkill(create(SkillFileSchema, {}))).toEqual(emptySkillForm);
@@ -89,4 +90,18 @@ describe("the skill form", () => {
     expect(splitArgs(`--from v1 "the notes" 'x y' z`)).toEqual(["--from", "v1", "the notes", "x y", "z"]);
     expect(splitArgs("  ")).toEqual([]);
   });
+});
+
+describe("trigger phrases and scenarios", () => {
+  it.each([
+    { name: "a phrase, tidied", list: [], typed: "  write   the notes ", want: ["write the notes"] },
+    { name: "one already there", list: ["write the notes"], typed: "write the notes", want: ["write the notes"] },
+    { name: "blank", list: ["a"], typed: "   ", want: ["a"] },
+  ])("adds $name", ({ list, typed, want }) => expect(addTrigger(list, typed)).toEqual(want));
+
+  it.each([
+    { name: "from the prompt's first words", prompt: "Write the release notes for v2.4 please", taken: [], want: "write-the-release-notes-for" },
+    { name: "beside one taken", prompt: "Write notes", taken: ["write-notes"], want: "write-notes-2" },
+    { name: "with nothing usable", prompt: "?!", taken: [], want: "scenario" },
+  ])("names a scenario $name", ({ prompt, taken, want }) => expect(scenarioName(prompt, taken)).toBe(want));
 });

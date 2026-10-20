@@ -16,6 +16,7 @@ package main
 
 import (
 	_ "embed"
+	"sync"
 
 	"fyne.io/systray"
 	"github.com/retail-cortex/blitz/apps/tray/internal/tray"
@@ -42,22 +43,44 @@ func mustICO(p []byte) []byte {
 	return ico
 }
 
-// setIcon shows the service's state in the icon, and a dot while
-// workflows' human tasks wait (waiting).
-func setIcon(running, waiting bool) {
-	p := stoppedPNG
-	if running {
-		p = runningPNG
-	}
-	if !waiting {
+// setIcon shows the service's state in the icon, a dot while workflows'
+// human tasks wait (waiting), at a brightness (alpha: the pulse's frame).
+func setIcon(running, waiting bool, alpha float64) {
+	if !waiting && alpha >= 1 {
 		systray.SetIcon(map[bool][]byte{true: runningIcon, false: stoppedIcon}[running])
 		return
 	}
-	if d, err := tray.WithDot(p); err == nil {
-		if ico, err := tray.ICO(d); err == nil {
-			systray.SetIcon(ico)
-			return
+	k := frameKey{running, waiting, alpha}
+	framesMu.Lock()
+	defer framesMu.Unlock()
+	if ico, ok := frames[k]; ok {
+		systray.SetIcon(ico)
+		return
+	}
+	p := map[bool][]byte{true: runningPNG, false: stoppedPNG}[running]
+	var err error
+	if waiting {
+		p, err = tray.WithDot(p)
+	}
+	if err == nil && alpha < 1 {
+		p, err = tray.Pulse(p, alpha)
+	}
+	ico := map[bool][]byte{true: runningIcon, false: stoppedIcon}[running]
+	if err == nil {
+		if made, e := tray.ICO(p); e == nil {
+			ico = made
 		}
 	}
-	systray.SetIcon(map[bool][]byte{true: runningIcon, false: stoppedIcon}[running])
+	frames[k] = ico
+	systray.SetIcon(ico)
+}
+
+var (
+	framesMu sync.Mutex
+	frames   = map[frameKey][]byte{}
+)
+
+type frameKey struct {
+	running, waiting bool
+	alpha            float64
 }

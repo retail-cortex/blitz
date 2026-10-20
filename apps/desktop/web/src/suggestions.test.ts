@@ -54,9 +54,9 @@ describe("welcome tiles", () => {
     [
       "a failed worker, with why",
       { kind: SuggestionKind.WORKER_FAILED, worker: "deps", detail: "maximum turns reached" },
-      ["4", "Find out why the worker deps failed", { type: "send", prompt: "Find out why the worker deps failed (maximum turns reached), and fix what you can." }],
+      ["4", "Find out why the job deps failed", { type: "send", prompt: "Find out why the job deps failed (maximum turns reached), and fix what you can." }],
     ],
-    ["a failed worker, without", { kind: SuggestionKind.WORKER_FAILED, worker: "deps" }, ["4", "Find out why the worker deps failed", { type: "send", prompt: "Find out why the worker deps failed" }]],
+    ["a failed worker, without", { kind: SuggestionKind.WORKER_FAILED, worker: "deps" }, ["4", "Find out why the job deps failed", { type: "send", prompt: "Find out why the job deps failed" }]],
     ["a model's idea", { kind: SuggestionKind.IDEA, title: " Finish the rounding tests ", prompt: "Add the tests." }, ["5", "Finish the rounding tests", { type: "send", prompt: "Add the tests." }]],
     [
       "a changed specification",

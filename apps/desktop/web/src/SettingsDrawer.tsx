@@ -162,7 +162,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
             {section === "skills" && <SkillSettings />}
-            {section === "workers" && <WorkersSettings onLeave={onClose} />}
+            {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "mcp" && <McpSettings />}
             {section === "workspaces" && (
               <Workspaces

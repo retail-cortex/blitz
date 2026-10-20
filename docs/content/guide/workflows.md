@@ -81,7 +81,7 @@ The form travels as standard [A2UI](https://a2ui.org) messages, so another A2UI 
 
 A **Wait** step pauses the run for a time or until one. A paused run costs nothing while it waits: the service keeps it, picks a timer's run up when it's due, and an answered task's run goes on in the background, in the chat it started in. A workflow you change while a run waits won't resume that run.
 
-Waiting tasks show under the run on the canvas and, from any workspace, as a button in the status bar. How new ones reach you is **Settings › Appearance › Workflow tasks**: *Notify me* (the default), *Show the task at once*, or *Off*. With the app closed, the tray tells you: a dot on its icon, *1 workflow task waiting* in its menu, and a notification that opens a small window with only the task's form. A [worker](workers.md) can run a workflow on a schedule (its `workflow` field), so a nightly job can stop and ask before it goes on.
+Waiting tasks show under the run on the canvas and, from any workspace, as a button in the status bar. How new ones reach you is **Settings › Appearance › Workflow tasks**: *Notify me* (the default), *Show the task at once*, or *Off*. With the app closed, the tray tells you: a dot on its icon, *1 workflow task waiting* in its menu, and a notification that opens a small window with only the task's form. A [job](workers.md) can run a workflow on a schedule (its `workflow` field), so a nightly job can stop and ask before it goes on.
 
 ## Building one
 
@@ -91,7 +91,7 @@ In the desktop app, **Studio › Workflows** lists them; **+** starts one, blank
 
 ## Running and following a run
 
-**Run** asks for the input and runs it in the background. You don't have to watch: close Studio and carry on; the run goes on in the service. While it runs, the status bar shows it (*/research-brief 2/5*); click it to go back to the canvas. If a run fails, you hear of it wherever you are (or as a system notification when the app isn't in front), with **Open** to see where and why; with the app closed, the tray tells you, and its notification opens the app on the run. Opening a workflow while a run of it goes, started on the canvas, in a chat or by a worker, shows that run.
+**Run** asks for the input and runs it in the background. You don't have to watch: close Studio and carry on; the run goes on in the service. While it runs, the status bar shows it (*/research-brief 2/5*); click it to go back to the canvas. If a run fails, you hear of it wherever you are (or as a system notification when the app isn't in front), with **Open** to see where and why; with the app closed, the tray tells you, and its notification opens the app on the run. The tray's menu also lists every run going on, with **Open** and **Stop**, and each workspace's workflows, to run one from there; its icon pulses while one runs. Opening a workflow while a run of it goes, started on the canvas, in a chat or by a job, shows that run.
 
 Under the canvas, the run panel shows how it's going: each step marked on the canvas with what it took and spent, an approval or a person's form it waits on, and three tabs:
 
@@ -109,7 +109,7 @@ The workspace's mode is the limit. If you restrict a workspace to *Ask*, its wor
 
 ## Running on a schedule
 
-A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [worker](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. What a scheduled run may do without asking (write files, use the web) and its limits are the worker's, in **Studio › Workers**.
+A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. What a scheduled run may do without asking (write files, use the web) and its limits are the job's, in **Studio › Jobs**.
 
 ## The file
 

@@ -15,7 +15,7 @@ curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/insta
 
 Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature and its checksum itself, with nothing else to install (releases before v0.7.0 need cosign for their signature). A copy installed by Homebrew is updated with `brew upgrade blitz`.
 
-Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files; Windows's also has `blitz-tray.exe`, which runs the service and opens the [desktop app's page](../products/desktop.md#on-windows):
+Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files:
 
 | Platform | Archive |
 |---|---|
@@ -72,7 +72,7 @@ In a session, type a request. Blitz reads and searches the workspace, shows a di
 blitz service install           # starts blitzd at every login (launchd or systemd)
 ```
 
-With the service running, `blitz` attaches to it, the desktop app works, and [workers](../guide/workers.md) run on their schedules.
+With the service running, `blitz` attaches to it, the desktop app works, and [jobs](../guide/workers.md) run on their schedules.
 
 ## Start a project
 

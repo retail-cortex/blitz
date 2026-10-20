@@ -33,6 +33,7 @@ import {
   maxContentHTML,
   maxLinkPrompt,
   menuLabels,
+  isPageCertificate,
   originOf,
   pageEvents,
   parseDeepLink,
@@ -40,6 +41,8 @@ import {
   parseTasksLink,
   tasksURL,
   parseLink,
+  renewEvery,
+  shouldRenew,
   pictureExtension,
   previewContent,
   previewId,
@@ -58,22 +61,50 @@ import {
 } from "./logic";
 
 describe("parseLink", () => {
+  const fp = Array(32).fill("AB").join(":");
+  const line = (url: string, fingerprint: string = fp) => JSON.stringify({ url, fingerprint });
   it.each([
-    { name: "the host's link", line: '{"url":"http://127.0.0.1:5123/open?t=ab12"}', want: "http://127.0.0.1:5123/open?t=ab12" },
+    { name: "the host's link", line: line("https://127.0.0.1:5123/open?t=ab12"), want: { url: "https://127.0.0.1:5123/open?t=ab12", fingerprint: fp } },
     { name: "not JSON", line: "starting", want: undefined },
     { name: "no url", line: '{"link":"x"}', want: undefined },
-    { name: "another host", line: '{"url":"http://example.com:5123/open?t=ab12"}', want: undefined },
-    { name: "https", line: '{"url":"https://127.0.0.1:5123/open?t=ab12"}', want: undefined },
-    { name: "no port", line: '{"url":"http://127.0.0.1/open?t=ab12"}', want: undefined },
-    { name: "another path", line: '{"url":"http://127.0.0.1:5123/?t=ab12"}', want: undefined },
-    { name: "no ticket", line: '{"url":"http://127.0.0.1:5123/open"}', want: undefined },
-    { name: "a ticket that isn't hex", line: '{"url":"http://127.0.0.1:5123/open?t=../x"}', want: undefined },
-  ])("$name", ({ line, want }) => expect(parseLink(line)).toBe(want));
+    { name: "no fingerprint", line: '{"url":"https://127.0.0.1:5123/open?t=ab12"}', want: undefined },
+    { name: "a fingerprint too short", line: line("https://127.0.0.1:5123/open?t=ab12", "AB:CD"), want: undefined },
+    { name: "a fingerprint in lower case", line: line("https://127.0.0.1:5123/open?t=ab12", fp.toLowerCase()), want: undefined },
+    { name: "another host", line: line("https://example.com:5123/open?t=ab12"), want: undefined },
+    { name: "plain http", line: line("http://127.0.0.1:5123/open?t=ab12"), want: undefined },
+    { name: "no port", line: line("https://127.0.0.1/open?t=ab12"), want: undefined },
+    { name: "another path", line: line("https://127.0.0.1:5123/?t=ab12"), want: undefined },
+    { name: "no ticket", line: line("https://127.0.0.1:5123/open"), want: undefined },
+    { name: "a ticket that isn't hex", line: line("https://127.0.0.1:5123/open?t=../x"), want: undefined },
+  ])("$name", ({ line, want }) => expect(parseLink(line)).toEqual(want));
+});
+
+describe("shouldRenew", () => {
+  const origin = "https://127.0.0.1:5123";
+  it.each([
+    { name: "a certificate error on the page", error: "net::ERR_CERT_DATE_INVALID", url: origin + "/blitz.v1.X/Y", last: 0, now: renewEvery, want: true },
+    { name: "the page itself", error: "net::ERR_CERT_AUTHORITY_INVALID", url: origin + "/", last: 0, now: renewEvery, want: true },
+    { name: "renewed a moment ago", error: "net::ERR_CERT_DATE_INVALID", url: origin + "/", last: 1000, now: 1000 + renewEvery - 1, want: false },
+    { name: "another error", error: "net::ERR_CONNECTION_REFUSED", url: origin + "/", last: 0, now: renewEvery, want: false },
+    { name: "another site's certificate", error: "net::ERR_CERT_DATE_INVALID", url: "https://example.com/", last: 0, now: renewEvery, want: false },
+    { name: "another port", error: "net::ERR_CERT_DATE_INVALID", url: "https://127.0.0.1:5124/", last: 0, now: renewEvery, want: false },
+  ])("$name", ({ error, url, last, now, want }) => expect(shouldRenew(error, url, origin, last, now)).toBe(want));
+  it("not before the page is served", () => expect(shouldRenew("net::ERR_CERT_DATE_INVALID", "https://127.0.0.1:5123/", "", 0, renewEvery)).toBe(false));
+});
+
+describe("isPageCertificate", () => {
+  const fp = Array(32).fill("AB").join(":");
+  it.each([
+    { name: "the page server's", host: "127.0.0.1", fingerprint: fp, pinned: fp, want: true },
+    { name: "another certificate on the loopback address", host: "127.0.0.1", fingerprint: fp.replace("AB", "CD"), pinned: fp, want: false },
+    { name: "the same certificate for another host", host: "example.com", fingerprint: fp, pinned: fp, want: false },
+    { name: "nothing pinned yet", host: "127.0.0.1", fingerprint: "", pinned: "", want: false },
+  ])("$name", ({ host, fingerprint, pinned, want }) => expect(isPageCertificate(host, fingerprint, pinned)).toBe(want));
 });
 
 describe("originOf", () => {
   it("is the URL's origin, or empty", () => {
-    expect(originOf("http://127.0.0.1:5123/open?t=ab")).toBe("http://127.0.0.1:5123");
+    expect(originOf("https://127.0.0.1:5123/open?t=ab")).toBe("https://127.0.0.1:5123");
     expect(originOf("not a url")).toBe("");
   });
 });
@@ -165,10 +196,15 @@ describe("parseDeepLink", () => {
     { name: "another action", raw: "blitz://run?dir=/tmp", want: undefined },
     { name: "another scheme", raw: "https://open?dir=/tmp", want: undefined },
     { name: "a folder's workers", raw: "blitz://workers?dir=/tmp/shop&prompt=ignored", want: { dir: "/tmp/shop", prompt: "", view: "workers" } },
+    { name: "a job's details, from the tray", raw: "blitz://workers?dir=/tmp/shop&worker=nightly", want: { dir: "/tmp/shop", prompt: "", view: "workers", worker: "nightly" } },
     { name: "workers without a folder", raw: "blitz://workers", want: undefined },
     { name: "workers of a relative folder", raw: "blitz://workers?dir=shop", want: undefined },
     { name: "another action", raw: "blitz://settings?dir=/tmp", want: undefined },
     { name: "a prompt too long", raw: `blitz://open?dir=/tmp&prompt=${"x".repeat(maxLinkPrompt + 1)}`, want: undefined },
+    { name: "a workflow's canvas, from the tray", raw: "blitz://workflow?dir=/tmp/shop&workflow=brief", want: { dir: "/tmp/shop", prompt: "", view: "workflows", workflow: "brief", run: "" } },
+    { name: "a workflow's run", raw: "blitz://workflow?dir=/tmp/shop&workflow=brief&run=r1", want: { dir: "/tmp/shop", prompt: "", view: "workflows", workflow: "brief", run: "r1" } },
+    { name: "a workflow not named", raw: "blitz://workflow?dir=/tmp/shop", want: undefined },
+    { name: "a workflow in a relative folder", raw: "blitz://workflow?dir=shop&workflow=brief", want: undefined },
   ])("$name", ({ raw, want }) => expect(parseDeepLink(raw, "/home/me")).toEqual(want));
 
   it("finds the links among a command line's arguments", () => {

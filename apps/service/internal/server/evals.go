@@ -38,11 +38,13 @@ func evalCasesMsg(cases []evals.Case) []*pb.EvalCase {
 	return out
 }
 
-func evalMsg(w *engine.Workspace, e evals.Eval) *pb.EvalFile {
+func evalMsg(w *engine.Workspace, e evals.Eval, live []api.EvalRun) *pb.EvalFile {
 	m := &pb.EvalFile{Name: e.Name, Path: e.Path, Description: e.Description, Agents: e.Agents, Skills: e.Skills, Near: e.Near, Allow: e.Allow, Cases: evalCasesMsg(e.Cases), Problem: e.Problem}
-	if runs, err := w.EvalRuns(e.Name, 1); err == nil && len(runs) > 0 {
-		m.LastRun = evalRunMsg(runs[0])
-		m.LastRun.Results = nil
+	if runs, err := w.EvalRuns(e.Name, 1); err == nil {
+		if runs = withLiveEvals(live, runs); len(runs) > 0 {
+			m.LastRun = evalRunMsg(runs[0])
+			m.LastRun.Results = nil
+		}
 	}
 	return m
 }
@@ -57,7 +59,7 @@ func evalOf(s *pb.EvalSpec) evals.Eval {
 
 func evalResultMsg(r api.EvalResult) *pb.EvalResult {
 	return &pb.EvalResult{Case: r.Case, Name: r.Name, Agent: r.Agent, Type: r.Type, Scope: r.Scope, Status: r.Status, Score: r.Score, Threshold: r.Threshold,
-		Prompt: r.Prompt, Expected: r.Expected, Output: r.Output, Reason: r.Reason, Refusals: r.Refusals, CostUsd: r.CostUSD, Duration: durationpb.New(r.Duration)}
+		Prompt: r.Prompt, Expected: r.Expected, Output: r.Output, Reason: r.Reason, Refusals: r.Refusals, CostUsd: r.CostUSD, Duration: durationpb.New(r.Duration), SkillsUsed: r.SkillsUsed}
 }
 
 func evalRunMsg(r api.EvalRun) *pb.EvalRun {
@@ -88,7 +90,7 @@ func (h workspaceService) ListEvals(ctx context.Context, r req[pb.ListEvalsReque
 	}
 	out := &pb.ListEvalsResponse{Dir: w.ProjectEvalsDir()}
 	for _, e := range w.Evals() {
-		out.Evals = append(out.Evals, evalMsg(w.Workspace, e))
+		out.Evals = append(out.Evals, evalMsg(w.Workspace, e, h.s.liveEvals(w.Dir(), e.Name)))
 	}
 	return ok(out)
 }
@@ -114,7 +116,7 @@ func (h workspaceService) SaveEval(ctx context.Context, r req[pb.SaveEvalRequest
 	if len(problems) > 0 {
 		return ok(&pb.SaveEvalResponse{Problems: problems})
 	}
-	return ok(&pb.SaveEvalResponse{Eval: evalMsg(w.Workspace, saved)})
+	return ok(&pb.SaveEvalResponse{Eval: evalMsg(w.Workspace, saved, h.s.liveEvals(w.Dir(), saved.Name))})
 }
 
 func evalNamed(w *engine.Workspace, name string) (evals.Eval, bool, error) {
@@ -137,31 +139,82 @@ func (h workspaceService) DeleteEval(ctx context.Context, r req[pb.DeleteEvalReq
 	return ok(&pb.DeleteEvalResponse{})
 }
 
+// RunEval starts the run in the service (EV-09a) and follows it: with
+// background it goes on when the stream ends, else it stops with it.
 func (h workspaceService) RunEval(ctx context.Context, r req[pb.RunEvalRequest], stream *connect.ServerStream[pb.RunEvalResponse]) error {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
 		return err
 	}
-	var sendErr error
-	send := func(m *pb.RunEvalResponse) {
-		if sendErr == nil {
-			sendErr = stream.Send(m)
-		}
-	}
-	run, err := w.RunEval(ctx, r.Msg.Name, api.EvalOptions{
-		Cases: r.Msg.Cases,
-		OnStart: func(run api.EvalRun) {
-			send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Started{Started: evalRunMsg(run)}})
-		},
-		OnResult: func(x api.EvalResult) {
-			send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Result{Result: evalResultMsg(x)}})
-		},
-	})
+	l, err := h.s.startEval(ctx, w, r.Msg.Name, r.Msg.Cases, r.Msg.Background)
 	if err != nil {
 		return evalError(err)
 	}
-	send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Finished{Finished: evalRunMsg(run)}})
-	return sendErr
+	return l.follow(ctx, true, evalSender(stream))
+}
+
+// evalSender sends a run's events on stream: started, a result, finished.
+func evalSender(stream *connect.ServerStream[pb.RunEvalResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
+	return func(run api.EvalRun, x *api.EvalResult, finished bool) error {
+		switch {
+		case finished:
+			return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Finished{Finished: evalRunMsg(run)}})
+		case x != nil:
+			return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Result{Result: evalResultMsg(*x)}})
+		}
+		return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Started{Started: evalRunMsg(run)}})
+	}
+}
+
+// evalWatcher is evalSender for WatchEvalRun's stream.
+func evalWatcher(stream *connect.ServerStream[pb.WatchEvalRunResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
+	return func(run api.EvalRun, x *api.EvalResult, finished bool) error {
+		switch {
+		case finished:
+			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Finished{Finished: evalRunMsg(run)}})
+		case x != nil:
+			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Result{Result: evalResultMsg(*x)}})
+		}
+		return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Started{Started: evalRunMsg(run)}})
+	}
+}
+
+// WatchEvalRun follows a run going on, or sends a recorded one as
+// finished.
+func (h workspaceService) WatchEvalRun(ctx context.Context, r req[pb.WatchEvalRunRequest], stream *connect.ServerStream[pb.WatchEvalRunResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	if l := h.s.liveEval(w.Dir(), r.Msg.Id); l != nil {
+		return l.follow(ctx, false, evalWatcher(stream))
+	}
+	for _, e := range w.Evals() {
+		runs, err := w.EvalRuns(e.Name, 0)
+		if err != nil {
+			continue
+		}
+		for _, run := range runs {
+			if run.ID == r.Msg.Id {
+				return evalWatcher(stream)(run, nil, true)
+			}
+		}
+	}
+	return errUnknownEvalRun(r.Msg.Id)
+}
+
+// StopEvalRun stops a run going on; it records itself as stopped.
+func (h workspaceService) StopEvalRun(ctx context.Context, r req[pb.StopEvalRunRequest]) (*connect.Response[pb.StopEvalRunResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	l := h.s.liveEval(w.Dir(), r.Msg.Id)
+	if l == nil {
+		return nil, errUnknownEvalRun(r.Msg.Id)
+	}
+	l.cancel()
+	return ok(&pb.StopEvalRunResponse{})
 }
 
 func (h workspaceService) ListEvalRuns(ctx context.Context, r req[pb.ListEvalRunsRequest]) (*connect.Response[pb.ListEvalRunsResponse], error) {
@@ -176,6 +229,10 @@ func (h workspaceService) ListEvalRuns(ctx context.Context, r req[pb.ListEvalRun
 	runs, err := w.EvalRuns(r.Msg.Name, limit)
 	if err != nil {
 		return nil, evalError(err)
+	}
+	runs = withLiveEvals(h.s.liveEvals(w.Dir(), r.Msg.Name), runs)
+	if len(runs) > limit {
+		runs = runs[:limit]
 	}
 	out := &pb.ListEvalRunsResponse{}
 	for _, run := range runs {

@@ -56,7 +56,7 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `_index.md`: what Blitz is, in a page;
   - `getting-started/`: install, verifying a download, configuring, the first run;
   - `tutorials/`: whole pieces of work from an empty folder, step by step (since 2026-10-02: a software developer's, and a machine learning student's);
-  - `products/`: a page per program: the CLI and its REPL, the service and its workers, the desktop app;
+  - `products/`: a page per program: the CLI and its REPL, the service and its jobs, the desktop app;
   - `guide/`: what applies to every program: configuration, safety, models, agents and tools, extending, skills, search, images, language, logs and telemetry;
   - `architecture/`: the layers and their dependency rules, the engine, the service API, sandboxing and trust, the build, and the API reference (`architecture/api/`, generated from `proto/blitz/v1` by proto-gen-md-diagrams at build time: `//docs:api`, a page per proto with Mermaid class diagrams);
   - `packages/`: a page per shared package under `pkg/`;

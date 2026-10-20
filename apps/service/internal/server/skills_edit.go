@@ -29,7 +29,7 @@ import (
 func skillFileMsg(f api.SkillFile) *pb.SkillFile {
 	return &pb.SkillFile{
 		Skill: skillMsg(f.Info), Path: f.Path, Hash: f.Hash, Editable: f.Editable,
-		Spec: &pb.SkillSpec{Name: f.Spec.Name, Description: f.Spec.Description, Tools: f.Spec.Tools, Agents: f.Spec.Agents, Members: f.Spec.Members, Instructions: f.Spec.Instructions},
+		Spec: &pb.SkillSpec{Name: f.Spec.Name, Description: f.Spec.Description, Tools: f.Spec.Tools, Agents: f.Spec.Agents, Members: f.Spec.Members, Instructions: f.Spec.Instructions, Triggers: f.Spec.Triggers},
 	}
 }
 
@@ -67,7 +67,7 @@ func (h workspaceService) SaveSkill(ctx context.Context, r req[pb.SaveSkillReque
 	if s == nil {
 		return nil, invalid(errors.New("skill is required"))
 	}
-	f, problems, err := w.SaveSkill(api.SkillSpec{Name: s.Name, Description: s.Description, Tools: s.Tools, Agents: s.Agents, Members: s.Members, Instructions: s.Instructions}, r.Msg.PreviousName, r.Msg.Hash)
+	f, problems, err := w.SaveSkill(api.SkillSpec{Name: s.Name, Description: s.Description, Tools: s.Tools, Agents: s.Agents, Members: s.Members, Instructions: s.Instructions, Triggers: s.Triggers}, r.Msg.PreviousName, r.Msg.Hash)
 	if err != nil {
 		return nil, skillErr(err)
 	}

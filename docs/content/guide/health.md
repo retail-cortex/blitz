@@ -3,7 +3,7 @@ title: Workspace health
 weight: 59
 ---
 
-**Studio › Overview** is your workspace's dashboard: what it holds, how its runs go, what needs attention, and how good each agent, skill, rule, guardrail, eval, workflow and worker is. Studio opens on it.
+**Studio › Overview** is your workspace's dashboard: what it holds, how its runs go, what needs attention, and how good each agent, skill, rule, guardrail, eval, workflow and job is. Studio opens on it.
 
 Spec: [workspace health](../about/specs/spec_health_044.md).
 
@@ -14,7 +14,7 @@ The facts come from what the workspace already records, so they're always curren
 - **Workspace score**: a ring for the workspace and one for each kind, with how many items each has and how many don't load. Click a kind's ring to jump to its card.
 - **Runs, last 30 days**: runs per day (done, failed, stopped) with their cost as a line, the success rate and the total cost. Open the card for what costs the most and what fails the most.
 - **Eval coverage**: which agents have evals, how their latest results went, and which changed since their evals last ran.
-- **Needs attention**: files that don't load, failing workflows and workers, low grades, agents with no evals or out-of-date evals, the auto reviewer's denials, rules and guardrails that fired, and items nothing uses, most urgent first.
+- **Needs attention**: files that don't load, failing workflows and jobs, low grades, agents with no evals or out-of-date evals, the auto reviewer's denials, rules and guardrails that fired, and items nothing uses, most urgent first.
 - **One card per kind**: open it for a table of its items, with each one's grade, flags, uses or runs per day, its trend and its cost or eval results. Click a row for its verdict.
 
 Every card opens in place with the arrow in its corner, and the Overview remembers which cards you opened.

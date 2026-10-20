@@ -297,12 +297,12 @@ function Shell() {
       onDeepLink(async (link) => {
         // The global workers' (the home workspace's) are in Settings › Workers.
         if (link.view === "workers" && link.dir === (await globalHome())) {
-          setSettingsAt({ section: "workers" });
+          setSettingsAt({ section: "workers", scope: link.worker });
           return;
         }
         update((p) => openWorkspace(p, link.dir));
         if (link.view) {
-          showView({ dir: link.dir, view: link.view, workflow: link.workflow, run: link.run });
+          showView({ dir: link.dir, view: link.view, workflow: link.workflow, run: link.run, worker: link.worker });
           return;
         }
         if (link.prompt) compose({ dir: link.dir, text: link.prompt });

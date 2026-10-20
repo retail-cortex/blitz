@@ -44,7 +44,7 @@ PDFs attach the way images do: `summarise @papers/attention.pdf`, `/attach`, `--
 
 ## PDFs out
 
-`export_pdf` typesets a Markdown file as a PDF beside it (`notes/week1.md` → `notes/week1.pdf`, or `output`), in pure Go, so it works in the terminal, in workers and in the service. It asks before writing, like any file the agent creates, and `/undo` removes it. Ask for a PDF of something that isn't a file ("a summary of our conversation as a PDF") and only the PDF is written: the agent gives the tool the Markdown itself.
+`export_pdf` typesets a Markdown file as a PDF beside it (`notes/week1.md` → `notes/week1.pdf`, or `output`), in pure Go, so it works in the terminal, in jobs and in the service. It asks before writing, like any file the agent creates, and `/undo` removes it. Ask for a PDF of something that isn't a file ("a summary of our conversation as a PDF") and only the PDF is written: the agent gives the tool the Markdown itself.
 
 - Headings become the PDF's outline; lists, task lists, quotes, tables, code (highlighted), rules and page numbers are laid out; accents, Greek, Cyrillic and maths symbols print.
 - Pictures the file shows in the workspace are included (an HTML `<img>` too); web pictures and other raw HTML aren't. Maths and Mermaid diagrams print as their source: export from the desktop app to draw them.

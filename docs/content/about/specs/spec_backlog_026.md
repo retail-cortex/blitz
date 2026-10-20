@@ -29,7 +29,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-ENG-03** ✅ *Done (ROADMAP 25.8; MDL-73).* Thinking blocks keep round-tripping unchanged across tool calls (MDL-24) with thinking on.
 
 ### 2.2 Usage survives the process — S
-**Extends** [spec_engine_016](spec_engine_016.md) ENG-82. Usage lives in memory only, so after `--resume` (or a service restart) `/cost` and `/context` start at zero and a worker run's cost is known only while the service runs.
+**Extends** [spec_engine_016](spec_engine_016.md) ENG-82. Usage lives in memory only, so after `--resume` (or a service restart) `/cost` and `/context` start at zero and a job run's cost is known only while the service runs.
 - **BL-ENG-10** ✅ *Done 2026-09-29 (SES-15).* A session's cumulative usage (calls, tokens by kind, cost, priced flag, last prompt size) is stored in its metadata after each model call's turn and restored when the session is opened.
 - **BL-ENG-11** ✅ *Done 2026-09-29 (SES-15).* `/context` after resuming reports the last prompt's size, not 0.
 
@@ -58,10 +58,10 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 **Extends** [spec_filetools_006](spec_filetools_006.md), [spec_cli_020](spec_cli_020.md). *Source: Antigravity review, candidate 2.*
 - **BL-FS-01** ✅ *Done 2026-09-30 ([spec_filetools_006](spec_filetools_006.md) FS-01a).* `--add-dir PATH` (repeatable, startup only) adds an existing directory as an extra read-write root for this run, exactly like `sandbox.allowed_paths` (file roots and OS sandbox writable dirs), and `/sandbox` lists it. It can't widen `blocked_paths`. Not persisted.
 
-### 4.3 Workers' edits join `/undo` — S
-**Extends** [spec_workers_023](spec_workers_023.md), [spec_filetools_006](spec_filetools_006.md). *Source: ROADMAP 24c.* A worker's file changes go into the workspace's shared checkpoint stack, so `/undo` in an interactive session can revert a worker's edits (or be blocked by them) without saying so.
-- **BL-WK-01** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-54).* Each worker run gets its own checkpoint stack; `/checkpoints` and `/undo` in interactive sessions don't see it.
-- **BL-WK-02** ✅ *Done 2026-09-30 (WK-55).* A run's changed files are recorded in its run record (`files`), and `blitz workers undo <run-id>` restores them with the same conflict rules as `/undo` (FS-63).
+### 4.3 Jobs' edits join `/undo` — S
+**Extends** [spec_workers_023](spec_workers_023.md), [spec_filetools_006](spec_filetools_006.md). *Source: ROADMAP 24c.* A job's file changes go into the workspace's shared checkpoint stack, so `/undo` in an interactive session can revert a job's edits (or be blocked by them) without saying so.
+- **BL-WK-01** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-54).* Each job run gets its own checkpoint stack; `/checkpoints` and `/undo` in interactive sessions don't see it.
+- **BL-WK-02** ✅ *Done 2026-09-30 (WK-55).* A run's changed files are recorded in its run record (`files`), and `blitz jobs undo <run-id>` restores them with the same conflict rules as `/undo` (FS-63).
 
 ### 4.4 Web search cost — S
 **Extends** [spec_web_008](spec_web_008.md). Google grounding bills each search query Gemini runs; `/cost` doesn't count them.
@@ -79,14 +79,14 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 **Extends** [spec_client_022](spec_client_022.md) CL-05. Attached, `OnFinished` runs after the service already collected unread steer messages, so a message typed in that instant waits for the agent's next turn instead of being sent as the follow-up turn.
 - **BL-SVC-10** ✅ *Done 2026-09-30 ([spec_engine_016](spec_engine_016.md) ENG-42), locally too.* A steer message accepted after the service collected the leftovers is returned to the client (e.g. in `SteerResponse` as "too late: send as the next turn"), and the REPL and the app send it as the next turn, as they do locally.
 
-### 5.3 Worker run notifications — S
-**Extends** [spec_workers_023](spec_workers_023.md). Scheduled runs are unattended and silent; a failed or limited run is only visible with `blitz workers runs`.
+### 5.3 Job run notifications — S
+**Extends** [spec_workers_023](spec_workers_023.md). Scheduled runs are unattended and silent; a failed or limited run is only visible with `blitz jobs runs`.
 - **BL-WK-10** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-56).* Optional `[workers] notify` command (like a hook: JSON run record on stdin, outside the sandbox, trusted config) runs after every scheduled run whose status is in `notify_on` (default `failed`, `limited`).
 - **BL-WK-11** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-80c): the dropdown's workspace row, since the app has no tabs.* The desktop app shows a badge on a workspace tab with unseen failed runs.
 
 ### 5.4 Session metadata written twice — S
 **Extends** [spec_workers_023](spec_workers_023.md), [spec_sessions_017](spec_sessions_017.md). *Source: ROADMAP 24c.* With telemetry on, the workspace's and the run's session storage may both write a run session's metadata (`last_turn`).
-- **BL-WK-20** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-49); the test drives two storages directly.* Only the storage that owns a session writes its metadata; a test with telemetry on runs a worker while the workspace records turns and checks the run session's metadata is intact.
+- **BL-WK-20** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-49); the test drives two storages directly.* Only the storage that owns a session writes its metadata; a test with telemetry on runs a job while the workspace records turns and checks the run session's metadata is intact.
 
 ## 6. Skills
 
@@ -121,8 +121,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-40** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78f/g): embedded at build time; the window has its own language setting (System by default) rather than following `/locale` — see BL-DSK-41.* Every string in the page comes from the same catalogs as the terminal (served by the service or embedded at build time), follows the interface language (`/locale`), and passes the same catalog checks (I18N-05, I18N-06).
 - **BL-DSK-41** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-78h).* The window's **System** language follows the terminal's `[ui] locale` when one is set, and user catalogs in `~/.blitz/locales` load too (the service would serve them: the desktop module can't read the configuration itself).
 
-### 7.6 Workers view — S
-- **BL-DSK-50** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-80d), by polling.* The workers list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.
+### 7.6 Jobs view — S
+- **BL-DSK-50** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-80d), by polling.* The jobs list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.
 
 ### 7.7 Releasing the app — M
 - **BL-DSK-60** ✅ *Done 2026-09-27 ([spec_release_025](spec_release_025.md) REL-20–24): signed and notarised once the Apple secrets are set, ad hoc until then.* A macOS release job builds a universal `Blitz.app`, signs it with a Developer ID, notarises and staples it, and attaches a `.dmg` to the release; the app's version is the release tag's.
@@ -145,7 +145,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 ## 9. Verification still owed
 
 Not code, but blocking confidence in the specs above. *Source: ROADMAP 9, MANUAL_VERIFICATION.*
-- **BL-VER-01** Run every unchecked item of `MANUAL_VERIFICATION.md` (real providers 💲, terminal behaviour, macOS and Linux sandboxes, MCP, steering, fallback and pinning, the service, workers and the desktop app — §§36–37), and record results there; each failure becomes a backlog item here.
+- **BL-VER-01** Run every unchecked item of `MANUAL_VERIFICATION.md` (real providers 💲, terminal behaviour, macOS and Linux sandboxes, MCP, steering, fallback and pinning, the service, jobs and the desktop app — §§36–37), and record results there; each failure becomes a backlog item here.
 - **BL-VER-02** Verify the first release from `retail-cortex/blitz` against its new cosign identity (§18).
 - **BL-VER-04** Claude on Vertex AI, live, once project `rmcguinness-lab` has Claude Opus quota (requested after 2026-09-28; `global` and `us-east5` both answered `429 RESOURCE_EXHAUSTED`): `blitz config set-auth anthropic adc`, then `blitz doctor --online` and a session with Claude Opus 5.5 (streaming, a tool call, an image, prompt caching in `/cost`), and the desktop form's "Google Cloud (ADC)". Blitz's side was checked up to the request: the credentials, the Vertex path and the model were accepted.
 - **BL-VER-03** Windows: build, run, and document what's unsupported (no OS sandbox, no process guard, no skill scripts; shell tools need Git Bash or WSL). *The tray and the desktop page in a browser are built ([spec_windows_036](spec_windows_036.md)); running them on Windows is WIN-40.*

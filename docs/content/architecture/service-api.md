@@ -43,7 +43,7 @@ Every request names its workspace by absolute path. The server resolves symlinks
 
 ## Approvals across processes
 
-In process, the engine asks an approver function and waits. In the service, a broker turns each request into an `approval_request` (with the diff and what "always" would remember) on the running turn's stream, and the agent waits until the client calls `Approve(request_id, decision)`. The client that started the turn answers it. An approval with no client attached, such as from a worker, is refused rather than left waiting.
+In process, the engine asks an approver function and waits. In the service, a broker turns each request into an `approval_request` (with the diff and what "always" would remember) on the running turn's stream, and the agent waits until the client calls `Approve(request_id, decision)`. The client that started the turn answers it. An approval with no client attached, such as from a job, is refused rather than left waiting.
 
 ## Why a Unix socket
 

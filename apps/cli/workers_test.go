@@ -224,9 +224,9 @@ func TestWorkersCommandErrors(t *testing.T) {
 	}
 
 	ws := t.TempDir()
-	out, err := runCLI(t, "-d", ws, "workers", "list")
+	out, err := runCLI(t, "-d", ws, "jobs", "list") // jobs; the other tests call it by its old name, workers
 	require.NoError(t, err)
-	assert.Contains(t, out, "No workers")
+	assert.Contains(t, out, "No jobs")
 
 	addWorker(t, ws, "broken", "---\nschedule: whenever you like\n---\nDo it.\n")
 	addWorker(t, ws, "fine", "---\nschedule: daily at noon\n---\nDo it.\n")

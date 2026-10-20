@@ -48,6 +48,19 @@ func TestEvalCommand(t *testing.T) {
 
 	_, err = runCLI(t, "-d", dir, "eval", "gone")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+
+	// --skill runs a skill's scenarios: here the scenario can't run either.
+	scenario := filepath.Join(dir, ".agents", "skills", "notes", "scenarios", "since-tag.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(scenario), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "skills", "notes", "SKILL.md"), []byte("---\nname: notes\ndescription: Notes\n---\nRead the log.\n"), 0o644))
+	require.NoError(t, os.WriteFile(scenario, []byte("---\nprompt: Write the notes\n---\n## What's new\n"), 0o644))
+	out, err = runCLI(t, "-d", dir, "eval", "--skill", "notes")
+	assert.Equal(t, exitFailure, exitCodeFor(err), "%v\n%s", err, out)
+	assert.Contains(t, out, "since-tag")
+	_, err = runCLI(t, "-d", dir, "eval", "--skill", "nope")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "an unknown skill: %v", err)
+	_, err = runCLI(t, "-d", dir, "eval", "sums", "--skill", "notes")
+	assert.Error(t, err, "an eval and --skill both")
 }
 
 // An eval with no cases can't run (a usage error); a broken settings file

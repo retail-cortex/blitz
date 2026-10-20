@@ -33,7 +33,7 @@ Starting empty is fine. With an existing project, open its root: the folder with
 
 The setup wizard gives the workspace its *agent harness*: the instructions every agent reads, and the skills and agents worth having for this project.
 
-- **Desktop:** a new workspace's chat opens on the tile **Set up this workspace for agents**. It's also **Help › Set up the agent harness**.
+- **Desktop:** a new workspace's chat opens on the tile **Set up this workspace for agents**. It's also **Help › Set up the harness**.
 - **Terminal:** `/setup` in a session, or `blitz init` from the shell. `/setup testing` focuses it on one area.
 
 For a new project, the wizard starts with the specification: `/setup a link shortener for our team` asks what kind of project it is (Software, here), what you're building and for whom, how fast and how big it must be, where it runs, and how people sign in, writes numbered specs in `.agents/specs/`, then carries on with the setup. With a specification already there, it reads it instead; `/spec` on its own writes or revises one. When a spec changes later, `/skills update` and `/agents update` bring the project's skills and agents in line. [Start any project: spec, then setup](spec-then-setup.md) walks through this for software, research, analysis and writing.
@@ -176,7 +176,7 @@ Then the next requirements, and the next spec. When a change of plan comes up mi
 Two habits keep this working as the project grows:
 
 - **Short sessions.** A new chat per feature (**+** in the chat, or `/new`) keeps the context on the task. The spec carries what matters from one session to the next, so nothing is lost.
-- **Workers for the chores.** A worker is a workflow the service runs on a schedule, unattended and with only the permissions you give it: a nightly dependency check, a weekly report. With advanced settings on, **Workers › Add worker**; see [the service](../products/service.md).
+- **Jobs for the chores.** A job is a workflow the service runs on a schedule, unattended and with only the permissions you give it: a nightly dependency check, a weekly report. With advanced settings on, **Jobs › Add job**; see [the service](../products/service.md).
 
 ## How this repository does it
 

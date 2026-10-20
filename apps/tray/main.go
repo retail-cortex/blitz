@@ -17,9 +17,7 @@
 // Open the logs. It starts at login beside the service (--install), and
 // talks to the service over its socket like any client.
 //
-// Windows has no desktop app: there the tray serves the desktop page
-// itself (pkg/pageserver) and Open Blitz shows it in an Edge app window.
-// The service has no login item there either, so the tray starts it, and
+// On Windows the service has no login item, so the tray starts it, and
 // its menu has Start at login for the tray.
 //
 // --serve serves the page without an icon, for the Electron app's window
@@ -36,7 +34,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -55,6 +52,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/retail-cortex/blitz/pkg/wininstall"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
 // version is set at link time for releases.
@@ -71,7 +69,7 @@ func main() {
 	uninstall := flag.Bool("uninstall", false, "Stop starting the tray at login, then exit")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	serve := flag.Bool("serve", false, "Serve the desktop page for a window (the Electron app): print a link to it as a JSON line, a new one for each \"link\" line read, until standard input closes")
-	pageDir := flag.String("page", "", "With --serve: the built page's directory (default: the page built into the tray)")
+	pageDir := flag.String("page", "", "With --serve: the built page's directory")
 	applyUpdate := flag.Bool("apply-update", false, "Put a downloaded desktop app in place of the running one (the app's host runs this), then start it")
 	staged := flag.String("staged", "", "With --apply-update: the new app")
 	root := flag.String("root", "", "With --apply-update: the app it replaces")
@@ -165,20 +163,16 @@ func lock() bool {
 	return true
 }
 
-// serveWindow serves the page for the Electron app's window (--serve):
-// the page in dir, else the one built in; no icon, and no tray lock, so a
-// tray can show its icon beside it.
+// serveWindow serves the page in dir for the Electron app's window
+// (--serve): no icon, and no tray lock, so a tray can show its icon
+// beside it.
 func serveWindow(dir string) error {
-	p := page
-	if dir != "" {
-		d, err := tray.PageDir(dir)
-		if err != nil {
-			return err
-		}
-		p = d
+	if dir == "" {
+		return errors.New("--serve needs --page: the built page's directory")
 	}
-	if p == nil {
-		return errors.New("this blitz-tray has no page built in: pass --page")
+	p, err := tray.PageDir(dir)
+	if err != nil {
+		return err
 	}
 	sock := socket.DefaultSocket()
 	host := newHost(sock, newActions(sock))
@@ -266,33 +260,75 @@ func newHost(sock string, acts tray.Actions) pagehost.Host {
 	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, StartTray: func() error { return startTray(exe) }, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
 }
 
+// How many runs and workspaces the menu shows at most (more are in the app).
+const (
+	maxRunSlots   = 6
+	maxSpaceSlots = 12
+)
+
+// latestRuns are the workflow runs as the service last said.
+type latestRuns struct {
+	mu   sync.Mutex
+	runs []*pb.WorkflowRun
+}
+
+func (l *latestRuns) set(r []*pb.WorkflowRun) { l.mu.Lock(); l.runs = r; l.mu.Unlock() }
+
+func (l *latestRuns) get() []*pb.WorkflowRun { l.mu.Lock(); defer l.mu.Unlock(); return l.runs }
+
+// openSpaces are the workspaces open in the desktop app, in its order and
+// named as it names them (~/.blitz/desktop.json).
+func openSpaces() []tray.Space {
+	prefs, err := pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json")).Load()
+	if err != nil {
+		return nil
+	}
+	var out []tray.Space
+	for _, w := range prefs.Workspaces {
+		if w.Open {
+			out = append(out, tray.Space{Dir: w.Dir, Name: w.Name})
+		}
+	}
+	return out
+}
+
 func onReady() {
 	sock := socket.DefaultSocket()
+	var runs latestRuns
+	poke := make(chan struct{}, 1)
+	icon := newTrayIcon()
 	acts := newActions(sock)
 	status := acts.Status
-
-	if page != nil {
-		acts.Page = pageLink(page, sock, acts)
-	}
 
 	tray.SetupLocale()
 	systray.SetTitle("")
 	state := systray.AddMenuItem(i18n.T("tray.service"), "")
 	state.Disable()
+	// What's going on (spec_electron_038 EL-111): a heading and an item
+	// per run, each with Show and Stop, shown while there are some.
+	runningHead := systray.AddMenuItem(i18n.T("tray.running"), "")
+	runningHead.Disable()
+	runningHead.Hide()
+	runSlots := newSlots(maxRunSlots)
 	systray.AddSeparator()
 	start := systray.AddMenuItem(i18n.T("tray.start"), "")
 	stop := systray.AddMenuItem(i18n.T("tray.stop"), "")
 	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
+	// The running service's MCP servers: the service's, not a workspace's.
+	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
 	tasksItem := systray.AddMenuItem("", "")
 	tasksItem.Hide()
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
-	systray.AddSeparator()
-	// What the running service has: its MCP servers and workers.
-	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
-	workersMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.workers"), "")}
+	// A submenu per workspace with jobs or workflows (EL-111), under its
+	// heading and no line: a line can't be hidden, and with no workspace
+	// two would meet.
+	spacesHead := systray.AddMenuItem(i18n.T("tray.workspaces"), "")
+	spacesHead.Disable()
+	spacesHead.Hide()
+	spaceSlots := newSlots(maxSpaceSlots)
 	systray.AddSeparator()
 	// Windows: the tray is what starts at login (and starts the service).
 	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
@@ -352,7 +388,7 @@ func onReady() {
 	isWaiting := func() bool { tasksMu.Lock(); defer tasksMu.Unlock(); return waiting > 0 }
 
 	show := func(m tray.Menu, note string) {
-		setIcon(m.Running, m.Running && isWaiting())
+		icon.set(m.Running, m.Running && isWaiting())
 		title := m.State.Title
 		if note != "" {
 			title = note
@@ -394,18 +430,48 @@ func onReady() {
 			extras, err = tray.FetchExtras(context.Background(), sock)
 		}
 		// Shown while the service runs and answers (an older one doesn't).
-		for _, sm := range []*submenu{mcpMenu, workersMenu} {
-			if st.Running && err == nil {
-				sm.parent.Show()
-			} else {
-				sm.parent.Hide()
-			}
-		}
 		if st.Running && err == nil {
+			mcpMenu.parent.Show()
 			mcpMenu.show(tray.MCPEntries(extras), click)
-			workersMenu.show(tray.WorkerEntries(extras), click)
+			live := tray.Live{Runs: runs.get(), JobRuns: extras.Runs}
+			spaces := tray.Spaces(openSpaces(), extras.Workers)
+			going := tray.Going(live, spaces, time.Now())
+			runSlots.show(going, click)
+			if len(going) > 0 {
+				runningHead.Show()
+			} else {
+				runningHead.Hide()
+			}
+			var menus []tray.Entry
+			for _, sp := range spaces {
+				if entries := tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live); len(entries) > 0 {
+					menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: entries})
+				}
+			}
+			spaceSlots.show(menus, click)
+			if len(menus) > 0 {
+				spacesHead.Show()
+			} else {
+				spacesHead.Hide()
+			}
+			icon.pulse(live.Busy())
+		} else {
+			mcpMenu.parent.Hide()
+			runningHead.Hide()
+			spacesHead.Hide()
+			runSlots.show(nil, click)
+			spaceSlots.show(nil, click)
+			icon.pulse(false)
 		}
 	}
+	// The runs, followed as they change: each change redraws the menu.
+	go tray.WatchRuns(context.Background(), sock, 3*time.Second, func(r []*pb.WorkflowRun) {
+		runs.set(r)
+		select {
+		case poke <- struct{}{}:
+		default:
+		}
+	})
 	refresh()
 
 	do = func(doing string, f func() error) {
@@ -458,6 +524,10 @@ func onReady() {
 				if !isBusy() {
 					refresh()
 				}
+			case <-poke:
+				if !isBusy() {
+					refresh()
+				}
 			}
 		}
 	}()
@@ -480,25 +550,4 @@ func toggleAtLogin(item *systray.MenuItem) error {
 		item.Uncheck()
 	}
 	return err
-}
-
-// pageLink serves the page (on its first use) and returns a link that
-// opens it, a new one each time.
-func pageLink(page fs.FS, sock string, acts tray.Actions) func() (string, error) {
-	var (
-		mu  sync.Mutex
-		srv *pageserver.Server
-	)
-	return func() (string, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		if srv == nil {
-			s, err := pageserver.Start(pageserver.Options{Page: page, Socket: sock, Host: newHost(sock, acts).Handler()})
-			if err != nil {
-				return "", err
-			}
-			srv = s
-		}
-		return srv.OpenURL(), nil
-	}
 }

@@ -38,10 +38,14 @@ import (
 // names, unattended, in a session of its own that's deleted after; its
 // output is scored against the expected one.
 
-// Each case's limits: model calls and time.
+// Each case's limits: model calls, the agent's time, the scoring's
+// time, and the whole case's (setting up and cleaning up included), so a
+// case that hangs ends as an error and the run goes on to the next.
 var (
-	evalMaxTurns = 25
-	evalTimeout  = 5 * time.Minute
+	evalMaxTurns     = 25
+	evalTimeout      = 5 * time.Minute
+	evalScoreTimeout = 2 * time.Minute
+	evalCaseTimeout  = evalTimeout + evalScoreTimeout + time.Minute
 )
 
 // ProjectEvalsDir is where the workspace's evals are: .agents/evals.
@@ -72,7 +76,8 @@ func (w *Workspace) eval(name string) (evals.Eval, []string, error) {
 	return evals.Eval{}, nil, fmt.Errorf("%w: %q", api.ErrUnknownEval, name)
 }
 
-// EvalRuns are an eval's recorded runs, newest first.
+// EvalRuns are an eval's recorded runs, newest first ("skill:<name>":
+// a skill's scenario runs).
 func (w *Workspace) EvalRuns(name string, limit int) ([]api.EvalRun, error) {
 	return w.evalRuns.List(w.Dir(), name, limit)
 }
@@ -83,6 +88,9 @@ func (w *Workspace) EvalRuns(name string, limit int) ([]api.EvalRun, error) {
 // for, isn't run.
 func (w *Workspace) RunEval(ctx context.Context, name string, o api.EvalOptions) (api.EvalRun, error) {
 	w.RefreshAgents(ctx)
+	if skill, ok := strings.CutPrefix(name, api.SkillEvalPrefix); ok {
+		return w.runSkillScenarios(ctx, name, skill, o) // a skill's scenarios (SK-111)
+	}
 	e, _, err := w.eval(name)
 	if err != nil {
 		return api.EvalRun{}, err
@@ -224,7 +232,13 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 	}
 	started := time.Now()
 	defer func() { r.Duration = time.Since(started) }()
+	run := ctx // the run's: stopping it isn't a timeout
+	ctx, cancel := context.WithTimeout(ctx, evalCaseTimeout)
+	defer cancel()
 	fail := func(err error) api.EvalResult {
+		if run.Err() == nil && ctx.Err() != nil {
+			err = fmt.Errorf("the case took longer than %s: %w", evalCaseTimeout, err)
+		}
 		r.Status, r.Reason = api.EvalError, err.Error()
 		r.Duration = time.Since(started)
 		return r
@@ -232,47 +246,25 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 	if _, ok := w.agents.Get(agent); !ok && agent != w.engine.ActiveAgent() {
 		return fail(fmt.Errorf("agent %q isn't defined", agent))
 	}
-	st, err := session.NewStorage(w.cfg.Session.StorageDir)
+	output, spent, refusals, err := w.unattended(ctx, fmt.Sprintf("eval %s %s", e.Name, c.ID), agent, c.Prompt, c.Prompt+note, e.Allow, nil)
+	r.CostUSD, r.Refusals = spent, refusals
 	if err != nil {
 		return fail(err)
 	}
-	st.SetWorkspace(w.Dir())
-	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("eval %s %s", e.Name, c.ID), agent)
-	if err != nil {
-		st.Release()
-		return fail(err)
-	}
-	rec.Origin = session.OriginEval
-	defer func() {
-		st.Release()
-		_ = st.Delete(rec.ID)
-	}()
-	var mu sync.Mutex
-	decide := func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
-		if (req.Kind == api.ActionNetwork && slices.Contains(e.Allow, evals.AllowNetwork)) || (req.Kind == api.ActionMCP && slices.Contains(e.Allow, evals.AllowMCP)) {
-			return api.DecisionOnce, nil
-		}
-		mu.Lock()
-		r.Refusals = append(r.Refusals, textutil.Ellipsize(req.Tool+": "+req.Detail, 200))
-		mu.Unlock()
-		return api.DecisionDeny, nil
-	}
-	prompt := c.Prompt + note
-	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: api.Turn{
-		Text: c.Prompt, Prompt: prompt, MaxTurns: evalMaxTurns, Timeout: evalTimeout,
-	}}, func(api.Event) {}, st, runtime.WithAgent(agent))
-	r.CostUSD = w.engine.Usage(rec.ID).CostUSD
-	if err != nil {
-		return fail(err)
-	}
-	r.Output = res.Output
+	r.Output = output
 	pass := false
 	if c.Type == evals.Exact {
-		pass = evals.ExactMatch(c.Output, res.Output)
+		pass = evals.ExactMatch(c.Output, output)
 		r.Score = map[bool]float64{true: 1}[pass]
 	} else {
-		s, why, spent, err := score(ctx, c, SecretRedactor(w.cfg).String(res.Output))
+		sctx, done := context.WithTimeout(ctx, evalScoreTimeout)
+		s, why, spent, err := score(sctx, c, SecretRedactor(w.cfg).String(output))
+		timedOut := sctx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+		done()
 		r.CostUSD += spent
+		if timedOut {
+			return fail(fmt.Errorf("scoring took longer than %s", evalScoreTimeout))
+		}
 		if err != nil {
 			return fail(fmt.Errorf("scoring: %w", err))
 		}
@@ -284,4 +276,47 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 		r.Status = cmp.Or(c.Scope, evals.Fail)
 	}
 	return r
+}
+
+// unattended runs one prompt on agent in a session of its own, deleted
+// after, unattended (tools.Unattended): file changes, deletions and
+// commands are refused and returned; the web and MCP tools only when
+// allow says. text is the prompt as shown, prompt as sent; on (nil: none)
+// sees each event. It returns the answer and what it cost.
+func (w *Workspace) unattended(ctx context.Context, label, agent, text, prompt string, allow []string, on func(api.Event)) (output string, costUSD float64, refusals []string, err error) {
+	st, err := session.NewStorage(w.cfg.Session.StorageDir)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	st.SetWorkspace(w.Dir())
+	rec, err := st.CreateSession(session.NewSessionID(), label, agent)
+	if err != nil {
+		st.Release()
+		return "", 0, nil, err
+	}
+	rec.Origin = session.OriginEval
+	defer func() {
+		st.Release()
+		_ = st.Delete(rec.ID)
+	}()
+	var mu sync.Mutex
+	decide := func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
+		if (req.Kind == api.ActionNetwork && slices.Contains(allow, evals.AllowNetwork)) || (req.Kind == api.ActionMCP && slices.Contains(allow, evals.AllowMCP)) {
+			return api.DecisionOnce, nil
+		}
+		mu.Lock()
+		refusals = append(refusals, textutil.Ellipsize(req.Tool+": "+req.Detail, 200))
+		mu.Unlock()
+		return api.DecisionDeny, nil
+	}
+	if on == nil {
+		on = func(api.Event) {}
+	}
+	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: api.Turn{
+		Text: text, Prompt: prompt, MaxTurns: evalMaxTurns, Timeout: evalTimeout,
+	}}, on, st, runtime.WithAgent(agent))
+	costUSD = w.engine.Usage(rec.ID).CostUSD
+	mu.Lock()
+	defer mu.Unlock()
+	return res.Output, costUSD, slices.Clone(refusals), err
 }

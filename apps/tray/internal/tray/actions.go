@@ -47,9 +47,6 @@ type Actions struct {
 	// Shutdown asks the service to stop (nil: nobody is asked, and Stop
 	// signals it).
 	Shutdown func() error
-	// Page is a link that opens the page the tray serves (Windows, which
-	// has no desktop app); nil opens the desktop app instead.
-	Page func() (string, error)
 }
 
 // Start starts the service: through its login item when it has one, else
@@ -118,18 +115,10 @@ func (a Actions) Restart() error {
 	return a.Start()
 }
 
-// OpenApp opens the desktop app: the bundle the tray is in (macOS),
-// blitz-desktop beside it or on PATH (Linux); or, with a Page, the page
-// in a browser's app window (Windows).
+// OpenApp opens the desktop app: the bundle the tray is in (macOS), the
+// app the tray is in, beside it or on PATH (blitz-desktop on Linux,
+// Blitz.exe on Windows).
 func (a Actions) OpenApp() error {
-	if a.Page != nil {
-		link, err := a.Page()
-		if err != nil {
-			return err
-		}
-		name, args := appWindow(goruntime.GOOS, os.Getenv, isFile, link)
-		return a.Run(name, args...)
-	}
 	if goruntime.GOOS == "darwin" {
 		if app := appBundle(a.Beside); app != "" {
 			return a.Run("open", app)
@@ -137,8 +126,12 @@ func (a Actions) OpenApp() error {
 		return a.Run("open", "-a", "Blitz")
 	}
 	name := "blitz-desktop"
+	if goruntime.GOOS == "windows" {
+		name = "Blitz.exe"
+	}
 	// In the Electron app: <root>/resources/app/bin/blitz-tray, the app
-	// <root>/blitz-desktop (Linux); else beside the tray.
+	// <root>/blitz-desktop (Linux) or <root>/Blitz.exe (Windows); else
+	// beside the tray.
 	for _, p := range []string{filepath.Join(a.Beside, "..", "..", "..", name), filepath.Join(a.Beside, name)} {
 		if isFile(p) {
 			return a.Run(filepath.Clean(p))

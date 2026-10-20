@@ -53,26 +53,56 @@ export const taskWindowMethods: readonly WindowMethod[] = ["OpenURL", "SetAppear
 export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
+/** A link to the page, and the fingerprint of the certificate its server has. */
+export interface PageLink {
+  url: string;
+  fingerprint: string;
+}
+
 /**
  * The link to the page in a line blitz-tray --serve wrote: a one-time
- * link on the loopback address ({"url": "http://127.0.0.1:<port>/open?t=<hex>"}),
- * or undefined for anything else.
+ * link on the loopback address, over HTTPS, with its server's certificate
+ * ({"url": "https://127.0.0.1:<port>/open?t=<hex>", "fingerprint": "AB:…"},
+ * SHA-256 as colon-separated hex), or undefined for anything else.
  */
-export function parseLink(line: string): string | undefined {
-  let url: unknown;
+export function parseLink(line: string): PageLink | undefined {
+  let url: unknown, fingerprint: unknown;
   try {
-    url = (JSON.parse(line) as { url?: unknown }).url;
+    ({ url, fingerprint } = JSON.parse(line) as { url?: unknown; fingerprint?: unknown });
   } catch {
     return undefined;
   }
-  if (typeof url !== "string") return undefined;
+  if (typeof url !== "string" || typeof fingerprint !== "string" || !/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(fingerprint)) return undefined;
   try {
     const u = new URL(url);
-    if (u.protocol !== "http:" || u.hostname !== "127.0.0.1" || !u.port || u.pathname !== "/open" || !/^[0-9a-f]+$/.test(u.searchParams.get("t") ?? "")) return undefined;
+    if (u.protocol !== "https:" || u.hostname !== "127.0.0.1" || !u.port || u.pathname !== "/open" || !/^[0-9a-f]+$/.test(u.searchParams.get("t") ?? "")) return undefined;
   } catch {
     return undefined;
   }
-  return url;
+  return { url, fingerprint };
+}
+
+/**
+ * Whether a certificate is the page server's: on the loopback address,
+ * with the fingerprint blitz-tray --serve named (pinned). The window
+ * trusts that one certificate, made by the server as it started, and
+ * leaves every other to Chromium's own checks.
+ */
+export function isPageCertificate(hostname: string, fingerprint: string, pinned: string): boolean {
+  return pinned !== "" && hostname === "127.0.0.1" && fingerprint === pinned;
+}
+
+/** How soon after renewing the page server's certificate another error may renew it again (ms). */
+export const renewEvery = 60_000;
+
+/**
+ * Whether a failed request means the page server needs a new certificate:
+ * a certificate error (net::ERR_CERT_…) on the page's own origin, and none
+ * renewed in the last renewEvery, so a server that keeps failing isn't
+ * started again and again.
+ */
+export function shouldRenew(error: string, url: string, origin: string, lastRenew: number, now: number): boolean {
+  return origin !== "" && error.startsWith("net::ERR_CERT_") && originOf(url) === origin && now - lastRenew >= renewEvery;
 }
 
 /** The origin of a URL ("" when it isn't one). */
@@ -197,14 +227,18 @@ export interface DeepLink {
   /** For workflows: the workflow, and the run to show on its canvas. */
   workflow?: string;
   run?: string;
+  /** For workers: the job to open (its details), else the list. */
+  worker?: string;
 }
 
 /**
  * Reads blitz://open?dir=<folder>&prompt=<text> and, from the tray,
- * blitz://workers?dir=<folder> (the folder's workers): the folder must be
- * an absolute path (whether it's a folder is the main process's to
- * check), the prompt at most maxLinkPrompt characters. Undefined
- * otherwise.
+ * blitz://workers?dir=<folder>[&worker=<name>] (the folder's jobs, or
+ * one job's details) and
+ * blitz://workflow?dir=<folder>&workflow=<name>[&run=<id>] (a workflow's
+ * canvas, on a run; EL-111): the folder must be an absolute path (whether
+ * it's a folder is the main process's to check), the prompt at most
+ * maxLinkPrompt characters, the workflow named. Undefined otherwise.
  */
 export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   let u: URL;
@@ -215,12 +249,21 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   }
   if (u.protocol !== "blitz:") return undefined;
   const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
-  if (action !== "open" && action !== "workers") return undefined;
+  if (action !== "open" && action !== "workers" && action !== "workflow") return undefined;
   let dir = u.searchParams.get("dir") ?? "";
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
   if (!absolute) return undefined;
-  if (action === "workers") return { dir, prompt: "", view: "workers" };
+  if (action === "workers") {
+    const worker = [...(u.searchParams.get("worker") ?? "")].slice(0, 200).join("");
+    return worker ? { dir, prompt: "", view: "workers", worker } : { dir, prompt: "", view: "workers" };
+  }
+  if (action === "workflow") {
+    const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+    const workflow = cut(u.searchParams.get("workflow"));
+    if (!workflow) return undefined;
+    return { dir, prompt: "", view: "workflows", workflow, run: cut(u.searchParams.get("run")) };
+  }
   const prompt = u.searchParams.get("prompt") ?? "";
   if ([...prompt].length > maxLinkPrompt) return undefined;
   return { dir, prompt };

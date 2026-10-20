@@ -24,8 +24,8 @@ weight: 32
 - **Cancellation.** Cancelling the turn cancels the sub-agent.
 - **Approvals.** They go through the workspace's one approver. In the service they need the running turn's stream: once the turn ends, a request is refused, and with no client attached it is refused at once. Requests carry no agent name, and the desktop app holds one pending request at a time.
 - **Steering.** Steer messages are queued per session and added to the next tool result (`message_from_user`). What's left when the turn ends goes back to the client, which sends it as the next turn.
-- **Starting turns.** Nothing starts a turn in an idle interactive session, and a client that isn't running a turn gets no events. Workers run in their own sessions, from the service's scheduler.
-- **Concurrency.** The engine runs turns of different sessions at once (workers already do).
+- **Starting turns.** Nothing starts a turn in an idle interactive session, and a client that isn't running a turn gets no events. Jobs run in their own sessions, from the service's scheduler.
+- **Concurrency.** The engine runs turns of different sessions at once (jobs already do).
 - **Existing pattern.** Background shell processes show the shape to reuse: IDs, a cap on how many run at once, a lifetime, kept output, finished ones retained, listing by session.
 
 ## 3. Tasks
@@ -73,7 +73,7 @@ weight: 32
 
 The hard part: a task may need an approval while the person is doing something else, or after the turn that started it has ended.
 
-- **BGA-40 Phase 1: unattended** (replaced by BGA-41 in phase 2). A task runs as workers do (`tools.Unattended`): what the workspace's mode and rules allow runs; anything that would ask is refused and returned to the task as a denial ("needs approval: shell `make deploy`; not asked, because it runs in the background"); `ask_user_question` is refused. The task can report what it needed, and the main agent can do that step itself in the foreground. This is safe, needs no new UI, and is useful at once for reviews, research and tests.
+- **BGA-40 Phase 1: unattended** (replaced by BGA-41 in phase 2). A task runs as jobs do (`tools.Unattended`): what the workspace's mode and rules allow runs; anything that would ask is refused and returned to the task as a denial ("needs approval: shell `make deploy`; not asked, because it runs in the background"); `ask_user_question` is refused. The task can report what it needed, and the main agent can do that step itself in the foreground. This is safe, needs no new UI, and is useful at once for reviews, research and tests.
 - **BGA-41 Phase 2: labelled approvals.**
   - A task's run routes its approval requests and questions to its session's people (`tools.TaskAsker`) once the workspace's rules and mode would ask: they become the engine's waiting requests (`api.TaskRequest`: ID, task, agent, session, and the approval or the question), labelled "qa · task-3"; the protos' `ApprovalRequest` and `Question` gain `agent` and `task_id`.
   - While one waits, the task is `waiting`. `WatchTasks` and `ListTaskRequests` carry them; `SessionService.Approve` and `Answer` answer them, falling back to the tasks' requests when no running turn owns the ID.
@@ -99,7 +99,7 @@ Tests: the task manager's cap, lifetime, stop and close; delivery into a running
 A task is a sub-agent inside a turn. A background run is a whole turn the service runs with no client attached, started from a terminal and picked up later from any client.
 
 - **BGA-60 Starting one.** `blitz --bg "<prompt>"` (the prompt as for a one-shot run; with `--plan`, `--max-turns`, `--max-cost-usd`, `--timeout`; not with `-i`, `--local`, `--resume`, `--continue` or `--output-format`) calls `SessionService.StartBackground` and prints the run's ID and session, and how to follow it. It needs the service (`errNeedsService` otherwise).
-- **BGA-61 Its session.** The run's turn goes in a new session of the workspace, made in a session storage of its own as a worker's is (`engine.RunDetached`), so the workspace's active session, and the clients working there, stay where they are. The run is `bg-<n>`, counted over the service's lifetime; its state is running, waiting (a request waits for an answer), done, failed or stopped.
+- **BGA-61 Its session.** The run's turn goes in a new session of the workspace, made in a session storage of its own as a job's is (`engine.RunDetached`), so the workspace's active session, and the clients working there, stay where they are. The run is `bg-<n>`, counted over the service's lifetime; its state is running, waiting (a request waits for an answer), done, failed or stopped.
 - **BGA-62 Its events and requests.** The run's events are kept (the latest 5,000) for anyone who watches it. Its approval requests and questions go through the service's broker like a turn's, on the run's own sink: they wait, with nobody attached, until a client answers them with `Approve` or `Answer`. The run's own limits and `stop` still end it.
 - **BGA-63 Watching.** `WatchBackground(id, follow)` streams the kept events from the start, leaving out requests already answered, and with `follow` those to come, ending with `TurnFinished`. `ListBackground` gives every workspace's runs, newest first (the running ones, and the latest 50 that ended), with cost and how many requests wait. `StopBackground` cancels one and waits for it to end. An unknown ID is `UNKNOWN_RUN` (`api.ErrUnknownRun`).
 - **BGA-64 The CLI.** `blitz agents [--all]` lists the runs going on (or all) as a table: ID, state (with the requests waiting), age, cost, workspace, prompt. `blitz logs <id> [-f]` prints a run's events so far (following it with `-f`) without answering anything. `blitz stop <id>` stops one and says where its session is.

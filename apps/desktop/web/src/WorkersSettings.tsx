@@ -27,6 +27,7 @@ import { WorkerLimits } from "./WorkerLimits";
 import { displayName, openWorkspace } from "./prefs";
 import { runDetail } from "./runningWorkers";
 import { useApp } from "./state";
+import { intent as newIntent } from "./intent";
 import { WorkersPane } from "./studio/WorkersPane";
 import { lastFailed, workerStateLabel } from "./Workers";
 import { workspaceFlag } from "./workersOverview";
@@ -45,7 +46,9 @@ const overviewPollMs = 10000;
  * workspaces says so, with Open; one whose folder is gone, with Forget.
  * onLeave closes Settings (a workspace opened, a run's conversation).
  */
-export function WorkersSettings({ onLeave }: { onLeave: () => void }) {
+export function WorkersSettings({ onLeave, worker = "" }: { onLeave: () => void; worker?: string }) {
+  // A global job to open on (the tray's Open: blitz://workers on the home workspace, with its name).
+  const [intent] = useState(() => (worker ? newIntent("show", worker) : undefined));
   const { prefs, update } = useApp();
   const snack = useSnackbar();
   const [home, setHome] = useState("");
@@ -108,7 +111,7 @@ export function WorkersSettings({ onLeave }: { onLeave: () => void }) {
       {policy && <WorkerLimits policy={policy} onChanged={() => void refresh()} />}
       {home && (
         <div className="slide-box">
-          <WorkersPane dir={home} global onLeave={onLeave} />
+          <WorkersPane dir={home} global onLeave={onLeave} intent={intent} />
         </div>
       )}
 
