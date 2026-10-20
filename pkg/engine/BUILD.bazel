@@ -100,6 +100,7 @@ go_library(
         "//pkg/engine/audit",
         "//pkg/engine/commands",
         "//pkg/engine/compose",
+        "//pkg/engine/databases",
         "//pkg/engine/evals",
         "//pkg/engine/flows",
         "//pkg/engine/gates",

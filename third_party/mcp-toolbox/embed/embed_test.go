@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -215,4 +216,93 @@ func TestStartAndFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, s.Close())
 	assert.NoError(t, s.Close(), "twice")
+}
+
+// A statement that only reads is told from one that may write.
+func TestReadsOnly(t *testing.T) {
+	for _, tc := range []struct {
+		sql  string
+		want bool
+	}{
+		{"SELECT * FROM t", true},
+		{"  select\n  count(*) from t;", true},
+		{"-- the totals\nSELECT sum(n) FROM t", true},
+		{"/* a */ WITH x AS (SELECT 1) SELECT * FROM x", true},
+		{"(SELECT 1)", true},
+		{"EXPLAIN SELECT 1", true},
+		{"PRAGMA table_info(t)", true},
+		{"SELECT replace(name, 'a', 'b') FROM t", true},
+		{"WITH gone AS (DELETE FROM t RETURNING *) SELECT * FROM gone", false},
+		{"DELETE FROM t", false},
+		{"insert into t values (1)", false},
+		{"UPDATE t SET n = 1", false},
+		{"DROP TABLE t", false},
+		{"SELECT 1; DROP TABLE t", false},
+		{"", false},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			assert.Equal(t, tc.want, ReadsOnly(tc.sql))
+		})
+	}
+}
+
+// Read-only sources and the tools on them; a custom SQL tool that only
+// reads is marked so, one that writes isn't.
+func TestReadOnlyTools(t *testing.T) {
+	cfg, err := Load(context.Background(), []string{writeConfig(t, `kind: source
+name: ro
+type: sqlite
+database: /tmp/a.db
+readOnly: true
+---
+kind: source
+name: rw
+type: sqlite
+database: /tmp/b.db
+---
+kind: source
+name: bq_blocked
+type: bigquery
+project: p
+writeMode: blocked
+---
+kind: source
+name: bq_ro
+type: bigquery
+project: p
+readOnly: true
+---
+kind: source
+name: bq_rw
+type: bigquery
+project: p
+---
+kind: tool
+name: reads
+type: sqlite-sql
+source: ro
+description: Reads
+statement: SELECT 1
+---
+kind: tool
+name: writes
+type: sqlite-sql
+source: rw
+description: Writes
+statement: DELETE FROM t
+---
+kind: tool
+name: rw_reads
+type: sqlite-sql
+source: rw
+description: Reads, but the source writes
+statement: SELECT 1
+`)}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bq_blocked", "bq_ro", "ro"}, ReadOnlySources(cfg))
+	assert.Equal(t, []string{"reads"}, ReadOnlyTools(cfg))
+	for name, want := range map[string]bool{"reads": true, "rw_reads": true, "writes": false} {
+		ann := reflect.ValueOf(cfg.Tools[name]).FieldByName("Annotations")
+		assert.Equal(t, want, !ann.IsNil(), name)
+	}
 }

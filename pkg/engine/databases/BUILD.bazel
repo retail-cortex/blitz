@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "databases",
+    srcs = ["databases.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/databases",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/engine/tools",
+        "//pkg/redact",
+        "//pkg/secrets",
+        "//third_party/mcp-toolbox/embed",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_test(
+    name = "databases_test",
+    srcs = ["databases_test.go"],
+    embed = [":databases"],
+    deps = [
+        "//pkg/config",
+        "//pkg/secrets",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

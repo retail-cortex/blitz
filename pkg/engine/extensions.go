@@ -23,6 +23,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 
+	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -166,7 +167,9 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 	var out []api.MCPServer
 	for _, s := range w.cfg.MCP.Servers {
 		target := s.URL
-		if target == "" {
+		if s.InProcess != "" {
+			target = "in-process: " + strings.Join(s.Args, ", ")
+		} else if target == "" {
 			target = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
 		m := api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove, Disabled: s.Disabled, State: "disabled"}
@@ -183,15 +186,25 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 // restart, disabled and removed ones stop, and the agents are built
 // again so the next turn offers what's there now.
 func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
-	changed, err := w.tools.MCP().Update(mcpWithSecrets(cfg.MCP.Servers, w.Dir()))
+	servers := databases.With(mcpWithSecrets(cfg.MCP.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
+	changed, err := w.tools.MCP().Update(servers)
 	if err != nil {
 		return err
 	}
 	w.cfg.MCP = cfg.MCP
+	w.cfg.MCP.Servers = servers
 	if !changed {
 		return nil
 	}
 	return w.engine.Rebuild(ctx)
+}
+
+// ReloadDatabases serves the database files as they are now
+// (spec_databases_046): the databases server starts, restarts with the
+// changed files or secrets, or stops when there are none.
+func (w *Workspace) ReloadDatabases(ctx context.Context) error {
+	cfg := *w.cfg
+	return w.ReloadMCP(ctx, &cfg)
 }
 
 // RestartMCPServer stops the MCP server named name and starts it afresh

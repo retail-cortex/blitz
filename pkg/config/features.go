@@ -399,6 +399,16 @@ type MCPServerConfig struct {
 	// TimeoutSeconds bounds one tool call (default 300). A server that fails
 	// or times out twice in a row is paused, with growing back-off.
 	TimeoutSeconds int `toml:"timeout_seconds"`
+	// InProcess names a server Blitz runs inside its own process, in place
+	// of a command or URL ("databases", spec_databases_046). Blitz sets it;
+	// settings files can't.
+	InProcess string `toml:"-"`
+	// Fingerprint changes when an in-process server's files do, so a
+	// reload restarts it.
+	Fingerprint string `toml:"-"`
+	// ReadOnlyTools run without asking: tools Blitz knows can't change
+	// anything (a read-only database's).
+	ReadOnlyTools []string `toml:"-"`
 }
 
 // BrowserConfig controls the browser tool (spec_parity_027 §5.2): a

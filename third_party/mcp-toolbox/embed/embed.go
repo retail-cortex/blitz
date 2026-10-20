@@ -30,12 +30,16 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/log"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/server"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/telemetry"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
 
 	// The databases Blitz offers: their sources and tools register
@@ -101,7 +105,108 @@ func Load(ctx context.Context, files []string, env map[string]string) (Config, e
 		vars[k] = v
 	}
 	p := &ConfigParser{EnvVars: vars}
-	return p.LoadAndMergeConfigs(ctx, files)
+	cfg, err := p.LoadAndMergeConfigs(ctx, files)
+	if err != nil {
+		return cfg, err
+	}
+	markReads(cfg)
+	return cfg, nil
+}
+
+// markReads marks the custom SQL tools whose statement only reads, and
+// that don't say, read-only (readOnlyHint): Toolbox takes an unmarked one
+// for a write, hiding it on a read-only source.
+func markReads(cfg Config) {
+	yes := true
+	for name, tc := range cfg.Tools {
+		rv := reflect.ValueOf(tc)
+		if rv.Kind() != reflect.Struct {
+			continue
+		}
+		stmt, ann := rv.FieldByName("Statement"), rv.FieldByName("Annotations")
+		if stmt.Kind() != reflect.String || ann.Kind() != reflect.Pointer || !ann.IsNil() || !ReadsOnly(stmt.String()) {
+			continue
+		}
+		cp := reflect.New(rv.Type()).Elem()
+		cp.Set(rv)
+		cp.FieldByName("Annotations").Set(reflect.ValueOf(&tools.ToolAnnotations{ReadOnlyHint: &yes}))
+		cfg.Tools[name] = cp.Interface().(tools.ToolConfig)
+	}
+}
+
+var (
+	// readVerbs start a statement that reads.
+	readVerbs = map[string]bool{"select": true, "with": true, "explain": true, "show": true, "pragma": true, "values": true, "describe": true, "table": true}
+	// writeWords in a statement may make it write (WITH … DELETE).
+	writeWords = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex)\b`)
+	sqlComment = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
+)
+
+// ReadsOnly says whether a SQL statement only reads: it starts with
+// SELECT, WITH, EXPLAIN, SHOW, PRAGMA, VALUES, DESCRIBE or TABLE, and has
+// no word that writes. It's a hint, not a guard: a read-only source is
+// what stops writes.
+func ReadsOnly(statement string) bool {
+	s := sqlComment.ReplaceAllString(statement, " ")
+	words := strings.Fields(strings.ToLower(strings.TrimLeft(strings.TrimSpace(s), "(")))
+	return len(words) > 0 && readVerbs[strings.TrimRight(words[0], ";")] && !writeWords.MatchString(s)
+}
+
+// ReadOnlySources are cfg's sources that can't write, by name: SQLite,
+// Postgres and AlloyDB with readOnly (the database refuses a write), and
+// BigQuery with writeMode blocked (or readOnly).
+func ReadOnlySources(cfg Config) []string {
+	var out []string
+	for name, sc := range cfg.Sources {
+		if sourceReadOnly(sc) {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ReadOnlyTools are cfg's tools on a read-only source (ReadOnlySources),
+// by name: whatever they say they do, they can't change the database.
+func ReadOnlyTools(cfg Config) []string {
+	ro := map[string]bool{}
+	for _, s := range ReadOnlySources(cfg) {
+		ro[s] = true
+	}
+	var out []string
+	for name, tc := range cfg.Tools {
+		if src := field(tc, "Source"); src.Kind() == reflect.String && ro[src.String()] {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// sourceReadOnly says whether a source's settings make it read-only.
+func sourceReadOnly(sc any) bool {
+	if wm := field(sc, "WriteMode"); wm.Kind() == reflect.String { // BigQuery
+		switch wm.String() {
+		case "blocked":
+			return true
+		case "":
+			ro := field(sc, "ReadOnly")
+			return ro.Kind() == reflect.Pointer && !ro.IsNil() && ro.Elem().Bool()
+		}
+		return false
+	}
+	ro := field(sc, "ReadOnly")
+	return ro.Kind() == reflect.Bool && ro.Bool()
+}
+
+// field is a config struct's field by name; the zero Value when it has
+// none.
+func field(v any, name string) reflect.Value {
+	rv := reflect.Indirect(reflect.ValueOf(v))
+	if rv.Kind() != reflect.Struct {
+		return reflect.Value{}
+	}
+	return rv.FieldByName(name)
 }
 
 // Files are dir's YAML files (*.yaml, *.yml), by name; none when dir isn't

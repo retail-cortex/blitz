@@ -32,6 +32,7 @@ go_library(
         "//third_party/mcp-toolbox/internal/sources/postgres",
         "//third_party/mcp-toolbox/internal/sources/sqlite",
         "//third_party/mcp-toolbox/internal/telemetry",
+        "//third_party/mcp-toolbox/internal/tools",
         "//third_party/mcp-toolbox/internal/tools/alloydbainl",
         "//third_party/mcp-toolbox/internal/tools/bigquery/bigqueryanalyzecontribution",
         "//third_party/mcp-toolbox/internal/tools/bigquery/bigqueryexecutesql",
