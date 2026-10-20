@@ -39,7 +39,7 @@ import { docSections } from "./docs/sections";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import type { Section } from "./SettingsDrawer";
-import { type StudioKind } from "./studio/StudioDrawer";
+import { studioIcons, studioKinds, type StudioKind } from "./studio/StudioDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -72,7 +72,8 @@ export function MenuBar({
   onCommit,
   onHistory,
   onStudio,
-  studioOpen = false,
+  studioKind = null,
+  onCloseStudio,
   onSearch,
   onSettings,
   onOpenWorkspace,
@@ -84,10 +85,12 @@ export function MenuBar({
   onCommit?: () => void;
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
-  /** Opens Studio on a kind, or closes it when it's open (studioOpen). */
+  /** Opens Studio on a kind, or shows that kind when it's open. */
   onStudio?: (kind: StudioKind) => void;
-  /** Studio is open: its button shows it pressed. */
-  studioOpen?: boolean;
+  /** The kind Studio shows, null when it's closed: the menu ticks it, and offers Close Studio. */
+  studioKind?: StudioKind | null;
+  /** Closes Studio, as its ✕ does. */
+  onCloseStudio?: () => void;
   onSearch: () => void;
   onSettings: (section: Section, scope?: string) => void;
   onOpenWorkspace: () => void;
@@ -99,6 +102,19 @@ export function MenuBar({
   const menus = menuIds(advanced);
   const failures = useWorkerFailures();
   const failed = dir ? (failures[dir] ?? 0) : 0;
+
+  // Studio: its kinds, as the drawer lists them (icons only there), a
+  // failed worker run noted on Workers; Close Studio while it's open.
+  const studio: MenuEntry[] = [
+    ...studioKinds.map((k) => ({
+      label: t(`desktop.studio.${k}`),
+      icon: studioIcons[k],
+      on: studioKind === k,
+      detail: k === "workers" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
+      onSelect: () => onStudio?.(k),
+    })),
+    ...(studioKind ? (["divider", { label: t("desktop.studio.close"), icon: mdiClose, onSelect: () => onCloseStudio?.() }] as MenuEntry[]) : []),
+  ];
 
   const changes: MenuEntry[] = [
     { label: t("desktop.menu.changes.session"), detail: t("desktop.changes.session"), icon: mdiHistory, onSelect: () => onChanges?.("session") },
@@ -174,12 +190,7 @@ export function MenuBar({
             </button>
           )}
           {/* Studio: everything the workspace's .agents folder holds, in one drawer; a dot when a worker failed. */}
-          {menus.includes("studio") && (
-            <button type="button" className="menubar-item" aria-pressed={studioOpen} onClick={() => onStudio?.("overview")}>
-              {t("desktop.studio")}
-              {failed > 0 && <span className="dot menubar-dot" title={tn("desktop.switcher.failed_runs", failed)} />}
-            </button>
-          )}
+          {menus.includes("studio") && <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.studio")} dot={failed > 0} {...p} />} items={studio} />}
         </>
       )}
       <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.menu.help")} {...p} />} items={help} />

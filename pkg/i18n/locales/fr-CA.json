@@ -1764,6 +1764,7 @@
     "desktop.health.why.stale": "a changé depuis la dernière exécution de ses évaluations",
     "desktop.health.why.uncovered": "n'a aucune évaluation",
     "desktop.health.why.unused": "n'est pas utilisé",
+    "desktop.studio.close": "Fermer Studio",
     "desktop.studio.overview": "Aperçu",
     "desktop.studio.active_agent": "L'agent actif",
     "desktop.studio.every_agent": "Tous les agents",

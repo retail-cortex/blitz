@@ -40,7 +40,7 @@ import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
-import { StudioDrawer, type StudioOpen } from "./studio/StudioDrawer";
+import { StudioDrawer, type StudioKind, type StudioOpen } from "./studio/StudioDrawer";
 import { intent as newIntent, type ItemIntent } from "./intent";
 import type { Section } from "./SettingsDrawer";
 import { AgentEditor } from "./AgentEditor";
@@ -81,8 +81,11 @@ export function Workspace({
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
   const [agent, setAgent] = useState<ItemIntent | null>(null);
   const [studio, setStudio] = useState<StudioOpen | null>(null);
-  // The menu's Studio button toggles it: open, it closes as its ✕ does.
+  // The menu's Close Studio closes it as its ✕ does; its kinds, picked
+  // while it's open, show in it (the kind shown is ticked).
   const [studioClose, setStudioClose] = useState(0);
+  const [studioAsk, setStudioAsk] = useState<{ kind: StudioKind; n: number }>({ kind: "overview", n: 0 });
+  const [studioKind, setStudioKind] = useState<StudioKind | null>(null);
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
@@ -251,8 +254,9 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
-          onStudio={(kind) => (studio ? setStudioClose((n) => n + 1) : setStudio({ kind }))}
-          studioOpen={!!studio}
+          onStudio={(kind) => (studio ? setStudioAsk((a) => ({ kind, n: a.n + 1 })) : setStudio({ kind }))}
+          studioKind={studio ? studioKind : null}
+          onCloseStudio={() => setStudioClose((n) => n + 1)}
           onSearch={onSearch}
           onSettings={onSettings}
           onOpenWorkspace={onOpenWorkspace}
@@ -324,7 +328,7 @@ export function Workspace({
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
-      {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} />}
+      {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} ask={studioAsk} onKind={setStudioKind} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

@@ -73,7 +73,25 @@ export const studioIcons: Record<StudioKind, string> = {
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, and its own secrets.
  */
-export function StudioDrawer({ dir, initial, onClose, onWorkers, closeRequest }: { dir: string; initial: StudioOpen; onClose: () => void; onWorkers?: () => void; closeRequest?: number }) {
+export function StudioDrawer({
+  dir,
+  initial,
+  onClose,
+  onWorkers,
+  closeRequest,
+  ask,
+  onKind,
+}: {
+  dir: string;
+  initial: StudioOpen;
+  onClose: () => void;
+  onWorkers?: () => void;
+  closeRequest?: number;
+  /** A kind the menu bar's Studio menu asks for while it's open (n bumped each time): shown as a click on it would. */
+  ask?: { kind: StudioKind; n: number };
+  /** The kind shown, each time it changes (the menu ticks it). */
+  onKind?: (kind: StudioKind) => void;
+}) {
   const snack = useSnackbar();
   const [kind, setKind] = useState<StudioKind>(initial.kind);
   // Whether the kind's form holds unsaved changes: closing asks first.
@@ -91,6 +109,15 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers, closeRequest }:
     setCompact(false);
     setKind(k);
   };
+  useEffect(() => onKind?.(kind), [kind, onKind]);
+  // Only a request made while it's open: the count it opened with is old.
+  const menuAsked = useRef(ask?.n ?? 0);
+  useEffect(() => {
+    if (!ask || ask.n === menuAsked.current) return;
+    menuAsked.current = ask.n;
+    if (ask.kind !== kind) choose(ask.kind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask?.n]);
   // Asked again for a workflow's run while open (the status bar, an
   // alert): back to Workflows, whose pane opens it.
   const asked = initial.intent?.n;

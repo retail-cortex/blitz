@@ -138,7 +138,7 @@ Each run is a conversation of its own, titled `⏰ <name>` and the time: open it
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 
-**When one fails:** the Studio button gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
+**When one fails:** the Studio menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
 
 ```toml
 [workers]

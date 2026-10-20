@@ -1764,6 +1764,7 @@
     "desktop.health.why.stale": "changed since its evals last ran",
     "desktop.health.why.uncovered": "has no evals",
     "desktop.health.why.unused": "isn't used",
+    "desktop.studio.close": "Close Studio",
     "desktop.studio.overview": "Overview",
     "desktop.studio.active_agent": "The active agent",
     "desktop.studio.every_agent": "Every agent",
