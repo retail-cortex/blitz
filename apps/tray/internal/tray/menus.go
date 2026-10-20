@@ -315,7 +315,7 @@ func SpaceEntries(s Space, workers []*pb.Worker, flows []Flow, l Live) []Entry {
 
 // jobEntry is a job's item: marked running or failed (its last run), with
 // when it runs next, or "off". Its switch says what it is and what a click
-// does: On (it runs on its schedule) turns it off, Off (it doesn't run,
+// does, first: On (it runs on its schedule) turns it off, Off (it doesn't run,
 // not even by hand) turns it on, at the content reviewed; a job not yet
 // reviewed (new, changed, invalid) is reviewed in the app. Run now only
 // while it's on: the service refuses a job that's off.
@@ -338,7 +338,8 @@ func jobEntry(w *pb.Worker, l Live) Entry {
 	case !enabled:
 		title += " · " + i18n.T("tray.job.off_short")
 	}
-	e := Entry{Title: title, Children: []Entry{{Title: i18n.T("tray.workers.run_now"), Icon: IconPlay, Disabled: !enabled, Action: Action{Kind: RunWorker, Workspace: w.Workspace, Name: w.Name}}}}
+	// Its state first, then what it does: Run, Stop while it runs, Open (the owner's order).
+	e := Entry{Title: title, Children: []Entry{toggle, {Title: i18n.T("tray.run"), Icon: IconPlay, Disabled: !enabled, Action: Action{Kind: RunWorker, Workspace: w.Workspace, Name: w.Name}}}}
 	if w.LastRun != nil && w.LastRun.Status == pb.RunStatus_RUN_STATUS_FAILED {
 		e.Icon = DotFailed
 	}
@@ -349,7 +350,7 @@ func jobEntry(w *pb.Worker, l Live) Entry {
 			break
 		}
 	}
-	e.Children = append(e.Children, toggle, Entry{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: w.Workspace}})
+	e.Children = append(e.Children, Entry{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: w.Workspace}})
 	return e
 }
 

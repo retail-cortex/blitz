@@ -80,7 +80,7 @@ func TestGoing(t *testing.T) {
 	assert.Equal(t, "nightly · job · Shop · 2/4 · 1h 5m", got[0].Title)
 	assert.Equal(t, DotRunning, got[0].Icon)
 	assert.Equal(t, []Entry{
-		{Title: "Show in Blitz", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}},
+		{Title: "Open", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}},
 		{Title: "Stop", Icon: IconStop, Action: Action{Kind: StopRun, RunID: "j1"}},
 	}, got[0].Children)
 	assert.Equal(t, "research-brief · Shop · 3m", got[1].Title)
@@ -121,19 +121,20 @@ func TestSpaceEntries(t *testing.T) {
 	nightly := got[1]
 	assert.Equal(t, DotRunning, nightly.Icon)
 	assert.Equal(t, []Action{
+		{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: RunWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: StopRun, RunID: "j1"},
-		{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: ShowWorkers, Workspace: "/w/shop"},
-	}, actions(nightly.Children))
-	assert.Equal(t, Entry{Title: "On · runs on its schedule", Icon: SwitchOn, Action: Action{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"}}, nightly.Children[2], "on: a click turns it off")
+	}, actions(nightly.Children), "its state first, then Run, Stop, Open")
+	assert.Equal(t, Entry{Title: "On · runs on its schedule", Icon: SwitchOn, Action: Action{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"}}, nightly.Children[0], "on: a click turns it off")
 	weekly := got[2]
 	assert.Equal(t, DotFailed, weekly.Icon, "its last run failed")
-	assert.True(t, weekly.Children[0].Disabled, "off: it can't be run by hand either")
-	assert.Equal(t, Entry{Title: "Off · doesn’t run", Icon: SwitchOff, Action: Action{Kind: EnableWorker, Workspace: "/w/shop", Name: "weekly", Hash: "h2"}}, weekly.Children[1], "off: a click turns it on, at the hash reviewed")
+	assert.True(t, weekly.Children[1].Disabled, "off: it can't be run by hand either")
+	assert.Equal(t, "Run", weekly.Children[1].Title)
+	assert.Equal(t, Entry{Title: "Off · doesn’t run", Icon: SwitchOff, Action: Action{Kind: EnableWorker, Workspace: "/w/shop", Name: "weekly", Hash: "h2"}}, weekly.Children[0], "off: a click turns it on, at the hash reviewed")
 	fresh := got[3].Children
-	assert.True(t, fresh[0].Disabled, "a new job doesn't run before it's reviewed")
-	assert.Equal(t, Entry{Title: "Review in Blitz to turn it on", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}}, fresh[1], "reviewed in the app, a click away")
+	assert.True(t, fresh[1].Disabled, "a new job doesn't run before it's reviewed")
+	assert.Equal(t, Entry{Title: "Review in Blitz to turn it on", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}}, fresh[0], "reviewed in the app, a click away")
 
 	brief := got[5]
 	assert.Equal(t, DotRunning, brief.Icon)
@@ -188,7 +189,7 @@ func TestPulse(t *testing.T) {
 func TestLabel(t *testing.T) {
 	assert.Equal(t, "▶︎ Run", Label(Entry{Title: "Run", Icon: IconPlay}))
 	assert.Equal(t, "■ Stop", Label(Entry{Title: "Stop", Icon: IconStop}))
-	assert.Equal(t, "↗ Show in Blitz", Label(Entry{Title: "Show in Blitz", Icon: IconEye}))
+	assert.Equal(t, "↗ Open", Label(Entry{Title: "Open", Icon: IconEye}))
 	assert.Equal(t, "● brief", Label(Entry{Title: "brief", Icon: DotRunning}))
 	assert.Equal(t, "⚠︎ weekly", Label(Entry{Title: "weekly", Icon: DotFailed}))
 	assert.Equal(t, "◔ brief", Label(Entry{Title: "brief", Icon: DotWaiting}))
