@@ -323,6 +323,9 @@ func onReady() {
 	systray.AddSeparator()
 	// A submenu per workspace, with its jobs and its workflows (EL-111),
 	// then the running service's MCP servers.
+	spacesHead := systray.AddMenuItem(i18n.T("tray.workspaces"), "")
+	spacesHead.Disable()
+	spacesHead.Hide()
 	spaceSlots := newSlots(maxSpaceSlots)
 	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
 	systray.AddSeparator()
@@ -443,10 +446,16 @@ func onReady() {
 				menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live)})
 			}
 			spaceSlots.show(menus, click)
+			if len(menus) > 0 {
+				spacesHead.Show()
+			} else {
+				spacesHead.Hide()
+			}
 			icon.pulse(live.Busy())
 		} else {
 			mcpMenu.parent.Hide()
 			runningHead.Hide()
+			spacesHead.Hide()
 			runSlots.show(nil, click)
 			spaceSlots.show(nil, click)
 			icon.pulse(false)

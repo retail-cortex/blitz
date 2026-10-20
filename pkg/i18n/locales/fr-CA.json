@@ -3021,6 +3021,7 @@
     "tray.show": "Afficher dans Blitz",
     "tray.next": "prochaine {when}",
     "tray.stop_run": "Arrêter",
+    "tray.workspaces": "Espaces de travail",
     "tray.workers": "Jobs",
     "tray.workers.none": "Aucun job",
     "tray.workers.global": "Globaux",
