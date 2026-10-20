@@ -114,7 +114,7 @@ func TestSpaceEntries(t *testing.T) {
 	for i, e := range got {
 		titles[i] = e.Title
 	}
-	assert.Equal(t, []string{"Jobs", "nightly · next Tue 02:00", "weekly", "fresh", "Workflows", "brief · 1/2", "digest"}, titles)
+	assert.Equal(t, []string{"Jobs", "nightly · next Tue 02:00", "weekly · off", "fresh · off", "Workflows", "brief · 1/2", "digest"}, titles)
 	assert.True(t, got[0].Disabled)
 	assert.Equal(t, IconJob, got[0].Icon)
 
@@ -126,12 +126,14 @@ func TestSpaceEntries(t *testing.T) {
 		{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: ShowWorkers, Workspace: "/w/shop"},
 	}, actions(nightly.Children))
+	assert.Equal(t, Entry{Title: "On · runs on its schedule", Icon: SwitchOn, Action: Action{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"}}, nightly.Children[2], "on: a click turns it off")
 	weekly := got[2]
 	assert.Equal(t, DotFailed, weekly.Icon, "its last run failed")
-	assert.Equal(t, Action{Kind: EnableWorker, Workspace: "/w/shop", Name: "weekly", Hash: "h2"}, weekly.Children[1].Action, "enabled again at the hash reviewed")
+	assert.True(t, weekly.Children[0].Disabled, "off: it can't be run by hand either")
+	assert.Equal(t, Entry{Title: "Off · doesn’t run", Icon: SwitchOff, Action: Action{Kind: EnableWorker, Workspace: "/w/shop", Name: "weekly", Hash: "h2"}}, weekly.Children[1], "off: a click turns it on, at the hash reviewed")
 	fresh := got[3].Children
 	assert.True(t, fresh[0].Disabled, "a new job doesn't run before it's reviewed")
-	assert.Equal(t, "Review it in Blitz to enable it", fresh[1].Title)
+	assert.Equal(t, Entry{Title: "Review in Blitz to turn it on", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}}, fresh[1], "reviewed in the app, a click away")
 
 	brief := got[5]
 	assert.Equal(t, DotRunning, brief.Icon)
@@ -147,7 +149,7 @@ func TestSpaceEntries(t *testing.T) {
 	assert.Equal(t, "Workflows", onlyFlows[0].Title, "no Jobs heading without jobs")
 	assert.Len(t, onlyFlows, 2)
 	onlyJobs := SpaceEntries(Space{Dir: "/w/blog"}, workers, nil, Live{})
-	assert.Equal(t, []string{"Jobs", "elsewhere"}, []string{onlyJobs[0].Title, onlyJobs[1].Title}, "no Workflows heading without workflows")
+	assert.Equal(t, []string{"Jobs", "elsewhere · off"}, []string{onlyJobs[0].Title, onlyJobs[1].Title}, "no Workflows heading without workflows")
 }
 
 func actions(entries []Entry) []Action {
@@ -192,4 +194,6 @@ func TestLabel(t *testing.T) {
 	assert.Equal(t, "◔ brief", Label(Entry{Title: "brief", Icon: DotWaiting}))
 	assert.Equal(t, "Jobs", Label(Entry{Title: "Jobs", Icon: IconJob}))
 	assert.Equal(t, "shop", Label(Entry{Title: "shop", Icon: IconFolder}))
+	assert.Equal(t, "◉ On", Label(Entry{Title: "On", Icon: SwitchOn}))
+	assert.Equal(t, "○ Off", Label(Entry{Title: "Off", Icon: SwitchOff}))
 }

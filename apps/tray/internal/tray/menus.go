@@ -50,6 +50,8 @@ const (
 	DotRunning   = "dot-running"
 	DotFailed    = "dot-failed"
 	DotWaiting   = "dot-waiting"
+	SwitchOn     = "switch-on"
+	SwitchOff    = "switch-off"
 )
 
 // glyphs are the icons as text. The menu bar's menus on macOS draw no
@@ -64,6 +66,8 @@ var glyphs = map[string]string{
 	DotRunning: "●",
 	DotFailed:  "⚠\uFE0E",
 	DotWaiting: "◔",
+	SwitchOn:   "◉",
+	SwitchOff:  "○",
 }
 
 // Label is an entry's title, its icon's character before it.
@@ -310,24 +314,31 @@ func SpaceEntries(s Space, workers []*pb.Worker, flows []Flow, l Live) []Entry {
 }
 
 // jobEntry is a job's item: marked running or failed (its last run), with
-// when it runs next.
+// when it runs next, or "off". Its switch says what it is and what a click
+// does: On (it runs on its schedule) turns it off, Off (it doesn't run,
+// not even by hand) turns it on, at the content reviewed; a job not yet
+// reviewed (new, changed, invalid) is reviewed in the app. Run now only
+// while it's on: the service refuses a job that's off.
 func jobEntry(w *pb.Worker, l Live) Entry {
 	enabled := w.State == pb.WorkerState_WORKER_STATE_ENABLED
 	reviewed := enabled || w.State == pb.WorkerState_WORKER_STATE_DISABLED
-	toggle := Entry{Title: i18n.T("tray.workers.enabled"), Checkbox: true, Checked: enabled, Disabled: !reviewed}
+	var toggle Entry
 	switch {
 	case enabled:
-		toggle.Action = Action{Kind: DisableWorker, Workspace: w.Workspace, Name: w.Name}
+		toggle = Entry{Title: i18n.T("tray.job.on"), Icon: SwitchOn, Action: Action{Kind: DisableWorker, Workspace: w.Workspace, Name: w.Name}}
 	case reviewed:
-		toggle.Action = Action{Kind: EnableWorker, Workspace: w.Workspace, Name: w.Name, Hash: w.Hash}
+		toggle = Entry{Title: i18n.T("tray.job.off"), Icon: SwitchOff, Action: Action{Kind: EnableWorker, Workspace: w.Workspace, Name: w.Name, Hash: w.Hash}}
 	default:
-		toggle.Title = i18n.T("tray.workers.review")
+		toggle = Entry{Title: i18n.T("tray.job.review"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: w.Workspace}}
 	}
 	title := w.Name
-	if enabled && w.NextRun != nil {
+	switch {
+	case enabled && w.NextRun != nil:
 		title += " · " + i18n.T("tray.next", "when", w.NextRun.AsTime().Local().Format("Mon 15:04"))
+	case !enabled:
+		title += " · " + i18n.T("tray.job.off_short")
 	}
-	e := Entry{Title: title, Children: []Entry{{Title: i18n.T("tray.workers.run_now"), Icon: IconPlay, Disabled: !reviewed, Action: Action{Kind: RunWorker, Workspace: w.Workspace, Name: w.Name}}}}
+	e := Entry{Title: title, Children: []Entry{{Title: i18n.T("tray.workers.run_now"), Icon: IconPlay, Disabled: !enabled, Action: Action{Kind: RunWorker, Workspace: w.Workspace, Name: w.Name}}}}
 	if w.LastRun != nil && w.LastRun.Status == pb.RunStatus_RUN_STATUS_FAILED {
 		e.Icon = DotFailed
 	}
