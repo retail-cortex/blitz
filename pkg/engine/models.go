@@ -73,14 +73,14 @@ func (w *Workspace) Model() api.ModelInfo {
 // It returns the active agent's pin when there is one, since that still
 // decides what the active agent runs on.
 func (w *Workspace) SetModel(ctx context.Context, ref string) (activePin string, err error) {
-	llm, err := w.newModel(ctx, w.cfg, ref)
+	llm, err := w.newModel(ctx, w.settings(), ref)
 	if err == nil {
 		err = w.engine.SetModel(ctx, llm)
 	}
 	if err != nil {
 		return "", err
 	}
-	w.cfg.Blitz.DefaultModel = ref
+	w.setSettings(func(c *config.Config) { c.Blitz.DefaultModel = ref })
 	if m, pinned := w.engine.AgentModel(w.engine.ActiveAgent()); pinned {
 		return m, nil
 	}
@@ -93,7 +93,7 @@ func (w *Workspace) PinModel(ctx context.Context, agent, ref string) (api.PinRes
 	if _, ok := w.agents.Get(agent); !ok {
 		return api.PinResult{}, &api.UnknownAgentError{Name: agent}
 	}
-	llm, err := w.newModel(ctx, w.cfg, ref)
+	llm, err := w.newModel(ctx, w.settings(), ref)
 	if err == nil {
 		err = w.engine.PinModel(ctx, agent, llm)
 	}
@@ -112,7 +112,7 @@ func (w *Workspace) Unpin(ctx context.Context, agent string) (api.PinResult, err
 	}
 	err := w.engine.Unpin(ctx, agent)
 	if err == nil && spec.DefaultModel != "" {
-		llm, merr := w.newModel(ctx, w.cfg, spec.DefaultModel)
+		llm, merr := w.newModel(ctx, w.settings(), spec.DefaultModel)
 		if err = merr; err == nil {
 			err = w.engine.PinModel(ctx, agent, llm)
 		}
@@ -129,10 +129,15 @@ func (w *Workspace) Unpin(ctx context.Context, agent string) (api.PinResult, err
 // Removing one the global settings also set records agent = "" there, so
 // the global pin doesn't come back when the workspace next opens.
 func (w *Workspace) saveAgentModel(agent, ref string) api.Saved {
-	if w.cfg.AgentModels == nil {
-		w.cfg.AgentModels = map[string]string{}
-	}
-	w.cfg.AgentModels[agent] = ref // "" is "not pinned here"
+	w.setSettings(func(c *config.Config) {
+		// A new map: a copy taken by settings shares the old one.
+		pins := maps.Clone(c.AgentModels)
+		if pins == nil {
+			pins = map[string]string{}
+		}
+		pins[agent] = ref // "" is "not pinned here"
+		c.AgentModels = pins
+	})
 	dir := config.WorkspaceSettingsDir("", w.Dir())
 	if ref != "" {
 		path, err := config.SaveAgentModel(dir, agent, ref)
@@ -210,7 +215,7 @@ func settingsKey(cfg *config.Config, name string) string {
 func (w *Workspace) Settings() api.Settings {
 	return api.Settings{
 		Agency: w.cfg.Blitz.AgencyLevel,
-		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.reply.Tag().String(),
+		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.replyIn().Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
 		Effort:         w.engine.Effort(),
 		Style:          w.styleName(),
@@ -266,7 +271,8 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 		default:
 			return key, api.ErrInvalidAgency
 		}
-		w.cfg.Blitz.AgencyLevel = strings.ToLower(value)
+		w.setSettings(func(c *config.Config) { c.Blitz.AgencyLevel = strings.ToLower(value) })
+		w.engine.SetAgency(strings.ToLower(value))
 	default:
 		return key, &api.UnknownSettingError{Key: key}
 	}
@@ -278,10 +284,12 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 // a key set in the settings takes effect without reopening the workspace.
 // It returns why the model still can't be built, if it can't.
 func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) error {
-	w.cfg.LLM = cfg.LLM
-	w.cfg.Blitz.DefaultModel = cfg.Blitz.DefaultModel
-	w.cfg.Audio = cfg.Audio
-	w.cfg.Health = cfg.Health            // the dashboard's judge and schedule, set from it
+	w.setSettings(func(c *config.Config) {
+		c.LLM = cfg.LLM
+		c.Blitz.DefaultModel = cfg.Blitz.DefaultModel
+		c.Audio = cfg.Audio
+		c.Health = cfg.Health // the dashboard's judge and schedule, set from it
+	})
 	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
 	w.setupUploader(ctx, func(string) {})
 	return w.rebuildModels(ctx)
@@ -305,7 +313,7 @@ func (w *Workspace) RetryModel(ctx context.Context) error {
 func (w *Workspace) rebuildModels(ctx context.Context) error {
 	w.rebuildMu.Lock()
 	defer w.rebuildMu.Unlock()
-	llm, err := w.newModel(ctx, w.cfg, "")
+	llm, err := w.newModel(ctx, w.settings(), "")
 	if err == nil {
 		err = w.engine.SetModel(ctx, llm)
 	} else {
@@ -315,9 +323,9 @@ func (w *Workspace) rebuildModels(ctx context.Context) error {
 	w.modelMu.Lock()
 	w.modelErr = err
 	w.modelMu.Unlock()
-	w.agentRefs = agentModelRefs(w.cfg, w.agents, func(string) {})
+	w.agentRefs = agentModelRefs(w.settings(), w.agents, func(string) {})
 	for agent, ref := range w.agentRefs {
-		pin, perr := w.newModel(ctx, w.cfg, ref)
+		pin, perr := w.newModel(ctx, w.settings(), ref)
 		if perr == nil {
 			perr = w.engine.PinModel(ctx, agent, pin)
 		}

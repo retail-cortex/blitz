@@ -66,7 +66,7 @@ func (w *Workspace) workerPolicy() config.WorkerPolicy {
 func (w *Workspace) ReloadWorkerPolicy(cfg *config.Config) {
 	w.policyMu.Lock()
 	defer w.policyMu.Unlock()
-	w.cfg.Workers.Policy = cfg.Workers.Policy
+	w.setSettings(func(c *config.Config) { c.Workers.Policy = cfg.Workers.Policy })
 }
 
 // workerRoots are the directories holding the workspace's workers; the
@@ -472,9 +472,9 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		}
 	}
 	if wk.Model != "" && runErr == nil {
-		llm, err := w.newModel(ctx, w.cfg, wk.Model)
+		llm, err := w.newModel(ctx, w.settings(), wk.Model)
 		if err != nil {
-			runErr = fmt.Errorf("model %q: %s", wk.Model, ModelErrorSummary(err, w.cfg))
+			runErr = fmt.Errorf("model %q: %s", wk.Model, ModelErrorSummary(err, w.settings()))
 		} else {
 			opts = append(opts, runtime.WithModel(llm))
 		}

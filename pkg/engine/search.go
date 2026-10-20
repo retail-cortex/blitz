@@ -122,7 +122,7 @@ func (w *Workspace) openSearch(ctx context.Context) {
 	}
 	if sc.Enrich {
 		ref := cmp.Or(sc.EnrichModel, w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model)
-		if llm, err := w.newModel(ctx, w.cfg, ref); err != nil {
+		if llm, err := w.newModel(ctx, w.settings(), ref); err != nil {
 			st.problems = append(st.problems, i18n.T("search.enrich_failed", "error", err))
 		} else {
 			opts = append(opts, search.WithEnricher(describer{llm: llm, redact: w.secretRedactor()}, sc.EnrichDailyLimit, w.Busy))
@@ -210,7 +210,7 @@ func (w *Workspace) ReloadSearch(cfg *config.Config) {
 		return
 	}
 	w.closeSearch()
-	w.cfg.Search = cfg.Search
+	w.setSettings(func(c *config.Config) { c.Search = cfg.Search })
 	w.openSearch(w.bgCtx)
 }
 

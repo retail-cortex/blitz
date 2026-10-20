@@ -82,13 +82,13 @@ func (w *Workspace) RewriteWorker(ctx context.Context, spec api.WorkerSpec) (Wor
 		fmt.Fprintf(&b, "Permissions now: %s\n", strings.Join(spec.Permissions, ", "))
 	}
 	fmt.Fprintf(&b, "\nThe instructions:\n%s\n", w.secretRedactor().String(spec.Prompt))
-	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+	llm, err := w.suggestionsModel(ctx)
 	if err != nil {
-		return WorkerRewrite{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return WorkerRewrite{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	reply, served, usage, err := runtime.Ask(ctx, llm, rewriteInstruction, b.String())
 	if err != nil {
-		return WorkerRewrite{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return WorkerRewrite{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	if usage != nil {
 		slog.Info("worker instructions rewritten", "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)

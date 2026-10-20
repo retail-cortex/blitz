@@ -91,13 +91,13 @@ func (w *Workspace) DraftManifest(ctx context.Context, r DraftRequest) (Manifest
 	if r.Current != "" {
 		fmt.Fprintf(&b, "\nThe text now:\n%s\n", redact(r.Current))
 	}
-	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+	llm, err := w.suggestionsModel(ctx)
 	if err != nil {
-		return ManifestDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return ManifestDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	reply, served, usage, err := runtime.Ask(ctx, llm, brief+draftReply, b.String())
 	if err != nil {
-		return ManifestDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return ManifestDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	if usage != nil {
 		slog.Info("manifest drafted", "kind", r.Kind, "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)

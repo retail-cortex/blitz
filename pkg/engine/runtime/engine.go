@@ -244,6 +244,7 @@ type Engine struct {
 	settingsMu sync.RWMutex
 	settings   map[string]config.ModelSettings // model name -> [model_settings]
 	effort     string                          // session-wide reasoning effort (/effort)
+	agency     string                          // the agency level the root agent's prompt names (/set agency)
 
 	scoped scopedRules // path-scoped project rules
 
@@ -276,6 +277,7 @@ func NewEngine(
 	opts ...Option,
 ) (*Engine, error) {
 	e := &Engine{
+		agency:    cfg.Blitz.AgencyLevel,
 		cfg:       cfg,
 		agentReg:  agentReg,
 		skillProv: skillProv,
@@ -584,6 +586,21 @@ func (e *Engine) SetEffort(effort string) {
 	e.settingsMu.Lock()
 	defer e.settingsMu.Unlock()
 	e.effort = effort
+}
+
+// SetAgency sets the agency level the root agent's prompt names, from the
+// next rebuild (the settings it was built with aren't written once open).
+func (e *Engine) SetAgency(level string) {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	e.agency = level
+}
+
+// agencyLevel is the agency level now.
+func (e *Engine) agencyLevel() string {
+	e.settingsMu.RLock()
+	defer e.settingsMu.RUnlock()
+	return e.agency
 }
 
 // Effort returns the session's reasoning effort ("" when unset).
@@ -1027,7 +1044,7 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		subAgents = append(subAgents, sub)
 	}
 
-	rootInstruction := rootSpec.InterpolatePrompt(e.cfg.Blitz.AgencyLevel)
+	rootInstruction := rootSpec.InterpolatePrompt(e.agencyLevel())
 	if e.cfg.Skills.Enabled && e.skillProv != nil {
 		if allSkills := e.skillProv.List(); len(allSkills) > 0 {
 			var sb strings.Builder

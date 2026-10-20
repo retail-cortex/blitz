@@ -15,10 +15,13 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"sort"
 	"strings"
 	"time"
+
+	"google.golang.org/adk/v2/model"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -26,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
@@ -201,7 +205,7 @@ func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
 		return err
 	}
 	m.Servers = servers
-	w.cfg.MCP = m
+	w.setSettings(func(c *config.Config) { c.MCP = m })
 	w.mcpMu.Unlock()
 	if !changed {
 		return nil
@@ -209,12 +213,42 @@ func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
 	return w.engine.Rebuild(ctx)
 }
 
-// secretRedactor is SecretRedactor of the workspace's settings, read
-// while applyMCP can't replace their MCP servers (whose secrets it masks).
+// secretRedactor is SecretRedactor of the workspace's settings now: its
+// keys and MCP servers as no reload is halfway through changing them.
 func (w *Workspace) secretRedactor() *redact.Redactor {
-	w.mcpMu.RLock()
-	defer w.mcpMu.RUnlock()
-	return SecretRedactor(w.cfg)
+	return SecretRedactor(w.settings())
+}
+
+// settings is a copy of the workspace's settings, taken while nothing
+// changes them: what's handed to a model, a redactor or a summary. Its
+// maps are shared, so they're replaced, never written in place.
+func (w *Workspace) settings() *config.Config {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	c := *w.cfg
+	return &c
+}
+
+// suggestionsModel is the small model the drafts and judges use: the
+// suggestions model, else the reviewer's (the main one when neither is set).
+func (w *Workspace) suggestionsModel(ctx context.Context) (model.LLM, error) {
+	c := w.settings()
+	return w.newModel(ctx, c, cmp.Or(c.Suggestions.Model, c.Permissions.Auto.Model))
+}
+
+// replyIn is the language the agents reply in (SetLocale changes it).
+func (w *Workspace) replyIn() *i18n.Localizer {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	return w.reply
+}
+
+// setSettings changes the workspace's settings with f, nothing reading
+// them meanwhile.
+func (w *Workspace) setSettings(f func(c *config.Config)) {
+	w.cfgMu.Lock()
+	defer w.cfgMu.Unlock()
+	f(w.cfg)
 }
 
 // mcpConfig is the MCP settings now (applyMCP replaces them).

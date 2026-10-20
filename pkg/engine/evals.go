@@ -163,9 +163,9 @@ func (w *Workspace) evalScorer(ctx context.Context, e evals.Eval) (scorer, error
 		return func(ctx context.Context, c evals.Case, output string) (float64, string, float64, error) {
 			var spent float64
 			ask := func(ctx context.Context, instruction, prompt string) (string, error) {
-				llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+				llm, err := w.suggestionsModel(ctx)
 				if err != nil {
-					return "", fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+					return "", fmt.Errorf("%s", ModelErrorSummary(err, w.settings()))
 				}
 				reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
 				spent += w.engine.EstimateCostUSD(served, usage)

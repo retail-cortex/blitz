@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -74,9 +73,9 @@ func (w *Workspace) Rules() []gates.Rule {
 // workspace's) for rule verdicts.
 func (w *Workspace) ruleAsker() gates.Asker {
 	return func(ctx context.Context, instruction, prompt string) (string, error) {
-		llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+		llm, err := w.suggestionsModel(ctx)
 		if err != nil {
-			return "", fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+			return "", fmt.Errorf("%s", ModelErrorSummary(err, w.settings()))
 		}
 		reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
 		meterUsage(ctx, served, w.engine.EstimateUsage(served, usage))

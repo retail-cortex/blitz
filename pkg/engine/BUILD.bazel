@@ -246,6 +246,7 @@ go_test(
         "secrets_test.go",
         "sessions_test.go",
         "sessiontools_test.go",
+        "settings_race_test.go",
         "settingswatch_test.go",
         "skillfiles_test.go",
         "skillscenarios_test.go",

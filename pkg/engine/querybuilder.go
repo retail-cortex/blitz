@@ -68,7 +68,7 @@ Reply with JSON only, no fences: {"name": "<tool name>", "description": "<what i
 // problem; so is a model that fails.
 func (w *Workspace) DraftConnectorQuery(ctx context.Context, c connectors.Connection, values map[string]string, request string) (QueryDraft, error) {
 	return draftQuery(ctx, queryBuilder{
-		cfg:      w.cfg,
+		cfg:      w.settings(),
 		catalog:  w.ConnectorCatalog(),
 		newModel: w.newModel,
 		redact:   w.secretRedactor().String,

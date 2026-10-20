@@ -271,7 +271,7 @@ No Markdown, no commentary.`
 // askIdeas has the suggestions model write ideas from recent.
 func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecord) ([]idea, error) {
 	ref := cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model)
-	llm, err := w.newModel(ctx, w.cfg, ref)
+	llm, err := w.newModel(ctx, w.settings(), ref)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecor
 	if st, err := w.GitStatus(ctx); err == nil && st.Repo {
 		fmt.Fprintf(&b, "\nGit: branch %s, %d uncommitted files.\n", st.Branch, st.Changed)
 	}
-	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.reply), b.String())
+	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.replyIn()), b.String())
 	if err != nil {
 		return nil, err
 	}

@@ -49,17 +49,17 @@ func (w *Workspace) refreshAgents(ctx context.Context) error {
 	if !changed {
 		return loadErr
 	}
-	refs := agentModelRefs(w.cfg, w.agents, func(string) {})
+	refs := agentModelRefs(w.settings(), w.agents, func(string) {})
 	for agent, ref := range refs {
 		if w.agentRefs[agent] == ref {
 			continue
 		}
-		m, err := w.newModel(ctx, w.cfg, ref)
+		m, err := w.newModel(ctx, w.settings(), ref)
 		if err == nil {
 			err = w.engine.PinModel(ctx, agent, m)
 		}
 		if err != nil {
-			w.warn(i18n.T("pin.load_failed", "agent", agent, "model", ref, "error", ModelErrorSummary(err, w.cfg)))
+			w.warn(i18n.T("pin.load_failed", "agent", agent, "model", ref, "error", ModelErrorSummary(err, w.settings())))
 			delete(refs, agent) // tried again on the next change
 		}
 	}

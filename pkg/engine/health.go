@@ -243,9 +243,9 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 	if len(items) == 0 {
 		return 0, 0, nil
 	}
-	llm, err := w.newModel(ctx, w.cfg, ref)
+	llm, err := w.newModel(ctx, w.settings(), ref)
 	if err != nil {
-		return 0, 0, fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+		return 0, 0, fmt.Errorf("%s", ModelErrorSummary(err, w.settings()))
 	}
 	for i, it := range items {
 		if ctx.Err() != nil {

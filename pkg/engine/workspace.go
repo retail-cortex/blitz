@@ -98,15 +98,19 @@ type Workspace struct {
 	goalMu       sync.Mutex
 	goals        map[string]api.Goal // by session
 	cfg          *config.Config
-	policyMu     sync.Mutex // guards cfg.Workers.Policy, which the settings can change
-	guards       guarding   // each turn's guardrails (spec_gates_041)
-	agents       *agents.Registry
-	skills       *skills.Provider
-	tools        *tools.Registry
-	engine       *runtime.Engine
-	storage      *session.Storage
-	audit        *audit.Logger
-	memory       memory.Loaded
+	// cfgMu guards what changes in cfg once it's open (reloads and
+	// setters write it through setSettings), and reply; readers that hand
+	// the settings on take a copy (settings).
+	cfgMu    sync.RWMutex
+	policyMu sync.Mutex // guards cfg.Workers.Policy, which the settings can change
+	guards   guarding   // each turn's guardrails (spec_gates_041)
+	agents   *agents.Registry
+	skills   *skills.Provider
+	tools    *tools.Registry
+	engine   *runtime.Engine
+	storage  *session.Storage
+	audit    *audit.Logger
+	memory   memory.Loaded
 	// memoryStamp is what the instruction files and rules held when last
 	// loaded (memory.Stamp); memoryMu guards reloading them.
 	memoryStamp string
@@ -542,7 +546,7 @@ func (w *Workspace) instructions() string {
 	if p := strings.TrimSpace(w.appendPrompt); p != "" {
 		s += "\n\n" + p
 	}
-	return s + i18n.ReplyInstruction(w.reply)
+	return s + i18n.ReplyInstruction(w.replyIn())
 }
 
 // loadMemory reads instruction files and rules; imports of blocked paths

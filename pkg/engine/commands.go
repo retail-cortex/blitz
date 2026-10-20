@@ -138,9 +138,9 @@ func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.E
 		opts = append(opts, runtime.WithAgent(c.Agent))
 	}
 	if c.Model != "" {
-		llm, err := w.newModel(ctx, w.cfg, c.Model)
+		llm, err := w.newModel(ctx, w.settings(), c.Model)
 		if err != nil {
-			return nil, fmt.Errorf("/%s: model %q: %s", name, c.Model, ModelErrorSummary(err, w.cfg))
+			return nil, fmt.Errorf("/%s: model %q: %s", name, c.Model, ModelErrorSummary(err, w.settings()))
 		}
 		opts = append(opts, runtime.WithModel(llm))
 	}
