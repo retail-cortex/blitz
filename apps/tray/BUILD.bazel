@@ -34,7 +34,6 @@ go_library(
         "lock_unix.go",
         "lock_windows.go",
         "main.go",
-        "menuicons.go",
         "submenu.go",
         "trayicon.go",
     ],
@@ -62,7 +61,7 @@ go_library(
         "icons/stopped-44.png",
         "icons/windows-running-64.png",
         "icons/windows-stopped-64.png",
-    ] + glob(["icons/menu/*.png"]),  # keep
+    ],  # keep
     importpath = "github.com/retail-cortex/blitz/apps/tray",
     target_compatible_with = _TRAY_OS,
     visibility = ["//visibility:private"],

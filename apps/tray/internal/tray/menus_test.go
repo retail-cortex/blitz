@@ -180,3 +180,16 @@ func TestPulse(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, 1.0, PulseFrames[0], "it starts at full brightness")
 }
+
+// An entry's icon is a character before its title; headings and
+// workspaces have none.
+func TestLabel(t *testing.T) {
+	assert.Equal(t, "▶︎ Run", Label(Entry{Title: "Run", Icon: IconPlay}))
+	assert.Equal(t, "■ Stop", Label(Entry{Title: "Stop", Icon: IconStop}))
+	assert.Equal(t, "↗ Show in Blitz", Label(Entry{Title: "Show in Blitz", Icon: IconEye}))
+	assert.Equal(t, "● brief", Label(Entry{Title: "brief", Icon: DotRunning}))
+	assert.Equal(t, "⚠︎ weekly", Label(Entry{Title: "weekly", Icon: DotFailed}))
+	assert.Equal(t, "◔ brief", Label(Entry{Title: "brief", Icon: DotWaiting}))
+	assert.Equal(t, "Jobs", Label(Entry{Title: "Jobs", Icon: IconJob}))
+	assert.Equal(t, "shop", Label(Entry{Title: "shop", Icon: IconFolder}))
+}

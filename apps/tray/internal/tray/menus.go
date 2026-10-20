@@ -39,7 +39,7 @@ import (
 // name (main draws them), and the tray's icon pulsing while anything
 // runs (Pulse).
 
-// Icon names, drawn by main from icons/menu.
+// Icon names: each drawn as a character before the entry's title (Label).
 const (
 	IconPlay     = "play"
 	IconStop     = "stop"
@@ -51,6 +51,28 @@ const (
 	DotFailed    = "dot-failed"
 	DotWaiting   = "dot-waiting"
 )
+
+// glyphs are the icons as text. The menu bar's menus on macOS draw no
+// images the tray gives its items (checked on macOS 27, 2026-10-19: none
+// of five ways showed one), so the icons are characters in the titles,
+// alike on every system. The headings and the workspaces have none. U+FE0E
+// asks for the text form, not an emoji.
+var glyphs = map[string]string{
+	IconPlay:   "▶\uFE0E",
+	IconStop:   "■",
+	IconEye:    "↗",
+	DotRunning: "●",
+	DotFailed:  "⚠\uFE0E",
+	DotWaiting: "◔",
+}
+
+// Label is an entry's title, its icon's character before it.
+func Label(e Entry) string {
+	if g := glyphs[e.Icon]; g != "" {
+		return g + " " + e.Title
+	}
+	return e.Title
+}
 
 // Space is a workspace the tray has a submenu for.
 type Space struct {

@@ -1,4 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
-  <!-- The tray menu's icon for Stop (macOS draws it as a template, in the menu's colour): Material Design Icons' path, as the app's. stop-template.png is rendered from it (32 px, 16 pt at 2x). -->
-  <path fill="#000000" d="M18,18H6V6H18V18Z"/>
-</svg>

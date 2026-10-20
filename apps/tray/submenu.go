@@ -23,15 +23,16 @@ import (
 
 // submenu draws entries (tray.MCPEntries, a workspace's, a run's) under
 // a menu item, again only when they change: the old items go, the new
-// ones come, each with its icon, each click calling click with its action.
+// ones come (their icons as characters, tray.Label), each click calling
+// click with its action.
 type submenu struct {
 	parent *systray.MenuItem
 	mu     sync.Mutex
 	key    string
 	items  []*systray.MenuItem
 	done   chan struct{} // closed when the items go, ending their clicks' goroutines
-	// The parent's title and icon as last set (slots set them).
-	title, icon string
+	// The parent's title as last set (slots set it).
+	title string
 }
 
 // show draws entries, unless they're what's drawn.
@@ -58,14 +59,13 @@ func (m *submenu) add(parent *systray.MenuItem, entries []tray.Entry, click func
 	for _, e := range entries {
 		var mi *systray.MenuItem
 		if e.Checkbox {
-			mi = parent.AddSubMenuItemCheckbox(e.Title, "", e.Checked)
+			mi = parent.AddSubMenuItemCheckbox(tray.Label(e), "", e.Checked)
 		} else {
-			mi = parent.AddSubMenuItem(e.Title, "")
+			mi = parent.AddSubMenuItem(tray.Label(e), "")
 		}
 		if e.Disabled {
 			mi.Disable()
 		}
-		setItemIcon(mi, e.Icon)
 		m.items = append(m.items, mi)
 		if len(e.Children) > 0 {
 			m.add(mi, e.Children, click)
@@ -89,7 +89,7 @@ func (m *submenu) add(parent *systray.MenuItem, entries []tray.Entry, click func
 
 // slots are top-level items kept for entries that come and go, the runs
 // going on and the workspaces (a menu's items can't be put in its middle
-// later): each shows an entry (its title, icon and submenu) or is hidden.
+// later): each shows an entry (its title and submenu) or is hidden.
 type slots struct{ items []*submenu }
 
 // newSlots adds n hidden items where the menu is being built.
@@ -113,13 +113,9 @@ func (s *slots) show(entries []tray.Entry, click func(tray.Action)) {
 		}
 		e := entries[i]
 		sm.mu.Lock()
-		if sm.title != e.Title {
-			sm.title = e.Title
-			sm.parent.SetTitle(e.Title)
-		}
-		if sm.icon != e.Icon {
-			sm.icon = e.Icon
-			setItemIcon(sm.parent, e.Icon)
+		if title := tray.Label(e); sm.title != title {
+			sm.title = title
+			sm.parent.SetTitle(title)
 		}
 		sm.mu.Unlock()
 		sm.parent.Show()
