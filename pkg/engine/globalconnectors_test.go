@@ -97,6 +97,15 @@ func TestMakeConnectorGlobal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, problems[0], "a global connection named")
 
+	// A relative path meant the workspace's folder: made global, it still names that file.
+	_, problems, err = w.SaveConnector(ctx, connectors.Connection{Name: "notes", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": "./data/notes.db"}}, nil, "")
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	notes, problems, err := w.MakeConnectorGlobal(ctx, "databases", "notes")
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	assert.Equal(t, filepath.Join(w.Dir(), "data", "notes.db"), notes.Settings["database"])
+
 	kinds := filepath.Join(connectors.WorkspaceDir(w.Dir()), "kinds")
 	require.NoError(t, os.MkdirAll(kinds, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(kinds, "pantry.yaml"), []byte("id: pantry\ncategory: databases\nname: Pantry\nbackend: toolbox\nsource: sqlite\ncapabilities: [test]\nfields:\n  - {key: database, type: path, required: true}\n"), 0o600))

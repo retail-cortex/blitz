@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "connection.go",
         "databases.go",
+        "paths.go",
         "session.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/databases",
@@ -49,6 +50,7 @@ go_test(
     srcs = [
         "connection_test.go",
         "databases_test.go",
+        "paths_test.go",
     ],
     embed = [":databases"],
     deps = [

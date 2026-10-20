@@ -140,20 +140,24 @@ var (
 func ReadsOnly(statement string) bool { return embed.ReadsOnly(statement) }
 
 // Transport connects to a toolbox server c: each connection loads its
-// files (Args) with their secrets (Env) and starts Toolbox, connecting to
-// the databases; closing the connection stops it.
+// files (Args) with their secrets (Env), their paths resolved where each
+// file belongs (baseOf: its workspace, else the home folder), and starts
+// Toolbox, connecting to the databases; closing the connection stops it.
 func Transport(c config.MCPServerConfig) mcp.Transport {
-	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env)}
+	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: pathKeys(connectors.Load("", "").Kinds), base: baseOf}
 }
 
 type transport struct {
 	files []string
 	vars  map[string]string
+	// keys are the path settings by source type, resolved against base(file).
+	keys map[string][]string
+	base func(file string) string
 }
 
 // Connect starts Toolbox and connects to it.
 func (t *transport) Connect(ctx context.Context) (mcp.Connection, error) {
-	cfg, err := embed.Load(ctx, t.files, t.vars)
+	cfg, err := embed.LoadWith(ctx, t.files, t.vars, resolver(t.keys, t.base))
 	if err != nil {
 		return nil, err
 	}

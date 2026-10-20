@@ -264,9 +264,15 @@ func with(ctx context.Context, env connectors.Env, k *connectors.Kind, c connect
 	}
 	ctx, cancel := context.WithTimeout(ctx, connectors.TestTimeout)
 	defer cancel()
-	cfg := config.MCPServerConfig{Args: []string{file}, Env: vars}
+	// Written in a temporary folder: its paths start where c belongs.
+	base := scopeBase(c.Scope, env.Workspace)
+	kinds := connectors.Load(env.PrefixDir, env.Workspace).Kinds
+	if k != nil {
+		kinds = append(kinds, *k)
+	}
+	t := &transport{files: []string{file}, vars: vars, keys: pathKeys(kinds), base: func(string) string { return base }}
 	client := mcp.NewClient(&mcp.Implementation{Name: "blitz", Version: "studio"}, nil)
-	cs, err := client.Connect(ctx, Transport(cfg), nil)
+	cs, err := client.Connect(ctx, t, nil)
 	if err != nil {
 		return err
 	}

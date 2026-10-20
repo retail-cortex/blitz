@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -37,6 +38,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/log"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/resources"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/server"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/telemetry"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools"
@@ -97,6 +99,14 @@ var SourceTypes = []string{"postgres", "alloydb-postgres", "sqlite", "bigquery"}
 // process's environment: Blitz puts secrets there. A ${NAME} with no value
 // and no default is an error, naming it.
 func Load(ctx context.Context, files []string, env map[string]string) (Config, error) {
+	return LoadWith(ctx, files, env, nil)
+}
+
+// LoadWith is Load with each file's text given to rewrite first, before
+// its ${NAME}s are filled (nil: as it is). Blitz resolves a connection's
+// relative paths there, against the folder it belongs to, not the
+// service's working directory.
+func LoadWith(ctx context.Context, files []string, env map[string]string, rewrite func(file string, raw []byte) ([]byte, error)) (Config, error) {
 	if len(files) == 0 {
 		return Config{}, errors.New("no database files")
 	}
@@ -105,12 +115,50 @@ func Load(ctx context.Context, files []string, env map[string]string) (Config, e
 		vars[k] = v
 	}
 	p := &ConfigParser{EnvVars: vars}
-	cfg, err := p.LoadAndMergeConfigs(ctx, files)
+	var cfg Config
+	var err error
+	if rewrite == nil {
+		cfg, err = p.LoadAndMergeConfigs(ctx, files)
+	} else {
+		cfg, err = p.loadRewritten(ctx, files, rewrite)
+	}
 	if err != nil {
 		return cfg, err
 	}
 	markReads(cfg)
 	return cfg, nil
+}
+
+// loadRewritten is LoadAndMergeConfigs with each file's text rewritten
+// before it's parsed.
+func (p *ConfigParser) loadRewritten(ctx context.Context, files []string, rewrite func(string, []byte) ([]byte, error)) (Config, error) {
+	var configs []Config
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			return Config{}, fmt.Errorf("unable to read config file at %q: %w", f, err)
+		}
+		if raw, err = rewrite(f, raw); err != nil {
+			return Config{}, fmt.Errorf("%s: %w", filepath.Base(f), err)
+		}
+		abs, err := filepath.Abs(f)
+		if err != nil {
+			abs = f
+		}
+		c, err := p.ParseConfig(context.WithValue(ctx, resources.BaseDirKey, filepath.Dir(abs)), raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("unable to parse config file at %q: %w", f, err)
+		}
+		configs = append(configs, c)
+	}
+	if len(configs) == 1 {
+		return configs[0], nil
+	}
+	merged, err := mergeConfigs(configs...)
+	if err != nil {
+		return Config{}, fmt.Errorf("unable to merge config files: %w", err)
+	}
+	return merged, nil
 }
 
 // markReads marks the custom SQL tools whose statement only reads, and

@@ -339,6 +339,23 @@ func Delete(cat Catalog, prefixDir, workspace, category, scope, name string) err
 	return nil
 }
 
+// ResolvePath is p, a path setting's value (a field of type path), as it
+// opens: a relative one against base (the workspace's folder for a
+// workspace connection, the home folder for a global one), ~/ as the home
+// folder; a value that isn't a file's path (SQLite's :memory:, a file:
+// URI, a ${NAME} filled later) is left as it is (false).
+func ResolvePath(p, base string) (string, bool) {
+	switch {
+	case p == "" || strings.HasPrefix(p, ":") || strings.HasPrefix(p, "file:") || strings.Contains(p, "${"):
+		return p, false
+	case p == "~" || strings.HasPrefix(p, "~/"):
+		return config.ExpandHome(p), true
+	case filepath.IsAbs(p):
+		return p, true
+	}
+	return filepath.Join(base, p), true
+}
+
 // MakeGlobal moves the workspace's connection name, of category, to the
 // global folder with its secrets (CON-19), so every workspace has it:
 // problems, with nothing moved, when its kind or category is the
@@ -383,6 +400,15 @@ func MakeGlobal(prefixDir, workspace, category, name string) (Connection, []stri
 		if f.Secret() {
 			if v, ok := resolve(secrets.OnlyWorkspace, SecretKey(c, name, f.Key)); ok {
 				values[f.Key] = v
+			}
+		}
+	}
+	// A relative path meant the workspace's folder: it still names that file.
+	for _, f := range k.Fields {
+		if v := conn.Settings[f.Key]; f.Type == FieldPath && v != "" && !strings.HasPrefix(v, "~") {
+			if p, isFile := ResolvePath(v, workspace); isFile {
+				conn.Settings = maps.Clone(conn.Settings)
+				conn.Settings[f.Key] = p
 			}
 		}
 	}

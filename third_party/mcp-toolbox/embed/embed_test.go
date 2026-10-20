@@ -16,6 +16,7 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"database/sql"
 	"encoding/json"
 	"os"
@@ -125,6 +126,37 @@ func TestServesTools(t *testing.T) {
 
 	_, err = Load(ctx, nil, nil)
 	assert.Error(t, err, "no files")
+}
+
+// LoadWith gives each file's text to rewrite before it's parsed (Blitz
+// resolves relative paths there); a rewrite's error names the file, and
+// several files are merged as Load merges them.
+func TestLoadWith(t *testing.T) {
+	ctx := context.Background()
+	db := recipes(t)
+	file := writeConfig(t, strings.Replace(sqliteTools, "${DB_PATH}", "./recipes.db", 1))
+	var seen []string
+	cfg, err := LoadWith(ctx, []string{file}, nil, func(f string, raw []byte) ([]byte, error) {
+		seen = append(seen, f)
+		return []byte(strings.Replace(string(raw), "./recipes.db", db, 1)), nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{file}, seen)
+	got, _ := call(t, connect(t, cfg), "count_recipes", nil)
+	assert.JSONEq(t, `{"n": 2}`, got)
+
+	_, err = LoadWith(ctx, []string{file}, nil, func(string, []byte) ([]byte, error) { return nil, errors.New("no file at x") })
+	assert.ErrorContains(t, err, "db.yaml: no file at x")
+	_, err = LoadWith(ctx, []string{filepath.Join(t.TempDir(), "gone.yaml")}, nil, func(_ string, raw []byte) ([]byte, error) { return raw, nil })
+	assert.ErrorContains(t, err, "unable to read")
+	_, err = LoadWith(ctx, []string{writeConfig(t, "kind: [")}, nil, func(_ string, raw []byte) ([]byte, error) { return raw, nil })
+	assert.ErrorContains(t, err, "unable to parse")
+	other := writeConfig(t, "kind: tool\nname: other\ntype: sqlite-sql\nsource: recipes\ndescription: d\nstatement: SELECT 1\n")
+	cfg, err = LoadWith(ctx, []string{file, other}, map[string]string{}, func(_ string, raw []byte) ([]byte, error) {
+		return []byte(strings.Replace(string(raw), "./recipes.db", db, 1)), nil
+	})
+	require.NoError(t, err)
+	assert.Len(t, cfg.Tools, 3, "merged")
 }
 
 // Every SQLite source has sqlite-vec: vec0 tables and a nearest-neighbour

@@ -34,9 +34,9 @@ fields:
       es: "Base de datos"
       fr-CA: "Base de données"
     help:
-      en: "Its name (for SQLite, the file's path)"
-      es: "Su nombre (en SQLite, la ruta del archivo)"
-      fr-CA: "Son nom (pour SQLite, le chemin du fichier)"
+      en: "The file's path: ./kitchen.db starts at the workspace's folder (a global connection's at your home folder); ~/ is your home folder"
+      es: "La ruta del archivo: ./kitchen.db empieza en la carpeta del espacio de trabajo (la de una conexión global, en tu carpeta personal); ~/ es tu carpeta personal"
+      fr-CA: "Le chemin du fichier : ./kitchen.db part du dossier de l’espace de travail (celui d’une connexion globale, de votre dossier personnel); ~/ est votre dossier personnel"
 readOnly:
   key: readOnly
   value: true
