@@ -78,6 +78,30 @@ func TestReadComponent(t *testing.T) {
 	assert.Error(t, err, "an unaccepted license file accepted")
 }
 
+// A module that ships no license file takes the one kept for it under
+// the licenses folder; without one, it's a problem.
+func TestGoModulesLicenseFallback(t *testing.T) {
+	mod := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(mod, "go.mod"), []byte("module example.com/bare\n"), 0o644))
+	repos := filepath.Join(t.TempDir(), "repos")
+	require.NoError(t, os.WriteFile(repos, []byte(mod+"\n"), 0o644))
+	versions := map[string]string{"example.com/bare": "v0.1.0"}
+
+	_, problems := goModules(repos, versions, "")
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "no license file")
+
+	licenses := t.TempDir()
+	kept := filepath.Join(licenses, "example.com", "bare")
+	require.NoError(t, os.MkdirAll(kept, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(kept, "LICENSE-MIT"), []byte("MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy"), 0o644))
+	comps, problems := goModules(repos, versions, licenses)
+	require.Empty(t, problems)
+	require.Len(t, comps, 1)
+	assert.Equal(t, "MIT", comps[0].license)
+	assert.Equal(t, "v0.1.0", comps[0].version)
+}
+
 // Fonts bundled into the programs are read from their folders, each with
 // its license, and printed in a section of their own.
 func TestBundledFonts(t *testing.T) {
@@ -89,10 +113,11 @@ func TestBundledFonts(t *testing.T) {
 	require.Len(t, problems, 1)
 	assert.Contains(t, problems[0], "Missing")
 
-	text := render(nil, nil, fonts, fonts, "APACHE")
+	text := render(nil, nil, fonts, fonts, fonts, "APACHE")
 	assert.Contains(t, text, "Fonts bundled into blitz")
 	assert.Contains(t, text, "SIL Open Font License")
 	assert.Contains(t, text, "Colour themes the desktop app's are taken from")
-	assert.NotContains(t, render(nil, nil, nil, nil, "APACHE"), "Fonts bundled")
-	assert.NotContains(t, render(nil, nil, nil, nil, "APACHE"), "Colour themes")
+	assert.Contains(t, text, "Source code copied into blitzd")
+	assert.NotContains(t, render(nil, nil, nil, nil, nil, "APACHE"), "Fonts bundled")
+	assert.NotContains(t, render(nil, nil, nil, nil, nil, "APACHE"), "Colour themes")
 }

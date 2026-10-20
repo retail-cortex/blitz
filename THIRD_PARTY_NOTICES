@@ -14,9 +14,19 @@ Go modules linked into blitz, blitzd and the desktop app
   Go standard library 1.27.2                                     BSD-3-Clause
   cel.dev/expr v0.25.2                                           Apache-2.0
   cloud.google.com/go v0.123.0                                   Apache-2.0
-  cloud.google.com/go/auth v0.24.0                               Apache-2.0
+  cloud.google.com/go/alloydb v1.26.0                            Apache-2.0
+  cloud.google.com/go/alloydbconn v1.19.2                        Apache-2.0
+  cloud.google.com/go/auth v0.24.1                               Apache-2.0
   cloud.google.com/go/auth/oauth2adapt v0.3.0                    Apache-2.0
+  cloud.google.com/go/bigquery v1.85.0                           Apache-2.0
+  cloud.google.com/go/cloudsqlconn v1.25.4                       Apache-2.0
   cloud.google.com/go/compute/metadata v0.10.0                   Apache-2.0
+  cloud.google.com/go/dataplex v1.36.0                           Apache-2.0
+  cloud.google.com/go/iam v1.14.0                                Apache-2.0
+  cloud.google.com/go/longrunning v1.3.0                         Apache-2.0
+  cloud.google.com/go/monitoring v1.30.0                         Apache-2.0
+  cloud.google.com/go/sql v0.3.0                                 Apache-2.0
+  cloud.google.com/go/trace v1.16.0                              Apache-2.0
   connectrpc.com/connect v1.21.0                                 Apache-2.0
   fyne.io/systray v1.12.2                                        Apache-2.0
   github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1           MIT
@@ -24,11 +34,19 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0         MIT
   github.com/AzureAD/microsoft-authentication-library-for-go v1.8.0 MIT
   github.com/BurntSushi/toml v1.6.0                              MIT
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.57.0 Apache-2.0
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.38.0 Apache-2.0
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.62.0 Apache-2.0
+  github.com/MicahParks/jwkset v0.11.3                           Apache-2.0
+  github.com/MicahParks/keyfunc/v3 v3.8.2                        Apache-2.0
   github.com/a2aproject/a2a-go/v2 v2.6.0                         Apache-2.0
+  github.com/ajg/form v1.5.1                                     BSD-3-Clause
   github.com/alecthomas/chroma/v2 v2.20.0                        MIT
   github.com/anthropics/anthropic-sdk-go v1.75.0                 MIT
   github.com/antlr4-go/antlr/v4 v4.13.0                          BSD-3-Clause
+  github.com/apache/arrow/go/v15 v15.0.2                         Apache-2.0
   github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 MIT
+  github.com/asg017/sqlite-vec-go-bindings v0.1.6                Apache-2.0
   github.com/aws/aws-sdk-go-v2 v1.47.1                           Apache-2.0
   github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.11  Apache-2.0
   github.com/aws/aws-sdk-go-v2/config v1.33.6                    Apache-2.0
@@ -67,7 +85,13 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/dlclark/regexp2 v1.11.5                             MIT
   github.com/dustin/go-humanize v1.0.1                           MIT
   github.com/ergochat/readline v0.1.3                            MIT
+  github.com/fatih/color v1.18.0                                 MIT
   github.com/felixge/httpsnoop v1.1.0                            MIT
+  github.com/gabriel-vasile/mimetype v1.4.13                     MIT
+  github.com/go-chi/chi/v5 v5.3.0                                MIT
+  github.com/go-chi/cors v1.2.2                                  MIT
+  github.com/go-chi/httplog/v3 v3.5.0                            MIT
+  github.com/go-chi/render v1.0.3                                MIT
   github.com/go-logr/logr v1.4.4                                 Apache-2.0
   github.com/go-logr/stdr v1.2.2                                 Apache-2.0
   github.com/go-openapi/analysis v0.25.5                         Apache-2.0
@@ -93,20 +117,27 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/go-openapi/swag/yamlutils v0.28.0                   Apache-2.0
   github.com/go-openapi/validate v0.26.1                         Apache-2.0
   github.com/go-pdf/fpdf v0.9.0                                  MIT
+  github.com/go-playground/locales v0.14.1                       MIT
+  github.com/go-playground/universal-translator v0.18.1          MIT
+  github.com/go-playground/validator/v10 v10.30.3                MIT
   github.com/go-viper/mapstructure/v2 v2.5.0                     MIT
+  github.com/goccy/go-json v0.10.2                               MIT
+  github.com/goccy/go-yaml v1.11.0                               MIT
   github.com/godbus/dbus/v5 v5.1.0                               BSD-2-Clause
   github.com/golang-jwt/jwt/v5 v5.3.1                            MIT
+  github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 Apache-2.0
   github.com/golang/protobuf                                     BSD-3-Clause
   github.com/google/btree v1.1.3                                 Apache-2.0
   github.com/google/cel-go v0.26.1                               Apache-2.0
   github.com/google/certificate-transparency-go v1.3.3           Apache-2.0
+  github.com/google/flatbuffers v25.2.10+incompatible            Apache-2.0
   github.com/google/go-cmp v0.7.0                                BSD-3-Clause
   github.com/google/go-containerregistry v0.21.7                 Apache-2.0
   github.com/google/jsonschema-go v0.4.3                         MIT
-  github.com/google/s2a-go v0.1.10                               Apache-2.0
+  github.com/google/s2a-go v0.1.11                               Apache-2.0
   github.com/google/safehtml v0.1.0                              BSD-3-Clause
   github.com/google/uuid v1.6.0                                  BSD-3-Clause
-  github.com/googleapis/enterprise-certificate-proxy v0.3.22     Apache-2.0
+  github.com/googleapis/enterprise-certificate-proxy v0.3.23     Apache-2.0
   github.com/googleapis/gax-go/v2 v2.26.2                        BSD-3-Clause
   github.com/gorilla/css v1.0.1                                  BSD-3-Clause
   github.com/gorilla/websocket v1.5.3                            BSD-2-Clause
@@ -115,9 +146,17 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/in-toto/in-toto-golang v0.11.0                      Apache-2.0
   github.com/inconshreveable/mousetrap v1.1.0                    Apache-2.0
   github.com/invopop/jsonschema v0.14.0                          MIT
+  github.com/jackc/pgpassfile v1.0.0                             MIT
+  github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 MIT
+  github.com/jackc/pgx/v5 v5.11.0                                MIT
+  github.com/jackc/puddle/v2 v2.2.3                              MIT
+  github.com/klauspost/compress v1.18.6                          Apache-2.0
+  github.com/klauspost/cpuid/v2 v2.2.5                           MIT
   github.com/kylelemons/godebug v1.1.0                           Apache-2.0
   github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0   BSD-3-Clause
+  github.com/leodido/go-urn v1.4.0                               MIT
   github.com/lucasb-eyer/go-colorful v1.3.0                      MIT
+  github.com/mattn/go-colorable v0.1.14                          MIT
   github.com/mattn/go-isatty v0.0.24                             MIT
   github.com/mattn/go-runewidth v0.0.17                          MIT
   github.com/microcosm-cc/bluemonday v1.0.27                     BSD-3-Clause
@@ -126,13 +165,16 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/mohae/deepcopy v0.0.0-20170308212314-bb9b5e7adda9   MIT
   github.com/muesli/reflow v0.3.0                                MIT
   github.com/muesli/termenv v0.16.0                              MIT
+  github.com/ncruces/go-sqlite3 v0.20.3                          MIT
   github.com/ncruces/go-strftime v1.0.0                          MIT
+  github.com/ncruces/julianday v1.0.0                            MIT
   github.com/oklog/ulid/v2 v2.1.1                                Apache-2.0
   github.com/openai/openai-go/v3 v3.71.1                         Apache-2.0
   github.com/opencontainers/go-digest v1.0.0                     Apache-2.0
   github.com/opencontainers/runtime-spec v1.2.1                  Apache-2.0
   github.com/pb33f/ordered-map/v2 v2.3.1                         Apache-2.0
   github.com/philippgille/chromem-go v0.7.0                      MPL-2.0
+  github.com/pierrec/lz4/v4 v4.1.18                              BSD-3-Clause
   github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c      BSD-2-Clause
   github.com/pkg/errors v0.9.1                                   BSD-2-Clause
   github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec BSD-3-Clause
@@ -153,6 +195,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/spf13/pflag v1.0.10                                 BSD-3-Clause
   github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 MIT
   github.com/stoewer/go-strcase v1.2.0                           MIT
+  github.com/tetratelabs/wazero v1.8.2                           Apache-2.0
   github.com/theupdateframework/go-tuf/v2 v2.4.2                 Apache-2.0
   github.com/tidwall/gjson v1.19.0                               MIT
   github.com/tidwall/match v1.2.0                                MIT
@@ -165,10 +208,17 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78    MIT
   github.com/yuin/goldmark v1.8.6                                MIT
   github.com/yuin/goldmark-emoji v1.0.6                          MIT
+  github.com/zeebo/xxh3 v1.0.2                                   BSD-2-Clause
+  go.opencensus.io v0.24.0                                       Apache-2.0
   go.opentelemetry.io/auto/sdk v1.2.1                            Apache-2.0
   go.opentelemetry.io/contrib/bridges/otelslog v0.20.1           Apache-2.0
-  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 Apache-2.0
-  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 Apache-2.0
+  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0 Apache-2.0
+  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0 Apache-2.0
+  go.opentelemetry.io/contrib/propagators/autoprop v0.72.0       Apache-2.0
+  go.opentelemetry.io/contrib/propagators/aws v1.47.0            Apache-2.0
+  go.opentelemetry.io/contrib/propagators/b3 v1.47.0             Apache-2.0
+  go.opentelemetry.io/contrib/propagators/jaeger v1.47.0         Apache-2.0
+  go.opentelemetry.io/contrib/propagators/ot v1.47.0             Apache-2.0
   go.opentelemetry.io/otel v1.47.0                               Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0 Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0 Apache-2.0
@@ -181,24 +231,27 @@ Go modules linked into blitz, blitzd and the desktop app
   go.opentelemetry.io/otel/sdk/metric v1.47.0                    Apache-2.0
   go.opentelemetry.io/otel/trace v1.47.0                         Apache-2.0
   go.opentelemetry.io/proto/otlp v1.11.0                         Apache-2.0
+  go.uber.org/multierr v1.11.0                                   MIT
   go.yaml.in/yaml/v3 v3.0.5                                      Apache-2.0
   go.yaml.in/yaml/v4 v4.0.0-rc.2                                 Apache-2.0
-  golang.org/x/crypto v0.57.0                                    BSD-3-Clause
+  golang.org/x/crypto v0.58.0                                    BSD-3-Clause
   golang.org/x/exp v0.0.0-20260112195511-716be5621a96            BSD-3-Clause
   golang.org/x/image v0.46.0                                     BSD-3-Clause
   golang.org/x/mod v0.41.0                                       BSD-3-Clause
-  golang.org/x/net v0.60.0                                       BSD-3-Clause
+  golang.org/x/net v0.61.0                                       BSD-3-Clause
   golang.org/x/oauth2 v0.37.0                                    BSD-3-Clause
   golang.org/x/sync v0.24.0                                      BSD-3-Clause
-  golang.org/x/sys v0.48.0                                       BSD-3-Clause
-  golang.org/x/term v0.46.0                                      BSD-3-Clause
-  golang.org/x/text v0.42.0                                      BSD-3-Clause
+  golang.org/x/sys v0.49.0                                       BSD-3-Clause
+  golang.org/x/term v0.47.0                                      BSD-3-Clause
+  golang.org/x/text v0.43.0                                      BSD-3-Clause
   golang.org/x/time v0.16.0                                      BSD-3-Clause
+  golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da        BSD-3-Clause
   google.golang.org/adk/v2 v2.6.0                                Apache-2.0
-  google.golang.org/api v0.300.0                                 BSD-3-Clause
+  google.golang.org/api v0.301.0                                 BSD-3-Clause
   google.golang.org/genai v1.74.0                                Apache-2.0
-  google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc Apache-2.0
-  google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc Apache-2.0
+  google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8  Apache-2.0
+  google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 Apache-2.0
+  google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 Apache-2.0
   google.golang.org/grpc v1.84.0                                 Apache-2.0
   google.golang.org/protobuf v1.36.12                            BSD-3-Clause
   gopkg.in/yaml.v3 v3.0.1                                        Apache-2.0
@@ -253,7 +306,17 @@ cloud.google.com/go v0.123.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-cloud.google.com/go/auth v0.24.0
+cloud.google.com/go/alloydb v1.26.0
+-----------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/alloydbconn v1.19.2
+---------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/auth v0.24.1
 --------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -263,8 +326,48 @@ cloud.google.com/go/auth/oauth2adapt v0.3.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
+cloud.google.com/go/bigquery v1.85.0
+------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/cloudsqlconn v1.25.4
+----------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
 cloud.google.com/go/compute/metadata v0.10.0
 --------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/dataplex v1.36.0
+------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/iam v1.14.0
+-------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/longrunning v1.3.0
+--------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/monitoring v1.30.0
+--------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/sql v0.3.0
+------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+cloud.google.com/go/trace v1.16.0
+---------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
@@ -403,10 +506,66 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.57.0
+----------------------------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.38.0
+---------------------------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.62.0
+-------------------------------------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/MicahParks/jwkset v0.11.3
+------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/MicahParks/keyfunc/v3 v3.8.2
+---------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
 github.com/a2aproject/a2a-go/v2 v2.6.0
 --------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/ajg/form v1.5.1
+--------------------------
+
+Copyright (c) 2014 Alvaro J. Genial. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 github.com/alecthomas/chroma/v2 v2.20.0
 ---------------------------------------
@@ -474,12 +633,44 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+github.com/apache/arrow/go/v15 v15.0.2
+--------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 --------------------------------------------------------------------
 
 The MIT License (MIT)
 
 Copyright (c) 2014-2020 Alex Saskevich
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/asg017/sqlite-vec-go-bindings v0.1.6
+-----------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+MIT License
+
+Copyright (c) 2024 Alex Garcia
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -1164,6 +1355,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/fatih/color v1.18.0
+------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2013 Fatih Arslan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 github.com/felixge/httpsnoop v1.1.0
 -----------------------------------
 
@@ -1186,6 +1401,129 @@ Copyright (c) 2016 Felix Geisendörfer (felix@debuggable.com)
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
+
+github.com/gabriel-vasile/mimetype v1.4.13
+------------------------------------------
+
+MIT License
+
+Copyright (c) 2018 Gabriel Vasile
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/go-chi/chi/v5 v5.3.0
+-------------------------------
+
+Copyright (c) 2015-present Peter Kieltyka (https://github.com/pkieltyka), Google Inc.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/go-chi/cors v1.2.2
+-----------------------------
+
+Copyright (c) 2014 Olivier Poitrey <rs@dailymotion.com>
+Copyright (c) 2016-Present https://github.com/go-chi authors
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/go-chi/httplog/v3 v3.5.0
+-----------------------------------
+
+Copyright (c) 2015-present Peter Kieltyka (https://github.com/pkieltyka)
+Copyright (c) 2024-present Golang.cz, https://github.com/go-chi authors
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/go-chi/render v1.0.3
+-------------------------------
+
+Copyright (c) 2016-Present https://github.com/go-chi authors
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 github.com/go-logr/logr v1.4.4
 ------------------------------
@@ -1506,6 +1844,81 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/go-playground/locales v0.14.1
+----------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Go Playground
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/go-playground/universal-translator v0.18.1
+-----------------------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Go Playground
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/go-playground/validator/v10 v10.30.3
+-----------------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2015 Dean Karn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 github.com/go-viper/mapstructure/v2 v2.5.0
 ------------------------------------------
 
@@ -1530,6 +1943,56 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+github.com/goccy/go-json v0.10.2
+--------------------------------
+
+MIT License
+
+Copyright (c) 2020 Masaaki Goshima
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/goccy/go-yaml v1.11.0
+--------------------------------
+
+MIT License
+
+Copyright (c) 2019 Masaaki Goshima
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 github.com/godbus/dbus/v5 v5.1.0
 --------------------------------
@@ -1571,6 +2034,11 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
+---------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
 
 github.com/golang/protobuf
 --------------------------
@@ -1615,6 +2083,11 @@ Licensed under the Apache License 2.0 (printed at the end).
 
 github.com/google/certificate-transparency-go v1.3.3
 ----------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/google/flatbuffers v25.2.10+incompatible
+---------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
@@ -1679,7 +2152,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-github.com/google/s2a-go v0.1.10
+github.com/google/s2a-go v0.1.11
 --------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -1746,7 +2219,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-github.com/googleapis/enterprise-certificate-proxy v0.3.22
+github.com/googleapis/enterprise-certificate-proxy v0.3.23
 ----------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -1908,6 +2381,140 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/jackc/pgpassfile v1.0.0
+----------------------------------
+
+Copyright (c) 2019 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+-----------------------------------------------------------------
+
+Copyright (c) 2020 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/jackc/pgx/v5 v5.11.0
+-------------------------------
+
+Copyright (c) 2013-2021 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/jackc/puddle/v2 v2.2.3
+---------------------------------
+
+Copyright (c) 2018 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/klauspost/compress v1.18.6
+-------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+github.com/klauspost/cpuid/v2 v2.2.5
+------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2015 Klaus Post
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 github.com/kylelemons/godebug v1.1.0
 ------------------------------------
 
@@ -1944,6 +2551,31 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+github.com/leodido/go-urn v1.4.0
+--------------------------------
+
+MIT License
+
+Copyright (c) 2018 Leonardo Di Donato
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 github.com/lucasb-eyer/go-colorful v1.3.0
 -----------------------------------------
 
@@ -1954,6 +2586,31 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/mattn/go-colorable v0.1.14
+-------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Yasuhiro Matsumoto
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 github.com/mattn/go-isatty v0.0.24
 ----------------------------------
@@ -2134,8 +2791,58 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/ncruces/go-sqlite3 v0.20.3
+-------------------------------------
+
+MIT License
+
+Copyright (c) 2023 Nuno Cruces
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 github.com/ncruces/go-strftime v1.0.0
 -------------------------------------
+
+MIT License
+
+Copyright (c) 2022 Nuno Cruces
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+github.com/ncruces/julianday v1.0.0
+-----------------------------------
 
 MIT License
 
@@ -2987,6 +3694,37 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
 
+github.com/pierrec/lz4/v4 v4.1.18
+---------------------------------
+
+Copyright (c) 2015, Pierre Curto
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of xxHash nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 ---------------------------------------------------------
 
@@ -3331,6 +4069,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/tetratelabs/wazero v1.8.2
+------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+wazero
+Copyright 2020-2023 wazero authors
+
 github.com/theupdateframework/go-tuf/v2 v2.4.2
 ----------------------------------------------
 
@@ -3581,6 +4327,40 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+github.com/zeebo/xxh3 v1.0.2
+----------------------------
+
+xxHash Library
+Copyright (c) 2012-2014, Yann Collet
+Copyright (c) 2019, Jeff Wendling
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this
+  list of conditions and the following disclaimer in the documentation and/or
+  other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+go.opencensus.io v0.24.0
+------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
 go.opentelemetry.io/auto/sdk v1.2.1
 -----------------------------------
 
@@ -3591,13 +4371,38 @@ go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0
+go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
 -----------------------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 ---------------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/contrib/propagators/autoprop v0.72.0
+--------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/contrib/propagators/aws v1.47.0
+---------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/contrib/propagators/b3 v1.47.0
+--------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/contrib/propagators/jaeger v1.47.0
+------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/contrib/propagators/ot v1.47.0
+--------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
@@ -3661,6 +4466,29 @@ go.opentelemetry.io/proto/otlp v1.11.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
+go.uber.org/multierr v1.11.0
+----------------------------
+
+Copyright (c) 2017-2021 Uber Technologies, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
 go.yaml.in/yaml/v3 v3.0.5
 -------------------------
 
@@ -3699,7 +4527,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-golang.org/x/crypto v0.57.0
+golang.org/x/crypto v0.58.0
 ---------------------------
 
 Copyright 2009 The Go Authors.
@@ -3823,7 +4651,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/net v0.60.0
+golang.org/x/net v0.61.0
 ------------------------
 
 Copyright 2009 The Go Authors.
@@ -3916,7 +4744,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/sys v0.48.0
+golang.org/x/sys v0.49.0
 ------------------------
 
 Copyright 2009 The Go Authors.
@@ -3947,7 +4775,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/term v0.46.0
+golang.org/x/term v0.47.0
 -------------------------
 
 Copyright 2009 The Go Authors.
@@ -3978,7 +4806,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/text v0.42.0
+golang.org/x/text v0.43.0
 -------------------------
 
 Copyright 2009 The Go Authors.
@@ -4040,12 +4868,43 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
+-------------------------------------------------------
+
+Copyright 2019 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 google.golang.org/adk/v2 v2.6.0
 -------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/api v0.300.0
+google.golang.org/api v0.301.0
 ------------------------------
 
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -4081,12 +4940,17 @@ google.golang.org/genai v1.74.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc
+google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8
+-------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8
 ----------------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc
+google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8
 ----------------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -13961,6 +14825,16 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
 CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Source code copied into blitzd (third_party, with Blitz's changes)
+==================================================================
+
+  MCP Toolbox for Databases 1.14.0 (Google LLC)                  Apache-2.0
+
+MCP Toolbox for Databases 1.14.0 (Google LLC)
+---------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
 
 Fonts bundled into blitz, blitzd and the desktop app (PDFs the agent exports)
 =============================================================================

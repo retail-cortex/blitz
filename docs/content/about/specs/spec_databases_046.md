@@ -1,0 +1,50 @@
+---
+title: "046 · Databases"
+weight: 46
+---
+
+*Databases the agents can query: PostgreSQL, AlloyDB, SQLite (with sqlite-vec) and BigQuery, served inside Blitz by MCP Toolbox for Databases, read-only unless the user says otherwise* (`spec_databases_046`)
+
+| | |
+|---|---|
+| Status | **Done** in v0.7.2 (the owner's request, 2026-10-19): DB-01–DB-16. |
+| Source | `third_party/mcp-toolbox/` (the pruned Toolbox, `embed/embed.go`, `patches/`, `tools/update_toolbox.sh`), `pkg/engine/databases/` (`databases.go`, `connection.go`, `store.go`), `pkg/engine/databases.go`, `pkg/engine/tools/mcp.go` (`RegisterInProcess`, `ReadOnlyTools`), `pkg/engine/extensions.go` (`applyMCP`, `ReloadDatabases`), `pkg/engine/settingswatch.go`, `apps/service/internal/server/databases.go`, `apps/desktop/web/src/studio/DatabasesPane.tsx`, `apps/desktop/web/src/studio/databaseForm.ts` |
+| Tests | `third_party/mcp-toolbox/embed/embed_test.go` (`TestPostgresReadOnly` against a real PostgreSQL when `BLITZ_TEST_POSTGRES` is set), `pkg/engine/databases/*_test.go`, `pkg/engine/databases_test.go`, `pkg/engine/tools/mcpinproc_test.go`, `apps/service/internal/server/databases_test.go`, `apps/desktop/web/src/studio/databaseForm.test.ts` |
+| Depends on | [spec_mcp_009](spec_mcp_009.md) (MCP servers, approvals), [spec_secrets_039](spec_secrets_039.md) (passwords), [spec_studio_040](spec_studio_040.md) |
+
+## 1. Purpose
+
+An agent that can read the team's data answers questions no file in the repository can: how many orders failed last night, which customers churned, what the schema looks like before a migration. [MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox) (Google, Apache-2.0, written in Go) already turns a database into MCP tools, with connection pooling, parameterised queries and a read-only model. Blitz runs it inside its own process, not as a program to install, and puts a form in front of it, so connecting a database is a few fields in Studio. Reading is the default, enforced by the database itself, so an agent can explore without the risk of changing anything.
+
+## 2. Requirements
+
+### Toolbox inside Blitz
+
+- **DB-01** `third_party/mcp-toolbox` is a pruned copy of Toolbox (v1.14.0, `VERSION`): its core (`third_party/mcp-toolbox/internal/server`, its sources, tools and utilities), the PostgreSQL, AlloyDB, SQLite and BigQuery sources and their tools, and its config parser (`third_party/mcp-toolbox/embed/config.go`, from Toolbox's cmd/internal), under Blitz's module path so the embed package can import its internal packages. Toolbox's command line isn't used: its signal handling, its version check (a call home) and its global OpenTelemetry setup would act on Blitz's process. `tools/update_toolbox.sh [version]` refreshes the copy from the release's module and applies `patches/*.patch` in order; then `bazel run //:gazelle`. nogo skips `third_party/mcp-toolbox/internal` (upstream code).
+- **DB-02** Blitz's patches: (01) SQLite through `ncruces/go-sqlite3` with **sqlite-vec** (`vec0` tables, nearest-neighbour queries; wazero with threads) and `readOnly` (the file opened `mode=ro`); (02) PostgreSQL and AlloyDB `readOnly`: every session `default_transaction_read_only=on`, and `execute_sql` runs in a read-only transaction rolled back after, so neither `BEGIN READ WRITE` nor `SET default_transaction_read_only = off` gets a write through; (03) no Cloud SQL; (04) `${NAME}` filled only from the values Blitz gives, never the process's environment; (05) the stdio server doesn't panic when its session closes; (06) closing the server closes its sources' pools and stops BigQuery's client caches (Toolbox never did, so each restart leaked connections).
+- **DB-03** `embed.Load(files, values)` reads and merges Toolbox YAML files; `embed.Start` initialises the sources (connecting to each: a database that can't be reached is the error) and serves the tools as MCP over an in-memory pipe (`Session`, closed once). A custom SQL tool with no annotations whose statement only reads (`ReadsOnly`: it starts with SELECT, WITH, EXPLAIN, SHOW, PRAGMA, VALUES, DESCRIBE or TABLE and has no word that writes) is marked `readOnlyHint`, since Toolbox otherwise takes it for a write and hides it on a read-only source. `ReadOnlySources` and `ReadOnlyTools` name the sources that can't write (SQLite, PostgreSQL and AlloyDB with `readOnly`, BigQuery with `writeMode: blocked` or `readOnly`) and the tools on them.
+
+### The databases server
+
+- **DB-04** A workspace's **database files** are the global ones (`~/.blitz/databases/*.yaml`, `*.yml`) and its own (`.agents/databases/`), merged into one MCP server, **databases**, run in-process (`MCPServerConfig.InProcess`, `tools.RegisterInProcess`): its tools are named `db__<tool>` and offered to every agent. A user's own MCP server named `databases` wins, with a warning. With no files there's no server.
+- **DB-05** A `${NAME}` in a file is the Blitz secret `NAME` (the workspace's own, else the global one; spec_secrets_039), never an environment variable; its value is remembered for every redactor to mask.
+- **DB-06** The server connects when its tools are first listed, like any MCP server (spec_mcp_009), and gives up after the listing's timeout; its state (idle, connected, failed with why) is in `/mcp` and Studio. Its target reads `in-process: <files>`.
+- **DB-07** Tools on a read-only source run **without asking** (`MCPServerConfig.ReadOnlyTools`; `Lookup` reports them as auto-approved): the database refuses any write, whatever the agent sends. Every other database tool asks first, as MCP tools do.
+- **DB-08** The settings watch (every 2 s) notices database files added, changed or removed, and restarts the server (`ReloadDatabases`); so does saving or deleting one in Studio. MCP reloads are applied one at a time (`applyMCP`, `mcpMu`).
+
+### Connections in Studio
+
+- **DB-09** A **connection** is one file, `<name>.yaml`: one source named `<name>` with the ready-made tools switched on (`<name>_execute_sql`, `<name>_list_tables`…) and the custom queries (`<name>_<query>`), so tool names never collide between files. `databases.Parse` reads a file into the form; one with more than the form describes (other sources or tool types, toolsets, unknown settings) is **custom**, listed and edited as YAML. A connection's description is kept in a `# about:` comment (Toolbox's sources take no description field) and goes into its tools' descriptions.
+- **DB-10** The kinds (`databases.Kinds`): **PostgreSQL** (host, port, database, user, password; tools `execute_sql`, `list_tables`, `list_schemas`, `list_views`, `list_indexes`, `database_overview`); **AlloyDB** (project, region, cluster, instance, IP type, database, user and password or IAM; the PostgreSQL tools); **SQLite** (the file; `execute_sql`, which writes, and `list_tables`); **BigQuery** (project, location, datasets, most bytes billed; `execute_sql`, `list_datasets`, `list_tables`, `table_info`, `dataset_info`). Google Cloud kinds sign in with Application Default Credentials.
+- **DB-11** A password is never in the file: saving keeps the value typed as the secret `DB_<NAME>_PASSWORD` in the connection's scope and writes `${DB_<NAME>_PASSWORD}`. A rename moves the secret; deleting a connection deletes its secrets. A required password with no value kept or typed is a problem.
+- **DB-12** New connections are **read-only**. Custom queries take parameters (string, integer, float, boolean) and say whether they only read.
+- **DB-13** `WorkspaceService.ListDatabases` (the connections, global first, the kinds, the folders, and the server's state), `SaveDatabase` (problems with nothing written; `DATABASE_NOT_FOUND` for a previous name that isn't there), `DeleteDatabase`, `TestDatabase` (connects to the form as it is, unsaved, and lists its tools: which run unasked; a problem says why it couldn't connect, redacted) and `TryDatabaseTool` (runs one tool of the form as it is, with JSON arguments).
+- **DB-14** **Studio › Databases** (`DatabasesPane`), after Workflows with Secrets (what the agent reaches; spec_studio_040 STU-02): the server's state, then **This workspace** and **Every workspace**, each connection with its kind, read-only or not, its tool count and description. A connection's form slides in over the list: name and description, where (this workspace or every workspace), the kind, its settings (a kept password shown as kept, typed to replace), **Read-only** with what it means for the kind, the ready-made tools (one that writes is marked as not offered while read-only), and **Your queries**, each with its SQL, parameters (drafted from `$1` or `@name` when the SQL is first written) and **Try it**. **Test the connection** lists the tools the agents would get. Delete, Revert, Cancel and Save as in the other kinds; unsaved changes are asked about.
+- **DB-15** The strings are in English, Spanish and French.
+- **DB-16** The leak checks of the test binaries that link Toolbox ignore opencensus's stats worker, which its package's `init` starts for the process.
+
+## 3. Not yet
+
+- Choosing which agents get a connection (every agent does).
+- A guardrail that reads SQL before a write runs; until then a writable database's tools ask first.
+- MySQL, Spanner, Cloud SQL and the other databases Toolbox supports: each is a source and its tools added to the copy (`tools/update_toolbox.sh`) and a kind added to the form.

@@ -50,25 +50,27 @@ func main() {
 		apache   = flag.String("apache", "LICENSE", "the Apache License 2.0 text, printed once at the end")
 		fonts    = flag.String("fonts", "", "fonts bundled into the programs, as name=directory (with their license file); repeat with ;")
 		themes   = flag.String("themes", "", "colour themes the desktop app's are taken from, as fonts are given")
+		vendored = flag.String("vendored", "", "source code copied into the programs (third_party), as fonts are given")
+		licenses = flag.String("licenses", "", "a folder of license files for modules that ship none: <dir>/<module path>/LICENSE*")
 		lock     = flag.String("npm-lock", "", "the pnpm-lock.yaml (the page's packages are what ships)")
 		store    = flag.String("npm-store", "", "rules_js's package store (node_modules/.aspect_rules_js)")
 		out      = flag.String("out", "THIRD_PARTY_NOTICES", "the file to write")
 		checkOld = flag.Bool("check", false, "fail if the file differs from what would be written, instead of writing it")
 	)
 	flag.Parse()
-	if err := run(*repos, *gomod, *goroot, *apache, *lock, *store, *fonts, *themes, *out, *checkOld); err != nil {
+	if err := run(*repos, *gomod, *goroot, *apache, *lock, *store, *fonts, *themes, *vendored, *licenses, *out, *checkOld); err != nil {
 		fmt.Fprintln(os.Stderr, "✗", err)
 		os.Exit(1)
 	}
 }
 
-func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, themes, out string, check bool) error {
+func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, themes, vendored, licenses, out string, check bool) error {
 	versions, err := moduleVersions(gomod)
 	if err != nil {
 		return err
 	}
 	var problems []string
-	goComps, errs := goModules(reposFile, versions)
+	goComps, errs := goModules(reposFile, versions, licenses)
 	problems = append(problems, errs...)
 	if goroot != "" {
 		c, err := readComponent("Go standard library", strings.TrimPrefix(goVersion(goroot), "go"), goroot)
@@ -83,6 +85,8 @@ func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, themes, out s
 	fontComps, errs := bundledFonts(fonts)
 	themeComps, themeErrs := bundledFonts(themes)
 	errs = append(errs, themeErrs...)
+	vendoredComps, vendoredErrs := bundledFonts(vendored)
+	errs = append(errs, vendoredErrs...)
 	problems = append(problems, errs...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
@@ -92,7 +96,7 @@ func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, themes, out s
 	if err != nil {
 		return err
 	}
-	text := render(goComps, npmComps, fontComps, themeComps, string(apacheText))
+	text := render(goComps, npmComps, vendoredComps, fontComps, themeComps, string(apacheText))
 	if check {
 		old, _ := os.ReadFile(out)
 		if !bytes.Equal(old, []byte(text)) {
@@ -162,7 +166,7 @@ func goVersion(goroot string) string {
 }
 
 // goModules reads the listed module directories.
-func goModules(reposFile string, versions map[string]string) ([]component, []string) {
+func goModules(reposFile string, versions map[string]string, licenses string) ([]component, []string) {
 	data, err := os.ReadFile(reposFile)
 	if err != nil {
 		return nil, []string{err.Error()}
@@ -191,6 +195,13 @@ func goModules(reposFile string, versions map[string]string) ([]component, []str
 			continue
 		}
 		c, err := readComponent(name, versions[name], dir)
+		if err != nil && licenses != "" {
+			// A module that ships no license file, its upstream's kept in
+			// the repository (third_party/licenses/<module>).
+			if alt, aerr := readComponent(name, versions[name], filepath.Join(licenses, filepath.FromSlash(name))); aerr == nil {
+				c, err = alt, nil
+			}
+		}
 		if err != nil {
 			problems = append(problems, err.Error())
 			continue
@@ -482,7 +493,7 @@ func identify(text string) string {
 	return ""
 }
 
-func render(goComps, npmComps, fontComps, themeComps []component, apache string) string {
+func render(goComps, npmComps, vendoredComps, fontComps, themeComps []component, apache string) string {
 	var b strings.Builder
 	b.WriteString(`THIRD-PARTY NOTICES
 
@@ -521,6 +532,9 @@ and packages the programs link; don't edit it by hand.
 	}
 	section("Go modules linked into blitz, blitzd and the desktop app", goComps)
 	section("npm packages bundled into the desktop app's window", npmComps)
+	if len(vendoredComps) > 0 {
+		section("Source code copied into blitzd (third_party, with Blitz's changes)", vendoredComps)
+	}
 	if len(fontComps) > 0 {
 		section("Fonts bundled into blitz, blitzd and the desktop app (PDFs the agent exports)", fontComps)
 	}

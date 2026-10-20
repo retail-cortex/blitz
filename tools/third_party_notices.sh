@@ -44,5 +44,7 @@ bazel run "${q[@]}" //tools/notices -- \
 	--go-repos="$tmp/repos" --go-mod="$PWD/go.mod" --goroot="$goroot" --apache="$PWD/LICENSE" \
 	--npm-lock="$PWD/pnpm-lock.yaml" --npm-store="$bin/node_modules/.aspect_rules_js" \
 	--fonts="Noto Sans, Noto Sans Mono and Noto Sans Math (the Noto Project)=$PWD/pkg/engine/mdpdf/fonts" \
+	--licenses="$PWD/third_party/licenses" \
+	--vendored="MCP Toolbox for Databases $(cat third_party/mcp-toolbox/VERSION) (Google LLC)=$PWD/third_party/mcp-toolbox" \
 	--themes="One Light (Atom's one-light-ui and one-light-syntax, GitHub Inc.)=$PWD/third_party/themes/one-light;One Dark Pro (Binaryify)=$PWD/third_party/themes/one-dark-pro" \
 	--out="$PWD/THIRD_PARTY_NOTICES" "${check[@]}"
