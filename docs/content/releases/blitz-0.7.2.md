@@ -21,6 +21,8 @@ weight: 1
 
 ### Good to know
 
+- **Workers are now called jobs**, in the app, the tray and the CLI: `blitz jobs` (`blitz workers` still works). Nothing moves: a job is still saved as `.agents/workers/<name>/WORKER.md`, so existing ones carry on as they are.
+
 - Help's **Set up the agent harness** is now **Set up the harness**.
 
 - **The Edge window on Windows is gone.** Up to 0.7.1, the CLI's Windows zip had a tray that showed Blitz in an Edge window. The Blitz app has replaced it, so install it with `Blitz_0.7.2_windows_x64_setup.exe`. The CLI zip now holds `blitz.exe` and `blitzd.exe`, like the other platforms' archives.

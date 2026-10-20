@@ -22,7 +22,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 2. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
 3. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
 4. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
-5. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` now compares the unlimited run with the one-at-a-time run instead of a fixed 1.1 s, which failed on a loaded machine.
+5. Smaller: `blitz jobs runs <unknown>` says "hasn't run yet" rather than that there's no such job; `TestEngineCapsParallelToolCalls` now compares the unlimited run with the one-at-a-time run instead of a fixed 1.1 s, which failed on a loaded machine.
 
 **Picking this up on another machine.** Everything is in the repository; nothing lives only on the machine it was done on.
 
@@ -85,11 +85,11 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 | `900c1b96` | ROADMAP item 23 replanned: one service per user, CLI attaches, Connect + buf |
 | `3fb181cd`, `af7cad97` | Phase 5: `api.Event` instead of ADK events for every client; the prompt is recorded before steering can start |
 | `42aaf41b` | Phase 5b: per-workspace state, no dependence on the working directory |
-| `f9a6e7bf` | ROADMAP item 24 planned: workers |
+| `f9a6e7bf` | ROADMAP item 24 planned: jobs |
 | `d8c08d91` | Phase 6: the service API as protos, buf, generated Go and Connect code |
 | `2e4cb2c0`, `a6ed23d6`, `a926faa6` | Phase 7: `apps/service/internal/server`, approvals over the stream, `blitz serve`, the workspace lock |
 | `26e261cd`, `d969c75f`, `d5562753` | Phase 8: `api.Backend`, `pkg/client`, the CLI attaching to the service, `--local` |
-| `31531764`, (the commit adding `pkg/engine/workers.go`) | Item 24a–b: worker definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
+| `31531764`, (the commit adding `pkg/engine/workers.go`) | Item 24a–b: job definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
 | (the commit adding `pkg/engine/session/title_test.go`) | Session names from the first prompt, `/rename`, terminal title, resume hint on exit |
 
 `bazel test --config=race //...` passes (vet and staticcheck run in every compile), and so does `bazel run //tools:check_deps`.
@@ -103,7 +103,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 **Priority (2026-09-26, owner's decision): close feature gaps before adding new features.** The gaps are specified as requirements in [specs/spec_backlog_026.md](../about/specs/spec_backlog_026.md) (Blitz's own) and [specs/spec_parity_027.md](../about/specs/spec_parity_027.md) (against Claude Code, Antigravity CLI and Antigravity; §14 gives the order; §12 records the five conflicts with earlier decisions, decided below). Specs 001–025 describe current behaviour; move requirements into them as gaps close.
 
 0. **Release readiness is done** ([roadmap](../about/roadmap.md) item 27): licensing, comments, specs, this site, the README, contributing, owners, and coverage in CI. Coverage's weakest packages (see [coverage](../about/coverage.md)) are where tests are most needed; raise `tools/coverage/floor.txt` as it rises.
-1. **ROADMAP item 23 is done in a first version**: the per-user service (`blitzd`, `service install`), the proto API, the CLI attaching to it, workers (item 24), and the desktop app (now the Electron app, `bazel build //:mac-app`). **Next, in order:** run MANUAL_VERIFICATION sections 36–37 (the service, workers and the app need a person, and some checks are 💲); then the known gap of workers' edits joining `/undo` (ROADMAP 24c). An attached CLI's process list and `!cmd` audit are done (2026-09-29, CL-04). The app's slash commands, Markdown, images, notifications, translation and release job are done (2026-09-27, branch `desktop-polish`); its signing is item 3.
+1. **ROADMAP item 23 is done in a first version**: the per-user service (`blitzd`, `service install`), the proto API, the CLI attaching to it, jobs (item 24), and the desktop app (now the Electron app, `bazel build //:mac-app`). **Next, in order:** run MANUAL_VERIFICATION sections 36–37 (the service, jobs and the app need a person, and some checks are 💲); then the known gap of jobs' edits joining `/undo` (ROADMAP 24c). An attached CLI's process list and `!cmd` audit are done (2026-09-29, CL-04). The app's slash commands, Markdown, images, notifications, translation and release job are done (2026-09-27, branch `desktop-polish`); its signing is item 3.
 2. **Manual verification (needs a person).** Nothing in `MANUAL_VERIFICATION.md` has been run yet. It covers real providers (💲 = paid calls), terminal behavior, the macOS and Linux sandboxes, MCP, steering, fallback and pinning. Record results in the file; any failure becomes the next task.
 3. **Name the release archives' macOS binaries** (spec_monorepo_028 §5): they have their own UUIDs but are signed `a.out` by Go's linker; build them on the macOS runner and `codesign --identifier`, or sign with rcodesign on Linux, keeping the archives reproducible.
 4. **Sign and notarize the desktop app** (needs an Apple Developer Program membership). The release job (`release.yml` `desktop`, [spec_release_025](../about/specs/spec_release_025.md) REL-20–26) signs ad hoc and warns until these repository secrets exist (Settings › Secrets and variables › Actions):
@@ -150,7 +150,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 - **Telemetry and OTel need one provider per process:** the ADK binds its tracer to the first global provider.
 - **Bazel, in a monorepo** (2026-09-27, owner's decision; reverses "No Bazel" of 2026-09-26). The engine had bled into the front ends; the repository is now three apps over shared packages (`apps/`, `pkg/`, `pkg/engine/`), and Bazel 9.2 builds and tests everything: Go, the desktop page, the protos (generated, never committed) and the packages. The service is its own program, `blitzd`. Make, GoReleaser and the tools module are gone; tools come through Bazel, and host tools are a last resort (`bazel run //tools:tidy` for dependencies). The Linux desktop build uses the system's GTK through pkg-config, deliberately not hermetic. [specs/spec_monorepo_028.md](../about/specs/spec_monorepo_028.md).
 - *Superseded 2026-09-27 by the monorepo decision above.* **Layout follows golang-standards/project-layout** (2026-09-26): `apps/cli` (CLI/TUI, pure Go) and `apps/desktop` (Wails, cgo, built on each OS); code in `internal/`, `pkg/` only for deliberately public APIs; frontend in `apps/desktop/web`, packaging in `build/`. Slash-command logic moves from `tui` to a UI-agnostic `pkg/engine` shared by both UIs.
-- **One engine service per user** (2026-09-26, replacing "a process per tab"): the service (`blitz serve`; since 2026-09-27 its own program, `blitzd`) hosts every workspace over Connect on a Unix socket; the CLI attaches when it's running, else runs in-process. Scheduled workers (item 24) run in it. See ROADMAP item 23.
+- **One engine service per user** (2026-09-26, replacing "a process per tab"): the service (`blitz serve`; since 2026-09-27 its own program, `blitzd`) hosts every workspace over Connect on a Unix socket; the CLI attaches when it's running, else runs in-process. Scheduled jobs (item 24) run in it. See ROADMAP item 23.
 - **The module path is `github.com/retail-cortex/blitz`**, matching the repository.
 
 Conventions, layout and commands: [Development](_index.md).

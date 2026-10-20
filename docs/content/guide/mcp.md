@@ -80,7 +80,7 @@ allow = ["mcp(github:list_*)"]
 deny  = ["mcp(github:delete_*)"]
 ```
 
-The rule names the server and the tool as the agent sees it (with its prefix, if it has one). Plan mode and read-only commands refuse MCP tools, except reading a server's resources. A [worker](workers.md) may use one only with a `mcp:<server>:<tool>` permission.
+The rule names the server and the tool as the agent sees it (with its prefix, if it has one). Plan mode and read-only commands refuse MCP tools, except reading a server's resources. A [job](workers.md) may use one only with a `mcp:<server>:<tool>` permission.
 
 ## Prompts and resources
 

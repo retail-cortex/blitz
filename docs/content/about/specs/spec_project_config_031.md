@@ -29,9 +29,9 @@ This design lets a repository carry settings in three tiers:
 - **Read from the repository without trust:**
   - instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md`) and rule directories;
   - slash commands (`.blitz/commands`, `.claude/commands`, `.agents/workflows`);
-  - worker definitions, which are hash-pinned (WK-30).
+  - job definitions, which are hash-pinned (WK-30).
 - **Read from the repository only with `blitz.trust_workspace` or `--trust-workspace`:** agents (`.agents/agents`; `./agents` until 2026-10-01) and skills (`./skills`, `.agents/skills`). Attached to the service, `--trust-workspace` is lost (`client.Attach` sends only the directory).
-- **Nothing asks the user outside a turn.** The service's broker only asks during a running turn. The closest pattern is the worker review: list the item with its hash, then enable that hash; the service refuses a hash that has changed (`HASH_MISMATCH`).
+- **Nothing asks the user outside a turn.** The service's broker only asks during a running turn. The closest pattern is the job review: list the item with its hash, then enable that hash; the service refuses a hash that has changed (`HASH_MISMATCH`).
 
 ## 3. Files
 
@@ -72,7 +72,7 @@ This design lets a repository carry settings in three tiers:
 
   A "don't trust" answer is recorded too (`trusted: false`), so the question isn't repeated until the content changes. The states are `none` (no tier B content), `new`, `changed` (the hash differs), `trusted` and `declined`. A damaged file counts as no decisions.
 - **PRJ-22 When tier B loads.** Only when the state is `trusted`. Otherwise the workspace opens without it: no hook, MCP server or allow rule from the project is loaded, started or parsed beyond TOML decoding (PAR-CFG-06). The trust check runs in `config.LoadWorkspace`, before `engine.Open` starts hooks and MCP servers.
-- **PRJ-23 Trusting is for one hash.** It records that hash; the content is read again from disk and an answer about a hash that no longer matches is refused (`api.ErrProjectChanged`, `PROJECT_CHANGED` over the API), as workers refuse a stale review. In the service the workspace then reopens (`TrustProject` returns `reopened`); a workspace opened by the REPL itself picks the decision up when it next opens.
+- **PRJ-23 Trusting is for one hash.** It records that hash; the content is read again from disk and an answer about a hash that no longer matches is refused (`api.ErrProjectChanged`, `PROJECT_CHANGED` over the API), as jobs refuse a stale review. In the service the workspace then reopens (`TrustProject` returns `reopened`); a workspace opened by the REPL itself picks the decision up when it next opens.
 - **PRJ-24 What people see before trusting.** The exact items, one line each, with what they do: "hook `pre_tool` runs `./scripts/check.sh` (in the repository)", "MCP server `db` runs `npx @acme/db-mcp`", "allow rule `Bash(make test)`". People trust the items shown, not a file name.
 
 ## 6. Where people are asked
@@ -85,7 +85,7 @@ This design lets a repository carry settings in three tiers:
 - **PRJ-34 Commands.**
   - `blitz trust [--revoke] [dir]` and `/trust` show the state and the items, and change the decision.
   - `blitz doctor` lists the project files, the tier A settings applied, tier B's state, and each ignored key with its reason.
-- **PRJ-35 Workers.** A worker's run uses the workspace as opened. If tier B isn't trusted, project hooks don't run for workers either.
+- **PRJ-35 Jobs.** A job's run uses the workspace as opened. If tier B isn't trusted, project hooks don't run for jobs either.
 
 ## 7. API
 

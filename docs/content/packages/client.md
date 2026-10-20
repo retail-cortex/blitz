@@ -10,7 +10,7 @@ weight: 2
 - Turns stream `RunTurn` events and convert them to `api.Event`s; approval and question events are answered through the approver the front end set.
 - Service errors (`ErrorInfo` reasons) map back to `pkg/api`'s sentinel and typed errors, so `errors.Is` matches.
 - `Close` leaves the workspace open in the service for other clients. Background processes belong to the service and survive the client.
-- `AttachWorkers` does the same for the CLI's worker commands over `WorkerService`.
+- `AttachWorkers` does the same for the CLI's job commands over `WorkerService`.
 
 ## API
 
@@ -18,7 +18,7 @@ weight: 2
 |---|---|
 | `Attach(ctx, socket, dir, warn)` | A `*Remote` for the workspace in `dir` |
 | `AttachHTTP` | The same over any HTTP client (tests) |
-| `AttachWorkers` | The workspace's workers, over `WorkerService` |
+| `AttachWorkers` | The workspace's jobs, over `WorkerService` |
 
 ## Used by
 

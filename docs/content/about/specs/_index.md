@@ -32,7 +32,7 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 020 | [cli](spec_cli_020.md) | Commands, flags, one-shot output formats, exit codes, `doctor`, `config` |
 | 021 | [service](spec_service_021.md) | `blitzd`, socket, Connect API, approval broker, login item |
 | 022 | [client](spec_client_022.md) | Attaching front ends to the service |
-| 023 | [workers](spec_workers_023.md) | `WORKER.md`, schedules, permissions, enabling, runs, scheduler |
+| 023 | [jobs](spec_workers_023.md) | `WORKER.md`, schedules, permissions, enabling, runs, scheduler |
 | 024 | [desktop](spec_desktop_024.md) | The desktop app and its page (the Wails shell until v0.6.5; the Electron app since, spec 038) |
 | 025 | [release](spec_release_025.md) | CI, reproducible and signed releases |
 | 026 | [backlog](spec_backlog_026.md) | What's missing: unimplemented requirements, verification still owed, and deliberate limitations |

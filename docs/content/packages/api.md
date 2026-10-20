@@ -21,6 +21,6 @@ It depends on nothing else in Blitz except `pkg/config` and `pkg/images`, and no
 
 ## Used by
 
-apps/cli, apps/cli/internal/tui, apps/service/internal/server, pkg/client, pkg/engine and its runtime, session, tools and workers packages.
+apps/cli, apps/cli/internal/tui, apps/service/internal/server, pkg/client, pkg/engine and its runtime, session, tools and jobs packages.
 
 Spec: [workspace](../about/specs/spec_workspace_018.md), [client](../about/specs/spec_client_022.md).

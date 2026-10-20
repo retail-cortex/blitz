@@ -71,7 +71,7 @@ From a terminal or CI, `blitz eval --skill release-notes` runs them, and fails w
 
 ## Reviewing a skill's scripts
 
-A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a worker's run is refused.
+A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a job's run is refused.
 
 - **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
 - Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.

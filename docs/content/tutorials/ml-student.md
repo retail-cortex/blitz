@@ -209,13 +209,13 @@ For quick checks there's `run-experiment`: "check numerically that Gini impurity
 For printing, a cheat sheet, or sharing with a study group:
 
 - **Desktop:** open a note, then **Export as PDF** in its bar. It prints the preview as you see it, equations as written and Mermaid diagrams drawn, to `notes/<topic>.pdf` beside it.
-- **Agent:** "export notes/decision-trees.md as a PDF" uses `export_pdf`, which works in the terminal and in workers too. It typesets the Markdown itself: headings become the PDF's outline, and tables, code and images are laid out, but Mermaid diagrams print as their code.
+- **Agent:** "export notes/decision-trees.md as a PDF" uses `export_pdf`, which works in the terminal and in jobs too. It typesets the Markdown itself: headings become the PDF's outline, and tables, code and images are laid out, but Mermaid diagrams print as their code.
 
 The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Workers](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Workers › New worker** in the desktop app):
+A job is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Jobs](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Jobs › New job** in the desktop app):
 
 ```markdown
 ---
@@ -231,7 +231,7 @@ For each file in inbox/ not yet listed in notes/digested.md:
 3. Add the file's name and the topic to notes/digested.md.
 ```
 
-Enable it with `blitz workers enable digest`, which shows exactly what you're approving. In the morning, `blitz workers runs digest` lists what it did, and each run is a conversation you can open. Move the digested files into `sources/` when you're done with them.
+Enable it with `blitz jobs enable digest`, which shows exactly what you're approving. In the morning, `blitz jobs runs digest` lists what it did, and each run is a conversation you can open. Move the digested files into `sources/` when you're done with them.
 
 ## What it doesn't do
 

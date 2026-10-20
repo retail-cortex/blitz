@@ -65,21 +65,23 @@ func openWorkers(ctx context.Context, g *globalFlags) (ops workerOps, close func
 
 func newWorkersCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "workers",
-		Short: "List, enable and run the workspace's workers (.agents/workers/<name>/WORKER.md)",
-		Long: `Workers are workflows a workspace defines in .agents/workers/<name>/WORKER.md
+		Use:     "jobs",
+		Aliases: []string{"workers"}, // their name until v0.7.2
+		Short:   "List, enable and run the workspace's jobs (.agents/workers/<name>/WORKER.md)",
+		Long: `Jobs are workflows a workspace defines in .agents/workers/<name>/WORKER.md
 (or workers/<name>/WORKER.md) and the
-Blitz service runs on their schedules, unattended. A worker runs only once
+Blitz service runs on their schedules, unattended. A job runs only once
 enabled, pinned to the content you reviewed: editing it disables it until it is
 enabled again. It may do only what its permissions allow; anything else is
-refused and recorded.`,
+refused and recorded. (Jobs were called workers until v0.7.2: 'blitz workers'
+still works.)`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return workersList(cmd, g) },
 	}
 	var yes bool
 	enable := &cobra.Command{
 		Use:   "enable <name>",
-		Short: "Show a worker and enable it as shown",
+		Short: "Show a job and enable it as shown",
 		Args:  cobra.ExactArgs(1),
 		RunE:  func(cmd *cobra.Command, args []string) error { return workersEnable(cmd, g, args[0], yes) },
 	}
@@ -87,7 +89,7 @@ refused and recorded.`,
 	var limit int
 	runs := &cobra.Command{
 		Use:   "runs <name>",
-		Short: "Show a worker's recent runs",
+		Short: "Show a job's recent runs",
 		Args:  cobra.ExactArgs(1),
 		RunE:  func(cmd *cobra.Command, args []string) error { return workersRuns(cmd, g, args[0], limit) },
 	}
@@ -101,15 +103,15 @@ refused and recorded.`,
 	}
 	undo.Flags().BoolVarP(&force, "force", "f", false, "Overwrite files changed since the run")
 	cmd.AddCommand(
-		&cobra.Command{Use: "list", Short: "List the workspace's workers", Args: cobra.NoArgs,
+		&cobra.Command{Use: "list", Short: "List the workspace's jobs", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return workersList(cmd, g) }},
 		enable,
-		&cobra.Command{Use: "disable <name>", Short: "Stop a worker from running", Args: cobra.ExactArgs(1),
+		&cobra.Command{Use: "disable <name>", Short: "Stop a job from running", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersDisable(cmd, g, args[0]) }},
-		&cobra.Command{Use: "run <name>", Short: "Run an enabled worker now and show what it does", Args: cobra.ExactArgs(1),
+		&cobra.Command{Use: "run <name>", Short: "Run an enabled job now and show what it does", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersRun(cmd, g, args[0]) }},
 		runs,
-		&cobra.Command{Use: "stop <name|run-id>", Short: "Stop a worker's run that's going now", Args: cobra.ExactArgs(1),
+		&cobra.Command{Use: "stop <name|run-id>", Short: "Stop a job's run that's going now", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersStop(cmd, g, args[0]) }},
 		undo,
 	)
@@ -168,7 +170,7 @@ func workersList(cmd *cobra.Command, g *globalFlags) error {
 	}
 	out := cmd.OutOrStdout()
 	if len(list) == 0 {
-		fmt.Fprintln(out, "No workers: add .agents/workers/<name>/WORKER.md to the workspace.")
+		fmt.Fprintln(out, "No jobs: add .agents/workers/<name>/WORKER.md to the workspace.")
 		return nil
 	}
 	for _, w := range list {
@@ -233,11 +235,11 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 	}
 	w, found := findWorker(list, name)
 	if !found {
-		return withCode(exitUsage, fmt.Errorf("no worker %q (see 'blitz workers')", name))
+		return withCode(exitUsage, fmt.Errorf("no job %q (see 'blitz jobs')", name))
 	}
 	if w.State == api.StateInvalid {
 		describeWorker(cmd.OutOrStdout(), w)
-		return withCode(exitUsage, fmt.Errorf("worker %q can't be enabled until WORKER.md is fixed", name))
+		return withCode(exitUsage, fmt.Errorf("job %q can't be enabled until WORKER.md is fixed", name))
 	}
 	out := cmd.OutOrStdout()
 	describeWorker(out, w)
@@ -260,7 +262,7 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 	}
 	fmt.Fprintf(out, "✓ %s enabled; next run %s.\n", name, next)
 	if !loginitem.Installed() { // a service started on demand stops when idle
-		fmt.Fprintln(out, "Workers run in the Blitz service: keep it running with 'blitz service install'.")
+		fmt.Fprintln(out, "Jobs run in the Blitz service: keep it running with 'blitz service install'.")
 	}
 	return nil
 }
@@ -325,7 +327,7 @@ func printRun(out io.Writer, r api.Run) {
 	fmt.Fprintf(out, "%s  %-9s %s, %s, $%.4f, %d model calls  run %s  session %s\n",
 		r.Started.Local().Format("2006-01-02 15:04"), r.Status, how, r.Duration.Round(time.Second), r.CostUSD, r.Calls, r.ID, r.SessionID)
 	if len(r.Files) > 0 {
-		fmt.Fprintf(out, "    changed: %s ('blitz workers undo %s' puts them back)\n", strings.Join(r.Files, ", "), r.ID)
+		fmt.Fprintf(out, "    changed: %s ('blitz jobs undo %s' puts them back)\n", strings.Join(r.Files, ", "), r.ID)
 	}
 	for _, f := range r.Refusals {
 		fmt.Fprintf(out, "    refused: %s (%s)\n", f.Detail, f.Tool)

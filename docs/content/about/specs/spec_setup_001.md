@@ -13,7 +13,7 @@ weight: 1
 
 ## 1. Purpose
 
-Blitz is a native Go coding agent built on the Google Agent Development Kit (`google.golang.org/adk/v2`), running Gemini, Claude, OpenAI-compatible or Ollama models. The CLI is one static binary; the same engine also runs as a per-user service for a desktop app and scheduled workers. This spec fixes the repository shape everything else builds on. Product tone: terse output, no persona or mascot, plain status marks (`✓ ✗ ! ↳`).
+Blitz is a native Go coding agent built on the Google Agent Development Kit (`google.golang.org/adk/v2`), running Gemini, Claude, OpenAI-compatible or Ollama models. The CLI is one static binary; the same engine also runs as a per-user service for a desktop app and scheduled jobs. This spec fixes the repository shape everything else builds on. Product tone: terse output, no persona or mascot, plain status marks (`✓ ✗ ! ↳`).
 
 ## 2. Identity
 

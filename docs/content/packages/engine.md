@@ -12,7 +12,7 @@ Blitz without a user interface. Source: [`pkg/engine`](https://github.com/retail
 | Name | |
 |---|---|
 | `Open(ctx, cfg, Options)` | Opens a workspace: a `*Workspace`, which implements `api.Backend` |
-| `Workspace` | Turns, sessions, agents and models, settings, changes, extensions, files, workers |
+| `Workspace` | Turns, sessions, agents and models, settings, changes, extensions, files, jobs |
 | `StartObservability`, `SetupLocale`, `SecretRedactor` | Process-wide setup the apps share |
 | `ModelErrorSummary` | A model error cut short and masked, since some SDK errors embed the key |
 
@@ -27,7 +27,7 @@ Blitz without a user interface. Source: [`pkg/engine`](https://github.com/retail
 | `pkg/engine/skills` | Skill definitions (`SKILL.md`), and the policy that caps what their scripts may do. Spec: [skills](../about/specs/spec_skills_013.md) |
 | `pkg/engine/commands` | Custom slash commands: Markdown files whose body is a prompt, plus the bundled ones |
 | `pkg/engine/memory` | Project instruction files, their imports, and rules scoped to paths. Spec: [memory](../about/specs/spec_memory_012.md) |
-| `pkg/engine/workers` | `WORKER.md`: schedules, permissions, the enabled store, run logs. Spec: [workers](../about/specs/spec_workers_023.md) |
+| `pkg/engine/workers` | `WORKER.md`: schedules, permissions, the enabled store, run logs. Spec: [jobs](../about/specs/spec_workers_023.md) |
 | `pkg/engine/audit` | The append-only JSONL audit log, secrets masked |
 | `pkg/engine/breaker` | A circuit breaker for dependencies that keep failing (MCP servers, models): a cooldown from 15 seconds, doubling to 5 minutes |
 

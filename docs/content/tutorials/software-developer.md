@@ -176,7 +176,7 @@ Then the next requirements, and the next spec. When a change of plan comes up mi
 Two habits keep this working as the project grows:
 
 - **Short sessions.** A new chat per feature (**+** in the chat, or `/new`) keeps the context on the task. The spec carries what matters from one session to the next, so nothing is lost.
-- **Workers for the chores.** A worker is a workflow the service runs on a schedule, unattended and with only the permissions you give it: a nightly dependency check, a weekly report. With advanced settings on, **Workers › Add worker**; see [the service](../products/service.md).
+- **Jobs for the chores.** A job is a workflow the service runs on a schedule, unattended and with only the permissions you give it: a nightly dependency check, a weekly report. With advanced settings on, **Jobs › Add job**; see [the service](../products/service.md).
 
 ## How this repository does it
 

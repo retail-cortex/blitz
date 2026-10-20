@@ -72,7 +72,7 @@ In a session, type a request. Blitz reads and searches the workspace, shows a di
 blitz service install           # starts blitzd at every login (launchd or systemd)
 ```
 
-With the service running, `blitz` attaches to it, the desktop app works, and [workers](../guide/workers.md) run on their schedules.
+With the service running, `blitz` attaches to it, the desktop app works, and [jobs](../guide/workers.md) run on their schedules.
 
 ## Start a project
 
