@@ -227,11 +227,14 @@ export interface DeepLink {
   /** For workflows: the workflow, and the run to show on its canvas. */
   workflow?: string;
   run?: string;
+  /** For workers: the job to open (its details), else the list. */
+  worker?: string;
 }
 
 /**
  * Reads blitz://open?dir=<folder>&prompt=<text> and, from the tray,
- * blitz://workers?dir=<folder> (the folder's jobs) and
+ * blitz://workers?dir=<folder>[&worker=<name>] (the folder's jobs, or
+ * one job's details) and
  * blitz://workflow?dir=<folder>&workflow=<name>[&run=<id>] (a workflow's
  * canvas, on a run; EL-111): the folder must be an absolute path (whether
  * it's a folder is the main process's to check), the prompt at most
@@ -251,7 +254,10 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
   if (!absolute) return undefined;
-  if (action === "workers") return { dir, prompt: "", view: "workers" };
+  if (action === "workers") {
+    const worker = [...(u.searchParams.get("worker") ?? "")].slice(0, 200).join("");
+    return worker ? { dir, prompt: "", view: "workers", worker } : { dir, prompt: "", view: "workers" };
+  }
   if (action === "workflow") {
     const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
     const workflow = cut(u.searchParams.get("workflow"));

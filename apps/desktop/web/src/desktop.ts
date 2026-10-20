@@ -164,6 +164,8 @@ export interface DeepLink {
   /** For workflows: the workflow, and the run to show on its canvas. */
   workflow?: string;
   run?: string;
+  /** For workers: the job whose details to open. */
+  worker?: string;
 }
 
 /** The methods the program serving the page answers (the tray's), once asked. */

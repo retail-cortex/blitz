@@ -123,9 +123,13 @@ func MCPEntries(e Extras) []Entry {
 func Key(entries []Entry) string { return fmt.Sprintf("%+v", entries) }
 
 // WorkersLink is the blitz:// link that opens the app on a workspace's
-// workers.
-func WorkersLink(workspace string) string {
-	return "blitz://workers?" + url.Values{"dir": {workspace}}.Encode()
+// jobs, on one job's details when name is given.
+func WorkersLink(workspace, name string) string {
+	q := url.Values{"dir": {workspace}}
+	if name != "" {
+		q.Set("worker", name)
+	}
+	return "blitz://workers?" + q.Encode()
 }
 
 // Do does what a click asks of the service at sock; ShowWorkers and
@@ -148,7 +152,7 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 	case DisableWorker:
 		_, err = wc.DisableWorker(ctx, connect.NewRequest(&pb.DisableWorkerRequest{Workspace: a.Workspace, Name: a.Name}))
 	case ShowWorkers:
-		err = open(WorkersLink(a.Workspace))
+		err = open(WorkersLink(a.Workspace, a.Name))
 	case RunWorkflow:
 		// As the canvas's Run does: "/name" in the background, its input empty.
 		_, err = pb.NewSessionServiceClient(hc, socket.BaseURL).StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: a.Workspace, Turn: &pb.Turn{Text: "/" + a.Name}}))

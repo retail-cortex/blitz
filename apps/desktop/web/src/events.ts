@@ -112,6 +112,8 @@ export interface ViewDetail {
   /** Studio › Workflows: the workflow to open, and the run to show on it. */
   workflow?: string;
   run?: string;
+  /** Studio › Jobs: the job whose details to open. */
+  worker?: string;
 }
 // Views for a workspace that isn't there yet (it's opening), shown when it
 // mounts.

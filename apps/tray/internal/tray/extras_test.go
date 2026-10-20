@@ -45,7 +45,8 @@ func TestMCPEntries(t *testing.T) {
 }
 
 func TestWorkersLink(t *testing.T) {
-	assert.Equal(t, "blitz://workers?dir=%2Fw%2Fmy+shop", WorkersLink("/w/my shop"))
+	assert.Equal(t, "blitz://workers?dir=%2Fw%2Fmy+shop", WorkersLink("/w/my shop", ""))
+	assert.Equal(t, "blitz://workers?dir=%2Fw&worker=nightly", WorkersLink("/w", "nightly"), "a job's details")
 }
 
 // fakeExtras answers the submenus' calls and records the changes asked.

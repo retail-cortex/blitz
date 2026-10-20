@@ -196,6 +196,7 @@ describe("parseDeepLink", () => {
     { name: "another action", raw: "blitz://run?dir=/tmp", want: undefined },
     { name: "another scheme", raw: "https://open?dir=/tmp", want: undefined },
     { name: "a folder's workers", raw: "blitz://workers?dir=/tmp/shop&prompt=ignored", want: { dir: "/tmp/shop", prompt: "", view: "workers" } },
+    { name: "a job's details, from the tray", raw: "blitz://workers?dir=/tmp/shop&worker=nightly", want: { dir: "/tmp/shop", prompt: "", view: "workers", worker: "nightly" } },
     { name: "workers without a folder", raw: "blitz://workers", want: undefined },
     { name: "workers of a relative folder", raw: "blitz://workers?dir=shop", want: undefined },
     { name: "another action", raw: "blitz://settings?dir=/tmp", want: undefined },

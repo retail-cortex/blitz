@@ -80,7 +80,7 @@ func TestGoing(t *testing.T) {
 	assert.Equal(t, "nightly · job · Shop · 2/4 · 1h 5m", got[0].Title)
 	assert.Equal(t, DotRunning, got[0].Icon)
 	assert.Equal(t, []Entry{
-		{Title: "Open", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop"}},
+		{Title: "Open", Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: "/w/shop", Name: "nightly"}},
 		{Title: "Stop", Icon: IconStop, Action: Action{Kind: StopRun, RunID: "j1"}},
 	}, got[0].Children)
 	assert.Equal(t, "research-brief · Shop · 3m", got[1].Title)
@@ -124,7 +124,7 @@ func TestSpaceEntries(t *testing.T) {
 		{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: RunWorker, Workspace: "/w/shop", Name: "nightly"},
 		{Kind: StopRun, RunID: "j1"},
-		{Kind: ShowWorkers, Workspace: "/w/shop"},
+		{Kind: ShowWorkers, Workspace: "/w/shop", Name: "nightly"},
 	}, actions(nightly.Children), "its state first, then Run, Stop, Open")
 	assert.Equal(t, Entry{Title: "On · runs on its schedule", Icon: SwitchOn, Action: Action{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"}}, nightly.Children[0], "on: a click turns it off")
 	weekly := got[2]

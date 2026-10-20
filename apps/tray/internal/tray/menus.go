@@ -222,7 +222,7 @@ func Going(l Live, spaces []Space, now time.Time) []Entry {
 			parts = append(parts, since(jr.Started.AsTime(), now))
 		}
 		out = append(out, Entry{Title: strings.Join(parts, " · "), Icon: DotRunning, Children: []Entry{
-			{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: jr.Workspace}},
+			{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: jr.Workspace, Name: jr.Worker}},
 			{Title: i18n.T("tray.stop_run"), Icon: IconStop, Action: Action{Kind: StopRun, RunID: jr.Id}},
 		}})
 	}
@@ -350,7 +350,7 @@ func jobEntry(w *pb.Worker, l Live) Entry {
 			break
 		}
 	}
-	e.Children = append(e.Children, Entry{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: w.Workspace}})
+	e.Children = append(e.Children, Entry{Title: i18n.T("tray.show"), Icon: IconEye, Action: Action{Kind: ShowWorkers, Workspace: w.Workspace, Name: w.Name}})
 	return e
 }
 

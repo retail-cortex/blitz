@@ -99,7 +99,7 @@ export function Workspace({
   // workers in the drawer.
   const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session", d?: ViewDetail) => {
     if (v === "changes") setDrawer({ kind: "changes", source });
-    else if (v === "workers") setStudio({ kind: "workers", intent: newIntent("show") });
+    else if (v === "workers") setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
     else if (v === "workflows") setStudio({ kind: "workflows", intent: newIntent("show", d?.workflow ?? ""), run: d?.run });
     else {
       setDrawer(null);
