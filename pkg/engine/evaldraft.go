@@ -49,7 +49,7 @@ func (w *Workspace) DraftEvalCases(ctx context.Context, agent, request string, e
 	if !ok {
 		return EvalDraft{}, fmt.Errorf("agent %q isn't defined", agent)
 	}
-	redact := SecretRedactor(w.cfg).String
+	redact := w.secretRedactor().String
 	var b strings.Builder
 	fmt.Fprintf(&b, "The agent: %s\nWhat it's for: %s\n", spec.Name, cmp.Or(redact(spec.Description), "(not said)"))
 	if len(spec.Tools) > 0 {

@@ -198,7 +198,7 @@ func (w *Workspace) healthFile(it health.Item) string {
 	if err != nil {
 		return "(the file can't be read: " + err.Error() + ")"
 	}
-	return SecretRedactor(w.cfg).String(string(data))
+	return w.secretRedactor().String(string(data))
 }
 
 // estimatedOutput is the tokens a verdict takes, for estimates.

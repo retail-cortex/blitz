@@ -87,7 +87,7 @@ func (w *Workspace) ruleAsker() gates.Asker {
 // JudgeRule judges subject against a rule as written (Studio's Try it):
 // a prompt for a before-agent rule, an answer for an after-agent one.
 func (w *Workspace) JudgeRule(ctx context.Context, r gates.Rule, subject string) (gates.Verdict, error) {
-	return gates.Judge(ctx, w.ruleAsker(), r, SecretRedactor(w.cfg).String(subject))
+	return gates.Judge(ctx, w.ruleAsker(), r, w.secretRedactor().String(subject))
 }
 
 // auditRule records a rule's verdict in the audit log.

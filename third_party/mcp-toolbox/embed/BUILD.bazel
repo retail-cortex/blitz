@@ -83,6 +83,7 @@ go_test(
     embed = [":embed"],
     deps = [
         "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_ncruces_go_sqlite3//:go-sqlite3",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

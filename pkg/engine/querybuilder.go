@@ -71,6 +71,7 @@ func (w *Workspace) DraftConnectorQuery(ctx context.Context, c connectors.Connec
 		cfg:      w.cfg,
 		catalog:  w.ConnectorCatalog(),
 		newModel: w.newModel,
+		redact:   w.secretRedactor().String,
 		skill:    func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
 		schema: func(ctx context.Context) ([]connectors.Table, error) {
 			return w.ReadConnectorSchema(ctx, c, values)
@@ -84,8 +85,10 @@ type queryBuilder struct {
 	cfg      *config.Config
 	catalog  connectors.Catalog
 	newModel func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
-	skill    func() (*skills.Skill, bool)
-	schema   func(context.Context) ([]connectors.Table, error)
+	// redact masks the secrets in what the model is sent.
+	redact func(string) string
+	skill  func() (*skills.Skill, bool)
+	schema func(context.Context) ([]connectors.Table, error)
 }
 
 // draftQuery is DraftConnectorQuery with what it needs given.
@@ -101,7 +104,7 @@ func draftQuery(ctx context.Context, qb queryBuilder, c connectors.Connection, r
 	if !ok {
 		return QueryDraft{}, fmt.Errorf("the %s skill isn't there", SQLSkill)
 	}
-	redact := SecretRedactor(qb.cfg).String
+	redact := qb.redact
 	tables, err := qb.schema(ctx)
 	if err != nil {
 		return QueryDraft{Problem: redact(err.Error())}, nil

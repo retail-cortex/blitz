@@ -125,7 +125,7 @@ func (w *Workspace) openSearch(ctx context.Context) {
 		if llm, err := w.newModel(ctx, w.cfg, ref); err != nil {
 			st.problems = append(st.problems, i18n.T("search.enrich_failed", "error", err))
 		} else {
-			opts = append(opts, search.WithEnricher(describer{llm: llm, redact: SecretRedactor(w.cfg)}, sc.EnrichDailyLimit, w.Busy))
+			opts = append(opts, search.WithEnricher(describer{llm: llm, redact: w.secretRedactor()}, sc.EnrichDailyLimit, w.Busy))
 		}
 	}
 	for _, p := range st.problems {

@@ -159,7 +159,7 @@ func TestQueryPromptAndPlaceholders(t *testing.T) {
 // A draft needs the sql-query skill: without it, it says so.
 func TestDraftWithoutTheSkill(t *testing.T) {
 	cat := connectors.Load("", "")
-	_, err := draftQuery(context.Background(), queryBuilder{catalog: cat, skill: func() (*skills.Skill, bool) { return nil, false }}, connectors.Connection{Name: "k", Category: "databases", Kind: "sqlite"}, "x")
+	_, err := draftQuery(context.Background(), queryBuilder{catalog: cat, redact: func(s string) string { return s }, skill: func() (*skills.Skill, bool) { return nil, false }}, connectors.Connection{Name: "k", Category: "databases", Kind: "sqlite"}, "x")
 	assert.ErrorContains(t, err, "the sql-query skill isn't there")
 }
 

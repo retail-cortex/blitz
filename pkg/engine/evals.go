@@ -258,7 +258,7 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 		r.Score = map[bool]float64{true: 1}[pass]
 	} else {
 		sctx, done := context.WithTimeout(ctx, evalScoreTimeout)
-		s, why, spent, err := score(sctx, c, SecretRedactor(w.cfg).String(output))
+		s, why, spent, err := score(sctx, c, w.secretRedactor().String(output))
 		timedOut := sctx.Err() == context.DeadlineExceeded && ctx.Err() == nil
 		done()
 		r.CostUSD += spent

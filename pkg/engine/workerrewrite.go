@@ -81,7 +81,7 @@ func (w *Workspace) RewriteWorker(ctx context.Context, spec api.WorkerSpec) (Wor
 	if len(spec.Permissions) > 0 {
 		fmt.Fprintf(&b, "Permissions now: %s\n", strings.Join(spec.Permissions, ", "))
 	}
-	fmt.Fprintf(&b, "\nThe instructions:\n%s\n", SecretRedactor(w.cfg).String(spec.Prompt))
+	fmt.Fprintf(&b, "\nThe instructions:\n%s\n", w.secretRedactor().String(spec.Prompt))
 	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
 	if err != nil {
 		return WorkerRewrite{Problem: ModelErrorSummary(err, w.cfg)}, nil

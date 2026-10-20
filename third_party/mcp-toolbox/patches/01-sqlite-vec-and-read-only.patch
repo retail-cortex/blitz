@@ -1,13 +1,9 @@
 --- a/internal/sources/sqlite/sqlite.go
 +++ b/internal/sources/sqlite/sqlite.go
-@@ -19,13 +19,24 @@
+@@ -19,13 +19,20 @@
  	"database/sql"
  	"encoding/json"
  	"fmt"
-+	"github.com/ncruces/go-sqlite3"
-+	"github.com/tetratelabs/wazero"
-+	"github.com/tetratelabs/wazero/api"
-+	"github.com/tetratelabs/wazero/experimental"
 +	"net/url"
 +	"strings"
  
@@ -26,21 +22,7 @@
  )
  
  const SourceType string = "sqlite"
-@@ -39,6 +50,13 @@
- 	}
- }
- 
-+// The sqlite-vec build uses WebAssembly's atomics (threads), which
-+// wazero offers as an experimental feature: on, before the first
-+// connection compiles it (Blitz).
-+func init() {
-+	sqlite3.RuntimeConfig = wazero.NewRuntimeConfig().WithCoreFeatures(api.CoreFeaturesV2 | experimental.CoreFeaturesThreads)
-+}
-+
- func newConfig(ctx context.Context, name string, decoder *yaml.Decoder) (sources.SourceConfig, error) {
- 	actual := Config{Name: name}
- 	if err := decoder.DecodeContext(ctx, &actual); err != nil {
-@@ -52,6 +70,9 @@
+@@ -52,6 +59,9 @@
  	Type         string `yaml:"type" validate:"required"`
  	Database     string `yaml:"database" validate:"required"` // Path to SQLite database file
  	SQLCommenter *bool  `yaml:"sqlCommenter"`
@@ -50,7 +32,7 @@
  }
  
  func (r Config) SourceConfigType() string {
-@@ -59,7 +80,7 @@
+@@ -59,7 +69,7 @@
  }
  
  func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
@@ -59,7 +41,7 @@
  	if err != nil {
  		return nil, fmt.Errorf("unable to create db connection: %w", err)
  	}
-@@ -85,7 +106,7 @@
+@@ -85,7 +95,7 @@
  }
  
  func (s *Source) IsReadOnly() bool {
@@ -68,7 +50,7 @@
  }
  
  func (s *Source) SourceType() string {
-@@ -161,13 +182,13 @@
+@@ -161,13 +171,13 @@
  	return out, nil
  }
  
@@ -84,7 +66,7 @@
  	if err != nil {
  		return nil, fmt.Errorf("sql.Open: %w", err)
  	}
-@@ -178,3 +199,19 @@
+@@ -178,3 +188,19 @@
  
  	return db, nil
  }

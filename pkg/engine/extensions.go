@@ -26,6 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
 // Skills and their scripts' environments, MCP servers, and the tools an
@@ -206,6 +207,14 @@ func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
 		return nil
 	}
 	return w.engine.Rebuild(ctx)
+}
+
+// secretRedactor is SecretRedactor of the workspace's settings, read
+// while applyMCP can't replace their MCP servers (whose secrets it masks).
+func (w *Workspace) secretRedactor() *redact.Redactor {
+	w.mcpMu.RLock()
+	defer w.mcpMu.RUnlock()
+	return SecretRedactor(w.cfg)
 }
 
 // mcpConfig is the MCP settings now (applyMCP replaces them).

@@ -127,6 +127,7 @@ func (g GlobalConnectors) DraftQuery(ctx context.Context, c connectors.Connectio
 		cfg:      g.Config,
 		catalog:  g.Catalog(),
 		newModel: newModel,
+		redact:   SecretRedactor(g.Config).String,
 		skill: func() (*skills.Skill, bool) {
 			all, err := skills.Builtins()
 			if err != nil {

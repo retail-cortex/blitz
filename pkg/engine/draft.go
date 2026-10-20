@@ -74,7 +74,7 @@ func (w *Workspace) DraftManifest(ctx context.Context, r DraftRequest) (Manifest
 	if strings.TrimSpace(r.Current) == "" && strings.TrimSpace(r.Request) == "" && strings.TrimSpace(r.Description) == "" {
 		return ManifestDraft{}, fmt.Errorf("say what it should do first: a description or a request")
 	}
-	redact := SecretRedactor(w.cfg).String
+	redact := w.secretRedactor().String
 	var b strings.Builder
 	fmt.Fprintf(&b, "Name: %s\n", cmp.Or(r.Name, "(not named yet)"))
 	if r.Description != "" {

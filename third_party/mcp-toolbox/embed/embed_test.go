@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/ncruces/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -170,6 +171,10 @@ func TestLoadWith(t *testing.T) {
 // Every SQLite source has sqlite-vec: vec0 tables and a nearest-neighbour
 // query.
 func TestSQLiteVec(t *testing.T) {
+	// ncruces' own runtime has the threads sqlite-vec needs and a 256 MB
+	// memory limit; one of Blitz's, with wazero's 4 GB, reserved 4 GB a
+	// connection and lost the session on CI's Linux race run.
+	assert.Nil(t, sqlite3.RuntimeConfig, "no runtime of Blitz's own")
 	cfg, err := Load(context.Background(), []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": recipes(t)})
 	require.NoError(t, err)
 	cs := connect(t, cfg)

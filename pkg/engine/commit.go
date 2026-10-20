@@ -126,7 +126,7 @@ func (w *Workspace) askCommitMessage(ctx context.Context) (string, error) {
 		b.WriteString("\n")
 	}
 	b.WriteString("The staged diff:\n")
-	b.WriteString(SecretRedactor(w.cfg).String(text))
+	b.WriteString(w.secretRedactor().String(text))
 	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
 	if err != nil {
 		return "", err

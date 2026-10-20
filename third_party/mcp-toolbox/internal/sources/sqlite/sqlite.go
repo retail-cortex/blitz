@@ -19,10 +19,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/ncruces/go-sqlite3"
-	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/api"
-	"github.com/tetratelabs/wazero/experimental"
 	"net/url"
 	"strings"
 
@@ -48,13 +44,6 @@ func init() {
 	if !sources.Register(SourceType, newConfig) {
 		panic(fmt.Sprintf("source type %q already registered", SourceType))
 	}
-}
-
-// The sqlite-vec build uses WebAssembly's atomics (threads), which
-// wazero offers as an experimental feature: on, before the first
-// connection compiles it (Blitz).
-func init() {
-	sqlite3.RuntimeConfig = wazero.NewRuntimeConfig().WithCoreFeatures(api.CoreFeaturesV2 | experimental.CoreFeaturesThreads)
 }
 
 func newConfig(ctx context.Context, name string, decoder *yaml.Decoder) (sources.SourceConfig, error) {

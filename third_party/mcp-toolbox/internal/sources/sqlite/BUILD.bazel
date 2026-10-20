@@ -25,11 +25,7 @@ go_library(
         "//third_party/mcp-toolbox/internal/util/orderedmap",
         "@com_github_asg017_sqlite_vec_go_bindings//ncruces",
         "@com_github_goccy_go_yaml//:go-yaml",
-        "@com_github_ncruces_go_sqlite3//:go-sqlite3",
         "@com_github_ncruces_go_sqlite3//driver",
-        "@com_github_tetratelabs_wazero//:wazero",
-        "@com_github_tetratelabs_wazero//api",
-        "@com_github_tetratelabs_wazero//experimental",
         "@io_opentelemetry_go_otel_trace//:trace",
     ],
 )
