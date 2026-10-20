@@ -22,9 +22,9 @@ import (
 	goruntime "runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
-	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
@@ -44,53 +44,6 @@ func TestMCPEntries(t *testing.T) {
 	assert.True(t, none[0].Disabled)
 }
 
-// The Workers submenu: runs to stop first, then each worker with Run now,
-// Enabled (only for a reviewed one) and Show in Blitz, named with its
-// workspace when there are several.
-func TestWorkerEntries(t *testing.T) {
-	one := []*pb.Worker{
-		{Workspace: "/w/shop", Name: "nightly", State: pb.WorkerState_WORKER_STATE_ENABLED, Hash: "h1"},
-		{Workspace: "/w/shop", Name: "weekly", State: pb.WorkerState_WORKER_STATE_DISABLED, Hash: "h2"},
-		{Workspace: "/w/shop", Name: "fresh", State: pb.WorkerState_WORKER_STATE_NEW, Hash: "h3"},
-	}
-	got := WorkerEntries(Extras{Workers: one, Runs: []*pb.WorkerRun{{Id: "r1", Workspace: "/w/shop", Worker: "nightly"}}})
-	require.Len(t, got, 4)
-	assert.Equal(t, Action{Kind: StopRun, RunID: "r1"}, got[0].Action)
-	assert.Contains(t, got[0].Title, "nightly")
-
-	nightly := got[1]
-	assert.Equal(t, "nightly", nightly.Title, "one workspace: just the name")
-	require.Len(t, nightly.Children, 3)
-	assert.Equal(t, Action{Kind: RunWorker, Workspace: "/w/shop", Name: "nightly"}, nightly.Children[0].Action)
-	assert.True(t, nightly.Children[1].Checked)
-	assert.Equal(t, Action{Kind: DisableWorker, Workspace: "/w/shop", Name: "nightly"}, nightly.Children[1].Action)
-	assert.Equal(t, Action{Kind: ShowWorkers, Workspace: "/w/shop"}, nightly.Children[2].Action)
-
-	weekly := got[2].Children[1]
-	assert.False(t, weekly.Checked)
-	assert.Equal(t, Action{Kind: EnableWorker, Workspace: "/w/shop", Name: "weekly", Hash: "h2"}, weekly.Action, "re-enabled at the hash reviewed")
-
-	fresh := got[3].Children
-	assert.True(t, fresh[0].Disabled, "a new worker doesn't run before it's reviewed")
-	assert.True(t, fresh[1].Disabled)
-	assert.Equal(t, NoAction, fresh[1].Action.Kind)
-
-	two := append(one, &pb.Worker{Workspace: "/w/blog", Name: "nightly", State: pb.WorkerState_WORKER_STATE_ENABLED})
-	assert.Equal(t, "shop › nightly", WorkerEntries(Extras{Workers: two})[0].Title)
-	t.Setenv("MODENV_PREFIX", t.TempDir())
-	global := append(one, &pb.Worker{Workspace: config.HomeWorkspace(""), Name: "news", State: pb.WorkerState_WORKER_STATE_ENABLED})
-	var titles []string
-	for _, e := range WorkerEntries(Extras{Workers: global}) {
-		titles = append(titles, e.Title)
-	}
-	assert.Contains(t, titles, "Global › news", "the home workspace's are the global workers")
-
-	none := WorkerEntries(Extras{})
-	require.Len(t, none, 1)
-	assert.True(t, none[0].Disabled)
-	assert.NotEqual(t, Key(MCPEntries(Extras{})), Key(WorkerEntries(Extras{})))
-}
-
 func TestWorkersLink(t *testing.T) {
 	assert.Equal(t, "blitz://workers?dir=%2Fw%2Fmy+shop", WorkersLink("/w/my shop"))
 }
@@ -99,8 +52,30 @@ func TestWorkersLink(t *testing.T) {
 type fakeExtras struct {
 	pb.UnimplementedConfigServiceHandler
 	pb.UnimplementedWorkerServiceHandler
+	pb.UnimplementedSessionServiceHandler
+	pb.UnimplementedWorkspaceServiceHandler
 	mu    sync.Mutex
 	asked []string
+}
+
+func (f *fakeExtras) StartBackground(_ context.Context, r *connect.Request[pb.StartBackgroundRequest]) (*connect.Response[pb.StartBackgroundResponse], error) {
+	f.note("start " + r.Msg.Workspace + " " + r.Msg.Turn.GetText())
+	return connect.NewResponse(&pb.StartBackgroundResponse{}), nil
+}
+
+func (f *fakeExtras) StopWorkflowRun(_ context.Context, r *connect.Request[pb.StopWorkflowRunRequest]) (*connect.Response[pb.StopWorkflowRunResponse], error) {
+	f.note("stop flow " + r.Msg.Id)
+	return connect.NewResponse(&pb.StopWorkflowRunResponse{}), nil
+}
+
+// WatchWorkflowRuns sends the runs twice, then ends.
+func (f *fakeExtras) WatchWorkflowRuns(_ context.Context, _ *connect.Request[pb.WatchWorkflowRunsRequest], stream *connect.ServerStream[pb.WatchWorkflowRunsResponse]) error {
+	for _, status := range []string{"running", "done"} {
+		if err := stream.Send(&pb.WatchWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "f1", Workflow: "brief", Status: status}}}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *fakeExtras) note(s string) { f.mu.Lock(); f.asked = append(f.asked, s); f.mu.Unlock() }
@@ -152,6 +127,8 @@ func TestFetchExtrasAndDo(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle(pb.NewConfigServiceHandler(f))
 	mux.Handle(pb.NewWorkerServiceHandler(f))
+	mux.Handle(pb.NewSessionServiceHandler(f))
+	mux.Handle(pb.NewWorkspaceServiceHandler(f))
 	srv := &http.Server{Handler: mux}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { srv.Close() })
@@ -172,12 +149,26 @@ func TestFetchExtrasAndDo(t *testing.T) {
 		{Kind: EnableWorker, Workspace: "/w", Name: "nightly", Hash: "h"},
 		{Kind: DisableWorker, Workspace: "/w", Name: "nightly"},
 		{Kind: ShowWorkers, Workspace: "/w"},
+		{Kind: RunWorkflow, Workspace: "/w", Name: "brief"},
+		{Kind: StopWorkflow, Workspace: "/w", RunID: "f1"},
 		{Kind: NoAction},
 	} {
 		require.NoError(t, Do(ctx, sock, a, open), "%+v", a)
 	}
-	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly"}, f.asked)
+	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1"}, f.asked)
 	assert.Equal(t, "blitz://workers?dir=%2Fw", opened)
+	require.NoError(t, Do(ctx, sock, Action{Kind: ShowWorkflow, Workspace: "/w", Name: "brief", RunID: "f1"}, open))
+	assert.Equal(t, "blitz://workflow?dir=%2Fw&run=f1&workflow=brief", opened)
+
+	// The runs are followed as they change; the stream's end says none, and it's asked again.
+	seen := make(chan []*pb.WorkflowRun, 8)
+	watchCtx, stop := context.WithCancel(ctx)
+	go WatchRuns(watchCtx, sock, 10*time.Millisecond, func(r []*pb.WorkflowRun) { seen <- r })
+	first, second, ended := <-seen, <-seen, <-seen
+	stop()
+	assert.Equal(t, "running", first[0].Status)
+	assert.Equal(t, "done", second[0].Status)
+	assert.Empty(t, ended, "the stream ended: nothing known to run")
 	assert.Error(t, Do(ctx, sock, Action{Kind: ActionKind(99)}, open))
 
 	srv.Close()

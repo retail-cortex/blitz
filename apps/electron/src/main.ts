@@ -432,6 +432,8 @@ async function receiveLink(raw: string) {
   if (!info?.isDirectory()) return;
   if (win && !win.isDestroyed() && !win.webContents.isLoading()) send("deeplink:open", link);
   else pending.push(link);
+  // From the tray (Show in Blitz): the window comes forward, opened if it was closed.
+  if (ready) void openApp();
 }
 
 /** Prints a page (whole HTML, pictures inline) to PDF, offscreen, its scripts off. */

@@ -231,10 +231,11 @@ export interface DeepLink {
 
 /**
  * Reads blitz://open?dir=<folder>&prompt=<text> and, from the tray,
- * blitz://workers?dir=<folder> (the folder's workers): the folder must be
- * an absolute path (whether it's a folder is the main process's to
- * check), the prompt at most maxLinkPrompt characters. Undefined
- * otherwise.
+ * blitz://workers?dir=<folder> (the folder's jobs) and
+ * blitz://workflow?dir=<folder>&workflow=<name>[&run=<id>] (a workflow's
+ * canvas, on a run; EL-111): the folder must be an absolute path (whether
+ * it's a folder is the main process's to check), the prompt at most
+ * maxLinkPrompt characters, the workflow named. Undefined otherwise.
  */
 export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   let u: URL;
@@ -245,12 +246,18 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   }
   if (u.protocol !== "blitz:") return undefined;
   const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
-  if (action !== "open" && action !== "workers") return undefined;
+  if (action !== "open" && action !== "workers" && action !== "workflow") return undefined;
   let dir = u.searchParams.get("dir") ?? "";
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
   if (!absolute) return undefined;
   if (action === "workers") return { dir, prompt: "", view: "workers" };
+  if (action === "workflow") {
+    const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+    const workflow = cut(u.searchParams.get("workflow"));
+    if (!workflow) return undefined;
+    return { dir, prompt: "", view: "workflows", workflow, run: cut(u.searchParams.get("run")) };
+  }
   const prompt = u.searchParams.get("prompt") ?? "";
   if ([...prompt].length > maxLinkPrompt) return undefined;
   return { dir, prompt };

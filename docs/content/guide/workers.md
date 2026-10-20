@@ -138,6 +138,8 @@ Each run is a conversation of its own, titled `⏰ <name>` and the time: open it
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz jobs undo <run-id>` puts them back (`--force` overwrites files changed since).
 
+**From the tray:** each workspace's submenu lists its jobs, to run one now, stop it, switch it off or on, or show it in Blitz; the runs going on are at the top of the menu, and the icon pulses while one runs.
+
 **When one fails:** the Studio menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the job … failed**. To be told elsewhere, set a command in your settings:
 
 ```toml

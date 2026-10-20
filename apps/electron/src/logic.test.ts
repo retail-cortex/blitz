@@ -200,6 +200,10 @@ describe("parseDeepLink", () => {
     { name: "workers of a relative folder", raw: "blitz://workers?dir=shop", want: undefined },
     { name: "another action", raw: "blitz://settings?dir=/tmp", want: undefined },
     { name: "a prompt too long", raw: `blitz://open?dir=/tmp&prompt=${"x".repeat(maxLinkPrompt + 1)}`, want: undefined },
+    { name: "a workflow's canvas, from the tray", raw: "blitz://workflow?dir=/tmp/shop&workflow=brief", want: { dir: "/tmp/shop", prompt: "", view: "workflows", workflow: "brief", run: "" } },
+    { name: "a workflow's run", raw: "blitz://workflow?dir=/tmp/shop&workflow=brief&run=r1", want: { dir: "/tmp/shop", prompt: "", view: "workflows", workflow: "brief", run: "r1" } },
+    { name: "a workflow not named", raw: "blitz://workflow?dir=/tmp/shop", want: undefined },
+    { name: "a workflow in a relative folder", raw: "blitz://workflow?dir=shop&workflow=brief", want: undefined },
   ])("$name", ({ raw, want }) => expect(parseDeepLink(raw, "/home/me")).toEqual(want));
 
   it("finds the links among a command line's arguments", () => {

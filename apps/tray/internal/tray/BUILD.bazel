@@ -26,9 +26,11 @@ go_library(
         "extras.go",
         "ico.go",
         "locale.go",
+        "menus.go",
         "serve.go",
         "tasks.go",
         "tray.go",
+        "watch.go",
     ],
     importpath = "github.com/retail-cortex/blitz/apps/tray/internal/tray",
     target_compatible_with = select({
@@ -49,6 +51,7 @@ go_library(
         "//pkg/textutil",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_x_text//language",
     ] + select({
         "@rules_go//go/platform:windows": [
@@ -67,6 +70,7 @@ go_test(
         "extras_test.go",
         "ico_test.go",
         "locale_test.go",
+        "menus_test.go",
         "probe_test.go",
         "serve_test.go",
         "service_test.go",

@@ -34,7 +34,9 @@ go_library(
         "lock_unix.go",
         "lock_windows.go",
         "main.go",
+        "menuicons.go",
         "submenu.go",
+        "trayicon.go",
     ],
     cgo = True,
     clinkopts = select({
@@ -60,7 +62,7 @@ go_library(
         "icons/stopped-44.png",
         "icons/windows-running-64.png",
         "icons/windows-stopped-64.png",
-    ],  # keep
+    ] + glob(["icons/menu/*.png"]),  # keep
     importpath = "github.com/retail-cortex/blitz/apps/tray",
     target_compatible_with = _TRAY_OS,
     visibility = ["//visibility:private"],
@@ -74,6 +76,7 @@ go_library(
         "//pkg/selfupdate",
         "//pkg/socket",
         "//pkg/wininstall",
+        "//proto/blitz/v1:blitzv1_go_proto",
         "@io_fyne_systray//:systray",
     ] + select({
         "@rules_go//go/platform:windows": [

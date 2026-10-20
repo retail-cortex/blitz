@@ -52,6 +52,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/retail-cortex/blitz/pkg/wininstall"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
 // version is set at link time for releases.
@@ -259,8 +260,43 @@ func newHost(sock string, acts tray.Actions) pagehost.Host {
 	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, StartTray: func() error { return startTray(exe) }, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
 }
 
+// How many runs and workspaces the menu shows at most (more are in the app).
+const (
+	maxRunSlots   = 6
+	maxSpaceSlots = 12
+)
+
+// latestRuns are the workflow runs as the service last said.
+type latestRuns struct {
+	mu   sync.Mutex
+	runs []*pb.WorkflowRun
+}
+
+func (l *latestRuns) set(r []*pb.WorkflowRun) { l.mu.Lock(); l.runs = r; l.mu.Unlock() }
+
+func (l *latestRuns) get() []*pb.WorkflowRun { l.mu.Lock(); defer l.mu.Unlock(); return l.runs }
+
+// openSpaces are the workspaces open in the desktop app, in its order and
+// named as it names them (~/.blitz/desktop.json).
+func openSpaces() []tray.Space {
+	prefs, err := pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json")).Load()
+	if err != nil {
+		return nil
+	}
+	var out []tray.Space
+	for _, w := range prefs.Workspaces {
+		if w.Open {
+			out = append(out, tray.Space{Dir: w.Dir, Name: w.Name})
+		}
+	}
+	return out
+}
+
 func onReady() {
 	sock := socket.DefaultSocket()
+	var runs latestRuns
+	poke := make(chan struct{}, 1)
+	icon := newTrayIcon()
 	acts := newActions(sock)
 	status := acts.Status
 
@@ -268,6 +304,12 @@ func onReady() {
 	systray.SetTitle("")
 	state := systray.AddMenuItem(i18n.T("tray.service"), "")
 	state.Disable()
+	// What's going on (spec_electron_038 EL-111): a heading and an item
+	// per run, each with Show and Stop, shown while there are some.
+	runningHead := systray.AddMenuItem(i18n.T("tray.running"), "")
+	runningHead.Disable()
+	runningHead.Hide()
+	runSlots := newSlots(maxRunSlots)
 	systray.AddSeparator()
 	start := systray.AddMenuItem(i18n.T("tray.start"), "")
 	stop := systray.AddMenuItem(i18n.T("tray.stop"), "")
@@ -279,9 +321,10 @@ func onReady() {
 	tasksItem.Hide()
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
 	systray.AddSeparator()
-	// What the running service has: its MCP servers and workers.
+	// A submenu per workspace, with its jobs and its workflows (EL-111),
+	// then the running service's MCP servers.
+	spaceSlots := newSlots(maxSpaceSlots)
 	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
-	workersMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.workers"), "")}
 	systray.AddSeparator()
 	// Windows: the tray is what starts at login (and starts the service).
 	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
@@ -341,7 +384,7 @@ func onReady() {
 	isWaiting := func() bool { tasksMu.Lock(); defer tasksMu.Unlock(); return waiting > 0 }
 
 	show := func(m tray.Menu, note string) {
-		setIcon(m.Running, m.Running && isWaiting())
+		icon.set(m.Running, m.Running && isWaiting())
 		title := m.State.Title
 		if note != "" {
 			title = note
@@ -383,18 +426,40 @@ func onReady() {
 			extras, err = tray.FetchExtras(context.Background(), sock)
 		}
 		// Shown while the service runs and answers (an older one doesn't).
-		for _, sm := range []*submenu{mcpMenu, workersMenu} {
-			if st.Running && err == nil {
-				sm.parent.Show()
-			} else {
-				sm.parent.Hide()
-			}
-		}
 		if st.Running && err == nil {
+			mcpMenu.parent.Show()
 			mcpMenu.show(tray.MCPEntries(extras), click)
-			workersMenu.show(tray.WorkerEntries(extras), click)
+			live := tray.Live{Runs: runs.get(), JobRuns: extras.Runs}
+			spaces := tray.Spaces(openSpaces(), extras.Workers)
+			going := tray.Going(live, spaces, time.Now())
+			runSlots.show(going, click)
+			if len(going) > 0 {
+				runningHead.Show()
+			} else {
+				runningHead.Hide()
+			}
+			var menus []tray.Entry
+			for _, sp := range spaces {
+				menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live)})
+			}
+			spaceSlots.show(menus, click)
+			icon.pulse(live.Busy())
+		} else {
+			mcpMenu.parent.Hide()
+			runningHead.Hide()
+			runSlots.show(nil, click)
+			spaceSlots.show(nil, click)
+			icon.pulse(false)
 		}
 	}
+	// The runs, followed as they change: each change redraws the menu.
+	go tray.WatchRuns(context.Background(), sock, 3*time.Second, func(r []*pb.WorkflowRun) {
+		runs.set(r)
+		select {
+		case poke <- struct{}{}:
+		default:
+		}
+	})
 	refresh()
 
 	do = func(doing string, f func() error) {
@@ -444,6 +509,10 @@ func onReady() {
 				systray.Quit()
 				return
 			case <-time.After(every):
+				if !isBusy() {
+					refresh()
+				}
+			case <-poke:
 				if !isBusy() {
 					refresh()
 				}

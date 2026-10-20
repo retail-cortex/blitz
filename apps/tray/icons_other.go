@@ -19,6 +19,7 @@ package main
 import (
 	_ "embed"
 	goruntime "runtime"
+	"sync"
 
 	"fyne.io/systray"
 	"github.com/retail-cortex/blitz/apps/tray/internal/tray"
@@ -41,21 +42,52 @@ var (
 	stoppedColour []byte
 )
 
-// setIcon shows the service's state in the icon, and a dot while
-// workflows' human tasks wait (waiting).
-func setIcon(running, waiting bool) {
+// setIcon shows the service's state in the icon, a dot while workflows'
+// human tasks wait (waiting), at a brightness (alpha: the pulse's frame).
+func setIcon(running, waiting bool, alpha float64) {
 	template, colour := stoppedIcon, stoppedColour
 	if running {
 		template, colour = runningIcon, runningColour
 	}
-	if waiting {
-		template, colour = dotted(template), dotted(colour)
-	}
 	if goruntime.GOOS == "darwin" {
+		template = iconFrame(template, waiting, alpha)
 		systray.SetTemplateIcon(template, template)
 		return
 	}
-	systray.SetIcon(colour)
+	systray.SetIcon(iconFrame(colour, waiting, alpha))
+}
+
+var (
+	framesMu sync.Mutex
+	frames   = map[frameKey][]byte{}
+)
+
+type frameKey struct {
+	icon    *byte
+	waiting bool
+	alpha   float64
+}
+
+// iconFrame is icon with the tasks' dot (waiting) at a brightness, made
+// once (the icon itself if that fails).
+func iconFrame(icon []byte, waiting bool, alpha float64) []byte {
+	k := frameKey{&icon[0], waiting, alpha}
+	framesMu.Lock()
+	defer framesMu.Unlock()
+	if f, ok := frames[k]; ok {
+		return f
+	}
+	f := icon
+	if waiting {
+		f = dotted(f)
+	}
+	if alpha < 1 {
+		if p, err := tray.Pulse(f, alpha); err == nil {
+			f = p
+		}
+	}
+	frames[k] = f
+	return f
 }
 
 // dotted is an icon with the waiting tasks' dot (the icon itself if that fails).
