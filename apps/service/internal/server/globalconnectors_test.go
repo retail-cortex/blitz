@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -140,4 +141,59 @@ func TestGlobalConnectorsOverTheAPI(t *testing.T) {
 	assert.NotEmpty(t, made.Msg.Problems, "a global one has its name")
 	_, err = w.MakeConnectorGlobal(ctx, connect.NewRequest(&pb.MakeConnectorGlobalRequest{Workspace: dir, Category: "databases", Name: "gone"}))
 	assert.Equal(t, "CONNECTOR_NOT_FOUND", reason(t, err))
+
+	// A query's parameters go both ways; Make global refuses a file the
+	// person hasn't trusted; Try it says why it can't run.
+	withParams := &pb.Connector{Name: "menu", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": file}, ReadOnly: true,
+		Queries: []*pb.ConnectorQuery{{Name: "quick", Description: "Quick ones", Statement: "SELECT name FROM recipes WHERE length(name) < $1", Params: []*pb.ConnectorQueryParam{{Name: "n", Type: "integer", Description: "Letters"}}}}}
+	menu, err := w.SaveConnector(ctx, connect.NewRequest(&pb.SaveConnectorRequest{Workspace: dir, Connection: withParams}))
+	require.NoError(t, err)
+	require.Empty(t, menu.Msg.Problems)
+	require.Len(t, menu.Msg.Connection.Queries, 1)
+	assert.Equal(t, "n", menu.Msg.Connection.Queries[0].Params[0].Name)
+	assert.True(t, menu.Msg.Connection.Queries[0].ReadsOnly)
+	text, err := os.ReadFile(menu.Msg.Connection.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(menu.Msg.Connection.Path, append(text, '\n'), 0o600))
+	_, err = w.MakeConnectorGlobal(ctx, connect.NewRequest(&pb.MakeConnectorGlobalRequest{Workspace: dir, Category: "databases", Name: "menu"}))
+	assert.Equal(t, "CONNECTOR_NOT_TRUSTED", reason(t, err))
+	wsTried, err := w.TryConnectorTool(ctx, connect.NewRequest(&pb.TryConnectorToolRequest{Workspace: dir, Connection: &pb.Connector{Name: "x", Category: "email"}, Tool: "count"}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, wsTried.Msg.Problem)
+
+	// Settings that can't be read: each global call says so.
+	home, _ := os.UserHomeDir()
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[[[ not toml"), 0o600))
+	for name, call := range map[string]func() error{
+		"list": func() error {
+			_, err := cfg.ListGlobalConnectors(ctx, connect.NewRequest(&pb.ListGlobalConnectorsRequest{}))
+			return err
+		},
+		"save": func() error {
+			_, err := cfg.SaveGlobalConnector(ctx, connect.NewRequest(&pb.SaveGlobalConnectorRequest{Connection: kitchen}))
+			return err
+		},
+		"delete": func() error {
+			_, err := cfg.DeleteGlobalConnector(ctx, connect.NewRequest(&pb.DeleteGlobalConnectorRequest{Category: "databases", Name: "kitchen"}))
+			return err
+		},
+		"test": func() error {
+			_, err := cfg.TestGlobalConnector(ctx, connect.NewRequest(&pb.TestGlobalConnectorRequest{Connection: kitchen}))
+			return err
+		},
+		"try": func() error {
+			_, err := cfg.TryGlobalConnectorTool(ctx, connect.NewRequest(&pb.TryGlobalConnectorToolRequest{Connection: kitchen, Tool: "count"}))
+			return err
+		},
+		"schema": func() error {
+			_, err := cfg.ReadGlobalConnectorSchema(ctx, connect.NewRequest(&pb.ReadGlobalConnectorSchemaRequest{Connection: kitchen}))
+			return err
+		},
+		"draft": func() error {
+			_, err := cfg.DraftGlobalConnectorQuery(ctx, connect.NewRequest(&pb.DraftGlobalConnectorQueryRequest{Connection: kitchen, Request: "x"}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
 }

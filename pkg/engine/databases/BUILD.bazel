@@ -51,6 +51,7 @@ go_test(
         "connection_test.go",
         "databases_test.go",
         "paths_test.go",
+        "schema_test.go",
     ],
     embed = [":databases"],
     deps = [

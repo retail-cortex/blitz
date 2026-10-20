@@ -175,6 +175,9 @@ func TestUserDescriptors(t *testing.T) {
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "email.yaml"), "id: email\nname: Email\nserver: email\nprefix: mail\nsecretPrefix: MAIL\nbackend: toolbox\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "kinds.yaml"), "id: kinds\nname: X\nserver: x\nprefix: x\nsecretPrefix: x\nbackend: nope\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "twin.yaml"), "id: twin\nname: X\nserver: databases\nprefix: db\nsecretPrefix: DB\nbackend: toolbox\n")
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "unknown.yaml"), "id: unknown\ncolour: red\n")
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "zz-again.yaml"), "id: email\nname: Again\nserver: again\nprefix: again\nsecretPrefix: AGAIN\nbackend: toolbox\n")
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "names.yaml"), "id: names\nname: X\nserver: Bad-Server\nprefix: a-b\nsecretPrefix: NAMES\nbackend: toolbox\n")
 	cat = connectors.Load("", ws)
 	_, ok = cat.Category("email")
 	assert.True(t, ok, "a category is added")
@@ -185,7 +188,7 @@ func TestUserDescriptors(t *testing.T) {
 		catProblems = append(catProblems, c.Problem)
 	}
 	all := strings.Join(catProblems, "\n")
-	for _, want := range []string{"not kinds or categories", "secretPrefix", "backend", "has its server or prefix"} {
+	for _, want := range []string{"not kinds or categories", "secretPrefix", "backend", "has its server or prefix", "colour", `there's a category "email" already`, `server "Bad-Server"`, `prefix "a-b"`} {
 		assert.Contains(t, all, want)
 	}
 }
@@ -414,4 +417,43 @@ func TestWith(t *testing.T) {
 	trusted, untrusted = connectors.Serving{Local: []string{"a"}}.Split()
 	assert.Empty(t, trusted, "nil trusts none")
 	assert.Equal(t, []string{"a"}, untrusted)
+}
+
+// Make global refuses what it can't move, saying why, and moves nothing:
+// a category or name that isn't there, a file that can't be read as a
+// connection, one more than the form describes; Save and Prepare say
+// what's wrong with a kind or category that isn't there.
+func TestMakeGlobalAndPrepareRefuse(t *testing.T) {
+	ws := home(t)
+	cat := connectors.Load("", ws)
+	dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
+
+	_, _, err := connectors.MakeGlobal("", ws, "email", "inbox")
+	assert.ErrorIs(t, err, connectors.ErrUnknown)
+	_, _, err = connectors.MakeGlobal("", ws, "databases", "gone")
+	assert.ErrorIs(t, err, connectors.ErrUnknown)
+
+	write(t, filepath.Join(dir, "broken.yaml"), "kind: [")
+	_, problems, err := connectors.MakeGlobal("", ws, "databases", "broken")
+	require.NoError(t, err)
+	require.Len(t, problems, 1)
+	assert.NoFileExists(t, filepath.Join(connectors.GlobalDir(""), "databases", "broken.yaml"))
+
+	write(t, filepath.Join(dir, "two.yaml"), "kind: source\nname: a\ntype: sqlite\ndatabase: /tmp/a.db\n---\nkind: source\nname: b\ntype: sqlite\ndatabase: /tmp/b.db\n")
+	_, problems, err = connectors.MakeGlobal("", ws, "databases", "two")
+	require.NoError(t, err)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "by hand")
+	assert.FileExists(t, filepath.Join(dir, "two.yaml"), "nothing moved")
+
+	_, problems, err = connectors.Save(cat, "", ws, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"}, nil, "")
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(problems, " "), `kind "mysql": one of`)
+
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "x", Category: "email"})
+	assert.ErrorContains(t, err, `category "email" isn't there`)
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "Bad Name", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": "/tmp/x.db"}})
+	assert.Error(t, err, "a name that can't be saved")
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"})
+	assert.ErrorContains(t, err, `kind "mysql"`)
 }

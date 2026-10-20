@@ -28,6 +28,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -138,6 +139,28 @@ func TestParseQueryDraft(t *testing.T) {
 			assert.Equal(t, tc.notes, d.Notes)
 		})
 	}
+}
+
+// The prompt says how parameters are written in the connection's dialect,
+// and a kind with no queries keeps the parameters as given.
+func TestQueryPromptAndPlaceholders(t *testing.T) {
+	cat := connectors.Load("", "")
+	bq, _ := cat.Kind("bigquery")
+	prompt := queryPrompt(bq, connectors.Connection{Name: "sales"}, nil, "x")
+	assert.Contains(t, prompt, "Parameters: by name, @name")
+	assert.Contains(t, prompt, "Dialect: GoogleSQL")
+	assert.NotContains(t, prompt, "read-only")
+	params := []connectors.Param{{Name: "a", Type: "string"}}
+	got, notes := matchPlaceholders(connectors.Kind{}, "SELECT $1, $2", params, nil)
+	assert.Equal(t, params, got)
+	assert.Empty(t, notes)
+}
+
+// A draft needs the sql-query skill: without it, it says so.
+func TestDraftWithoutTheSkill(t *testing.T) {
+	cat := connectors.Load("", "")
+	_, err := draftQuery(context.Background(), queryBuilder{catalog: cat, skill: func() (*skills.Skill, bool) { return nil, false }}, connectors.Connection{Name: "k", Category: "databases", Kind: "sqlite"}, "x")
+	assert.ErrorContains(t, err, "the sql-query skill isn't there")
 }
 
 // The schema is a table a line, its columns under it, cut when it's too
