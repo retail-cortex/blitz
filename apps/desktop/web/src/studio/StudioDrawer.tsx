@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiDatabaseOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -26,6 +26,7 @@ import { t, tn } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { DatabasesPane } from "./DatabasesPane";
 import { EvalsPane } from "./EvalsPane";
 import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
@@ -41,13 +42,13 @@ import { OverviewPane } from "./OverviewPane";
  * The kinds Studio holds (spec_studio_040), after the Overview of them all
  * (spec_health_044), in the order an agent is built: the agent and the
  * evals that prove it, what it follows (skills, rules, guardrails), what
- * runs (workflows, workers), and secrets.
+ * runs (workflows, workers), and what it reaches (databases, secrets).
  */
-export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "secrets"] as const;
+export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "databases", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
-/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); secrets. */
-export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["secrets"]];
+/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (databases, secrets). */
+export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["databases", "secrets"]];
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -67,13 +68,15 @@ export const studioIcons: Record<StudioKind, string> = {
   evals: mdiFlaskOutline,
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
+  databases: mdiDatabaseOutline,
   secrets: mdiKeyVariant,
 };
 
 /**
  * The workspace's Studio (spec_studio_040): what its .agents folder
  * holds, kind by kind, each listed and edited here: agents, skills,
- * workflows, evals, rules, guardrails, and its own secrets.
+ * workflows, evals, rules, guardrails, the databases its agents use, and
+ * its own secrets.
  */
 export function StudioDrawer({
   dir,
@@ -217,6 +220,7 @@ export function StudioDrawer({
               </div>
             </div>
           )}
+          {kind === "databases" && <DatabasesPane workspace={dir} onDirty={setDirty} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
           {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={intentFor("workflows")} run={initial.run} />}
