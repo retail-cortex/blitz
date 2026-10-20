@@ -52,7 +52,7 @@ Then setup writes `.agents/AGENTS.md` (the stack, the Bazel commands, the layout
 
 ## 2. Open Studio
 
-**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Workflows, Jobs, Secrets) and the selected kind beside it. It opens on **Overview**.
+**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Jobs, Workflows, Secrets) and the selected kind beside it. It opens on **Overview**.
 
 The Overview costs nothing to show, because it reads only what the workspace already records. Right after setup you'll see:
 

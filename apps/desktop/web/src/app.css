@@ -1009,6 +1009,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .settings-drawer.studio-drawer .settings-nav { width: 48px; }
 .studio-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
 .studio-drawer .settings-nav-label { display: none; }
+.studio-nav-line { height: 1px; margin: 6px 10px; background: var(--md-outline-variant); flex: none; }
 .studio-drawer.is-compact .settings { gap: 12px; }
 /* Studio's panes fill the drawer (Settings keeps its measure). */
 .settings-drawer.studio-drawer :is(.settings, .settings-pane) { max-width: none; }

@@ -43,9 +43,11 @@ import { OverviewPane } from "./OverviewPane";
  * evals that prove it, what it follows (skills, rules, guardrails), what
  * runs (workflows, workers), and secrets.
  */
-export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workflows", "workers", "secrets"] as const;
+export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
+/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); secrets. */
+export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["secrets"]];
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -176,12 +178,15 @@ export function StudioDrawer({
     >
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {studioKinds.map((k) => (
-            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
-              <Icon path={studioIcons[k]} />
-              <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
-            </button>
-          ))}
+          {studioGroups.map((group, i) => [
+            i > 0 && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
+            ...group.map((k) => (
+              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
+                <Icon path={studioIcons[k]} />
+                <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
+              </button>
+            )),
+          ])}
         </div>
         <GradesContext.Provider value={grades}>
         <div className="settings-pane" key={listed}>

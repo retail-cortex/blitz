@@ -39,7 +39,7 @@ import { docSections } from "./docs/sections";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import type { Section } from "./SettingsDrawer";
-import { studioIcons, studioKinds, type StudioKind } from "./studio/StudioDrawer";
+import { studioGroups, studioIcons, type StudioKind } from "./studio/StudioDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -106,13 +106,16 @@ export function MenuBar({
   // Studio: its kinds, as the drawer lists them (icons only there), a
   // failed worker run noted on Workers; Close Studio while it's open.
   const studio: MenuEntry[] = [
-    ...studioKinds.map((k) => ({
-      label: t(`desktop.studio.${k}`),
-      icon: studioIcons[k],
-      on: studioKind === k,
-      detail: k === "workers" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
-      onSelect: () => onStudio?.(k),
-    })),
+    ...studioGroups.flatMap((group, i): MenuEntry[] => [
+      ...(i > 0 ? (["divider"] as MenuEntry[]) : []),
+      ...group.map((k) => ({
+        label: t(`desktop.studio.${k}`),
+        icon: studioIcons[k],
+        on: studioKind === k,
+        detail: k === "workers" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
+        onSelect: () => onStudio?.(k),
+      })),
+    ]),
     ...(studioKind ? (["divider", { label: t("desktop.studio.close"), icon: mdiClose, onSelect: () => onCloseStudio?.() }] as MenuEntry[]) : []),
   ];
 
