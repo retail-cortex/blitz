@@ -1,0 +1,88 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "embed",
+    srcs = [
+        "config.go",
+        "embed.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/third_party/mcp-toolbox/embed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//third_party/mcp-toolbox/internal/auth/generic",
+        "//third_party/mcp-toolbox/internal/log",
+        "//third_party/mcp-toolbox/internal/resources",
+        "//third_party/mcp-toolbox/internal/server",
+        "//third_party/mcp-toolbox/internal/sources/alloydbpg",
+        "//third_party/mcp-toolbox/internal/sources/bigquery",
+        "//third_party/mcp-toolbox/internal/sources/postgres",
+        "//third_party/mcp-toolbox/internal/sources/sqlite",
+        "//third_party/mcp-toolbox/internal/telemetry",
+        "//third_party/mcp-toolbox/internal/tools/alloydbainl",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigqueryanalyzecontribution",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigqueryexecutesql",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigqueryforecast",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerygetdatasetinfo",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerygettableinfo",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerylistdatasetids",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerylisttableids",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerysearchcatalog",
+        "//third_party/mcp-toolbox/internal/tools/bigquery/bigquerysql",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgresdatabaseoverview",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgresexecutesql",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgresgetcolumncardinality",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistactivequeries",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistavailableextensions",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistdatabasestats",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistindexes",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistinstalledextensions",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistlocks",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistpgsettings",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistpublicationtables",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistquerystats",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistroles",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistschemas",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistsequences",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgresliststoredprocedure",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslisttables",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslisttablespaces",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslisttablestats",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslisttriggers",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslistviews",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgreslongrunningtransactions",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgresreplicationstats",
+        "//third_party/mcp-toolbox/internal/tools/postgres/postgressql",
+        "//third_party/mcp-toolbox/internal/tools/sqlite/sqliteexecutesql",
+        "//third_party/mcp-toolbox/internal/tools/sqlite/sqlitesql",
+        "//third_party/mcp-toolbox/internal/util",
+        "@com_github_goccy_go_yaml//:go-yaml",
+        "@com_github_goccy_go_yaml//lexer",
+        "@com_github_goccy_go_yaml//token",
+        "@com_github_google_go_cmp//cmp",
+    ],
+)
+
+go_test(
+    name = "embed_test",
+    srcs = ["embed_test.go"],
+    embed = [":embed"],
+    deps = [
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,37 @@
+--- a/embed/config.go
++++ b/embed/config.go
+@@ -36,6 +36,8 @@
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
+ )
+ 
++// Config is a parsed Toolbox configuration: its sources, tools, groups and
++// the rest, merged from every file (Blitz: doc comments added).
+ type Config struct {
+ 	Sources           server.SourceConfigs           `yaml:"sources"`
+ 	AuthServices      server.AuthServiceConfigs      `yaml:"authServices"`
+@@ -47,6 +49,8 @@
+ 	Groups            server.GroupConfigs            `yaml:"groups"`
+ }
+ 
++// ConfigParser parses configuration files, filling ${NAME} placeholders
++// from EnvVars.
+ type ConfigParser struct {
+ 	EnvVars         map[string]string
+ 	OptionalEnvVars []string
+@@ -128,7 +132,7 @@
+ 			p.requiredEnvVars = append(p.requiredEnvVars, variableName)
+ 		}
+ 
+-		if value, found := os.LookupEnv(variableName); found {
++		if value, found := p.EnvVars[variableName]; found { // Blitz: only the values given, never the process's environment
+ 			p.EnvVars[variableName] = value
+ 			output.WriteString(value)
+ 		} else if defaultProvided {
+@@ -169,6 +173,7 @@
+ 	return output.String(), err
+ }
+ 
++// ParseConfig parses one configuration file's content.
+ func (p *ConfigParser) ParseConfig(ctx context.Context, raw []byte) (Config, error) {
+ 	var config Config
+ 	// Replace environment variables if found

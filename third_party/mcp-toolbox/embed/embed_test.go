@@ -1,0 +1,218 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package embed
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// recipes is a SQLite file with two recipes.
+func recipes(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "recipes.db")
+	db, err := sql.Open("sqlite3", path)
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE recipes(name TEXT); INSERT INTO recipes VALUES ('soup'), ('bread')`)
+	require.NoError(t, err)
+	return path
+}
+
+// connect starts cfg's server and connects an MCP client to it, as Blitz
+// does.
+func connect(t *testing.T, cfg Config) *mcp.ClientSession {
+	t.Helper()
+	s, err := Start(context.Background(), cfg, nil)
+	require.NoError(t, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	cs, err := client.Connect(context.Background(), &mcp.IOTransport{Reader: s, Writer: s}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { cs.Close(); s.Close() })
+	return cs
+}
+
+// call calls a tool and returns its text and whether it was an error.
+func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) (string, bool) {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
+	require.NoError(t, err)
+	var out []string
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			out = append(out, tc.Text)
+		}
+	}
+	return strings.Join(out, "\n"), res.IsError
+}
+
+// writeConfig writes a database file and returns its path.
+func writeConfig(t *testing.T, yaml string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "db.yaml")
+	require.NoError(t, os.WriteFile(p, []byte(yaml), 0o600))
+	return p
+}
+
+const sqliteTools = `kind: source
+name: recipes
+type: sqlite
+database: ${DB_PATH}
+---
+kind: tool
+name: count_recipes
+type: sqlite-sql
+source: recipes
+description: How many recipes there are
+statement: SELECT count(*) AS n FROM recipes
+---
+kind: tool
+name: run_sql
+type: sqlite-execute-sql
+source: recipes
+description: Run any SQL
+`
+
+// Toolbox serves a config's tools in-process: listed and called over MCP,
+// a ${NAME} filled from the values given and never the environment.
+func TestServesTools(t *testing.T) {
+	ctx := context.Background()
+	file := writeConfig(t, sqliteTools)
+	t.Setenv("DB_PATH", "/from/the/environment")
+	_, err := Load(ctx, []string{file}, nil)
+	require.ErrorContains(t, err, `"DB_PATH"`, "the process's environment isn't read")
+
+	cfg, err := Load(ctx, []string{file}, map[string]string{"DB_PATH": recipes(t)})
+	require.NoError(t, err)
+	cs := connect(t, cfg)
+	init := cs.InitializeResult()
+	require.NotNil(t, init)
+	assert.Equal(t, "Toolbox", init.ServerInfo.Name)
+	assert.Equal(t, Version, init.ServerInfo.Version)
+
+	list, err := cs.ListTools(ctx, nil)
+	require.NoError(t, err)
+	var names []string
+	for _, tool := range list.Tools {
+		names = append(names, tool.Name)
+	}
+	assert.ElementsMatch(t, []string{"count_recipes", "run_sql"}, names)
+	got, isErr := call(t, cs, "count_recipes", nil)
+	assert.False(t, isErr)
+	assert.JSONEq(t, `{"n": 2}`, got)
+
+	_, err = Load(ctx, nil, nil)
+	assert.Error(t, err, "no files")
+}
+
+// Every SQLite source has sqlite-vec: vec0 tables and a nearest-neighbour
+// query.
+func TestSQLiteVec(t *testing.T) {
+	cfg, err := Load(context.Background(), []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": recipes(t)})
+	require.NoError(t, err)
+	cs := connect(t, cfg)
+	for _, tc := range []struct {
+		name, sql string
+	}{
+		{"its version", "SELECT vec_version() AS v"},
+		{"a vec0 table", "CREATE VIRTUAL TABLE dishes USING vec0(taste float[2])"},
+		{"vectors in it", "INSERT INTO dishes(rowid, taste) VALUES (1, '[0,1]'), (2, '[1,0]'), (3, '[0.9,0.1]')"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, isErr := call(t, cs, "run_sql", map[string]any{"sql": tc.sql})
+			assert.False(t, isErr, got)
+		})
+	}
+	got, isErr := call(t, cs, "run_sql", map[string]any{"sql": "SELECT rowid FROM dishes WHERE taste MATCH '[1,0]' AND k = 2 ORDER BY distance"})
+	require.False(t, isErr, got)
+	var rows []map[string]any
+	for _, line := range strings.Split(got, "\n") {
+		var row map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &row), line)
+		rows = append(rows, row)
+	}
+	require.Len(t, rows, 2)
+	assert.EqualValues(t, 2, rows[0]["rowid"], "the nearest first")
+	assert.EqualValues(t, 3, rows[1]["rowid"])
+}
+
+// A read-only SQLite source offers no tool that writes, and SQLite itself
+// refuses a write, even from a tool that says it doesn't write.
+func TestSQLiteReadOnly(t *testing.T) {
+	db := recipes(t)
+	cfg, err := Load(context.Background(), []string{writeConfig(t, `kind: source
+name: recipes
+type: sqlite
+database: `+db+`
+readOnly: true
+---
+kind: tool
+name: run_sql
+type: sqlite-execute-sql
+source: recipes
+description: Run any SQL
+---
+kind: tool
+name: wipe
+type: sqlite-sql
+source: recipes
+description: Says it reads, but deletes
+statement: DELETE FROM recipes
+annotations:
+  readOnlyHint: true
+`)}, nil)
+	require.NoError(t, err)
+	cs := connect(t, cfg)
+	list, err := cs.ListTools(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, list.Tools, 1, "run_sql writes: not offered")
+	assert.Equal(t, "wipe", list.Tools[0].Name)
+	got, isErr := call(t, cs, "wipe", nil)
+	assert.True(t, isErr)
+	assert.Contains(t, got, "readonly")
+}
+
+// A database that can't be reached fails Start; Files lists a folder's
+// YAML; Close is safe twice.
+func TestStartAndFiles(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := Load(ctx, []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": filepath.Join(t.TempDir(), "missing", "x.db")})
+	require.NoError(t, err)
+	_, err = Start(ctx, cfg, nil)
+	assert.Error(t, err, "its folder isn't there")
+
+	dir := t.TempDir()
+	for _, f := range []string{"b.yaml", "a.yml", "notes.md"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f), nil, 0o600))
+	}
+	assert.Equal(t, []string{filepath.Join(dir, "a.yml"), filepath.Join(dir, "b.yaml")}, Files(dir))
+	assert.Empty(t, Files(filepath.Join(dir, "none")))
+
+	cfg, err = Load(ctx, []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": recipes(t)})
+	require.NoError(t, err)
+	s, err := Start(ctx, cfg, nil)
+	require.NoError(t, err)
+	assert.NoError(t, s.Close())
+	assert.NoError(t, s.Close(), "twice")
+}
