@@ -142,8 +142,12 @@ func TestSpaceEntries(t *testing.T) {
 	}, actions(brief.Children))
 	assert.Equal(t, []Action{{Kind: RunWorkflow, Workspace: "/w/shop", Name: "digest"}, {Kind: ShowWorkflow, Workspace: "/w/shop", Name: "digest"}}, actions(got[6].Children))
 
-	empty := SpaceEntries(Space{Dir: "/w/new"}, workers, nil, Live{})
-	assert.Equal(t, []string{"Jobs", "No jobs", "Workflows", "No workflows"}, []string{empty[0].Title, empty[1].Title, empty[2].Title, empty[3].Title})
+	assert.Empty(t, SpaceEntries(Space{Dir: "/w/new"}, workers, nil, Live{}), "nothing to show: no submenu")
+	onlyFlows := SpaceEntries(Space{Dir: "/w/new"}, workers, []Flow{{Name: "brief"}}, Live{})
+	assert.Equal(t, "Workflows", onlyFlows[0].Title, "no Jobs heading without jobs")
+	assert.Len(t, onlyFlows, 2)
+	onlyJobs := SpaceEntries(Space{Dir: "/w/blog"}, workers, nil, Live{})
+	assert.Equal(t, []string{"Jobs", "elsewhere"}, []string{onlyJobs[0].Title, onlyJobs[1].Title}, "no Workflows heading without workflows")
 }
 
 func actions(entries []Entry) []Action {

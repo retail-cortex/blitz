@@ -314,20 +314,21 @@ func onReady() {
 	start := systray.AddMenuItem(i18n.T("tray.start"), "")
 	stop := systray.AddMenuItem(i18n.T("tray.stop"), "")
 	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
+	// The running service's MCP servers: the service's, not a workspace's.
+	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
 	tasksItem := systray.AddMenuItem("", "")
 	tasksItem.Hide()
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
-	systray.AddSeparator()
-	// A submenu per workspace, with its jobs and its workflows (EL-111),
-	// then the running service's MCP servers.
+	// A submenu per workspace with jobs or workflows (EL-111), under its
+	// heading and no line: a line can't be hidden, and with no workspace
+	// two would meet.
 	spacesHead := systray.AddMenuItem(i18n.T("tray.workspaces"), "")
 	spacesHead.Disable()
 	spacesHead.Hide()
 	spaceSlots := newSlots(maxSpaceSlots)
-	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
 	systray.AddSeparator()
 	// Windows: the tray is what starts at login (and starts the service).
 	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
@@ -443,7 +444,9 @@ func onReady() {
 			}
 			var menus []tray.Entry
 			for _, sp := range spaces {
-				menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live)})
+				if entries := tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live); len(entries) > 0 {
+					menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: entries})
+				}
 			}
 			spaceSlots.show(menus, click)
 			if len(menus) > 0 {

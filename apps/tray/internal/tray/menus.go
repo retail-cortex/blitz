@@ -245,25 +245,24 @@ func spaceNamer(spaces []Space) func(dir string) string {
 // SpaceEntries are a workspace's submenu: Jobs, each job with Run now,
 // Stop while it runs, Enabled and Show in Blitz, marked running or failed;
 // then Workflows, each with Run, Stop while it runs and Show in Blitz,
-// marked running.
+// marked running. A section with nothing in it is left out, and a
+// workspace with neither has no submenu (none).
 func SpaceEntries(s Space, workers []*pb.Worker, flows []Flow, l Live) []Entry {
-	out := []Entry{{Title: i18n.T("tray.jobs"), Icon: IconJob, Disabled: true}}
-	jobs := 0
+	var out []Entry
 	for _, w := range workers {
 		if w.Workspace != s.Dir {
 			continue
 		}
-		jobs++
+		if len(out) == 0 {
+			out = append(out, Entry{Title: i18n.T("tray.jobs"), Icon: IconJob, Disabled: true})
+		}
 		out = append(out, jobEntry(w, l))
 	}
-	if jobs == 0 {
-		out = append(out, Entry{Title: i18n.T("tray.workers.none"), Disabled: true})
-	}
-	// No line between them: a submenu's lines can't be taken away as it changes; the headings part them.
-	out = append(out, Entry{Title: i18n.T("tray.workflows"), Icon: IconWorkflow, Disabled: true})
 	if len(flows) == 0 {
-		return append(out, Entry{Title: i18n.T("tray.workflows.none"), Disabled: true})
+		return out
 	}
+	// No line between the sections: a submenu's lines can't be taken away as it changes; the headings part them.
+	out = append(out, Entry{Title: i18n.T("tray.workflows"), Icon: IconWorkflow, Disabled: true})
 	for _, f := range flows {
 		var run *pb.WorkflowRun
 		for _, r := range l.Runs {
