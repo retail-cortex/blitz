@@ -46,13 +46,21 @@ func recipes(t *testing.T) string {
 // does.
 func connect(t *testing.T, cfg Config) *mcp.ClientSession {
 	t.Helper()
-	s, err := Start(context.Background(), cfg, nil)
+	s, err := Start(context.Background(), cfg, testLog{t})
 	require.NoError(t, err)
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	cs, err := client.Connect(context.Background(), &mcp.IOTransport{Reader: s, Writer: s}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Close(); s.Close() })
 	return cs
+}
+
+// testLog is Toolbox's log in the test's output.
+type testLog struct{ t *testing.T }
+
+func (l testLog) Write(p []byte) (int, error) {
+	l.t.Log(strings.TrimRight(string(p), "\n"))
+	return len(p), nil
 }
 
 // call calls a tool and returns its text and whether it was an error.

@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -350,8 +351,14 @@ func Start(ctx context.Context, cfg Config, logOut io.Writer) (*Session, error) 
 		defer func() {
 			if p := recover(); p != nil {
 				s.err = fmt.Errorf("toolbox stopped: %v", p)
+				fmt.Fprintf(logOut, "toolbox stopped: %v\n%s", p, debug.Stack())
 			}
-			_ = serverW.CloseWithError(io.EOF)
+			// The client reads why it stopped, not a bare end of stream.
+			closing := io.EOF
+			if s.err != nil {
+				closing = s.err
+			}
+			_ = serverW.CloseWithError(closing)
 		}()
 		s.err = srv.ServeStdio(ctx, clientR, serverW)
 	}()

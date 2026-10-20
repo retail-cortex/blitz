@@ -186,7 +186,10 @@ go_library(
 
 go_test(
     name = "engine_test",
-    size = "small",
+    # medium: under the race detector the connector tests run Toolbox's
+    # SQLite (WebAssembly) about ten times slower, and small's 60 s per
+    # shard timed out on CI's macOS runners.
+    size = "medium",
     srcs = [
         "added_test.go",
         "agentfiles_test.go",
