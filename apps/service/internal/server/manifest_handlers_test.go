@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The Studio handlers (skills, rules, guardrails, evals, workflows and
-// human tasks) refuse a workspace that isn't an absolute directory, as
+// The Studio handlers (skills, rules, guardrails, evals, workflows,
+// human tasks and databases) refuse a workspace that isn't an absolute directory, as
 // INVALID_WORKSPACE, before doing anything.
 func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 	c, _ := serveEvery(t, nil)
@@ -62,6 +62,11 @@ func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 		"SaveWorkflow":    func() error { return unary(w.SaveWorkflow, &pb.SaveWorkflowRequest{Workspace: ws}) },
 		"DeleteWorkflow":  func() error { return unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: ws}) },
 		"AnswerHumanTask": func() error { return unary(w.AnswerHumanTask, &pb.AnswerHumanTaskRequest{Workspace: ws}) },
+		"ListDatabases":   func() error { return unary(w.ListDatabases, &pb.ListDatabasesRequest{Workspace: ws}) },
+		"SaveDatabase":    func() error { return unary(w.SaveDatabase, &pb.SaveDatabaseRequest{Workspace: ws}) },
+		"DeleteDatabase":  func() error { return unary(w.DeleteDatabase, &pb.DeleteDatabaseRequest{Workspace: ws}) },
+		"TestDatabase":    func() error { return unary(w.TestDatabase, &pb.TestDatabaseRequest{Workspace: ws}) },
+		"TryDatabaseTool": func() error { return unary(w.TryDatabaseTool, &pb.TryDatabaseToolRequest{Workspace: ws}) },
 		"RunEval": func() error {
 			return streamErr(w.RunEval(ctx, connect.NewRequest(&pb.RunEvalRequest{Workspace: ws, Name: "x"})))
 		},

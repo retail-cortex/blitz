@@ -855,6 +855,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.srv.Shutdown(ctx)
 }
 
+// Close closes the server's sources: their connection pools (Blitz).
+func (s *Server) Close() {
+	if s.PrimitiveMgr != nil {
+		s.PrimitiveMgr.CloseSources()
+	}
+}
+
 func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }

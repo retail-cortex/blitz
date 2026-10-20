@@ -165,7 +165,7 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 		states[st.Name] = st
 	}
 	var out []api.MCPServer
-	for _, s := range w.cfg.MCP.Servers {
+	for _, s := range w.mcpConfig().Servers {
 		target := s.URL
 		if s.InProcess != "" {
 			target = "in-process: " + strings.Join(s.Args, ", ")
@@ -186,25 +186,41 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 // restart, disabled and removed ones stop, and the agents are built
 // again so the next turn offers what's there now.
 func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
-	servers := databases.With(mcpWithSecrets(cfg.MCP.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
+	return w.applyMCP(ctx, cfg.MCP)
+}
+
+// applyMCP puts m's servers, with their secrets and the databases server,
+// in place of the running ones (one at a time: the settings watch and the
+// service both reload).
+func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
+	w.mcpMu.Lock()
+	servers := databases.With(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
 	changed, err := w.tools.MCP().Update(servers)
 	if err != nil {
+		w.mcpMu.Unlock()
 		return err
 	}
-	w.cfg.MCP = cfg.MCP
-	w.cfg.MCP.Servers = servers
+	m.Servers = servers
+	w.cfg.MCP = m
+	w.mcpMu.Unlock()
 	if !changed {
 		return nil
 	}
 	return w.engine.Rebuild(ctx)
 }
 
+// mcpConfig is the MCP settings now (applyMCP replaces them).
+func (w *Workspace) mcpConfig() config.MCPConfig {
+	w.mcpMu.RLock()
+	defer w.mcpMu.RUnlock()
+	return w.cfg.MCP
+}
+
 // ReloadDatabases serves the database files as they are now
 // (spec_databases_046): the databases server starts, restarts with the
 // changed files or secrets, or stops when there are none.
 func (w *Workspace) ReloadDatabases(ctx context.Context) error {
-	cfg := *w.cfg
-	return w.ReloadMCP(ctx, &cfg)
+	return w.applyMCP(ctx, w.mcpConfig())
 }
 
 // RestartMCPServer stops the MCP server named name and starts it afresh
@@ -229,7 +245,7 @@ func (w *Workspace) ActiveAgentTools() api.AgentTools {
 		out.Tools = append(out.Tools, api.ToolInfo{Name: t.Name(), Description: t.Description(), PlanAllowed: runtime.PlanAllows(t.Name())})
 	}
 	sort.Slice(out.Tools, func(i, j int) bool { return out.Tools[i].Name < out.Tools[j].Name })
-	for _, s := range w.cfg.MCP.Servers {
+	for _, s := range w.mcpConfig().Servers {
 		if !s.Disabled && mcpOfferedTo(s.Agents, active) { // a disabled server offers nothing
 			out.MCP = append(out.MCP, api.MCPOffer{Server: s.Name, Tools: s.Tools, Prefix: s.Prefix})
 		}

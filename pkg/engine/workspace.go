@@ -34,12 +34,12 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
-	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -82,7 +82,9 @@ type Workspace struct {
 	settingsWatch     *settingsWatch
 	settingsMu        sync.Mutex
 	settingsListeners map[int]func()
-	settingsNext      int
+	// mcpMu guards cfg.MCP, which applyMCP replaces.
+	mcpMu        sync.RWMutex
+	settingsNext int
 	// permProblem is why rules were left out at the last reload.
 	permMu      sync.Mutex
 	permProblem error

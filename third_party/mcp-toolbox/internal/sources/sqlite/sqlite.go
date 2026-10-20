@@ -105,6 +105,14 @@ type Source struct {
 	Db *sql.DB
 }
 
+// Close closes the database (Blitz: Toolbox never did).
+func (s *Source) Close() error {
+	if s.Db == nil {
+		return nil
+	}
+	return s.Db.Close()
+}
+
 func (s *Source) IsReadOnly() bool {
 	return s.ReadOnly
 }

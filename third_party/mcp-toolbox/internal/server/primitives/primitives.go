@@ -70,6 +70,17 @@ func NewPrimitiveManager(
 	return primitiveMgr
 }
 
+// CloseSources closes every source that holds connections (Blitz).
+func (r *PrimitiveManager) CloseSources() {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.sources {
+		if c, ok := s.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
+}
+
 func (r *PrimitiveManager) GetSource(sourceName string) (sources.Source, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

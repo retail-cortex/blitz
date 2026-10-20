@@ -37,6 +37,8 @@ type Cache struct {
 	mu      sync.RWMutex
 	items   map[string]Item
 	onEvict OnEvictFunc
+	done    chan struct{}
+	once    sync.Once
 }
 
 // NewCache creates a new cache and cleans up every 55 min
@@ -46,6 +48,7 @@ func NewCache(onEvict OnEvictFunc) *Cache {
 	c := &Cache{
 		items:   make(map[string]Item),
 		onEvict: onEvict,
+		done:    make(chan struct{}),
 	}
 
 	go c.startCleanup(cleanupInterval)
@@ -57,9 +60,29 @@ func (c *Cache) startCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.DeleteExpired()
+	for {
+		select {
+		case <-ticker.C:
+			c.DeleteExpired()
+		case <-c.done:
+			return
+		}
 	}
+}
+
+// Close stops the cleanup and evicts every item (Blitz).
+func (c *Cache) Close() {
+	if c == nil {
+		return
+	}
+	c.once.Do(func() {
+		close(c.done)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for k, it := range c.items {
+			c.delete(k, it)
+		}
+	})
 }
 
 // delete is an internal helper that assumes the write lock is held

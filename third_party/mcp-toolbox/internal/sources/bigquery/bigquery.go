@@ -344,6 +344,18 @@ func (s *Source) IsReadOnly() bool {
 	return s.WriteMode == WriteModeBlocked || s.WriteMode == WriteModeProtected
 }
 
+// Close closes the client and the cached ones, and stops the caches
+// (Blitz: Toolbox never did).
+func (s *Source) Close() error {
+	s.bqClientCache.Close()
+	s.bqRestCache.Close()
+	s.dataplexCache.Close()
+	if s.Client != nil {
+		return s.Client.Close()
+	}
+	return nil
+}
+
 func (s *Source) SourceType() string {
 	// Returns BigQuery Google SQL source type
 	return SourceType

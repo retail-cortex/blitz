@@ -357,6 +357,23 @@ service WorkspaceService {
   rpc RestartMCPServer(RestartMCPServerRequest) returns (RestartMCPServerResponse);
   // Returns what the active agent can use.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  // Returns the databases the agents can use (spec_databases_046): the
+  // global ones, then the workspace's, with the kinds Studio offers and
+  // how the databases server is doing.
+  rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse);
+  // Writes a database from Studio's form (or its YAML, for a custom one),
+  // keeping the secret values given as Blitz secrets; problems, with
+  // nothing written, when it can't be saved. The databases server
+  // restarts with it (DATABASE_NOT_FOUND for a previous name that isn't
+  // there).
+  rpc SaveDatabase(SaveDatabaseRequest) returns (SaveDatabaseResponse);
+  // Deletes a database and its secrets (DATABASE_NOT_FOUND).
+  rpc DeleteDatabase(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
+  // Connects to a database as written, unsaved, and lists the tools it
+  // offers; problem says why it can't be reached.
+  rpc TestDatabase(TestDatabaseRequest) returns (TestDatabaseResponse);
+  // Runs one of a database's tools as written, unsaved (Try it).
+  rpc TryDatabaseTool(TryDatabaseToolRequest) returns (TryDatabaseToolResponse);
 
   // Re-reads project instruction files and returns their paths.
   rpc ReloadMemory(ReloadMemoryRequest) returns (ReloadMemoryResponse);
@@ -3471,3 +3488,167 @@ message DropComposeRequest {
 
 // Response message for WorkspaceService.DropCompose.
 message DropComposeResponse {}
+
+// A setting a kind of database takes (spec_databases_046).
+message DatabaseField {
+  // Its name in the file: host, port, project…
+  string key = 1;
+  // Kept as a Blitz secret, never sent back.
+  bool secret = 2;
+  bool required = 3;
+  // Used when it's left empty.
+  string default_value = 4;
+}
+
+// A ready-made tool a kind of database offers.
+message DatabaseReadyTool {
+  // The tool is named <connection>_<id>.
+  string id = 1;
+  // It can change the database: hidden on a read-only one.
+  bool writes = 2;
+  // A new connection has it.
+  bool on = 3;
+}
+
+// A kind of database Studio offers.
+message DatabaseKind {
+  // Its Toolbox source type: postgres, alloydb-postgres, sqlite, bigquery.
+  string type = 1;
+  repeated DatabaseField fields = 2;
+  repeated DatabaseReadyTool tools = 3;
+}
+
+// A custom query's parameter.
+message DatabaseQueryParam {
+  string name = 1;
+  // string, integer, float or boolean.
+  string type = 2;
+  string description = 3;
+}
+
+// A custom SQL tool: <connection>_<name>.
+message DatabaseQuery {
+  string name = 1;
+  string description = 2;
+  string statement = 3;
+  repeated DatabaseQueryParam params = 4;
+  // Its statement only reads (a hint; a read-only connection is the
+  // guard).
+  bool reads_only = 5;
+}
+
+// A database file, as Studio's form shows it.
+message DatabaseConnection {
+  // The file's name and its tools' prefix.
+  string name = 1;
+  // workspace (.agents/databases) or global.
+  string scope = 2;
+  string path = 3;
+  // Its kind's type.
+  string type = 4;
+  // What it holds, for the agents.
+  string description = 5;
+  // The kind's settings; a secret one names its secret (${NAME}).
+  map<string, string> settings = 6;
+  // The secret settings that have a value.
+  repeated string secrets_set = 7;
+  bool read_only = 8;
+  // The ready-made tools switched on, by ID.
+  repeated string tools = 9;
+  repeated DatabaseQuery queries = 10;
+  // More than the form describes: edited as YAML (text).
+  bool custom = 11;
+  // The file.
+  string text = 12;
+  // Why it can't be loaded.
+  string problem = 13;
+}
+
+// Request message for WorkspaceService.ListDatabases.
+message ListDatabasesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListDatabases.
+message ListDatabasesResponse {
+  repeated DatabaseConnection connections = 1;
+  repeated DatabaseKind kinds = 2;
+  // Where the workspace's and the global ones are.
+  string workspace_dir = 3;
+  string global_dir = 4;
+  // The databases server: idle, connected or failed ("" with no
+  // databases), error saying why it failed, tools how many it offered.
+  string state = 5;
+  string error = 6;
+  int32 tool_count = 7;
+}
+
+// Request message for WorkspaceService.SaveDatabase.
+message SaveDatabaseRequest {
+  string workspace = 1;
+  DatabaseConnection connection = 2;
+  // Its name before (a rename), "" for a new one.
+  string previous_name = 3;
+  // Secret settings' new values, by key (a password); one left out keeps
+  // its value.
+  map<string, string> secret_values = 4;
+}
+
+// Response message for WorkspaceService.SaveDatabase.
+message SaveDatabaseResponse {
+  DatabaseConnection connection = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteDatabase.
+message DeleteDatabaseRequest {
+  string workspace = 1;
+  string scope = 2;
+  string name = 3;
+}
+
+// Response message for WorkspaceService.DeleteDatabase.
+message DeleteDatabaseResponse {}
+
+// A tool a database offers.
+message DatabaseTool {
+  string name = 1;
+  string description = 2;
+  // It runs without asking: its database can't be written.
+  bool read_only = 3;
+}
+
+// Request message for WorkspaceService.TestDatabase.
+message TestDatabaseRequest {
+  string workspace = 1;
+  DatabaseConnection connection = 2;
+  map<string, string> secret_values = 3;
+}
+
+// Response message for WorkspaceService.TestDatabase.
+message TestDatabaseResponse {
+  repeated DatabaseTool tools = 1;
+  // Why it couldn't connect ("" when it did).
+  string problem = 2;
+}
+
+// Request message for WorkspaceService.TryDatabaseTool.
+message TryDatabaseToolRequest {
+  string workspace = 1;
+  DatabaseConnection connection = 2;
+  map<string, string> secret_values = 3;
+  // The tool: <connection>_<id>, or the ID alone.
+  string tool = 4;
+  // Its arguments, a JSON object.
+  string args_json = 5;
+}
+
+// Response message for WorkspaceService.TryDatabaseTool.
+message TryDatabaseToolResponse {
+  // What it answered.
+  string output = 1;
+  // The answer is the tool's error.
+  bool is_error = 2;
+  // Why it couldn't be run ("" when it was).
+  string problem = 3;
+}

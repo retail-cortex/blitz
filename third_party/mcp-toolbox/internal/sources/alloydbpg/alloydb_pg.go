@@ -100,6 +100,14 @@ type Source struct {
 	Pool *pgxpool.Pool
 }
 
+// Close closes the connection pool (Blitz: Toolbox never did).
+func (s *Source) Close() error {
+	if s.Pool != nil {
+		s.Pool.Close()
+	}
+	return nil
+}
+
 func (s *Source) IsReadOnly() bool {
 	return s.ReadOnly
 }

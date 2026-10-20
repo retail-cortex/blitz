@@ -248,6 +248,7 @@ func (s *Session) Close() error {
 		s.stop()
 		_ = s.srv.Shutdown(context.Background())
 		<-s.done
+		s.srv.Close()
 		_ = s.r.Close()
 	})
 	if errors.Is(s.err, context.Canceled) || errors.Is(s.err, io.EOF) {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Package databases gives a workspace's agents its databases
 // (spec_databases_046): MCP Toolbox for Databases, run inside Blitz's
 // process (third_party/mcp-toolbox/embed), serving the tools the
@@ -141,11 +140,16 @@ func Config(prefixDir, workspace string) (config.MCPServerConfig, bool) {
 	}
 	// A file that doesn't load still makes the server: listing its tools
 	// fails, saying why, in /mcp and Studio.
-	if cfg, err := embed.Load(context.Background(), files, vars); err == nil {
-		c.ReadOnlyTools = embed.ReadOnlyTools(cfg)
+	if cfg, err := loadConfig(context.Background(), files, vars); err == nil {
+		c.ReadOnlyTools = readOnlyTools(cfg)
 	}
 	return c, true
 }
+
+var (
+	loadConfig    = embed.Load
+	readOnlyTools = embed.ReadOnlyTools
+)
 
 // With is servers with the workspace's databases server in place of any
 // in-process one there (none when it has no database files). A server of

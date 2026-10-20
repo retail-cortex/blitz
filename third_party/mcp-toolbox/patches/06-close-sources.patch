@@ -1,0 +1,175 @@
+diff --git a/internal/server/primitives/primitives.go b/internal/server/primitives/primitives.go
+index b40caa25..26da109f 100644
+--- a/internal/server/primitives/primitives.go
++++ b/internal/server/primitives/primitives.go
+@@ -70,6 +70,17 @@ func NewPrimitiveManager(
+ 	return primitiveMgr
+ }
+ 
++// CloseSources closes every source that holds connections (Blitz).
++func (r *PrimitiveManager) CloseSources() {
++	r.mu.RLock()
++	defer r.mu.RUnlock()
++	for _, s := range r.sources {
++		if c, ok := s.(interface{ Close() error }); ok {
++			_ = c.Close()
++		}
++	}
++}
++
+ func (r *PrimitiveManager) GetSource(sourceName string) (sources.Source, bool) {
+ 	r.mu.RLock()
+ 	defer r.mu.RUnlock()
+diff --git a/internal/server/server.go b/internal/server/server.go
+index da26380c..a4086073 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -855,6 +855,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
+ 	return s.srv.Shutdown(ctx)
+ }
+ 
++// Close closes the server's sources: their connection pools (Blitz).
++func (s *Server) Close() {
++	if s.PrimitiveMgr != nil {
++		s.PrimitiveMgr.CloseSources()
++	}
++}
++
+ func (s *Server) Addr() string {
+ 	return s.listener.Addr().String()
+ }
+diff --git a/internal/sources/alloydbpg/alloydb_pg.go b/internal/sources/alloydbpg/alloydb_pg.go
+index 418b7b65..d5e18db2 100644
+--- a/internal/sources/alloydbpg/alloydb_pg.go
++++ b/internal/sources/alloydbpg/alloydb_pg.go
+@@ -100,6 +100,14 @@ type Source struct {
+ 	Pool *pgxpool.Pool
+ }
+ 
++// Close closes the connection pool (Blitz: Toolbox never did).
++func (s *Source) Close() error {
++	if s.Pool != nil {
++		s.Pool.Close()
++	}
++	return nil
++}
++
+ func (s *Source) IsReadOnly() bool {
+ 	return s.ReadOnly
+ }
+diff --git a/internal/sources/bigquery/bigquery.go b/internal/sources/bigquery/bigquery.go
+index 75da846b..98a0540a 100644
+--- a/internal/sources/bigquery/bigquery.go
++++ b/internal/sources/bigquery/bigquery.go
+@@ -344,6 +344,18 @@ func (s *Source) IsReadOnly() bool {
+ 	return s.WriteMode == WriteModeBlocked || s.WriteMode == WriteModeProtected
+ }
+ 
++// Close closes the client and the cached ones, and stops the caches
++// (Blitz: Toolbox never did).
++func (s *Source) Close() error {
++	s.bqClientCache.Close()
++	s.bqRestCache.Close()
++	s.dataplexCache.Close()
++	if s.Client != nil {
++		return s.Client.Close()
++	}
++	return nil
++}
++
+ func (s *Source) SourceType() string {
+ 	// Returns BigQuery Google SQL source type
+ 	return SourceType
+diff --git a/internal/sources/cache.go b/internal/sources/cache.go
+index 80e6a2f8..abb35c16 100644
+--- a/internal/sources/cache.go
++++ b/internal/sources/cache.go
+@@ -37,6 +37,8 @@ type Cache struct {
+ 	mu      sync.RWMutex
+ 	items   map[string]Item
+ 	onEvict OnEvictFunc
++	done    chan struct{}
++	once    sync.Once
+ }
+ 
+ // NewCache creates a new cache and cleans up every 55 min
+@@ -46,6 +48,7 @@ func NewCache(onEvict OnEvictFunc) *Cache {
+ 	c := &Cache{
+ 		items:   make(map[string]Item),
+ 		onEvict: onEvict,
++		done:    make(chan struct{}),
+ 	}
+ 
+ 	go c.startCleanup(cleanupInterval)
+@@ -57,11 +60,31 @@ func (c *Cache) startCleanup(interval time.Duration) {
+ 	ticker := time.NewTicker(interval)
+ 	defer ticker.Stop()
+ 
+-	for range ticker.C {
+-		c.DeleteExpired()
++	for {
++		select {
++		case <-ticker.C:
++			c.DeleteExpired()
++		case <-c.done:
++			return
++		}
+ 	}
+ }
+ 
++// Close stops the cleanup and evicts every item (Blitz).
++func (c *Cache) Close() {
++	if c == nil {
++		return
++	}
++	c.once.Do(func() {
++		close(c.done)
++		c.mu.Lock()
++		defer c.mu.Unlock()
++		for k, it := range c.items {
++			c.delete(k, it)
++		}
++	})
++}
++
+ // delete is an internal helper that assumes the write lock is held
+ func (c *Cache) delete(key string, item Item) {
+ 	if c.onEvict != nil {
+diff --git a/internal/sources/postgres/postgres.go b/internal/sources/postgres/postgres.go
+index c220d3e0..e556e3bd 100644
+--- a/internal/sources/postgres/postgres.go
++++ b/internal/sources/postgres/postgres.go
+@@ -108,6 +108,14 @@ type Source struct {
+ 	Pool *pgxpool.Pool
+ }
+ 
++// Close closes the connection pool (Blitz: Toolbox never did).
++func (s *Source) Close() error {
++	if s.Pool != nil {
++		s.Pool.Close()
++	}
++	return nil
++}
++
+ func (s *Source) IsReadOnly() bool {
+ 	return s.ReadOnly
+ }
+diff --git a/internal/sources/sqlite/sqlite.go b/internal/sources/sqlite/sqlite.go
+index 2950ed09..eadd7f81 100644
+--- a/internal/sources/sqlite/sqlite.go
++++ b/internal/sources/sqlite/sqlite.go
+@@ -105,6 +105,14 @@ type Source struct {
+ 	Db *sql.DB
+ }
+ 
++// Close closes the database (Blitz: Toolbox never did).
++func (s *Source) Close() error {
++	if s.Db == nil {
++		return nil
++	}
++	return s.Db.Close()
++}
++
+ func (s *Source) IsReadOnly() bool {
+ 	return s.ReadOnly
+ }
