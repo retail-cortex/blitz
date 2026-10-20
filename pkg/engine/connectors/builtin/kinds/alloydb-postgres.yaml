@@ -1,0 +1,174 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+id: alloydb-postgres
+category: databases
+name:
+  en: "AlloyDB"
+  es: "AlloyDB"
+  fr-CA: "AlloyDB"
+hint:
+  en: "AlloyDB for PostgreSQL on Google Cloud, through its connector. Signs in with your Google credentials (gcloud auth application-default login) unless you give a user and password."
+  es: "AlloyDB para PostgreSQL en Google Cloud, mediante su conector. Inicia sesión con tus credenciales de Google (gcloud auth application-default login) salvo que des usuario y contraseña."
+  fr-CA: "AlloyDB pour PostgreSQL sur Google Cloud, par son connecteur. Se connecte avec vos identifiants Google (gcloud auth application-default login) à moins de donner un utilisateur et un mot de passe."
+backend: toolbox
+source: alloydb-postgres
+capabilities: [test, try, queries, schema, query-builder]
+fields:
+  - key: project
+    required: true
+    label:
+      en: "Project"
+      es: "Proyecto"
+      fr-CA: "Projet"
+    help:
+      en: "The Google Cloud project"
+      es: "El proyecto de Google Cloud"
+      fr-CA: "Le projet Google Cloud"
+  - key: region
+    required: true
+    label:
+      en: "Region"
+      es: "Región"
+      fr-CA: "Région"
+    help:
+      en: "us-central1, for example"
+      es: "us-central1, por ejemplo"
+      fr-CA: "us-central1, par exemple"
+  - key: cluster
+    required: true
+    label:
+      en: "Cluster"
+      es: "Clúster"
+      fr-CA: "Grappe"
+    help:
+      en: "The AlloyDB cluster"
+      es: "El clúster de AlloyDB"
+      fr-CA: "La grappe AlloyDB"
+  - key: instance
+    required: true
+    label:
+      en: "Instance"
+      es: "Instancia"
+      fr-CA: "Instance"
+    help:
+      en: "The instance in it"
+      es: "La instancia dentro de él"
+      fr-CA: "L'instance qu'elle contient"
+  - key: ipType
+    default: "public"
+    label:
+      en: "IP type"
+      es: "Tipo de IP"
+      fr-CA: "Type d'IP"
+    help:
+      en: "public or private"
+      es: "public o private"
+      fr-CA: "public ou private"
+  - key: database
+    required: true
+    label:
+      en: "Database"
+      es: "Base de datos"
+      fr-CA: "Base de données"
+    help:
+      en: "Its name (for SQLite, the file's path)"
+      es: "Su nombre (en SQLite, la ruta del archivo)"
+      fr-CA: "Son nom (pour SQLite, le chemin du fichier)"
+  - key: user
+    label:
+      en: "User"
+      es: "Usuario"
+      fr-CA: "Utilisateur"
+    help:
+      en: "A user that can only read is safest"
+      es: "Lo más seguro es un usuario que solo pueda leer"
+      fr-CA: "Un utilisateur qui ne peut que lire est le plus sûr"
+  - key: password
+    type: secret
+    label:
+      en: "Password"
+      es: "Contraseña"
+      fr-CA: "Mot de passe"
+readOnly:
+  key: readOnly
+  value: true
+  hint:
+    en: "Every session is read-only: AlloyDB refuses any write, whatever the SQL. Tools that write aren't offered."
+    es: "Cada sesión es de solo lectura: AlloyDB rechaza cualquier escritura, sea cual sea el SQL. No se ofrecen herramientas que escriben."
+    fr-CA: "Chaque session est en lecture seule : AlloyDB refuse toute écriture, quel que soit le SQL. Les outils qui écrivent ne sont pas offerts."
+tools:
+  - id: execute_sql
+    type: postgres-execute-sql
+    on: true
+    agent: "Run a SQL statement on {connection}."
+    about:
+      en: "Runs any SQL the agent writes"
+      es: "Ejecuta cualquier SQL que escriba el agente"
+      fr-CA: "Exécute tout SQL écrit par l'agent"
+  - id: list_tables
+    type: postgres-list-tables
+    on: true
+    agent: "List the tables in {connection}, with their columns."
+    about:
+      en: "Lists the tables and their columns"
+      es: "Lista las tablas y sus columnas"
+      fr-CA: "Liste les tables et leurs colonnes"
+  - id: list_schemas
+    type: postgres-list-schemas
+    agent: "List the schemas in {connection}."
+    about:
+      en: "Lists the schemas"
+      es: "Lista los esquemas"
+      fr-CA: "Liste les schémas"
+  - id: list_views
+    type: postgres-list-views
+    agent: "List the views in {connection}."
+    about:
+      en: "Lists the views"
+      es: "Lista las vistas"
+      fr-CA: "Liste les vues"
+  - id: list_indexes
+    type: postgres-list-indexes
+    agent: "List the indexes in {connection}."
+    about:
+      en: "Lists the indexes"
+      es: "Lista los índices"
+      fr-CA: "Liste les index"
+  - id: database_overview
+    type: postgres-database-overview
+    agent: "An overview of {connection}: its version, size and connections."
+    about:
+      en: "Its version, size and connections"
+      es: "Su versión, tamaño y conexiones"
+      fr-CA: "Sa version, sa taille et ses connexions"
+queries:
+  type: postgres-sql
+  dialect: "PostgreSQL (AlloyDB)"
+  placeholders: "$1"
+  example: "SELECT name, total FROM orders WHERE customer = $1"
+  hint:
+    en: "SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."
+    es: "SQL que escribes una vez, con parámetros ($1, $2…), ofrecido como herramienta propia. Más seguro que dejar que el agente escriba SQL."
+    fr-CA: "Du SQL écrit une fois, avec des paramètres ($1, $2…), offert comme outil à part entière. Plus sûr que de laisser l'agent écrire le SQL."
+schema:
+  statement: |
+    SELECT c.table_schema || '.' || c.table_name AS "table",
+      obj_description(format('%I.%I', c.table_schema, c.table_name)::regclass, 'pg_class') AS about,
+      string_agg(c.column_name || ' ' || c.data_type, ', ' ORDER BY c.ordinal_position) AS columns
+    FROM information_schema.columns c
+    WHERE c.table_schema NOT IN ('pg_catalog', 'information_schema') AND c.table_schema NOT LIKE 'pg_toast%'
+    GROUP BY c.table_schema, c.table_name
+    ORDER BY 1
+    LIMIT 500

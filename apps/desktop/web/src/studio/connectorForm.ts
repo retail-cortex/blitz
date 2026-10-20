@@ -14,23 +14,27 @@
  * limitations under the License.
  */
 
-// Studio's database form (spec_databases_046): a connection as the form
-// holds it, from and to the API. A password is typed into secretValues
-// and saved as a Blitz secret; the form never holds a kept one.
+// Studio's connector form (spec_connectors_047): a connection as the
+// form holds it, from and to the API, drawn from its kind's descriptor. A
+// password is typed into secretValues and saved as a Blitz secret; the
+// form never holds a kept one.
 
-import type { DatabaseConnection, DatabaseKind } from "../gen/blitz/v1/workspace_pb";
+import type { Connector, ConnectorKind, ConnectorQuery } from "../gen/blitz/v1/workspace_pb";
 
-/** Where a connection is: this workspace's .agents/databases, or every workspace's. */
-export type DatabaseScope = "workspace" | "global";
+/** Where a connection is: this workspace's .agents/connectors, or every workspace's. */
+export type ConnectorScope = "workspace" | "global";
 
-/** A custom query's parameter as the form holds it. */
+/** A capability a kind of connector has (spec_connectors_047). */
+export type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
+
+/** A query's parameter as the form holds it. */
 export interface ParamForm {
   name: string;
   type: string;
   description: string;
 }
 
-/** A custom query as the form holds it. */
+/** A query as the form holds it. */
 export interface QueryForm {
   name: string;
   description: string;
@@ -39,10 +43,11 @@ export interface QueryForm {
 }
 
 /** What the form holds. */
-export interface DatabaseForm {
+export interface ConnectorForm {
   name: string;
-  scope: DatabaseScope;
-  type: string;
+  category: string;
+  scope: ConnectorScope;
+  kind: string;
   description: string;
   /** The kind's settings, but the secret ones. */
   settings: Record<string, string>;
@@ -53,7 +58,7 @@ export interface DatabaseForm {
   readOnly: boolean;
   tools: string[];
   queries: QueryForm[];
-  /** More than the form describes: its YAML is edited. */
+  /** More than the form describes: its text is edited. */
   custom: boolean;
   text: string;
 }
@@ -61,40 +66,71 @@ export interface DatabaseForm {
 /** The parameter types a query takes. */
 export const paramTypes = ["string", "integer", "float", "boolean"];
 
-/** A new connection's form for kind: read-only, its usual tools on. */
-export function newDatabaseForm(kind: DatabaseKind | undefined, scope: DatabaseScope = "workspace"): DatabaseForm {
-  return { name: "", scope, type: kind?.type ?? "postgres", description: "", settings: {}, secretsSet: [], secretValues: {}, readOnly: true, tools: (kind?.tools ?? []).filter((t) => t.on).map((t) => t.id), queries: [], custom: false, text: "" };
+/** A descriptor's text in lang (es, fr-CA, then fr), else English. */
+export function textIn(text: Record<string, string> | undefined, lang: string): string {
+  if (!text) return "";
+  return text[lang] ?? text[lang.split("-")[0]] ?? text.en ?? "";
+}
+
+/** Whether kind has capability c. */
+export function can(kind: ConnectorKind | undefined, c: Capability): boolean {
+  return !!kind && kind.capabilities.includes(c);
+}
+
+/** A new connection's form for kind in category: read-only when it can be, its usual tools on. */
+export function newConnectorForm(category: string, kind: ConnectorKind | undefined, scope: ConnectorScope = "workspace"): ConnectorForm {
+  return {
+    name: "",
+    category,
+    scope,
+    kind: kind?.id ?? "",
+    description: "",
+    settings: {},
+    secretsSet: [],
+    secretValues: {},
+    readOnly: kind?.canReadOnly ?? false,
+    tools: (kind?.tools ?? []).filter((t) => t.on).map((t) => t.id),
+    queries: [],
+    custom: false,
+    text: "",
+  };
 }
 
 /** The form switched to another kind: the settings it shares kept, its usual tools on. */
-export function withKind(f: DatabaseForm, kind: DatabaseKind): DatabaseForm {
-  const keys = new Set(kind.fields.filter((x) => !x.secret).map((x) => x.key));
+export function withKind(f: ConnectorForm, kind: ConnectorKind): ConnectorForm {
+  const keys = new Set(kind.fields.filter((x) => x.type !== "secret").map((x) => x.key));
   const settings = Object.fromEntries(Object.entries(f.settings).filter(([k]) => keys.has(k)));
-  return { ...f, type: kind.type, settings, secretValues: {}, tools: kind.tools.filter((t) => t.on).map((t) => t.id) };
+  return { ...f, kind: kind.id, settings, secretValues: {}, readOnly: kind.canReadOnly && f.readOnly, tools: kind.tools.filter((t) => t.on).map((t) => t.id), queries: can(kind, "queries") ? f.queries : [] };
+}
+
+/** A query from the API as the form holds it. */
+export function queryForm(q: ConnectorQuery): QueryForm {
+  return { name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ name: p.name, type: p.type, description: p.description })) };
 }
 
 /** A connection from the API as the form holds it. */
-export function formFromConnection(c: DatabaseConnection, kind: DatabaseKind | undefined): DatabaseForm {
-  const secret = new Set(kind?.fields.filter((x) => x.secret).map((x) => x.key));
+export function formFromConnection(c: Connector, kind: ConnectorKind | undefined): ConnectorForm {
+  const secret = new Set(kind?.fields.filter((x) => x.type === "secret").map((x) => x.key));
   const settings = Object.fromEntries(Object.entries(c.settings).filter(([k]) => !secret.has(k)));
   return {
     name: c.name,
+    category: c.category,
     scope: c.scope === "global" ? "global" : "workspace",
-    type: c.type,
+    kind: c.kind,
     description: c.description,
     settings,
     secretsSet: [...c.secretsSet],
     secretValues: {},
     readOnly: c.readOnly,
     tools: [...c.tools],
-    queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ name: p.name, type: p.type, description: p.description })) })),
+    queries: c.queries.map(queryForm),
     custom: c.custom,
     text: c.text,
   };
 }
 
 /** The form as the API takes it: the connection, and the secret values typed. */
-export function connectionFromForm(f: DatabaseForm) {
+export function connectionFromForm(f: ConnectorForm) {
   const settings = Object.fromEntries(
     Object.entries(f.settings)
       .map(([k, v]) => [k, v.trim()])
@@ -104,8 +140,9 @@ export function connectionFromForm(f: DatabaseForm) {
   return {
     connection: {
       name: f.name.trim(),
+      category: f.category,
       scope: f.scope,
-      type: f.type,
+      kind: f.kind,
       description: f.description.trim(),
       settings,
       readOnly: f.readOnly,
@@ -119,7 +156,7 @@ export function connectionFromForm(f: DatabaseForm) {
 }
 
 /** Whether two forms hold the same connection. */
-export function sameDatabaseForm(a: DatabaseForm, b: DatabaseForm): boolean {
+export function sameConnectorForm(a: ConnectorForm, b: ConnectorForm): boolean {
   return JSON.stringify(connectionFromForm(a)) === JSON.stringify(connectionFromForm(b));
 }
 

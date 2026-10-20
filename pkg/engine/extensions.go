@@ -23,7 +23,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 
-	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -189,12 +188,12 @@ func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
 	return w.applyMCP(ctx, cfg.MCP)
 }
 
-// applyMCP puts m's servers, with their secrets and the databases server,
+// applyMCP puts m's servers, with their secrets and the connector servers,
 // in place of the running ones (one at a time: the settings watch and the
 // service both reload).
 func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
 	w.mcpMu.Lock()
-	servers := databases.With(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
+	servers := w.withConnectors(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
 	changed, err := w.tools.MCP().Update(servers)
 	if err != nil {
 		w.mcpMu.Unlock()
@@ -214,13 +213,6 @@ func (w *Workspace) mcpConfig() config.MCPConfig {
 	w.mcpMu.RLock()
 	defer w.mcpMu.RUnlock()
 	return w.cfg.MCP
-}
-
-// ReloadDatabases serves the database files as they are now
-// (spec_databases_046): the databases server starts, restarts with the
-// changed files or secrets, or stops when there are none.
-func (w *Workspace) ReloadDatabases(ctx context.Context) error {
-	return w.applyMCP(ctx, w.mcpConfig())
 }
 
 // RestartMCPServer stops the MCP server named name and starts it afresh

@@ -12,81 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package databases gives a workspace's agents its databases
-// (spec_databases_046): MCP Toolbox for Databases, run inside Blitz's
-// process (third_party/mcp-toolbox/embed), serving the tools the
-// database files describe as one MCP server, "databases", its tools
-// named db__<tool>.
+// Package databases is the connectors' toolbox backend
+// (spec_databases_046, spec_connectors_047): MCP Toolbox for Databases,
+// run inside Blitz's process (third_party/mcp-toolbox/embed), serving a
+// category's connection files (Toolbox YAML: sources, tools, toolsets)
+// as one MCP server, its tools named <prefix>__<tool> (db__shop_list_tables).
 //
-// The files are Toolbox's YAML (sources, tools, toolsets), the global
-// ones in <config>/databases and the workspace's in .agents/databases,
-// merged. A ${NAME} in them is the Blitz secret NAME, the workspace's
-// own, else the global one; never an environment variable.
+// A ${NAME} in a file is the Blitz secret NAME, the workspace's own, else
+// the global one; never an environment variable. A workspace's own files
+// reach the global secrets, and their read-only tools run unasked, only
+// once its project settings are trusted.
 package databases
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/embed"
 )
 
-const (
-	// Server is the MCP server's name, in /mcp and mcp(databases:…) rules.
-	Server = "databases"
-	// Prefix namespaces its tools: db__count_orders.
-	Prefix = "db"
-	// Folder is the database files' folder, in the config folder and in a
-	// workspace's .agents.
-	Folder = "databases"
-)
+// ID is the backend's ID, which kinds name, and its in-process server's.
+const ID = "toolbox"
 
-func init() { tools.RegisterInProcess(Server, Transport) }
+// Backend is the toolbox backend.
+type Backend struct{}
 
-// GlobalDir is where the global database files are.
-func GlobalDir(prefixDir string) string {
-	return filepath.Join(config.ConfigDir(prefixDir), Folder)
+func init() {
+	connectors.Register(Backend{})
+	tools.RegisterInProcess(ID, Transport)
 }
 
-// WorkspaceDir is where a workspace's database files are.
-func WorkspaceDir(workspace string) string {
-	return filepath.Join(workspace, ".agents", Folder)
-}
+// ID is toolbox.
+func (Backend) ID() string { return ID }
 
-// Files are the database files for a workspace: the global ones, then
-// its own (empty workspace: the global ones only).
-func Files(prefixDir, workspace string) []string {
-	files := embed.Files(GlobalDir(prefixDir))
-	if workspace != "" {
-		files = append(files, embed.Files(WorkspaceDir(workspace))...)
-	}
-	return files
-}
-
-// Fingerprint changes when the files do (added, removed, changed).
-func Fingerprint(files []string) string {
-	h := sha256.New()
-	for _, f := range files {
-		fmt.Fprintf(h, "%s\x00", f)
-		if info, err := os.Stat(f); err == nil {
-			fmt.Fprintf(h, "%d\x00%d\x00", info.Size(), info.ModTime().UnixNano())
-		}
-	}
-	return hex.EncodeToString(h.Sum(nil))[:16]
-}
+// Capabilities are all of them: Toolbox connects, runs tools and queries,
+// and the kinds say how their schema is read.
+func (Backend) Capabilities() []connectors.Capability { return connectors.Capabilities }
 
 // placeholderRE is Toolbox's ${NAME} (or ${NAME:default}).
 var placeholderRE = regexp.MustCompile(`\$\{(\w+)(?::[^}]*)?\}`)
@@ -106,13 +78,14 @@ func Names(files []string) []string {
 	return slices.Sorted(maps.Keys(seen))
 }
 
-// Vars are the values of the files' ${NAME}s that lookup finds (a
-// secrets lookup, as secrets.Vault.Resolve gives). The values are
-// remembered for every redactor to mask.
-func Vars(files []string, lookup func(scope, key string) (string, bool)) map[string]string {
+// Vars are the values of the files' ${NAME}s that lookup finds (a secrets
+// lookup, as secrets.Vault.Resolve gives) in scope (secrets.AnyScope, or
+// secrets.OnlyWorkspace). The values are remembered for every redactor
+// to mask.
+func Vars(files []string, scope string, lookup func(scope, key string) (string, bool)) map[string]string {
 	vars := map[string]string{}
 	for _, n := range Names(files) {
-		if v, ok := lookup(secrets.AnyScope, n); ok {
+		if v, ok := lookup(scope, n); ok {
 			vars[n] = v
 			redact.Remember(v)
 		}
@@ -120,30 +93,41 @@ func Vars(files []string, lookup func(scope, key string) (string, bool)) map[str
 	return vars
 }
 
-// Config is the workspace's databases server, when it has database
-// files: in-process, its files in Args and their secrets in Env, offered
-// to every agent; its tools on read-only sources run without asking.
-func Config(prefixDir, workspace string) (config.MCPServerConfig, bool) {
-	files := Files(prefixDir, workspace)
+// Serve is the category's toolbox server, when it has files: in-process,
+// its files in Args and their secrets in Env, offered to every agent; its
+// tools on read-only sources run without asking. A workspace file the
+// person hasn't trusted gets only the workspace's own secrets, and its
+// tools all ask first.
+func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
+	files := append(slices.Clone(s.Global), s.Local...)
 	if len(files) == 0 {
-		return config.MCPServerConfig{}, false
+		return nil
 	}
-	vars := Vars(files, config.Vault(prefixDir).Resolve(config.SecretScope(prefixDir, workspace)))
+	lookup := config.Vault(s.PrefixDir).Resolve(config.SecretScope(s.PrefixDir, s.Workspace))
+	trusted, untrusted := s.Split()
+	vars := Vars(append(slices.Clone(s.Global), trusted...), secrets.AnyScope, lookup)
+	for k, v := range Vars(untrusted, secrets.OnlyWorkspace, lookup) {
+		if _, ok := vars[k]; !ok {
+			vars[k] = v
+		}
+	}
 	c := config.MCPServerConfig{
-		Name:        Server,
-		Prefix:      Prefix,
-		InProcess:   Server,
+		Name:        s.Category.Server,
+		Prefix:      s.Category.Prefix,
+		InProcess:   ID,
 		Args:        files,
 		Env:         vars,
 		Agents:      []string{"*"},
-		Fingerprint: Fingerprint(files),
+		Fingerprint: connectors.Fingerprint(files),
 	}
 	// A file that doesn't load still makes the server: listing its tools
 	// fails, saying why, in /mcp and Studio.
-	if cfg, err := loadConfig(context.Background(), files, vars); err == nil {
-		c.ReadOnlyTools = readOnlyTools(cfg)
+	if unasked := append(slices.Clone(s.Global), trusted...); len(unasked) > 0 {
+		if cfg, err := loadConfig(context.Background(), unasked, vars); err == nil {
+			c.ReadOnlyTools = readOnlyTools(cfg)
+		}
 	}
-	return c, true
+	return []config.MCPServerConfig{c}
 }
 
 var (
@@ -151,25 +135,11 @@ var (
 	readOnlyTools = embed.ReadOnlyTools
 )
 
-// With is servers with the workspace's databases server in place of any
-// in-process one there (none when it has no database files). A server of
-// the user's own named databases wins, and warn says so.
-func With(servers []config.MCPServerConfig, prefixDir, workspace string, warn func(string)) []config.MCPServerConfig {
-	out := slices.DeleteFunc(slices.Clone(servers), func(s config.MCPServerConfig) bool { return s.InProcess == Server })
-	c, ok := Config(prefixDir, workspace)
-	if !ok {
-		return out
-	}
-	if slices.ContainsFunc(out, func(s config.MCPServerConfig) bool { return s.Name == Server }) {
-		if warn != nil {
-			warn(fmt.Sprintf("an MCP server is named %q: the database files aren't served", Server))
-		}
-		return out
-	}
-	return append(out, c)
-}
+// ReadsOnly says whether a SQL statement only reads, as Toolbox's tools
+// are marked (a hint: a read-only connection is the guard).
+func ReadsOnly(statement string) bool { return embed.ReadsOnly(statement) }
 
-// Transport connects to a databases server c: each connection loads its
+// Transport connects to a toolbox server c: each connection loads its
 // files (Args) with their secrets (Env) and starts Toolbox, connecting to
 // the databases; closing the connection stops it.
 func Transport(c config.MCPServerConfig) mcp.Transport {

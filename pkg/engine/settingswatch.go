@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine/databases"
+	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 )
 
 // The engine keeps its permission rules in step with the files they come
@@ -34,7 +34,7 @@ import (
 // settingsPoll, and applies a change to the live rules, which every tool
 // call reads, so a turn already running obeys it from its next action.
 // Listeners (the service, for its clients) hear of it. A change to the
-// database files (spec_databases_046) restarts the databases server.
+// connector files (spec_connectors_047) restarts the connector servers.
 
 // settingsPoll is how often the settings files are looked at.
 var settingsPoll = 2 * time.Second
@@ -114,7 +114,7 @@ func (w *Workspace) watchSettings() *settingsWatch {
 	for _, f := range append(rules, approvals) {
 		seen[f] = stampOf(f)
 	}
-	dbSeen := databases.Fingerprint(databases.Files(w.cfg.Dir, w.Dir()))
+	connSeen := connectors.Fingerprint(connectors.AllFiles(w.cfg.Dir, w.Dir()))
 	go func() {
 		defer close(sw.done)
 		t := time.NewTicker(settingsPoll)
@@ -136,10 +136,10 @@ func (w *Workspace) watchSettings() *settingsWatch {
 					seen[approvals], approvalsChanged = s, true
 				}
 			}
-			if fp := databases.Fingerprint(databases.Files(w.cfg.Dir, w.Dir())); fp != dbSeen {
-				dbSeen = fp
-				if err := w.ReloadDatabases(context.Background()); err != nil {
-					w.warn("databases: " + err.Error())
+			if fp := connectors.Fingerprint(connectors.AllFiles(w.cfg.Dir, w.Dir())); fp != connSeen {
+				connSeen = fp
+				if err := w.ReloadConnectors(context.Background()); err != nil {
+					w.warn("connectors: " + err.Error())
 				}
 			}
 			if rulesChanged {

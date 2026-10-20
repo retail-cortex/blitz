@@ -1,0 +1,28 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+id: databases
+name:
+  en: "Databases"
+  es: "Bases de datos"
+  fr-CA: "Bases de données"
+hint:
+  en: "Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."
+  es: "Bases de datos que tus agentes pueden consultar, servidas dentro de Blitz por MCP Toolbox for Databases. De solo lectura salvo que digas lo contrario."
+  fr-CA: "Les bases de données que vos agents peuvent interroger, servies dans Blitz par MCP Toolbox for Databases. En lecture seule sauf avis contraire."
+icon: database
+server: databases
+prefix: db
+secretPrefix: DB
+backend: toolbox

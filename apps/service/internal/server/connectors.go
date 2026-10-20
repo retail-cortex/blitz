@@ -1,0 +1,234 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+
+	"connectrpc.com/connect"
+
+	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/connectors"
+	"github.com/retail-cortex/blitz/pkg/engine/databases"
+	"github.com/retail-cortex/blitz/pkg/redact"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+)
+
+// Studio's connectors (spec_connectors_047).
+
+// errNoConnector is the reason for a connection that isn't there.
+const errNoConnector = "CONNECTOR_NOT_FOUND"
+
+func queryMsg(q connectors.Query) *pb.ConnectorQuery {
+	m := &pb.ConnectorQuery{Name: q.Name, Description: q.Description, Statement: q.Statement, ReadsOnly: databases.ReadsOnly(q.Statement)}
+	for _, p := range q.Params {
+		m.Params = append(m.Params, &pb.ConnectorQueryParam{Name: p.Name, Type: p.Type, Description: p.Description})
+	}
+	return m
+}
+
+func connectorMsg(w *engine.Workspace, cat connectors.Catalog, c connectors.Connection) *pb.Connector {
+	m := &pb.Connector{
+		Name: c.Name, Category: c.Category, Scope: c.Scope, Path: c.Path, Kind: c.Kind, Description: c.Description, Settings: c.Settings,
+		ReadOnly: c.ReadOnly, Tools: c.Tools, Custom: c.Custom, Text: c.Text, Problem: c.Problem, Trusted: c.Trusted,
+	}
+	for _, q := range c.Queries {
+		m.Queries = append(m.Queries, queryMsg(q))
+	}
+	if kind, ok := cat.Kind(c.Kind); ok && !c.Custom {
+		for _, f := range kind.Fields {
+			if f.Secret() && w.HasConnectorSecret(c, f.Key) {
+				m.SecretsSet = append(m.SecretsSet, f.Key)
+			}
+		}
+	}
+	return m
+}
+
+func connectorOf(m *pb.Connector) connectors.Connection {
+	c := connectors.Connection{
+		Name: m.GetName(), Category: m.GetCategory(), Scope: m.GetScope(), Kind: m.GetKind(), Description: m.GetDescription(), Settings: m.GetSettings(),
+		ReadOnly: m.GetReadOnly(), Tools: m.GetTools(), Custom: m.GetCustom(), Text: m.GetText(),
+	}
+	for _, q := range m.GetQueries() {
+		dq := connectors.Query{Name: q.GetName(), Description: q.GetDescription(), Statement: q.GetStatement()}
+		for _, p := range q.GetParams() {
+			dq.Params = append(dq.Params, connectors.Param{Name: p.GetName(), Type: p.GetType(), Description: p.GetDescription()})
+		}
+		c.Queries = append(c.Queries, dq)
+	}
+	return c
+}
+
+func kindMsg(k connectors.Kind) *pb.ConnectorKind {
+	m := &pb.ConnectorKind{
+		Id: k.ID, Category: k.Category, Name: k.Name, Hint: k.Hint, Backend: k.Backend, CanReadOnly: k.ReadOnly != nil,
+		Origin: k.Origin, Path: k.Path, Problem: k.Problem,
+	}
+	for _, c := range k.Capabilities {
+		m.Capabilities = append(m.Capabilities, string(c))
+	}
+	for _, f := range k.Fields {
+		m.Fields = append(m.Fields, &pb.ConnectorField{Key: f.Key, Label: f.Label, Help: f.Help, Type: f.Type, Required: f.Required, DefaultValue: f.Default})
+	}
+	for _, t := range k.Tools {
+		m.Tools = append(m.Tools, &pb.ConnectorReadyTool{Id: t.ID, About: t.About, Writes: t.Writes, On: t.On})
+	}
+	if k.ReadOnly != nil {
+		m.ReadOnlyHint = k.ReadOnly.Hint
+	}
+	if q := k.Queries; q != nil {
+		m.QueriesHint, m.QueriesExample, m.Placeholders = q.Hint, q.Example, q.Placeholders
+	}
+	return m
+}
+
+func (h workspaceService) ListConnectors(ctx context.Context, r req[pb.ListConnectorsRequest]) (*connect.Response[pb.ListConnectorsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	prefix := w.Config().Dir
+	out := &pb.ListConnectorsResponse{WorkspaceDir: connectors.WorkspaceDir(w.Dir()), GlobalDir: connectors.GlobalDir(prefix)}
+	cat := w.ConnectorCatalog()
+	for _, c := range cat.Categories {
+		m := &pb.ConnectorCategory{
+			Id: c.ID, Name: c.Name, Hint: c.Hint, Icon: c.Icon, Server: c.Server, Prefix: c.Prefix,
+			WorkspaceDir: connectors.ConnectionDir(prefix, w.Dir(), connectors.ScopeWorkspace, c.ID),
+			GlobalDir:    connectors.ConnectionDir(prefix, w.Dir(), connectors.ScopeGlobal, c.ID),
+			Origin:       c.Origin, Path: c.Path, Problem: c.Problem,
+		}
+		if c.Problem == "" {
+			st := w.ConnectorState(c.ID)
+			m.State, m.Error, m.ToolCount = st.State, st.Error, int32(st.Tools)
+		}
+		out.Categories = append(out.Categories, m)
+	}
+	for _, k := range cat.Kinds {
+		out.Kinds = append(out.Kinds, kindMsg(k))
+	}
+	for _, c := range w.Connectors() {
+		out.Connections = append(out.Connections, connectorMsg(w.Workspace, cat, c))
+	}
+	return ok(out)
+}
+
+func (h workspaceService) SaveConnector(ctx context.Context, r req[pb.SaveConnectorRequest]) (*connect.Response[pb.SaveConnectorResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Connection == nil {
+		return nil, invalid(errors.New("connection is required"))
+	}
+	saved, problems, err := w.SaveConnector(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.PreviousName)
+	if errors.Is(err, connectors.ErrUnknown) {
+		return nil, apiError(connect.CodeNotFound, errNoConnector, err)
+	} else if err != nil {
+		return nil, err
+	}
+	if len(problems) > 0 {
+		return ok(&pb.SaveConnectorResponse{Problems: problems})
+	}
+	return ok(&pb.SaveConnectorResponse{Connection: connectorMsg(w.Workspace, w.ConnectorCatalog(), saved)})
+}
+
+func (h workspaceService) DeleteConnector(ctx context.Context, r req[pb.DeleteConnectorRequest]) (*connect.Response[pb.DeleteConnectorResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.DeleteConnector(ctx, r.Msg.Category, r.Msg.Scope, r.Msg.Name); errors.Is(err, connectors.ErrUnknown) {
+		return nil, apiError(connect.CodeNotFound, errNoConnector, err)
+	} else if err != nil {
+		return nil, err
+	}
+	return ok(&pb.DeleteConnectorResponse{})
+}
+
+func (h workspaceService) TestConnector(ctx context.Context, r req[pb.TestConnectorRequest]) (*connect.Response[pb.TestConnectorResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	tools, err := w.TestConnector(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
+	if err != nil {
+		return ok(&pb.TestConnectorResponse{Problem: redact.Mask(err.Error())})
+	}
+	out := &pb.TestConnectorResponse{}
+	for _, t := range tools {
+		out.Tools = append(out.Tools, &pb.ConnectorTool{Name: t.Name, Description: t.Description, ReadOnly: t.ReadOnly})
+	}
+	return ok(out)
+}
+
+func (h workspaceService) TryConnectorTool(ctx context.Context, r req[pb.TryConnectorToolRequest]) (*connect.Response[pb.TryConnectorToolResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	var args map[string]any
+	if r.Msg.ArgsJson != "" {
+		if err := json.Unmarshal([]byte(r.Msg.ArgsJson), &args); err != nil {
+			return ok(&pb.TryConnectorToolResponse{Problem: "the arguments aren't a JSON object: " + err.Error()})
+		}
+	}
+	out, isErr, err := w.TryConnectorTool(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Tool, args)
+	if err != nil {
+		return ok(&pb.TryConnectorToolResponse{Problem: redact.Mask(err.Error())})
+	}
+	return ok(&pb.TryConnectorToolResponse{Output: redact.Mask(out), IsError: isErr})
+}
+
+func (h workspaceService) ReadConnectorSchema(ctx context.Context, r req[pb.ReadConnectorSchemaRequest]) (*connect.Response[pb.ReadConnectorSchemaResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	tables, err := w.ReadConnectorSchema(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
+	if err != nil {
+		return ok(&pb.ReadConnectorSchemaResponse{Problem: redact.Mask(err.Error())})
+	}
+	out := &pb.ReadConnectorSchemaResponse{}
+	for _, t := range tables {
+		tm := &pb.ConnectorTable{Name: t.Name, About: t.About}
+		for _, c := range t.Columns {
+			tm.Columns = append(tm.Columns, &pb.ConnectorColumn{Name: c.Name, Type: c.Type, About: c.About})
+		}
+		out.Tables = append(out.Tables, tm)
+	}
+	return ok(out)
+}
+
+func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.DraftConnectorQueryRequest]) (*connect.Response[pb.DraftConnectorQueryResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Connection == nil {
+		return nil, invalid(errors.New("connection is required"))
+	}
+	d, err := w.DraftConnectorQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Request)
+	if err != nil { // no query builder, no request, no such category
+		return nil, invalid(err)
+	}
+	out := &pb.DraftConnectorQueryResponse{Notes: d.Notes, Tables: int32(d.Tables), Problem: d.Problem}
+	if d.Problem == "" {
+		out.Query = queryMsg(d.Query)
+	}
+	return ok(out)
+}

@@ -1088,7 +1088,7 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .db-param { display: grid; grid-template-columns: minmax(110px, 1fr) auto minmax(140px, 2fr) minmax(110px, 1fr) auto; gap: 8px; align-items: center; }
 .db-param > * { min-width: 0; }
 @media (max-width: 900px) { .db-param { grid-template-columns: 1fr 1fr; } }
-.databases-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
+.connectors-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
 .db-result { max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; font-family: var(--md-mono); font-size: 12px; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }

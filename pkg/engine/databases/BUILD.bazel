@@ -19,12 +19,22 @@ go_library(
     srcs = [
         "connection.go",
         "databases.go",
-        "store.go",
+        "session.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/databases",
-    visibility = ["//visibility:public"],
+    visibility = [
+        # The engine, the service, and the CLI's --local mode; the other
+        # three only in tests (//tools:check_deps checks libraries).
+        "//apps/cli:__pkg__",
+        "//apps/cli/internal/tui:__pkg__",
+        "//apps/service:__subpackages__",
+        "//pkg/client:__pkg__",
+        "//pkg/engine:__subpackages__",
+        "//pkg/pageserver:__pkg__",
+    ],
     deps = [
         "//pkg/config",
+        "//pkg/engine/connectors",
         "//pkg/engine/tools",
         "//pkg/redact",
         "//pkg/secrets",
@@ -43,6 +53,7 @@ go_test(
     embed = [":databases"],
     deps = [
         "//pkg/config",
+        "//pkg/engine/connectors",
         "//pkg/secrets",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_stretchr_testify//assert",

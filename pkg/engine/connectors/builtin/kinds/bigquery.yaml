@@ -1,0 +1,125 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+id: bigquery
+category: databases
+name:
+  en: "BigQuery"
+  es: "BigQuery"
+  fr-CA: "BigQuery"
+hint:
+  en: "BigQuery on Google Cloud. Signs in with your Google credentials (gcloud auth application-default login)."
+  es: "BigQuery en Google Cloud. Inicia sesión con tus credenciales de Google (gcloud auth application-default login)."
+  fr-CA: "BigQuery sur Google Cloud. Se connecte avec vos identifiants Google (gcloud auth application-default login)."
+backend: toolbox
+source: bigquery
+capabilities: [test, try, queries, schema, query-builder]
+fields:
+  - key: project
+    required: true
+    label:
+      en: "Project"
+      es: "Proyecto"
+      fr-CA: "Projet"
+    help:
+      en: "The Google Cloud project"
+      es: "El proyecto de Google Cloud"
+      fr-CA: "Le projet Google Cloud"
+  - key: location
+    label:
+      en: "Location"
+      es: "Ubicación"
+      fr-CA: "Emplacement"
+    help:
+      en: "US, EU, or a region (optional)"
+      es: "US, EU o una región (opcional)"
+      fr-CA: "US, EU ou une région (facultatif)"
+  - key: allowedDatasets
+    type: list
+    label:
+      en: "Datasets"
+      es: "Conjuntos de datos"
+      fr-CA: "Ensembles de données"
+    help:
+      en: "Only these, comma-separated (empty: every one)"
+      es: "Solo estos, separados por comas (vacío: todos)"
+      fr-CA: "Seulement ceux-ci, séparés par des virgules (vide : tous)"
+  - key: maximumBytesBilled
+    type: number
+    label:
+      en: "Most bytes billed"
+      es: "Máximo de bytes facturados"
+      fr-CA: "Octets facturés au maximum"
+    help:
+      en: "A query that would bill more fails (empty: no limit)"
+      es: "Una consulta que facturaría más falla (vacío: sin límite)"
+      fr-CA: "Une requête qui facturerait plus échoue (vide : aucune limite)"
+readOnly:
+  key: writeMode
+  value: blocked
+  hint:
+    en: "Writes are blocked: only queries that read run. Tools that write aren't offered."
+    es: "Las escrituras están bloqueadas: solo se ejecutan consultas que leen. No se ofrecen herramientas que escriben."
+    fr-CA: "Les écritures sont bloquées : seules les requêtes qui lisent s'exécutent. Les outils qui écrivent ne sont pas offerts."
+tools:
+  - id: execute_sql
+    type: bigquery-execute-sql
+    on: true
+    agent: "Run a SQL statement on {connection}."
+    about:
+      en: "Runs any SQL the agent writes"
+      es: "Ejecuta cualquier SQL que escriba el agente"
+      fr-CA: "Exécute tout SQL écrit par l'agent"
+  - id: list_datasets
+    type: bigquery-list-dataset-ids
+    on: true
+    agent: "List the datasets in {connection}."
+    about:
+      en: "Lists the datasets"
+      es: "Lista los conjuntos de datos"
+      fr-CA: "Liste les ensembles de données"
+  - id: list_tables
+    type: bigquery-list-table-ids
+    on: true
+    agent: "List the tables in {connection}, with their columns."
+    about:
+      en: "Lists the tables and their columns"
+      es: "Lista las tablas y sus columnas"
+      fr-CA: "Liste les tables et leurs colonnes"
+  - id: table_info
+    type: bigquery-get-table-info
+    on: true
+    agent: "A table's schema and details in {connection}."
+    about:
+      en: "A table's schema and details"
+      es: "El esquema y los detalles de una tabla"
+      fr-CA: "Le schéma et les détails d'une table"
+  - id: dataset_info
+    type: bigquery-get-dataset-info
+    agent: "A dataset's details in {connection}."
+    about:
+      en: "A dataset's details"
+      es: "Los detalles de un conjunto de datos"
+      fr-CA: "Les détails d'un ensemble de données"
+queries:
+  type: bigquery-sql
+  dialect: "GoogleSQL (BigQuery); name tables dataset.table"
+  placeholders: "@name"
+  example: "SELECT sku, SUM(qty) AS sold FROM sales.orders WHERE day = @day GROUP BY sku"
+  hint:
+    en: "SQL you write once, with parameters (@name), offered as tools of their own. Safer than letting the agent write SQL."
+    es: "SQL que escribes una vez, con parámetros (@nombre), ofrecido como herramienta propia. Más seguro que dejar que el agente escriba SQL."
+    fr-CA: "Du SQL écrit une fois, avec des paramètres (@nom), offert comme outil à part entière. Plus sûr que de laisser l'agent écrire le SQL."
+schema:
+  reader: bigquery

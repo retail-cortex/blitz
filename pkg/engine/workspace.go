@@ -34,7 +34,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
-	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
@@ -267,7 +266,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 	w.loadPlugins(cfg, o.Warn)
 
-	cfg.MCP.Servers = databases.With(mcpWithSecrets(cfg.MCP.Servers, dir), cfg.Dir, dir, o.Warn)
+	cfg.MCP.Servers = w.withConnectors(mcpWithSecrets(cfg.MCP.Servers, dir), cfg.Dir, dir, o.Warn)
 	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}

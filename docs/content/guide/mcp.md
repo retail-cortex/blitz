@@ -7,7 +7,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) lets the agent use
 
 Spec: [MCP](../about/specs/spec_mcp_009.md).
 
-For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has one built in, set up in Studio. See [Databases](databases.md).
+For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has one built in, set up in **Studio › Connectors**. See [Databases](databases.md) and [Connectors](connectors.md).
 
 ## Add a server
 

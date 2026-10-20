@@ -20,7 +20,8 @@ So "workspace settings" are yours and private; "project settings" travel with th
 | [Models](models.md) | Retries, fallback models, per-agent models, per-model settings, cost |
 | [Agents and tools](agents.md) | Using and switching agents, agency, a model per agent, writing your own, delegation, the tools |
 | [MCP servers](mcp.md) | Adding a server's tools, its approvals, prompts and resources, and what to do when one misbehaves |
-| [Databases](databases.md) | PostgreSQL, AlloyDB, SQLite (with vectors) and BigQuery for your agents, read-only unless you say otherwise |
+| [Connectors](connectors.md) | The systems your agents reach, set up in Studio; add your own kinds with a YAML descriptor |
+| [Databases](databases.md) | PostgreSQL, AlloyDB, SQLite (with vectors) and BigQuery for your agents, read-only unless you say otherwise, with a query builder |
 | [Extending](extending.md) | Project memory, hooks, custom commands, plugins |
 | [Jobs](workers.md) | Prompts on a schedule, unattended, with only the permissions you give them |
 | [Workflows](workflows.md) | Steps run in order, each one's output the next one's input: `/name` in the chat, or built on a canvas |

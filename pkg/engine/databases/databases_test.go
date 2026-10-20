@@ -21,13 +21,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -48,7 +48,7 @@ func recipes(t *testing.T) string {
 	db, err := sql.Open("sqlite3", path)
 	require.NoError(t, err)
 	defer db.Close()
-	_, err = db.Exec(`CREATE TABLE recipes(name TEXT); INSERT INTO recipes VALUES ('soup'), ('bread')`)
+	_, err = db.Exec(`CREATE TABLE recipes(name TEXT, minutes INTEGER); INSERT INTO recipes VALUES ('soup', 30), ('bread', 90)`)
 	require.NoError(t, err)
 	return path
 }
@@ -73,85 +73,69 @@ description: How many recipes there are
 statement: SELECT count(*) AS n FROM recipes
 `
 
-const scratch = `kind: source
-name: scratch
+const pantry = `kind: source
+name: pantry
 type: sqlite
-database: ${SCRATCH_DB:/tmp/none.db}
+database: ${PANTRY_DB}
+readOnly: true
 ---
 kind: tool
-name: scratch_sql
-type: sqlite-execute-sql
-source: scratch
-description: Run any SQL on the scratch database
+name: pantry_count
+type: sqlite-sql
+source: pantry
+description: How many there are
+statement: SELECT 1 AS n
 `
 
-// The global and the workspace's files make one server, their ${NAME}s
-// the workspace's secret, else the global one; tools on a read-only
-// source run unasked.
-func TestConfig(t *testing.T) {
+// The global and the workspace's files make one server: a global file's
+// ${NAME}s are the workspace's secret, else the global one, and its
+// read-only tools run unasked; so are a trusted workspace file's. An
+// untrusted one gets only the workspace's own secrets, and asks first.
+func TestServe(t *testing.T) {
 	ws := home(t)
-	_, ok := Config("", ws)
-	assert.False(t, ok, "no database files, no server")
-
-	write(t, filepath.Join(GlobalDir(""), "kitchen.yaml"), kitchen)
-	write(t, filepath.Join(WorkspaceDir(ws), "scratch.yml"), scratch)
-	write(t, filepath.Join(WorkspaceDir(ws), "notes.md"), "not a database file")
+	_, cat, _ := catalog(t)
+	global := filepath.Join(t.TempDir(), "kitchen.yaml")
+	local := filepath.Join(t.TempDir(), "pantry.yaml")
+	write(t, global, kitchen)
+	write(t, local, pantry)
 	v := config.Vault("")
-	require.NoError(t, v.Set(secrets.GlobalScope, "KITCHEN_DB", "/global/kitchen.db"))
-	require.NoError(t, v.Set(config.SecretScope("", ws), "KITCHEN_DB", recipes(t)))
+	require.NoError(t, v.Set(secrets.GlobalScope, "KITCHEN_DB", recipes(t)))
+	require.NoError(t, v.Set(secrets.GlobalScope, "PANTRY_DB", "/global/pantry.db"))
+	assert.Empty(t, Backend{}.Serve(connectors.Serving{Category: cat, Workspace: ws}), "no files, no server")
 
-	c, ok := Config("", ws)
-	require.True(t, ok)
-	assert.Equal(t, Server, c.Name)
-	assert.Equal(t, Server, c.InProcess)
-	assert.Equal(t, Prefix, c.Prefix)
+	serve := func(trusted bool) config.MCPServerConfig {
+		out := Backend{}.Serve(connectors.Serving{Category: cat, Workspace: ws, Global: []string{global}, Local: []string{local}, Trusted: func(string) bool { return trusted }})
+		require.Len(t, out, 1)
+		return out[0]
+	}
+	c := serve(false)
+	assert.Equal(t, "databases", c.Name)
+	assert.Equal(t, ID, c.InProcess)
+	assert.Equal(t, "db", c.Prefix)
 	assert.Equal(t, []string{"*"}, c.Agents)
-	assert.Equal(t, []string{filepath.Join(GlobalDir(""), "kitchen.yaml"), filepath.Join(WorkspaceDir(ws), "scratch.yml")}, c.Args)
-	assert.Equal(t, []string{"KITCHEN_DB", "SCRATCH_DB"}, Names(c.Args))
-	assert.NotEqual(t, "/global/kitchen.db", c.Env["KITCHEN_DB"], "the workspace's own first")
-	assert.NotContains(t, c.Env, "SCRATCH_DB", "no secret: its default")
-	assert.Equal(t, []string{"count_recipes"}, c.ReadOnlyTools)
+	assert.Equal(t, []string{global, local}, c.Args)
+	assert.Equal(t, []string{"KITCHEN_DB", "PANTRY_DB"}, Names(c.Args))
+	assert.NotContains(t, c.Env, "PANTRY_DB", "an untrusted file gets no global secret")
+	assert.Equal(t, []string{"count_recipes"}, c.ReadOnlyTools, "nor runs unasked")
 
-	g, ok := Config("", "")
-	require.True(t, ok, "the global files alone")
-	assert.Equal(t, "/global/kitchen.db", g.Env["KITCHEN_DB"])
+	require.NoError(t, v.Set(config.SecretScope("", ws), "PANTRY_DB", recipes(t)))
+	c = serve(false)
+	assert.Contains(t, c.Env, "PANTRY_DB", "the workspace's own secret")
 
-	before := c.Fingerprint
-	time.Sleep(10 * time.Millisecond)
-	write(t, filepath.Join(WorkspaceDir(ws), "scratch.yml"), scratch+"\n")
-	assert.NotEqual(t, before, Fingerprint(Files("", ws)), "a changed file")
-}
-
-// With puts the databases server in place of the old one; a server of the
-// user's named databases wins.
-func TestWith(t *testing.T) {
-	ws := home(t)
-	user := config.MCPServerConfig{Name: "github", Command: "gh"}
-	stale := config.MCPServerConfig{Name: Server, InProcess: Server, Fingerprint: "old"}
-	assert.Equal(t, []config.MCPServerConfig{user}, With([]config.MCPServerConfig{user, stale}, "", ws, nil), "no files: none")
-
-	write(t, filepath.Join(WorkspaceDir(ws), "scratch.yaml"), scratch)
-	out := With([]config.MCPServerConfig{user, stale}, "", ws, nil)
-	require.Len(t, out, 2)
-	assert.NotEqual(t, "old", out[1].Fingerprint)
-
-	mine := config.MCPServerConfig{Name: Server, Command: "my-db-server"}
-	var warned []string
-	out = With([]config.MCPServerConfig{mine}, "", ws, func(s string) { warned = append(warned, s) })
-	assert.Equal(t, []config.MCPServerConfig{mine}, out)
-	require.Len(t, warned, 1)
-	assert.Contains(t, warned[0], "named \"databases\"")
+	require.NoError(t, v.Delete(config.SecretScope("", ws), "PANTRY_DB"))
+	c = serve(true)
+	assert.Equal(t, "/global/pantry.db", c.Env["PANTRY_DB"], "trusted: the global one too")
+	assert.ElementsMatch(t, []string{"count_recipes", "pantry_count"}, c.ReadOnlyTools)
 }
 
 // The transport starts Toolbox in-process: its tools listed and called
 // over MCP; a database that can't be opened fails the connection; a
 // cancelled one gives up.
 func TestTransport(t *testing.T) {
-	ws := home(t)
-	write(t, filepath.Join(WorkspaceDir(ws), "kitchen.yaml"), kitchen)
-	require.NoError(t, config.Vault("").Set(config.SecretScope("", ws), "KITCHEN_DB", recipes(t)))
-	c, ok := Config("", ws)
-	require.True(t, ok)
+	home(t)
+	file := filepath.Join(t.TempDir(), "kitchen.yaml")
+	write(t, file, kitchen)
+	c := config.MCPServerConfig{Args: []string{file}, Env: map[string]string{"KITCHEN_DB": recipes(t)}}
 
 	ctx := context.Background()
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
@@ -179,4 +163,70 @@ func TestTransport(t *testing.T) {
 	if err != nil { // Start may win the race
 		assert.True(t, strings.Contains(err.Error(), "canceled"), err.Error())
 	}
+}
+
+// Test lists what a connection offers, as written; Try runs a tool;
+// ReadSchema reads its tables and columns, and finds none in an empty
+// file.
+func TestTestTryAndSchema(t *testing.T) {
+	ws := home(t)
+	_, cat, _ := catalog(t)
+	env := connectors.Env{Workspace: ws, Category: cat}
+	k := kindOf(t, "sqlite")
+	c := connectors.Connection{Name: "kitchen", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": recipes(t)}, ReadOnly: true, Tools: []string{"execute_sql", "list_tables"},
+		Queries: []connectors.Query{{Name: "count", Description: "How many recipes", Statement: "SELECT count(*) AS n FROM recipes"}}}
+	ctx := context.Background()
+	tools, err := Backend{}.Test(ctx, env, k, c)
+	require.NoError(t, err)
+	var names []string
+	for _, tl := range tools {
+		names = append(names, tl.Name)
+		assert.True(t, tl.ReadOnly, tl.Name)
+	}
+	assert.Equal(t, []string{"kitchen_count", "kitchen_list_tables"}, names, "execute_sql writes: hidden on a read-only one")
+
+	text, isErr, err := Backend{}.Try(ctx, env, k, c, "count", nil)
+	require.NoError(t, err)
+	assert.False(t, isErr)
+	assert.JSONEq(t, `{"n": 2}`, text)
+
+	tables, err := Backend{}.ReadSchema(ctx, env, k, c)
+	require.NoError(t, err)
+	require.Len(t, tables, 1)
+	assert.Equal(t, "recipes", tables[0].Name)
+	assert.Equal(t, []connectors.Column{{Name: "name", Type: "TEXT"}, {Name: "minutes", Type: "INTEGER"}}, tables[0].Columns)
+
+	empty := filepath.Join(t.TempDir(), "empty.db")
+	db, err := sql.Open("sqlite3", empty)
+	require.NoError(t, err)
+	_, err = db.Exec("PRAGMA user_version = 1")
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	c.Settings = map[string]string{"database": empty}
+	tables, err = Backend{}.ReadSchema(ctx, env, k, c)
+	require.NoError(t, err)
+	assert.Empty(t, tables)
+
+	c.Settings = map[string]string{"database": filepath.Join(t.TempDir(), "missing", "x.db")}
+	_, err = Backend{}.Test(ctx, env, k, c)
+	assert.Error(t, err)
+	_, err = Backend{}.ReadSchema(ctx, env, nil, c)
+	assert.Error(t, err, "no kind, no schema")
+
+	pg := connectors.Connection{Name: "shop", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "postgres", Settings: map[string]string{"host": "127.0.0.1", "port": "1", "database": "d", "user": "u", "password": "${DB_SHOP_PASSWORD}"}, Tools: []string{"execute_sql"}}
+	require.NoError(t, config.Vault("").Set(config.SecretScope("", ws), "DB_SHOP_PASSWORD", "kept-pass"))
+	env.Values = map[string]string{"password": "typed-pass"}
+	_, err = Backend{}.Test(ctx, env, kindOf(t, "postgres"), pg)
+	require.Error(t, err, "nothing listens on port 1")
+	assert.NotContains(t, err.Error(), "typed-pass")
+}
+
+// BigQuery's table metadata gives its description and columns.
+func TestTableInfo(t *testing.T) {
+	about, cols := tableInfo(`{"Description": "Orders", "Schema": [{"Name": "day", "Type": "DATE", "Description": "When"}, {"Name": "qty", "Type": "INTEGER"}]}`)
+	assert.Equal(t, "Orders", about)
+	assert.Equal(t, []connectors.Column{{Name: "day", Type: "DATE", About: "When"}, {Name: "qty", Type: "INTEGER"}}, cols)
+	about, cols = tableInfo("not json")
+	assert.Empty(t, about)
+	assert.Empty(t, cols)
 }

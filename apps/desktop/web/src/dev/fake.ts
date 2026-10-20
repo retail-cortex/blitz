@@ -695,22 +695,44 @@ const fakeGuards: FakeGuard[] = [
   { name: "no-branch-delete", builtin: "", stage: "action", action: "block", agents: [], tools: ["run_shell_command"], description: "Branches stay", pii: false, judge: false, off: false, text: "Deleting a git branch, locally or on the remote." },
 ];
 const fakeGuardFile = (workspace: string, g: FakeGuard) => ({ ...g, path: `${workspace}/.agents/guardrails/${g.name}.md`, problem: "", editable: true });
-// Studio's databases (spec_databases_046): a read-only Postgres with a
-// query of its own, a SQLite file, and BigQuery for every workspace.
-type FakeDatabase = { name: string; scope: string; type: string; description: string; settings: Record<string, string>; secretsSet: string[]; readOnly: boolean; tools: string[]; queries: { name: string; description: string; statement: string; params: { name: string; type: string; description: string }[] }[]; custom: boolean; text: string };
-const pgTools = [{ id: "execute_sql", on: true }, { id: "list_tables", on: true }, { id: "list_schemas" }, { id: "list_views" }, { id: "list_indexes" }, { id: "database_overview" }];
-const fakeDatabaseKinds = [
-  { type: "postgres", fields: [{ key: "host", required: true, defaultValue: "localhost" }, { key: "port", required: true, defaultValue: "5432" }, { key: "database", required: true }, { key: "user", required: true }, { key: "password", secret: true, required: true }], tools: pgTools },
-  { type: "alloydb-postgres", fields: [{ key: "project", required: true }, { key: "region", required: true }, { key: "cluster", required: true }, { key: "instance", required: true }, { key: "ipType", defaultValue: "public" }, { key: "database", required: true }, { key: "user" }, { key: "password", secret: true }], tools: pgTools },
-  { type: "sqlite", fields: [{ key: "database", required: true }], tools: [{ id: "execute_sql", writes: true, on: true }, { id: "list_tables", on: true }] },
-  { type: "bigquery", fields: [{ key: "project", required: true }, { key: "location" }, { key: "allowedDatasets" }, { key: "maximumBytesBilled" }], tools: [{ id: "execute_sql", on: true }, { id: "list_datasets", on: true }, { id: "list_tables", on: true }, { id: "table_info", on: true }, { id: "dataset_info" }] },
+// Studio's connectors (spec_connectors_047): the databases category and
+// its four kinds (English only: the real descriptors carry Spanish and
+// French); a read-only Postgres with a query of its own, a SQLite file
+// that came with the workspace (not trusted yet), and BigQuery for every
+// workspace.
+type FakeConnector = { name: string; category: string; scope: string; kind: string; description: string; settings: Record<string, string>; secretsSet: string[]; readOnly: boolean; tools: string[]; queries: { name: string; description: string; statement: string; params: { name: string; type: string; description: string }[] }[]; custom: boolean; text: string; trusted: boolean };
+const en = (s: string) => ({ en: s });
+const allCaps = ["test", "try", "queries", "schema", "query-builder"];
+const pgTools = [
+  { id: "execute_sql", on: true, about: en("Runs any SQL the agent writes") },
+  { id: "list_tables", on: true, about: en("Lists the tables and their columns") },
+  { id: "list_schemas", about: en("Lists the schemas") },
+  { id: "list_views", about: en("Lists the views") },
+  { id: "list_indexes", about: en("Lists the indexes") },
+  { id: "database_overview", about: en("Its version, size and connections") },
 ];
-const fakeDatabases: FakeDatabase[] = [
-  { name: "shop", scope: "workspace", type: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }], custom: false, text: "" },
-  { name: "notes", scope: "workspace", type: "sqlite", description: "Meeting notes, with embeddings", settings: { database: "data/notes.db" }, secretsSet: [], readOnly: false, tools: ["execute_sql", "list_tables"], queries: [], custom: false, text: "" },
-  { name: "sales", scope: "global", type: "bigquery", description: "Sales across every store", settings: { project: "acme-analytics", location: "US", maximumBytesBilled: "1000000000" }, secretsSet: [], readOnly: true, tools: ["execute_sql", "list_datasets", "list_tables", "table_info"], queries: [], custom: false, text: "" },
+const field = (key: string, label: string, help: string, more: Record<string, unknown> = {}) => ({ key, label: en(label), help: en(help), type: "text", ...more });
+const fakeConnectorKinds = [
+  { id: "alloydb-postgres", category: "databases", name: en("AlloyDB"), hint: en("AlloyDB for PostgreSQL on Google Cloud, through its connector. Signs in with your Google credentials (gcloud auth application-default login) unless you give a user and password."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: AlloyDB refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
+    fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("region", "Region", "us-central1, for example", { required: true }), field("cluster", "Cluster", "The AlloyDB cluster", { required: true }), field("instance", "Instance", "The instance in it", { required: true }), field("ipType", "IP type", "public or private", { defaultValue: "public" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest"), field("password", "Password", "", { type: "secret" })], tools: pgTools },
+  { id: "bigquery", category: "databases", name: en("BigQuery"), hint: en("BigQuery on Google Cloud. Signs in with your Google credentials (gcloud auth application-default login)."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Writes are blocked: only queries that read run. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (@name), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT sku, SUM(qty) AS sold FROM sales.orders WHERE day = @day GROUP BY sku", placeholders: "@name", origin: "builtin",
+    fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("location", "Location", "US, EU, or a region (optional)"), field("allowedDatasets", "Datasets", "Only these, comma-separated (empty: every one)", { type: "list" }), field("maximumBytesBilled", "Most bytes billed", "A query that would bill more fails (empty: no limit)", { type: "number" })],
+    tools: [{ id: "execute_sql", on: true, about: en("Runs any SQL the agent writes") }, { id: "list_datasets", on: true, about: en("Lists the datasets") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }, { id: "table_info", on: true, about: en("A table's schema and details") }, { id: "dataset_info", about: en("A dataset's details") }] },
+  { id: "postgres", category: "databases", name: en("PostgreSQL"), hint: en("Any PostgreSQL server, local or hosted."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: PostgreSQL refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
+    fields: [field("host", "Host", "localhost, or the server's address", { required: true, defaultValue: "localhost" }), field("port", "Port", "5432 unless it's another", { required: true, defaultValue: "5432" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest", { required: true }), field("password", "Password", "", { type: "secret", required: true })], tools: pgTools },
+  { id: "sqlite", category: "databases", name: en("SQLite"), hint: en("A SQLite file. sqlite-vec is built in: vec0 tables and nearest-neighbour queries work."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("The file is opened read-only: SQLite refuses any write. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (? or $1…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name FROM recipes WHERE cuisine = ?", placeholders: "$1", origin: "builtin",
+    fields: [field("database", "Database", "The file's path", { type: "path", required: true })], tools: [{ id: "execute_sql", writes: true, on: true, about: en("Runs any SQL the agent writes") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }] },
 ];
-const fakeDatabaseMsg = (workspace: string, d: FakeDatabase) => ({ ...d, path: d.scope === "global" ? `~/.blitz/databases/${d.name}.yaml` : `${workspace}/.agents/databases/${d.name}.yaml`, problem: "" });
+const fakeConnectors: FakeConnector[] = [
+  { name: "shop", category: "databases", scope: "workspace", kind: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }], custom: false, text: "", trusted: true },
+  { name: "notes", category: "databases", scope: "workspace", kind: "sqlite", description: "Meeting notes, with embeddings", settings: { database: "data/notes.db" }, secretsSet: [], readOnly: false, tools: ["execute_sql", "list_tables"], queries: [], custom: false, text: "", trusted: false },
+  { name: "sales", category: "databases", scope: "global", kind: "bigquery", description: "Sales across every store", settings: { project: "acme-analytics", location: "US", maximumBytesBilled: "1000000000" }, secretsSet: [], readOnly: true, tools: ["execute_sql", "list_datasets", "list_tables", "table_info"], queries: [], custom: false, text: "", trusted: true },
+];
+const fakeConnectorMsg = (workspace: string, d: FakeConnector) => ({ ...d, path: d.scope === "global" ? `~/.blitz/connectors/${d.category}/${d.name}.yaml` : `${workspace}/.agents/connectors/${d.category}/${d.name}.yaml`, problem: "" });
+const fakeTables = [
+  { name: "public.customers", about: "Everyone who ever ordered", columns: [{ name: "customer_id", type: "integer" }, { name: "name", type: "text" }, { name: "email", type: "text" }] },
+  { name: "public.orders", about: "", columns: [{ name: "order_id", type: "integer" }, { name: "customer_id", type: "integer" }, { name: "total", type: "numeric" }, { name: "placed_at", type: "timestamp with time zone" }] },
+];
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
@@ -1681,44 +1703,77 @@ export function installFake() {
           if (guardrail?.builtin === "prompt_injection") return /ignore|you are now/i.test(sample) ? { pass: false, reason: "it contains text aimed at the agent" } : { pass: true, reason: "Nothing in it looks aimed at the agent." };
           return /delete|-D|drop/i.test(sample) ? { pass: false, reason: "It deletes a branch." } : { pass: true, reason: "Nothing here is deleted." };
         },
-        // Studio › Databases.
-        listDatabases: ({ workspace }) => ({
-          connections: fakeDatabases.map((d) => fakeDatabaseMsg(workspace, d)),
-          kinds: fakeDatabaseKinds,
-          workspaceDir: `${workspace}/.agents/databases`,
-          globalDir: "~/.blitz/databases",
-          state: "connected",
-          toolCount: fakeDatabases.reduce((n, d) => n + d.tools.length + d.queries.length, 0),
+        // Studio › Connectors.
+        listConnectors: ({ workspace }) => ({
+          categories: [
+            {
+              id: "databases",
+              name: { en: "Databases", es: "Bases de datos", "fr-CA": "Bases de données" },
+              hint: en("Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."),
+              icon: "database",
+              server: "databases",
+              prefix: "db",
+              workspaceDir: `${workspace}/.agents/connectors/databases`,
+              globalDir: "~/.blitz/connectors/databases",
+              state: "connected",
+              toolCount: fakeConnectors.reduce((n, d) => n + d.tools.length + d.queries.length, 0),
+              origin: "builtin",
+            },
+          ],
+          kinds: [...fakeConnectorKinds, { id: "mysql", category: "databases", name: en("MySQL"), backend: "toolbox", origin: "workspace", path: `${workspace}/.agents/connectors/kinds/mysql.yaml`, problem: 'source "mysql": not in Blitz\'s Toolbox' }],
+          connections: fakeConnectors.map((d) => fakeConnectorMsg(workspace, d)),
+          workspaceDir: `${workspace}/.agents/connectors`,
+          globalDir: "~/.blitz/connectors",
         }),
-        saveDatabase: ({ workspace, connection, previousName, secretValues }) => {
+        saveConnector: ({ workspace, connection, previousName, secretValues }) => {
           const c = connection!;
           if (!/^[a-z][a-z0-9_]{0,39}$/.test(c.name)) return { problems: [`name "${c.name}": lower case letters, digits and _, starting with a letter`] };
-          const i = fakeDatabases.findIndex((d) => d.name === (previousName || c.name) && d.scope === c.scope);
-          if (!previousName && i >= 0) return { problems: [`there's a database named "${c.name}" already`] };
-          const secretsSet = [...new Set([...(i >= 0 ? fakeDatabases[i].secretsSet : []), ...Object.keys(secretValues)])];
-          if (c.type === "postgres" && !secretsSet.includes("password")) return { problems: ["password is required"] };
-          const next: FakeDatabase = { name: c.name, scope: c.scope, type: c.type, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text };
-          if (i >= 0) fakeDatabases[i] = next;
-          else fakeDatabases.push(next);
-          return { connection: fakeDatabaseMsg(workspace, next) };
+          const i = fakeConnectors.findIndex((d) => d.name === (previousName || c.name) && d.scope === c.scope && d.category === c.category);
+          if (!previousName && i >= 0) return { problems: [`there's a connection named "${c.name}" already`] };
+          const secretsSet = [...new Set([...(i >= 0 ? fakeConnectors[i].secretsSet : []), ...Object.keys(secretValues)])];
+          if (c.kind === "postgres" && !secretsSet.includes("password")) return { problems: ["password is required"] };
+          const next: FakeConnector = { name: c.name, category: c.category, scope: c.scope, kind: c.kind, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text, trusted: true };
+          if (i >= 0) fakeConnectors[i] = next;
+          else fakeConnectors.push(next);
+          return { connection: fakeConnectorMsg(workspace, next) };
         },
-        deleteDatabase: ({ scope, name }) => {
-          const i = fakeDatabases.findIndex((d) => d.name === name && d.scope === scope);
-          if (i < 0) throw new ConnectError(`no database ${name}`, Code.NotFound);
-          fakeDatabases.splice(i, 1);
+        deleteConnector: ({ category, scope, name }) => {
+          const i = fakeConnectors.findIndex((d) => d.name === name && d.scope === scope && d.category === category);
+          if (i < 0) throw new ConnectError(`no connection ${name}`, Code.NotFound);
+          fakeConnectors.splice(i, 1);
           return {};
         },
-        testDatabase: async ({ connection }) => {
+        testConnector: async ({ connection }) => {
           await new Promise((r) => setTimeout(r, 700));
           const c = connection!;
           if (c.settings.host === "nowhere") return { problem: `failed to connect to host=nowhere user=${c.settings.user}: dial tcp: lookup nowhere: no such host` };
-          const kind = fakeDatabaseKinds.find((k) => k.type === c.type);
+          const kind = fakeConnectorKinds.find((k) => k.id === c.kind);
           const tools = [...c.tools.filter((id) => !(c.readOnly && kind?.tools.find((t) => t.id === id && "writes" in t && t.writes))).map((id) => ({ name: `${c.name}_${id}`, description: `${id.replace(/_/g, " ")} on ${c.name}.` })), ...c.queries.map((q) => ({ name: `${c.name}_${q.name}`, description: q.description }))];
           return { tools: tools.map((t) => ({ ...t, readOnly: c.readOnly })) };
         },
-        tryDatabaseTool: async ({ tool }) => {
+        tryConnectorTool: async ({ tool }) => {
           await new Promise((r) => setTimeout(r, 500));
           return { output: tool.endsWith("top_customers") ? '{"name":"Ada Lovelace","spent":1820.5}\n{"name":"Grace Hopper","spent":1544}' : '{"n":42}' };
+        },
+        readConnectorSchema: async ({ connection }) => {
+          await new Promise((r) => setTimeout(r, 500));
+          if (connection!.settings.host === "nowhere") return { problem: "no tables in shop: failed to connect to host=nowhere" };
+          return { tables: fakeTables };
+        },
+        draftConnectorQuery: async ({ request }) => {
+          await new Promise((r) => setTimeout(r, 900));
+          if (/refund/i.test(request)) return { tables: fakeTables.length, problem: "No table holds refunds: orders has a total, but nothing says one was refunded." };
+          return {
+            tables: fakeTables.length,
+            notes: ["\"Spent\" is the sum of orders.total.", "\"Last month\" is the calendar month before today."],
+            query: {
+              name: "top_customers_last_month",
+              description: "The customers who spent the most last month, with what they spent. Use it for \"best customers\" questions.",
+              statement: "SELECT c.name, sum(o.total) AS spent\nFROM public.orders o JOIN public.customers c USING (customer_id)\nWHERE o.placed_at >= date_trunc('month', now()) - interval '1 month'\n  AND o.placed_at < date_trunc('month', now())\nGROUP BY c.name\nORDER BY spent DESC\nLIMIT $1",
+              params: [{ name: "limit", type: "integer", description: "How many customers" }],
+              readsOnly: true,
+            },
+          };
         },
         // Studio › Rules: gates before and after the agent, and instruction rules.
         listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),

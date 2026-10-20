@@ -30,7 +30,9 @@ import (
 // again.
 type SkillTrust struct {
 	path string
-	mu   sync.Mutex
+	// key names the decisions in the file: skills, or connections.
+	key string
+	mu  sync.Mutex
 }
 
 type skillTrustEntry struct {
@@ -40,7 +42,14 @@ type skillTrustEntry struct {
 
 // OpenSkillTrust is the store in the settings directory dir.
 func OpenSkillTrust(dir string) *SkillTrust {
-	return &SkillTrust{path: filepath.Join(dir, "skill-trust.json")}
+	return &SkillTrust{path: filepath.Join(dir, "skill-trust.json"), key: "skills"}
+}
+
+// OpenConnectorTrust is the store of the workspace connection files the
+// user trusted, by their content (spec_connectors_047):
+// connector-trust.json in the settings directory dir, by the file's path.
+func OpenConnectorTrust(dir string) *SkillTrust {
+	return &SkillTrust{path: filepath.Join(dir, "connector-trust.json"), key: "connections"}
 }
 
 // Reviewed reports whether the skill in folder dir was trusted with
@@ -73,17 +82,14 @@ func (s *SkillTrust) Trust(dir, hash string) error {
 		return nil
 	}
 	all[key] = skillTrustEntry{Hash: hash, At: time.Now().UTC()}
-	data, err := json.MarshalIndent(struct {
-		Version int                        `json:"version"`
-		Skills  map[string]skillTrustEntry `json:"skills"`
-	}{1, all}, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"version": 1, s.key: all}, "", "  ")
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".skill-trust-*.json")
+	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".trust-*.json")
 	if err != nil {
 		return err
 	}
@@ -100,14 +106,13 @@ func (s *SkillTrust) Trust(dir, hash string) error {
 
 // readLocked reads the decisions; a missing or damaged file has none.
 func (s *SkillTrust) readLocked() map[string]skillTrustEntry {
-	var f struct {
-		Skills map[string]skillTrustEntry `json:"skills"`
+	var f map[string]json.RawMessage
+	all := map[string]skillTrustEntry{}
+	if data, err := os.ReadFile(s.path); err == nil && json.Unmarshal(data, &f) == nil {
+		_ = json.Unmarshal(f[s.key], &all)
 	}
-	if data, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(data, &f)
+	if all == nil {
+		all = map[string]skillTrustEntry{}
 	}
-	if f.Skills == nil {
-		f.Skills = map[string]skillTrustEntry{}
-	}
-	return f.Skills
+	return all
 }

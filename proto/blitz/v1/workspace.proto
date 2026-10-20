@@ -357,23 +357,33 @@ service WorkspaceService {
   rpc RestartMCPServer(RestartMCPServerRequest) returns (RestartMCPServerResponse);
   // Returns what the active agent can use.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
-  // Returns the databases the agents can use (spec_databases_046): the
-  // global ones, then the workspace's, with the kinds Studio offers and
-  // how the databases server is doing.
-  rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse);
-  // Writes a database from Studio's form (or its YAML, for a custom one),
-  // keeping the secret values given as Blitz secrets; problems, with
-  // nothing written, when it can't be saved. The databases server
-  // restarts with it (DATABASE_NOT_FOUND for a previous name that isn't
-  // there).
-  rpc SaveDatabase(SaveDatabaseRequest) returns (SaveDatabaseResponse);
-  // Deletes a database and its secrets (DATABASE_NOT_FOUND).
-  rpc DeleteDatabase(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
-  // Connects to a database as written, unsaved, and lists the tools it
-  // offers; problem says why it can't be reached.
-  rpc TestDatabase(TestDatabaseRequest) returns (TestDatabaseResponse);
-  // Runs one of a database's tools as written, unsaved (Try it).
-  rpc TryDatabaseTool(TryDatabaseToolRequest) returns (TryDatabaseToolResponse);
+  // Returns the connectors (spec_connectors_047): the categories and
+  // kinds there are (built-in, global and the workspace's descriptors,
+  // each with any problem), the connections, global first, and how each
+  // category's server is doing.
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse);
+  // Writes a connection from Studio's form (or its text, for a custom
+  // one), keeping the secret values given as Blitz secrets; problems,
+  // with nothing written, when it can't be saved. Saving a workspace one
+  // trusts it as written. Its category's server restarts with it
+  // (CONNECTOR_NOT_FOUND for a previous name that isn't there).
+  rpc SaveConnector(SaveConnectorRequest) returns (SaveConnectorResponse);
+  // Deletes a connection and its secrets (CONNECTOR_NOT_FOUND).
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse);
+  // Connects to a connection as written, unsaved, and lists the tools it
+  // offers; problem says why it can't be reached (the test capability).
+  rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse);
+  // Runs one of a connection's tools as written, unsaved (Try it; the try
+  // capability).
+  rpc TryConnectorTool(TryConnectorToolRequest) returns (TryConnectorToolResponse);
+  // Reads a connection's tables and their columns, as written (the schema
+  // capability); problem says why when it can read none.
+  rpc ReadConnectorSchema(ReadConnectorSchemaRequest) returns (ReadConnectorSchemaResponse);
+  // Drafts one of a connection's queries from what the user is looking
+  // for: its schema is read (none read is the problem) and the sql-query
+  // skill writes the query (the query-builder capability). Nothing is
+  // saved.
+  rpc DraftConnectorQuery(DraftConnectorQueryRequest) returns (DraftConnectorQueryResponse);
 
   // Re-reads project instruction files and returns their paths.
   rpc ReloadMemory(ReloadMemoryRequest) returns (ReloadMemoryResponse);
@@ -3489,104 +3499,158 @@ message DropComposeRequest {
 // Response message for WorkspaceService.DropCompose.
 message DropComposeResponse {}
 
-// A setting a kind of database takes (spec_databases_046).
-message DatabaseField {
+// A setting a kind of connector takes (spec_connectors_047).
+message ConnectorField {
   // Its name in the file: host, port, project…
   string key = 1;
-  // Kept as a Blitz secret, never sent back.
-  bool secret = 2;
-  bool required = 3;
+  // Its label and help, by language (en, es, fr-CA).
+  map<string, string> label = 2;
+  map<string, string> help = 3;
+  // text, number, secret (kept as a Blitz secret, never sent back), list
+  // (comma-separated) or path.
+  string type = 4;
+  bool required = 5;
   // Used when it's left empty.
-  string default_value = 4;
+  string default_value = 6;
 }
 
-// A ready-made tool a kind of database offers.
-message DatabaseReadyTool {
+// A ready-made tool a kind of connector offers.
+message ConnectorReadyTool {
   // The tool is named <connection>_<id>.
   string id = 1;
-  // It can change the database: hidden on a read-only one.
-  bool writes = 2;
+  // What it does, by language.
+  map<string, string> about = 2;
+  // It can change what it's connected to: not offered on a read-only
+  // connection.
+  bool writes = 3;
   // A new connection has it.
-  bool on = 3;
+  bool on = 4;
 }
 
-// A kind of database Studio offers.
-message DatabaseKind {
-  // Its Toolbox source type: postgres, alloydb-postgres, sqlite, bigquery.
-  string type = 1;
-  repeated DatabaseField fields = 2;
-  repeated DatabaseReadyTool tools = 3;
+// A kind of connector: a descriptor.
+message ConnectorKind {
+  // Its ID: postgres, alloydb-postgres, sqlite, bigquery…
+  string id = 1;
+  string category = 2;
+  // Its name and hint, by language.
+  map<string, string> name = 3;
+  map<string, string> hint = 4;
+  // The backend that serves it (toolbox).
+  string backend = 5;
+  repeated ConnectorField fields = 6;
+  repeated ConnectorReadyTool tools = 7;
+  // test, try, queries, schema, query-builder.
+  repeated string capabilities = 8;
+  // It can be read-only; what that means for it, by language.
+  bool can_read_only = 9;
+  map<string, string> read_only_hint = 10;
+  // Its queries: how they're written (by language), an example, and how
+  // they name parameters ($1 or @name).
+  map<string, string> queries_hint = 11;
+  string queries_example = 12;
+  string placeholders = 13;
+  // builtin, global or workspace; its file ("" built in).
+  string origin = 14;
+  string path = 15;
+  // Why it can't be used ("" when it can).
+  string problem = 16;
 }
 
-// A custom query's parameter.
-message DatabaseQueryParam {
+// A category of connectors (Databases), with how its server is doing.
+message ConnectorCategory {
+  string id = 1;
+  // Its name and hint, by language.
+  map<string, string> name = 2;
+  map<string, string> hint = 3;
+  // A Material Design icon's name, without mdi.
+  string icon = 4;
+  // Its MCP server's name, and its tools' prefix (db: db__shop_…).
+  string server = 5;
+  string prefix = 6;
+  // Where its workspace and global connections are.
+  string workspace_dir = 7;
+  string global_dir = 8;
+  // Its server: idle, connected or failed ("" with no connections),
+  // error saying why it failed, tool_count how many tools it offered.
+  string state = 9;
+  string error = 10;
+  int32 tool_count = 11;
+  string origin = 12;
+  string path = 13;
+  string problem = 14;
+}
+
+// A connection's own query parameter.
+message ConnectorQueryParam {
   string name = 1;
   // string, integer, float or boolean.
   string type = 2;
   string description = 3;
 }
 
-// A custom SQL tool: <connection>_<name>.
-message DatabaseQuery {
+// A connection's own query, a tool: <connection>_<name>.
+message ConnectorQuery {
   string name = 1;
   string description = 2;
   string statement = 3;
-  repeated DatabaseQueryParam params = 4;
+  repeated ConnectorQueryParam params = 4;
   // Its statement only reads (a hint; a read-only connection is the
   // guard).
   bool reads_only = 5;
 }
 
-// A database file, as Studio's form shows it.
-message DatabaseConnection {
+// A connection file, as Studio's form shows it.
+message Connector {
   // The file's name and its tools' prefix.
   string name = 1;
-  // workspace (.agents/databases) or global.
-  string scope = 2;
-  string path = 3;
-  // Its kind's type.
-  string type = 4;
+  string category = 2;
+  // workspace (.agents/connectors/<category>) or global.
+  string scope = 3;
+  string path = 4;
+  // Its kind's ID ("" for a custom file).
+  string kind = 5;
   // What it holds, for the agents.
-  string description = 5;
+  string description = 6;
   // The kind's settings; a secret one names its secret (${NAME}).
-  map<string, string> settings = 6;
+  map<string, string> settings = 7;
   // The secret settings that have a value.
-  repeated string secrets_set = 7;
-  bool read_only = 8;
+  repeated string secrets_set = 8;
+  bool read_only = 9;
   // The ready-made tools switched on, by ID.
-  repeated string tools = 9;
-  repeated DatabaseQuery queries = 10;
-  // More than the form describes: edited as YAML (text).
-  bool custom = 11;
+  repeated string tools = 10;
+  repeated ConnectorQuery queries = 11;
+  // More than the form describes: edited as text.
+  bool custom = 12;
   // The file.
-  string text = 12;
-  // Why it can't be loaded.
-  string problem = 13;
+  string text = 13;
+  // Why it can't be read.
+  string problem = 14;
+  // The person trusted it: a global one, or a workspace one saved in
+  // Studio or with trusted project settings. An untrusted one uses only
+  // the workspace's secrets, and its tools ask first.
+  bool trusted = 15;
 }
 
-// Request message for WorkspaceService.ListDatabases.
-message ListDatabasesRequest {
+// Request message for WorkspaceService.ListConnectors.
+message ListConnectorsRequest {
   string workspace = 1;
 }
 
-// Response message for WorkspaceService.ListDatabases.
-message ListDatabasesResponse {
-  repeated DatabaseConnection connections = 1;
-  repeated DatabaseKind kinds = 2;
-  // Where the workspace's and the global ones are.
-  string workspace_dir = 3;
-  string global_dir = 4;
-  // The databases server: idle, connected or failed ("" with no
-  // databases), error saying why it failed, tools how many it offered.
-  string state = 5;
-  string error = 6;
-  int32 tool_count = 7;
+// Response message for WorkspaceService.ListConnectors.
+message ListConnectorsResponse {
+  repeated ConnectorCategory categories = 1;
+  repeated ConnectorKind kinds = 2;
+  repeated Connector connections = 3;
+  // Where the global and the workspace's descriptors are
+  // (<dir>/kinds, <dir>/categories).
+  string workspace_dir = 4;
+  string global_dir = 5;
 }
 
-// Request message for WorkspaceService.SaveDatabase.
-message SaveDatabaseRequest {
+// Request message for WorkspaceService.SaveConnector.
+message SaveConnectorRequest {
   string workspace = 1;
-  DatabaseConnection connection = 2;
+  Connector connection = 2;
   // Its name before (a rename), "" for a new one.
   string previous_name = 3;
   // Secret settings' new values, by key (a password); one left out keeps
@@ -3594,48 +3658,49 @@ message SaveDatabaseRequest {
   map<string, string> secret_values = 4;
 }
 
-// Response message for WorkspaceService.SaveDatabase.
-message SaveDatabaseResponse {
-  DatabaseConnection connection = 1;
+// Response message for WorkspaceService.SaveConnector.
+message SaveConnectorResponse {
+  Connector connection = 1;
   repeated string problems = 2;
 }
 
-// Request message for WorkspaceService.DeleteDatabase.
-message DeleteDatabaseRequest {
+// Request message for WorkspaceService.DeleteConnector.
+message DeleteConnectorRequest {
   string workspace = 1;
-  string scope = 2;
-  string name = 3;
+  string category = 2;
+  string scope = 3;
+  string name = 4;
 }
 
-// Response message for WorkspaceService.DeleteDatabase.
-message DeleteDatabaseResponse {}
+// Response message for WorkspaceService.DeleteConnector.
+message DeleteConnectorResponse {}
 
-// A tool a database offers.
-message DatabaseTool {
+// A tool a connection offers.
+message ConnectorTool {
   string name = 1;
   string description = 2;
-  // It runs without asking: its database can't be written.
+  // It runs without asking: what it's connected to can't be written.
   bool read_only = 3;
 }
 
-// Request message for WorkspaceService.TestDatabase.
-message TestDatabaseRequest {
+// Request message for WorkspaceService.TestConnector.
+message TestConnectorRequest {
   string workspace = 1;
-  DatabaseConnection connection = 2;
+  Connector connection = 2;
   map<string, string> secret_values = 3;
 }
 
-// Response message for WorkspaceService.TestDatabase.
-message TestDatabaseResponse {
-  repeated DatabaseTool tools = 1;
+// Response message for WorkspaceService.TestConnector.
+message TestConnectorResponse {
+  repeated ConnectorTool tools = 1;
   // Why it couldn't connect ("" when it did).
   string problem = 2;
 }
 
-// Request message for WorkspaceService.TryDatabaseTool.
-message TryDatabaseToolRequest {
+// Request message for WorkspaceService.TryConnectorTool.
+message TryConnectorToolRequest {
   string workspace = 1;
-  DatabaseConnection connection = 2;
+  Connector connection = 2;
   map<string, string> secret_values = 3;
   // The tool: <connection>_<id>, or the ID alone.
   string tool = 4;
@@ -3643,12 +3708,62 @@ message TryDatabaseToolRequest {
   string args_json = 5;
 }
 
-// Response message for WorkspaceService.TryDatabaseTool.
-message TryDatabaseToolResponse {
+// Response message for WorkspaceService.TryConnectorTool.
+message TryConnectorToolResponse {
   // What it answered.
   string output = 1;
   // The answer is the tool's error.
   bool is_error = 2;
   // Why it couldn't be run ("" when it was).
   string problem = 3;
+}
+
+// A column of a connection's table.
+message ConnectorColumn {
+  string name = 1;
+  string type = 2;
+  string about = 3;
+}
+
+// A table (or view) a connection holds.
+message ConnectorTable {
+  // As a query names it: schema.table, dataset.table.
+  string name = 1;
+  string about = 2;
+  repeated ConnectorColumn columns = 3;
+}
+
+// Request message for WorkspaceService.ReadConnectorSchema.
+message ReadConnectorSchemaRequest {
+  string workspace = 1;
+  Connector connection = 2;
+  map<string, string> secret_values = 3;
+}
+
+// Response message for WorkspaceService.ReadConnectorSchema.
+message ReadConnectorSchemaResponse {
+  repeated ConnectorTable tables = 1;
+  // Why it read none ("" when it read some).
+  string problem = 2;
+}
+
+// Request message for WorkspaceService.DraftConnectorQuery.
+message DraftConnectorQueryRequest {
+  string workspace = 1;
+  Connector connection = 2;
+  map<string, string> secret_values = 3;
+  // What the user is looking for, in their words.
+  string request = 4;
+}
+
+// Response message for WorkspaceService.DraftConnectorQuery.
+message DraftConnectorQueryResponse {
+  // The draft: a query the form adds, unsaved.
+  ConnectorQuery query = 1;
+  // The assumptions it made, a line each.
+  repeated string notes = 2;
+  // How many tables of the schema it read.
+  int32 tables = 3;
+  // Why there's no draft ("" when there is).
+  string problem = 4;
 }

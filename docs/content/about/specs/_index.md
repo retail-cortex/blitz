@@ -56,5 +56,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 044 | [health](spec_health_044.md) | A workspace's dashboard: what it holds, how its runs go, and each item's quality judged on the evidence, on request and nightly; since v0.7.1 |
 | 045 | [composer](spec_composer_045.md) | A guided conversation that makes a component: asks what it needs, writes the file, checks it with the engine's rules and hands it to the editor as a draft; for workflows since v0.7.1, the other kinds next |
 | 046 | [databases](spec_databases_046.md) | Databases the agents can query (PostgreSQL, AlloyDB, SQLite with sqlite-vec, BigQuery), served in-process by MCP Toolbox for Databases, read-only by default; since v0.7.2 |
+| 047 | [connectors](spec_connectors_047.md) | The systems the agents reach, databases first: categories and kinds as descriptors, backends behind one interface, capabilities such as the query builder; since v0.7.2 |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).
