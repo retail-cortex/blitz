@@ -339,6 +339,64 @@ func Delete(cat Catalog, prefixDir, workspace, category, scope, name string) err
 	return nil
 }
 
+// MakeGlobal moves the workspace's connection name, of category, to the
+// global folder with its secrets (CON-19), so every workspace has it:
+// problems, with nothing moved, when its kind or category is the
+// workspace's own descriptor, it's a custom file, or a global one has its
+// name. ErrUnknown when it isn't there.
+func MakeGlobal(prefixDir, workspace, category, name string) (Connection, []string, error) {
+	wcat := Load(prefixDir, workspace)
+	c, ok := wcat.Category(category)
+	if !ok {
+		return Connection{}, nil, fmt.Errorf("%w: category %q", ErrUnknown, category)
+	}
+	p := file(ConnectionDir(prefixDir, workspace, ScopeWorkspace, category), name)
+	if p == "" {
+		return Connection{}, nil, fmt.Errorf("%w: %q", ErrUnknown, name)
+	}
+	text, err := os.ReadFile(p)
+	if err != nil {
+		return Connection{}, nil, err
+	}
+	conn := Parse(wcat, c, name, string(text))
+	conn.Scope, conn.Path = ScopeWorkspace, p
+	gcat := Load(prefixDir, "")
+	_, ok = gcat.Category(category)
+	switch {
+	case conn.Problem != "":
+		return Connection{}, []string{conn.Problem}, nil
+	case conn.Custom:
+		return Connection{}, []string{fmt.Sprintf("%s is more than the form describes: move %s to %s by hand", name, p, ConnectionDir(prefixDir, "", ScopeGlobal, category))}, nil
+	case !ok:
+		return Connection{}, []string{fmt.Sprintf("the %s category is this workspace's own: add its descriptor to %s first", category, GlobalDir(prefixDir))}, nil
+	}
+	k, ok := gcat.Kind(conn.Kind)
+	if !ok {
+		return Connection{}, []string{fmt.Sprintf("the %s kind is this workspace's own: add its descriptor to %s first", conn.Kind, filepath.Join(GlobalDir(prefixDir), "kinds"))}, nil
+	}
+	if file(ConnectionDir(prefixDir, "", ScopeGlobal, category), name) != "" {
+		return Connection{}, []string{fmt.Sprintf("there's a global connection named %q already", name)}, nil
+	}
+	values := map[string]string{}
+	resolve := config.Vault(prefixDir).Resolve(SecretScope(prefixDir, workspace, ScopeWorkspace))
+	for _, f := range k.Fields {
+		if f.Secret() {
+			if v, ok := resolve(secrets.OnlyWorkspace, SecretKey(c, name, f.Key)); ok {
+				values[f.Key] = v
+			}
+		}
+	}
+	conn.Scope = ScopeGlobal
+	saved, problems, err := Save(gcat, prefixDir, "", conn, values, "")
+	if err != nil || len(problems) > 0 {
+		return saved, problems, err
+	}
+	if err := Delete(wcat, prefixDir, workspace, category, ScopeWorkspace, name); err != nil {
+		return saved, nil, err
+	}
+	return saved, nil, nil
+}
+
 // Prepare is c as the backend writes it for a test, try or schema read:
 // its kind and backend, and its secret settings naming their secrets when
 // a value is typed or kept.

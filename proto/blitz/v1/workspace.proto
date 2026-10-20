@@ -362,14 +362,22 @@ service WorkspaceService {
   // each with any problem), the connections, global first, and how each
   // category's server is doing.
   rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse);
-  // Writes a connection from Studio's form (or its text, for a custom
-  // one), keeping the secret values given as Blitz secrets; problems,
-  // with nothing written, when it can't be saved. Saving a workspace one
-  // trusts it as written. Its category's server restarts with it
-  // (CONNECTOR_NOT_FOUND for a previous name that isn't there).
+  // Writes one of the workspace's connections from Studio's form (or its
+  // text, for a custom one), keeping the secret values given as the
+  // workspace's secrets; problems, with nothing written, when it can't be
+  // saved. Saving it trusts it as written. Its category's server restarts
+  // with it (CONNECTOR_NOT_FOUND for a previous name that isn't there;
+  // CONNECTOR_GLOBAL for a global one, which ConfigService changes).
   rpc SaveConnector(SaveConnectorRequest) returns (SaveConnectorResponse);
-  // Deletes a connection and its secrets (CONNECTOR_NOT_FOUND).
+  // Deletes one of the workspace's connections and its secrets
+  // (CONNECTOR_NOT_FOUND; CONNECTOR_GLOBAL for a global one).
   rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse);
+  // Moves one of the workspace's connections, with its secrets, to the
+  // global folder, so every workspace has it: problems, with nothing
+  // moved, when it can't be (a kind of the workspace's own, a name a
+  // global one has). CONNECTOR_NOT_FOUND; CONNECTOR_NOT_TRUSTED when the
+  // person hasn't saved it as it is.
+  rpc MakeConnectorGlobal(MakeConnectorGlobalRequest) returns (MakeConnectorGlobalResponse);
   // Turns a connection on or off in this workspace, a global one too: one
   // that's off keeps its file and secrets, and the agents here don't get
   // its tools. The choice is the person's, kept in their settings folder
@@ -3681,6 +3689,20 @@ message DeleteConnectorRequest {
 
 // Response message for WorkspaceService.DeleteConnector.
 message DeleteConnectorResponse {}
+
+// Request message for WorkspaceService.MakeConnectorGlobal.
+message MakeConnectorGlobalRequest {
+  string workspace = 1;
+  string category = 2;
+  string name = 3;
+}
+
+// Response message for WorkspaceService.MakeConnectorGlobal.
+message MakeConnectorGlobalResponse {
+  // The global connection it is now.
+  Connector connection = 1;
+  repeated string problems = 2;
+}
 
 // Request message for WorkspaceService.SetConnectorEnabled.
 message SetConnectorEnabledRequest {

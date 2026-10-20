@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   mdiAlertCircleOutline,
@@ -26,6 +26,7 @@ import {
   mdiDatabaseLockOutline,
   mdiDatabaseOutline,
   mdiDeleteOutline,
+  mdiEarth,
   mdiLanConnect,
   mdiLoading,
   mdiPlay,
@@ -36,10 +37,11 @@ import {
   mdiTableLarge,
   mdiUndoVariant,
 } from "@mdi/js";
-import { workspaces } from "../api";
+import { config, workspaces } from "../api";
+import { openSettings } from "../events";
 import { message } from "../errors";
 import { language, t, tn, useLanguage } from "../i18n";
-import type { Connector, ConnectorCategory, ConnectorKind, ConnectorTable, ConnectorTool } from "../gen/blitz/v1/workspace_pb";
+import type { Connector, ConnectorCategory, ConnectorKind, ConnectorQuery, ConnectorTable, ConnectorTool } from "../gen/blitz/v1/workspace_pb";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "../ui/controls";
 import { can, connectionFromForm, formFromConnection, newConnectorForm, paramTypes, queryForm, readsOnly, sameConnectorForm, statementParams, textIn, withKind, type ConnectorForm, type ConnectorScope, type QueryForm } from "./connectorForm";
 
@@ -52,11 +54,57 @@ const agentTool = (prefix: string, tool: string) => `${prefix}__${tool}`;
 /** What a connection is open as: one by category, scope and name, or a new one (name ""). */
 type Open = { category: string; scope: ConnectorScope; name: string } | null;
 
+/** A connection as written in the form, for the service. */
+type Written = ReturnType<typeof connectionFromForm>;
+
 /**
- * The connectors the agents reach (Studio › Connectors,
- * spec_connectors_047), by category (Databases, served by MCP Toolbox for
- * Databases inside Blitz): each category's connections, this workspace's
- * and every workspace's, with its kind and whether it's read-only. A
+ * Where a pane's connections are kept and changed (spec_connectors_047
+ * CON-18): a workspace's (Studio, which lists the global ones too but
+ * never changes them), or the global ones (Settings, with no workspace).
+ */
+type ConnectorApi = {
+  global: boolean;
+  list: () => Promise<{ categories: ConnectorCategory[]; kinds: ConnectorKind[]; connections: Connector[] }>;
+  save: (r: Written & { previousName: string }) => Promise<{ connection?: Connector; problems: string[] }>;
+  remove: (c: Connector) => Promise<unknown>;
+  test: (r: Written) => Promise<{ tools: ConnectorTool[]; problem: string }>;
+  tryTool: (r: Written & { tool: string; argsJson: string }) => Promise<{ output: string; isError: boolean; problem: string }>;
+  readSchema: (r: Written) => Promise<{ tables: ConnectorTable[]; problem: string }>;
+  draft: (r: Written & { request: string }) => Promise<{ query?: ConnectorQuery; notes: string[]; tables: number; problem: string }>;
+};
+
+/** A workspace's connections, through WorkspaceService. */
+const workspaceApi = (workspace: string): ConnectorApi => ({
+  global: false,
+  list: () => workspaces.listConnectors({ workspace }),
+  save: (r) => workspaces.saveConnector({ workspace, ...r }),
+  remove: (c) => workspaces.deleteConnector({ workspace, category: c.category, scope: c.scope, name: c.name }),
+  test: (r) => workspaces.testConnector({ workspace, ...r }),
+  tryTool: (r) => workspaces.tryConnectorTool({ workspace, ...r }),
+  readSchema: (r) => workspaces.readConnectorSchema({ workspace, ...r }),
+  draft: (r) => workspaces.draftConnectorQuery({ workspace, ...r }),
+});
+
+/** The global connections, through ConfigService. */
+const globalApi: ConnectorApi = {
+  global: true,
+  list: () => config.listGlobalConnectors({}),
+  save: (r) => config.saveGlobalConnector(r),
+  remove: (c) => config.deleteGlobalConnector({ category: c.category, name: c.name }),
+  test: (r) => config.testGlobalConnector(r),
+  tryTool: (r) => config.tryGlobalConnectorTool(r),
+  readSchema: (r) => config.readGlobalConnectorSchema(r),
+  draft: (r) => config.draftGlobalConnectorQuery(r),
+};
+
+/**
+ * The connectors the agents reach (spec_connectors_047), by category
+ * (Databases, served by MCP Toolbox for Databases inside Blitz). With a
+ * workspace it's Studio › Connectors: the workspace's connections, which
+ * it changes and can make global, and the global ones, shown as they are
+ * with a switch turning each on or off here (CON-17). Without one it's
+ * Settings › Connectors: the global connections, changed there alone
+ * (CON-18). Each row says its kind and whether it's read-only. A
  * connection's form slides in over the list, drawn from its kind's
  * descriptor: its settings, a password kept as a secret, read-only (the
  * default when it can be), the ready-made tools, and, as its kind can,
@@ -64,8 +112,11 @@ type Open = { category: string; scope: ConnectorScope; name: string } | null;
  * tables, and Test connection. A file the form can't describe is edited
  * as it is.
  */
-export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
+export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onDirty?: (dirty: boolean) => void }) {
   useLanguage();
+  const api = useMemo(() => (workspace ? workspaceApi(workspace) : globalApi), [workspace]);
+  const studio = !api.global;
+  const scope: ConnectorScope = studio ? "workspace" : "global";
   const lang = language();
   const snack = useSnackbar();
   const [categories, setCategories] = useState<ConnectorCategory[]>([]);
@@ -84,10 +135,11 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
   const [reading, setReading] = useState(false);
   const [schema, setSchema] = useState<{ tables: ConnectorTable[]; problem: string } | null>(null);
   const [building, setBuilding] = useState(false);
+  const [promoting, setPromoting] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const r = await workspaces.listConnectors({ workspace });
+      const r = await api.list();
       setCategories(r.categories);
       setKinds(r.kinds);
       setConnections(r.connections);
@@ -95,7 +147,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
     } catch (e) {
       setError(message(e));
     }
-  }, [workspace]);
+  }, [api]);
   useEffect(() => void refresh(), [refresh]);
 
   const usable = categories.filter((c) => !c.problem);
@@ -105,6 +157,8 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
   const broken = [...categories.filter((c) => c.problem), ...kinds.filter((k) => k.problem)];
   const file = open && open.name ? connections.find((c) => c.category === open.category && c.scope === open.scope && c.name === open.name) : undefined;
   const untrusted = !!file && file.scope === "workspace" && !file.trusted;
+  // A global connection open in Studio: shown as it is, changed in Settings.
+  const shown = studio && !!file && file.scope === "global";
   const isNew = open !== null && open.name === "";
   const dirty = open !== null && !sameConnectorForm(form, base);
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
@@ -133,7 +187,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
     setProblems([]);
     try {
       const { connection, secretValues } = connectionFromForm(form);
-      const r = await workspaces.saveConnector({ workspace, previousName: file?.name ?? "", connection, secretValues });
+      const r = await api.save({ previousName: file?.name ?? "", connection, secretValues });
       if (r.problems.length || !r.connection) return setProblems(r.problems);
       snack(t("desktop.connectors.saved", { name: r.connection.name }));
       setOpen(null);
@@ -148,7 +202,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
   // here don't get its tools.
   const enable = async (c: Connector, on: boolean) => {
     try {
-      await workspaces.setConnectorEnabled({ workspace, category: c.category, scope: c.scope, name: c.name, enabled: on });
+      await workspaces.setConnectorEnabled({ workspace: workspace ?? "", category: c.category, scope: c.scope, name: c.name, enabled: on });
       snack(t(on ? "desktop.connectors.enabled" : "desktop.connectors.disabled", { name: c.name }));
       await refresh();
     } catch (e) {
@@ -159,7 +213,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
     setDeleting(false);
     if (!file) return;
     try {
-      await workspaces.deleteConnector({ workspace, category: file.category, scope: file.scope, name: file.name });
+      await api.remove(file);
       snack(t("desktop.connectors.deleted", { name: file.name }));
       setOpen(null);
       await refresh();
@@ -167,11 +221,26 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
       snack(message(e), { error: true });
     }
   };
+  // Make Global (CON-19): the workspace's connection, with its secrets,
+  // moves to the global folder, and Settings changes it from then on.
+  const promote = async () => {
+    setPromoting(false);
+    if (!file || !workspace) return;
+    try {
+      const r = await workspaces.makeConnectorGlobal({ workspace, category: file.category, name: file.name });
+      if (r.problems.length || !r.connection) return setProblems(r.problems);
+      snack(t("desktop.connectors.made_global", { name: file.name }));
+      setOpen(null);
+      await refresh();
+    } catch (e) {
+      setProblems([message(e)]);
+    }
+  };
   const test = async () => {
     setTesting(true);
     setTested(null);
     try {
-      const r = await workspaces.testConnector({ workspace, ...connectionFromForm(form) });
+      const r = await api.test(connectionFromForm(form));
       setTested({ tools: r.tools, problem: r.problem });
     } catch (e) {
       setTested({ tools: [], problem: message(e) });
@@ -183,7 +252,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
     setReading(true);
     setSchema(null);
     try {
-      const r = await workspaces.readConnectorSchema({ workspace, ...connectionFromForm(form) });
+      const r = await api.readSchema(connectionFromForm(form));
       setSchema({ tables: r.tables, problem: r.problem });
     } catch (e) {
       setSchema({ tables: [], problem: message(e) });
@@ -195,21 +264,19 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
   const kind = kindOf(form.kind);
   const category = categoryOf(form.category);
   const prefix = category?.prefix ?? "";
-  const scopes: { scope: ConnectorScope; title: string }[] = [
-    { scope: "workspace", title: t("desktop.connectors.here") },
-    { scope: "global", title: t("desktop.connectors.everywhere") },
-  ];
   const folder = (c: ConnectorCategory | undefined, scope: ConnectorScope) => (scope === "global" ? `~/.blitz/connectors/${c?.id ?? ""}` : `.agents/connectors/${c?.id ?? ""}`);
   const title = form.name || t("desktop.connectors.new");
   const where = file?.path ?? `${folder(category, form.scope)}/${form.name.trim() || "…"}.yaml`;
-  const testable = form.custom || can(kind, "test");
+  const testable = !shown && (form.custom || can(kind, "test"));
   return (
     <div className={`slide-pane connectors-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
-        <div className="row side-head">
-          <span className="t-title-sm spacer">{t("desktop.studio.connectors")}</span>
-        </div>
-        <p className="t-body-sm muted">{t("desktop.connectors.intro", { path: ".agents/connectors/kinds" })}</p>
+        {studio && (
+          <div className="row side-head">
+            <span className="t-title-sm spacer">{t("desktop.studio.connectors")}</span>
+          </div>
+        )}
+        <p className="t-body-sm muted">{studio ? t("desktop.connectors.intro", { path: ".agents/connectors/kinds" }) : t("desktop.connectors.global_intro", { path: "~/.blitz/connectors/kinds" })}</p>
         {error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
@@ -223,7 +290,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
               <div className="row" style={{ gap: 6 }}>
                 <Icon path={categoryIcons[cat.icon] ?? mdiPowerPlugOutline} size="sm" />
                 <span className="t-title-sm spacer">{textIn(cat.name, lang)}</span>
-                <IconButton icon={mdiPlus} label={t("desktop.connectors.add_to", { category: textIn(cat.name, lang) })} small disabled={!first} onClick={() => showForm({ category: cat.id, scope: "workspace", name: "" }, newConnectorForm(cat.id, first))} />
+                <IconButton icon={mdiPlus} label={t("desktop.connectors.add_to", { category: textIn(cat.name, lang) })} small disabled={!first} onClick={() => showForm({ category: cat.id, scope, name: "" }, newConnectorForm(cat.id, first, scope))} />
               </div>
               <span className="t-body-sm muted">{textIn(cat.hint, lang)}</span>
               {cat.state && (
@@ -248,7 +315,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                               [
                                 c.enabled ? "" : t("desktop.connectors.off_here"),
                                 c.custom || !k ? t("desktop.connectors.custom") : textIn(k.name, lang),
-                                c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here"),
+                                studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "",
                                 distrusted ? t("desktop.connectors.untrusted_short") : "",
                                 c.readOnly ? t("desktop.connectors.read_only") : c.custom ? "" : t("desktop.connectors.read_write"),
                                 c.custom ? "" : tn("desktop.connectors.tool_count", c.tools.length + c.queries.length),
@@ -259,9 +326,11 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                           </small>
                         </span>
                       </button>
-                      <span className="trailing">
-                        <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={(on) => void enable(c, on)} />
-                      </span>
+                      {studio && (
+                        <span className="trailing">
+                          <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={(on) => void enable(c, on)} />
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -290,13 +359,19 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
               <h2 className="t-headline spacer ellipsis">{title}</h2>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
             </div>
+            {shown && (
+              <div className="card outlined row small-card t-body-sm" style={{ gap: 6 }}>
+                <Icon path={mdiEarth} size="sm" />
+                <span className="spacer">{t("desktop.connectors.global_shown")}</span>
+              </div>
+            )}
             {untrusted && (
               <div className="card outlined row small-card t-body-sm" style={{ gap: 6 }}>
                 <Icon path={mdiShieldAlertOutline} size="sm" />
                 <span className="spacer">{t("desktop.connectors.untrusted")}</span>
               </div>
             )}
-            <fieldset className="worker agent-form rule-form">
+            <fieldset className="worker agent-form rule-form" disabled={shown}>
               <div className="pair">
                 <Field label={t("desktop.connectors.name")} supporting={t("desktop.connectors.name_hint", { prefix, name: form.name.trim() || "shop" })}>
                   {(id) => <input id={id} className="input mono" value={form.name} onChange={(e) => set("name", e.target.value)} />}
@@ -305,11 +380,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                   {(id) => <input id={id} className="input" value={form.description} disabled={form.custom} onChange={(e) => set("description", e.target.value)} />}
                 </Field>
               </div>
-              <div className="stack" style={{ gap: 6 }}>
-                <span className="t-label">{t("desktop.connectors.scope")}</span>
-                <Segmented value={form.scope} label={t("desktop.connectors.scope")} options={scopes.map((s) => ({ value: s.scope, label: s.title }))} onChange={(v) => set("scope", v)} />
-                <span className="t-body-sm muted">{t(`desktop.connectors.scope_hint.${form.scope}`, { path: folder(category, form.scope) })}</span>
-              </div>
+              <span className="t-body-sm muted">{t(`desktop.connectors.scope_hint.${form.scope}`, { path: folder(category, form.scope) })}</span>
               {form.custom ? (
                 <Field label={t("desktop.connectors.yaml")} supporting={t("desktop.connectors.custom_hint")}>
                   {(id) => <textarea id={id} className="input mono" rows={16} value={form.text} onChange={(e) => set("text", e.target.value)} />}
@@ -401,7 +472,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                       {form.queries.map((q, i) => (
                         <QueryCard
                           key={i}
-                          workspace={workspace}
+                          api={api}
                           form={form}
                           kind={kind}
                           prefix={prefix}
@@ -475,27 +546,48 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
               <span className="t-body-sm muted spacer ellipsis" title={where}>
                 {t("desktop.agents.where", { path: where })}
               </span>
-              {file && (
-                <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
-                  {t("desktop.rules.delete")}
-                </Button>
+              {shown ? (
+                <>
+                  <Button onClick={close}>{t("desktop.connectors.close")}</Button>
+                  <Button variant="filled" icon={mdiEarth} onClick={() => openSettings({ section: "connectors" })}>
+                    {t("desktop.connectors.edit_in_settings")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {file && (
+                    <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
+                      {t("desktop.rules.delete")}
+                    </Button>
+                  )}
+                  {studio && file && (
+                    <Button
+                      icon={mdiEarth}
+                      disabled={dirty || untrusted}
+                      title={dirty ? t("desktop.connectors.make_global_save_first") : untrusted ? t("desktop.connectors.make_global_trust_first") : t("desktop.connectors.make_global_hint")}
+                      onClick={() => setPromoting(true)}
+                    >
+                      {t("desktop.connectors.make_global")}
+                    </Button>
+                  )}
+                  {dirty && file && (
+                    <Button icon={mdiUndoVariant} onClick={() => setForm(base)}>
+                      {t("desktop.agents.revert")}
+                    </Button>
+                  )}
+                  <Button onClick={close}>{t("desktop.cancel")}</Button>
+                  <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || !form.name.trim() || (!!file && !dirty && !isNew && !untrusted)} onClick={() => void save()}>
+                    {untrusted && !dirty ? t("desktop.connectors.trust_save") : t("desktop.rules.save")}
+                  </Button>
+                </>
               )}
-              {dirty && file && (
-                <Button icon={mdiUndoVariant} onClick={() => setForm(base)}>
-                  {t("desktop.agents.revert")}
-                </Button>
-              )}
-              <Button onClick={close}>{t("desktop.cancel")}</Button>
-              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || !form.name.trim() || (!!file && !dirty && !isNew && !untrusted)} onClick={() => void save()}>
-                {untrusted && !dirty ? t("desktop.connectors.trust_save") : t("desktop.rules.save")}
-              </Button>
             </div>
           </>
         )}
       </section>
       {building && kind && (
         <QueryBuilder
-          workspace={workspace}
+          api={api}
           form={form}
           prefix={prefix}
           onClose={() => setBuilding(false)}
@@ -505,6 +597,26 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
           }}
         />
       )}
+      {promoting &&
+        file &&
+        createPortal(
+          <Dialog
+            title={t("desktop.connectors.make_global_title", { name: file.name })}
+            icon={mdiEarth}
+            onClose={() => setPromoting(false)}
+            footer={
+              <>
+                <Button onClick={() => setPromoting(false)}>{t("desktop.cancel")}</Button>
+                <Button variant="filled" icon={mdiEarth} onClick={() => void promote()}>
+                  {t("desktop.connectors.make_global")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t("desktop.connectors.make_global_body", { name: file.name, path: folder(category, "global") })}</p>
+          </Dialog>,
+          document.body,
+        )}
       {deleting &&
         file &&
         createPortal(
@@ -562,7 +674,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
  * when it can read none, and the sql-query skill writes a query. The draft
  * is shown with its notes, and Use adds it to the form, unsaved.
  */
-function QueryBuilder({ workspace, form, prefix, onClose, onUse }: { workspace: string; form: ConnectorForm; prefix: string; onClose: () => void; onUse: (q: QueryForm) => void }) {
+function QueryBuilder({ api, form, prefix, onClose, onUse }: { api: ConnectorApi; form: ConnectorForm; prefix: string; onClose: () => void; onUse: (q: QueryForm) => void }) {
   const [request, setRequest] = useState("");
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<{ query: QueryForm; notes: string[]; tables: number } | null>(null);
@@ -571,7 +683,7 @@ function QueryBuilder({ workspace, form, prefix, onClose, onUse }: { workspace: 
     setBusy(true);
     setError("");
     try {
-      const r = await workspaces.draftConnectorQuery({ workspace, ...connectionFromForm(form), request: request.trim() });
+      const r = await api.draft({ ...connectionFromForm(form), request: request.trim() });
       if (r.problem || !r.query) setError(r.problem);
       else setDraft({ query: queryForm(r.query), notes: r.notes, tables: r.tables });
     } catch (e) {
@@ -645,7 +757,7 @@ function QueryBuilder({ workspace, form, prefix, onClose, onUse }: { workspace: 
 
 /** A connection's own query: its name, what it's for, its statement and parameters, and Try it on the connection as written. */
 function QueryCard({
-  workspace,
+  api,
   form,
   kind,
   prefix,
@@ -653,7 +765,7 @@ function QueryCard({
   onChange,
   onRemove,
 }: {
-  workspace: string;
+  api: ConnectorApi;
   form: ConnectorForm;
   kind: ConnectorKind;
   prefix: string;
@@ -670,7 +782,7 @@ function QueryCard({
     setResult(null);
     try {
       const values = Object.fromEntries(query.params.map((p) => [p.name, typed(args[p.name] ?? "", p.type)]));
-      const r = await workspaces.tryConnectorTool({ workspace, ...connectionFromForm(form), tool: query.name.trim(), argsJson: JSON.stringify(values) });
+      const r = await api.tryTool({ ...connectionFromForm(form), tool: query.name.trim(), argsJson: JSON.stringify(values) });
       setResult(r.problem ? { output: r.problem, error: true } : { output: r.output, error: r.isError });
     } catch (e) {
       setResult({ output: message(e), error: true });

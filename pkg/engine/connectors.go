@@ -130,11 +130,16 @@ func (w *Workspace) HasConnectorSecret(c connectors.Connection, field string) bo
 	return ok && connectors.HasSecret(w.cfg.Dir, w.Dir(), cat, c, field)
 }
 
-// SaveConnector writes a connection from Studio's form, in place of
-// previous ("" for a new one), keeping the secret values given; problems,
-// with nothing written, when it can't be saved. Saving a workspace one
-// trusts it as written. The servers restart with it.
+// SaveConnector writes one of the workspace's connections from Studio's
+// form, in place of previous ("" for a new one), keeping the secret
+// values given; problems, with nothing written, when it can't be saved.
+// Saving it trusts it as written. The servers restart with it. A global
+// one is Settings' to change (ErrGlobalConnector, CON-18).
 func (w *Workspace) SaveConnector(ctx context.Context, c connectors.Connection, values map[string]string, previous string) (connectors.Connection, []string, error) {
+	if c.Scope == connectors.ScopeGlobal {
+		return connectors.Connection{}, nil, ErrGlobalConnector
+	}
+	c.Scope = connectors.ScopeWorkspace
 	saved, problems, err := connectors.Save(w.ConnectorCatalog(), w.cfg.Dir, w.Dir(), c, values, previous)
 	if err != nil || len(problems) > 0 {
 		return saved, problems, err
@@ -144,8 +149,8 @@ func (w *Workspace) SaveConnector(ctx context.Context, c connectors.Connection, 
 			return saved, nil, err
 		}
 	}
-	if previous != "" { // a rename keeps whether it's on, in every workspace
-		if err := connectorScope(w.cfg).Rename(connectors.Key(saved.Scope, saved.Category, previous), saved.Key()); err != nil {
+	if previous != "" { // a rename keeps whether it's on
+		if err := connectorScope(w.cfg).Rename(w.Dir(), connectors.Key(saved.Scope, saved.Category, previous), saved.Key()); err != nil {
 			return saved, nil, err
 		}
 	}
@@ -154,16 +159,55 @@ func (w *Workspace) SaveConnector(ctx context.Context, c connectors.Connection, 
 	return saved, nil, w.ReloadConnectors(ctx)
 }
 
-// DeleteConnector removes a category's connection and its secrets
-// (connectors.ErrUnknown when it isn't there).
+// ErrGlobalConnector is a change to a global connection asked of a
+// workspace: Settings changes those (CON-18).
+var ErrGlobalConnector = errors.New("a global connection is changed in Settings, not in a workspace")
+
+// ErrUntrustedConnector is a workspace connection the person hasn't
+// trusted, which can't be made global until they save it (CON-19).
+var ErrUntrustedConnector = errors.New("save and trust it first")
+
+// DeleteConnector removes one of the workspace's connections and its
+// secrets (connectors.ErrUnknown when it isn't there; ErrGlobalConnector
+// for a global one).
 func (w *Workspace) DeleteConnector(ctx context.Context, category, scope, name string) error {
+	if scope == connectors.ScopeGlobal {
+		return ErrGlobalConnector
+	}
 	if err := connectors.Delete(w.ConnectorCatalog(), w.cfg.Dir, w.Dir(), category, scope, name); err != nil {
 		return err
 	}
-	if err := connectorScope(w.cfg).Forget(connectors.Key(scope, category, name)); err != nil {
+	if err := connectorScope(w.cfg).Forget(w.Dir(), connectors.Key(scope, category, name)); err != nil {
 		return err
 	}
 	return w.ReloadConnectors(ctx)
+}
+
+// MakeConnectorGlobal moves one of the workspace's connections, with its
+// secrets, to the global folder, so every workspace has it (CON-19):
+// problems, with nothing moved, when it can't be; ErrUntrustedConnector
+// when the person hasn't trusted it (a clone's file mustn't reach the
+// global secrets). Whether it's on here goes with it.
+func (w *Workspace) MakeConnectorGlobal(ctx context.Context, category, name string) (connectors.Connection, []string, error) {
+	i := slices.IndexFunc(w.Connectors(), func(c connectors.Connection) bool {
+		return c.Category == category && c.Scope == connectors.ScopeWorkspace && c.Name == name
+	})
+	if i < 0 {
+		return connectors.Connection{}, nil, fmt.Errorf("%w: %q", connectors.ErrUnknown, name)
+	}
+	if !w.Connectors()[i].Trusted {
+		return connectors.Connection{}, nil, ErrUntrustedConnector
+	}
+	saved, problems, err := connectors.MakeGlobal(w.cfg.Dir, w.Dir(), category, name)
+	if err != nil || len(problems) > 0 {
+		return saved, problems, err
+	}
+	if err := connectorScope(w.cfg).Rename(w.Dir(), connectors.Key(connectors.ScopeWorkspace, category, name), saved.Key()); err != nil {
+		return saved, nil, err
+	}
+	saved.Trusted = true
+	saved.On = w.connectorOn(w.Dir())(saved.Key())
+	return saved, nil, w.ReloadConnectors(ctx)
 }
 
 // connectorEnv is where Studio tests a connection: the secret values
@@ -201,7 +245,11 @@ var ErrNoQueryBuilder = errors.New("its kind has no query builder")
 
 // connectorKind is a connection's kind, when it has capability c.
 func (w *Workspace) connectorKind(c connectors.Connection, capability connectors.Capability) (connectors.Category, connectors.Kind, error) {
-	cat := w.ConnectorCatalog()
+	return kindWith(w.ConnectorCatalog(), c, capability)
+}
+
+// kindWith is c's category and kind in cat, when the kind has capability.
+func kindWith(cat connectors.Catalog, c connectors.Connection, capability connectors.Capability) (connectors.Category, connectors.Kind, error) {
 	category, ok := cat.Category(c.Category)
 	if !ok {
 		return connectors.Category{}, connectors.Kind{}, connectors.ErrUnknown

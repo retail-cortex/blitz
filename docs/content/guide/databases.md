@@ -9,11 +9,10 @@ Databases are the first of Blitz's [connectors](connectors.md). Spec: [databases
 
 ## Connect one
 
-In the desktop app, open **Studio › Connectors** and press **+** by **Databases**.
+In the desktop app, open **Studio › Connectors** for one this workspace has (saved in `.agents/connectors/databases`, so you can commit it for your team), or **Settings › Connectors** for one every workspace has (`~/.blitz/connectors/databases`), and press **+** by **Databases**. Any workspace can switch a global one off ([what each workspace can reach](connectors.md#choose-what-each-workspace-can-reach)).
 
 1. Give it a **name** (`shop`) and say **what it holds** ("The shop's orders and customers"). The agents read that to know when to use it.
-2. Choose **where**: **This workspace** (saved in `.agents/connectors/databases`, so you can commit it for your team) or **Every workspace** (`~/.blitz/connectors/databases`). A global one can still be switched off in any workspace that shouldn't see it ([what each workspace can reach](connectors.md#choose-what-each-workspace-can-reach)).
-3. Choose the **kind** and fill in its settings:
+2. Choose the **kind** and fill in its settings:
 
    | Kind | Settings | Signs in with |
    |---|---|---|
@@ -23,8 +22,8 @@ In the desktop app, open **Studio › Connectors** and press **+** by **Database
    | BigQuery | project, location, which datasets, the most bytes a query may bill | your Google credentials |
 
    For Google Cloud, sign in once with `gcloud auth application-default login`.
-4. Leave **Read-only** on unless the agents should change data.
-5. Press **Test** to connect and see the tools the agents will get, then **Save**.
+3. Leave **Read-only** on unless the agents should change data.
+4. Press **Test** to connect and see the tools the agents will get, then **Save**.
 
 The password goes into your system's keychain as a [secret](../about/specs/spec_secrets_039.md) (`DB_SHOP_PASSWORD`), never into the file, so a workspace's database file is safe to commit.
 

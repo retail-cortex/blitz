@@ -25,9 +25,13 @@ import (
 	"strconv"
 	"strings"
 
+	"google.golang.org/adk/v2/model"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/engine/databases"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 )
 
 // The query builder (spec_connectors_047 CON-12): a connection whose kind
@@ -63,29 +67,52 @@ Reply with JSON only, no fences: {"name": "<tool name>", "description": "<what i
 // A schema that can't be read, or holds no table, is the draft's
 // problem; so is a model that fails.
 func (w *Workspace) DraftConnectorQuery(ctx context.Context, c connectors.Connection, values map[string]string, request string) (QueryDraft, error) {
+	return draftQuery(ctx, queryBuilder{
+		cfg:      w.cfg,
+		catalog:  w.ConnectorCatalog(),
+		newModel: w.newModel,
+		skill:    func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
+		schema: func(ctx context.Context) ([]connectors.Table, error) {
+			return w.ReadConnectorSchema(ctx, c, values)
+		},
+	}, c, request)
+}
+
+// queryBuilder is what a draft needs: the settings, the catalog, the
+// model, the skill and the connection's schema.
+type queryBuilder struct {
+	cfg      *config.Config
+	catalog  connectors.Catalog
+	newModel func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	skill    func() (*skills.Skill, bool)
+	schema   func(context.Context) ([]connectors.Table, error)
+}
+
+// draftQuery is DraftConnectorQuery with what it needs given.
+func draftQuery(ctx context.Context, qb queryBuilder, c connectors.Connection, request string) (QueryDraft, error) {
 	if strings.TrimSpace(request) == "" {
 		return QueryDraft{}, fmt.Errorf("say what you're looking for first")
 	}
-	_, kind, err := w.connectorKind(c, connectors.QueryBuilder)
+	_, kind, err := kindWith(qb.catalog, c, connectors.QueryBuilder)
 	if err != nil {
 		return QueryDraft{}, err
 	}
-	skill, ok := w.skills.Get(SQLSkill)
+	skill, ok := qb.skill()
 	if !ok {
 		return QueryDraft{}, fmt.Errorf("the %s skill isn't there", SQLSkill)
 	}
-	redact := SecretRedactor(w.cfg).String
-	tables, err := w.ReadConnectorSchema(ctx, c, values)
+	redact := SecretRedactor(qb.cfg).String
+	tables, err := qb.schema(ctx)
 	if err != nil {
 		return QueryDraft{Problem: redact(err.Error())}, nil
 	}
-	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+	llm, err := qb.newModel(ctx, qb.cfg, cmp.Or(qb.cfg.Suggestions.Model, qb.cfg.Permissions.Auto.Model))
 	if err != nil {
-		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, qb.cfg)}, nil
 	}
 	reply, served, usage, err := runtime.Ask(ctx, llm, skill.Content+queryReply, redact(queryPrompt(kind, c, tables, request)))
 	if err != nil {
-		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, qb.cfg)}, nil
 	}
 	if usage != nil {
 		slog.Info("query drafted", "kind", kind.ID, "tables", len(tables), "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)

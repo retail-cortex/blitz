@@ -35,6 +35,7 @@ import {
   mdiPaletteOutline,
   mdiPencilOutline,
   mdiPowerPlugOutline,
+  mdiConnection,
   mdiScaleBalance,
   mdiServerNetwork,
   mdiTextBoxSearchOutline,
@@ -62,6 +63,7 @@ import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
 import { McpSettings } from "./McpSettings";
+import { ConnectorsPane } from "./studio/ConnectorsPane";
 import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
@@ -89,6 +91,7 @@ const sectionIcons: Record<SectionId, string> = {
   skills: mdiPuzzleOutline,
   workers: mdiCalendarClock,
   mcp: mdiPowerPlugOutline,
+  connectors: mdiConnection,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -164,6 +167,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "mcp" && <McpSettings />}
+            {section === "connectors" && <ConnectorsPane />}
             {section === "workspaces" && (
               <Workspaces
                 initial={initial === "workspaces" ? initialScope : ""}

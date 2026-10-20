@@ -1089,6 +1089,13 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .db-param > * { min-width: 0; }
 @media (max-width: 900px) { .db-param { grid-template-columns: 1fr 1fr; } }
 .connectors-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
+/* Settings › Connectors slides its form in as Studio's panes do, so while
+   it shows, Settings fills the drawer's height like Studio and the pane
+   scrolls itself (its footer stays in view); the sections scroll apart. */
+.settings-drawer:has(.settings-pane > .connectors-pane) > .body { overflow: hidden; }
+.settings-drawer:has(.settings-pane > .connectors-pane) .settings { height: 100%; min-height: 0; }
+.settings-drawer:has(.settings-pane > .connectors-pane) .settings-nav { max-height: 100%; overflow-y: auto; }
+.settings-drawer .settings-pane:has(> .connectors-pane) { display: flex; flex-direction: column; min-height: 0; }
 .db-result { max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; font-family: var(--md-mono); font-size: 12px; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }

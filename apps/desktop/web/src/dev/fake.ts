@@ -30,7 +30,7 @@ import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
-import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -733,6 +733,63 @@ const fakeTables = [
   { name: "public.customers", about: "Everyone who ever ordered", columns: [{ name: "customer_id", type: "integer" }, { name: "name", type: "text" }, { name: "email", type: "text" }] },
   { name: "public.orders", about: "", columns: [{ name: "order_id", type: "integer" }, { name: "customer_id", type: "integer" }, { name: "total", type: "numeric" }, { name: "placed_at", type: "timestamp with time zone" }] },
 ];
+// The Databases category, as both Studio and Settings list it.
+const fakeConnectorCategory = {
+  id: "databases",
+  name: { en: "Databases", es: "Bases de datos", "fr-CA": "Bases de données" },
+  hint: en("Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."),
+  icon: "database",
+  server: "databases",
+  prefix: "db",
+  globalDir: "~/.blitz/connectors/databases",
+  origin: "builtin",
+};
+// The connector calls Studio and Settings share: the workspace's
+// connections and the global ones (spec_connectors_047 CON-18).
+const fakeConnectorCalls = {
+  save: (workspace: string, c: Connector, previousName: string, secretValues: Record<string, string>) => {
+    if (!/^[a-z][a-z0-9_]{0,39}$/.test(c.name)) return { problems: [`name "${c.name}": lower case letters, digits and _, starting with a letter`] };
+    const i = fakeConnectors.findIndex((d) => d.name === (previousName || c.name) && d.scope === c.scope && d.category === c.category);
+    if (!previousName && i >= 0) return { problems: [`there's a connection named "${c.name}" already`] };
+    const secretsSet = [...new Set([...(i >= 0 ? fakeConnectors[i].secretsSet : []), ...Object.keys(secretValues)])];
+    if (c.kind === "postgres" && !secretsSet.includes("password")) return { problems: ["password is required"] };
+    const next: FakeConnector = { name: c.name, category: c.category, scope: c.scope, kind: c.kind, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text, trusted: true, enabled: i >= 0 ? fakeConnectors[i].enabled : true };
+    if (i >= 0) fakeConnectors[i] = next;
+    else fakeConnectors.push(next);
+    return { connection: fakeConnectorMsg(workspace, next) };
+  },
+  test: async (c: Connector) => {
+    await new Promise((r) => setTimeout(r, 700));
+    if (c.settings.host === "nowhere") return { problem: `failed to connect to host=nowhere user=${c.settings.user}: dial tcp: lookup nowhere: no such host` };
+    const kind = fakeConnectorKinds.find((k) => k.id === c.kind);
+    const tools = [...c.tools.filter((id) => !(c.readOnly && kind?.tools.find((t) => t.id === id && "writes" in t && t.writes))).map((id) => ({ name: `${c.name}_${id}`, description: `${id.replace(/_/g, " ")} on ${c.name}.` })), ...c.queries.map((q) => ({ name: `${c.name}_${q.name}`, description: q.description }))];
+    return { tools: tools.map((t) => ({ ...t, readOnly: c.readOnly })) };
+  },
+  tryTool: async (tool: string) => {
+    await new Promise((r) => setTimeout(r, 500));
+    return { output: tool.endsWith("top_customers") ? '{"name":"Ada Lovelace","spent":1820.5}\n{"name":"Grace Hopper","spent":1544}' : '{"n":42}' };
+  },
+  readSchema: async (c: Connector) => {
+    await new Promise((r) => setTimeout(r, 500));
+    if (c.settings.host === "nowhere") return { problem: "no tables in shop: failed to connect to host=nowhere" };
+    return { tables: fakeTables };
+  },
+  draft: async (request: string) => {
+    await new Promise((r) => setTimeout(r, 900));
+    if (/refund/i.test(request)) return { tables: fakeTables.length, problem: "No table holds refunds: orders has a total, but nothing says one was refunded." };
+    return {
+      tables: fakeTables.length,
+      notes: ["\"Spent\" is the sum of orders.total.", "\"Last month\" is the calendar month before today."],
+      query: {
+        name: "top_customers_last_month",
+        description: "The customers who spent the most last month, with what they spent. Use it for \"best customers\" questions.",
+        statement: "SELECT c.name, sum(o.total) AS spent\nFROM public.orders o JOIN public.customers c USING (customer_id)\nWHERE o.placed_at >= date_trunc('month', now()) - interval '1 month'\n  AND o.placed_at < date_trunc('month', now())\nGROUP BY c.name\nORDER BY spent DESC\nLIMIT $1",
+        params: [{ name: "limit", type: "integer", description: "How many customers" }],
+        readsOnly: true,
+      },
+    };
+  },
+};
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
@@ -1707,17 +1764,10 @@ export function installFake() {
         listConnectors: ({ workspace }) => ({
           categories: [
             {
-              id: "databases",
-              name: { en: "Databases", es: "Bases de datos", "fr-CA": "Bases de données" },
-              hint: en("Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."),
-              icon: "database",
-              server: "databases",
-              prefix: "db",
+              ...fakeConnectorCategory,
               workspaceDir: `${workspace}/.agents/connectors/databases`,
-              globalDir: "~/.blitz/connectors/databases",
               state: "connected",
               toolCount: fakeConnectors.reduce((n, d) => n + d.tools.length + d.queries.length, 0),
-              origin: "builtin",
             },
           ],
           kinds: [...fakeConnectorKinds, { id: "mysql", category: "databases", name: en("MySQL"), backend: "toolbox", origin: "workspace", path: `${workspace}/.agents/connectors/kinds/mysql.yaml`, problem: 'source "mysql": not in Blitz\'s Toolbox' }],
@@ -1726,16 +1776,8 @@ export function installFake() {
           globalDir: "~/.blitz/connectors",
         }),
         saveConnector: ({ workspace, connection, previousName, secretValues }) => {
-          const c = connection!;
-          if (!/^[a-z][a-z0-9_]{0,39}$/.test(c.name)) return { problems: [`name "${c.name}": lower case letters, digits and _, starting with a letter`] };
-          const i = fakeConnectors.findIndex((d) => d.name === (previousName || c.name) && d.scope === c.scope && d.category === c.category);
-          if (!previousName && i >= 0) return { problems: [`there's a connection named "${c.name}" already`] };
-          const secretsSet = [...new Set([...(i >= 0 ? fakeConnectors[i].secretsSet : []), ...Object.keys(secretValues)])];
-          if (c.kind === "postgres" && !secretsSet.includes("password")) return { problems: ["password is required"] };
-          const next: FakeConnector = { name: c.name, category: c.category, scope: c.scope, kind: c.kind, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text, trusted: true, enabled: i >= 0 ? fakeConnectors[i].enabled : true };
-          if (i >= 0) fakeConnectors[i] = next;
-          else fakeConnectors.push(next);
-          return { connection: fakeConnectorMsg(workspace, next) };
+          if (connection!.scope === "global") throw new ConnectError("a global connection is changed in Settings, not in a workspace", Code.FailedPrecondition);
+          return fakeConnectorCalls.save(workspace, { ...connection!, scope: "workspace" }, previousName, secretValues);
         },
         deleteConnector: ({ category, scope, name }) => {
           const i = fakeConnectors.findIndex((d) => d.name === name && d.scope === scope && d.category === category);
@@ -1749,38 +1791,18 @@ export function installFake() {
           d.enabled = enabled;
           return {};
         },
-        testConnector: async ({ connection }) => {
-          await new Promise((r) => setTimeout(r, 700));
-          const c = connection!;
-          if (c.settings.host === "nowhere") return { problem: `failed to connect to host=nowhere user=${c.settings.user}: dial tcp: lookup nowhere: no such host` };
-          const kind = fakeConnectorKinds.find((k) => k.id === c.kind);
-          const tools = [...c.tools.filter((id) => !(c.readOnly && kind?.tools.find((t) => t.id === id && "writes" in t && t.writes))).map((id) => ({ name: `${c.name}_${id}`, description: `${id.replace(/_/g, " ")} on ${c.name}.` })), ...c.queries.map((q) => ({ name: `${c.name}_${q.name}`, description: q.description }))];
-          return { tools: tools.map((t) => ({ ...t, readOnly: c.readOnly })) };
+        makeConnectorGlobal: ({ category, name }) => {
+          const d = fakeConnectors.find((d) => d.name === name && d.scope === "workspace" && d.category === category);
+          if (!d) throw new ConnectError(`no connection ${name}`, Code.NotFound);
+          if (!d.trusted) throw new ConnectError("save and trust it first", Code.FailedPrecondition);
+          if (fakeConnectors.some((x) => x.name === name && x.scope === "global" && x.category === category)) return { problems: [`there's a global connection named "${name}" already`] };
+          d.scope = "global";
+          return { connection: fakeConnectorMsg("", d) };
         },
-        tryConnectorTool: async ({ tool }) => {
-          await new Promise((r) => setTimeout(r, 500));
-          return { output: tool.endsWith("top_customers") ? '{"name":"Ada Lovelace","spent":1820.5}\n{"name":"Grace Hopper","spent":1544}' : '{"n":42}' };
-        },
-        readConnectorSchema: async ({ connection }) => {
-          await new Promise((r) => setTimeout(r, 500));
-          if (connection!.settings.host === "nowhere") return { problem: "no tables in shop: failed to connect to host=nowhere" };
-          return { tables: fakeTables };
-        },
-        draftConnectorQuery: async ({ request }) => {
-          await new Promise((r) => setTimeout(r, 900));
-          if (/refund/i.test(request)) return { tables: fakeTables.length, problem: "No table holds refunds: orders has a total, but nothing says one was refunded." };
-          return {
-            tables: fakeTables.length,
-            notes: ["\"Spent\" is the sum of orders.total.", "\"Last month\" is the calendar month before today."],
-            query: {
-              name: "top_customers_last_month",
-              description: "The customers who spent the most last month, with what they spent. Use it for \"best customers\" questions.",
-              statement: "SELECT c.name, sum(o.total) AS spent\nFROM public.orders o JOIN public.customers c USING (customer_id)\nWHERE o.placed_at >= date_trunc('month', now()) - interval '1 month'\n  AND o.placed_at < date_trunc('month', now())\nGROUP BY c.name\nORDER BY spent DESC\nLIMIT $1",
-              params: [{ name: "limit", type: "integer", description: "How many customers" }],
-              readsOnly: true,
-            },
-          };
-        },
+        testConnector: ({ connection }) => fakeConnectorCalls.test(connection!),
+        tryConnectorTool: ({ tool }) => fakeConnectorCalls.tryTool(tool),
+        readConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
+        draftConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
         // Studio › Rules: gates before and after the agent, and instruction rules.
         listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
         saveRule: ({ workspace, previousName, rule }) => {
@@ -2229,6 +2251,24 @@ export function installFake() {
           ],
         }),
         listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
+        // Settings › Connectors: the global connections.
+        listGlobalConnectors: () => ({
+          categories: [{ ...fakeConnectorCategory, workspaceDir: "", state: "", toolCount: 0 }],
+          kinds: fakeConnectorKinds,
+          connections: fakeConnectors.filter((d) => d.scope === "global").map((d) => fakeConnectorMsg("", { ...d, enabled: true })),
+          globalDir: "~/.blitz/connectors",
+        }),
+        saveGlobalConnector: ({ connection, previousName, secretValues }) => fakeConnectorCalls.save("", { ...connection!, scope: "global" }, previousName, secretValues),
+        deleteGlobalConnector: ({ category, name }) => {
+          const i = fakeConnectors.findIndex((d) => d.name === name && d.scope === "global" && d.category === category);
+          if (i < 0) throw new ConnectError(`no connection ${name}`, Code.NotFound);
+          fakeConnectors.splice(i, 1);
+          return {};
+        },
+        testGlobalConnector: ({ connection }) => fakeConnectorCalls.test(connection!),
+        tryGlobalConnectorTool: ({ tool }) => fakeConnectorCalls.tryTool(tool),
+        readGlobalConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
+        draftGlobalConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
         saveMCPServer: ({ name, server }) => {
           const i = fakeMCP.findIndex((m) => m.name === name);
           if (!name && fakeMCP.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);

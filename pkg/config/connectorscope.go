@@ -70,41 +70,51 @@ func (s *ConnectorScope) Set(workspace, conn string, on bool) error {
 	})
 }
 
-// Rename keeps a renamed connection's choice (from, to: keys) in every
-// workspace: a global one's is in each.
-func (s *ConnectorScope) Rename(from, to string) error {
+// Rename keeps a renamed connection's choice (from, to: keys) in
+// workspace, or in every workspace when it's "" (a global connection's
+// is in each).
+func (s *ConnectorScope) Rename(workspace, from, to string) error {
 	if from == to {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	all := s.readLocked()
-	changed := false
-	for ws, e := range all {
-		if slices.Contains(e.Off, from) {
-			e.Off = slices.DeleteFunc(slices.Clone(e.Off), func(k string) bool { return k == from || k == to })
-			e.Off = append(e.Off, to)
-			all[ws] = e
-			changed = true
+	return s.each(workspace, func(off []string) []string {
+		if !slices.Contains(off, from) {
+			return off
 		}
-	}
-	if !changed {
-		return nil
-	}
-	return s.writeLocked(all)
+		off = slices.DeleteFunc(off, func(k string) bool { return k == from || k == to })
+		return append(off, to)
+	})
 }
 
-// Forget drops a deleted connection (its key) from every workspace.
-func (s *ConnectorScope) Forget(conn string) error {
+// Forget drops a deleted connection (its key) from workspace, or from
+// every workspace when it's "".
+func (s *ConnectorScope) Forget(workspace, conn string) error {
+	return s.each(workspace, func(off []string) []string {
+		return slices.DeleteFunc(off, func(k string) bool { return k == conn })
+	})
+}
+
+// each applies f to workspace's list ("": every workspace's) and writes
+// what changed.
+func (s *ConnectorScope) each(workspace string, f func([]string) []string) error {
+	if workspace != "" {
+		return s.change(workspace, f)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	all := s.readLocked()
 	changed := false
 	for ws, e := range all {
-		if slices.Contains(e.Off, conn) {
-			e.Off = slices.DeleteFunc(slices.Clone(e.Off), func(k string) bool { return k == conn })
-			all[ws] = e
-			changed = true
+		after := f(slices.Clone(e.Off))
+		slices.Sort(after)
+		if slices.Equal(slices.Sorted(slices.Values(e.Off)), after) {
+			continue
+		}
+		changed = true
+		if len(after) == 0 {
+			delete(all, ws)
+		} else {
+			all[ws] = connectorScopeEntry{Off: after}
 		}
 	}
 	if !changed {

@@ -3,7 +3,7 @@ title: Connectors
 weight: 45
 ---
 
-**Connectors** are the systems your agents reach, set up in **Studio › Connectors** rather than installed: [databases](databases.md) today, more categories to come. Every connection that's on in a workspace has its tools offered to the agents there, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
+**Connectors** are the systems your agents reach, set up in **Studio › Connectors** (a workspace's) and **Settings › Connectors** (every workspace's) rather than installed: [databases](databases.md) today, more categories to come. Every connection that's on in a workspace has its tools offered to the agents there, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
 
 Spec: [connectors](../about/specs/spec_connectors_047.md).
 
@@ -11,8 +11,11 @@ Spec: [connectors](../about/specs/spec_connectors_047.md).
 
 | | This workspace | Every workspace |
 |---|---|---|
+| Set up in | **Studio › Connectors** | **Settings › Connectors** |
 | Connections | `.agents/connectors/<category>/<name>.yaml` | `~/.blitz/connectors/<category>/<name>.yaml` |
 | Your own kinds | `.agents/connectors/kinds/<id>.yaml` | `~/.blitz/connectors/kinds/<id>.yaml` |
+
+A workspace's Studio only changes that workspace's connections. Your global ones are listed there too, so you can see what's in scope and switch each on or off, but you change them in Settings. To share one of the workspace's with every workspace, open it in Studio and press **Make global**: it moves to `~/.blitz/connectors`, its password with it, and leaves the workspace's `.agents` folder (if that's committed, your teammates lose it with your next commit). A kind you described in the workspace's own `.agents/connectors/kinds` can't go global until you add its descriptor to `~/.blitz/connectors/kinds`.
 
 Passwords and other secret settings go into your system's keychain as [secrets](../about/specs/spec_secrets_039.md), never into the file, so a workspace's connections are safe to commit.
 

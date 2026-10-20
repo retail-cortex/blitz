@@ -66,6 +66,7 @@ func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 		"SaveConnector":       func() error { return unary(w.SaveConnector, &pb.SaveConnectorRequest{Workspace: ws}) },
 		"DeleteConnector":     func() error { return unary(w.DeleteConnector, &pb.DeleteConnectorRequest{Workspace: ws}) },
 		"SetConnectorEnabled": func() error { return unary(w.SetConnectorEnabled, &pb.SetConnectorEnabledRequest{Workspace: ws}) },
+		"MakeConnectorGlobal": func() error { return unary(w.MakeConnectorGlobal, &pb.MakeConnectorGlobalRequest{Workspace: ws}) },
 		"TestConnector":       func() error { return unary(w.TestConnector, &pb.TestConnectorRequest{Workspace: ws}) },
 		"TryConnectorTool":    func() error { return unary(w.TryConnectorTool, &pb.TryConnectorToolRequest{Workspace: ws}) },
 		"ReadConnectorSchema": func() error { return unary(w.ReadConnectorSchema, &pb.ReadConnectorSchemaRequest{Workspace: ws}) },
