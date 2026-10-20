@@ -43,7 +43,7 @@ import {
 import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
-import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun, type RunEvalResponse } from "../gen/blitz/v1/workspace_pb";
+import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun, type RunEvalResponse, type WatchEvalRunResponse } from "../gen/blitz/v1/workspace_pb";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
@@ -239,7 +239,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
 
   // Follows a run into live: started (with its results so far), each
   // result as it's scored, then finished. Leaving stops only the following.
-  const follow = async (name: string, total: number, events: (signal: AbortSignal) => AsyncIterable<RunEvalResponse>) => {
+  const follow = async (name: string, total: number, events: (signal: AbortSignal) => AsyncIterable<RunEvalResponse | WatchEvalRunResponse>) => {
     following.current?.abort();
     const ctl = new AbortController();
     following.current = ctl;

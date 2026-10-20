@@ -265,7 +265,7 @@ service WorkspaceService {
   // Follows an eval run: started (with its results so far), each result
   // after, then finished. A run that has ended sends only finished; an
   // unknown one is NOT_FOUND (EVAL_RUN_NOT_FOUND).
-  rpc WatchEvalRun(WatchEvalRunRequest) returns (stream RunEvalResponse);
+  rpc WatchEvalRun(WatchEvalRunRequest) returns (stream WatchEvalRunResponse);
   // Stops an eval run going on: the results so far are recorded, as
   // stopped (EVAL_RUN_NOT_FOUND when it isn't going on).
   rpc StopEvalRun(StopEvalRunRequest) returns (StopEvalRunResponse);
@@ -2800,6 +2800,16 @@ message StopEvalRunResponse {}
 // Response message for WorkspaceService.RunEval: the run as it starts,
 // each result, then the finished run.
 message RunEvalResponse {
+  oneof event {
+    EvalRun started = 1;
+    EvalResult result = 2;
+    EvalRun finished = 3;
+  }
+}
+
+// Response message for WorkspaceService.WatchEvalRun: RunEvalResponse's
+// events.
+message WatchEvalRunResponse {
   oneof event {
     EvalRun started = 1;
     EvalResult result = 2;

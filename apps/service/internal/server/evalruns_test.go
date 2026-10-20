@@ -127,10 +127,10 @@ func TestEvalRunsGoOnInTheBackground(t *testing.T) {
 		var kinds []string
 		for stream.Receive() {
 			switch ev := stream.Msg().Event.(type) {
-			case *pb.RunEvalResponse_Started:
+			case *pb.WatchEvalRunResponse_Started:
 				kinds = append(kinds, "started")
 				close(watching)
-			case *pb.RunEvalResponse_Finished:
+			case *pb.WatchEvalRunResponse_Finished:
 				kinds = append(kinds, "finished:"+ev.Finished.Status)
 			}
 		}

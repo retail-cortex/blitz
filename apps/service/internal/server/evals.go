@@ -166,15 +166,28 @@ func evalSender(stream *connect.ServerStream[pb.RunEvalResponse]) func(api.EvalR
 	}
 }
 
+// evalWatcher is evalSender for WatchEvalRun's stream.
+func evalWatcher(stream *connect.ServerStream[pb.WatchEvalRunResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
+	return func(run api.EvalRun, x *api.EvalResult, finished bool) error {
+		switch {
+		case finished:
+			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Finished{Finished: evalRunMsg(run)}})
+		case x != nil:
+			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Result{Result: evalResultMsg(*x)}})
+		}
+		return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Started{Started: evalRunMsg(run)}})
+	}
+}
+
 // WatchEvalRun follows a run going on, or sends a recorded one as
 // finished.
-func (h workspaceService) WatchEvalRun(ctx context.Context, r req[pb.WatchEvalRunRequest], stream *connect.ServerStream[pb.RunEvalResponse]) error {
+func (h workspaceService) WatchEvalRun(ctx context.Context, r req[pb.WatchEvalRunRequest], stream *connect.ServerStream[pb.WatchEvalRunResponse]) error {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
 		return err
 	}
 	if l := h.s.liveEval(w.Dir(), r.Msg.Id); l != nil {
-		return l.follow(ctx, false, evalSender(stream))
+		return l.follow(ctx, false, evalWatcher(stream))
 	}
 	for _, e := range w.Evals() {
 		runs, err := w.EvalRuns(e.Name, 0)
@@ -183,7 +196,7 @@ func (h workspaceService) WatchEvalRun(ctx context.Context, r req[pb.WatchEvalRu
 		}
 		for _, run := range runs {
 			if run.ID == r.Msg.Id {
-				return evalSender(stream)(run, nil, true)
+				return evalWatcher(stream)(run, nil, true)
 			}
 		}
 	}
