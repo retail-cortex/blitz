@@ -25,6 +25,8 @@ Passwords and other secret settings go into your system's keychain as [secrets](
 
 Every connection, your global ones too, has a switch in Studio › Connectors. Turn one **off** and the agents in this workspace no longer get its tools, so they can't draw on that data here; other workspaces aren't changed. That's how you keep a project's answers to the sources that belong to it: your sales warehouse on for the analysis workspace, off for the website.
 
+The tray has the same switches: each workspace's submenu ends with **Connectors**, every connection it reaches ticked while it's on there, so you can put a data source in or out of scope without opening the app.
+
 A connection that's off keeps its file and its password, and you can still test it, try its queries and read its tables in Studio. The switch is yours, kept in your settings folder rather than the project, so cloning a repository never turns one of your connections on.
 
 ## Add a kind of your own

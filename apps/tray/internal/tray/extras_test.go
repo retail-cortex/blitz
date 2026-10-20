@@ -79,6 +79,11 @@ func (f *fakeExtras) WatchWorkflowRuns(_ context.Context, _ *connect.Request[pb.
 	return nil
 }
 
+func (f *fakeExtras) SetConnectorEnabled(_ context.Context, r *connect.Request[pb.SetConnectorEnabledRequest]) (*connect.Response[pb.SetConnectorEnabledResponse], error) {
+	f.note("connector " + r.Msg.Workspace + " " + r.Msg.Scope + "/" + r.Msg.Category + "/" + r.Msg.Name + map[bool]string{true: " on", false: " off"}[r.Msg.Enabled])
+	return connect.NewResponse(&pb.SetConnectorEnabledResponse{}), nil
+}
+
 func (f *fakeExtras) note(s string) { f.mu.Lock(); f.asked = append(f.asked, s); f.mu.Unlock() }
 
 func (f *fakeExtras) ListMCPServerConfigs(context.Context, *connect.Request[pb.ListMCPServerConfigsRequest]) (*connect.Response[pb.ListMCPServerConfigsResponse], error) {
@@ -152,11 +157,12 @@ func TestFetchExtrasAndDo(t *testing.T) {
 		{Kind: ShowWorkers, Workspace: "/w"},
 		{Kind: RunWorkflow, Workspace: "/w", Name: "brief"},
 		{Kind: StopWorkflow, Workspace: "/w", RunID: "f1"},
+		{Kind: SetConnector, Workspace: "/w", Category: "databases", Scope: "global", Name: "sales", On: false},
 		{Kind: NoAction},
 	} {
 		require.NoError(t, Do(ctx, sock, a, open), "%+v", a)
 	}
-	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1"}, f.asked)
+	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1", "connector /w global/databases/sales off"}, f.asked)
 	assert.Equal(t, "blitz://workers?dir=%2Fw", opened)
 	require.NoError(t, Do(ctx, sock, Action{Kind: ShowWorkflow, Workspace: "/w", Name: "brief", RunID: "f1"}, open))
 	assert.Equal(t, "blitz://workflow?dir=%2Fw&run=f1&workflow=brief", opened)

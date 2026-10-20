@@ -444,7 +444,7 @@ func onReady() {
 			}
 			var menus []tray.Entry
 			for _, sp := range spaces {
-				if entries := tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), live); len(entries) > 0 {
+				if entries := tray.SpaceEntries(sp, extras.Workers, tray.Flows(sp.Dir), tray.Conns("", sp.Dir), live); len(entries) > 0 {
 					menus = append(menus, tray.Entry{Title: sp.Name, Icon: tray.IconFolder, Children: entries})
 				}
 			}

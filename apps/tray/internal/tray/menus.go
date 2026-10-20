@@ -41,17 +41,18 @@ import (
 
 // Icon names: each drawn as a character before the entry's title (Label).
 const (
-	IconPlay     = "play"
-	IconStop     = "stop"
-	IconEye      = "eye"
-	IconFolder   = "folder"
-	IconJob      = "job"
-	IconWorkflow = "workflow"
-	DotRunning   = "dot-running"
-	DotFailed    = "dot-failed"
-	DotWaiting   = "dot-waiting"
-	SwitchOn     = "switch-on"
-	SwitchOff    = "switch-off"
+	IconPlay      = "play"
+	IconStop      = "stop"
+	IconEye       = "eye"
+	IconFolder    = "folder"
+	IconJob       = "job"
+	IconWorkflow  = "workflow"
+	IconConnector = "connector"
+	DotRunning    = "dot-running"
+	DotFailed     = "dot-failed"
+	DotWaiting    = "dot-waiting"
+	SwitchOn      = "switch-on"
+	SwitchOff     = "switch-off"
 )
 
 // glyphs are the icons as text. The menu bar's menus on macOS draw no
@@ -271,9 +272,15 @@ func spaceNamer(spaces []Space) func(dir string) string {
 // SpaceEntries are a workspace's submenu: Jobs, each job with Run now,
 // Stop while it runs, Enabled and Show in Blitz, marked running or failed;
 // then Workflows, each with Run, Stop while it runs and Show in Blitz,
-// marked running. A section with nothing in it is left out, and a
-// workspace with neither has no submenu (none).
-func SpaceEntries(s Space, workers []*pb.Worker, flows []Flow, l Live) []Entry {
+// marked running; then Connectors, each connection it reaches checked
+// while it's on there (connEntries). A section with nothing in it is left
+// out, and a workspace with none has no submenu (none).
+func SpaceEntries(s Space, workers []*pb.Worker, flows []Flow, conns []Conn, l Live) []Entry {
+	return append(jobAndFlowEntries(s, workers, flows, l), connEntries(s, conns)...)
+}
+
+// jobAndFlowEntries are a workspace's Jobs and Workflows sections.
+func jobAndFlowEntries(s Space, workers []*pb.Worker, flows []Flow, l Live) []Entry {
 	var out []Entry
 	for _, w := range workers {
 		if w.Workspace != s.Dir {

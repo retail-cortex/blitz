@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "actions.go",
         "apply.go",
+        "connectors.go",
         "detach_unix.go",
         "detach_windows.go",
         "exited_unix.go",
@@ -67,6 +68,7 @@ go_test(
     srcs = [
         "actions_test.go",
         "apply_test.go",
+        "connectors_test.go",
         "extras_test.go",
         "ico_test.go",
         "locale_test.go",

@@ -3115,6 +3115,8 @@
     "tray.running.job": "job",
     "tray.jobs": "Jobs",
     "tray.workflows": "Workflows",
+    "tray.connectors": "Connectors",
+    "tray.connector.global": "every workspace",
     "tray.run": "Run",
     "tray.show": "Open",
     "tray.next": "next {when}",
