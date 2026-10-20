@@ -287,7 +287,18 @@ type Connection struct {
 	// Trusted says the person trusted it (Serving.Trusted): a global one,
 	// or a workspace one saved in Studio or with trusted project settings.
 	Trusted bool
+	// On says it's served in this workspace: the person can turn any
+	// connection off there, a global one too (CON-17).
+	On bool
 }
+
+// Key names a connection in a workspace's choices: <scope>/<category>/<name>.
+func Key(scope, category, name string) string {
+	return scope + "/" + category + "/" + name
+}
+
+// Key is c's key (Key).
+func (c Connection) Key() string { return Key(c.Scope, c.Category, c.Name) }
 
 // Scopes.
 const (

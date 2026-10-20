@@ -7,9 +7,9 @@ weight: 47
 
 | | |
 |---|---|
-| Status | **Done** in v0.7.2 (the owner's request, 2026-10-20): CON-01–CON-16. Databases are the first category (spec_databases_046). |
-| Source | `pkg/engine/connectors/` (`connectors.go` the types, `backend.go` the interface, `descriptors.go`, `store.go`, `serve.go`, `builtin/` the built-in descriptors), `pkg/engine/databases/` (the toolbox backend), `pkg/engine/connectors.go`, `pkg/engine/querybuilder.go`, `pkg/engine/skills/builtin/sql-query/SKILL.md`, `pkg/config/skilltrust.go` (`OpenConnectorTrust`), `apps/service/internal/server/connectors.go`, `apps/desktop/web/src/studio/ConnectorsPane.tsx`, `apps/desktop/web/src/studio/connectorForm.ts` |
-| Tests | `pkg/engine/connectors/connectors_test.go`, `pkg/engine/databases/*_test.go`, `pkg/engine/connectors_test.go`, `pkg/engine/querybuilder_test.go`, `apps/service/internal/server/connectors_test.go`, `apps/desktop/web/src/studio/connectorForm.test.ts` |
+| Status | **Done** in v0.7.2 (the owner's request, 2026-10-20): CON-01–CON-17. Databases are the first category (spec_databases_046). |
+| Source | `pkg/engine/connectors/` (`connectors.go` the types, `backend.go` the interface, `descriptors.go`, `store.go`, `serve.go`, `builtin/` the built-in descriptors), `pkg/engine/databases/` (the toolbox backend), `pkg/engine/connectors.go`, `pkg/engine/querybuilder.go`, `pkg/engine/skills/builtin/sql-query/SKILL.md`, `pkg/config/skilltrust.go` (`OpenConnectorTrust`), `pkg/config/connectorscope.go`, `apps/service/internal/server/connectors.go`, `apps/desktop/web/src/studio/ConnectorsPane.tsx`, `apps/desktop/web/src/studio/connectorForm.ts` |
+| Tests | `pkg/engine/connectors/connectors_test.go`, `pkg/config/connectorscope_test.go`, `pkg/engine/databases/*_test.go`, `pkg/engine/connectors_test.go`, `pkg/engine/querybuilder_test.go`, `apps/service/internal/server/connectors_test.go`, `apps/desktop/web/src/studio/connectorForm.test.ts` |
 | Depends on | [spec_databases_046](spec_databases_046.md), [spec_mcp_009](spec_mcp_009.md), [spec_secrets_039](spec_secrets_039.md), [spec_skills_013](spec_skills_013.md), [spec_studio_040](spec_studio_040.md) |
 
 ## 1. Purpose
@@ -39,10 +39,14 @@ Databases were the first system the agents could reach from Studio; email, issue
 
 - **CON-09** A workspace's connection files come with the workspace, so a clone could name the person's global secrets and an address of its own. One is **trusted** only when the person saved it, as it is now, in Studio (its content hash is kept in `connector-trust.json` in the settings folder, `config.OpenConnectorTrust`), or trusted the project's settings (spec_project_config_031). An untrusted one is still served, but its `${NAME}`s are only the workspace's own secrets, and its tools all ask first, read-only or not. Global connections are the person's own. Blitz never decides for them: Studio says so on the file and offers **Save and trust**.
 
+### Scope
+
+- **CON-17** Any connection, a global one too, can be turned **off in a workspace**: its tools aren't the agents' there, so the person chooses what each workspace's agents can reach (which data a project's answers draw on). It's on until they turn it off. One that's off keeps its file and secrets, is listed with *Off in this workspace*, and can still be tested, tried, read and drafted with in Studio. The choice is the person's, kept by the workspace (its folder, links resolved) in `connector-scope.json` in the settings folder (`config.OpenConnectorScope`), never in the project, so a repository can't turn a connection on or off; a rename keeps it and a delete forgets it, in every workspace. Turning one on or off serves its category again (CON-08).
+
 ### The API and Studio
 
-- **CON-10** `WorkspaceService.ListConnectors` (the categories with their folders and their server's state, the kinds, every descriptor's origin, file and problem, and the connections, each saying whether it's trusted), `SaveConnector` (problems with nothing written; `CONNECTOR_NOT_FOUND` for a previous name that isn't there), `DeleteConnector`, `TestConnector`, `TryConnectorTool`, `ReadConnectorSchema` (a problem when it reads no table) and `DraftConnectorQuery` (CON-12). They replace v0.7.2's development-only database RPCs.
-- **CON-11** **Studio › Connectors** (`ConnectorsPane`), after Workflows with Secrets (spec_studio_040 STU-02): each usable category with its icon, name, hint, server state and **+**, its connections (kind, scope, *not trusted yet*, read-only or not, tool count, description), and the descriptors that can't be used with why. A connection's form slides in over the list, drawn from its kind's descriptor: name and description, where, the category's kinds, the fields with their labels and help, **Read-only** with the kind's hint (when it can be), the ready-made tools, and as the kind can: **Your queries** with **Try it** and **Write a query**, **Read the tables**, and **Test**. The strings are in English, Spanish and French (DB-15).
+- **CON-10** `WorkspaceService.ListConnectors` (the categories with their folders and their server's state, the kinds, every descriptor's origin, file and problem, and the connections, each saying whether it's trusted and whether it's on here), `SaveConnector` (problems with nothing written; `CONNECTOR_NOT_FOUND` for a previous name that isn't there), `DeleteConnector`, `SetConnectorEnabled` (CON-17; `CONNECTOR_NOT_FOUND`), `TestConnector`, `TryConnectorTool`, `ReadConnectorSchema` (a problem when it reads no table) and `DraftConnectorQuery` (CON-12). They replace v0.7.2's development-only database RPCs.
+- **CON-11** **Studio › Connectors** (`ConnectorsPane`), after Workflows with Secrets (spec_studio_040 STU-02): each usable category with its icon, name, hint, server state and **+**, its connections (kind, scope, *not trusted yet*, *off in this workspace*, read-only or not, tool count, description) each with a switch turning it on or off here (CON-17), and the descriptors that can't be used with why. A connection's form slides in over the list, drawn from its kind's descriptor: name and description, where, the category's kinds, the fields with their labels and help, **Read-only** with the kind's hint (when it can be), the ready-made tools, and as the kind can: **Your queries** with **Try it** and **Write a query**, **Read the tables**, and **Test**. The strings are in English, Spanish and French (DB-15).
 
 ### The query builder
 
@@ -58,5 +62,5 @@ Databases were the first system the agents could reach from Studio; email, issue
 ## 3. Not yet
 
 - More categories (Email first) and an **MCP** backend, so any MCP server becomes a connector by a descriptor alone.
-- Choosing which agents get a category's connections (every agent does).
+- Choosing which agents get a connection (every agent in a workspace where it's on does).
 - Running a drafted query to check it before it's offered (Try it does it by hand).

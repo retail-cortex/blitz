@@ -375,19 +375,25 @@ func TestWith(t *testing.T) {
 	ws := home(t)
 	user := config.MCPServerConfig{Name: "github", Command: "gh"}
 	stale := config.MCPServerConfig{Name: "databases", InProcess: "toolbox", Fingerprint: "old"}
-	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil), "no files: none")
+	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil, nil), "no files: none")
 
 	file := filepath.Join(connectors.WorkspaceDir(ws), "databases", "scratch.yaml")
 	write(t, file, "kind: source\nname: scratch\ntype: sqlite\ndatabase: /tmp/none.db\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "notes.md"), "not a connection file")
-	out := connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil)
+	out := connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil, nil)
 	require.Len(t, out, 2)
 	assert.Equal(t, "databases", out[1].Name)
 	assert.NotEqual(t, "old", out[1].Fingerprint)
 
+	var asked []string
+	off := func(key string) bool { asked = append(asked, key); return false }
+	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, off, nil), "turned off: not served")
+	assert.Equal(t, []string{"workspace/databases/scratch"}, asked)
+	assert.Equal(t, "workspace/databases/scratch", connectors.Connection{Scope: "workspace", Category: "databases", Name: "scratch"}.Key())
+
 	mine := config.MCPServerConfig{Name: "databases", Command: "my-db-server"}
 	var warned []string
-	out = connectors.With([]config.MCPServerConfig{mine}, "", ws, nil, func(s string) { warned = append(warned, s) })
+	out = connectors.With([]config.MCPServerConfig{mine}, "", ws, nil, nil, func(s string) { warned = append(warned, s) })
 	assert.Equal(t, []config.MCPServerConfig{mine}, out)
 	require.Len(t, warned, 1)
 	assert.Contains(t, warned[0], `named "databases"`)

@@ -27,11 +27,12 @@ import (
 )
 
 // With is servers with the workspace's connector servers in place of any
-// in-process ones there: each category's connection files, served by
-// their backends, trusted says which workspace files the person trusted
-// (Serving.Trusted). A server of the user's own with a connector server's
-// name wins, and warn says so.
-func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted func(file string) bool, warn func(string)) []config.MCPServerConfig {
+// in-process ones there: each category's connection files that are on
+// (on says, by Key; nil: all of them), served by their backends; trusted
+// says which workspace files the person trusted (Serving.Trusted). A
+// server of the user's own with a connector server's name wins, and warn
+// says so.
+func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted func(file string) bool, on func(key string) bool, warn func(string)) []config.MCPServerConfig {
 	out := slices.DeleteFunc(slices.Clone(servers), func(s config.MCPServerConfig) bool { return s.InProcess != "" })
 	cat := Load(prefixDir, workspace)
 	for _, c := range cat.Usable() {
@@ -40,6 +41,9 @@ func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted
 		var order []string
 		for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
 			for _, f := range Files(prefixDir, workspace, scope, c.ID) {
+				if on != nil && !on(Key(scope, c.ID, idOf(f))) {
+					continue
+				}
 				text, _ := os.ReadFile(f)
 				b, ok := backendFor(cat, c, string(text))
 				if !ok {

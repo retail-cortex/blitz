@@ -370,6 +370,11 @@ service WorkspaceService {
   rpc SaveConnector(SaveConnectorRequest) returns (SaveConnectorResponse);
   // Deletes a connection and its secrets (CONNECTOR_NOT_FOUND).
   rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse);
+  // Turns a connection on or off in this workspace, a global one too: one
+  // that's off keeps its file and secrets, and the agents here don't get
+  // its tools. The choice is the person's, kept in their settings folder
+  // (CONNECTOR_NOT_FOUND).
+  rpc SetConnectorEnabled(SetConnectorEnabledRequest) returns (SetConnectorEnabledResponse);
   // Connects to a connection as written, unsaved, and lists the tools it
   // offers; problem says why it can't be reached (the test capability).
   rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse);
@@ -3629,6 +3634,8 @@ message Connector {
   // Studio or with trusted project settings. An untrusted one uses only
   // the workspace's secrets, and its tools ask first.
   bool trusted = 15;
+  // It's on in this workspace: its tools are the agents' here.
+  bool enabled = 16;
 }
 
 // Request message for WorkspaceService.ListConnectors.
@@ -3674,6 +3681,18 @@ message DeleteConnectorRequest {
 
 // Response message for WorkspaceService.DeleteConnector.
 message DeleteConnectorResponse {}
+
+// Request message for WorkspaceService.SetConnectorEnabled.
+message SetConnectorEnabledRequest {
+  string workspace = 1;
+  string category = 2;
+  string scope = 3;
+  string name = 4;
+  bool enabled = 5;
+}
+
+// Response message for WorkspaceService.SetConnectorEnabled.
+message SetConnectorEnabledResponse {}
 
 // A tool a connection offers.
 message ConnectorTool {

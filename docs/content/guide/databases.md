@@ -12,7 +12,7 @@ Databases are the first of Blitz's [connectors](connectors.md). Spec: [databases
 In the desktop app, open **Studio › Connectors** and press **+** by **Databases**.
 
 1. Give it a **name** (`shop`) and say **what it holds** ("The shop's orders and customers"). The agents read that to know when to use it.
-2. Choose **where**: **This workspace** (saved in `.agents/connectors/databases`, so you can commit it for your team) or **Every workspace** (`~/.blitz/connectors/databases`).
+2. Choose **where**: **This workspace** (saved in `.agents/connectors/databases`, so you can commit it for your team) or **Every workspace** (`~/.blitz/connectors/databases`). A global one can still be switched off in any workspace that shouldn't see it ([what each workspace can reach](connectors.md#choose-what-each-workspace-can-reach)).
 3. Choose the **kind** and fill in its settings:
 
    | Kind | Settings | Signs in with |

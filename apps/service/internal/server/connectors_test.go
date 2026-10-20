@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -144,6 +145,15 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 	require.Empty(t, moved.Msg.Problems, "the password moves with it")
 	assert.Equal(t, []string{"password"}, moved.Msg.Connection.SecretsSet)
 	_, err = w.SaveConnector(ctx, connect.NewRequest(&pb.SaveConnectorRequest{Workspace: dir, Connection: shop, PreviousName: "gone"}))
+	assert.Equal(t, "CONNECTOR_NOT_FOUND", reason(t, err))
+
+	assert.True(t, moved.Msg.Connection.Enabled, "on until turned off")
+	_, err = w.SetConnectorEnabled(ctx, connect.NewRequest(&pb.SetConnectorEnabledRequest{Workspace: dir, Category: "databases", Scope: "workspace", Name: "store"}))
+	require.NoError(t, err)
+	list, err = w.ListConnectors(ctx, connect.NewRequest(&pb.ListConnectorsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, slices.ContainsFunc(list.Msg.Connections, func(c *pb.Connector) bool { return c.Name == "store" && !c.Enabled }), "off in this workspace")
+	_, err = w.SetConnectorEnabled(ctx, connect.NewRequest(&pb.SetConnectorEnabledRequest{Workspace: dir, Category: "databases", Scope: "global", Name: "store", Enabled: true}))
 	assert.Equal(t, "CONNECTOR_NOT_FOUND", reason(t, err))
 
 	_, err = w.DeleteConnector(ctx, connect.NewRequest(&pb.DeleteConnectorRequest{Workspace: dir, Category: "databases", Scope: "workspace", Name: "store"}))

@@ -17,6 +17,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -48,9 +49,27 @@ func (w *Workspace) connectorTrusted(file string) bool {
 	return connectorTrust(w.cfg).Reviewed(file, connectors.Hash(file))
 }
 
-// withConnectors is servers with the workspace's connector servers.
+// connectorScope is the store of the connections the person turned off,
+// by workspace.
+func connectorScope(cfg *config.Config) *config.ConnectorScope {
+	dir := cfg.Dir
+	if dir == "" {
+		dir = config.ConfigDir("")
+	}
+	return config.OpenConnectorScope(dir)
+}
+
+// connectorOn says whether the connection with key is on in the workspace
+// in dir (CON-17): every one is, until the person turns it off.
+func (w *Workspace) connectorOn(dir string) func(key string) bool {
+	off := connectorScope(w.cfg).Off(dir)
+	return func(key string) bool { return !off[key] }
+}
+
+// withConnectors is servers with the workspace's connector servers, the
+// connections turned off left out.
 func (w *Workspace) withConnectors(servers []config.MCPServerConfig, prefixDir, dir string, warn func(string)) []config.MCPServerConfig {
-	return connectors.With(servers, prefixDir, dir, w.connectorTrusted, warn)
+	return connectors.With(servers, prefixDir, dir, w.connectorTrusted, w.connectorOn(dir), warn)
 }
 
 // ConnectorCatalog is the categories and kinds of connectors there are
@@ -60,13 +79,32 @@ func (w *Workspace) ConnectorCatalog() connectors.Catalog {
 }
 
 // Connectors are the workspace's connections, every category's, the
-// global ones first, each saying whether the person trusted it.
+// global ones first, each saying whether the person trusted it and
+// whether it's on here.
 func (w *Workspace) Connectors() []connectors.Connection {
 	list := connectors.List(w.ConnectorCatalog(), w.cfg.Dir, w.Dir())
+	on := w.connectorOn(w.Dir())
 	for i := range list {
 		list[i].Trusted = list[i].Scope == connectors.ScopeGlobal || w.connectorTrusted(list[i].Path)
+		list[i].On = on(list[i].Key())
 	}
 	return list
+}
+
+// SetConnectorOn turns a connection on or off in this workspace (CON-17;
+// connectors.ErrUnknown when it isn't there): one that's off keeps its
+// file and secrets, Studio can still test it, and the agents here don't
+// get its tools. Its category's server is served again.
+func (w *Workspace) SetConnectorOn(ctx context.Context, category, scope, name string, on bool) error {
+	if !slices.ContainsFunc(w.Connectors(), func(c connectors.Connection) bool {
+		return c.Category == category && c.Scope == scope && c.Name == name
+	}) {
+		return fmt.Errorf("%w: %q", connectors.ErrUnknown, name)
+	}
+	if err := connectorScope(w.cfg).Set(w.Dir(), connectors.Key(scope, category, name), on); err != nil {
+		return err
+	}
+	return w.ReloadConnectors(ctx)
 }
 
 // ConnectorState is how a category's server is doing: idle (not used
@@ -106,7 +144,13 @@ func (w *Workspace) SaveConnector(ctx context.Context, c connectors.Connection, 
 			return saved, nil, err
 		}
 	}
+	if previous != "" { // a rename keeps whether it's on, in every workspace
+		if err := connectorScope(w.cfg).Rename(connectors.Key(saved.Scope, saved.Category, previous), saved.Key()); err != nil {
+			return saved, nil, err
+		}
+	}
 	saved.Trusted = true
+	saved.On = w.connectorOn(w.Dir())(saved.Key())
 	return saved, nil, w.ReloadConnectors(ctx)
 }
 
@@ -114,6 +158,9 @@ func (w *Workspace) SaveConnector(ctx context.Context, c connectors.Connection, 
 // (connectors.ErrUnknown when it isn't there).
 func (w *Workspace) DeleteConnector(ctx context.Context, category, scope, name string) error {
 	if err := connectors.Delete(w.ConnectorCatalog(), w.cfg.Dir, w.Dir(), category, scope, name); err != nil {
+		return err
+	}
+	if err := connectorScope(w.cfg).Forget(connectors.Key(scope, category, name)); err != nil {
 		return err
 	}
 	return w.ReloadConnectors(ctx)

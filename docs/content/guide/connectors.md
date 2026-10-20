@@ -3,7 +3,7 @@ title: Connectors
 weight: 45
 ---
 
-**Connectors** are the systems your agents reach, set up in **Studio › Connectors** rather than installed: [databases](databases.md) today, more categories to come. Every connection's tools are offered to your agents, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
+**Connectors** are the systems your agents reach, set up in **Studio › Connectors** rather than installed: [databases](databases.md) today, more categories to come. Every connection that's on in a workspace has its tools offered to the agents there, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
 
 Spec: [connectors](../about/specs/spec_connectors_047.md).
 
@@ -17,6 +17,12 @@ Spec: [connectors](../about/specs/spec_connectors_047.md).
 Passwords and other secret settings go into your system's keychain as [secrets](../about/specs/spec_secrets_039.md), never into the file, so a workspace's connections are safe to commit.
 
 **A connection that came with the workspace**, one you didn't save yourself, is served, but it can use only this workspace's secrets, and every tool asks before it runs. Open it in Studio and press **Save and trust** once you've read it; trusting the project's settings trusts it too. That way a cloned repository can't point one of your passwords at a server of its own.
+
+## Choose what each workspace can reach
+
+Every connection, your global ones too, has a switch in Studio › Connectors. Turn one **off** and the agents in this workspace no longer get its tools, so they can't draw on that data here; other workspaces aren't changed. That's how you keep a project's answers to the sources that belong to it: your sales warehouse on for the analysis workspace, off for the website.
+
+A connection that's off keeps its file and its password, and you can still test it, try its queries and read its tables in Studio. The switch is yours, kept in your settings folder rather than the project, so cloning a repository never turns one of your connections on.
 
 ## Add a kind of your own
 

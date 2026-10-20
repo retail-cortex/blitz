@@ -164,3 +164,41 @@ func TestConnectorsWatched(t *testing.T) {
 	assert.NotEmpty(t, w.ConnectorCatalog().Kinds)
 	_ = config.ConfigDir("")
 }
+
+// A connection turned off in a workspace isn't served there, though its
+// file stays; turning it on serves it again, a rename keeps the choice
+// and a delete forgets it.
+func TestConnectorOnOff(t *testing.T) {
+	secrets.SetDefault(&secrets.Memory{})
+	w := openTest(t)
+	ctx := context.Background()
+	saved, _, err := w.SaveConnector(ctx, kitchen(t), nil, "")
+	require.NoError(t, err)
+	assert.True(t, saved.On, "on until turned off")
+	assert.Equal(t, []string{"kitchen_count"}, readOnlyTools(w))
+
+	require.NoError(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeWorkspace, "kitchen", false))
+	assert.Empty(t, readOnlyTools(w), "off: its tools are gone")
+	assert.Empty(t, w.ListMCPServers(), "and its category's server, with nothing else on")
+	list := w.Connectors()
+	require.Len(t, list, 1)
+	assert.False(t, list[0].On)
+	assert.FileExists(t, saved.Path, "the file stays")
+	_, err = w.TestConnector(ctx, list[0], nil)
+	assert.NoError(t, err, "Studio can still test it")
+
+	renamed := list[0]
+	renamed.Name = "pantry"
+	saved, _, err = w.SaveConnector(ctx, renamed, nil, "kitchen")
+	require.NoError(t, err)
+	assert.False(t, saved.On, "a rename keeps it off")
+	assert.Empty(t, readOnlyTools(w))
+
+	require.NoError(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeWorkspace, "pantry", true))
+	assert.Equal(t, []string{"pantry_count"}, readOnlyTools(w), "on again")
+
+	require.NoError(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeWorkspace, "pantry", false))
+	require.NoError(t, w.DeleteConnector(ctx, "databases", connectors.ScopeWorkspace, "pantry"))
+	assert.Empty(t, connectorScope(w.cfg).Off(w.Dir()), "a delete forgets it")
+	assert.ErrorIs(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeGlobal, "pantry", true), connectors.ErrUnknown)
+}

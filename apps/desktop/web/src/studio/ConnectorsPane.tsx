@@ -30,6 +30,7 @@ import {
   mdiLoading,
   mdiPlay,
   mdiPlus,
+  mdiPowerPlugOffOutline,
   mdiPowerPlugOutline,
   mdiShieldAlertOutline,
   mdiTableLarge,
@@ -143,6 +144,17 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
       setBusy(false);
     }
   };
+  // A connection on or off in this workspace (CON-17): off, the agents
+  // here don't get its tools.
+  const enable = async (c: Connector, on: boolean) => {
+    try {
+      await workspaces.setConnectorEnabled({ workspace, category: c.category, scope: c.scope, name: c.name, enabled: on });
+      snack(t(on ? "desktop.connectors.enabled" : "desktop.connectors.disabled", { name: c.name }));
+      await refresh();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const remove = async () => {
     setDeleting(false);
     if (!file) return;
@@ -228,12 +240,13 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                   return (
                     <div key={c.path} className="list-item">
                       <button type="button" className="row-open" onClick={() => showForm({ category: c.category, scope: c.scope === "global" ? "global" : "workspace", name: c.name }, formFromConnection(c, k))}>
-                        <Icon path={c.problem ? mdiAlertCircleOutline : distrusted ? mdiShieldAlertOutline : c.readOnly ? mdiDatabaseLockOutline : (categoryIcons[cat.icon] ?? mdiPowerPlugOutline)} className={c.problem ? "error-text" : undefined} />
+                        <Icon path={c.problem ? mdiAlertCircleOutline : !c.enabled ? mdiPowerPlugOffOutline : distrusted ? mdiShieldAlertOutline : c.readOnly ? mdiDatabaseLockOutline : (categoryIcons[cat.icon] ?? mdiPowerPlugOutline)} className={c.problem ? "error-text" : !c.enabled ? "muted" : undefined} />
                         <span className="lines spacer">
                           <span className="ellipsis">{c.name}</span>
                           <small className={`ellipsis ${c.problem ? "error-text" : ""}`}>
                             {c.problem ||
                               [
+                                c.enabled ? "" : t("desktop.connectors.off_here"),
                                 c.custom || !k ? t("desktop.connectors.custom") : textIn(k.name, lang),
                                 c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here"),
                                 distrusted ? t("desktop.connectors.untrusted_short") : "",
@@ -246,6 +259,9 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace: string; onDi
                           </small>
                         </span>
                       </button>
+                      <span className="trailing">
+                        <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={(on) => void enable(c, on)} />
+                      </span>
                     </div>
                   );
                 })}

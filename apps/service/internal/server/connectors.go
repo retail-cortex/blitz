@@ -44,7 +44,7 @@ func queryMsg(q connectors.Query) *pb.ConnectorQuery {
 func connectorMsg(w *engine.Workspace, cat connectors.Catalog, c connectors.Connection) *pb.Connector {
 	m := &pb.Connector{
 		Name: c.Name, Category: c.Category, Scope: c.Scope, Path: c.Path, Kind: c.Kind, Description: c.Description, Settings: c.Settings,
-		ReadOnly: c.ReadOnly, Tools: c.Tools, Custom: c.Custom, Text: c.Text, Problem: c.Problem, Trusted: c.Trusted,
+		ReadOnly: c.ReadOnly, Tools: c.Tools, Custom: c.Custom, Text: c.Text, Problem: c.Problem, Trusted: c.Trusted, Enabled: c.On,
 	}
 	for _, q := range c.Queries {
 		m.Queries = append(m.Queries, queryMsg(q))
@@ -158,6 +158,19 @@ func (h workspaceService) DeleteConnector(ctx context.Context, r req[pb.DeleteCo
 		return nil, err
 	}
 	return ok(&pb.DeleteConnectorResponse{})
+}
+
+func (h workspaceService) SetConnectorEnabled(ctx context.Context, r req[pb.SetConnectorEnabledRequest]) (*connect.Response[pb.SetConnectorEnabledResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.SetConnectorOn(ctx, r.Msg.Category, r.Msg.Scope, r.Msg.Name, r.Msg.Enabled); errors.Is(err, connectors.ErrUnknown) {
+		return nil, apiError(connect.CodeNotFound, errNoConnector, err)
+	} else if err != nil {
+		return nil, err
+	}
+	return ok(&pb.SetConnectorEnabledResponse{})
 }
 
 func (h workspaceService) TestConnector(ctx context.Context, r req[pb.TestConnectorRequest]) (*connect.Response[pb.TestConnectorResponse], error) {

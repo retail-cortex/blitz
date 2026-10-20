@@ -700,7 +700,7 @@ const fakeGuardFile = (workspace: string, g: FakeGuard) => ({ ...g, path: `${wor
 // French); a read-only Postgres with a query of its own, a SQLite file
 // that came with the workspace (not trusted yet), and BigQuery for every
 // workspace.
-type FakeConnector = { name: string; category: string; scope: string; kind: string; description: string; settings: Record<string, string>; secretsSet: string[]; readOnly: boolean; tools: string[]; queries: { name: string; description: string; statement: string; params: { name: string; type: string; description: string }[] }[]; custom: boolean; text: string; trusted: boolean };
+type FakeConnector = { name: string; category: string; scope: string; kind: string; description: string; settings: Record<string, string>; secretsSet: string[]; readOnly: boolean; tools: string[]; queries: { name: string; description: string; statement: string; params: { name: string; type: string; description: string }[] }[]; custom: boolean; text: string; trusted: boolean; enabled?: boolean };
 const en = (s: string) => ({ en: s });
 const allCaps = ["test", "try", "queries", "schema", "query-builder"];
 const pgTools = [
@@ -726,9 +726,9 @@ const fakeConnectorKinds = [
 const fakeConnectors: FakeConnector[] = [
   { name: "shop", category: "databases", scope: "workspace", kind: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }], custom: false, text: "", trusted: true },
   { name: "notes", category: "databases", scope: "workspace", kind: "sqlite", description: "Meeting notes, with embeddings", settings: { database: "data/notes.db" }, secretsSet: [], readOnly: false, tools: ["execute_sql", "list_tables"], queries: [], custom: false, text: "", trusted: false },
-  { name: "sales", category: "databases", scope: "global", kind: "bigquery", description: "Sales across every store", settings: { project: "acme-analytics", location: "US", maximumBytesBilled: "1000000000" }, secretsSet: [], readOnly: true, tools: ["execute_sql", "list_datasets", "list_tables", "table_info"], queries: [], custom: false, text: "", trusted: true },
+  { name: "sales", category: "databases", scope: "global", kind: "bigquery", description: "Sales across every store", settings: { project: "acme-analytics", location: "US", maximumBytesBilled: "1000000000" }, secretsSet: [], readOnly: true, tools: ["execute_sql", "list_datasets", "list_tables", "table_info"], queries: [], custom: false, text: "", trusted: true, enabled: false },
 ];
-const fakeConnectorMsg = (workspace: string, d: FakeConnector) => ({ ...d, path: d.scope === "global" ? `~/.blitz/connectors/${d.category}/${d.name}.yaml` : `${workspace}/.agents/connectors/${d.category}/${d.name}.yaml`, problem: "" });
+const fakeConnectorMsg = (workspace: string, d: FakeConnector) => ({ ...d, path: d.scope === "global" ? `~/.blitz/connectors/${d.category}/${d.name}.yaml` : `${workspace}/.agents/connectors/${d.category}/${d.name}.yaml`, problem: "", enabled: d.enabled !== false });
 const fakeTables = [
   { name: "public.customers", about: "Everyone who ever ordered", columns: [{ name: "customer_id", type: "integer" }, { name: "name", type: "text" }, { name: "email", type: "text" }] },
   { name: "public.orders", about: "", columns: [{ name: "order_id", type: "integer" }, { name: "customer_id", type: "integer" }, { name: "total", type: "numeric" }, { name: "placed_at", type: "timestamp with time zone" }] },
@@ -1732,7 +1732,7 @@ export function installFake() {
           if (!previousName && i >= 0) return { problems: [`there's a connection named "${c.name}" already`] };
           const secretsSet = [...new Set([...(i >= 0 ? fakeConnectors[i].secretsSet : []), ...Object.keys(secretValues)])];
           if (c.kind === "postgres" && !secretsSet.includes("password")) return { problems: ["password is required"] };
-          const next: FakeConnector = { name: c.name, category: c.category, scope: c.scope, kind: c.kind, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text, trusted: true };
+          const next: FakeConnector = { name: c.name, category: c.category, scope: c.scope, kind: c.kind, description: c.description, settings: { ...c.settings }, secretsSet, readOnly: c.readOnly, tools: c.tools, queries: c.queries.map((q) => ({ name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ ...p })) })), custom: c.custom, text: c.text, trusted: true, enabled: i >= 0 ? fakeConnectors[i].enabled : true };
           if (i >= 0) fakeConnectors[i] = next;
           else fakeConnectors.push(next);
           return { connection: fakeConnectorMsg(workspace, next) };
@@ -1741,6 +1741,12 @@ export function installFake() {
           const i = fakeConnectors.findIndex((d) => d.name === name && d.scope === scope && d.category === category);
           if (i < 0) throw new ConnectError(`no connection ${name}`, Code.NotFound);
           fakeConnectors.splice(i, 1);
+          return {};
+        },
+        setConnectorEnabled: ({ category, scope, name, enabled }) => {
+          const d = fakeConnectors.find((d) => d.name === name && d.scope === scope && d.category === category);
+          if (!d) throw new ConnectError(`no connection ${name}`, Code.NotFound);
+          d.enabled = enabled;
           return {};
         },
         testConnector: async ({ connection }) => {
