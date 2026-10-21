@@ -1082,6 +1082,14 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .rule-grip { flex: none; }
 .rule-step { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
 fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
+/* Studio › Databases: a kind's settings in a grid, each query a card
+   with its parameters a row each, and Try it's answer kept short. */
+.db-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+.db-param { display: grid; grid-template-columns: minmax(110px, 1fr) auto minmax(140px, 2fr) minmax(110px, 1fr) auto; gap: 8px; align-items: center; }
+.db-param > * { min-width: 0; }
+@media (max-width: 900px) { .db-param { grid-template-columns: 1fr 1fr; } }
+.connectors-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
+.db-result { max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; font-family: var(--md-mono); font-size: 12px; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane

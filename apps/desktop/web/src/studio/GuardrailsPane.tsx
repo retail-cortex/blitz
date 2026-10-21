@@ -16,7 +16,6 @@
 
 import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
@@ -39,10 +38,11 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
-import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "../ui/controls";
+import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { builtinDefaults, emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, sameGuardrailForm, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
 import { GatesTitle } from "./RulesOrGuardrails";
+import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 /** Each built-in's icon. */
 const builtinIcons: Record<BuiltinId, string> = { prompt_injection: mdiShieldAlertOutline, secrets: mdiEyeOffOutline, limits: mdiGaugeFull };
@@ -69,7 +69,6 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   const [base, setBase] = useState<GuardrailForm>(emptyGuardrailForm);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [agents, setAgents] = useState<string[]>([]);
   const [sample, setSample] = useState("");
@@ -102,7 +101,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   const dirty = open !== null && editable && !sameGuardrailForm(form, base);
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(dirty);
   const showForm = (o: Open, f: GuardrailForm) =>
     leave(() => {
       setForm(f);
@@ -359,15 +358,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
                 )}
               </div>
             )}
-            {problems.length > 0 && (
-              <div className="card error stack" role="alert" style={{ gap: 4 }}>
-                {problems.map((p) => (
-                  <span key={p} className="row t-body-sm" style={{ gap: 6 }}>
-                    <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
-                  </span>
-                ))}
-              </div>
-            )}
+            <ProblemList problems={problems} />
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={file?.path}>
                 {file?.path ? t("desktop.agents.where", { path: file.path }) : t("desktop.agents.where", { path: `.agents/guardrails/${b || form.name.trim() || "…"}.md` })}
@@ -392,52 +383,12 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
           </>
         )}
       </section>
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t(b ? "desktop.guardrails.reset_title" : "desktop.guardrails.delete_title", { name: title })}
-            icon={b ? mdiRestore : mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger={!b} onClick={() => void remove()}>
-                  {b ? t("desktop.guardrails.reset") : t("desktop.rules.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t(b ? "desktop.guardrails.reset_body" : "desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: title })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t(b ? "desktop.guardrails.reset_title" : "desktop.guardrails.delete_title", { name: title })} icon={b ? mdiRestore : mdiDeleteOutline} confirm={b ? t("desktop.guardrails.reset") : t("desktop.rules.delete")} danger={!b} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t(b ? "desktop.guardrails.reset_body" : "desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(title)}
     </div>
   );
 }

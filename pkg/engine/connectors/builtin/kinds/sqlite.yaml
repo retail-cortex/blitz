@@ -1,0 +1,83 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+id: sqlite
+category: databases
+name:
+  en: "SQLite"
+  es: "SQLite"
+  fr-CA: "SQLite"
+hint:
+  en: "A SQLite file. sqlite-vec is built in: vec0 tables and nearest-neighbour queries work."
+  es: "Un archivo SQLite. Incluye sqlite-vec: funcionan las tablas vec0 y las búsquedas de vecinos más cercanos."
+  fr-CA: "Un fichier SQLite. sqlite-vec est inclus : les tables vec0 et les recherches de plus proches voisins fonctionnent."
+backend: toolbox
+source: sqlite
+capabilities: [test, try, queries, schema, query-builder]
+fields:
+  - key: database
+    type: path
+    required: true
+    label:
+      en: "Database"
+      es: "Base de datos"
+      fr-CA: "Base de données"
+    help:
+      en: "The file's path: ./kitchen.db starts at the workspace's folder (a global connection's at your home folder); ~/ is your home folder"
+      es: "La ruta del archivo: ./kitchen.db empieza en la carpeta del espacio de trabajo (la de una conexión global, en tu carpeta personal); ~/ es tu carpeta personal"
+      fr-CA: "Le chemin du fichier : ./kitchen.db part du dossier de l’espace de travail (celui d’une connexion globale, de votre dossier personnel); ~/ est votre dossier personnel"
+readOnly:
+  key: readOnly
+  value: true
+  hint:
+    en: "The file is opened read-only: SQLite refuses any write. Tools that write aren't offered."
+    es: "El archivo se abre en solo lectura: SQLite rechaza cualquier escritura. No se ofrecen herramientas que escriben."
+    fr-CA: "Le fichier est ouvert en lecture seule : SQLite refuse toute écriture. Les outils qui écrivent ne sont pas offerts."
+tools:
+  - id: execute_sql
+    type: sqlite-execute-sql
+    writes: true
+    on: true
+    agent: "Run a SQL statement on {connection}."
+    about:
+      en: "Runs any SQL the agent writes"
+      es: "Ejecuta cualquier SQL que escriba el agente"
+      fr-CA: "Exécute tout SQL écrit par l'agent"
+  - id: list_tables
+    type: sqlite-sql
+    statement: "SELECT name, type, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    on: true
+    agent: "List the tables in {connection}, with their columns."
+    about:
+      en: "Lists the tables and their columns"
+      es: "Lista las tablas y sus columnas"
+      fr-CA: "Liste les tables et leurs colonnes"
+queries:
+  type: sqlite-sql
+  dialect: "SQLite (with sqlite-vec: vec0 tables, MATCH and k for nearest neighbours)"
+  placeholders: "$1"
+  example: "SELECT name FROM recipes WHERE cuisine = ?"
+  hint:
+    en: "SQL you write once, with parameters (? or $1…), offered as tools of their own. Safer than letting the agent write SQL."
+    es: "SQL que escribes una vez, con parámetros (? o $1…), ofrecido como herramienta propia. Más seguro que dejar que el agente escriba SQL."
+    fr-CA: "Du SQL écrit une fois, avec des paramètres (? ou $1…), offert comme outil à part entière. Plus sûr que de laisser l'agent écrire le SQL."
+schema:
+  statement: |
+    SELECT m.name AS "table", NULL AS about,
+      group_concat(p.name || ' ' || p.type, ', ') AS columns
+    FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    WHERE m.type IN ('table', 'view') AND m.name NOT LIKE 'sqlite_%'
+    GROUP BY m.name
+    ORDER BY m.name
+    LIMIT 500

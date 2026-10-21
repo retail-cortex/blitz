@@ -186,6 +186,7 @@ go_test(
         "mcp_update_test.go",
         "mcpextra_cov_test.go",
         "mcpextra_test.go",
+        "mcpinproc_test.go",
         "media_test.go",
         "mode_test.go",
         "nodeenv_cov_test.go",

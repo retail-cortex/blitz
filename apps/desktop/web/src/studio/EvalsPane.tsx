@@ -48,6 +48,7 @@ import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSn
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
 import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, money, resultsCost, seconds, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
+import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 type Tab = "cases" | "settings" | "runs";
 
@@ -98,7 +99,6 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [agents, setAgents] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
@@ -165,7 +165,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
     },
     [workspace],
   );
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(dirty);
   const showForm = (name: string, f: EvalForm, to: Tab = "cases") =>
     leave(() => {
       setForm(f);
@@ -594,15 +594,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                 )}
               </div>
             )}
-            {problems.length > 0 && (
-              <div className="card error stack" role="alert" style={{ gap: 4 }}>
-                {problems.map((p) => (
-                  <span key={p} className="row t-body-sm" style={{ gap: 6 }}>
-                    <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
-                  </span>
-                ))}
-              </div>
-            )}
+            <ProblemList problems={problems} />
             {file?.problem && !dirty && (
               <div className="card error row small-card">
                 <Icon path={mdiAlertCircleOutline} size="sm" /> {file.problem}
@@ -644,53 +636,12 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
           />,
           document.body,
         )}
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.evals.delete_title", { name: title })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.rules.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    setForm(base);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: title || t("desktop.agents.unnamed") })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.evals.delete_title", { name: title })} icon={mdiDeleteOutline} confirm={t("desktop.rules.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(title)}
     </div>
   );
 }

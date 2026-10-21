@@ -1,0 +1,82 @@
+diff --git a/internal/server/server.go b/internal/server/server.go
+index a4086073..22cd6406 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -108,6 +108,14 @@ func InitializeConfigs(ctx context.Context, cfg ServerConfig) (
+ 
+ 	// initialize and validate the sources from configs
+ 	sourcesMap := make(map[string]sources.Source)
++	// Blitz: a failure once a source is open closes the ones open, which
++	// nothing else holds (their pools, files and goroutines would leak).
++	initialized := false
++	defer func() {
++		if !initialized {
++			closeSources(sourcesMap)
++		}
++	}()
+ 	for name, sc := range cfg.SourceConfigs {
+ 		s, err := func() (sources.Source, error) {
+ 			childCtx, span := instrumentation.Tracer.Start(
+@@ -291,6 +299,7 @@ func InitializeConfigs(ctx context.Context, cfg ServerConfig) (
+ 		return nil, nil, nil, nil, nil, nil, nil, nil, err
+ 	}
+ 
++	initialized = true
+ 	return sourcesMap, authServicesMap, embeddingModelsMap, toolsMap, promptsMap, resourcesMap, resourceTemplatesMap, groupsMap, nil
+ }
+ 
+@@ -569,6 +578,13 @@ func NewServer(ctx context.Context, cfg ServerConfig) (*Server, error) {
+ 	if err != nil {
+ 		return nil, fmt.Errorf("unable to initialize configs: %w", err)
+ 	}
++	// Blitz: the sources are open; a later failure closes them.
++	built := false
++	defer func() {
++		if !built {
++			closeSources(sourcesMap)
++		}
++	}()
+ 
+ 	addr := net.JoinHostPort(cfg.Address, strconv.Itoa(cfg.Port))
+ 	srv := &http.Server{Addr: addr, Handler: r}
+@@ -744,9 +760,19 @@ func NewServer(ctx context.Context, cfg ServerConfig) (*Server, error) {
+ 		})
+ 	}
+ 
++	built = true
+ 	return s, nil
+ }
+ 
++// closeSources closes the sources that can be (Blitz).
++func closeSources(m map[string]sources.Source) {
++	for _, s := range m {
++		if c, ok := s.(interface{ Close() error }); ok {
++			_ = c.Close()
++		}
++	}
++}
++
+ func mcpAuthMiddleware(s *Server) func(http.Handler) http.Handler {
+ 	return func(next http.Handler) http.Handler {
+ 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+diff --git a/internal/sources/bigquery/bigquery.go b/internal/sources/bigquery/bigquery.go
+index 98a0540a..decd9f57 100644
+--- a/internal/sources/bigquery/bigquery.go
++++ b/internal/sources/bigquery/bigquery.go
+@@ -227,6 +227,7 @@ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.So
+ 			if strings.Contains(allowed, ".") {
+ 				parts := strings.Split(allowed, ".")
+ 				if len(parts) != 2 {
++					_ = s.Close() // Blitz: its client and caches
+ 					return nil, fmt.Errorf("invalid allowedDataset format: %q, expected 'project.dataset' or 'dataset'", allowed)
+ 				}
+ 				projectID = parts[0]
+@@ -242,7 +243,7 @@ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.So
+ 				dataset := s.Client.DatasetInProject(projectID, datasetID)
+ 				_, err := dataset.Metadata(ctx)
+ 				if err != nil {
+-					s.Client.Close()
++					_ = s.Close() // Blitz: its caches too, not only its client
+ 					if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusNotFound {
+ 						return nil, fmt.Errorf("allowedDataset '%s' not found in project '%s'", datasetID, projectID)
+ 					}

@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -26,6 +26,8 @@ import { t, tn } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { useDiscardGuard } from "./paneParts";
+import { ConnectorsPane } from "./ConnectorsPane";
 import { EvalsPane } from "./EvalsPane";
 import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
@@ -41,13 +43,13 @@ import { OverviewPane } from "./OverviewPane";
  * The kinds Studio holds (spec_studio_040), after the Overview of them all
  * (spec_health_044), in the order an agent is built: the agent and the
  * evals that prove it, what it follows (skills, rules, guardrails), what
- * runs (workflows, workers), and secrets.
+ * runs (workflows, workers), and what it reaches (connectors, secrets).
  */
-export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "secrets"] as const;
+export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
-/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); secrets. */
-export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["secrets"]];
+/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */
+export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["connectors", "secrets"]];
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -67,13 +69,15 @@ export const studioIcons: Record<StudioKind, string> = {
   evals: mdiFlaskOutline,
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
+  connectors: mdiConnection,
   secrets: mdiKeyVariant,
 };
 
 /**
  * The workspace's Studio (spec_studio_040): what its .agents folder
  * holds, kind by kind, each listed and edited here: agents, skills,
- * workflows, evals, rules, guardrails, and its own secrets.
+ * workflows, evals, rules, guardrails, the connectors its agents use, and
+ * its own secrets.
  */
 export function StudioDrawer({
   dir,
@@ -111,6 +115,8 @@ export function StudioDrawer({
     setCompact(false);
     setKind(k);
   };
+  // Picking another kind with a form's changes unsaved asks first.
+  const { leave, discard } = useDiscardGuard(dirty);
   useEffect(() => onKind?.(kind), [kind, onKind]);
   // Only a request made while it's open: the count it opened with is old.
   const menuAsked = useRef(ask?.n ?? 0);
@@ -181,7 +187,7 @@ export function StudioDrawer({
           {studioGroups.map((group, i) => [
             i > 0 && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
             ...group.map((k) => (
-              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
+              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => (k === kind ? undefined : leave(() => choose(k)))}>
                 <Icon path={studioIcons[k]} />
                 <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
               </button>
@@ -217,12 +223,14 @@ export function StudioDrawer({
               </div>
             </div>
           )}
+          {kind === "connectors" && <ConnectorsPane workspace={dir} onDirty={setDirty} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
           {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={intentFor("workflows")} run={initial.run} />}
         </div>
         </GradesContext.Provider>
       </div>
+      {discard(t(`desktop.studio.${kind}`))}
     </Drawer>
   );
 }

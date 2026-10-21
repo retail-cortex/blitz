@@ -157,9 +157,9 @@ func (w *Workspace) secretNames() []string {
 // auto mode's reviewer, else the default), its cost estimated.
 func (w *Workspace) composeAsker() compose.Asker {
 	return func(ctx context.Context, instruction, prompt string) (string, float64, error) {
-		llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+		llm, err := w.suggestionsModel(ctx)
 		if err != nil {
-			return "", 0, fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+			return "", 0, fmt.Errorf("%s", ModelErrorSummary(err, w.settings()))
 		}
 		reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
 		return reply, w.engine.EstimateUsage(served, usage).CostUSD, err

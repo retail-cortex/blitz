@@ -35,6 +35,7 @@ import {
   mdiPaletteOutline,
   mdiPencilOutline,
   mdiPowerPlugOutline,
+  mdiConnection,
   mdiScaleBalance,
   mdiServerNetwork,
   mdiTextBoxSearchOutline,
@@ -62,6 +63,8 @@ import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
 import { McpSettings } from "./McpSettings";
+import { ConnectorsPane } from "./studio/ConnectorsPane";
+import { useDiscardGuard } from "./studio/paneParts";
 import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
@@ -89,6 +92,7 @@ const sectionIcons: Record<SectionId, string> = {
   skills: mdiPuzzleOutline,
   workers: mdiCalendarClock,
   mcp: mdiPowerPlugOutline,
+  connectors: mdiConnection,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -108,6 +112,15 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
   const advanced = useAdvanced();
   const { update } = useApp();
   const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
+  // Whether a section's form holds unsaved changes (Connectors): closing
+  // or picking another section asks first, as Studio does.
+  const [dirty, setDirty] = useState(false);
+  const { leave, discard } = useDiscardGuard(dirty);
+  const pick = (id: SectionId) =>
+    leave(() => {
+      setDirty(false);
+      setSection(id);
+    });
   const [scope, setScope] = useState(initialScope);
   const flip = useFlip(initial === "file");
   // Simple mode shows what a newcomer needs (settingsSections), in their
@@ -133,7 +146,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
     </>
   );
   return (
-    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer" headerActions={actions}>
+    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer" headerActions={actions} dirty={dirty}>
       <div className={`settings-flip ${flip.turning}`} onAnimationEnd={flip.turned}>
         <div className="settings" hidden={showFile}>
           <div className="settings-nav list" role="tablist">
@@ -148,7 +161,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
                 data-autofocus={id === section && !showFile ? "" : undefined}
                 className={`list-item ${id === section ? "active" : ""}`}
                 title={t(`desktop.settings.${id}`)}
-                onClick={() => setSection(id)}
+                onClick={() => (id === section ? undefined : pick(id))}
               >
                 <Icon path={sectionIcons[id]} />
                 <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
@@ -164,6 +177,11 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "mcp" && <McpSettings />}
+            {section === "connectors" && (
+              <div className="slide-box">
+                <ConnectorsPane onDirty={setDirty} />
+              </div>
+            )}
             {section === "workspaces" && (
               <Workspaces
                 initial={initial === "workspaces" ? initialScope : ""}
@@ -186,6 +204,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
           </div>
         )}
       </div>
+      {discard(t(`desktop.settings.${section}`))}
     </Drawer>
   );
 }

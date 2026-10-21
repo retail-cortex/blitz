@@ -1,0 +1,18 @@
+--- a/internal/tools/postgres/postgresliststoredprocedure/postgresliststoredprocedure.go
++++ b/internal/tools/postgres/postgresliststoredprocedure/postgresliststoredprocedure.go
+@@ -22,7 +22,6 @@
+ 	yaml "github.com/goccy/go-yaml"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/alloydbpg"
+-	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/cloudsqlpg"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/postgres"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
+@@ -73,7 +72,6 @@
+ 
+ // validate compatible sources are still compatible
+ var _ compatibleSource = &alloydbpg.Source{}
+-var _ compatibleSource = &cloudsqlpg.Source{}
+ var _ compatibleSource = &postgres.Source{}
+ 
+ type Config struct {

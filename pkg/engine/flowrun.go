@@ -255,7 +255,7 @@ func (w *Workspace) stepRule(name string) (gates.Rule, bool) {
 // judgeStep judges a step's output against a rule, as an after-agent
 // gate judges an answer.
 func (w *Workspace) judgeStep(ctx context.Context, r gates.Rule, output string) (gates.Verdict, error) {
-	return gates.Judge(ctx, w.ruleAsker(), r, SecretRedactor(w.cfg).String(textutil.Ellipsize(output, 12<<10)))
+	return gates.Judge(ctx, w.ruleAsker(), r, w.secretRedactor().String(textutil.Ellipsize(output, 12<<10)))
 }
 
 // extractBrief is the brief for an extract step.
@@ -276,7 +276,7 @@ func (w *Workspace) extractStep(ctx context.Context, n flows.Node, input string)
 	if n.Instructions != "" {
 		fmt.Fprintf(&b, "\nAlso: %s\n", n.Instructions)
 	}
-	fmt.Fprintf(&b, "\nThe text:\n%s", SecretRedactor(w.cfg).String(textutil.Ellipsize(input, 32<<10)))
+	fmt.Fprintf(&b, "\nThe text:\n%s", w.secretRedactor().String(textutil.Ellipsize(input, 32<<10)))
 	reply, err := w.ruleAsker()(ctx, extractBrief, b.String())
 	if err != nil {
 		return flows.Result{}, err
@@ -341,7 +341,7 @@ const conditionBrief = `You decide whether a condition holds for a step's output
 // judgeCondition has the suggestions model decide whether a condition in
 // plain English holds for a step's output (WF-13).
 func (w *Workspace) judgeCondition(ctx context.Context, condition, output string) (bool, error) {
-	reply, err := w.ruleAsker()(ctx, conditionBrief, fmt.Sprintf("The condition: %s\n\nThe step's output:\n%s", condition, SecretRedactor(w.cfg).String(textutil.Ellipsize(output, 16<<10))))
+	reply, err := w.ruleAsker()(ctx, conditionBrief, fmt.Sprintf("The condition: %s\n\nThe step's output:\n%s", condition, w.secretRedactor().String(textutil.Ellipsize(output, 16<<10))))
 	if err != nil {
 		return false, fmt.Errorf("the condition %q couldn't be judged: %w", condition, err)
 	}

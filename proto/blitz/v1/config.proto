@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package blitz.v1;
 
+import "blitz/v1/workspace.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
@@ -134,6 +135,29 @@ service ConfigService {
   rpc RemoveMCPServer(RemoveMCPServerRequest) returns (RemoveMCPServerResponse);
   // Turns an MCP server of the global settings on or off (NOT_FOUND).
   rpc SetMCPServerEnabled(SetMCPServerEnabledRequest) returns (SetMCPServerEnabledResponse);
+
+  // Returns the global connectors (spec_connectors_047 CON-18): the
+  // categories and kinds of the built-in and global descriptors, and the
+  // global connections. A workspace's Studio lists them but never
+  // changes them.
+  rpc ListGlobalConnectors(ListGlobalConnectorsRequest) returns (ListGlobalConnectorsResponse);
+  // Writes a global connection, keeping the secret values given as
+  // global secrets; problems, with nothing written, when it can't be
+  // saved. Open workspaces serve it again (CONNECTOR_NOT_FOUND for a
+  // previous name that isn't there).
+  rpc SaveGlobalConnector(SaveGlobalConnectorRequest) returns (SaveGlobalConnectorResponse);
+  // Deletes a global connection and its secrets (CONNECTOR_NOT_FOUND).
+  rpc DeleteGlobalConnector(DeleteGlobalConnectorRequest) returns (DeleteGlobalConnectorResponse);
+  // Connects to a global connection as written, unsaved, and lists its
+  // tools.
+  rpc TestGlobalConnector(TestGlobalConnectorRequest) returns (TestGlobalConnectorResponse);
+  // Runs one of a global connection's tools as written, unsaved.
+  rpc TryGlobalConnectorTool(TryGlobalConnectorToolRequest) returns (TryGlobalConnectorToolResponse);
+  // Reads a global connection's tables and their columns, as written.
+  rpc ReadGlobalConnectorSchema(ReadGlobalConnectorSchemaRequest) returns (ReadGlobalConnectorSchemaResponse);
+  // Drafts one of a global connection's queries from what the user is
+  // looking for, with the built-in sql-query skill. Nothing is saved.
+  rpc DraftGlobalConnectorQuery(DraftGlobalConnectorQueryRequest) returns (DraftGlobalConnectorQueryResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -838,4 +862,106 @@ message GetSkillReviewRequest {
 message GetSkillReviewResponse {
   // Unset when its scripts need no review.
   SkillReview review = 1;
+}
+
+// Request message for ConfigService.ListGlobalConnectors.
+message ListGlobalConnectorsRequest {}
+
+// Response message for ConfigService.ListGlobalConnectors.
+message ListGlobalConnectorsResponse {
+  repeated ConnectorCategory categories = 1;
+  repeated ConnectorKind kinds = 2;
+  repeated Connector connections = 3;
+  // Where the global descriptors are (<dir>/kinds, <dir>/categories).
+  string global_dir = 4;
+}
+
+// Request message for ConfigService.SaveGlobalConnector.
+message SaveGlobalConnectorRequest {
+  Connector connection = 1;
+  // Its name before (a rename), "" for a new one.
+  string previous_name = 2;
+  // Secret settings' new values, by key; one left out keeps its value.
+  map<string, string> secret_values = 3;
+}
+
+// Response message for ConfigService.SaveGlobalConnector.
+message SaveGlobalConnectorResponse {
+  Connector connection = 1;
+  repeated string problems = 2;
+}
+
+// Request message for ConfigService.DeleteGlobalConnector.
+message DeleteGlobalConnectorRequest {
+  string category = 1;
+  string name = 2;
+}
+
+// Response message for ConfigService.DeleteGlobalConnector.
+message DeleteGlobalConnectorResponse {}
+
+// Request message for ConfigService.TestGlobalConnector.
+message TestGlobalConnectorRequest {
+  Connector connection = 1;
+  map<string, string> secret_values = 2;
+}
+
+// Response message for ConfigService.TestGlobalConnector.
+message TestGlobalConnectorResponse {
+  repeated ConnectorTool tools = 1;
+  // Why it couldn't connect ("" when it did).
+  string problem = 2;
+}
+
+// Request message for ConfigService.TryGlobalConnectorTool.
+message TryGlobalConnectorToolRequest {
+  Connector connection = 1;
+  map<string, string> secret_values = 2;
+  // The tool: <connection>_<id>, or the ID alone.
+  string tool = 3;
+  // Its arguments, a JSON object.
+  string args_json = 4;
+}
+
+// Response message for ConfigService.TryGlobalConnectorTool.
+message TryGlobalConnectorToolResponse {
+  // What it answered.
+  string output = 1;
+  // The answer is the tool's error.
+  bool is_error = 2;
+  // Why it couldn't be run ("" when it was).
+  string problem = 3;
+}
+
+// Request message for ConfigService.ReadGlobalConnectorSchema.
+message ReadGlobalConnectorSchemaRequest {
+  Connector connection = 1;
+  map<string, string> secret_values = 2;
+}
+
+// Response message for ConfigService.ReadGlobalConnectorSchema.
+message ReadGlobalConnectorSchemaResponse {
+  repeated ConnectorTable tables = 1;
+  // Why it read none ("" when it read some).
+  string problem = 2;
+}
+
+// Request message for ConfigService.DraftGlobalConnectorQuery.
+message DraftGlobalConnectorQueryRequest {
+  Connector connection = 1;
+  map<string, string> secret_values = 2;
+  // What the user is looking for, in their words.
+  string request = 3;
+}
+
+// Response message for ConfigService.DraftGlobalConnectorQuery.
+message DraftGlobalConnectorQueryResponse {
+  // The draft: a query the form adds, unsaved.
+  ConnectorQuery query = 1;
+  // The assumptions it made, a line each.
+  repeated string notes = 2;
+  // How many tables of the schema it read.
+  int32 tables = 3;
+  // Why there's no draft ("" when there is).
+  string problem = 4;
 }

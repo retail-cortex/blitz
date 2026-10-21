@@ -67,30 +67,7 @@ func editConfigFile(dir string, edit func(doc string) string, verify func(map[st
 	if err := verify(check); err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	tmp, err := os.CreateTemp(dir, ".env.toml.*")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(updated); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := tmp.Close(); err != nil {
-		return "", err
-	}
-	return path, os.Rename(tmp.Name(), path)
+	return path, writeFileAtomic(path, []byte(updated), perm)
 }
 
 // setTOMLKey sets key = value in [table], replacing an existing assignment,

@@ -1,0 +1,30 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "postgreslisttablespaces",
+    srcs = ["postgreslisttablespaces.go"],
+    importpath = "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools/postgres/postgreslisttablespaces",
+    visibility = ["//third_party/mcp-toolbox:__subpackages__"],
+    deps = [
+        "//third_party/mcp-toolbox/internal/sources",
+        "//third_party/mcp-toolbox/internal/tools",
+        "//third_party/mcp-toolbox/internal/util",
+        "//third_party/mcp-toolbox/internal/util/parameters",
+        "@com_github_goccy_go_yaml//:go-yaml",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

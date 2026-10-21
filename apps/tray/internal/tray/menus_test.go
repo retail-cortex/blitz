@@ -109,7 +109,7 @@ func TestSpaceEntries(t *testing.T) {
 		JobRuns: []*pb.WorkerRun{{Id: "j1", Workspace: "/w/shop", Worker: "nightly"}},
 		Runs:    []*pb.WorkflowRun{{Id: "f1", Workspace: "/w/shop", Workflow: "brief", Status: "running", Steps: []*pb.WorkflowRunStep{{Status: "done"}, {Status: "running"}}}},
 	}
-	got := SpaceEntries(shop, workers, []Flow{{Name: "brief"}, {Name: "digest"}}, l)
+	got := SpaceEntries(shop, workers, []Flow{{Name: "brief"}, {Name: "digest"}}, nil, l)
 	titles := make([]string, len(got))
 	for i, e := range got {
 		titles[i] = e.Title
@@ -145,11 +145,11 @@ func TestSpaceEntries(t *testing.T) {
 	}, actions(brief.Children))
 	assert.Equal(t, []Action{{Kind: RunWorkflow, Workspace: "/w/shop", Name: "digest"}, {Kind: ShowWorkflow, Workspace: "/w/shop", Name: "digest"}}, actions(got[6].Children))
 
-	assert.Empty(t, SpaceEntries(Space{Dir: "/w/new"}, workers, nil, Live{}), "nothing to show: no submenu")
-	onlyFlows := SpaceEntries(Space{Dir: "/w/new"}, workers, []Flow{{Name: "brief"}}, Live{})
+	assert.Empty(t, SpaceEntries(Space{Dir: "/w/new"}, workers, nil, nil, Live{}), "nothing to show: no submenu")
+	onlyFlows := SpaceEntries(Space{Dir: "/w/new"}, workers, []Flow{{Name: "brief"}}, nil, Live{})
 	assert.Equal(t, "Workflows", onlyFlows[0].Title, "no Jobs heading without jobs")
 	assert.Len(t, onlyFlows, 2)
-	onlyJobs := SpaceEntries(Space{Dir: "/w/blog"}, workers, nil, Live{})
+	onlyJobs := SpaceEntries(Space{Dir: "/w/blog"}, workers, nil, nil, Live{})
 	assert.Equal(t, []string{"Jobs", "elsewhere · off"}, []string{onlyJobs[0].Title, onlyJobs[1].Title}, "no Workflows heading without workflows")
 }
 

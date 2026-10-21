@@ -1,0 +1,124 @@
+--- a/internal/sources/postgres/postgres.go
++++ b/internal/sources/postgres/postgres.go
+@@ -65,6 +65,9 @@
+ 	// take, in seconds. When unset, no timeout is applied and connection behavior
+ 	// is unchanged.
+ 	ConnectTimeout *int `yaml:"connectTimeout" validate:"omitempty,gte=1"`
++	// ReadOnly makes every session read-only (Blitz): writes fail in
++	// Postgres itself, and tools that write aren't offered.
++	ReadOnly bool `yaml:"readOnly"`
+ }
+ 
+ func (r Config) SourceConfigType() string {
+@@ -72,7 +75,15 @@
+ }
+ 
+ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
+-	pool, err := initPostgresConnectionPool(ctx, tracer, r.Name, r.Host, r.Port, r.User, r.Password, r.Database, r.QueryParams, r.QueryExecMode, r.ConnectTimeout)
++	params := r.QueryParams
++	if r.ReadOnly {
++		params = make(map[string]string, len(r.QueryParams)+1)
++		for k, v := range r.QueryParams {
++			params[k] = v
++		}
++		params["default_transaction_read_only"] = "on"
++	}
++	pool, err := initPostgresConnectionPool(ctx, tracer, r.Name, r.Host, r.Port, r.User, r.Password, r.Database, params, r.QueryExecMode, r.ConnectTimeout)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("unable to create pool: %w", err)
+ 	}
+@@ -98,7 +109,7 @@
+ }
+ 
+ func (s *Source) IsReadOnly() bool {
+-	return false
++	return s.ReadOnly
+ }
+ 
+ func (s *Source) SourceType() string {
+@@ -115,10 +126,11 @@
+ 
+ func (s *Source) RunSQL(ctx context.Context, statement string, params []any) (any, error) {
+ 	statement = sqlcommenter.PrependComment(ctx, statement, SourceType, s.SQLCommenter)
+-	results, err := s.PostgresPool().Query(ctx, statement, params...)
++	results, done, err := queryRO(ctx, s.PostgresPool(), s.ReadOnly, statement, params)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("unable to execute query: %w", err)
+ 	}
++	defer done()
+ 	defer results.Close()
+ 
+ 	fields := results.FieldDescriptions()
+@@ -219,3 +231,24 @@
+ 		return 0, fmt.Errorf("invalid queryExecMode %q: must be one of %q, %q, %q, %q, or %q", queryExecMode, "cache_statement", "cache_describe", "describe_exec", "exec", "simple_protocol")
+ 	}
+ }
++
++// queryRO runs statement in a read-only transaction when the source is
++// read-only (Blitz), rolled back after: a single statement can't turn the
++// transaction writable and write in it. done closes it, after the rows.
++func queryRO(ctx context.Context, pool *pgxpool.Pool, readOnly bool, statement string, params []any) (pgx.Rows, func(), error) {
++	if !readOnly {
++		rows, err := pool.Query(ctx, statement, params...)
++		return rows, func() {}, err
++	}
++	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
++	if err != nil {
++		return nil, func() {}, err
++	}
++	done := func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }
++	rows, err := tx.Query(ctx, statement, params...)
++	if err != nil {
++		done()
++		return nil, func() {}, err
++	}
++	return rows, done, nil
++}
+--- a/internal/sources/alloydbpg/alloydb_pg.go
++++ b/internal/sources/alloydbpg/alloydb_pg.go
+@@ -17,6 +17,7 @@
+ import (
+ 	"context"
+ 	"fmt"
++	"github.com/jackc/pgx/v5"
+ 	"net"
+ 	"strings"
+ 
+@@ -117,10 +118,11 @@
+ 
+ func (s *Source) RunSQL(ctx context.Context, statement string, params []any) (any, error) {
+ 	statement = sqlcommenter.PrependComment(ctx, statement, SourceType, s.SQLCommenter)
+-	results, err := s.Pool.Query(ctx, statement, params...)
++	results, done, err := queryRO(ctx, s.Pool, s.ReadOnly, statement, params)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("unable to execute query: %w", err)
+ 	}
++	defer done()
+ 	defer results.Close()
+ 
+ 	fields := results.FieldDescriptions()
+@@ -249,3 +251,24 @@
+ 	}
+ 	return pool, nil
+ }
++
++// queryRO runs statement in a read-only transaction when the source is
++// read-only (Blitz), rolled back after: a single statement can't turn the
++// transaction writable and write in it. done closes it, after the rows.
++func queryRO(ctx context.Context, pool *pgxpool.Pool, readOnly bool, statement string, params []any) (pgx.Rows, func(), error) {
++	if !readOnly {
++		rows, err := pool.Query(ctx, statement, params...)
++		return rows, func() {}, err
++	}
++	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
++	if err != nil {
++		return nil, func() {}, err
++	}
++	done := func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }
++	rows, err := tx.Query(ctx, statement, params...)
++	if err != nil {
++		done()
++		return nil, func() {}, err
++	}
++	return rows, done, nil
++}

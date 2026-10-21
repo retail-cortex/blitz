@@ -235,7 +235,7 @@ func (w *Workspace) runScenario(ctx context.Context, s *skills.Skill, sc skills.
 	}
 	why := scenarioSkills(s.Name, sc, used)
 	sctx, done := context.WithTimeout(ctx, evalScoreTimeout)
-	near, judged, cost, err := score(sctx, evals.Case{Prompt: sc.Prompt, Output: sc.Outcome, Type: evals.Near, Threshold: sc.Threshold}, SecretRedactor(w.cfg).String(out))
+	near, judged, cost, err := score(sctx, evals.Case{Prompt: sc.Prompt, Output: sc.Outcome, Type: evals.Near, Threshold: sc.Threshold}, w.secretRedactor().String(out))
 	timedOut := sctx.Err() == context.DeadlineExceeded && ctx.Err() == nil
 	done()
 	r.CostUSD += cost

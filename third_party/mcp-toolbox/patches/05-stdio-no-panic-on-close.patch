@@ -1,0 +1,15 @@
+--- a/internal/server/mcp.go
++++ b/internal/server/mcp.go
+@@ -305,8 +305,10 @@
+ 	errChan := make(chan error, 1)
+ 	done := make(chan struct{})
+ 	defer close(done)
+-	defer close(readChan)
+-	defer close(errChan)
++	// Blitz: readChan and errChan aren't closed. The reader can still be
++	// blocked when ctx ends; closing them made its later send panic,
++	// which in-process takes the whole program down. Buffered, they're
++	// collected with it.
+ 
+ 	go func() {
+ 		select {

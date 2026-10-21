@@ -18,9 +18,13 @@ go_library(
     name = "config",
     srcs = [
         "agentmodels.go",
+        "atomic.go",
         "check.go",
         "config.go",
+        "connectorfiles.go",
+        "connectorscope.go",
         "features.go",
+        "hashtrust.go",
         "home.go",
         "locale.go",
         "mcpedit.go",
@@ -29,7 +33,6 @@ go_library(
         "project.go",
         "providers.go",
         "reference.go",
-        "skilltrust.go",
         "trust.go",
     ],
     embedsrcs = [
@@ -52,10 +55,13 @@ go_test(
     size = "small",
     srcs = [
         "agentmodels_test.go",
+        "atomic_test.go",
         "check_test.go",
         "config_test.go",
+        "connectorscope_test.go",
         "edit_test.go",
         "env_test.go",
+        "hashtrust_test.go",
         "helpers_test.go",
         "home_test.go",
         "locale_test.go",
@@ -65,7 +71,6 @@ go_test(
         "project_test.go",
         "providers_test.go",
         "reference_test.go",
-        "skilltrust_test.go",
     ],
     embed = [":config"],
     deps = [

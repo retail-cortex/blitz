@@ -81,12 +81,15 @@ const (
 	RunWorkflow              // run a workflow in the background (Name)
 	StopWorkflow             // stop a workflow's run (RunID)
 	ShowWorkflow             // open the app on a workflow's canvas (Name), on a run (RunID)
+	SetConnector             // turn a connection on or off in a workspace (Category, Scope, Name, On)
 )
 
 // Action is an entry's click.
 type Action struct {
 	Kind      ActionKind
 	Workspace string
+	Category  string
+	Scope     string
 	Name      string
 	RunID     string
 	Hash      string
@@ -160,6 +163,8 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).StopWorkflowRun(ctx, connect.NewRequest(&pb.StopWorkflowRunRequest{Workspace: a.Workspace, Id: a.RunID}))
 	case ShowWorkflow:
 		err = open(WorkflowLink(a.Workspace, a.Name, a.RunID))
+	case SetConnector:
+		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).SetConnectorEnabled(ctx, connect.NewRequest(&pb.SetConnectorEnabledRequest{Workspace: a.Workspace, Category: a.Category, Scope: a.Scope, Name: a.Name, Enabled: a.On}))
 	case NoAction:
 	default:
 		err = errors.New("no such action")

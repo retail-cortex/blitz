@@ -20,12 +20,16 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/adk/v2/model"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
 // Skills and their scripts' environments, MCP servers, and the tools an
@@ -164,9 +168,11 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 		states[st.Name] = st
 	}
 	var out []api.MCPServer
-	for _, s := range w.cfg.MCP.Servers {
+	for _, s := range w.liveMCP() {
 		target := s.URL
-		if target == "" {
+		if s.InProcess != "" {
+			target = "in-process: " + strings.Join(s.Args, ", ")
+		} else if target == "" {
 			target = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
 		m := api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove, Disabled: s.Disabled, State: "disabled"}
@@ -183,15 +189,88 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 // restart, disabled and removed ones stop, and the agents are built
 // again so the next turn offers what's there now.
 func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
-	changed, err := w.tools.MCP().Update(mcpWithSecrets(cfg.MCP.Servers, w.Dir()))
-	if err != nil {
+	return w.applyMCP(ctx, cfg.MCP)
+}
+
+// applyMCP puts m's servers, with their secrets and the connector servers,
+// in place of the running ones (one at a time: the settings watch and the
+// service both reload).
+func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
+	changed, err := w.replaceMCP(m)
+	if err != nil || !changed {
 		return err
 	}
-	w.cfg.MCP = cfg.MCP
-	if !changed {
-		return nil
-	}
 	return w.engine.Rebuild(ctx)
+}
+
+// replaceMCP is applyMCP but the rebuild: the settings keep m as written
+// (a changed secret is filled in afresh next time), mcpLive what runs.
+func (w *Workspace) replaceMCP(m config.MCPConfig) (bool, error) {
+	w.mcpMu.Lock()
+	defer w.mcpMu.Unlock()
+	live := w.withConnectors(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
+	changed, err := w.tools.MCP().Update(live)
+	if err != nil {
+		return false, err
+	}
+	w.cfgMu.Lock()
+	defer w.cfgMu.Unlock()
+	w.cfg.MCP, w.mcpLive = m, live
+	return changed, nil
+}
+
+// liveMCP are the MCP servers as they run (mcpLive).
+func (w *Workspace) liveMCP() []config.MCPServerConfig {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	return w.mcpLive
+}
+
+// secretRedactor is SecretRedactor of the workspace's settings now: its
+// keys and MCP servers as no reload is halfway through changing them.
+func (w *Workspace) secretRedactor() *redact.Redactor {
+	return SecretRedactor(w.settings())
+}
+
+// settings is a copy of the workspace's settings, taken while nothing
+// changes them: what's handed to a model, a redactor or a summary. Its
+// maps are shared, so they're replaced, never written in place.
+func (w *Workspace) settings() *config.Config {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	c := *w.cfg
+	if w.mcpLive != nil {
+		c.MCP.Servers = w.mcpLive // their secrets, for a redactor
+	}
+	return &c
+}
+
+// suggestionsModel is the small model the drafts and judges use: the
+// suggestions model, else the reviewer's (the main one when neither is set).
+func (w *Workspace) suggestionsModel(ctx context.Context) (model.LLM, error) {
+	return suggestionsLLM(ctx, w.settings(), w.newModel)
+}
+
+// replyIn is the language the agents reply in (SetLocale changes it).
+func (w *Workspace) replyIn() *i18n.Localizer {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	return w.reply
+}
+
+// setSettings changes the workspace's settings with f, nothing reading
+// them meanwhile.
+func (w *Workspace) setSettings(f func(c *config.Config)) {
+	w.cfgMu.Lock()
+	defer w.cfgMu.Unlock()
+	f(w.cfg)
+}
+
+// mcpConfig is the MCP settings now, as written (applyMCP replaces them).
+func (w *Workspace) mcpConfig() config.MCPConfig {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	return w.cfg.MCP
 }
 
 // RestartMCPServer stops the MCP server named name and starts it afresh
@@ -216,7 +295,7 @@ func (w *Workspace) ActiveAgentTools() api.AgentTools {
 		out.Tools = append(out.Tools, api.ToolInfo{Name: t.Name(), Description: t.Description(), PlanAllowed: runtime.PlanAllows(t.Name())})
 	}
 	sort.Slice(out.Tools, func(i, j int) bool { return out.Tools[i].Name < out.Tools[j].Name })
-	for _, s := range w.cfg.MCP.Servers {
+	for _, s := range w.liveMCP() {
 		if !s.Disabled && mcpOfferedTo(s.Agents, active) { // a disabled server offers nothing
 			out.MCP = append(out.MCP, api.MCPOffer{Server: s.Name, Tools: s.Tools, Prefix: s.Prefix})
 		}

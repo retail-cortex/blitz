@@ -174,14 +174,16 @@ func (w *Workspace) SetLocale(ctx context.Context, input string) (api.LocaleChan
 		return api.LocaleChange{}, api.ErrUnknownLocale
 	}
 	l := w.locales.Localizer(tag)
+	w.cfgMu.Lock()
 	w.reply = l
+	w.cfgMu.Unlock()
 	out := api.LocaleChange{Tag: tag.String(), NativeName: l.NativeName(), LanguageName: l.LanguageName(), HasCatalog: l.HasCatalog()}
 	if err := w.engine.SetInstructions(ctx, w.instructions()); err != nil {
 		out.Saved.Err = err
 		return out, nil
 	}
-	w.cfg.UI.Locale = out.Tag
-	out.Saved.Path, out.Saved.Err = config.SaveUILocale(config.ConfigDir(""), w.cfg.UI.Locale)
+	w.setSettings(func(c *config.Config) { c.UI.Locale = out.Tag })
+	out.Saved.Path, out.Saved.Err = config.SaveUILocale(config.ConfigDir(""), out.Tag)
 	return out, nil
 }
 

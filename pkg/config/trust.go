@@ -120,33 +120,11 @@ func (s *TrustStore) readLocked() map[string]trustEntry {
 }
 
 func (s *TrustStore) writeLocked(all map[string]trustEntry) error {
-	data, err := json.MarshalIndent(struct {
+	err := writeJSONAtomic(s.path, struct {
 		Version    int                   `json:"version"`
 		Workspaces map[string]trustEntry `json:"workspaces"`
-	}{1, all}, "", "  ")
+	}{1, all})
 	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".trust-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp.Name(), s.path); err != nil {
 		return errors.Join(errors.New("saving the trust decision"), err)
 	}
 	return nil

@@ -1,0 +1,88 @@
+--- a/internal/sources/sqlite/sqlite.go
++++ b/internal/sources/sqlite/sqlite.go
+@@ -19,13 +19,20 @@
+ 	"database/sql"
+ 	"encoding/json"
+ 	"fmt"
++	"net/url"
++	"strings"
+ 
+ 	"github.com/goccy/go-yaml"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/sqlcommenter"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util/orderedmap"
+ 	"go.opentelemetry.io/otel/trace"
+-	_ "modernc.org/sqlite" // Pure Go SQLite driver
++	// Blitz: SQLite with sqlite-vec compiled in (pure Go, WebAssembly
++	// through wazero), not modernc.org/sqlite, which can't load
++	// extensions: every SQLite source has vec0 tables and the vec_*
++	// functions.
++	_ "github.com/asg017/sqlite-vec-go-bindings/ncruces"
++	_ "github.com/ncruces/go-sqlite3/driver"
+ )
+ 
+ const SourceType string = "sqlite"
+@@ -52,6 +59,9 @@
+ 	Type         string `yaml:"type" validate:"required"`
+ 	Database     string `yaml:"database" validate:"required"` // Path to SQLite database file
+ 	SQLCommenter *bool  `yaml:"sqlCommenter"`
++	// ReadOnly opens the file read-only (Blitz): writes fail in SQLite
++	// itself, and tools that write aren't offered.
++	ReadOnly bool `yaml:"readOnly"`
+ }
+ 
+ func (r Config) SourceConfigType() string {
+@@ -59,7 +69,7 @@
+ }
+ 
+ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
+-	db, err := initSQLiteConnection(ctx, tracer, r.Name, r.Database)
++	db, err := initSQLiteConnection(ctx, tracer, r.Name, r.Database, r.ReadOnly)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("unable to create db connection: %w", err)
+ 	}
+@@ -85,7 +95,7 @@
+ }
+ 
+ func (s *Source) IsReadOnly() bool {
+-	return false
++	return s.ReadOnly
+ }
+ 
+ func (s *Source) SourceType() string {
+@@ -161,13 +171,13 @@
+ 	return out, nil
+ }
+ 
+-func initSQLiteConnection(ctx context.Context, tracer trace.Tracer, name, dbPath string) (*sql.DB, error) {
++func initSQLiteConnection(ctx context.Context, tracer trace.Tracer, name, dbPath string, readOnly bool) (*sql.DB, error) {
+ 	//nolint:all // Reassigned ctx
+ 	ctx, span := sources.InitConnectionSpan(ctx, tracer, SourceType, name)
+ 	defer span.End()
+ 
+ 	// Open database connection
+-	db, err := sql.Open("sqlite", dbPath)
++	db, err := sql.Open("sqlite3", sqliteDSN(dbPath, readOnly))
+ 	if err != nil {
+ 		return nil, fmt.Errorf("sql.Open: %w", err)
+ 	}
+@@ -178,3 +188,19 @@
+ 
+ 	return db, nil
+ }
++
++// sqliteDSN is the driver's name for a database file (Blitz): a file: URI
++// with mode=ro when read-only, which SQLite enforces as it opens it.
++// ":memory:" and URIs given as such are kept.
++func sqliteDSN(path string, readOnly bool) string {
++	if !readOnly {
++		return path
++	}
++	if strings.HasPrefix(path, "file:") {
++		if strings.Contains(path, "?") {
++			return path + "&mode=ro"
++		}
++		return path + "?mode=ro"
++	}
++	return "file:" + (&url.URL{Path: path}).EscapedPath() + "?mode=ro"
++}

@@ -130,7 +130,7 @@ func (w *Workspace) reloadSavedPermissions() error {
 // Rules that can't be read are left out, and PermissionsProblem says why
 // until a reload applies them all.
 func (w *Workspace) ReloadPermissions(cfg *config.Config) error {
-	w.cfg.Permissions, w.cfg.ProjectPermissions = cfg.Permissions, cfg.ProjectPermissions
+	w.setSettings(func(c *config.Config) { c.Permissions, c.ProjectPermissions = cfg.Permissions, cfg.ProjectPermissions })
 	err := errors.Join(w.tools.Rules().ReplaceConfigured(cfg.Permissions), w.tools.Rules().ReplaceProject(cfg.ProjectPermissions))
 	w.permMu.Lock()
 	w.permProblem = err

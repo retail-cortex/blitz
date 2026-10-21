@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -74,9 +73,9 @@ func (w *Workspace) Rules() []gates.Rule {
 // workspace's) for rule verdicts.
 func (w *Workspace) ruleAsker() gates.Asker {
 	return func(ctx context.Context, instruction, prompt string) (string, error) {
-		llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+		llm, err := w.suggestionsModel(ctx)
 		if err != nil {
-			return "", fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+			return "", fmt.Errorf("%s", ModelErrorSummary(err, w.settings()))
 		}
 		reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
 		meterUsage(ctx, served, w.engine.EstimateUsage(served, usage))
@@ -87,7 +86,7 @@ func (w *Workspace) ruleAsker() gates.Asker {
 // JudgeRule judges subject against a rule as written (Studio's Try it):
 // a prompt for a before-agent rule, an answer for an after-agent one.
 func (w *Workspace) JudgeRule(ctx context.Context, r gates.Rule, subject string) (gates.Verdict, error) {
-	return gates.Judge(ctx, w.ruleAsker(), r, SecretRedactor(w.cfg).String(subject))
+	return gates.Judge(ctx, w.ruleAsker(), r, w.secretRedactor().String(subject))
 }
 
 // auditRule records a rule's verdict in the audit log.

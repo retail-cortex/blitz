@@ -126,7 +126,7 @@ func (w *Workspace) auditGuardrail(g gates.Guardrail, decision, detail string) {
 // judgeGuardrail judges subject against a custom guardrail, secrets
 // redacted first.
 func (w *Workspace) judgeGuardrail(ctx context.Context, g gates.Guardrail, subject string) (gates.Verdict, error) {
-	return gates.JudgeGuardrail(ctx, w.ruleAsker(), g, SecretRedactor(w.cfg).String(textutil.Ellipsize(subject, guardSubjectLimit)))
+	return gates.JudgeGuardrail(ctx, w.ruleAsker(), g, w.secretRedactor().String(textutil.Ellipsize(subject, guardSubjectLimit)))
 }
 
 // TryGuardrail judges a sample against a guardrail as written (Studio's
@@ -153,7 +153,7 @@ func (w *Workspace) TryGuardrail(ctx context.Context, g gates.Guardrail, sample 
 // maskOutput is text with the secrets guardrail's masks, and whether it
 // masked anything.
 func (w *Workspace) maskOutput(g gates.Guardrail, text string) (string, bool) {
-	masked := SecretRedactor(w.cfg).String(text)
+	masked := w.secretRedactor().String(text)
 	if g.PII {
 		masked, _ = redact.PII(masked)
 	}

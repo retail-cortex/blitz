@@ -74,7 +74,7 @@ func (w *Workspace) DraftManifest(ctx context.Context, r DraftRequest) (Manifest
 	if strings.TrimSpace(r.Current) == "" && strings.TrimSpace(r.Request) == "" && strings.TrimSpace(r.Description) == "" {
 		return ManifestDraft{}, fmt.Errorf("say what it should do first: a description or a request")
 	}
-	redact := SecretRedactor(w.cfg).String
+	redact := w.secretRedactor().String
 	var b strings.Builder
 	fmt.Fprintf(&b, "Name: %s\n", cmp.Or(r.Name, "(not named yet)"))
 	if r.Description != "" {
@@ -91,13 +91,13 @@ func (w *Workspace) DraftManifest(ctx context.Context, r DraftRequest) (Manifest
 	if r.Current != "" {
 		fmt.Fprintf(&b, "\nThe text now:\n%s\n", redact(r.Current))
 	}
-	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+	llm, err := w.suggestionsModel(ctx)
 	if err != nil {
-		return ManifestDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return ManifestDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	reply, served, usage, err := runtime.Ask(ctx, llm, brief+draftReply, b.String())
 	if err != nil {
-		return ManifestDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return ManifestDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	if usage != nil {
 		slog.Info("manifest drafted", "kind", r.Kind, "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)

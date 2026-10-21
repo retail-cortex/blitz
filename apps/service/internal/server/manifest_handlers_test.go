@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The Studio handlers (skills, rules, guardrails, evals, workflows and
-// human tasks) refuse a workspace that isn't an absolute directory, as
+// The Studio handlers (skills, rules, guardrails, evals, workflows,
+// human tasks and databases) refuse a workspace that isn't an absolute directory, as
 // INVALID_WORKSPACE, before doing anything.
 func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 	c, _ := serveEvery(t, nil)
@@ -36,32 +36,41 @@ func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 	const ws = "relative/dir"
 	w := c.workspaces
 	for name, call := range map[string]func() error{
-		"GetSkillFile":    func() error { return unary(w.GetSkillFile, &pb.GetSkillFileRequest{Workspace: ws}) },
-		"SaveSkill":       func() error { return unary(w.SaveSkill, &pb.SaveSkillRequest{Workspace: ws}) },
-		"DeleteSkill":     func() error { return unary(w.DeleteSkill, &pb.DeleteSkillRequest{Workspace: ws}) },
-		"ReadSkillFile":   func() error { return unary(w.ReadSkillFile, &pb.ReadSkillFileRequest{Workspace: ws}) },
-		"WriteSkillFile":  func() error { return unary(w.WriteSkillFile, &pb.WriteSkillFileRequest{Workspace: ws}) },
-		"DeleteSkillFile": func() error { return unary(w.DeleteSkillFile, &pb.DeleteSkillFileRequest{Workspace: ws}) },
-		"CopySkill":       func() error { return unary(w.CopySkill, &pb.CopySkillRequest{Workspace: ws}) },
-		"RunSkillScript":  func() error { return unary(w.RunSkillScript, &pb.RunSkillScriptRequest{Workspace: ws}) },
-		"ListRules":       func() error { return unary(w.ListRules, &pb.ListRulesRequest{Workspace: ws}) },
-		"SaveRule":        func() error { return unary(w.SaveRule, &pb.SaveRuleRequest{Workspace: ws}) },
-		"DeleteRule":      func() error { return unary(w.DeleteRule, &pb.DeleteRuleRequest{Workspace: ws}) },
-		"ReorderRules":    func() error { return unary(w.ReorderRules, &pb.ReorderRulesRequest{Workspace: ws}) },
-		"TryRule":         func() error { return unary(w.TryRule, &pb.TryRuleRequest{Workspace: ws}) },
-		"ListGuardrails":  func() error { return unary(w.ListGuardrails, &pb.ListGuardrailsRequest{Workspace: ws}) },
-		"SaveGuardrail":   func() error { return unary(w.SaveGuardrail, &pb.SaveGuardrailRequest{Workspace: ws}) },
-		"DeleteGuardrail": func() error { return unary(w.DeleteGuardrail, &pb.DeleteGuardrailRequest{Workspace: ws}) },
-		"TryGuardrail":    func() error { return unary(w.TryGuardrail, &pb.TryGuardrailRequest{Workspace: ws}) },
-		"ListEvals":       func() error { return unary(w.ListEvals, &pb.ListEvalsRequest{Workspace: ws}) },
-		"SaveEval":        func() error { return unary(w.SaveEval, &pb.SaveEvalRequest{Workspace: ws}) },
-		"DeleteEval":      func() error { return unary(w.DeleteEval, &pb.DeleteEvalRequest{Workspace: ws}) },
-		"ListEvalRuns":    func() error { return unary(w.ListEvalRuns, &pb.ListEvalRunsRequest{Workspace: ws}) },
-		"DraftEvalCases":  func() error { return unary(w.DraftEvalCases, &pb.DraftEvalCasesRequest{Workspace: ws}) },
-		"ListWorkflows":   func() error { return unary(w.ListWorkflows, &pb.ListWorkflowsRequest{Workspace: ws}) },
-		"SaveWorkflow":    func() error { return unary(w.SaveWorkflow, &pb.SaveWorkflowRequest{Workspace: ws}) },
-		"DeleteWorkflow":  func() error { return unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: ws}) },
-		"AnswerHumanTask": func() error { return unary(w.AnswerHumanTask, &pb.AnswerHumanTaskRequest{Workspace: ws}) },
+		"GetSkillFile":        func() error { return unary(w.GetSkillFile, &pb.GetSkillFileRequest{Workspace: ws}) },
+		"SaveSkill":           func() error { return unary(w.SaveSkill, &pb.SaveSkillRequest{Workspace: ws}) },
+		"DeleteSkill":         func() error { return unary(w.DeleteSkill, &pb.DeleteSkillRequest{Workspace: ws}) },
+		"ReadSkillFile":       func() error { return unary(w.ReadSkillFile, &pb.ReadSkillFileRequest{Workspace: ws}) },
+		"WriteSkillFile":      func() error { return unary(w.WriteSkillFile, &pb.WriteSkillFileRequest{Workspace: ws}) },
+		"DeleteSkillFile":     func() error { return unary(w.DeleteSkillFile, &pb.DeleteSkillFileRequest{Workspace: ws}) },
+		"CopySkill":           func() error { return unary(w.CopySkill, &pb.CopySkillRequest{Workspace: ws}) },
+		"RunSkillScript":      func() error { return unary(w.RunSkillScript, &pb.RunSkillScriptRequest{Workspace: ws}) },
+		"ListRules":           func() error { return unary(w.ListRules, &pb.ListRulesRequest{Workspace: ws}) },
+		"SaveRule":            func() error { return unary(w.SaveRule, &pb.SaveRuleRequest{Workspace: ws}) },
+		"DeleteRule":          func() error { return unary(w.DeleteRule, &pb.DeleteRuleRequest{Workspace: ws}) },
+		"ReorderRules":        func() error { return unary(w.ReorderRules, &pb.ReorderRulesRequest{Workspace: ws}) },
+		"TryRule":             func() error { return unary(w.TryRule, &pb.TryRuleRequest{Workspace: ws}) },
+		"ListGuardrails":      func() error { return unary(w.ListGuardrails, &pb.ListGuardrailsRequest{Workspace: ws}) },
+		"SaveGuardrail":       func() error { return unary(w.SaveGuardrail, &pb.SaveGuardrailRequest{Workspace: ws}) },
+		"DeleteGuardrail":     func() error { return unary(w.DeleteGuardrail, &pb.DeleteGuardrailRequest{Workspace: ws}) },
+		"TryGuardrail":        func() error { return unary(w.TryGuardrail, &pb.TryGuardrailRequest{Workspace: ws}) },
+		"ListEvals":           func() error { return unary(w.ListEvals, &pb.ListEvalsRequest{Workspace: ws}) },
+		"SaveEval":            func() error { return unary(w.SaveEval, &pb.SaveEvalRequest{Workspace: ws}) },
+		"DeleteEval":          func() error { return unary(w.DeleteEval, &pb.DeleteEvalRequest{Workspace: ws}) },
+		"ListEvalRuns":        func() error { return unary(w.ListEvalRuns, &pb.ListEvalRunsRequest{Workspace: ws}) },
+		"DraftEvalCases":      func() error { return unary(w.DraftEvalCases, &pb.DraftEvalCasesRequest{Workspace: ws}) },
+		"ListWorkflows":       func() error { return unary(w.ListWorkflows, &pb.ListWorkflowsRequest{Workspace: ws}) },
+		"SaveWorkflow":        func() error { return unary(w.SaveWorkflow, &pb.SaveWorkflowRequest{Workspace: ws}) },
+		"DeleteWorkflow":      func() error { return unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: ws}) },
+		"AnswerHumanTask":     func() error { return unary(w.AnswerHumanTask, &pb.AnswerHumanTaskRequest{Workspace: ws}) },
+		"ListConnectors":      func() error { return unary(w.ListConnectors, &pb.ListConnectorsRequest{Workspace: ws}) },
+		"SaveConnector":       func() error { return unary(w.SaveConnector, &pb.SaveConnectorRequest{Workspace: ws}) },
+		"DeleteConnector":     func() error { return unary(w.DeleteConnector, &pb.DeleteConnectorRequest{Workspace: ws}) },
+		"SetConnectorEnabled": func() error { return unary(w.SetConnectorEnabled, &pb.SetConnectorEnabledRequest{Workspace: ws}) },
+		"MakeConnectorGlobal": func() error { return unary(w.MakeConnectorGlobal, &pb.MakeConnectorGlobalRequest{Workspace: ws}) },
+		"TestConnector":       func() error { return unary(w.TestConnector, &pb.TestConnectorRequest{Workspace: ws}) },
+		"TryConnectorTool":    func() error { return unary(w.TryConnectorTool, &pb.TryConnectorToolRequest{Workspace: ws}) },
+		"ReadConnectorSchema": func() error { return unary(w.ReadConnectorSchema, &pb.ReadConnectorSchemaRequest{Workspace: ws}) },
+		"DraftConnectorQuery": func() error { return unary(w.DraftConnectorQuery, &pb.DraftConnectorQueryRequest{Workspace: ws}) },
 		"RunEval": func() error {
 			return streamErr(w.RunEval(ctx, connect.NewRequest(&pb.RunEvalRequest{Workspace: ws, Name: "x"})))
 		},

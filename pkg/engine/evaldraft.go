@@ -49,7 +49,7 @@ func (w *Workspace) DraftEvalCases(ctx context.Context, agent, request string, e
 	if !ok {
 		return EvalDraft{}, fmt.Errorf("agent %q isn't defined", agent)
 	}
-	redact := SecretRedactor(w.cfg).String
+	redact := w.secretRedactor().String
 	var b strings.Builder
 	fmt.Fprintf(&b, "The agent: %s\nWhat it's for: %s\n", spec.Name, cmp.Or(redact(spec.Description), "(not said)"))
 	if len(spec.Tools) > 0 {
@@ -65,13 +65,13 @@ func (w *Workspace) DraftEvalCases(ctx context.Context, agent, request string, e
 	if r := strings.TrimSpace(request); r != "" {
 		fmt.Fprintf(&b, "\nWhat the user asks for: %s\n", redact(r))
 	}
-	llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+	llm, err := w.suggestionsModel(ctx)
 	if err != nil {
-		return EvalDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return EvalDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	reply, served, usage, err := runtime.Ask(ctx, llm, evalDraftBrief, b.String())
 	if err != nil {
-		return EvalDraft{Problem: ModelErrorSummary(err, w.cfg)}, nil
+		return EvalDraft{Problem: ModelErrorSummary(err, w.settings())}, nil
 	}
 	if usage != nil {
 		slog.Info("eval cases drafted", "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)

@@ -63,6 +63,7 @@ type mcpServer struct {
 	cfg       config.MCPServerConfig
 	toolset   tool.Toolset
 	allowed   map[string]bool   // optional allow-list
+	readOnly  map[string]bool   // tools that run unasked (ReadOnlyTools)
 	conns     *closingTransport // nil for toolsets built by the caller
 	transport *stdioTransport   // stdio servers only
 	health    *breaker.Breaker
@@ -336,6 +337,12 @@ func checkMCPConfigs(cfgs []config.MCPServerConfig) error {
 			return fmt.Errorf("duplicate mcp server name %q", c.Name)
 		}
 		names[c.Name] = true
+		if c.InProcess != "" {
+			if inProcess(c.InProcess) == nil {
+				return fmt.Errorf("mcp server %q: no in-process server %q", c.Name, c.InProcess)
+			}
+			continue
+		}
 		if (c.Command == "") == (c.URL == "") {
 			return fmt.Errorf("mcp server %q: set exactly one of command or url", c.Name)
 		}
@@ -356,7 +363,15 @@ func (m *MCPManager) newServer(c config.MCPServerConfig) (*mcpServer, error) {
 	}
 
 	tsCfg := mcptoolset.Config{}
-	if c.Command != "" {
+	if len(c.ReadOnlyTools) > 0 {
+		srv.readOnly = map[string]bool{}
+		for _, t := range c.ReadOnlyTools {
+			srv.readOnly[t] = true
+		}
+	}
+	if c.InProcess != "" {
+		srv.conns = &closingTransport{inner: inProcess(c.InProcess)(c)}
+	} else if c.Command != "" {
 		serverEnv := env
 		if c.Sandbox != nil && !*c.Sandbox && env != nil {
 			serverEnv = &ExecEnv{ScrubEnv: env.ScrubEnv, Dir: env.Dir}
@@ -500,7 +515,33 @@ func (m *MCPManager) Lookup(toolName string) (server string, autoApprove, ok boo
 	if s == nil {
 		return "", false, false
 	}
-	return s.cfg.Name, s.cfg.AutoApprove, true
+	name := toolName
+	if p := s.cfg.Prefix; p != "" {
+		name = strings.TrimPrefix(name, p+"__")
+	}
+	return s.cfg.Name, s.cfg.AutoApprove || s.readOnly[name], true
+}
+
+var (
+	inProcessMu      sync.RWMutex
+	inProcessServers = map[string]func(config.MCPServerConfig) mcp.Transport{}
+)
+
+// RegisterInProcess makes name an in-process server
+// (MCPServerConfig.InProcess): transport gives a server's configuration
+// its connection to the server, which runs inside Blitz's process.
+func RegisterInProcess(name string, transport func(config.MCPServerConfig) mcp.Transport) {
+	inProcessMu.Lock()
+	defer inProcessMu.Unlock()
+	inProcessServers[name] = transport
+}
+
+// inProcess is the in-process server name's transport maker; nil when
+// there's none.
+func inProcess(name string) func(config.MCPServerConfig) mcp.Transport {
+	inProcessMu.RLock()
+	defer inProcessMu.RUnlock()
+	return inProcessServers[name]
 }
 
 // Close ends every server session and stops stdio server processes.

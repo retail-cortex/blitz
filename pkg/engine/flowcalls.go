@@ -94,7 +94,7 @@ func (w *Workspace) mcpStep(ctx context.Context, n flows.Node) (flows.Result, er
 			parts = append(parts, t.Text)
 		}
 	}
-	text := SecretRedactor(w.cfg).String(strings.Join(parts, "\n"))
+	text := w.secretRedactor().String(strings.Join(parts, "\n"))
 	if res.IsError {
 		return flows.Result{}, fmt.Errorf("%s › %s: %s", n.Server, n.Tool, textutil.Ellipsize(text, 600))
 	}
@@ -166,11 +166,11 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 	if err != nil {
 		return flows.Result{}, fmt.Errorf("reading the response: %w", err)
 	}
-	text := SecretRedactor(w.cfg).String(string(data))
+	text := w.secretRedactor().String(string(data))
 	headers := map[string]any{}
 	for k, v := range resp.Header {
 		if len(v) > 0 {
-			headers[strings.ToLower(k)] = SecretRedactor(w.cfg).String(v[0])
+			headers[strings.ToLower(k)] = w.secretRedactor().String(v[0])
 		}
 	}
 	var parsed any = text
@@ -317,6 +317,6 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 			}
 		}
 	}
-	text := SecretRedactor(w.cfg).String(reply.String())
+	text := w.secretRedactor().String(reply.String())
 	return flows.Result{Text: text, Data: flows.DataOf(text)}, nil
 }
