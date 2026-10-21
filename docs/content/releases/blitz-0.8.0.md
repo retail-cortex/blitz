@@ -43,4 +43,5 @@ Full guide: [connect a database](../guide/databases.md). More on [connectors](..
 - **On Windows, install the app** with `Blitz_0.8.0_windows_x64_setup.exe`. The old Edge-based window is gone, and **Open Blitz** in the tray now opens the app.
 - **BigQuery and AlloyDB** sign in with your Google Cloud credentials (`gcloud auth application-default login`). They're newer in Blitz than PostgreSQL and SQLite and have seen less real-world use, so we'd love to hear how they work for you.
 - **SQLite answers up to 1,000 rows per query.** Add `WHERE` or `LIMIT` to narrow larger results.
+- **Includes the latest security fix** for how Blitz checks certificates on secure connections (Go 1.27.3).
 - Your settings, workspaces and conversations carry over from 0.7.1.
