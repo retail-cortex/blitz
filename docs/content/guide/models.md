@@ -32,6 +32,29 @@ model  = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 A model reference can name them too, for fallbacks or pinned agents: `bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0`, `azure/gpt-5-mini`. The desktop app's provider settings don't offer them yet: set them in the settings file.
 
+## A gateway with its own sign-in
+
+The `api` provider sends requests to your company's model gateway, with the headers you give it, in the API each model speaks: a `claude-…` model gets Anthropic's Messages API (streaming, prompt caching and thinking included), any other model OpenAI's Responses API. Both go to `<base_url>/responses`, as gateways that pass each vendor's request through expect. Where a header (or the URL's path or query) says `{{TOKEN_SCRIPT}}`, Blitz puts the token your script prints:
+
+```toml
+[llm]
+provider = "api"
+
+[llm.api]
+base_url = "https://llm-gateway.example.com/v1"   # requests go to <base_url>/responses
+model    = "gpt-5"
+token_script          = "gateway-cli token --audience llm"   # prints one line: the token
+token_script_language = "shell"                                # or python, typescript (Node 22.6+)
+
+[llm.api.headers]
+Authorization = "Bearer {{TOKEN_SCRIPT}}"
+X-Team        = "platform"
+```
+
+The script runs when a session first needs the token, with the service's environment and outside the sandbox, and must finish within 30 seconds. Each session keeps its token in memory; a `401` or `403` runs the script once more and retries, and a second one fails with the message to check the script. No `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` from the environment reaches the gateway. Responses API requests are never stored (`store: false`) or streamed. Requests follow the model: `temperature` and `top_p` aren't sent to models that refuse them (current Claude models, OpenAI's reasoning models), and a setting the gateway refuses for a model is left out of that model's requests from then on. Errors start `[llm.api]` and quote the gateway's reason. A project's settings can't set `[llm.api]`.
+
+In the desktop app, choose **API** in **Settings › Providers & keys**: the endpoint, a row per header (**Use the token** puts `{{TOKEN_SCRIPT}}` in it) and the script. Header values you've saved aren't shown again; leave one empty to keep it. `blitz doctor` shows the endpoint and the header names, and `blitz doctor --online` runs the script and sends a request.
+
 ## Listing models
 
 `blitz models` asks each provider you've set up which models it offers, and shows the price Blitz knows for each; `blitz models anthropic` asks one.

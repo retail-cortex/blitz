@@ -67,7 +67,7 @@ func TestCommandKey(t *testing.T) {
 	for _, tt := range []struct{ name, cmd, ttl, wantErr string }{
 		{"bad ttl", "echo k", "soon", "api_key_ttl"},
 		{"fails", "echo oops >&2; exit 3", "", "oops"},
-		{"prints nothing", "true", "", "printed no key"},
+		{"prints nothing", "true", "", "api_key_command printed nothing"},
 		{"two lines", "printf 'a\\nb\\n'", "", "more than one line"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

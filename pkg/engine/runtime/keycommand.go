@@ -15,26 +15,23 @@
 package runtime
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // Keys from a command (spec_parity_027 PAR-MOD-04): llm.<provider>.
 // api_key_command prints the key; it runs when a key is first needed and
 // again once api_key_ttl has passed, and every request carries the current
-// one, so a key a password manager or gateway rotates keeps working.
+// one, so a key a password manager or gateway rotates keeps working. The
+// command runs through runScript, as shell (scriptrun.go).
 
-const (
-	defaultKeyTTL     = 5 * time.Minute
-	keyCommandTimeout = 30 * time.Second
-)
+// defaultKeyTTL is how long a key is kept when api_key_ttl isn't set.
+const defaultKeyTTL = 5 * time.Minute
 
 // commandKey is one key command's cached output.
 type commandKey struct {
@@ -81,20 +78,9 @@ func (k *commandKey) get(ctx context.Context) (string, error) {
 	if k.key != "" && time.Since(k.at) < k.ttl {
 		return k.key, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, keyCommandTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", k.command)
-	var out, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return "", fmt.Errorf("api_key_command timed out after %s", keyCommandTimeout)
-		}
-		return "", fmt.Errorf("api_key_command failed: %v: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	key := strings.TrimSpace(out.String())
-	if key == "" || strings.ContainsAny(key, "\r\n") {
-		return "", errors.New("api_key_command printed no key (or more than one line)")
+	key, err := runScript(ctx, config.ScriptShell, k.command)
+	if err != nil {
+		return "", fmt.Errorf("api_key_command %w", err)
 	}
 	k.key, k.at = key, time.Now()
 	return key, nil

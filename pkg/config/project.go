@@ -643,6 +643,8 @@ func (c *Config) providerReady(ref string) bool {
 		return c.LLM.Bedrock.Model != "" || c.LLM.Bedrock.Region != ""
 	case "azure":
 		return c.LLM.Azure.Resource != "" || c.LLM.Azure.BaseURL != "" || c.LLM.Azure.AnthropicBaseURL != ""
+	case "api":
+		return c.LLM.API.BaseURL != ""
 	}
 	return false
 }

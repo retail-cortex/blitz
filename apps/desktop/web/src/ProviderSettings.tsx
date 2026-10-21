@@ -28,10 +28,12 @@ import { useAdvanced } from "./state";
 import { showsSignIn } from "./simpleMode";
 import { SignInPanel } from "./SignInPanel";
 import { signInProvider } from "./signin";
+import { apiFormProblems, fromApiForm, sameApiForm, toApiForm, type ApiForm } from "./apiForm";
+import { ApiProviderForm } from "./ApiProviderForm";
 
 /** Providers llm.provider can name; the first three take API keys. */
-const providers = ["gemini", "anthropic", "openai", "ollama"];
-const providerNames: Record<string, string> = { gemini: "Gemini", anthropic: "Anthropic", openai: "OpenAI", ollama: "Ollama" };
+const providers = ["gemini", "anthropic", "openai", "ollama", "api"];
+const providerNames: Record<string, string> = { gemini: "Gemini", anthropic: "Anthropic", openai: "OpenAI", ollama: "Ollama", api: "API" };
 /** The models a provider's sign-in notes speak of. */
 const modelNames: Record<string, string> = { gemini: "Gemini", anthropic: "Claude" };
 
@@ -68,7 +70,7 @@ const onVertex = (provider: string, m: string) => m === "adc" || (m === "oauth" 
  * What the form saves as one change: the provider, the default model, and
  * how the provider signs in: an API key (a new one, or "" to keep the
  * current one), Google Cloud's ADC (a project and location) or an ant
- * OAuth profile.
+ * OAuth profile; for the api provider, its endpoint, headers and script.
  */
 interface Choice {
   provider: string;
@@ -78,6 +80,7 @@ interface Choice {
   projectId: string;
   location: string;
   profile: string;
+  api: ApiForm;
 }
 
 /**
@@ -89,7 +92,7 @@ export const effectiveProvider = (provider: string, workspace: string) => provid
 /** The choice as saved in the scope, for provider. */
 function savedChoice(d: DescribeConfigResponse, provider: string, model = d.defaultModel): Choice {
   const p = d.providers.find((x) => x.name === provider);
-  return { provider, model, method: p?.auth || "api_key", key: "", projectId: p?.projectId ?? "", location: p?.location ?? "", profile: p?.profile ?? "" };
+  return { provider, model, method: p?.auth || "api_key", key: "", projectId: p?.projectId ?? "", location: p?.location ?? "", profile: p?.profile ?? "", api: toApiForm(d.api) };
 }
 
 const sameChoice = (a: Choice, b: Choice) =>
@@ -99,7 +102,8 @@ const sameChoice = (a: Choice, b: Choice) =>
   a.key.trim() === "" &&
   a.projectId.trim() === b.projectId &&
   a.location.trim() === b.location &&
-  a.profile.trim() === b.profile;
+  a.profile.trim() === b.profile &&
+  (a.provider !== "api" || sameApiForm(a.api, b.api));
 
 /**
  * A scope's provider and its sign-in: the global settings (workspace "")
@@ -116,7 +120,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const [error, setError] = useState("");
   const [modelError, setModelError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [choice, setChoice] = useState<Choice>({ provider: "", model: "", method: "api_key", key: "", projectId: "", location: "", profile: "" });
+  const [choice, setChoice] = useState<Choice>({ provider: "", model: "", method: "api_key", key: "", projectId: "", location: "", profile: "", api: toApiForm() });
   const catalog = useModelCatalog(workspace);
 
   // Reads the scope; fresh also starts the choice over from what's saved.
@@ -164,10 +168,13 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const saved = savedChoice(desc, effectiveProvider(desc.provider, workspace));
   const dirty = !sameChoice(choice, saved);
   const modelCheck = checkModelRef(choice.model, catalog, choice.provider || desc.provider);
+  const isAPI = choice.provider === "api";
+  const apiProblems = isAPI ? apiFormProblems(choice.api) : [];
+  const blocked = !!modelCheck.error || apiProblems.length > 0;
   const save = () =>
     dirty &&
     !busy &&
-    !modelCheck.error &&
+    !blocked &&
     act(
       () =>
         config.setProvider({
@@ -176,6 +183,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           defaultModel: modelCheck.value,
           key: choice.method === "api_key" ? choice.key.trim() : "",
           auth: others.length ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
+          api: isAPI ? fromApiForm(choice.api) : undefined,
         }),
       t("desktop.keys.provider_saved"),
       true,
@@ -276,13 +284,14 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <p className="t-body-sm muted">{t(choice.method === "oauth" && choice.provider === "gemini" ? "desktop.keys.google_oauth_hint" : `desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>
         )}
         {choice.provider === "openai" && <p className="t-body-sm muted">{t("desktop.keys.openai_key_only")}</p>}
+        {isAPI && <ApiProviderForm form={choice.api} onChange={(api) => setChoice((c) => ({ ...c, api }))} problems={apiProblems} busy={busy} onEnter={onEnter} />}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
         {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
           <Button small disabled={!dirty || busy} onClick={() => setChoice(saved)}>
             {t("desktop.file.revert")}
           </Button>
-          <Button small variant="filled" disabled={!dirty || busy || !!modelCheck.error} onClick={save}>
+          <Button small variant="filled" disabled={!dirty || busy || blocked} onClick={save}>
             {t("desktop.keys.save")}
           </Button>
         </div>

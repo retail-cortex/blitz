@@ -47,7 +47,7 @@ When a project's settings (`.blitz/settings.toml`) need trust, the REPL lists wh
 
 ```toml
 [llm]
-provider = "gemini"                  # gemini (default), anthropic, openai or ollama
+provider = "gemini"                  # gemini (default), anthropic, openai, ollama or api
 
 [llm.anthropic]
 model = "claude-opus-5"
@@ -59,6 +59,7 @@ The model comes from `llm.<provider>.model` unless `blitz.default_model` or `--m
 - **Anthropic** streams, caches the system prompt, keeps thinking across tool calls, and falls back on server-side refusals (`llm.anthropic.fallbacks = "default"`, or `"off"`). It takes a key, signs in with an Anthropic account, or runs on Vertex AI with Google Cloud (below). Without `api_key` it also uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
 - **OpenAI** covers every OpenAI-compatible API (OpenRouter, vLLM, …) through `base_url`.
 - **Ollama** runs local models.
+- **API** sends OpenAI Responses requests to your own gateway, with your headers and a token a script prints ([Models](models.md#a-gateway-with-its-own-sign-in)).
 
 [Models](models.md) covers fallbacks, per-agent models and generation settings.
 

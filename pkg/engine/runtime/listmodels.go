@@ -70,6 +70,9 @@ func ConfiguredProviders(cfg *config.Config) []string {
 	if cfg.LLM.Azure.Resource != "" || cfg.LLM.Azure.BaseURL != "" || cfg.LLM.Azure.AnthropicBaseURL != "" {
 		out = append(out, "azure")
 	}
+	if cfg.LLM.API.BaseURL != "" {
+		out = append(out, "api")
+	}
 	return out
 }
 
@@ -90,8 +93,11 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 			ids, err := listProvider(lctx, cfg, p)
 			sort.Strings(ids)
 			pm := ProviderModels{Provider: p, Err: err}
-			if p == "bedrock" || p == "azure" {
+			switch p {
+			case "bedrock", "azure":
 				pm.Note = "the configured model: " + p + "'s console lists the others"
+			case "api":
+				pm.Note = "the configured model"
 			}
 			for _, id := range ids {
 				m := ListedModel{ID: id}
@@ -146,6 +152,8 @@ func listProvider(ctx context.Context, cfg *config.Config, provider string) ([]s
 		return nonEmpty(cfg.LLM.Bedrock.Model), nil
 	case "azure":
 		return nonEmpty(cfg.LLM.Azure.Model), nil
+	case "api":
+		return nonEmpty(cfg.LLM.API.Model), nil
 	case "openai", "ollama":
 		key, base, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
 		if err != nil {
@@ -176,7 +184,7 @@ func nonEmpty(s string) []string {
 type errUnknownProvider string
 
 func (e errUnknownProvider) Error() string {
-	return "unknown provider " + string(e) + " (gemini, anthropic, openai, ollama, bedrock or azure)"
+	return "unknown provider " + string(e) + " (gemini, anthropic, openai, ollama, bedrock, azure or api)"
 }
 
 func contains(list []string, v string) bool {

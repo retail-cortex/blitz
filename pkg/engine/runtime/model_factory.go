@@ -78,7 +78,7 @@ func NewModelRef(ctx context.Context, cfg *config.Config, ref string) (model.LLM
 // knownProviders are the provider prefixes recognised in model references.
 var knownProviders = map[string]bool{
 	"gemini": true, "anthropic": true, "openai": true, "ollama": true,
-	"bedrock": true, "azure": true, "vertex-anthropic": true,
+	"bedrock": true, "azure": true, "vertex-anthropic": true, "api": true,
 }
 
 // ParseModelRef splits "provider/model" into its parts. Without a known
@@ -165,9 +165,15 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 // providerOf names the API a built model talks to; with provider "" the
 // choice was made from the credentials present.
 func providerOf(m model.LLM) string {
-	switch m.(type) {
+	switch m := m.(type) {
 	case *anthropicModel:
 		return "anthropic"
+	case *apiModel:
+		// The settings the API the gateway's model speaks takes (MDL-107).
+		if m.p.format == formatMessages {
+			return "anthropic"
+		}
+		return "openai"
 	case *toolCallParsingModel:
 		return "openai"
 	}
@@ -204,6 +210,9 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 
 	case "azure":
 		return newAzureModel(ctx, cfg.LLM.Azure, modelName, pol)
+
+	case "api":
+		return newAPIModel(ctx, cfg.LLM.API, modelName, pol)
 
 	case "":
 		// If Gemini key is set and provider is empty, try gemini, else fallback to openai/ollama

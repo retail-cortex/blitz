@@ -127,6 +127,9 @@ func Run(ctx context.Context, o Options) []Check {
 	case cfg.LLM.Provider == "vertex-anthropic":
 		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location, confirm)
 		add("credentials", st, "Claude on Vertex AI, %s", detail)
+	case cfg.LLM.Provider == "api":
+		st, detail := checkAPI(cfg.LLM.API, confirm)
+		add("credentials", st, "%s", detail)
 	case key == "" && keyCommandFor(cfg) != "":
 		add("credentials", statusOK, "the key comes from api_key_command%s", confirm)
 	case key == "":
@@ -379,6 +382,27 @@ func checkADC(provider, project, location, confirm string) (checkStatus, string)
 		return statusOK, where + "gcloud's application-default login" + confirm
 	}
 	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"
+}
+
+// checkAPI says whether the api provider's settings can build a model
+// (spec_models_015 MDL-109): its endpoint and the headers it sends, by name
+// only (a value can be a credential), and where its token comes from. The
+// script runs only with --online, in the model's request, so a token isn't
+// spent on a look at the settings.
+func checkAPI(c config.APIConfig, confirm string) (checkStatus, string) {
+	if err := c.Check(); err != nil {
+		return statusFail, err.Error()
+	}
+	names := make([]string, 0, len(c.Headers))
+	for name := range c.Headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	detail := fmt.Sprintf("API at %s, headers %s", c.BaseURL, strings.Join(names, ", "))
+	if c.UsesToken() {
+		return statusOK, detail + "; the token from a " + c.Language() + " token_script" + confirm
+	}
+	return statusOK, detail + confirm
 }
 
 // keyCommandFor is the provider's api_key_command.
