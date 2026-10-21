@@ -35,6 +35,7 @@ go_test(
     name = "docx_test",
     srcs = [
         "docx_test.go",
+        "hang_test.go",
         "math_test.go",
         "read_test.go",
     ],
