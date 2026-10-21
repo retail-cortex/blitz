@@ -108,6 +108,14 @@ func InitializeConfigs(ctx context.Context, cfg ServerConfig) (
 
 	// initialize and validate the sources from configs
 	sourcesMap := make(map[string]sources.Source)
+	// Blitz: a failure once a source is open closes the ones open, which
+	// nothing else holds (their pools, files and goroutines would leak).
+	initialized := false
+	defer func() {
+		if !initialized {
+			closeSources(sourcesMap)
+		}
+	}()
 	for name, sc := range cfg.SourceConfigs {
 		s, err := func() (sources.Source, error) {
 			childCtx, span := instrumentation.Tracer.Start(
@@ -291,6 +299,7 @@ func InitializeConfigs(ctx context.Context, cfg ServerConfig) (
 		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
+	initialized = true
 	return sourcesMap, authServicesMap, embeddingModelsMap, toolsMap, promptsMap, resourcesMap, resourceTemplatesMap, groupsMap, nil
 }
 
@@ -569,6 +578,13 @@ func NewServer(ctx context.Context, cfg ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize configs: %w", err)
 	}
+	// Blitz: the sources are open; a later failure closes them.
+	built := false
+	defer func() {
+		if !built {
+			closeSources(sourcesMap)
+		}
+	}()
 
 	addr := net.JoinHostPort(cfg.Address, strconv.Itoa(cfg.Port))
 	srv := &http.Server{Addr: addr, Handler: r}
@@ -744,7 +760,17 @@ func NewServer(ctx context.Context, cfg ServerConfig) (*Server, error) {
 		})
 	}
 
+	built = true
 	return s, nil
+}
+
+// closeSources closes the sources that can be (Blitz).
+func closeSources(m map[string]sources.Source) {
+	for _, s := range m {
+		if c, ok := s.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
 }
 
 func mcpAuthMiddleware(s *Server) func(http.Handler) http.Handler {

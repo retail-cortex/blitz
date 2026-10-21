@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 
@@ -33,12 +34,12 @@ import (
 // Folder is the connectors' folder, in the config folder and in a
 // workspace's .agents: its kinds and categories folders hold descriptors,
 // and a folder per category its connections.
-const Folder = "connectors"
+const Folder = config.ConnectorsFolder
 
 // Descriptor folders, in a connectors folder.
 const (
-	KindsFolder      = "kinds"
-	CategoriesFolder = "categories"
+	KindsFolder      = config.ConnectorKindsFolder
+	CategoriesFolder = config.ConnectorCategoriesFolder
 )
 
 // Catalog is what connectors there are: the categories and their kinds,
@@ -50,14 +51,10 @@ type Catalog struct {
 }
 
 // GlobalDir is the global connectors folder.
-func GlobalDir(prefixDir string) string {
-	return filepath.Join(config.ConfigDir(prefixDir), Folder)
-}
+func GlobalDir(prefixDir string) string { return config.GlobalConnectorsDir(prefixDir) }
 
 // WorkspaceDir is a workspace's connectors folder.
-func WorkspaceDir(workspace string) string {
-	return filepath.Join(workspace, ".agents", Folder)
-}
+func WorkspaceDir(workspace string) string { return config.WorkspaceConnectorsDir(workspace) }
 
 // Dir is a scope's connectors folder ("" for a workspace scope with no
 // workspace).
@@ -74,8 +71,59 @@ func Dir(prefixDir, workspace, scope string) string {
 // Load reads the catalog for a workspace ("" for the global one alone).
 // A global or workspace descriptor adds a category or a kind; one with
 // the ID of one there already isn't used, so a workspace can't change
-// what a built-in kind means.
+// what a built-in kind means. It's read again only when a descriptor
+// file changes (catalogs).
 func Load(prefixDir, workspace string) Catalog {
+	key := prefixDir + "\x00" + workspace
+	fp := Fingerprint(descriptorFiles(prefixDir, workspace))
+	catalogs.Lock()
+	defer catalogs.Unlock()
+	if c, ok := catalogs.m[key]; ok && c.fingerprint == fp {
+		return c.cat.clone()
+	}
+	if len(catalogs.m) >= maxCatalogs {
+		clear(catalogs.m)
+	}
+	cat := load(prefixDir, workspace)
+	catalogs.m[key] = cachedCatalog{fingerprint: fp, cat: cat}
+	return cat.clone()
+}
+
+// catalogs are the catalogs read, by folders, with the fingerprint of
+// their descriptor files then; at most maxCatalogs.
+var catalogs = struct {
+	sync.Mutex
+	m map[string]cachedCatalog
+}{m: map[string]cachedCatalog{}}
+
+const maxCatalogs = 64
+
+type cachedCatalog struct {
+	fingerprint string
+	cat         Catalog
+}
+
+// clone is cat with slices of its own, so a caller appending to them
+// doesn't write into the cached ones.
+func (cat Catalog) clone() Catalog {
+	return Catalog{Categories: slices.Clone(cat.Categories), Kinds: slices.Clone(cat.Kinds)}
+}
+
+// descriptorFiles are the global and workspace descriptor files.
+func descriptorFiles(prefixDir, workspace string) []string {
+	var out []string
+	for _, scope := range Scopes {
+		if dir := Dir(prefixDir, workspace, scope); dir != "" {
+			for _, folder := range []string{CategoriesFolder, KindsFolder} {
+				out = append(out, yamlFiles(filepath.Join(dir, folder))...)
+			}
+		}
+	}
+	return out
+}
+
+// load reads the catalog (Load).
+func load(prefixDir, workspace string) Catalog {
 	var cat Catalog
 	add := func(origin, file string, data []byte) {
 		if filepath.Base(filepath.Dir(file)) == CategoriesFolder {
@@ -101,7 +149,7 @@ func Load(prefixDir, workspace string) Catalog {
 			}
 		}
 	}
-	for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
+	for _, scope := range Scopes {
 		dir := Dir(prefixDir, workspace, scope)
 		if dir == "" {
 			continue
@@ -126,10 +174,8 @@ func pathOf(origin, file string) string {
 	return file
 }
 
-// idOf is a descriptor file's ID by its name.
-func idOf(file string) string {
-	return strings.TrimSuffix(strings.TrimSuffix(filepath.Base(file), ".yaml"), ".yml")
-}
+// idOf is a descriptor's ID, or a connection's name, by its file.
+func idOf(file string) string { return config.ConnectorFileName(file) }
 
 // strict decodes a descriptor, refusing fields it doesn't know.
 func strict(data []byte, v any) error {
@@ -139,19 +185,7 @@ func strict(data []byte, v any) error {
 }
 
 // yamlFiles are a folder's YAML files, sorted.
-func yamlFiles(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if n := e.Name(); !e.IsDir() && (strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml")) {
-			out = append(out, filepath.Join(dir, n))
-		}
-	}
-	return out
-}
+func yamlFiles(dir string) []string { return config.ConnectorFiles(dir) }
 
 // reserved are names a category can't take: its folder would be a
 // descriptors folder.
@@ -221,8 +255,8 @@ func (cat *Catalog) check() {
 				problems = append(problems, fmt.Sprintf("field %q: every field has a key of its own", f.Key))
 			}
 			keys[f.Key] = true
-			if f.Type != "" && !slices.Contains([]string{FieldText, FieldNumber, FieldSecret, FieldList, FieldPath}, f.Type) {
-				problems = append(problems, fmt.Sprintf("field %q: type is text, number, secret, list or path", f.Key))
+			if f.Type != "" && !slices.Contains(FieldTypes, f.Type) {
+				problems = append(problems, fmt.Sprintf("field %q: type is one of %s", f.Key, strings.Join(FieldTypes, ", ")))
 			}
 		}
 		ids := map[string]bool{}
@@ -235,13 +269,15 @@ func (cat *Catalog) check() {
 		for _, c := range k.Capabilities {
 			switch {
 			case !slices.Contains(Capabilities, c):
-				problems = append(problems, fmt.Sprintf("capability %q: one of test, try, queries, schema, query-builder", c))
+				problems = append(problems, fmt.Sprintf("capability %q: one of %s", c, capabilityList()))
 			case ok && !supports(b, c):
 				problems = append(problems, fmt.Sprintf("capability %q: backend %s can't", c, k.Backend))
 			case c == Queries && (k.Queries == nil || k.Queries.Type == ""):
 				problems = append(problems, "capability queries: say how they're written (queries: type)")
 			case c == Schema && (k.Schema == nil || k.Schema.Statement == "" && k.Schema.Reader == ""):
 				problems = append(problems, "capability schema: say how it's read (schema: statement or reader)")
+			case c == Schema && k.Schema.Statement != "" && (k.Queries == nil || k.Queries.Type == ""):
+				problems = append(problems, "capability schema: a statement runs as a query (queries: type)")
 			case c == QueryBuilder && (!k.Can(Schema) || !k.Can(Queries)):
 				problems = append(problems, "capability query-builder: needs schema and queries")
 			}
@@ -296,16 +332,11 @@ func (cat Catalog) Usable() []Category {
 	return out
 }
 
-// DescriptorFiles are the global and workspace descriptor files, for the
-// settings watch.
-func DescriptorFiles(prefixDir, workspace string) []string {
-	var out []string
-	for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
-		if dir := Dir(prefixDir, workspace, scope); dir != "" {
-			for _, folder := range []string{CategoriesFolder, KindsFolder} {
-				out = append(out, yamlFiles(filepath.Join(dir, folder))...)
-			}
-		}
+// capabilityList is the capabilities' names, for a problem.
+func capabilityList() string {
+	names := make([]string, len(Capabilities))
+	for i, c := range Capabilities {
+		names[i] = string(c)
 	}
-	return out
+	return strings.Join(names, ", ")
 }

@@ -48,6 +48,7 @@ import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";
 import { SkillScenarios } from "./SkillScenarios";
 import { addTrigger, emptySkillForm, formFromSkill, kindOf, sameSkillForm, skillName, specFromForm, validSkillName, type SkillForm, type SkillKind } from "./skillForm";
+import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 /** Each kind's icon (SK-97). */
 const kindIcons: Record<SkillKind, string> = { simple: mdiPuzzleOutline, references: mdiBookOpenVariant, scripts: mdiCodeBraces, meta: mdiSitemapOutline };
@@ -83,7 +84,6 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   const [filesDirty, setFilesDirty] = useState(false);
   // A reference or script open in its tab: the file's buttons stand in for the skill's.
   const [fileOpen, setFileOpen] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [adding, setAdding] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -117,7 +117,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   const dirty = open !== null && (!sameSkillForm(form, base) || filesDirty);
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(dirty);
   const load = (f: SkillFile) => {
     const loaded = formFromSkill(f);
     setFile(f);
@@ -381,15 +381,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                   <span className="t-body-sm muted">{t("desktop.skills.tools_hint")}</span>
                   <ToolPicker offered={tools} chosen={form.tools} onChange={(v) => set("tools", v)} />
                 </div>
-                {problems.length > 0 && (
-                  <div className="card error stack" role="alert" style={{ gap: 4 }}>
-                    {problems.map((p) => (
-                      <span key={p} className="row t-body-sm" style={{ gap: 6 }}>
-                        <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <ProblemList problems={problems} />
               </div>
             )}
             {tab !== "general" && !saved && (
@@ -440,53 +432,12 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
           onClose={() => setAdding(false)}
         />
       )}
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.skills.delete_title", { name: open?.name ?? "" })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.skills.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.skills.delete_body", { path: file?.skill?.dir ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    setFilesDirty(false);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: form.name || t("desktop.agents.unnamed") })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.skills.delete_title", { name: open?.name ?? "" })} icon={mdiDeleteOutline} confirm={t("desktop.skills.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t("desktop.skills.delete_body", { path: file?.skill?.dir ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(form.name)}
     </div>
   );
 }

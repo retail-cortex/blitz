@@ -38,7 +38,7 @@ describe("the connector form", () => {
   });
 
   it("keeps the shared settings when the kind changes, never a password, and queries only where it takes them", () => {
-    const f = { ...newConnectorForm("databases", postgres), settings: { host: "db", database: "shop" }, secretValues: { password: "pw" }, queries: [{ name: "q", description: "d", statement: "SELECT 1", params: [] }] };
+    const f = { ...newConnectorForm("databases", postgres), settings: { host: "db", database: "shop" }, secretValues: { password: "pw" }, queries: [{ key: "k1", name: "q", description: "d", statement: "SELECT 1", params: [] }] };
     expect(withKind(f, sqlite)).toMatchObject({ kind: "sqlite", settings: { database: "shop" }, secretValues: {}, tools: ["execute_sql", "list_tables"], queries: [] });
     expect(withKind(f, postgres).queries).toHaveLength(1);
   });
@@ -67,7 +67,10 @@ describe("the connector form", () => {
     expect(sameConnectorForm(f, { ...f })).toBe(true);
     expect(sameConnectorForm(f, { ...f, secretValues: { password: "x" } })).toBe(false);
     expect(sameConnectorForm(f, { ...f, readOnly: false })).toBe(false);
-    expect(queryForm(c.queries[0])).toEqual(f.queries[0]);
+    const { key: _first, ...one } = queryForm(c.queries[0]);
+    const { key: _second, ...two } = f.queries[0];
+    expect(one).toEqual(two);
+    expect(queryForm(c.queries[0]).key).not.toBe(queryForm(c.queries[0]).key);
   });
 
   it("keeps a custom file's text", () => {

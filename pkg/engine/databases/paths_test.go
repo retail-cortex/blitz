@@ -16,6 +16,7 @@ package databases
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 )
 
@@ -125,8 +125,11 @@ func TestRelativeDatabase(t *testing.T) {
 	assert.Contains(t, text, "database: ./kitchen.db", "the file keeps the path as written")
 	file := filepath.Join(connectors.WorkspaceDir(ws), "databases", "kitchen.yaml")
 	write(t, file, text)
+	served := Backend{}.Serve(connectors.Serving{Category: category, Dirs: connectors.Dirs{Workspace: ws}, Local: []string{file}, Trusted: func(string) bool { return true }})
+	require.Len(t, served, 1)
+	assert.Equal(t, map[string][]string{"sqlite": {"database"}}, served[0].FileSettings, "Serve says which settings are paths")
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	cs, err := client.Connect(ctx, Transport(config.MCPServerConfig{Args: []string{file}}), nil)
+	cs, err := client.Connect(ctx, Transport(served[0]), nil)
 	require.NoError(t, err)
 	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "kitchen_count"})
 	require.NoError(t, err)
@@ -152,4 +155,39 @@ func TestRelativeDatabase(t *testing.T) {
 	assert.ErrorContains(t, err, "no file at "+filepath.Join(ws, "gone.db"))
 	assert.NoFileExists(t, filepath.Join(ws, "gone.db"))
 	_ = cat
+}
+
+// What's typed into the form, unsaved, is masked in what a test or try
+// answers; a value too short to tell apart isn't.
+func TestMaskTyped(t *testing.T) {
+	values := map[string]string{"password": "s3cret-pass", "pin": "123"}
+	assert.Equal(t, "auth failed for [REDACTED] (123)", maskText(values, "auth failed for s3cret-pass (123)"))
+	err := maskTyped(values, errors.New("bad password s3cret-pass"))
+	assert.EqualError(t, err, "bad password [REDACTED]")
+	plain := errors.New("no route")
+	assert.Same(t, plain, maskTyped(values, plain), "nothing to mask: the error as it was")
+	assert.NoError(t, maskTyped(values, nil))
+}
+
+// The rewrite leaves a path setting that isn't one value alone, and finds
+// nothing for a key that isn't there; a ready-made tool without words for
+// the agents says what it is on what; a file that can't be read names no
+// secret.
+func TestEdges(t *testing.T) {
+	ws := t.TempDir()
+	keys := map[string][]string{"sqlite": {"database"}}
+	listed := "kind: source\nname: k\ntype: sqlite\ndatabase: [a, b]\n"
+	out, err := resolvePaths([]byte(listed), keys, ws)
+	require.NoError(t, err)
+	assert.Equal(t, listed, string(out))
+
+	_, _, kinds := catalog(t)
+	k := kinds[0]
+	k.Tools = []connectors.ReadyTool{{ID: "peek", Type: "sqlite-sql", Statement: "SELECT 1"}}
+	_, category, _ := catalog(t)
+	text, err := Backend{}.Render(category, &k, connectors.Connection{Name: "shop", Kind: k.ID, Tools: []string{"peek"}, Settings: map[string]string{}})
+	require.NoError(t, err)
+	assert.Contains(t, text, "peek on shop.")
+
+	assert.Empty(t, Names([]string{filepath.Join(ws, "gone.yaml")}))
 }

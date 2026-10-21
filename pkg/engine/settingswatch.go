@@ -114,7 +114,7 @@ func (w *Workspace) watchSettings() *settingsWatch {
 	for _, f := range append(rules, approvals) {
 		seen[f] = stampOf(f)
 	}
-	connSeen := connectors.Fingerprint(connectors.AllFiles(w.cfg.Dir, w.Dir()))
+	connSeen := connectors.Fingerprint(connectors.AllFiles(w.connectorDirs()))
 	go func() {
 		defer close(sw.done)
 		t := time.NewTicker(settingsPoll)
@@ -136,7 +136,7 @@ func (w *Workspace) watchSettings() *settingsWatch {
 					seen[approvals], approvalsChanged = s, true
 				}
 			}
-			if fp := connectors.Fingerprint(connectors.AllFiles(w.cfg.Dir, w.Dir())); fp != connSeen {
+			if fp := connectors.Fingerprint(connectors.AllFiles(w.connectorDirs())); fp != connSeen {
 				connSeen = fp
 				if err := w.ReloadConnectors(context.Background()); err != nil {
 					w.warn("connectors: " + err.Error())

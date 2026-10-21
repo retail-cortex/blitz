@@ -494,7 +494,7 @@ type SkillPolicy struct {
 	// workspace, while its project settings aren't trusted.
 	UntrustedRoots []string `toml:"-"`
 	// Reviewed reports whether the skill in a folder was reviewed and
-	// trusted with a content hash (SkillTrust; nil: every skill is). A
+	// trusted with a content hash (HashTrust; nil: every skill is). A
 	// skill on disk whose scripts weren't is asked about before each run.
 	Reviewed func(dir, hash string) bool `toml:"-"`
 }

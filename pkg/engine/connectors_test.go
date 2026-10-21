@@ -61,8 +61,8 @@ func TestConnectorsInATurn(t *testing.T) {
 	w, _ := openTestWith(t, nil, call, text("two"))
 	ctx := context.Background()
 	assert.Empty(t, w.Connectors())
-	assert.Empty(t, w.ConnectorState("databases").Name, "no files, no server")
-	assert.Empty(t, w.ConnectorState("email").Name, "no such category")
+	assert.Empty(t, w.ConnectorState(connectors.Category{Server: "databases"}).Name, "no files, no server")
+	assert.Empty(t, w.ConnectorState(connectors.Category{}).Name, "no such category")
 
 	c := kitchen(t)
 	saved, problems, err := w.SaveConnector(ctx, c, nil, "")
@@ -78,7 +78,7 @@ func TestConnectorsInATurn(t *testing.T) {
 	require.Len(t, servers, 1)
 	assert.Equal(t, "databases", servers[0].Name)
 	assert.Contains(t, servers[0].Target, "in-process: ")
-	assert.Equal(t, "idle", w.ConnectorState("databases").State)
+	assert.Equal(t, "idle", w.ConnectorState(connectors.Category{Server: "databases"}).State)
 
 	s, _ := w.NewSession()
 	var result map[string]any
@@ -90,7 +90,7 @@ func TestConnectorsInATurn(t *testing.T) {
 	require.NotNil(t, result)
 	// With no one to ask, a tool that asks is refused: this one ran.
 	assert.Contains(t, fmt.Sprint(result), `"n":2`, "a read-only database's tool runs unasked")
-	assert.Equal(t, "connected", w.ConnectorState("databases").State)
+	assert.Equal(t, "connected", w.ConnectorState(connectors.Category{Server: "databases"}).State)
 
 	tools, err := w.TestConnector(ctx, c, nil)
 	require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestConnectorsInATurn(t *testing.T) {
 
 // readOnlyTools are the read-only tools the databases server runs unasked.
 func readOnlyTools(w *Workspace) []string {
-	for _, s := range w.mcpConfig().Servers {
+	for _, s := range w.liveMCP() {
 		if s.Name == "databases" {
 			return s.ReadOnlyTools
 		}

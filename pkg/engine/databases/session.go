@@ -30,7 +30,6 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
-	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -70,7 +69,7 @@ func (Backend) Try(ctx context.Context, env connectors.Env, k *connectors.Kind, 
 	var isErr bool
 	err := with(ctx, env, k, c, nil, func(ctx context.Context, cs *mcp.ClientSession, _ []string) error {
 		parts, e, err := call(ctx, cs, tool, args)
-		text, isErr = strings.Join(parts, "\n"), e
+		text, isErr = maskText(env.Values, strings.Join(parts, "\n")), e
 		return err
 	})
 	return text, isErr, err
@@ -100,7 +99,7 @@ func (Backend) ReadSchema(ctx context.Context, env connectors.Env, k *connectors
 	}
 	var extra []*yaml.Node
 	switch {
-	case k.Schema.Statement != "":
+	case k.Schema.Statement != "" && k.Queries != nil:
 		extra = append(extra, queryDoc(c.Name, k.Queries.Type, schemaTool, connectors.Query{Description: "The tables and their columns.", Statement: k.Schema.Statement}))
 	case k.Schema.Reader == "bigquery":
 		for _, t := range []struct{ id, typ string }{{"datasets", "bigquery-list-dataset-ids"}, {"tables", "bigquery-list-table-ids"}, {"table", "bigquery-get-table-info"}} {
@@ -112,7 +111,7 @@ func (Backend) ReadSchema(ctx context.Context, env connectors.Env, k *connectors
 	var tables []connectors.Table
 	err := with(ctx, env, k, c, extra, func(ctx context.Context, cs *mcp.ClientSession, _ []string) error {
 		var err error
-		if k.Schema.Statement != "" {
+		if k.Schema.Reader == "" {
 			tables, err = statementSchema(ctx, cs)
 		} else {
 			tables, err = bigquerySchema(ctx, cs, c.Settings["project"])
@@ -231,8 +230,39 @@ func tableInfo(text string) (string, []connectors.Column) {
 }
 
 // with starts c alone, as written (with extra tools), and calls f with a
-// session on it and its read-only tools.
+// session on it and its read-only tools. The secret values typed into
+// the form (env.Values) are masked in what it returns: unsaved, they
+// aren't Blitz's to remember (redact.Remember) for the process's life.
 func with(ctx context.Context, env connectors.Env, k *connectors.Kind, c connectors.Connection, extra []*yaml.Node, f func(context.Context, *mcp.ClientSession, []string) error) error {
+	return maskTyped(env.Values, startWith(ctx, env, k, c, extra, f))
+}
+
+// maskTyped is err with the values typed into the form masked (nil for
+// nil).
+func maskTyped(values map[string]string, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	masked := maskText(values, msg)
+	if masked == msg {
+		return err
+	}
+	return errors.New(masked)
+}
+
+// maskText is s with the values typed into the form masked.
+func maskText(values map[string]string, s string) string {
+	for _, v := range values {
+		if len(v) >= 4 {
+			s = strings.ReplaceAll(s, v, "[REDACTED]")
+		}
+	}
+	return s
+}
+
+// startWith is with, unmasked.
+func startWith(ctx context.Context, env connectors.Env, k *connectors.Kind, c connectors.Connection, extra []*yaml.Node, f func(context.Context, *mcp.ClientSession, []string) error) error {
 	text, err := Backend{}.Render(env.Category, k, c)
 	if err != nil {
 		return err
@@ -254,19 +284,18 @@ func with(ctx context.Context, env connectors.Env, k *connectors.Kind, c connect
 	if err := os.WriteFile(file, []byte(text), 0o600); err != nil {
 		return err
 	}
-	scope := connectors.SecretScope(env.PrefixDir, env.Workspace, c.Scope)
-	vars := Vars([]string{file}, secrets.AnyScope, config.Vault(env.PrefixDir).Resolve(scope))
+	scope := env.SecretScope(c.Scope)
+	vars := Vars([]string{file}, secrets.AnyScope, config.Vault(env.Prefix).Resolve(scope))
 	for key, v := range env.Values {
 		if v != "" {
 			vars[connectors.SecretKey(env.Category, c.Name, key)] = v
-			redact.Remember(v)
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, connectors.TestTimeout)
 	defer cancel()
 	// Written in a temporary folder: its paths start where c belongs.
 	base := scopeBase(c.Scope, env.Workspace)
-	kinds := connectors.Load(env.PrefixDir, env.Workspace).Kinds
+	kinds := connectors.Load(env.Prefix, env.Workspace).Kinds
 	if k != nil {
 		kinds = append(kinds, *k)
 	}

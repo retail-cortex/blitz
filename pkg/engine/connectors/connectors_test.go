@@ -170,7 +170,7 @@ func TestUserDescriptors(t *testing.T) {
 	} {
 		assert.Contains(t, problems[id], want, id)
 	}
-	assert.Len(t, connectors.DescriptorFiles("", ws), 14)
+	assert.Len(t, connectors.AllFiles(connectors.Dirs{Workspace: ws}), 14, "the settings watch follows every descriptor")
 
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "email.yaml"), "id: email\nname: Email\nserver: email\nprefix: mail\nsecretPrefix: MAIL\nbackend: toolbox\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "kinds.yaml"), "id: kinds\nname: X\nserver: x\nprefix: x\nsecretPrefix: x\nbackend: nope\n")
@@ -211,11 +211,11 @@ func TestSaveAndDelete(t *testing.T) {
 	ws := home(t)
 	cat := connectors.Load("", ws)
 	c := connectors.Connection{Name: "shop", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "postgres", Settings: map[string]string{"host": "h", "database": "d", "user": "u"}, ReadOnly: true, Tools: []string{"execute_sql"}}
-	_, problems, err := connectors.Save(cat, "", ws, c, nil, "")
+	_, problems, err := connectors.Save(cat, connectors.Dirs{Workspace: ws}, c, nil, "")
 	require.NoError(t, err)
 	assert.Contains(t, problems, "password is required")
 
-	saved, problems, err := connectors.Save(cat, "", ws, c, map[string]string{"password": "s3cret-pass"}, "")
+	saved, problems, err := connectors.Save(cat, connectors.Dirs{Workspace: ws}, c, map[string]string{"password": "s3cret-pass"}, "")
 	require.NoError(t, err)
 	require.Empty(t, problems)
 	assert.Equal(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "shop.yaml"), saved.Path)
@@ -224,41 +224,41 @@ func TestSaveAndDelete(t *testing.T) {
 	assert.NotContains(t, string(b), "s3cret-pass", "never the value")
 	assert.Contains(t, string(b), "# kind: postgres")
 	db, _ := cat.Category("databases")
-	assert.True(t, connectors.HasSecret("", ws, db, saved, "password"))
+	assert.True(t, connectors.HasSecret(connectors.Dirs{Workspace: ws}, db, saved, "password"))
 	assert.Equal(t, "${DB_SHOP_PASSWORD}", saved.Settings["password"])
 
-	_, problems, err = connectors.Save(cat, "", ws, c, nil, "")
+	_, problems, err = connectors.Save(cat, connectors.Dirs{Workspace: ws}, c, nil, "")
 	require.NoError(t, err)
 	assert.Contains(t, strings.Join(problems, "\n"), "already")
 
 	c.Name = "store"
-	moved, problems, err := connectors.Save(cat, "", ws, c, nil, "shop")
+	moved, problems, err := connectors.Save(cat, connectors.Dirs{Workspace: ws}, c, nil, "shop")
 	require.NoError(t, err)
 	require.Empty(t, problems, "the password is kept")
-	assert.True(t, connectors.HasSecret("", ws, db, moved, "password"))
-	assert.False(t, connectors.HasSecret("", ws, db, saved, "password"), "the old one's went with it")
+	assert.True(t, connectors.HasSecret(connectors.Dirs{Workspace: ws}, db, moved, "password"))
+	assert.False(t, connectors.HasSecret(connectors.Dirs{Workspace: ws}, db, saved, "password"), "the old one's went with it")
 	assert.NoFileExists(t, saved.Path)
 
-	_, _, err = connectors.Save(cat, "", ws, c, nil, "gone")
+	_, _, err = connectors.Save(cat, connectors.Dirs{Workspace: ws}, c, nil, "gone")
 	assert.ErrorIs(t, err, connectors.ErrUnknown)
 
-	list := connectors.List(cat, "", ws)
+	list := connectors.List(cat, connectors.Dirs{Workspace: ws})
 	require.Len(t, list, 1)
 	assert.Equal(t, "store", list[0].Name)
 	assert.Equal(t, "databases", list[0].Category)
 	assert.Equal(t, connectors.ScopeWorkspace, list[0].Scope)
 
 	g := connectors.Connection{Name: "notes", Category: "databases", Scope: connectors.ScopeGlobal, Kind: "sqlite", Settings: map[string]string{"database": "x.db"}}
-	_, problems, err = connectors.Save(cat, "", "", g, nil, "")
+	_, problems, err = connectors.Save(cat, connectors.Dirs{}, g, nil, "")
 	require.NoError(t, err)
 	require.Empty(t, problems)
-	list = connectors.List(cat, "", ws)
+	list = connectors.List(cat, connectors.Dirs{Workspace: ws})
 	assert.Equal(t, []string{connectors.ScopeGlobal, connectors.ScopeWorkspace}, []string{list[0].Scope, list[1].Scope}, "the global ones first")
 
-	require.NoError(t, connectors.Delete(cat, "", ws, "databases", connectors.ScopeWorkspace, "store"))
-	assert.False(t, connectors.HasSecret("", ws, db, moved, "password"))
-	assert.ErrorIs(t, connectors.Delete(cat, "", ws, "databases", connectors.ScopeWorkspace, "store"), connectors.ErrUnknown)
-	assert.ErrorIs(t, connectors.Delete(cat, "", ws, "email", connectors.ScopeWorkspace, "x"), connectors.ErrUnknown)
+	require.NoError(t, connectors.Delete(cat, connectors.Dirs{Workspace: ws}, connectors.Ref{Scope: connectors.ScopeWorkspace, Category: "databases", Name: "store"}))
+	assert.False(t, connectors.HasSecret(connectors.Dirs{Workspace: ws}, db, moved, "password"))
+	assert.ErrorIs(t, connectors.Delete(cat, connectors.Dirs{Workspace: ws}, connectors.Ref{Scope: connectors.ScopeWorkspace, Category: "databases", Name: "store"}), connectors.ErrUnknown)
+	assert.ErrorIs(t, connectors.Delete(cat, connectors.Dirs{Workspace: ws}, connectors.Ref{Scope: connectors.ScopeWorkspace, Category: "email", Name: "x"}), connectors.ErrUnknown)
 
 	for _, tc := range []struct {
 		name string
@@ -273,7 +273,7 @@ func TestSaveAndDelete(t *testing.T) {
 		{"broken YAML", connectors.Connection{Name: "raw", Category: "databases", Custom: true, Text: "kind: ["}, ws, "YAML"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, problems, err := connectors.Save(cat, "", tc.ws, tc.conn, nil, "")
+			_, problems, err := connectors.Save(cat, connectors.Dirs{Workspace: tc.ws}, tc.conn, nil, "")
 			require.NoError(t, err)
 			assert.Contains(t, strings.Join(problems, "\n"), tc.want)
 		})
@@ -334,7 +334,7 @@ func TestCapabilities(t *testing.T) {
 	ws := home(t)
 	write(t, filepath.Join(connectors.GlobalDir(""), "kinds", "supabase.yaml"), supabaseKind)
 	cat := connectors.Load("", ws)
-	env := connectors.Env{Workspace: ws}
+	env := connectors.Env{Dirs: connectors.Dirs{Workspace: ws}}
 	ctx := context.Background()
 	c := connectors.Connection{Name: "kitchen", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": recipes(t)}, ReadOnly: true, Tools: []string{"list_tables"},
 		Queries: []connectors.Query{{Name: "count", Description: "How many", Statement: "SELECT count(*) AS n FROM recipes"}}}
@@ -378,30 +378,30 @@ func TestWith(t *testing.T) {
 	ws := home(t)
 	user := config.MCPServerConfig{Name: "github", Command: "gh"}
 	stale := config.MCPServerConfig{Name: "databases", InProcess: "toolbox", Fingerprint: "old"}
-	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil, nil), "no files: none")
+	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}}), "no files: none")
 
 	file := filepath.Join(connectors.WorkspaceDir(ws), "databases", "scratch.yaml")
 	write(t, file, "kind: source\nname: scratch\ntype: sqlite\ndatabase: /tmp/none.db\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "notes.md"), "not a connection file")
-	out := connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, nil, nil)
+	out := connectors.With([]config.MCPServerConfig{user, stale}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}})
 	require.Len(t, out, 2)
 	assert.Equal(t, "databases", out[1].Name)
 	assert.NotEqual(t, "old", out[1].Fingerprint)
 
 	var asked []string
 	off := func(key string) bool { asked = append(asked, key); return false }
-	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, "", ws, nil, off, nil), "turned off: not served")
+	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}, On: off}), "turned off: not served")
 	assert.Equal(t, []string{"workspace/databases/scratch"}, asked)
 	assert.Equal(t, "workspace/databases/scratch", connectors.Connection{Scope: "workspace", Category: "databases", Name: "scratch"}.Key())
 
 	mine := config.MCPServerConfig{Name: "databases", Command: "my-db-server"}
 	var warned []string
-	out = connectors.With([]config.MCPServerConfig{mine}, "", ws, nil, nil, func(s string) { warned = append(warned, s) })
+	out = connectors.With([]config.MCPServerConfig{mine}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}, Warn: func(s string) { warned = append(warned, s) }})
 	assert.Equal(t, []config.MCPServerConfig{mine}, out)
 	require.Len(t, warned, 1)
 	assert.Contains(t, warned[0], `named "databases"`)
 
-	files := connectors.AllFiles("", ws)
+	files := connectors.AllFiles(connectors.Dirs{Workspace: ws})
 	assert.Equal(t, []string{file}, files)
 	before := connectors.Fingerprint(files)
 	time.Sleep(10 * time.Millisecond)
@@ -428,32 +428,172 @@ func TestMakeGlobalAndPrepareRefuse(t *testing.T) {
 	cat := connectors.Load("", ws)
 	dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
 
-	_, _, err := connectors.MakeGlobal("", ws, "email", "inbox")
+	_, _, err := connectors.MakeGlobal(connectors.Dirs{Workspace: ws}, "email", "inbox")
 	assert.ErrorIs(t, err, connectors.ErrUnknown)
-	_, _, err = connectors.MakeGlobal("", ws, "databases", "gone")
+	_, _, err = connectors.MakeGlobal(connectors.Dirs{Workspace: ws}, "databases", "gone")
 	assert.ErrorIs(t, err, connectors.ErrUnknown)
 
 	write(t, filepath.Join(dir, "broken.yaml"), "kind: [")
-	_, problems, err := connectors.MakeGlobal("", ws, "databases", "broken")
+	_, problems, err := connectors.MakeGlobal(connectors.Dirs{Workspace: ws}, "databases", "broken")
 	require.NoError(t, err)
 	require.Len(t, problems, 1)
 	assert.NoFileExists(t, filepath.Join(connectors.GlobalDir(""), "databases", "broken.yaml"))
 
 	write(t, filepath.Join(dir, "two.yaml"), "kind: source\nname: a\ntype: sqlite\ndatabase: /tmp/a.db\n---\nkind: source\nname: b\ntype: sqlite\ndatabase: /tmp/b.db\n")
-	_, problems, err = connectors.MakeGlobal("", ws, "databases", "two")
+	_, problems, err = connectors.MakeGlobal(connectors.Dirs{Workspace: ws}, "databases", "two")
 	require.NoError(t, err)
 	require.Len(t, problems, 1)
 	assert.Contains(t, problems[0], "by hand")
 	assert.FileExists(t, filepath.Join(dir, "two.yaml"), "nothing moved")
 
-	_, problems, err = connectors.Save(cat, "", ws, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"}, nil, "")
+	_, problems, err = connectors.Save(cat, connectors.Dirs{Workspace: ws}, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"}, nil, "")
 	require.NoError(t, err)
 	assert.Contains(t, strings.Join(problems, " "), `kind "mysql": one of`)
 
-	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "x", Category: "email"})
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Dirs: connectors.Dirs{Workspace: ws}}, connectors.Connection{Name: "x", Category: "email"})
 	assert.ErrorContains(t, err, `category "email" isn't there`)
-	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "Bad Name", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": "/tmp/x.db"}})
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Dirs: connectors.Dirs{Workspace: ws}}, connectors.Connection{Name: "Bad Name", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": "/tmp/x.db"}})
 	assert.Error(t, err, "a name that can't be saved")
-	_, _, _, err = connectors.Prepare(cat, connectors.Env{Workspace: ws}, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"})
+	_, _, _, err = connectors.Prepare(cat, connectors.Env{Dirs: connectors.Dirs{Workspace: ws}}, connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"})
 	assert.ErrorContains(t, err, `kind "mysql"`)
+}
+
+// A hand-written .yml connection is saved where it is, not beside itself
+// as .yaml; Delete takes every secret the category's kinds could have
+// given it, even when its file can't be read as a connection.
+func TestSaveInPlaceAndDeleteEverySecret(t *testing.T) {
+	ws := home(t)
+	d := connectors.Dirs{Workspace: ws}
+	cat := connectors.Load("", ws)
+	db, _ := cat.Category("databases")
+	dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
+	write(t, filepath.Join(dir, "notes.yml"), "# kind: sqlite\nkind: source\nname: notes\ntype: sqlite\ndatabase: /tmp/notes.db\n")
+	list := connectors.List(cat, d)
+	require.Len(t, list, 1)
+	list[0].Description = "Meeting notes"
+	saved, problems, err := connectors.Save(cat, d, list[0], nil, "notes")
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	assert.Equal(t, filepath.Join(dir, "notes.yml"), saved.Path, "written where it was")
+	assert.NoFileExists(t, filepath.Join(dir, "notes.yaml"))
+	assert.Len(t, connectors.List(cat, d), 1, "listed once")
+
+	shop := connectors.Connection{Name: "shop", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "postgres", Settings: map[string]string{"host": "h", "database": "d", "user": "u"}}
+	saved, _, err = connectors.Save(cat, d, shop, map[string]string{"password": "s3cret-pass"}, "")
+	require.NoError(t, err)
+	require.True(t, connectors.HasSecret(d, db, saved, "password"))
+	write(t, saved.Path, "kind: [") // can't be read any more
+	require.NoError(t, connectors.Delete(cat, d, saved.Ref()))
+	assert.False(t, connectors.HasSecret(d, db, saved, "password"), "no secret left behind")
+	assert.Equal(t, "workspace/databases/shop", saved.Ref().Key())
+}
+
+// A kind whose schema is a statement needs queries (their type runs it);
+// the catalog is read again when a descriptor changes, and a caller
+// appending to it doesn't change the next one.
+func TestDescriptorRulesAndCache(t *testing.T) {
+	ws := home(t)
+	kinds := filepath.Join(connectors.WorkspaceDir(ws), "kinds")
+	write(t, filepath.Join(kinds, "flat.yaml"), "id: flat\ncategory: databases\nname: Flat\nbackend: toolbox\nsource: sqlite\ncapabilities: [schema]\nschema: {statement: SELECT 1}\n")
+	cat := connectors.Load("", ws)
+	_, ok := cat.Kind("flat")
+	assert.False(t, ok, "a statement with no queries can't be read")
+	for _, k := range cat.Kinds {
+		if k.ID == "flat" {
+			assert.Contains(t, k.Problem, "runs as a query")
+		}
+	}
+	n := len(cat.Kinds)
+	cat.Kinds = append(cat.Kinds, connectors.Kind{ID: "mine"})
+	assert.Len(t, connectors.Load("", ws).Kinds, n, "the cached catalog is the cache's")
+
+	time.Sleep(10 * time.Millisecond)
+	write(t, filepath.Join(kinds, "flat.yaml"), "id: flat\ncategory: databases\nname: Flat\nbackend: toolbox\nsource: sqlite\ncapabilities: [schema, queries]\nschema: {statement: SELECT 1}\nqueries: {type: sqlite-sql}\n")
+	_, ok = connectors.Load("", ws).Kind("flat")
+	assert.True(t, ok, "read again once it changed")
+}
+
+// What can't be read or written is said: a category whose backend isn't
+// there makes a file custom, with its problem; an unreadable file is
+// listed with its error and not served (a warning); a folder that can't
+// be written fails the save; a category of the workspace's own can't go
+// global; the catalog cache stays bounded.
+func TestUnreadableAndUnwritable(t *testing.T) {
+	ws := home(t)
+	d := connectors.Dirs{Workspace: ws}
+	cat := connectors.Load("", ws)
+	c := connectors.Parse(cat, connectors.Category{ID: "x", Backend: "nope"}, "n", "text")
+	assert.True(t, c.Custom)
+	assert.Contains(t, c.Problem, `no backend "nope"`)
+
+	dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
+	locked := filepath.Join(dir, "locked.yaml")
+	write(t, locked, "kind: source\nname: locked\ntype: sqlite\ndatabase: /tmp/x.db\n")
+	require.NoError(t, os.Chmod(locked, 0))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o600) })
+	list := connectors.List(cat, d)
+	require.Len(t, list, 1)
+	assert.NotEmpty(t, list[0].Problem, "listed with why")
+	var warned []string
+	connectors.With(nil, connectors.ServeOptions{Dirs: d, Warn: func(s string) { warned = append(warned, s) }})
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], "isn't served")
+	assert.Empty(t, connectors.AllFiles(connectors.Dirs{Prefix: t.TempDir()}), "no workspace, no global files: none")
+	require.NoError(t, os.Chmod(locked, 0o600))
+	require.NoError(t, os.Remove(locked))
+
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	_, _, err := connectors.Save(cat, d, connectors.Connection{Name: "kitchen", Category: "databases", Kind: "sqlite", Settings: map[string]string{"database": "/tmp/k.db"}}, nil, "")
+	assert.Error(t, err, "the folder can't be written")
+	require.NoError(t, os.Chmod(dir, 0o755))
+
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "categories", "crm.yaml"), "id: crm\nname: CRM\nserver: crm\nprefix: crm\nsecretPrefix: CRM\nbackend: toolbox\n")
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "kinds", "crm-lite.yaml"), "id: crm-lite\ncategory: crm\nname: CRM Lite\nbackend: toolbox\nsource: sqlite\ncapabilities: [test]\nfields:\n  - {key: database, type: path, required: true}\n")
+	cat = connectors.Load("", ws)
+	_, problems, err := connectors.Save(cat, d, connectors.Connection{Name: "leads", Category: "crm", Kind: "crm-lite", Settings: map[string]string{"database": "/tmp/leads.db"}}, nil, "")
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	_, problems, err = connectors.MakeGlobal(d, "crm", "leads")
+	require.NoError(t, err)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "category is this workspace's own")
+
+	for range 70 { // more folders than the cache keeps
+		_ = connectors.Load("", t.TempDir())
+	}
+	_, ok := connectors.Load("", ws).Category("crm")
+	assert.True(t, ok, "read again after the cache was cleared")
+}
+
+// limited is a backend that can only take queries: a kind can't offer
+// what its backend can't.
+type limited struct{}
+
+func (limited) ID() string { return "limited" }
+func (limited) Capabilities() []connectors.Capability {
+	return []connectors.Capability{connectors.Queries}
+}
+func (limited) Check(*connectors.Kind, connectors.Connection) []string { return nil }
+func (limited) Serve(connectors.Serving) []config.MCPServerConfig      { return nil }
+func (limited) Parse(connectors.Category, []connectors.Kind, string, string) connectors.Connection {
+	return connectors.Connection{Custom: true}
+}
+func (limited) Render(connectors.Category, *connectors.Kind, connectors.Connection) (string, error) {
+	return "", nil
+}
+
+func TestBackendCapabilities(t *testing.T) {
+	ws := home(t)
+	connectors.Register(limited{})
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "kinds", "lim.yaml"), "id: lim\ncategory: databases\nname: Lim\nbackend: limited\nsource: x\ncapabilities: [test]\n")
+	cat := connectors.Load("", ws)
+	for _, k := range cat.Kinds {
+		if k.ID == "lim" {
+			assert.Contains(t, k.Problem, "backend limited can't")
+		}
+	}
+	pg, _ := cat.Kind("postgres")
+	_, ok := pg.Field("nope")
+	assert.False(t, ok)
 }

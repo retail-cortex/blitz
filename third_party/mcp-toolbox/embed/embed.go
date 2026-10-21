@@ -115,14 +115,11 @@ func LoadWith(ctx context.Context, files []string, env map[string]string, rewrit
 	for k, v := range env {
 		vars[k] = v
 	}
-	p := &ConfigParser{EnvVars: vars}
-	var cfg Config
-	var err error
 	if rewrite == nil {
-		cfg, err = p.LoadAndMergeConfigs(ctx, files)
-	} else {
-		cfg, err = p.loadRewritten(ctx, files, rewrite)
+		rewrite = func(_ string, raw []byte) ([]byte, error) { return raw, nil }
 	}
+	p := &ConfigParser{EnvVars: vars}
+	cfg, err := p.loadRewritten(ctx, files, rewrite)
 	if err != nil {
 		return cfg, err
 	}
@@ -130,8 +127,8 @@ func LoadWith(ctx context.Context, files []string, env map[string]string, rewrit
 	return cfg, nil
 }
 
-// loadRewritten is LoadAndMergeConfigs with each file's text rewritten
-// before it's parsed.
+// loadRewritten is Toolbox's LoadAndMergeConfigs (config.go, kept as
+// upstream wrote it) with each file's text rewritten before it's parsed.
 func (p *ConfigParser) loadRewritten(ctx context.Context, files []string, rewrite func(string, []byte) ([]byte, error)) (Config, error) {
 	var configs []Config
 	for _, f := range files {
@@ -256,18 +253,6 @@ func field(v any, name string) reflect.Value {
 		return reflect.Value{}
 	}
 	return rv.FieldByName(name)
-}
-
-// Files are dir's YAML files (*.yaml, *.yml), by name; none when dir isn't
-// there.
-func Files(dir string) []string {
-	var out []string
-	for _, pattern := range []string{"*.yaml", "*.yml"} {
-		m, _ := filepath.Glob(filepath.Join(dir, pattern))
-		out = append(out, m...)
-	}
-	slices.Sort(out)
-	return out
 }
 
 // Session is a running Toolbox server's MCP connection: what the client

@@ -100,14 +100,30 @@ func (s *ConnectorScope) each(workspace string, f func([]string) []string) error
 	if workspace != "" {
 		return s.change(workspace, f)
 	}
+	return s.apply(func(string) bool { return true }, "", f)
+}
+
+// apply applies f to the lists of the workspaces match picks (and to
+// add's, which may have none yet) and writes them when one changed: an
+// emptied list goes.
+func (s *ConnectorScope) apply(match func(ws string) bool, add string, f func([]string) []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	all := s.readLocked()
+	if _, ok := all[add]; add != "" && !ok {
+		all[add] = connectorScopeEntry{}
+	}
 	changed := false
 	for ws, e := range all {
+		if !match(ws) {
+			continue
+		}
 		after := f(slices.Clone(e.Off))
 		slices.Sort(after)
 		if slices.Equal(slices.Sorted(slices.Values(e.Off)), after) {
+			if len(e.Off) == 0 {
+				delete(all, ws) // the empty one add made
+			}
 			continue
 		}
 		changed = true
@@ -123,27 +139,13 @@ func (s *ConnectorScope) each(workspace string, f func([]string) []string) error
 	return s.writeLocked(all)
 }
 
-// change applies f to workspace's list and writes it when it changed.
+// change applies f to workspace's list (each, for one workspace).
 func (s *ConnectorScope) change(workspace string, f func([]string) []string) error {
 	key, err := CanonicalWorkspace(workspace)
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	all := s.readLocked()
-	before := all[key].Off
-	after := f(slices.Clone(before))
-	slices.Sort(after)
-	if slices.Equal(slices.Sorted(slices.Values(before)), after) {
-		return nil
-	}
-	if len(after) == 0 {
-		delete(all, key)
-	} else {
-		all[key] = connectorScopeEntry{Off: after}
-	}
-	return s.writeLocked(all)
+	return s.apply(func(ws string) bool { return ws == key }, key, f)
 }
 
 // readLocked reads the choices; a missing or damaged file has none.
@@ -162,24 +164,5 @@ func (s *ConnectorScope) readLocked() map[string]connectorScopeEntry {
 
 // writeLocked writes the choices in place of the file, atomically.
 func (s *ConnectorScope) writeLocked(all map[string]connectorScopeEntry) error {
-	data, err := json.MarshalIndent(map[string]any{"version": 1, "workspaces": all}, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".scope-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), s.path)
+	return writeJSONAtomic(s.path, map[string]any{"version": 1, "workspaces": all})
 }

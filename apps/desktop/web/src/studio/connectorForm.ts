@@ -36,6 +36,8 @@ export interface ParamForm {
 
 /** A query as the form holds it. */
 export interface QueryForm {
+  /** Tells the form's queries apart, so a card keeps its own Try it state; never sent. */
+  key: string;
   name: string;
   description: string;
   statement: string;
@@ -103,9 +105,21 @@ export function withKind(f: ConnectorForm, kind: ConnectorKind): ConnectorForm {
   return { ...f, kind: kind.id, settings, secretValues: {}, readOnly: kind.canReadOnly && f.readOnly, tools: kind.tools.filter((t) => t.on).map((t) => t.id), queries: can(kind, "queries") ? f.queries : [] };
 }
 
+let lastQueryKey = 0;
+
+/** A new key for a query in the form (QueryForm.key). */
+export function queryKey(): string {
+  return `q${++lastQueryKey}`;
+}
+
+/** An empty query, as Add a query makes it. */
+export function newQueryForm(): QueryForm {
+  return { key: queryKey(), name: "", description: "", statement: "", params: [] };
+}
+
 /** A query from the API as the form holds it. */
 export function queryForm(q: ConnectorQuery): QueryForm {
-  return { name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ name: p.name, type: p.type, description: p.description })) };
+  return { key: queryKey(), name: q.name, description: q.description, statement: q.statement, params: q.params.map((p) => ({ name: p.name, type: p.type, description: p.description })) };
 }
 
 /** A connection from the API as the form holds it. */

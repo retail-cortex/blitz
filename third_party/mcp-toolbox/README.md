@@ -26,7 +26,14 @@ databases are left out.
   4. the config parser's `${NAME}` from the given values alone, and its doc
      comments;
   5. the MCP stdio session no longer panics when it's closed while
-     reading (in-process, a panic would stop `blitzd`).
+     reading (in-process, a panic would stop `blitzd`);
+  6. the server closes its sources (their pools, files and clients) when
+     it's closed, and sources can be closed;
+  7. a start that fails once a source is open (a later source, a tool, the
+     server itself) closes the sources open so far, and BigQuery closes
+     its client and caches on its own early errors;
+  8. a SQLite query returns at most `MaxRows` (1000) rows, the last one
+     saying so, rather than loading a whole table into memory.
 
 To move to another release: `tools/update_toolbox.sh <version>`, then
 `bazel run //tools:tidy` and the tests. A patch that no longer applies is

@@ -16,7 +16,6 @@
 
 import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   mdiAlertCircleOutline,
   mdiArrowDown,
@@ -40,10 +39,11 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
-import { Button, Dialog, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "../ui/controls";
+import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
+import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 /** Each action's icon. */
 const actionIcons: Record<RuleAction, string> = { block: mdiCancel, warn: mdiAlertCircleOutline, revise: mdiPencilRuler };
@@ -72,7 +72,6 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
   const [base, setBase] = useState<RuleForm>(emptyRuleForm);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [agents, setAgents] = useState<string[]>([]);
   const [dragging, setDragging] = useState<{ list: "before" | "after"; index: number } | null>(null);
@@ -102,7 +101,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
   const dirty = open !== null && editable && !sameRuleForm(form, base);
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(dirty);
   const show = (r: RuleFile) =>
     leave(() => {
       const f = formFromRule(r);
@@ -355,15 +354,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                 )}
               </div>
             )}
-            {problems.length > 0 && (
-              <div className="card error stack" role="alert" style={{ gap: 4 }}>
-                {problems.map((p) => (
-                  <span key={p} className="row t-body-sm" style={{ gap: 6 }}>
-                    <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
-                  </span>
-                ))}
-              </div>
-            )}
+            <ProblemList problems={problems} />
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={current?.path}>
                 {current?.path ? t("desktop.agents.where", { path: current.path }) : form.name ? t("desktop.agents.where", { path: `.agents/rules/${form.name.trim()}.md` }) : ""}
@@ -388,52 +379,12 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
           </>
         )}
       </section>
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.rules.delete_title", { name: open?.name ?? "" })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.rules.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.rules.delete_body", { path: current?.path ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: form.name || t("desktop.agents.unnamed") })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.rules.delete_title", { name: open?.name ?? "" })} icon={mdiDeleteOutline} confirm={t("desktop.rules.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t("desktop.rules.delete_body", { path: current?.path ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(form.name)}
     </div>
   );
 }

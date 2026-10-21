@@ -17,6 +17,8 @@ package engine
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -24,6 +26,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"google.golang.org/adk/v2/model"
 
@@ -67,28 +71,38 @@ Reply with JSON only, no fences: {"name": "<tool name>", "description": "<what i
 // A schema that can't be read, or holds no table, is the draft's
 // problem; so is a model that fails.
 func (w *Workspace) DraftConnectorQuery(ctx context.Context, c connectors.Connection, values map[string]string, request string) (QueryDraft, error) {
+	cfg := w.settings()
 	return draftQuery(ctx, queryBuilder{
-		cfg:      w.settings(),
-		catalog:  w.ConnectorCatalog(),
-		newModel: w.newModel,
-		redact:   w.secretRedactor().String,
-		skill:    func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
+		cfg:     cfg,
+		catalog: w.ConnectorCatalog(),
+		model:   func(ctx context.Context) (model.LLM, error) { return suggestionsLLM(ctx, cfg, w.newModel) },
+		redact:  SecretRedactor(cfg).String,
+		skill:   func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
 		schema: func(ctx context.Context) ([]connectors.Table, error) {
 			return w.ReadConnectorSchema(ctx, c, values)
 		},
+		schemaKey: schemaKey(w.Dir(), c, values),
 	}, c, request)
 }
 
-// queryBuilder is what a draft needs: the settings, the catalog, the
-// model, the skill and the connection's schema.
+// suggestionsLLM is the small model drafts and judges use: the
+// suggestions model, else the reviewer's, else the main one.
+func suggestionsLLM(ctx context.Context, cfg *config.Config, newModel func(context.Context, *config.Config, string) (model.LLM, error)) (model.LLM, error) {
+	return newModel(ctx, cfg, cmp.Or(cfg.Suggestions.Model, cfg.Permissions.Auto.Model))
+}
+
+// queryBuilder is what a draft needs: the settings (for a model error's
+// summary), the catalog, the model, the redactor, the skill, and the
+// connection's schema with the key it's kept by (schemas).
 type queryBuilder struct {
-	cfg      *config.Config
-	catalog  connectors.Catalog
-	newModel func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	cfg     *config.Config
+	catalog connectors.Catalog
+	model   func(context.Context) (model.LLM, error)
 	// redact masks the secrets in what the model is sent.
-	redact func(string) string
-	skill  func() (*skills.Skill, bool)
-	schema func(context.Context) ([]connectors.Table, error)
+	redact    func(string) string
+	skill     func() (*skills.Skill, bool)
+	schema    func(context.Context) ([]connectors.Table, error)
+	schemaKey string
 }
 
 // draftQuery is DraftConnectorQuery with what it needs given.
@@ -104,16 +118,15 @@ func draftQuery(ctx context.Context, qb queryBuilder, c connectors.Connection, r
 	if !ok {
 		return QueryDraft{}, fmt.Errorf("the %s skill isn't there", SQLSkill)
 	}
-	redact := qb.redact
-	tables, err := qb.schema(ctx)
+	tables, err := schemas.get(ctx, qb.schemaKey, qb.schema)
 	if err != nil {
-		return QueryDraft{Problem: redact(err.Error())}, nil
+		return QueryDraft{Problem: qb.redact(err.Error())}, nil
 	}
-	llm, err := qb.newModel(ctx, qb.cfg, cmp.Or(qb.cfg.Suggestions.Model, qb.cfg.Permissions.Auto.Model))
+	llm, err := qb.model(ctx)
 	if err != nil {
 		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, qb.cfg)}, nil
 	}
-	reply, served, usage, err := runtime.Ask(ctx, llm, skill.Content+queryReply, redact(queryPrompt(kind, c, tables, request)))
+	reply, served, usage, err := runtime.Ask(ctx, llm, skill.Content+queryReply, qb.redact(queryPrompt(kind, c, tables, request)))
 	if err != nil {
 		return QueryDraft{Tables: len(tables), Problem: ModelErrorSummary(err, qb.cfg)}, nil
 	}
@@ -123,6 +136,66 @@ func draftQuery(ctx context.Context, qb queryBuilder, c connectors.Connection, r
 	d := parseQueryDraft(reply, kind, c)
 	d.Tables = len(tables)
 	return d, nil
+}
+
+// SchemaTTL is how long a schema read for the query builder is reused:
+// several drafts in a row read it once (BigQuery's is up to about 60
+// calls).
+var SchemaTTL = 5 * time.Minute
+
+// schemas are the schemas the query builder read lately, by schemaKey;
+// one that failed isn't kept.
+var schemas = schemaCache{m: map[string]cachedSchema{}}
+
+type schemaCache struct {
+	mu sync.Mutex
+	m  map[string]cachedSchema
+}
+
+type cachedSchema struct {
+	tables []connectors.Table
+	at     time.Time
+}
+
+// maxSchemas bounds the schemas kept.
+const maxSchemas = 32
+
+// get is the schema kept by key, else read and kept ("" isn't kept).
+func (s *schemaCache) get(ctx context.Context, key string, read func(context.Context) ([]connectors.Table, error)) ([]connectors.Table, error) {
+	s.mu.Lock()
+	if c, ok := s.m[key]; ok && key != "" && time.Since(c.at) < SchemaTTL {
+		s.mu.Unlock()
+		return c.tables, nil
+	}
+	s.mu.Unlock()
+	tables, err := read(ctx)
+	if err != nil || key == "" {
+		return tables, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, c := range s.m {
+		if time.Since(c.at) >= SchemaTTL {
+			delete(s.m, k)
+		}
+	}
+	if len(s.m) >= maxSchemas {
+		clear(s.m)
+	}
+	s.m[key] = cachedSchema{tables: tables, at: time.Now()}
+	return tables, nil
+}
+
+// schemaKey keeps a connection's schema apart from every other: where it
+// is (the workspace, "" global), the connection as written and the secret
+// values typed (hashed, never kept).
+func schemaKey(where string, c connectors.Connection, values map[string]string) string {
+	h := sha256.New()
+	enc := json.NewEncoder(h)
+	_ = enc.Encode(where)
+	_ = enc.Encode(c)
+	_ = enc.Encode(values)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // queryPrompt is what the skill is given: the connection, its dialect and

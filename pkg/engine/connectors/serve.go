@@ -26,25 +26,38 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
+// ServeOptions is what With serves from: the folders, which workspace
+// files the person trusted (Serving.Trusted; nil: none), which
+// connections are on in the workspace (by Key; nil: all), and where a
+// server it can't serve is said (nil: nowhere).
+type ServeOptions struct {
+	Dirs
+	Trusted func(file string) bool
+	On      func(key string) bool
+	Warn    func(string)
+}
+
 // With is servers with the workspace's connector servers in place of any
-// in-process ones there: each category's connection files that are on
-// (on says, by Key; nil: all of them), served by their backends; trusted
-// says which workspace files the person trusted (Serving.Trusted). A
-// server of the user's own with a connector server's name wins, and warn
-// says so.
-func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted func(file string) bool, on func(key string) bool, warn func(string)) []config.MCPServerConfig {
+// in-process ones there: each category's connection files that are on,
+// served by their backends. A server of the user's own with a connector
+// server's name wins, and Warn says so.
+func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerConfig {
 	out := slices.DeleteFunc(slices.Clone(servers), func(s config.MCPServerConfig) bool { return s.InProcess != "" })
-	cat := Load(prefixDir, workspace)
+	cat := Load(o.Prefix, o.Workspace)
 	for _, c := range cat.Usable() {
 		type group struct{ global, local []string }
 		groups := map[string]*group{}
 		var order []string
-		for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
-			for _, f := range Files(prefixDir, workspace, scope, c.ID) {
-				if on != nil && !on(Key(scope, c.ID, idOf(f))) {
+		for _, scope := range Scopes {
+			for _, f := range o.Files(scope, c.ID) {
+				if o.On != nil && !o.On(Key(scope, c.ID, idOf(f))) {
 					continue
 				}
-				text, _ := os.ReadFile(f)
+				text, err := os.ReadFile(f)
+				if err != nil {
+					warn(o.Warn, fmt.Sprintf("%s isn't served: %v", f, err))
+					continue
+				}
 				b, ok := backendFor(cat, c, string(text))
 				if !ok {
 					continue
@@ -65,11 +78,9 @@ func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted
 		for _, id := range order {
 			b, _ := BackendOf(id)
 			g := groups[id]
-			for _, s := range b.Serve(Serving{Category: c, PrefixDir: prefixDir, Workspace: workspace, Global: g.global, Local: g.local, Trusted: trusted}) {
+			for _, s := range b.Serve(Serving{Category: c, Dirs: o.Dirs, Global: g.global, Local: g.local, Trusted: o.Trusted}) {
 				if slices.ContainsFunc(out, func(u config.MCPServerConfig) bool { return u.Name == s.Name }) {
-					if warn != nil {
-						warn(fmt.Sprintf("an MCP server is named %q: the %s connectors aren't served", s.Name, c.ID))
-					}
+					warn(o.Warn, fmt.Sprintf("an MCP server is named %q: the %s connectors aren't served", s.Name, c.ID))
 					continue
 				}
 				out = append(out, s)
@@ -79,12 +90,19 @@ func With(servers []config.MCPServerConfig, prefixDir, workspace string, trusted
 	return out
 }
 
-// AllFiles are every descriptor and connection file the workspace's
-// connectors read, for the settings watch.
-func AllFiles(prefixDir, workspace string) []string {
+// warn says msg with f, when there's one.
+func warn(f func(string), msg string) {
+	if f != nil {
+		f(msg)
+	}
+}
+
+// AllFiles are every descriptor and connection file the connectors in d
+// read, for the settings watch.
+func AllFiles(d Dirs) []string {
 	var out []string
-	for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
-		dir := Dir(prefixDir, workspace, scope)
+	for _, scope := range Scopes {
+		dir := d.Dir(scope)
 		if dir == "" {
 			continue
 		}

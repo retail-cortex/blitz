@@ -15,9 +15,7 @@
 package tray
 
 import (
-	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -41,38 +39,26 @@ type Conn struct {
 	On bool
 }
 
-// Connection scopes, as the service names them.
-const (
-	scopeWorkspace = "workspace"
-	scopeGlobal    = "global"
-)
-
-// connName is a connection file's name the service would read.
-var connName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-
 // Conns are the connections workspace dir reaches: each category's
 // global ones, then its own, by category and name, with whether each is
 // on there (the person's choices in the settings folder of prefixDir).
+// The folders, names and keys are the engine's (pkg/config).
 func Conns(prefixDir, dir string) []Conn {
-	settings := config.ConfigDir(prefixDir)
-	off := config.OpenConnectorScope(settings).Off(dir)
-	roots := []struct{ scope, dir string }{{scopeGlobal, filepath.Join(settings, "connectors")}, {scopeWorkspace, filepath.Join(dir, ".agents", "connectors")}}
+	off := config.OpenConnectorScope(config.ConfigDir(prefixDir)).Off(dir)
+	roots := []struct{ scope, dir string }{
+		{config.ConnectorScopeGlobal, config.GlobalConnectorsDir(prefixDir)},
+		{config.ConnectorScopeWorkspace, config.WorkspaceConnectorsDir(dir)},
+	}
 	var out []Conn
 	for _, r := range roots {
-		cats, _ := os.ReadDir(r.dir)
-		for _, cat := range cats {
-			// kinds and categories hold descriptors, not connections (CON-03).
-			if !cat.IsDir() || cat.Name() == "kinds" || cat.Name() == "categories" {
-				continue
-			}
-			files, _ := os.ReadDir(filepath.Join(r.dir, cat.Name()))
-			for _, f := range files {
-				ext := filepath.Ext(f.Name())
-				name := strings.TrimSuffix(f.Name(), ext)
-				if f.IsDir() || (ext != ".yaml" && ext != ".yml") || !connName.MatchString(name) {
+		for _, catDir := range config.ConnectorCategoryDirs(r.dir) {
+			category := filepath.Base(catDir)
+			for _, f := range config.ConnectorFiles(catDir) {
+				name := config.ConnectorFileName(f)
+				if !config.ValidConnectorName(name) {
 					continue
 				}
-				out = append(out, Conn{Category: cat.Name(), Scope: r.scope, Name: name, On: !off[r.scope+"/"+cat.Name()+"/"+name]})
+				out = append(out, Conn{Category: category, Scope: r.scope, Name: name, On: !off[config.ConnectorKey(r.scope, category, name)]})
 			}
 		}
 	}
@@ -90,7 +76,7 @@ func connEntries(s Space, conns []Conn) []Entry {
 	out := []Entry{{Title: i18n.T("tray.connectors"), Icon: IconConnector, Disabled: true}}
 	for _, c := range conns {
 		title := c.Name
-		if c.Scope == scopeGlobal {
+		if c.Scope == config.ConnectorScopeGlobal {
 			title += " · " + i18n.T("tray.connector.global")
 		}
 		out = append(out, Entry{Title: title, Checkbox: true, Checked: c.On, Action: Action{Kind: SetConnector, Workspace: s.Dir, Category: c.Category, Scope: c.Scope, Name: c.Name, On: !c.On}})

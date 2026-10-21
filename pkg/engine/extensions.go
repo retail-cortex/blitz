@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"cmp"
 	"context"
 	"sort"
 	"strings"
@@ -169,7 +168,7 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 		states[st.Name] = st
 	}
 	var out []api.MCPServer
-	for _, s := range w.mcpConfig().Servers {
+	for _, s := range w.liveMCP() {
 		target := s.URL
 		if s.InProcess != "" {
 			target = "in-process: " + strings.Join(s.Args, ", ")
@@ -197,20 +196,34 @@ func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
 // in place of the running ones (one at a time: the settings watch and the
 // service both reload).
 func (w *Workspace) applyMCP(ctx context.Context, m config.MCPConfig) error {
-	w.mcpMu.Lock()
-	servers := w.withConnectors(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
-	changed, err := w.tools.MCP().Update(servers)
-	if err != nil {
-		w.mcpMu.Unlock()
+	changed, err := w.replaceMCP(m)
+	if err != nil || !changed {
 		return err
 	}
-	m.Servers = servers
-	w.setSettings(func(c *config.Config) { c.MCP = m })
-	w.mcpMu.Unlock()
-	if !changed {
-		return nil
-	}
 	return w.engine.Rebuild(ctx)
+}
+
+// replaceMCP is applyMCP but the rebuild: the settings keep m as written
+// (a changed secret is filled in afresh next time), mcpLive what runs.
+func (w *Workspace) replaceMCP(m config.MCPConfig) (bool, error) {
+	w.mcpMu.Lock()
+	defer w.mcpMu.Unlock()
+	live := w.withConnectors(mcpWithSecrets(m.Servers, w.Dir()), w.cfg.Dir, w.Dir(), w.warn)
+	changed, err := w.tools.MCP().Update(live)
+	if err != nil {
+		return false, err
+	}
+	w.cfgMu.Lock()
+	defer w.cfgMu.Unlock()
+	w.cfg.MCP, w.mcpLive = m, live
+	return changed, nil
+}
+
+// liveMCP are the MCP servers as they run (mcpLive).
+func (w *Workspace) liveMCP() []config.MCPServerConfig {
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
+	return w.mcpLive
 }
 
 // secretRedactor is SecretRedactor of the workspace's settings now: its
@@ -226,14 +239,16 @@ func (w *Workspace) settings() *config.Config {
 	w.cfgMu.RLock()
 	defer w.cfgMu.RUnlock()
 	c := *w.cfg
+	if w.mcpLive != nil {
+		c.MCP.Servers = w.mcpLive // their secrets, for a redactor
+	}
 	return &c
 }
 
 // suggestionsModel is the small model the drafts and judges use: the
 // suggestions model, else the reviewer's (the main one when neither is set).
 func (w *Workspace) suggestionsModel(ctx context.Context) (model.LLM, error) {
-	c := w.settings()
-	return w.newModel(ctx, c, cmp.Or(c.Suggestions.Model, c.Permissions.Auto.Model))
+	return suggestionsLLM(ctx, w.settings(), w.newModel)
 }
 
 // replyIn is the language the agents reply in (SetLocale changes it).
@@ -251,10 +266,10 @@ func (w *Workspace) setSettings(f func(c *config.Config)) {
 	f(w.cfg)
 }
 
-// mcpConfig is the MCP settings now (applyMCP replaces them).
+// mcpConfig is the MCP settings now, as written (applyMCP replaces them).
 func (w *Workspace) mcpConfig() config.MCPConfig {
-	w.mcpMu.RLock()
-	defer w.mcpMu.RUnlock()
+	w.cfgMu.RLock()
+	defer w.cfgMu.RUnlock()
 	return w.cfg.MCP
 }
 
@@ -280,7 +295,7 @@ func (w *Workspace) ActiveAgentTools() api.AgentTools {
 		out.Tools = append(out.Tools, api.ToolInfo{Name: t.Name(), Description: t.Description(), PlanAllowed: runtime.PlanAllows(t.Name())})
 	}
 	sort.Slice(out.Tools, func(i, j int) bool { return out.Tools[i].Name < out.Tools[j].Name })
-	for _, s := range w.mcpConfig().Servers {
+	for _, s := range w.liveMCP() {
 		if !s.Disabled && mcpOfferedTo(s.Agents, active) { // a disabled server offers nothing
 			out.MCP = append(out.MCP, api.MCPOffer{Server: s.Name, Tools: s.Tools, Prefix: s.Prefix})
 		}

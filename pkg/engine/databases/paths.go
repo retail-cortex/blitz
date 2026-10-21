@@ -55,8 +55,8 @@ func pathKeys(kinds []connectors.Kind) map[string][]string {
 // else (a global one) the home folder.
 func baseOf(file string) string {
 	connectorsDir := filepath.Dir(filepath.Dir(file))
-	if filepath.Base(connectorsDir) == "connectors" && filepath.Base(filepath.Dir(connectorsDir)) == ".agents" {
-		return filepath.Dir(filepath.Dir(connectorsDir))
+	if ws := filepath.Dir(filepath.Dir(connectorsDir)); connectors.WorkspaceDir(ws) == connectorsDir {
+		return ws
 	}
 	return homeDir()
 }

@@ -129,7 +129,7 @@ func TestGlobalConnectors(t *testing.T) {
 
 	c := kitchen(t)
 	c.Scope = connectors.ScopeWorkspace // Settings' are global whatever it says
-	saved, problems, err := g.Save(c, nil, "")
+	saved, problems, err := g.Save(ctx, c, nil, "")
 	require.NoError(t, err)
 	require.Empty(t, problems)
 	assert.Equal(t, connectors.ScopeGlobal, saved.Scope)
@@ -140,7 +140,7 @@ func TestGlobalConnectors(t *testing.T) {
 
 	require.NoError(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeGlobal, "kitchen", false))
 	saved.Name = "pantry"
-	saved, _, err = g.Save(saved, nil, "kitchen")
+	saved, _, err = g.Save(ctx, saved, nil, "kitchen")
 	require.NoError(t, err)
 	require.Len(t, g.List(), 1)
 	assert.Equal(t, "pantry", g.List()[0].Name)
@@ -163,8 +163,8 @@ func TestGlobalConnectors(t *testing.T) {
 	assert.Contains(t, llm.prompts[0], "pantry (SQLite)")
 	assert.NotEmpty(t, g.Catalog().Kinds)
 
-	require.NoError(t, g.Delete("databases", "pantry"))
+	require.NoError(t, g.Delete(ctx, connectors.Ref{Category: "databases", Name: "pantry"}))
 	assert.Empty(t, g.List())
 	assert.Empty(t, connectorScope(w.cfg).Off(w.Dir()), "forgotten everywhere")
-	assert.ErrorIs(t, g.Delete("databases", "pantry"), connectors.ErrUnknown)
+	assert.ErrorIs(t, g.Delete(ctx, connectors.Ref{Category: "databases", Name: "pantry"}), connectors.ErrUnknown)
 }

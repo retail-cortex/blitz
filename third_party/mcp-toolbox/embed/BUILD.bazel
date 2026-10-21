@@ -82,9 +82,11 @@ go_test(
     srcs = ["embed_test.go"],
     embed = [":embed"],
     deps = [
+        "//third_party/mcp-toolbox/internal/sources/sqlite",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_ncruces_go_sqlite3//:go-sqlite3",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_uber_go_goleak//:goleak",
     ],
 )

@@ -48,9 +48,9 @@ func queryMsg(q connectors.Query) *pb.ConnectorQuery {
 	return m
 }
 
-// connectorMsg is c for the API; hasSecret says which of its secret
-// fields have a value.
-func connectorMsg(hasSecret func(connectors.Connection, string) bool, cat connectors.Catalog, c connectors.Connection) *pb.Connector {
+// connectorMsg is c for the API, with the secret fields that have a
+// value (kept by d).
+func connectorMsg(d connectors.Dirs, cat connectors.Catalog, c connectors.Connection) *pb.Connector {
 	m := &pb.Connector{
 		Name: c.Name, Category: c.Category, Scope: c.Scope, Path: c.Path, Kind: c.Kind, Description: c.Description, Settings: c.Settings,
 		ReadOnly: c.ReadOnly, Tools: c.Tools, Custom: c.Custom, Text: c.Text, Problem: c.Problem, Trusted: c.Trusted, Enabled: c.On,
@@ -58,9 +58,10 @@ func connectorMsg(hasSecret func(connectors.Connection, string) bool, cat connec
 	for _, q := range c.Queries {
 		m.Queries = append(m.Queries, queryMsg(q))
 	}
-	if kind, ok := cat.Kind(c.Kind); ok && !c.Custom {
-		for _, f := range kind.Fields {
-			if f.Secret() && hasSecret(c, f.Key) {
+	category, okCat := cat.Category(c.Category)
+	if kind, ok := cat.Kind(c.Kind); ok && okCat && !c.Custom {
+		for _, f := range kind.SecretFields() {
+			if connectors.HasSecret(d, category, c, f.Key) {
 				m.SecretsSet = append(m.SecretsSet, f.Key)
 			}
 		}
@@ -111,8 +112,8 @@ func kindMsg(k connectors.Kind) *pb.ConnectorKind {
 func categoryMsg(c connectors.Category, prefix, workspace string) *pb.ConnectorCategory {
 	return &pb.ConnectorCategory{
 		Id: c.ID, Name: c.Name, Hint: c.Hint, Icon: c.Icon, Server: c.Server, Prefix: c.Prefix,
-		WorkspaceDir: connectors.ConnectionDir(prefix, workspace, connectors.ScopeWorkspace, c.ID),
-		GlobalDir:    connectors.ConnectionDir(prefix, workspace, connectors.ScopeGlobal, c.ID),
+		WorkspaceDir: connectors.Dirs{Prefix: prefix, Workspace: workspace}.ConnectionDir(connectors.ScopeWorkspace, c.ID),
+		GlobalDir:    connectors.Dirs{Prefix: prefix}.ConnectionDir(connectors.ScopeGlobal, c.ID),
 		Origin:       c.Origin, Path: c.Path, Problem: c.Problem,
 	}
 }
@@ -147,7 +148,7 @@ func draftMsg(d engine.QueryDraft) *pb.DraftConnectorQueryResponse {
 	return out
 }
 
-// argsOf is Try it's JSON arguments.
+// argsOf is the JSON arguments Try it sends.
 func argsOf(text string) (map[string]any, error) {
 	var args map[string]any
 	if text == "" {
@@ -173,29 +174,108 @@ func connectorError(err error) error {
 	return err
 }
 
+// listed is set listed for the API: its categories (with how each
+// category's server is doing, by state; nil: not said), kinds and
+// connections, the catalog read once.
+func listed(set engine.ConnectorSet, state func(connectors.Category) (string, string, int)) ([]*pb.ConnectorCategory, []*pb.ConnectorKind, []*pb.Connector) {
+	d, cat := set.Dirs(), set.Catalog()
+	var cats []*pb.ConnectorCategory
+	for _, c := range cat.Categories {
+		m := categoryMsg(c, d.Prefix, d.Workspace)
+		if c.Problem == "" && state != nil {
+			st, why, n := state(c)
+			m.State, m.Error, m.ToolCount = st, why, int32(n)
+		}
+		cats = append(cats, m)
+	}
+	var kinds []*pb.ConnectorKind
+	for _, k := range cat.Kinds {
+		kinds = append(kinds, kindMsg(k))
+	}
+	var conns []*pb.Connector
+	for _, c := range set.List() {
+		conns = append(conns, connectorMsg(d, cat, c))
+	}
+	return cats, kinds, conns
+}
+
+// saveIn saves m in set (problems, with nothing written, when it can't
+// be), the saved connection for the API.
+func saveIn(ctx context.Context, set engine.ConnectorSet, m *pb.Connector, values map[string]string, previous string) (*pb.Connector, []string, error) {
+	if m == nil {
+		return nil, nil, invalid(errors.New("connection is required"))
+	}
+	saved, problems, err := set.Save(ctx, connectorOf(m), values, previous)
+	if err != nil {
+		return nil, nil, connectorError(err)
+	}
+	if len(problems) > 0 {
+		return nil, problems, nil
+	}
+	return connectorMsg(set.Dirs(), set.Catalog(), saved), nil, nil
+}
+
+// testIn tests m in set: its tools, or why it can't be reached.
+func testIn(ctx context.Context, set engine.ConnectorSet, m *pb.Connector, values map[string]string) ([]*pb.ConnectorTool, string) {
+	tools, err := set.Test(ctx, connectorOf(m), values)
+	if err != nil {
+		return nil, redact.Mask(err.Error())
+	}
+	return toolsMsg(tools), ""
+}
+
+// tryIn runs one of m's tools in set: what it answered and whether
+// that's its error, or why it couldn't run.
+func tryIn(ctx context.Context, set engine.ConnectorSet, m *pb.Connector, values map[string]string, tool, argsJSON string) (string, bool, string) {
+	args, err := argsOf(argsJSON)
+	if err != nil {
+		return "", false, err.Error()
+	}
+	out, isErr, err := set.Try(ctx, connectorOf(m), values, tool, args)
+	if err != nil {
+		return "", false, redact.Mask(err.Error())
+	}
+	return redact.Mask(out), isErr, ""
+}
+
+// readIn reads m's schema in set: its tables, or why it read none.
+func readIn(ctx context.Context, set engine.ConnectorSet, m *pb.Connector, values map[string]string) ([]*pb.ConnectorTable, string) {
+	tables, err := set.ReadSchema(ctx, connectorOf(m), values)
+	if err != nil {
+		return nil, redact.Mask(err.Error())
+	}
+	return tablesMsg(tables), ""
+}
+
+// draftIn drafts a query for m in set: the draft, or why there's none
+// (a request it can't take is invalid; a connection that isn't there,
+// not found).
+func draftIn(ctx context.Context, set engine.ConnectorSet, m *pb.Connector, values map[string]string, request string) (*pb.DraftConnectorQueryResponse, error) {
+	if m == nil {
+		return nil, invalid(errors.New("connection is required"))
+	}
+	d, err := set.DraftQuery(ctx, connectorOf(m), values, request)
+	if errors.Is(err, connectors.ErrUnknown) {
+		return nil, connectorError(err)
+	} else if err != nil {
+		return nil, invalid(err)
+	}
+	return draftMsg(d), nil
+}
+
 func (h workspaceService) ListConnectors(ctx context.Context, r req[pb.ListConnectorsRequest]) (*connect.Response[pb.ListConnectorsResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
 		return nil, err
 	}
-	prefix := w.Config().Dir
-	out := &pb.ListConnectorsResponse{WorkspaceDir: connectors.WorkspaceDir(w.Dir()), GlobalDir: connectors.GlobalDir(prefix)}
-	cat := w.ConnectorCatalog()
-	for _, c := range cat.Categories {
-		m := categoryMsg(c, prefix, w.Dir())
-		if c.Problem == "" {
-			st := w.ConnectorState(c.ID)
-			m.State, m.Error, m.ToolCount = st.State, st.Error, int32(st.Tools)
-		}
-		out.Categories = append(out.Categories, m)
-	}
-	for _, k := range cat.Kinds {
-		out.Kinds = append(out.Kinds, kindMsg(k))
-	}
-	for _, c := range w.Connectors() {
-		out.Connections = append(out.Connections, connectorMsg(w.HasConnectorSecret, cat, c))
-	}
-	return ok(out)
+	cats, kinds, conns := listed(w.ConnectorSet(), func(c connectors.Category) (string, string, int) {
+		st := w.ConnectorState(c)
+		return st.State, st.Error, st.Tools
+	})
+	return ok(&pb.ListConnectorsResponse{
+		Categories: cats, Kinds: kinds, Connections: conns,
+		WorkspaceDir: connectors.WorkspaceDir(w.Dir()), GlobalDir: connectors.GlobalDir(w.Config().Dir),
+	})
 }
 
 func (h workspaceService) SaveConnector(ctx context.Context, r req[pb.SaveConnectorRequest]) (*connect.Response[pb.SaveConnectorResponse], error) {
@@ -203,17 +283,11 @@ func (h workspaceService) SaveConnector(ctx context.Context, r req[pb.SaveConnec
 	if err != nil {
 		return nil, err
 	}
-	if r.Msg.Connection == nil {
-		return nil, invalid(errors.New("connection is required"))
-	}
-	saved, problems, err := w.SaveConnector(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.PreviousName)
+	saved, problems, err := saveIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues, r.Msg.PreviousName)
 	if err != nil {
-		return nil, connectorError(err)
+		return nil, err
 	}
-	if len(problems) > 0 {
-		return ok(&pb.SaveConnectorResponse{Problems: problems})
-	}
-	return ok(&pb.SaveConnectorResponse{Connection: connectorMsg(w.HasConnectorSecret, w.ConnectorCatalog(), saved)})
+	return ok(&pb.SaveConnectorResponse{Connection: saved, Problems: problems})
 }
 
 func (h workspaceService) DeleteConnector(ctx context.Context, r req[pb.DeleteConnectorRequest]) (*connect.Response[pb.DeleteConnectorResponse], error) {
@@ -221,7 +295,7 @@ func (h workspaceService) DeleteConnector(ctx context.Context, r req[pb.DeleteCo
 	if err != nil {
 		return nil, err
 	}
-	if err := w.DeleteConnector(ctx, r.Msg.Category, r.Msg.Scope, r.Msg.Name); err != nil {
+	if err := w.ConnectorSet().Delete(ctx, connectors.Ref{Scope: r.Msg.Scope, Category: r.Msg.Category, Name: r.Msg.Name}); err != nil {
 		return nil, connectorError(err)
 	}
 	return ok(&pb.DeleteConnectorResponse{})
@@ -240,7 +314,8 @@ func (h workspaceService) MakeConnectorGlobal(ctx context.Context, r req[pb.Make
 		return ok(&pb.MakeConnectorGlobalResponse{Problems: problems})
 	}
 	h.s.reloadConnectors(ctx, w.Dir())
-	return ok(&pb.MakeConnectorGlobalResponse{Connection: connectorMsg(w.HasConnectorSecret, w.ConnectorCatalog(), moved)})
+	set := w.ConnectorSet()
+	return ok(&pb.MakeConnectorGlobalResponse{Connection: connectorMsg(set.Dirs(), set.Catalog(), moved)})
 }
 
 func (h workspaceService) SetConnectorEnabled(ctx context.Context, r req[pb.SetConnectorEnabledRequest]) (*connect.Response[pb.SetConnectorEnabledResponse], error) {
@@ -259,11 +334,8 @@ func (h workspaceService) TestConnector(ctx context.Context, r req[pb.TestConnec
 	if err != nil {
 		return nil, err
 	}
-	tools, err := w.TestConnector(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
-	if err != nil {
-		return ok(&pb.TestConnectorResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.TestConnectorResponse{Tools: toolsMsg(tools)})
+	tools, problem := testIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues)
+	return ok(&pb.TestConnectorResponse{Tools: tools, Problem: problem})
 }
 
 func (h workspaceService) TryConnectorTool(ctx context.Context, r req[pb.TryConnectorToolRequest]) (*connect.Response[pb.TryConnectorToolResponse], error) {
@@ -271,15 +343,8 @@ func (h workspaceService) TryConnectorTool(ctx context.Context, r req[pb.TryConn
 	if err != nil {
 		return nil, err
 	}
-	args, err := argsOf(r.Msg.ArgsJson)
-	if err != nil {
-		return ok(&pb.TryConnectorToolResponse{Problem: err.Error()})
-	}
-	out, isErr, err := w.TryConnectorTool(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Tool, args)
-	if err != nil {
-		return ok(&pb.TryConnectorToolResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.TryConnectorToolResponse{Output: redact.Mask(out), IsError: isErr})
+	out, isErr, problem := tryIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues, r.Msg.Tool, r.Msg.ArgsJson)
+	return ok(&pb.TryConnectorToolResponse{Output: out, IsError: isErr, Problem: problem})
 }
 
 func (h workspaceService) ReadConnectorSchema(ctx context.Context, r req[pb.ReadConnectorSchemaRequest]) (*connect.Response[pb.ReadConnectorSchemaResponse], error) {
@@ -287,11 +352,8 @@ func (h workspaceService) ReadConnectorSchema(ctx context.Context, r req[pb.Read
 	if err != nil {
 		return nil, err
 	}
-	tables, err := w.ReadConnectorSchema(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
-	if err != nil {
-		return ok(&pb.ReadConnectorSchemaResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.ReadConnectorSchemaResponse{Tables: tablesMsg(tables)})
+	tables, problem := readIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues)
+	return ok(&pb.ReadConnectorSchemaResponse{Tables: tables, Problem: problem})
 }
 
 func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.DraftConnectorQueryRequest]) (*connect.Response[pb.DraftConnectorQueryResponse], error) {
@@ -299,12 +361,9 @@ func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.Draf
 	if err != nil {
 		return nil, err
 	}
-	if r.Msg.Connection == nil {
-		return nil, invalid(errors.New("connection is required"))
+	d, err := draftIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues, r.Msg.Request)
+	if err != nil {
+		return nil, err
 	}
-	d, err := w.DraftConnectorQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Request)
-	if err != nil { // no query builder, no request, no such category
-		return nil, invalid(err)
-	}
-	return ok(draftMsg(d))
+	return ok(d)
 }

@@ -23,7 +23,7 @@ In the desktop app, open **Studio › Connectors** for one this workspace has (s
 
    For Google Cloud, sign in once with `gcloud auth application-default login`.
 
-   A SQLite path can be relative: `./data/kitchen.db` starts at the workspace's folder, so a teammate who clones the project and has the file there gets the same database. A global connection's relative path starts at your home folder, and `~/` is your home folder anywhere. Blitz says so when the file isn't there, rather than creating an empty one. **Make global** turns a relative path into the full one, so it still names the same file.
+   A SQLite path can be relative: `./data/kitchen.db` starts at the workspace's folder, so a teammate who clones the project and has the file there gets the same database. A global connection's relative path starts at your home folder, and `~/` is your home folder anywhere. Blitz says so when the file isn't there, rather than creating an empty one. A SQLite query answers at most 1,000 rows, the last saying so: narrow it with `WHERE` or `LIMIT` for the rest. **Make global** turns a relative path into the full one, so it still names the same file.
 3. Leave **Read-only** on unless the agents should change data.
 4. Press **Test** to connect and see the tools the agents will get, then **Save**.
 

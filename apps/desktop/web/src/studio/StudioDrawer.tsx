@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPowerPlugOutline, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -26,6 +26,7 @@ import { t, tn } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { useDiscardGuard } from "./paneParts";
 import { ConnectorsPane } from "./ConnectorsPane";
 import { EvalsPane } from "./EvalsPane";
 import { GuardrailsPane } from "./GuardrailsPane";
@@ -68,7 +69,7 @@ export const studioIcons: Record<StudioKind, string> = {
   evals: mdiFlaskOutline,
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
-  connectors: mdiPowerPlugOutline,
+  connectors: mdiConnection,
   secrets: mdiKeyVariant,
 };
 
@@ -114,6 +115,8 @@ export function StudioDrawer({
     setCompact(false);
     setKind(k);
   };
+  // Picking another kind with a form's changes unsaved asks first.
+  const { leave, discard } = useDiscardGuard(dirty);
   useEffect(() => onKind?.(kind), [kind, onKind]);
   // Only a request made while it's open: the count it opened with is old.
   const menuAsked = useRef(ask?.n ?? 0);
@@ -184,7 +187,7 @@ export function StudioDrawer({
           {studioGroups.map((group, i) => [
             i > 0 && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
             ...group.map((k) => (
-              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
+              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => (k === kind ? undefined : leave(() => choose(k)))}>
                 <Icon path={studioIcons[k]} />
                 <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
               </button>
@@ -227,6 +230,7 @@ export function StudioDrawer({
         </div>
         </GradesContext.Provider>
       </div>
+      {discard(t(`desktop.studio.${kind}`))}
     </Drawer>
   );
 }

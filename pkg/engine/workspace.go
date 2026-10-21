@@ -81,9 +81,10 @@ type Workspace struct {
 	settingsWatch     *settingsWatch
 	settingsMu        sync.Mutex
 	settingsListeners map[int]func()
-	// mcpMu guards cfg.MCP, which applyMCP replaces.
-	mcpMu        sync.RWMutex
-	settingsNext int
+	settingsNext      int
+	// mcpMu runs one applyMCP at a time (the settings watch and the
+	// service both reload); what it changes is cfgMu's.
+	mcpMu sync.Mutex
 	// permProblem is why rules were left out at the last reload.
 	permMu      sync.Mutex
 	permProblem error
@@ -99,9 +100,13 @@ type Workspace struct {
 	goals        map[string]api.Goal // by session
 	cfg          *config.Config
 	// cfgMu guards what changes in cfg once it's open (reloads and
-	// setters write it through setSettings), and reply; readers that hand
-	// the settings on take a copy (settings).
-	cfgMu    sync.RWMutex
+	// setters write it through setSettings), reply and mcpLive; readers
+	// that hand the settings on take a copy (settings).
+	cfgMu sync.RWMutex
+	// mcpLive are the MCP servers as they run: cfg.MCP's with their
+	// secrets filled in, and the connector servers (cfg.MCP stays as
+	// written).
+	mcpLive  []config.MCPServerConfig
 	policyMu sync.Mutex // guards cfg.Workers.Policy, which the settings can change
 	guards   guarding   // each turn's guardrails (spec_gates_041)
 	agents   *agents.Registry
@@ -270,8 +275,14 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 	w.loadPlugins(cfg, o.Warn)
 
-	cfg.MCP.Servers = w.withConnectors(mcpWithSecrets(cfg.MCP.Servers, dir), cfg.Dir, dir, o.Warn)
-	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
+	// The registry starts the servers as they run; the settings keep them
+	// as written (applyMCP).
+	written := cfg.MCP.Servers
+	w.mcpLive = w.withConnectors(mcpWithSecrets(written, dir), cfg.Dir, dir, o.Warn)
+	cfg.MCP.Servers = w.mcpLive
+	w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills)
+	cfg.MCP.Servers = written
+	if err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)

@@ -50,11 +50,10 @@ type Backend interface {
 // Serving is what a backend serves: a category's connection files of
 // its kinds, the global ones then the workspace's.
 type Serving struct {
-	Category  Category
-	PrefixDir string
-	Workspace string
-	Global    []string
-	Local     []string
+	Category Category
+	Dirs
+	Global []string
+	Local  []string
 	// Trusted says whether the person trusted a workspace connection file
 	// (saved it in Studio, or trusted the project's settings): a trusted
 	// one may use global secrets, and its read-only tools run without
@@ -75,14 +74,13 @@ func (s Serving) Split() (trusted, untrusted []string) {
 	return trusted, untrusted
 }
 
-// Env is where a connection is tested, tried or read: the config folder,
-// the workspace, and the secret values typed into the form (by field) in
+// Env is where a connection is tested, tried or read: its folders, its
+// category, and the secret values typed into the form (by field) in
 // place of the kept ones.
 type Env struct {
-	PrefixDir string
-	Workspace string
-	Category  Category
-	Values    map[string]string
+	Dirs
+	Category Category
+	Values   map[string]string
 }
 
 // Tester connects to a connection as written and lists its tools.

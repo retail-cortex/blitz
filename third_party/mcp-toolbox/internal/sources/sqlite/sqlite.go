@@ -37,6 +37,9 @@ import (
 
 const SourceType string = "sqlite"
 
+// MaxRows bounds the rows a query returns (Blitz).
+var MaxRows = 1000
+
 // validate interface
 var _ sources.SourceConfig = Config{}
 
@@ -145,6 +148,14 @@ func (s *Source) RunSQL(ctx context.Context, statement string, params []any) (an
 	// Prepare the result slice
 	out := []any{}
 	for rows.Next() {
+		// Blitz: rows past MaxRows aren't read, so a query over a big table
+		// doesn't load all of it; the last row says so.
+		if len(out) == MaxRows {
+			note := orderedmap.Row{}
+			note.Add("note", fmt.Sprintf("only the first %d rows: narrow the query (WHERE, LIMIT) for the rest", MaxRows))
+			out = append(out, note)
+			break
+		}
 		if err := rows.Scan(values...); err != nil {
 			return nil, fmt.Errorf("unable to scan row: %w", err)
 		}

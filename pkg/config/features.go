@@ -409,6 +409,10 @@ type MCPServerConfig struct {
 	// ReadOnlyTools run without asking: tools Blitz knows can't change
 	// anything (a read-only database's).
 	ReadOnlyTools []string `toml:"-"`
+	// FileSettings are an in-process server's settings that name a file,
+	// by source type (SQLite's database): a relative one is resolved
+	// where its file belongs (spec_databases_046 DB-17).
+	FileSettings map[string][]string `toml:"-"`
 }
 
 // BrowserConfig controls the browser tool (spec_parity_027 §5.2): a

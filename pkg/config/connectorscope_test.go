@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,4 +65,27 @@ func TestConnectorScope(t *testing.T) {
 	file := filepath.Join(a, "file")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	assert.Error(t, OpenConnectorScope(file).Set(a, "k", false), "the settings folder is a file")
+}
+
+// The connector files are the YAML files in a folder (not hidden ones),
+// a category's folder is any but the descriptors' and hidden ones, and a
+// connection's name is lower case, digits and _, at most 40.
+func TestConnectorFiles(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"b.yaml", "a.yml", ".hidden.yaml", "notes.md"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f), nil, 0o600))
+	}
+	for _, d := range []string{"databases", "kinds", "categories", ".git"} {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, d), 0o755))
+	}
+	assert.Equal(t, []string{filepath.Join(dir, "a.yml"), filepath.Join(dir, "b.yaml")}, ConnectorFiles(dir))
+	assert.Equal(t, []string{filepath.Join(dir, "databases")}, ConnectorCategoryDirs(dir))
+	assert.Empty(t, ConnectorFiles(filepath.Join(dir, "none")))
+	assert.Empty(t, ConnectorCategoryDirs(filepath.Join(dir, "none")))
+	assert.Equal(t, "shop", ConnectorFileName("/x/shop.yml"))
+	assert.True(t, ValidConnectorName("shop_2"))
+	assert.False(t, ValidConnectorName("Shop"))
+	assert.False(t, ValidConnectorName(strings.Repeat("a", 41)))
+	assert.Equal(t, "global/databases/shop", ConnectorKey(ConnectorScopeGlobal, "databases", "shop"))
+	assert.Equal(t, filepath.Join("/w", ".agents", "connectors"), WorkspaceConnectorsDir("/w"))
 }

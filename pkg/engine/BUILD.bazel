@@ -198,6 +198,7 @@ go_test(
         "commands_test.go",
         "commit_test.go",
         "compose_test.go",
+        "connectors_more_test.go",
         "connectors_test.go",
         "context_test.go",
         "draft_test.go",

@@ -116,7 +116,10 @@ func TestCtrlCDuringShellPassthroughDoesNotExit(t *testing.T) {
 
 func TestToolsAndShowCommands(t *testing.T) {
 	app, _ := newCommandApp(t, "")
-	local(app).Config().MCP.Servers = []config.MCPServerConfig{{Name: "gh", Prefix: "gh"}, {Name: "qa-only", Agents: []string{"qa"}}}
+	// As a settings change brings them (ReloadMCP); nothing listens there.
+	cfg := *local(app).Config()
+	cfg.MCP.Servers = []config.MCPServerConfig{{Name: "gh", Prefix: "gh", URL: "http://127.0.0.1:1/mcp"}, {Name: "qa-only", Agents: []string{"qa"}, URL: "http://127.0.0.1:1/mcp"}}
+	require.NoError(t, local(app).ReloadMCP(context.Background(), &cfg))
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/tools", app) })
 	for _, want := range []string{"read_file", "run_shell_command", "mcp:gh", "gh__"} {
 		t.Run(want, func(t *testing.T) {

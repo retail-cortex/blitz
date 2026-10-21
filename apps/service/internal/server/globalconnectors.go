@@ -24,7 +24,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
-	"github.com/retail-cortex/blitz/pkg/redact"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -64,19 +63,8 @@ func (h configService) ListGlobalConnectors(ctx context.Context, _ req[pb.ListGl
 	if err != nil {
 		return nil, err
 	}
-	prefix := g.Config.Dir
-	out := &pb.ListGlobalConnectorsResponse{GlobalDir: connectors.GlobalDir(prefix)}
-	cat := g.Catalog()
-	for _, c := range cat.Categories {
-		out.Categories = append(out.Categories, categoryMsg(c, prefix, ""))
-	}
-	for _, k := range cat.Kinds {
-		out.Kinds = append(out.Kinds, kindMsg(k))
-	}
-	for _, c := range g.List() {
-		out.Connections = append(out.Connections, connectorMsg(g.HasSecret, cat, c))
-	}
-	return ok(out)
+	cats, kinds, conns := listed(g, nil)
+	return ok(&pb.ListGlobalConnectorsResponse{Categories: cats, Kinds: kinds, Connections: conns, GlobalDir: connectors.GlobalDir(g.Config.Dir)})
 }
 
 func (h configService) SaveGlobalConnector(ctx context.Context, r req[pb.SaveGlobalConnectorRequest]) (*connect.Response[pb.SaveGlobalConnectorResponse], error) {
@@ -87,15 +75,14 @@ func (h configService) SaveGlobalConnector(ctx context.Context, r req[pb.SaveGlo
 	if err != nil {
 		return nil, err
 	}
-	saved, problems, err := g.Save(connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.PreviousName)
+	saved, problems, err := saveIn(ctx, g, r.Msg.Connection, r.Msg.SecretValues, r.Msg.PreviousName)
 	if err != nil {
-		return nil, connectorError(err)
+		return nil, err
 	}
-	if len(problems) > 0 {
-		return ok(&pb.SaveGlobalConnectorResponse{Problems: problems})
+	if saved != nil {
+		h.s.reloadConnectors(ctx, "")
 	}
-	h.s.reloadConnectors(ctx, "")
-	return ok(&pb.SaveGlobalConnectorResponse{Connection: connectorMsg(g.HasSecret, g.Catalog(), saved)})
+	return ok(&pb.SaveGlobalConnectorResponse{Connection: saved, Problems: problems})
 }
 
 func (h configService) DeleteGlobalConnector(ctx context.Context, r req[pb.DeleteGlobalConnectorRequest]) (*connect.Response[pb.DeleteGlobalConnectorResponse], error) {
@@ -103,7 +90,7 @@ func (h configService) DeleteGlobalConnector(ctx context.Context, r req[pb.Delet
 	if err != nil {
 		return nil, err
 	}
-	if err := g.Delete(r.Msg.Category, r.Msg.Name); err != nil {
+	if err := g.Delete(ctx, connectors.Ref{Category: r.Msg.Category, Name: r.Msg.Name}); err != nil {
 		return nil, connectorError(err)
 	}
 	h.s.reloadConnectors(ctx, "")
@@ -115,11 +102,8 @@ func (h configService) TestGlobalConnector(ctx context.Context, r req[pb.TestGlo
 	if err != nil {
 		return nil, err
 	}
-	tools, err := g.Test(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
-	if err != nil {
-		return ok(&pb.TestGlobalConnectorResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.TestGlobalConnectorResponse{Tools: toolsMsg(tools)})
+	tools, problem := testIn(ctx, g, r.Msg.Connection, r.Msg.SecretValues)
+	return ok(&pb.TestGlobalConnectorResponse{Tools: tools, Problem: problem})
 }
 
 func (h configService) TryGlobalConnectorTool(ctx context.Context, r req[pb.TryGlobalConnectorToolRequest]) (*connect.Response[pb.TryGlobalConnectorToolResponse], error) {
@@ -127,15 +111,8 @@ func (h configService) TryGlobalConnectorTool(ctx context.Context, r req[pb.TryG
 	if err != nil {
 		return nil, err
 	}
-	args, err := argsOf(r.Msg.ArgsJson)
-	if err != nil {
-		return ok(&pb.TryGlobalConnectorToolResponse{Problem: err.Error()})
-	}
-	out, isErr, err := g.Try(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Tool, args)
-	if err != nil {
-		return ok(&pb.TryGlobalConnectorToolResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.TryGlobalConnectorToolResponse{Output: redact.Mask(out), IsError: isErr})
+	out, isErr, problem := tryIn(ctx, g, r.Msg.Connection, r.Msg.SecretValues, r.Msg.Tool, r.Msg.ArgsJson)
+	return ok(&pb.TryGlobalConnectorToolResponse{Output: out, IsError: isErr, Problem: problem})
 }
 
 func (h configService) ReadGlobalConnectorSchema(ctx context.Context, r req[pb.ReadGlobalConnectorSchemaRequest]) (*connect.Response[pb.ReadGlobalConnectorSchemaResponse], error) {
@@ -143,11 +120,8 @@ func (h configService) ReadGlobalConnectorSchema(ctx context.Context, r req[pb.R
 	if err != nil {
 		return nil, err
 	}
-	tables, err := g.ReadSchema(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues)
-	if err != nil {
-		return ok(&pb.ReadGlobalConnectorSchemaResponse{Problem: redact.Mask(err.Error())})
-	}
-	return ok(&pb.ReadGlobalConnectorSchemaResponse{Tables: tablesMsg(tables)})
+	tables, problem := readIn(ctx, g, r.Msg.Connection, r.Msg.SecretValues)
+	return ok(&pb.ReadGlobalConnectorSchemaResponse{Tables: tables, Problem: problem})
 }
 
 func (h configService) DraftGlobalConnectorQuery(ctx context.Context, r req[pb.DraftGlobalConnectorQueryRequest]) (*connect.Response[pb.DraftGlobalConnectorQueryResponse], error) {
@@ -158,10 +132,9 @@ func (h configService) DraftGlobalConnectorQuery(ctx context.Context, r req[pb.D
 	if err != nil {
 		return nil, err
 	}
-	d, err := g.DraftQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, r.Msg.Request)
-	if err != nil { // no query builder, no request, no such category
-		return nil, invalid(err)
+	d, err := draftIn(ctx, g, r.Msg.Connection, r.Msg.SecretValues, r.Msg.Request)
+	if err != nil {
+		return nil, err
 	}
-	m := draftMsg(d)
-	return ok(&pb.DraftGlobalConnectorQueryResponse{Query: m.Query, Notes: m.Notes, Tables: m.Tables, Problem: m.Problem})
+	return ok(&pb.DraftGlobalConnectorQueryResponse{Query: d.Query, Notes: d.Notes, Tables: d.Tables, Problem: d.Problem})
 }

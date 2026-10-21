@@ -29,6 +29,9 @@ import (
 	"github.com/ncruces/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
+
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/sqlite"
 )
 
 // recipes is a SQLite file with two recipes.
@@ -168,6 +171,35 @@ func TestLoadWith(t *testing.T) {
 	assert.Len(t, cfg.Tools, 3, "merged")
 }
 
+// A SQLite query returns at most MaxRows rows, the last one saying so
+// (patch 08).
+func TestSQLiteMaxRows(t *testing.T) {
+	old := sqlite.MaxRows
+	sqlite.MaxRows = 1
+	t.Cleanup(func() { sqlite.MaxRows = old })
+	cfg, err := Load(context.Background(), []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": recipes(t)})
+	require.NoError(t, err)
+	got, isErr := call(t, connect(t, cfg), "run_sql", map[string]any{"sql": "SELECT name FROM recipes ORDER BY name"})
+	require.False(t, isErr, got)
+	lines := strings.Split(got, "\n")
+	require.Len(t, lines, 2)
+	assert.JSONEq(t, `{"name": "bread"}`, lines[0])
+	assert.Contains(t, lines[1], "only the first 1 rows")
+}
+
+// A start that fails once a source is open (here a tool naming a source
+// that isn't there) closes that source: its database/sql opener goroutine
+// doesn't outlive the attempt (patch 07).
+func TestFailedStartClosesSources(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	cfg, err := Load(context.Background(), []string{writeConfig(t, strings.Replace(sqliteTools, "source: recipes\ndescription: Run any SQL", "source: nowhere\ndescription: Run any SQL", 1))}, map[string]string{"DB_PATH": recipes(t)})
+	require.NoError(t, err)
+	for range 3 {
+		_, err = Start(context.Background(), cfg, nil)
+		require.Error(t, err)
+	}
+}
+
 // Every SQLite source has sqlite-vec: vec0 tables and a nearest-neighbour
 // query.
 func TestSQLiteVec(t *testing.T) {
@@ -239,21 +271,13 @@ annotations:
 	assert.Contains(t, got, "readonly")
 }
 
-// A database that can't be reached fails Start; Files lists a folder's
-// YAML; Close is safe twice.
-func TestStartAndFiles(t *testing.T) {
+// A database that can't be reached fails Start; Close is safe twice.
+func TestStartAndClose(t *testing.T) {
 	ctx := context.Background()
 	cfg, err := Load(ctx, []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": filepath.Join(t.TempDir(), "missing", "x.db")})
 	require.NoError(t, err)
 	_, err = Start(ctx, cfg, nil)
 	assert.Error(t, err, "its folder isn't there")
-
-	dir := t.TempDir()
-	for _, f := range []string{"b.yaml", "a.yml", "notes.md"} {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, f), nil, 0o600))
-	}
-	assert.Equal(t, []string{filepath.Join(dir, "a.yml"), filepath.Join(dir, "b.yaml")}, Files(dir))
-	assert.Empty(t, Files(filepath.Join(dir, "none")))
 
 	cfg, err = Load(ctx, []string{writeConfig(t, sqliteTools)}, map[string]string{"DB_PATH": recipes(t)})
 	require.NoError(t, err)

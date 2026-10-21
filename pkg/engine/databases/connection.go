@@ -39,9 +39,6 @@ import (
 // Toolbox's sources take no description field.
 var aboutRE = regexp.MustCompile(`(?m)^# about: (.*)$`)
 
-// kindRE is the comment that names its kind.
-var kindRE = regexp.MustCompile(`(?m)^# kind: ([a-z][a-z0-9-]*)\s*$`)
-
 // doc is one YAML document of a connection file.
 type doc = map[string]any
 
@@ -77,8 +74,8 @@ func (Backend) Parse(cat connectors.Category, kinds []connectors.Kind, name, tex
 	}
 	typ, _ := source["type"].(string)
 	var kind *connectors.Kind
-	if m := kindRE.FindStringSubmatch(text); m != nil {
-		if i := slices.IndexFunc(kinds, func(k connectors.Kind) bool { return k.ID == m[1] && k.Source == typ }); i >= 0 {
+	if id := connectors.KindOf(text); id != "" {
+		if i := slices.IndexFunc(kinds, func(k connectors.Kind) bool { return k.ID == id && k.Source == typ }); i >= 0 {
 			kind = &kinds[i]
 		}
 	}

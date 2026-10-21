@@ -35,6 +35,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // Capability is something a kind of connector can do, beyond being
@@ -140,6 +142,9 @@ const (
 // Secret says whether the field is kept as a Blitz secret.
 func (f Field) Secret() bool { return f.Type == FieldSecret }
 
+// FieldTypes are the types a field can have ("" is text).
+var FieldTypes = []string{FieldText, FieldNumber, FieldSecret, FieldList, FieldPath}
+
 // ReadyTool is a ready-made tool a kind offers: named <connection>_<id>.
 type ReadyTool struct {
 	ID string `yaml:"id"`
@@ -220,6 +225,17 @@ type Kind struct {
 // Can says whether the kind has capability c.
 func (k Kind) Can(c Capability) bool { return slices.Contains(k.Capabilities, c) }
 
+// SecretFields are k's fields kept as secrets (a password).
+func (k Kind) SecretFields() []Field {
+	var out []Field
+	for _, f := range k.Fields {
+		if f.Secret() {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // Field is the kind's field key.
 func (k Kind) Field(key string) (Field, bool) {
 	for _, f := range k.Fields {
@@ -293,17 +309,15 @@ type Connection struct {
 }
 
 // Key names a connection in a workspace's choices: <scope>/<category>/<name>.
-func Key(scope, category, name string) string {
-	return scope + "/" + category + "/" + name
-}
+func Key(scope, category, name string) string { return config.ConnectorKey(scope, category, name) }
 
 // Key is c's key (Key).
 func (c Connection) Key() string { return Key(c.Scope, c.Category, c.Name) }
 
 // Scopes.
 const (
-	ScopeWorkspace = "workspace"
-	ScopeGlobal    = "global"
+	ScopeWorkspace = config.ConnectorScopeWorkspace
+	ScopeGlobal    = config.ConnectorScopeGlobal
 )
 
 // Origins of descriptors.
@@ -346,14 +360,12 @@ var ErrNoTables = errors.New("no tables")
 // TestTimeout bounds connecting to a connection to test, try or read it.
 var TestTimeout = 20 * time.Second
 
-var (
-	nameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
-	idRE   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
-)
+// idRE is a descriptor's ID.
+var idRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
 // ValidName says whether name can name a connection or a query: lower
 // case letters, digits and _, starting with a letter, at most 40.
-func ValidName(name string) bool { return nameRE.MatchString(name) }
+func ValidName(name string) bool { return config.ValidConnectorName(name) }
 
 // SecretKey is the Blitz secret a connection's secret field is kept as:
 // DB_SHOP_PASSWORD (the category's SecretPrefix, the name, the field).

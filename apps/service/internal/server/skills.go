@@ -72,7 +72,7 @@ func (h configService) installedSkill(i skillreg.Installed) *pb.InstalledSkill {
 
 // skillTrust is the store of reviewed skills in the service's settings
 // directory (spec_skills_013 SK-108).
-func (h configService) skillTrust() *config.SkillTrust {
+func (h configService) skillTrust() *config.HashTrust {
 	return config.OpenSkillTrust(config.ConfigDir(h.s.configDir))
 }
 

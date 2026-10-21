@@ -227,6 +227,7 @@ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.So
 			if strings.Contains(allowed, ".") {
 				parts := strings.Split(allowed, ".")
 				if len(parts) != 2 {
+					_ = s.Close() // Blitz: its client and caches
 					return nil, fmt.Errorf("invalid allowedDataset format: %q, expected 'project.dataset' or 'dataset'", allowed)
 				}
 				projectID = parts[0]
@@ -242,7 +243,7 @@ func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.So
 				dataset := s.Client.DatasetInProject(projectID, datasetID)
 				_, err := dataset.Metadata(ctx)
 				if err != nil {
-					s.Client.Close()
+					_ = s.Close() // Blitz: its caches too, not only its client
 					if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusNotFound {
 						return nil, fmt.Errorf("allowedDataset '%s' not found in project '%s'", datasetID, projectID)
 					}

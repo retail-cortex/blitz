@@ -765,8 +765,9 @@ const fakeConnectorCalls = {
     const tools = [...c.tools.filter((id) => !(c.readOnly && kind?.tools.find((t) => t.id === id && "writes" in t && t.writes))).map((id) => ({ name: `${c.name}_${id}`, description: `${id.replace(/_/g, " ")} on ${c.name}.` })), ...c.queries.map((q) => ({ name: `${c.name}_${q.name}`, description: q.description }))];
     return { tools: tools.map((t) => ({ ...t, readOnly: c.readOnly })) };
   },
-  tryTool: async (tool: string) => {
+  tryTool: async (c: Connector, tool: string) => {
     await new Promise((r) => setTimeout(r, 500));
+    if (c.settings.host === "nowhere") return { problem: `failed to connect to host=nowhere user=${c.settings.user}: dial tcp: lookup nowhere: no such host` };
     return { output: tool.endsWith("top_customers") ? '{"name":"Ada Lovelace","spent":1820.5}\n{"name":"Grace Hopper","spent":1544}' : '{"n":42}' };
   },
   readSchema: async (c: Connector) => {
@@ -1767,7 +1768,7 @@ export function installFake() {
               ...fakeConnectorCategory,
               workspaceDir: `${workspace}/.agents/connectors/databases`,
               state: "connected",
-              toolCount: fakeConnectors.reduce((n, d) => n + d.tools.length + d.queries.length, 0),
+              toolCount: fakeConnectors.filter((d) => d.enabled !== false).reduce((n, d) => n + d.tools.length + d.queries.length, 0),
             },
           ],
           kinds: [...fakeConnectorKinds, { id: "mysql", category: "databases", name: en("MySQL"), backend: "toolbox", origin: "workspace", path: `${workspace}/.agents/connectors/kinds/mysql.yaml`, problem: 'source "mysql": not in Blitz\'s Toolbox' }],
@@ -1780,6 +1781,7 @@ export function installFake() {
           return fakeConnectorCalls.save(workspace, { ...connection!, scope: "workspace" }, previousName, secretValues);
         },
         deleteConnector: ({ category, scope, name }) => {
+          if (scope === "global") throw new ConnectError("a global connection is changed in Settings, not in a workspace", Code.FailedPrecondition);
           const i = fakeConnectors.findIndex((d) => d.name === name && d.scope === scope && d.category === category);
           if (i < 0) throw new ConnectError(`no connection ${name}`, Code.NotFound);
           fakeConnectors.splice(i, 1);
@@ -1800,7 +1802,7 @@ export function installFake() {
           return { connection: fakeConnectorMsg("", d) };
         },
         testConnector: ({ connection }) => fakeConnectorCalls.test(connection!),
-        tryConnectorTool: ({ tool }) => fakeConnectorCalls.tryTool(tool),
+        tryConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
         // Studio › Rules: gates before and after the agent, and instruction rules.
@@ -2266,7 +2268,7 @@ export function installFake() {
           return {};
         },
         testGlobalConnector: ({ connection }) => fakeConnectorCalls.test(connection!),
-        tryGlobalConnectorTool: ({ tool }) => fakeConnectorCalls.tryTool(tool),
+        tryGlobalConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readGlobalConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftGlobalConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
         saveMCPServer: ({ name, server }) => {

@@ -103,7 +103,7 @@ func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
 	if len(files) == 0 {
 		return nil
 	}
-	lookup := config.Vault(s.PrefixDir).Resolve(config.SecretScope(s.PrefixDir, s.Workspace))
+	lookup := config.Vault(s.Prefix).Resolve(s.SecretScope(connectors.ScopeWorkspace))
 	trusted, untrusted := s.Split()
 	vars := Vars(append(slices.Clone(s.Global), trusted...), secrets.AnyScope, lookup)
 	for k, v := range Vars(untrusted, secrets.OnlyWorkspace, lookup) {
@@ -112,13 +112,14 @@ func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
 		}
 	}
 	c := config.MCPServerConfig{
-		Name:        s.Category.Server,
-		Prefix:      s.Category.Prefix,
-		InProcess:   ID,
-		Args:        files,
-		Env:         vars,
-		Agents:      []string{"*"},
-		Fingerprint: connectors.Fingerprint(files),
+		Name:         s.Category.Server,
+		Prefix:       s.Category.Prefix,
+		InProcess:    ID,
+		Args:         files,
+		Env:          vars,
+		Agents:       []string{"*"},
+		Fingerprint:  connectors.Fingerprint(files),
+		FileSettings: pathKeys(connectors.Load(s.Prefix, s.Workspace).Kinds),
 	}
 	// A file that doesn't load still makes the server: listing its tools
 	// fails, saying why, in /mcp and Studio.
@@ -140,11 +141,13 @@ var (
 func ReadsOnly(statement string) bool { return embed.ReadsOnly(statement) }
 
 // Transport connects to a toolbox server c: each connection loads its
-// files (Args) with their secrets (Env), their paths resolved where each
-// file belongs (baseOf: its workspace, else the home folder), and starts
-// Toolbox, connecting to the databases; closing the connection stops it.
+// files (Args) with their secrets (Env), their file settings
+// (FileSettings, which Serve works out from the workspace's catalog)
+// resolved where each file belongs (baseOf: its workspace, else the home
+// folder), and starts Toolbox, connecting to the databases; closing the
+// connection stops it.
 func Transport(c config.MCPServerConfig) mcp.Transport {
-	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: pathKeys(connectors.Load("", "").Kinds), base: baseOf}
+	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: c.FileSettings, base: baseOf}
 }
 
 type transport struct {

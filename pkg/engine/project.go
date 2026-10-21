@@ -77,12 +77,8 @@ func TrustProject(cfg *config.Config, hash string, trusted bool) error {
 }
 
 // skillTrust is the store of reviewed skills in cfg's settings directory.
-func skillTrust(cfg *config.Config) *config.SkillTrust {
-	dir := cfg.Dir
-	if dir == "" {
-		dir = config.ConfigDir("")
-	}
-	return config.OpenSkillTrust(dir)
+func skillTrust(cfg *config.Config) *config.HashTrust {
+	return config.OpenSkillTrust(settingsDir(cfg))
 }
 
 // trustProjectSkills records the workspace's skills with scripts as
