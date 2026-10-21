@@ -7,7 +7,7 @@ weight: 46
 
 | | |
 |---|---|
-| Status | **Done** in v0.7.2 (the owner's request, 2026-10-19): DB-01–DB-18. Since 2026-10-20 databases are the first category of [connectors](spec_connectors_047.md): their kinds are descriptors and Toolbox is a backend. |
+| Status | **Done** in v0.8.0 (the owner's request, 2026-10-19): DB-01–DB-18. Since 2026-10-20 databases are the first category of [connectors](spec_connectors_047.md): their kinds are descriptors and Toolbox is a backend. |
 | Source | `third_party/mcp-toolbox/` (the pruned Toolbox, `embed/embed.go`, `patches/`, `tools/update_toolbox.sh`), `pkg/engine/databases/` (the toolbox backend: `databases.go`, `connection.go`, `session.go`), `pkg/engine/connectors/builtin/` (the Databases category and its kinds), `pkg/engine/connectors.go`, `pkg/engine/tools/mcp.go` (`RegisterInProcess`, `ReadOnlyTools`), `pkg/engine/extensions.go` (`applyMCP`), `pkg/engine/settingswatch.go`, `apps/service/internal/server/connectors.go`, `apps/desktop/web/src/studio/ConnectorsPane.tsx`, `apps/desktop/web/src/studio/connectorForm.ts` |
 | Tests | `third_party/mcp-toolbox/embed/embed_test.go` (`TestPostgresReadOnly` against a real PostgreSQL when `BLITZ_TEST_POSTGRES` is set), `pkg/engine/databases/*_test.go`, `pkg/engine/connectors_test.go`, `pkg/engine/tools/mcpinproc_test.go`, `apps/service/internal/server/connectors_test.go`, `apps/desktop/web/src/studio/connectorForm.test.ts` |
 | Depends on | [spec_connectors_047](spec_connectors_047.md) (the descriptors, the backend interface, trust, the query builder), [spec_mcp_009](spec_mcp_009.md) (MCP servers, approvals), [spec_secrets_039](spec_secrets_039.md) (passwords), [spec_studio_040](spec_studio_040.md) |
