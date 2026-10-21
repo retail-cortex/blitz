@@ -126,7 +126,7 @@ go_test(
         "workflows_test.go",
     ],
     embed = [":server"],
-    shard_count = 4,
+    shard_count = 8,
     deps = [
         "//pkg/a2ui",
         "//pkg/api",

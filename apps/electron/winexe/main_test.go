@@ -91,11 +91,13 @@ func TestRewriteGoProgram(t *testing.T) {
 	assert.Contains(t, string(m), `level="asInvoker"`)
 }
 
-// The setup program is named as itself (--name, --description).
+// The setup program is named as itself (--name, --description). It's
+// the small program: rewriting Electron's takes seconds a time, and the
+// test binary has a minute for all of them on a slow CI runner.
 func TestRewriteDetails(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "setup.exe")
 	var stderr bytes.Buffer
-	require.Equal(t, 0, cmd([]string{"--in", runfile(t, *exePath), "--icon", runfile(t, *iconPath), "--version", "0.7.1", "--out", out, "--name", "Uninstall Blitz.exe", "--description", "Blitz Setup"}, &stderr), stderr.String())
+	require.Equal(t, 0, cmd([]string{"--in", runfile(t, *setupPath), "--icon", runfile(t, *iconPath), "--version", "0.7.1", "--out", out, "--name", "Uninstall Blitz.exe", "--description", "Blitz Setup"}, &stderr), stderr.String())
 	v, err := version.FromBytes(load(t, out).Get(winres.RT_VERSION, winres.ID(1), 0))
 	require.NoError(t, err)
 	table := v.Table().GetMainTranslation()
@@ -157,9 +159,9 @@ func TestCmd(t *testing.T) {
 	stderr.Reset()
 	assert.Equal(t, 1, cmd(nil, &stderr))
 	assert.Contains(t, stderr.String(), "winexe: --in, --icon and --out are needed")
-	if *exePath != "" {
+	if *setupPath != "" { // the small program: Electron's is slow to rewrite
 		out := filepath.Join(t.TempDir(), "Blitz.exe")
-		assert.Equal(t, 0, cmd([]string{"--in", runfile(t, *exePath), "--icon", runfile(t, *iconPath), "--version", "1.2.3", "--out", out}, &stderr))
+		assert.Equal(t, 0, cmd([]string{"--in", runfile(t, *setupPath), "--icon", runfile(t, *iconPath), "--version", "1.2.3", "--out", out}, &stderr))
 		_, err := os.Stat(out)
 		assert.NoError(t, err)
 	}
