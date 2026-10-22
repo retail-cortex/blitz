@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.4.0
-weight: 14
+weight: 15
 ---
 
 **Blitz comes to Windows.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.4.0).

@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.0
-weight: 1
+weight: 2
 ---
 
 **Your agents can now work with your data.** Blitz 0.8.0 connects your agents to the databases you already use. Point Blitz at a PostgreSQL, AlloyDB, SQLite or BigQuery database and your agents can explore its tables, run queries and answer questions from your real data. Read-only by default and with passwords kept in your keychain, so you stay in control of what they can see and change.
