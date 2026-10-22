@@ -51,11 +51,11 @@ var CloudProviders = []string{"bedrock", "azure", "vertex-anthropic"}
 
 // ValidProvider reports whether p is a provider Blitz can use.
 func ValidProvider(p string) bool {
-	return p == "ollama" || knownProvider(p) || slices.Contains(CloudProviders, p)
+	return p == "ollama" || p == "api" || knownProvider(p) || slices.Contains(CloudProviders, p)
 }
 
 // providerList names the providers, for errors.
-const providerList = "gemini, anthropic, openai, ollama, bedrock, azure or vertex-anthropic"
+const providerList = "gemini, anthropic, openai, ollama, bedrock, azure, vertex-anthropic or api"
 
 // keyEnv are the environment variables each provider's key can come from.
 var keyEnv = map[string][]string{
@@ -166,6 +166,8 @@ type ScopeInfo struct {
 	DefaultModel string // blitz.default_model as set in this scope
 	Providers    []ProviderInfo
 	SecretStore  string // where keys go
+	// API is the api provider's settings, header values withheld.
+	API APIProviderInfo
 }
 
 // Describe reports the settings of a scope: what the file sets, and for
@@ -213,6 +215,7 @@ func Describe(prefixDir, workspace string) (ScopeInfo, error) {
 		}
 		info.Providers = append(info.Providers, pi)
 	}
+	info.API = describeAPI(raw)
 	return info, nil
 }
 
@@ -660,9 +663,9 @@ func editSettings(prefixDir, workspace string, edits []settingEdit) (string, err
 		func(doc string) string {
 			for _, e := range edits {
 				if e.value == "" {
-					doc = removeTOMLKey(doc, e.table, e.key)
+					doc = removeTOMLKey(doc, e.table, tomlKey(e.key))
 				} else {
-					doc = setTOMLKey(doc, e.table, e.key, strconv.Quote(e.value))
+					doc = setTOMLKey(doc, e.table, tomlKey(e.key), strconv.Quote(e.value))
 				}
 			}
 			return doc
@@ -698,12 +701,14 @@ func (a *ProviderAuth) trim() {
 // ProviderChoice is what the provider form saves as one change: a scope's
 // llm.provider and blitz.default_model ("" removes either, so a workspace
 // follows the global setting again), how Provider signs in (Auth; nil
-// leaves it as it is) and, unless Key is "", a new API key for Provider.
+// leaves it as it is), unless Key is "", a new API key for Provider and,
+// for the api provider, its settings (API; nil leaves them as they are).
 type ProviderChoice struct {
 	Provider string
 	Model    string
 	Key      string
 	Auth     *ProviderAuth
+	API      *APIProviderSettings
 }
 
 // SetProvider saves a ProviderChoice in a scope as one change: everything
@@ -727,6 +732,20 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 			return "", fmt.Errorf("an API key is for signing in with api_key, not %s", c.Auth.Method)
 		}
 		edits = append(edits, c.Auth.edits(c.Provider)...)
+	}
+	if c.API != nil {
+		if c.Provider != "api" {
+			return "", errors.New("the api provider's settings need provider api")
+		}
+		raw, err := readTOML(filepath.Join(scopeDir(prefixDir, workspace), ".env.toml"))
+		if err != nil {
+			return "", err
+		}
+		apiEdits, err := c.API.edits(raw)
+		if err != nil {
+			return "", err
+		}
+		edits = append(edits, apiEdits...)
 	}
 	undo := func() {}
 	if c.Key != "" {

@@ -152,7 +152,8 @@ type BlitzConfig struct {
 
 // LLMConfig holds provider configurations for LLM backends.
 type LLMConfig struct {
-	// Provider is the model provider: gemini, openai, anthropic or ollama.
+	// Provider is the model provider: gemini, openai, anthropic, ollama,
+	// bedrock, azure, vertex-anthropic or api.
 	Provider string `toml:"provider"`
 	// MaxRetries is how often a failed model request is retried (rate
 	// limits, overload, 5xx, connection errors), with exponential backoff
@@ -176,6 +177,7 @@ type LLMConfig struct {
 	Anthropic AnthropicConfig `toml:"anthropic"`
 	Bedrock   BedrockConfig   `toml:"bedrock"`
 	Azure     AzureConfig     `toml:"azure"`
+	API       APIConfig       `toml:"api"`
 }
 
 // BedrockConfig holds settings for Claude on Amazon Bedrock. Credentials
@@ -376,6 +378,8 @@ func (c *Config) ModelName() string {
 		return c.LLM.Bedrock.Model
 	case "azure":
 		return c.LLM.Azure.Model
+	case "api":
+		return c.LLM.API.Model
 	default:
 		return c.LLM.Gemini.Model
 	}

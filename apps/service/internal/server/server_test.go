@@ -24,6 +24,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -266,6 +267,45 @@ func TestWorkspacesOpenIndependently(t *testing.T) {
 	code, info := errorReason(t, func() error { _, err := s.workspace(ctx, fast); return err }())
 	assert.Equal(t, connect.CodeUnavailable, code, "after Close: %v %v", code, info)
 	assert.Equal(t, "SHUTTING_DOWN", info.Reason, "after Close: %v %v", code, info)
+}
+
+// Close waits for a workspace still being opened, which closes itself:
+// nothing of it runs on after Close (the caller that asked gave up).
+func TestCloseWaitsForAnOpen(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	started, release := make(chan struct{}), make(chan struct{})
+	var opened atomic.Bool
+	open := func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("m")})
+	}
+	s := New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		close(started)
+		<-release
+		w, err := open(ctx, dir)
+		opened.Store(err == nil)
+		return w, err
+	})
+	gone, cancel := context.WithCancel(context.Background())
+	asked := make(chan error, 1)
+	go func() { _, err := s.workspace(gone, dir); asked <- err }()
+	<-started
+	cancel()
+	assert.Equal(t, connect.CodeCanceled, connect.CodeOf(<-asked))
+
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	require.Eventually(t, func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.closed }, time.Second, time.Millisecond)
+	close(release)
+	require.NoError(t, <-closed)
+	assert.True(t, opened.Load(), "Close returned before the open ended")
+	w, err := open(context.Background(), dir)
+	require.NoError(t, err, "the workspace opened during Close is still open")
+	require.NoError(t, w.Close())
 }
 
 // A workspace keeps only its most recently used images.

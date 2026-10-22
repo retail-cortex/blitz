@@ -83,7 +83,27 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 			Auth: p.Auth, ProjectId: p.ProjectID, Location: p.Location, Profile: p.Profile,
 		})
 	}
+	res.Api = apiSettingsToProto(info.API)
 	return ok(res)
+}
+
+// apiSettingsToProto is the api provider's settings for DescribeConfig;
+// config.Describe has already withheld the header values.
+func apiSettingsToProto(a config.APIProviderInfo) *pb.ApiProviderSettings {
+	out := &pb.ApiProviderSettings{BaseUrl: a.BaseURL, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage}
+	for _, h := range a.Headers {
+		out.Headers = append(out.Headers, &pb.ApiHeader{Name: h.Name, Value: h.Value, HasValue: h.HasValue})
+	}
+	return out
+}
+
+// apiSettingsFromProto is the api provider's settings SetProvider saves.
+func apiSettingsFromProto(a *pb.ApiProviderSettings) *config.APIProviderSettings {
+	out := &config.APIProviderSettings{BaseURL: a.BaseUrl, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage}
+	for _, h := range a.Headers {
+		out.Headers = append(out.Headers, config.APIHeader{Name: h.Name, Value: h.Value})
+	}
+	return out
 }
 
 // changed reloads the open workspaces a change in scope dir touches (all of
@@ -176,6 +196,9 @@ func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequ
 	choice := config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key}
 	if a := r.Msg.Auth; a != nil {
 		choice.Auth = &config.ProviderAuth{Method: a.Method, ProjectID: a.ProjectId, Location: a.Location, Profile: a.Profile}
+	}
+	if a := r.Msg.Api; a != nil {
+		choice.API = apiSettingsFromProto(a)
 	}
 	path, err := config.SetProvider(h.s.configDir, dir, choice)
 	if err != nil {

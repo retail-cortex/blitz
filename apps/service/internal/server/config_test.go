@@ -423,3 +423,48 @@ func TestSearchSettingsApplyAtOnce(t *testing.T) {
 	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: "search.sources", Value: "email"}))
 	assert.Error(t, err, "not a source")
 }
+
+// The api provider's settings round-trip through the service with header
+// values withheld; an empty value keeps the stored one; settings the model
+// can't use are refused (spec_config_002 CFG-44, CFG-45b; SVC-35).
+func TestConfigServiceAPIProvider(t *testing.T) {
+	_, s := serve(t, nil, text("hi"))
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	settings := &pb.ApiProviderSettings{
+		BaseUrl:     "https://gateway.example.com",
+		TokenScript: "echo t",
+		Headers: []*pb.ApiHeader{
+			{Name: "X-Api-Key", Value: config.TokenPlaceholder},
+			{Name: "X-Tenant", Value: "secret-tenant"},
+		},
+	}
+	_, err := cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "api", DefaultModel: "gpt-5", Api: settings}))
+	require.NoError(t, err)
+
+	desc, err := cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{}))
+	require.NoError(t, err)
+	assert.NotContains(t, desc.Msg.String(), "secret-tenant", "the description shows a header's value")
+	api := desc.Msg.Api
+	require.NotNil(t, api)
+	assert.Equal(t, "https://gateway.example.com", api.BaseUrl)
+	assert.Equal(t, "echo t", api.TokenScript)
+	require.Len(t, api.Headers, 2)
+	assert.Equal(t, config.TokenPlaceholder, api.Headers[0].Value, "the placeholder is shown")
+	assert.Equal(t, "", api.Headers[1].Value)
+	assert.True(t, api.Headers[1].HasValue)
+
+	// Saving the form as it came back keeps the withheld value.
+	_, err = cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "api", DefaultModel: "gpt-5", Api: api}))
+	require.NoError(t, err)
+	file, err := cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{}))
+	require.NoError(t, err)
+	assert.Contains(t, file.Msg.Text, `X-Tenant = "secret-tenant"`)
+
+	_, err = cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "api", Api: &pb.ApiProviderSettings{BaseUrl: "https://g.example.com"}}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "settings with no header: %v", err)
+}

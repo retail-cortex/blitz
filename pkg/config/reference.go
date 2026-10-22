@@ -30,7 +30,7 @@ import (
 // The files that declare the settings: their doc comments are the
 // reference's descriptions, so it can't drift from the code.
 //
-//go:embed config.go features.go modelsettings.go
+//go:embed config.go features.go modelsettings.go apiprovider.go
 var settingsSources embed.FS
 
 // Setting is one entry of the settings reference: a table ([llm]) or a
@@ -49,7 +49,7 @@ type Setting struct {
 }
 
 // mapNames are the placeholders for map keys, by the map's key.
-var mapNames = map[string]string{"agent_models": "<agent>", "model_settings": "<model>", "pricing": "<model>", "search_pricing": "<provider>", "env": "<variable>"}
+var mapNames = map[string]string{"agent_models": "<agent>", "model_settings": "<model>", "pricing": "<model>", "search_pricing": "<provider>", "env": "<variable>", "headers": "<header>"}
 
 // Reference is every setting a settings file can have, in the order of
 // the Config struct, with its type, default and description.

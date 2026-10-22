@@ -224,7 +224,7 @@ func SettingApplies(provider, modelName, key string, s config.ModelSettings) boo
 // [model_settings] key. Unsupported settings are left out of requests.
 func SettingSupported(provider, modelName, key string) bool {
 	switch provider {
-	case "openai", "ollama":
+	case "openai", "ollama", "api":
 		// The Responses API has no seed; a thinking budget only chooses
 		// between no reasoning (0) and medium.
 		return key != "seed"

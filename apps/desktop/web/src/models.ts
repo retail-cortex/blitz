@@ -20,7 +20,7 @@
 import type { ListModelsResponse } from "./gen/blitz/v1/config_pb";
 
 /** Providers a "provider/" prefix may name. */
-export const knownProviders = ["gemini", "anthropic", "openai", "ollama", "bedrock", "azure", "vertex-anthropic"];
+export const knownProviders = ["gemini", "anthropic", "openai", "ollama", "bedrock", "azure", "vertex-anthropic", "api"];
 
 /** Providers whose model names are always lowercase. */
 const lowercaseProviders = new Set(["gemini", "anthropic", "vertex-anthropic"]);

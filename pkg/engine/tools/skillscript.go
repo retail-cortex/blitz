@@ -290,11 +290,11 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	case ts && sc.EntryPoint != "":
 		// Import the module and call the named export; a number it returns
 		// (or resolves to) is the exit code.
-		argv = append(append([]string{interp}, nodeFlags...), "--input-type=module", "-e",
+		argv = append(append([]string{interp}, NodeTypeScriptFlags...), "--input-type=module", "-e",
 			"const {pathToFileURL}=await import('node:url'); const m=await import(pathToFileURL(process.argv[1]).href); const r=await m["+pyQuote(sc.EntryPoint)+"](); process.exit(typeof r==='number'?r:0)",
 			scriptPath)
 	case ts:
-		argv = append(append([]string{interp}, nodeFlags...), scriptPath)
+		argv = append(append([]string{interp}, NodeTypeScriptFlags...), scriptPath)
 	case sc.Language == skills.LanguageCmd:
 		argv = []string{interp, "/d", "/c", scriptPath}
 	case sc.Language == skills.LanguagePowerShell:
@@ -439,9 +439,10 @@ func requiresPython(skill *skills.Skill, sc skills.ScriptDefinition) string {
 	return scriptRequiresPython(src)
 }
 
-// nodeFlags run a TypeScript script: its types stripped (Node 22.6+), and
-// no warning about the feature.
-var nodeFlags = []string{"--experimental-strip-types", "--no-warnings"}
+// NodeTypeScriptFlags run a TypeScript file with node: its types stripped
+// (Node 22.6+), and no warning about the feature. Skill scripts and the api
+// provider's token script (package runtime) both use them.
+var NodeTypeScriptFlags = []string{"--experimental-strip-types", "--no-warnings"}
 
 // materializeTypeScript copies a TypeScript script (and, on disk, its
 // skill's files, so it can import its neighbours) into a temporary

@@ -37,7 +37,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"google.golang.org/adk/v2/model"
-	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -88,11 +87,7 @@ func clientFallbackChain(fb, name string) []anthropic.BetaFallbackParam {
 // ADK passes the invocation to the model), so a session that fell back
 // stays on the fallback, and other sessions don't.
 func (m *anthropicModel) fallbackState(ctx context.Context) option.RequestOption {
-	id := ""
-	if c, ok := ctx.(interface{ Session() adksession.Session }); ok && c.Session() != nil {
-		id = c.Session().ID()
-	}
-	st, _ := m.states.LoadOrStore(id, &betafallback.BetaFallbackState{})
+	st, _ := m.states.LoadOrStore(adkSessionID(ctx), &betafallback.BetaFallbackState{})
 	return betafallback.WithBetaFallbackState(st.(*betafallback.BetaFallbackState))
 }
 

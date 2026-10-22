@@ -64,6 +64,7 @@ type Server struct {
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
 	opening    map[string]*opening   // workspaces being opened, by canonical directory
+	opens      sync.WaitGroup        // openWorkspace calls, which Close waits for
 	closed     bool
 }
 
@@ -115,7 +116,8 @@ func (s *Server) Handler() http.Handler {
 	return s.act.track(mux)
 }
 
-// Close closes every workspace; none opens after it.
+// Close closes every workspace, once those being opened are (they close
+// themselves, seeing closed); none opens after it.
 func (s *Server) Close() error {
 	if s.sched != nil {
 		s.sched.stop() // runs use their workspace until they end
@@ -123,6 +125,7 @@ func (s *Server) Close() error {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+	s.opens.Wait()
 	s.stopRuns()
 	s.stopEvals()
 	s.mu.Lock()
@@ -172,6 +175,7 @@ func (s *Server) workspace(ctx context.Context, dir string) (*workspace, error) 
 	if !ok {
 		op = &opening{done: make(chan struct{})}
 		s.opening[key] = op
+		s.opens.Add(1)
 		go s.openWorkspace(key, op)
 	}
 	s.mu.Unlock()
@@ -186,6 +190,7 @@ func (s *Server) workspace(ctx context.Context, dir string) (*workspace, error) 
 // openWorkspace opens the workspace for key and settles op. It doesn't use
 // the first caller's context: others may be waiting on it.
 func (s *Server) openWorkspace(key string, op *opening) {
+	defer s.opens.Done()
 	defer close(op.done)
 	aw, err := s.open(context.Background(), key)
 	s.mu.Lock()

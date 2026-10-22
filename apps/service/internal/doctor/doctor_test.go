@@ -145,6 +145,10 @@ func TestDoctorChecks(t *testing.T) {
 			want: []wantCheck{{"credentials", statusOK, `AWS's credential chain, region "us-east-1"`}}},
 		{name: "azure", settings: lit("[llm]\nprovider = \"azure\"\n[llm.azure]\nresource = \"res\"\n"),
 			want: []wantCheck{{"credentials", statusOK, `Azure resource "res", auth "api_key"`}}},
+		{name: "api with a token script", settings: lit("[llm]\nprovider = \"api\"\n[llm.api]\nbase_url = \"https://gateway.example.com\"\nmodel = \"gpt-5\"\ntoken_script = \"echo t\"\n[llm.api.headers]\nX-Tenant = \"secret-tenant\"\nX-Api-Key = \"{{TOKEN_SCRIPT}}\"\n"),
+			want: []wantCheck{{"credentials", statusOK, "API at https://gateway.example.com, headers X-Api-Key, X-Tenant; the token from a shell token_script (use --online to confirm)"}}},
+		{name: "api that can't build", settings: lit("[llm]\nprovider = \"api\"\n[llm.api]\nbase_url = \"https://gateway.example.com\"\n"),
+			want: []wantCheck{{"credentials", statusFail, "[llm.api] needs at least one header"}}},
 		{name: "claude on vertex", settings: lit("[llm]\nprovider = \"vertex-anthropic\"\n"),
 			want: []wantCheck{{"credentials", statusFail, "Claude on Vertex AI, Google Cloud ADC needs a project"}}},
 		{name: "key command", settings: lit("[llm]\nprovider = \"openai\"\n[llm.openai]\napi_key_command = \"echo k\"\n"),
@@ -585,4 +589,14 @@ func TestDoctorBrokenPluginsAndProject(t *testing.T) {
 		{"plugins", statusFail, "installed.toml"},
 		{"project settings", statusWarn, ""},
 	})
+}
+
+// The api provider's check names its headers, never their values (a value
+// can be a credential), and says when there's no token script.
+func TestCheckAPI(t *testing.T) {
+	c := config.APIConfig{BaseURL: "https://gateway.example.com", Headers: map[string]string{"X-Api-Key": "static-secret"}}
+	st, detail := checkAPI(c, "")
+	assert.Equal(t, statusOK, st)
+	assert.Equal(t, "API at https://gateway.example.com, headers X-Api-Key", detail)
+	assert.NotContains(t, detail, "static-secret")
 }
