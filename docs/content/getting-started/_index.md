@@ -52,7 +52,7 @@ blitz config set-key gemini     # stores the key in the OS keychain
 blitz doctor                    # checks the settings, credentials, sandbox, MCP servers and hooks
 ```
 
-`llm.provider` picks the provider: `gemini` (the default), `anthropic`, `openai` or `ollama`. A key can also come from the environment (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). Settings are read only from `~/.blitz`, never from the project, so a cloned repository can't redirect your key or turn off approvals. [Configuration](../guide/configuration.md) has the details.
+Blitz needs a model provider before anything else. Gemini is the default; `llm.provider` picks another: `anthropic`, `openai`, `ollama`, `bedrock`, `azure`, `vertex-anthropic`, or `api` for your company's gateway. In the desktop app, set it up in **Settings › Providers & keys**. [Providers](../guide/providers.md) covers each one, its key or sign-in, and checking it works. Settings are read only from `~/.blitz`, never from the project, so a cloned repository can't redirect your key or turn off approvals; [Configuration](../guide/configuration.md) has the details.
 
 **On Linux, the shell sandbox is required.** Install bubblewrap (`sudo apt install bubblewrap`) and run `blitz security`: it says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`.
 

@@ -5,6 +5,7 @@ weight: 10
 
 This tutorial builds a small program from an empty folder: **linkr**, a URL shortener in Go with an HTTP API. The program doesn't matter much. What matters is the order of the work, the one Blitz itself is built with:
 
+0. [Set up a provider](#0-set-up-a-provider)
 1. [Choose a directory](#1-choose-a-directory)
 2. [Run the wizard](#2-run-the-wizard)
 3. [Create your skills](#3-create-your-skills)
@@ -14,7 +15,28 @@ This tutorial builds a small program from an empty folder: **linkr**, a URL shor
 
 The first four steps give the agent what it needs to work the way you want. The last two are the work itself: every feature is written down before it's built, and the agent builds it from what's written.
 
-You need Blitz installed and a model it can use ([Getting started](../getting-started/_index.md)). The steps show the desktop app and the terminal side by side; use whichever you like.
+You need Blitz installed ([Getting started](../getting-started/_index.md)); step 0 sets up the model it uses. The steps show the desktop app and the terminal side by side; use whichever you like.
+
+## 0. Set up a provider
+
+Blitz needs a model before anything else, so set up the provider you have access to first.
+
+**In the desktop app**, open **Settings** (the gear at the top right, or ⌘,) › **Providers & keys**:
+
+1. Choose the **Provider**. Gemini is the default; Anthropic, OpenAI, Ollama and your company's gateway (**API**) are there too.
+2. Paste its API key (it goes into your keychain), or sign in with an account under **Sign in with**.
+3. Press **Save**. If the model isn't available, the form says why.
+
+![Settings › Providers & keys, with the Gemini key in the keychain](../../images/desktop/settings-providers.png)
+
+**In the terminal**:
+
+```bash
+blitz config set-key gemini   # or anthropic, openai: reads the key, stores it in the keychain
+blitz doctor                  # checks the provider, the key and the model
+```
+
+Amazon Bedrock, Azure, Claude on Vertex AI, Ollama and company gateways are in [Providers](../guide/providers.md), with every way to sign in.
 
 ## 1. Choose a directory
 

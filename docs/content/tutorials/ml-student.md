@@ -7,6 +7,7 @@ This tutorial follows a real study workspace: **blitz-research**, a student's fo
 
 It's the idea behind NotebookLM, kept to what helps you learn. Your files stay in a folder you own, every output is a plain file you can edit and commit, and nothing happens that you didn't ask for.
 
+0. [Set up a provider](#0-set-up-a-provider)
 1. [Choose a folder](#1-choose-a-folder)
 2. [Run the wizard](#2-run-the-wizard)
 3. [Add your sources](#3-add-your-sources)
@@ -18,6 +19,27 @@ It's the idea behind NotebookLM, kept to what helps you learn. Your files stay i
 9. [Digest new sources overnight](#9-digest-new-sources-overnight)
 
 You need Blitz installed and a model ([Getting started](../getting-started/_index.md)). **Use Gemini or Claude**: they read a PDF as it is, figures, tables and equations included. Other models get only a PDF's text, which loses the maths and diagrams that matter most here ([PDFs in](../guide/images.md#pdfs-in)).
+
+## 0. Set up a provider
+
+Blitz needs a model before anything else, so set up the provider you have access to first.
+
+**In the desktop app**, open **Settings** (the gear at the top right, or ⌘,) › **Providers & keys**:
+
+1. Choose the **Provider**. Gemini is the default; Anthropic, OpenAI, Ollama and your company's gateway (**API**) are there too.
+2. Paste its API key (it goes into your keychain), or sign in with an account under **Sign in with**.
+3. Press **Save**. If the model isn't available, the form says why.
+
+![Settings › Providers & keys, with the Gemini key in the keychain](../../images/desktop/settings-providers.png)
+
+**In the terminal**:
+
+```bash
+blitz config set-key gemini   # or anthropic, openai: reads the key, stores it in the keychain
+blitz doctor                  # checks the provider, the key and the model
+```
+
+Amazon Bedrock, Azure, Claude on Vertex AI, Ollama and company gateways are in [Providers](../guide/providers.md), with every way to sign in.
 
 ## 1. Choose a folder
 

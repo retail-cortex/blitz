@@ -125,11 +125,17 @@ export function docLink(page: DocPage, href: string, carried: Set<string>): DocT
   return { kind: "url", href: siteURL + (target ?? "") + (anchor ? `#${anchor}` : "") };
 }
 
-/** A picture in page from the pictures the app carries (by the site path it's served at), if it's one. */
-export function docPicture(page: DocPage, src: string, pictures: Record<string, string>): string | undefined {
+/**
+ * A picture in page from the pictures the app carries (by the site path it's
+ * served at), if it's one. In dark mode a picture's dark twin (name-dark.png,
+ * as the desktop app's screenshots have) takes its place, as on the site.
+ */
+export function docPicture(page: DocPage, src: string, pictures: Record<string, string>, dark = false): string | undefined {
   if (/^[a-z]+:/i.test(src)) return undefined;
   const target = src.startsWith("/") ? src.slice(1) : resolveFrom(page.path, src);
-  return target === null ? undefined : pictures[target];
+  if (target === null) return undefined;
+  const twin = dark && !target.endsWith("-dark.png") ? pictures[target.replace(/\.png$/, "-dark.png")] : undefined;
+  return twin ?? pictures[target];
 }
 
 /** A search hit: the page, and a line of its text around the match. */

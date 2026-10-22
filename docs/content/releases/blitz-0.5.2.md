@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.5.2
-weight: 11
+weight: 13
 ---
 
 **Go code in your docs, steady as you hover.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.5.2).

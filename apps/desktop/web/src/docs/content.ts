@@ -26,7 +26,7 @@ const raw = import.meta.glob(
 /** The docs' Markdown files, by their path in docs/content (guide/models.md, _index.md). */
 export const docFiles: Record<string, string> = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k.replace(/^.*\/docs\/content\//, ""), v]));
 
+const pictures = import.meta.glob("../../../../../docs/static/images/**/*.png", { query: "?url", import: "default", eager: true }) as Record<string, string>;
+
 /** The docs' pictures (static/images), by the path the site serves them at. */
-export const docPictures: Record<string, string> = {
-  "images/desktop.png": new URL("../../../../../docs/static/images/desktop.png", import.meta.url).href,
-};
+export const docPictures: Record<string, string> = Object.fromEntries(Object.entries(pictures).map(([k, v]) => [k.replace(/^.*\/docs\/static\//, ""), v]));

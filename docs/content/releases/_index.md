@@ -5,6 +5,8 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.8.2](blitz-0.8.2.md): a user guide you can see: every provider on one page, Settings pane by pane, Studio area by area and connecting a database step by step, with screenshots in light and dark, in the app and on the web.
+- [Blitz 0.8.1](blitz-0.8.1.md): bring your company's AI: Claude and GPT through your company's model gateway, signed in the way your company does, with no key of your own; a Providers guide for every provider.
 - [Blitz 0.8.0](blitz-0.8.0.md): your agents can work with your data: PostgreSQL, AlloyDB, SQLite and BigQuery, read-only by default, with a query builder; a menu bar that shows what's running; skills you can test; and no more frozen window.
 - [Blitz 0.7.1](blitz-0.7.1.md): Studio for agents, evals, skills with scripts, rules, guardrails, secrets, workflows and workers; workflows on a canvas or composed with AI; a workspace dashboard that grades it all; a Windows setup program.
 - [Blitz 0.7.0](blitz-0.7.0.md): a new desktop app on Electron, Windows included, that updates itself; web pages beside the chat, added to it or saved into the workspace; One Light and One Dark Pro themes; the chat or the editor expands over the other.

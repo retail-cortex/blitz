@@ -15,7 +15,8 @@ So "workspace settings" are yours and private; "project settings" travel with th
 
 | Page | |
 |---|---|
-| [Configuration](configuration.md) | Where settings live, providers, API keys, per-workspace settings |
+| [Providers](providers.md) | Where models come from, set up first: Gemini, Anthropic, OpenAI, Ollama, Bedrock, Azure, Vertex AI or your company's gateway, with a key or a sign-in |
+| [Configuration](configuration.md) | Where settings live, sharing settings with your team, per-workspace settings |
 | [Safety](safety.md) | Approvals, permission modes and rules, the sandboxes, checkpoints, the audit log |
 | [Models](models.md) | Retries, fallback models, per-agent models, per-model settings, cost |
 | [Agents and tools](agents.md) | Using and switching agents, agency, a model per agent, writing your own, delegation, the tools |

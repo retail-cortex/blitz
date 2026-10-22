@@ -3,7 +3,7 @@ title: VS Code
 weight: 35
 ---
 
-The Blitz extension for VS Code shows the agent's chat beside your code. It attaches to the [service](service.md), as the [desktop app](desktop.md) does, so a session started in the terminal or the desktop app goes on here. Source: `apps/vscode`. Spec: [vscode](../about/specs/spec_vscode_034.md).
+The Blitz extension for VS Code shows the agent's chat beside your code. It attaches to the [service](service.md), as the [desktop app](desktop/_index.md) does, so a session started in the terminal or the desktop app goes on here. Source: `apps/vscode`. Spec: [vscode](../about/specs/spec_vscode_034.md).
 
 ## Install
 

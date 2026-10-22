@@ -20,7 +20,7 @@ blz -d ~/src/api                             # a session in another project
 |---|---|
 | [**`blitz`**, the CLI](products/cli.md) | An interactive session in the terminal, or a one-shot run for scripts and CI. A single static binary that starts in about 20 ms. |
 | [**`blitzd`**, the service](products/service.md) | A per-user service holding every workspace you open, reached over a Unix socket only you can open. It runs scheduled jobs and lets the CLI and the desktop app share sessions. |
-| [**Blitz**, the desktop app](products/desktop.md) | A window onto the service, laid out like an IDE: the workspace's files, an editor, and the agent's chat. |
+| [**Blitz**, the desktop app](products/desktop/_index.md) | A window onto the service, laid out like an IDE: the workspace's files, an editor, and the agent's chat. |
 
 All three run the same engine, so a session started in the terminal can be picked up in the desktop app. The [architecture](architecture/_index.md) explains how they fit together.
 

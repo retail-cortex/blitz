@@ -5,6 +5,7 @@ weight: 15
 
 This tutorial takes one real project and gives it everything an agent needs to work on it well. The project is **Recipe Books**: a mobile-first web app where people collect recipes by hand, from a photo or by talking to an AI agent, then search them, share books and build shopping lists. You'll set up its agents, their evals, skills with scripts, rules, guardrails, secrets, a scheduled workflow and the dashboard that grades all of it, every one in **Studio**:
 
+0. [Set up a provider](#0-set-up-a-provider)
 1. [Start from the spec](#1-start-from-the-spec)
 2. [Open Studio](#2-open-studio)
 3. [An agent that reviews, and changes nothing](#3-an-agent-that-reviews-and-changes-nothing)
@@ -19,7 +20,28 @@ This tutorial takes one real project and gives it everything an agent needs to w
 
 The order matters. Agents come first because everything else checks or uses them. Evals follow straight away, while you still remember what the agent is for. Rules and guardrails watch every turn after that, and the workflow at the end uses all of it. Writing the app's code is the [software developer tutorial](software-developer.md)'s job. This one builds the harness that code gets written in.
 
-You need the desktop app and a model it can use ([Getting started](../getting-started/_index.md)). Everything Studio makes is a file in `.agents/`, shown here as well, so you can write any of it by hand, review it in a pull request, or use it from the terminal. Most steps cost nothing. Drafting with AI, running evals and grading make small model calls (cents for this project), and each one says what it costs before or as it runs.
+You need the desktop app ([Getting started](../getting-started/_index.md)); step 0 sets up the model it uses. Everything Studio makes is a file in `.agents/`, shown here as well, so you can write any of it by hand, review it in a pull request, or use it from the terminal. Most steps cost nothing. Drafting with AI, running evals and grading make small model calls (cents for this project), and each one says what it costs before or as it runs.
+
+## 0. Set up a provider
+
+Blitz needs a model before anything else, so set up the provider you have access to first.
+
+**In the desktop app**, open **Settings** (the gear at the top right, or ⌘,) › **Providers & keys**:
+
+1. Choose the **Provider**. Gemini is the default; Anthropic, OpenAI, Ollama and your company's gateway (**API**) are there too.
+2. Paste its API key (it goes into your keychain), or sign in with an account under **Sign in with**.
+3. Press **Save**. If the model isn't available, the form says why.
+
+![Settings › Providers & keys, with the Gemini key in the keychain](../../images/desktop/settings-providers.png)
+
+**In the terminal**:
+
+```bash
+blitz config set-key gemini   # or anthropic, openai: reads the key, stores it in the keychain
+blitz doctor                  # checks the provider, the key and the model
+```
+
+Amazon Bedrock, Azure, Claude on Vertex AI, Ollama and company gateways are in [Providers](../guide/providers.md), with every way to sign in.
 
 ## 1. Start from the spec
 
@@ -52,7 +74,7 @@ Then setup writes `.agents/AGENTS.md` (the stack, the Bazel commands, the layout
 
 ## 2. Open Studio
 
-**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Jobs, Workflows, Secrets) and the selected kind beside it. It opens on **Overview**.
+Turn on **Show advanced** in Settings' title bar, and **Studio** appears in the menu bar. It opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Jobs, Workflows, Secrets) and the selected kind beside it. It opens on **Overview**.
 
 The Overview costs nothing to show, because it reads only what the workspace already records. Right after setup you'll see:
 

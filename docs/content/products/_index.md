@@ -9,7 +9,7 @@ Blitz ships as three programs over one engine.
 |---|---|---|
 | [`blitz`](cli.md) | The CLI: an interactive session (the REPL) or a one-shot run | No: it attaches to the service, starting it when it isn't running, or starts a private one for a run with settings of its own (`--local`) |
 | [`blitzd`](service.md) | The per-user service: every workspace a client opens, the jobs' schedules | Yes, for every client |
-| [Blitz](desktop.md) | The desktop app: files, editor and chat, like an IDE | Through the service |
+| [Blitz](desktop/_index.md) | The desktop app: files, editor and chat, like an IDE | Through the service |
 
 ```mermaid
 flowchart LR
