@@ -3,30 +3,27 @@ title: Blitz 0.8.1
 weight: 1
 ---
 
-**Use the models your company already provides.** Blitz 0.8.1 works with your company's model gateway. If your organisation gives you Claude and GPT models through its own gateway, one that signs each request with special headers and a short-lived token, Blitz can now use it directly: no personal API keys, nothing extra to run.
+**Your company's AI, now in Blitz.** Most companies don't hand out API keys. They run a model gateway: one address, company sign-in, every request accounted for. Until now, that left Blitz out. Blitz 0.8.1 plugs straight in: Claude and GPT on your company's account, under your company's rules, with no key of your own and nothing extra to install.
 
-### Get started in three steps
+### Up and running in a minute
 
-1. Update Blitz (the app updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.8.1).
+1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.8.1).
 2. Open **Settings › Providers & keys** and choose **API**.
-3. Enter your gateway's address, the headers it expects and the script that fetches your token. Then pick a model and start a chat.
+3. Paste your gateway's address, add the headers it expects, and give Blitz the command you already use to get a token. Pick a model and say hello.
 
-Full guide: [your company's gateway](../guide/providers.md#your-companys-gateway).
+Your platform team's gateway docs have the address and the token command. [Your company's gateway](../guide/providers.md#your-companys-gateway) has a complete example, and the new [Providers](../guide/providers.md) guide covers every other provider too.
 
 ### What's new
 
-**Your gateway, your sign-in.** Tell Blitz how your company signs in: a short shell, Python or TypeScript script that prints a token. Blitz puts the token wherever the gateway wants it, in a header or in the address, and fetches a fresh one when the old one expires, without interrupting your work.
+**Sign in the way your company does.** Whatever prints your token, whether your company's CLI or a few lines of Python or TypeScript, Blitz runs it, puts the token where the gateway expects it, and fetches a fresh one when it expires. No more pasting tokens that die after an hour.
 
-**Claude and GPT through one address.** Pick a Claude model and Blitz talks to it the way Claude expects; pick a GPT model and it does the same for GPT. Settings a model doesn't accept are left out for you, so a model swap never breaks a chat.
+**Claude and GPT, one setting.** Move between Claude and GPT without touching your configuration. Blitz speaks each model's own API to the gateway, so Claude keeps streaming, prompt caching and extended thinking, and an option a model doesn't support is dropped instead of breaking your chat.
 
-**Your keys stay private.** Personal API keys on your machine never reach the gateway, your tokens and headers never show up in the app, and an error tells you what the gateway said with the token hidden.
+**Nothing leaks.** Personal API keys on your laptop never reach the company gateway, tokens and header values never appear in the app, and when the gateway says no, you see its reason with the token masked.
 
-**Check it in one command.** `blitz doctor` tries your gateway and tells you what works and what to fix.
-
-**Every provider, on one page.** The new [Providers](../guide/providers.md) guide walks through setting up each one, from Gemini and Claude to OpenAI, Ollama, Amazon Bedrock, Azure, Vertex AI and your company's gateway, with a key or a sign-in.
+**Know it works before you start.** `blitz doctor --online` signs in, sends a test request and tells you exactly what to fix.
 
 ### Good to know
 
-- Tested with a real gateway using Claude and GPT models. Gemini through a gateway depends on the gateway supporting it.
-- Blitz now shuts down cleanly even while a project is still opening.
+- Tested against a real company gateway with Claude Sonnet 5.5 and GPT models. Gemini works if your gateway supports it.
 - Your settings, workspaces and conversations carry over from 0.8.0.
