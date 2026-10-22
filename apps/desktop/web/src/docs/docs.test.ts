@@ -58,11 +58,16 @@ describe("the docs the app carries", () => {
     }
   });
 
-  it("carries the desktop screenshot", () => {
-    const desktop = pages.get("products/desktop")!;
-    const src = /!\[[^\]]*\]\(([^)]+)\)/.exec(desktop.body)?.[1];
-    expect(src).toBeDefined();
-    expect(docPicture(desktop, src!, docPictures)).toBeTruthy();
+  it("carries every picture a page shows", () => {
+    expect(docPicture(pages.get("products/desktop")!, "../../images/desktop.png", docPictures)).toBeTruthy();
+    for (const page of pages.values()) {
+      // Pictures outside code: an example in a code block isn't shown.
+      const text = page.body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
+      for (const [, src] of text.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) {
+        if (/^[a-z]+:/i.test(src)) continue;
+        expect(docPicture(page, src, docPictures), `${page.file}: ${src}`).toBeTruthy();
+      }
+    }
   });
 
   it("finds pages by their words", () => {

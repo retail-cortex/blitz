@@ -18,7 +18,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 
 **Next, in order:**
 
-1. The same on a Chromebook (ChromeOS's Linux container, Debian): whether bubblewrap runs there at all (`blitz security`), and the `.deb` install (manual verification, *The sandbox required on Linux* and *Fixing it*; [Chromebooks](../products/desktop.md)).
+1. The same on a Chromebook (ChromeOS's Linux container, Debian): whether bubblewrap runs there at all (`blitz security`), and the `.deb` install (manual verification, *The sandbox required on Linux* and *Fixing it*; [Chromebooks](../products/desktop/_index.md)).
 2. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
 3. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
 4. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.

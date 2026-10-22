@@ -7,6 +7,27 @@ Every project starts the same way in Blitz: **`/setup`** (or `/init`) first writ
 
 It runs in the desktop app and in the terminal. In the desktop app, use a new workspace's first tile, **Set up this workspace for agents**, or type `/setup` in the chat; in the terminal, type it in a session. **`/spec`** on its own writes or revises the specification without setting anything up.
 
+## Before you start: set up a provider
+
+Blitz needs a model before anything else, so set up the provider you have access to first.
+
+**In the desktop app**, open **Settings** (the gear at the top right, or ⌘,) › **Providers & keys**:
+
+1. Choose the **Provider**. Gemini is the default; Anthropic, OpenAI, Ollama and your company's gateway (**API**) are there too.
+2. Paste its API key (it goes into your keychain), or sign in with an account under **Sign in with**.
+3. Press **Save**. If the model isn't available, the form says why.
+
+![Settings › Providers & keys, with the Gemini key in the keychain](../../images/desktop/settings-providers.png)
+
+**In the terminal**:
+
+```bash
+blitz config set-key gemini   # or anthropic, openai: reads the key, stores it in the keychain
+blitz doctor                  # checks the provider, the key and the model
+```
+
+Amazon Bedrock, Azure, Claude on Vertex AI, Ollama and company gateways are in [Providers](../guide/providers.md), with every way to sign in.
+
 ## How the two fit together
 
 1. **`/setup [what you're working on]`** looks at the folder. With no specification yet, it starts there (with one, it reads it and goes to step 3): it guesses what kind of project it is, and asks you to confirm: **Software**, **Research or science**, **Data analysis**, **Writing or documentation**, or **Something else**. Then it interviews you, a few questions at a time, with options where there are likely answers. Every kind starts with what the project is for, who it's for, how you'll judge success and what's out of scope; then come the kind's own questions.

@@ -1,0 +1,38 @@
+---
+title: Jobs
+weight: 70
+---
+
+**Studio › Jobs** runs a prompt on a schedule, unattended: a nightly dependency check, a weekly report, a morning digest. A job runs in the Blitz service, even when the app is closed, and may only do what you allowed when you enabled it.
+
+## Open it
+
+Choose **Studio › Jobs**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
+
+![Studio › Jobs: the workspace's jobs with their state and schedule](../../../../images/desktop/studio-jobs.png)
+
+Each job shows its state (**New**, **Enabled**, **Disabled**, **Changed** or **Invalid**), its schedule and what it does. Runs going on now are listed under **Running now**, each with **Stop**.
+
+## Make a job
+
+1. Choose **New job** (the calendar icon).
+2. Say **What it does** (the **Name** follows from it) and its **Schedule**: *Weekdays at 9:30*, *daily at 6 AM*, *every 2 hours*, or cron. **Time zone** starts as yours.
+3. Under **Runs**, keep **Its prompt, as a turn** and write the **Prompt**, as you'd type it in the chat, or choose a workflow to run.
+4. List what it **May do without asking**, one `kind:pattern` a line (`shell`, `write`, `delete`, `web` or `mcp`): only what it needs. Leave **Agent**, **Model** and the limits empty for the workspace's and the defaults (50 model calls, $1, 30 minutes).
+5. Choose **Create**. It's saved as `.agents/workers/<name>/WORKER.md`, and doesn't run yet.
+6. Open it, read what it may do, and choose **Enable as shown**.
+
+## A job's page
+
+![A job: its schedule, what it may do, its limits, and its runs](../../../../images/desktop/studio-jobs-edit.png)
+
+- **Schedule**: when it runs, in words and as cron, with its time zone and its next run.
+- **May**: the permissions it was enabled with.
+- **Limits**: the most model calls, cost and time a run may take.
+- **Content**: the fingerprint of what you enabled. Edit the job and it pauses as **Changed** until you enable it again, so what runs is always what you read.
+- **Run now** runs it at once; **Disable** stops its schedule; **Edit** changes it; **Delete** removes it.
+- **Runs**: each run's outcome, how it started (scheduled or manual), its cost, the files it changed and, for a failed run, why. **Open its conversation** shows what the agent did.
+
+When a run fails, the Studio menu gets a red dot and the Overview lists it under **Needs attention**. **Settings › Jobs** sets the limits every job is held to, and lists every workspace's jobs.
+
+More: [Jobs](../../../guide/workers.md).

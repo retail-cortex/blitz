@@ -108,7 +108,7 @@ hugo_serve(
 # tree as the page's tests need it.
 # The user docs, which the desktop app carries so they match its release
 # (spec_desktop_024 DSK-103): the home page, getting started, tutorials,
-# guide, products and releases, and their one picture.
+# guide, products and releases, and their pictures.
 copy_to_bin(
     name = "user_docs",
     srcs = glob([
@@ -118,7 +118,8 @@ copy_to_bin(
         "content/guide/**/*.md",
         "content/products/**/*.md",
         "content/releases/**/*.md",
-    ]) + ["static/images/desktop.png"],
+        "static/images/**/*.png",
+    ]),
     visibility = ["//apps/desktop/web:__pkg__"],
 )
 
