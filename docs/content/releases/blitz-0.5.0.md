@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.5.0
-weight: 14
+weight: 15
 ---
 
 **Write Markdown the way it looks, with code that understands your project.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.5.0).
