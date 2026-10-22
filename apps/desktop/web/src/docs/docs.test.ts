@@ -58,6 +58,12 @@ describe("the docs the app carries", () => {
     }
   });
 
+  it("has a dark twin for every desktop screenshot", () => {
+    const shots = Object.keys(docPictures).filter((p) => p.startsWith("images/desktop/") && !p.endsWith("-dark.png"));
+    expect(shots.length).toBeGreaterThan(0);
+    for (const p of shots) expect(docPictures[p.replace(/\.png$/, "-dark.png")], p).toBeTruthy();
+  });
+
   it("carries every picture a page shows", () => {
     expect(docPicture(pages.get("products/desktop")!, "../../images/desktop.png", docPictures)).toBeTruthy();
     for (const page of pages.values()) {
@@ -110,6 +116,11 @@ describe("pages and links", () => {
   it("leaves web pictures alone", () => {
     expect(docPicture(page, "https://example.com/x.png", { "x.png": "u" })).toBeUndefined();
     expect(docPicture(page, "/images/a.png", { "images/a.png": "u" })).toBe("u");
+    // Dark mode takes a picture's dark twin when there is one.
+    const twins = { "images/a.png": "u", "images/a-dark.png": "d" };
+    expect(docPicture(page, "/images/a.png", twins, true)).toBe("d");
+    expect(docPicture(page, "/images/a.png", twins, false)).toBe("u");
+    expect(docPicture(page, "/images/b.png", { "images/b.png": "b" }, true)).toBe("b");
   });
   it("orders a tree by weight, then title", () => {
     const t = docTree([parsePage("_index.md", "# Home"), parsePage("b/_index.md", "---\ntitle: B\nweight: 2\n---\n"), parsePage("a/_index.md", "---\ntitle: A\nweight: 2\n---\n"), parsePage("c/_index.md", "---\ntitle: C\nweight: 1\n---\n"), parsePage("a/x.md", "# X")]);

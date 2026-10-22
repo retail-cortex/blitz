@@ -57,6 +57,18 @@ function Tree({ node, at, open, depth = 0 }: { node: DocNode; at: string; open: 
   );
 }
 
+/** The window's theme (html[data-theme], theme.ts), kept in step as it changes. */
+function useWindowTheme(): string {
+  const read = () => document.documentElement.dataset.theme ?? "light";
+  const [theme, setTheme] = useState(read);
+  useEffect(() => {
+    const watch = new MutationObserver(() => setTheme(read()));
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => watch.disconnect();
+  }, []);
+  return theme;
+}
+
 /** The docs viewer, open on a page. */
 export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () => void }) {
   const [docs, setDocs] = useState<Docs | null>(null);
@@ -66,6 +78,8 @@ export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () 
   // In a narrow window the navigation folds behind Contents (app.css).
   const [navOpen, setNavOpen] = useState(false);
   const pane = useRef<HTMLDivElement>(null);
+  // Screenshots follow the theme: a dark twin in dark mode (docPicture).
+  const theme = useWindowTheme();
   useEffect(() => {
     void loadAppDocs().then(setDocs);
   }, []);
@@ -108,13 +122,13 @@ export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () 
       docs && page
         ? {
             link: (href) => docLink(page, href, new Set(docs.pages.keys())),
-            picture: (src) => docPicture(page, src, docs.pictures),
+            picture: (src) => docPicture(page, src, docs.pictures, theme === "dark"),
             open: go,
           }
         : null,
     // go reads index; a new page or step makes new links
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [docs, page, index],
+    [docs, page, index, theme],
   );
   const hits = docs && query.trim() ? searchDocs([...docs.pages.values()], query) : null;
   // Where the guide is, for next time: the page, and the scroll as it moves.
