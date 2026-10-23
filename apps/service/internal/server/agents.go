@@ -177,4 +177,18 @@ var suggestionKinds = map[api.SuggestionKind]pb.SuggestionKind{
 	api.SuggestWorkerFailed:  pb.SuggestionKind_SUGGESTION_KIND_WORKER_FAILED,
 	api.SuggestIdea:          pb.SuggestionKind_SUGGESTION_KIND_IDEA,
 	api.SuggestHarnessUpdate: pb.SuggestionKind_SUGGESTION_KIND_HARNESS_UPDATE,
+	api.SuggestReflect:       pb.SuggestionKind_SUGGESTION_KIND_REFLECT,
+	api.SuggestReflectReview: pb.SuggestionKind_SUGGESTION_KIND_REFLECT_REVIEW,
+}
+
+func (h workspaceService) GetReflection(ctx context.Context, r req[pb.GetReflectionRequest]) (*connect.Response[pb.GetReflectionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	refl, err := w.Reflection()
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetReflectionResponse{Patterns: int32(refl.Patterns), Proposals: int32(refl.Proposals)})
 }

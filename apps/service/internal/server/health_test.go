@@ -58,6 +58,8 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	assert.Len(t, h.Days, 30)
 	assert.Equal(t, "every day at 02:00", h.Schedule)
 	assert.Nil(t, h.Next, "no first check yet")
+	assert.Empty(t, h.ReflectSchedule, "the reflection's schedule is off by default")
+	assert.InDelta(t, 0.5, h.ReflectMaxCostUsd, 1e-9)
 	assert.False(t, h.Checking)
 
 	watch, err := c.workspaces.WatchWorkspaceHealth(ctx, connect.NewRequest(&pb.WatchWorkspaceHealthRequest{Workspace: dir}))

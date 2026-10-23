@@ -364,7 +364,7 @@ func approveWeb(ctx context.Context, hooks *Hooks, cfg WebFetchConfig, toolName,
 	case matchDomain(cfg.AllowDomains, host):
 		return nil
 	case fetchGranted(ctx, u):
-		hooks.Audit().Log(audit.Entry{Kind: audit.KindApproval, Tool: toolName, Detail: detail, Decision: "user-selected"})
+		hooks.Audit().LogContext(ctx, audit.Entry{Kind: audit.KindApproval, Tool: toolName, Detail: detail, Decision: "user-selected"})
 		return nil
 	}
 	return hooks.Approve(ctx, req)

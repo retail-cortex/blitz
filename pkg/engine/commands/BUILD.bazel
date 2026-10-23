@@ -28,6 +28,8 @@ go_library(
         "builtin/spec.md",
         "builtin/skills-update.md",
         "builtin/agents-update.md",
+        "builtin/rules-update.md",
+        "builtin/reflect.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/commands",
     visibility = [

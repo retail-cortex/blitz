@@ -246,7 +246,7 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 	if _, ok := w.agents.Get(agent); !ok && agent != w.engine.ActiveAgent() {
 		return fail(fmt.Errorf("agent %q isn't defined", agent))
 	}
-	output, spent, refusals, err := w.unattended(ctx, fmt.Sprintf("eval %s %s", e.Name, c.ID), agent, c.Prompt, c.Prompt+note, e.Allow, nil)
+	output, spent, refusals, err := w.unattended(ctx, fmt.Sprintf("eval %s %s", e.Name, c.ID), agent, api.Turn{Text: c.Prompt, Prompt: c.Prompt + note}, e.Allow, nil)
 	r.CostUSD, r.Refusals = spent, refusals
 	if err != nil {
 		return fail(err)
@@ -278,12 +278,13 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 	return r
 }
 
-// unattended runs one prompt on agent in a session of its own, deleted
+// unattended runs one turn t on agent in a session of its own, deleted
 // after, unattended (tools.Unattended): file changes, deletions and
 // commands are refused and returned; the web and MCP tools only when
-// allow says. text is the prompt as shown, prompt as sent; on (nil: none)
-// sees each event. It returns the answer and what it cost.
-func (w *Workspace) unattended(ctx context.Context, label, agent, text, prompt string, allow []string, on func(api.Event)) (output string, costUSD float64, refusals []string, err error) {
+// allow says. t's Text is the prompt as shown, Prompt as sent; without
+// limits of its own, it gets an eval's. on (nil: none) sees each event.
+// It returns the answer and what it cost.
+func (w *Workspace) unattended(ctx context.Context, label, agent string, t api.Turn, allow []string, on func(api.Event)) (output string, costUSD float64, refusals []string, err error) {
 	st, err := session.NewStorage(w.cfg.Session.StorageDir)
 	if err != nil {
 		return "", 0, nil, err
@@ -312,9 +313,8 @@ func (w *Workspace) unattended(ctx context.Context, label, agent, text, prompt s
 	if on == nil {
 		on = func(api.Event) {}
 	}
-	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: api.Turn{
-		Text: text, Prompt: prompt, MaxTurns: evalMaxTurns, Timeout: evalTimeout,
-	}}, on, st, runtime.WithAgent(agent))
+	t.MaxTurns, t.Timeout = cmp.Or(t.MaxTurns, evalMaxTurns), cmp.Or(t.Timeout, evalTimeout)
+	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: t}, on, st, runtime.WithAgent(agent))
 	costUSD = w.engine.Usage(rec.ID).CostUSD
 	mu.Lock()
 	defer mu.Unlock()

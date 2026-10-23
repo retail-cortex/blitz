@@ -60,13 +60,20 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
 	start := time.Now()
 	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
-	if t.Command && isSetup(t.Text) {
-		// The instructions it wrote apply from the next prompt.
+	if t.Command && isReflect(t.Text) && err == nil {
+		// The next reflection's evidence starts where this one began
+		// (spec_harness_learning_048 HE-04).
+		w.reflected(start)
+	}
+	if t.Command && (isSetup(t.Text) || isReflect(t.Text)) {
+		// The instructions and experience it wrote apply from the next
+		// prompt.
 		if _, rerr := w.ReloadMemory(context.WithoutCancel(ctx)); rerr != nil {
 			w.warn(rerr.Error())
 		}
 	}
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
+	w.auditTurnEnd(sessionID, err)
 	// A long turn's end is worth telling you about (spec_parity_027
 	// PAR-UI-03): notification hooks hear of it.
 	if after := w.cfg.UI.NotifyAfter; after > 0 && time.Since(start) >= time.Duration(after)*notifyUnit && !errors.Is(err, context.Canceled) {
@@ -115,6 +122,7 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
 	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
+	w.auditTurnEnd(rec.ID, err)
 	return res, err
 }
 
@@ -140,6 +148,26 @@ func turnOutcome(err error) string {
 	return "error"
 }
 
+// auditTurnEnd records a turn that didn't finish, stopped or at a limit,
+// for what agents learn from their runs (spec_harness_learning_048 HE-02);
+// one that finished, or failed otherwise, isn't recorded.
+func (w *Workspace) auditTurnEnd(sessionID string, err error) {
+	e := audit.Entry{Kind: audit.KindTurnEnd, Session: sessionID}
+	switch {
+	case errors.Is(err, api.ErrMaxTurns):
+		e.Decision, e.Detail = audit.DecisionLimit, "steps"
+	case errors.Is(err, api.ErrCostLimit):
+		e.Decision, e.Detail = audit.DecisionLimit, "cost"
+	case errors.Is(err, api.ErrTimeLimit):
+		e.Decision, e.Detail = audit.DecisionLimit, "time"
+	case errors.Is(err, context.Canceled):
+		e.Decision = audit.DecisionStopped
+	default:
+		return
+	}
+	w.tools.Hooks().Audit().Log(e)
+}
+
 // turn is a turn as the engine runs it.
 type turn struct {
 	api.Turn
@@ -155,6 +183,9 @@ type turn struct {
 // its active one (a worker run has its own). extra are further engine
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(api.Event), st *session.Storage, extra ...runtime.ExecOption) (api.TurnResult, error) {
+	// What's audited in the turn, its rules and guardrails as much as its
+	// tools, records its session.
+	ctx = audit.WithSession(ctx, sessionID)
 	// A model that couldn't be built may work now (a sign-in since), and
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
@@ -173,7 +204,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	var ruleNotices []api.Notice
 	if !t.Accepted {
 		var err error
-		if hookContext, err = w.accept(ctx, sessionID, t.Text); err != nil {
+		if hookContext, err = w.accept(ctx, sessionID, t.Text, ""); err != nil {
 			return api.TurnResult{}, err
 		}
 		if !t.Aside {
@@ -391,7 +422,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 // agent reads it with its next tool result. prompt_submit hooks apply, as to
 // any prompt (a refusal is a *BlockedError), and the transcript records it.
 func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
-	hookContext, err := w.accept(ctx, sessionID, text)
+	hookContext, err := w.accept(ctx, sessionID, text, audit.DecisionSteer)
 	if err != nil {
 		return err
 	}
@@ -427,14 +458,15 @@ func withHookContext(prompt, event, context string) string {
 	return prompt + "\n\n<" + event + "-hook-context>\n" + strings.TrimSpace(context) + "\n</" + event + "-hook-context>"
 }
 
-// accept runs prompt_submit hooks and audits the prompt.
-// It returns what the hooks gave as context for the agent.
-func (w *Workspace) accept(ctx context.Context, sessionID, text string) (string, error) {
+// accept runs prompt_submit hooks and audits the prompt, with decision
+// audit.DecisionSteer for one sent while a turn runs. It returns what the
+// hooks gave as context for the agent.
+func (w *Workspace) accept(ctx context.Context, sessionID, text, decision string) (string, error) {
 	out := w.tools.ScriptHooks().PromptSubmitContext(ctx, sessionID, text)
 	if out.Blocked {
 		return "", &api.BlockedError{Reason: out.Reason}
 	}
-	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindPrompt, Session: sessionID, Detail: text})
+	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindPrompt, Session: sessionID, Detail: text, Decision: decision})
 	return out.Context, nil
 }
 

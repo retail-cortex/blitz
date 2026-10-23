@@ -74,7 +74,7 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	}
 	files, _ := fs.ReadDir(builtinFS, "builtin")
 	assert.Len(t, bundled, len(files), "every bundled file parses: one that doesn't is skipped without a word")
-	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me", "setup", "spec", "skills-update", "agents-update"} {
+	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me", "setup", "spec", "skills-update", "agents-update", "rules-update", "reflect"} {
 		t.Run(name, func(t *testing.T) {
 			_, ok := bundled[name]
 			assert.True(t, ok, "bundled command %s missing", name)
@@ -88,6 +88,10 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	assert.Equal(t, "harness-update", bundled["skills-update"].Agent)
 	assert.Equal(t, "harness-update", bundled["agents-update"].Agent)
 	assert.Contains(t, bundled["agents-update"].Expand(""), "Update the agents")
+	assert.Equal(t, "harness-update", bundled["rules-update"].Agent, "/rules update: the update's third mode")
+	assert.Contains(t, bundled["rules-update"].Expand(""), "Update the rules")
+	assert.Equal(t, "harness-reflect", bundled["reflect"].Agent, "/reflect runs the reflector")
+	assert.Contains(t, bundled["reflect"].Expand("30"), "Evidence since: 30")
 	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
 	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")
 	// /grill-me <task> (BL-CLI-02): read-only, questions before any proposal.
@@ -99,13 +103,14 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	assert.Contains(t, prompt, "Don't change any files.")
 }
 
-// /skills update and /agents update name the update commands; the rest
-// of /skills and /agents is the front ends'.
+// /skills update, /agents update and /rules update name the update
+// commands; the rest of /skills, /agents and /rules is the front ends'.
 func TestAlias(t *testing.T) {
 	for _, tc := range []struct{ name, args, wantName, wantArgs string }{
 		{"skills", "update", "skills-update", ""},
 		{"skills", " update  the auth spec ", "skills-update", "the auth spec"},
 		{"Agents", "UPDATE x", "agents-update", "x"},
+		{"rules", "update", "rules-update", ""},
 		{"skills", "list", "skills", "list"},
 		{"skills", "updated", "skills", "updated"},
 		{"review", "update", "review", "update"},

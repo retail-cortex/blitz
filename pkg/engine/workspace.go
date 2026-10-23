@@ -35,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
+	"github.com/retail-cortex/blitz/pkg/engine/harness"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
@@ -120,7 +121,11 @@ type Workspace struct {
 	// loaded (memory.Stamp); memoryMu guards reloading them.
 	memoryStamp string
 	memoryMu    sync.Mutex
-	locales     *i18n.Bundle
+	// evidenceCache is the harness's evidence by the audit log's stamp
+	// (cachedEvidence), guarded by evidenceMu.
+	evidenceMu    sync.Mutex
+	evidenceCache map[string]harness.Evidence
+	locales       *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
 	// moveNotes tell a session's next prompt that /cd moved it here
@@ -301,6 +306,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			return n.Name, err
 		})
 	}
+	// What went wrong in the sessions, for the agents that improve the
+	// harness (spec_harness_learning_048).
+	w.tools.SetEvidenceReader(w.readEvidence)
+	w.tools.SetProposalSaver(w.saveProposals)
+	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
@@ -314,6 +324,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		if w.audit, err = audit.Open(config.ExpandHome(cfg.Audit.Dir), SecretRedactor(cfg)); err != nil {
 			o.Warn("audit log disabled: " + err.Error())
 		}
+		// Every entry names the workspace, whichever session it's in.
+		w.audit.SetWorkspace(w.Dir())
 		w.tools.SetAudit(w.audit)
 	}
 

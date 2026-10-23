@@ -305,7 +305,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	// Every decision goes to the audit log, and to whoever ctx says hears
 	// of them (a workflow run's receipt).
 	decided := func(e audit.Entry) {
-		h.Audit().Log(e)
+		h.Audit().LogContext(ctx, e)
 		if f, ok := ctx.Value(decisionKey{}).(DecisionObserver); ok && f != nil {
 			f(e)
 		}

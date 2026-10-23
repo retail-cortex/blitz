@@ -141,7 +141,7 @@ func TestWorkerConversions(t *testing.T) {
 
 // Every welcome tile the engine makes has its kind on the wire.
 func TestSuggestionKinds(t *testing.T) {
-	for _, k := range []api.SuggestionKind{api.SuggestSetup, api.SuggestHarnessUpdate, api.SuggestContinue, api.SuggestChanges, api.SuggestWorkerFailed, api.SuggestIdea} {
+	for _, k := range []api.SuggestionKind{api.SuggestSetup, api.SuggestHarnessUpdate, api.SuggestContinue, api.SuggestChanges, api.SuggestWorkerFailed, api.SuggestIdea, api.SuggestReflect, api.SuggestReflectReview} {
 		t.Run(string(k), func(t *testing.T) {
 			assert.NotEqual(t, pb.SuggestionKind_SUGGESTION_KIND_UNSPECIFIED, suggestionKinds[k])
 		})

@@ -46,6 +46,7 @@ go_test(
     size = "small",
     srcs = [
         "api_test.go",
+        "suggestions_test.go",
         "version_test.go",
     ],
     embed = [":api"],

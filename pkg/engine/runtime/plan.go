@@ -41,6 +41,8 @@ var planReadOnlyTools = map[string]bool{
 	"list_or_search_skills": true,
 	"list_mcp_resources":    true,
 	"remember":              true,
+	"harness_evidence":      true,
+	"harness_propose":       true, // into the service's storage, not the workspace
 	"read_mcp_resource":     true,
 	"list_tasks":            true,
 	"task_output":           true,

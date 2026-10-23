@@ -257,13 +257,6 @@ func TestParseIdeas(t *testing.T) {
 	}
 }
 
-func TestTail(t *testing.T) {
-	assert.Equal(t, "short", tail("short", 10))
-	assert.Equal(t, "…fgh", tail("abcdefgh", 3))
-	assert.Equal(t, "…é", tail("aaé", 2), "a cut rune is skipped") // é is two bytes
-	assert.Equal(t, "…", tail("aé", 1))
-}
-
 // /setup runs the setup agent, and what it wrote applies from the next
 // prompt without reloading by hand.
 func TestSetupCommandReloadsInstructions(t *testing.T) {

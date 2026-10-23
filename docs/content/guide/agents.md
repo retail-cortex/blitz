@@ -48,7 +48,8 @@ Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_leve
 | `model-judge` | Comparing models' answers, quality and speed |
 | `project-spec` | Writing the project's specification (`/spec`) |
 | `project-setup` | Setting up the workspace's instructions, skills and agents (`/setup`) |
-| `harness-update` | Revisiting skills or agents against the specification (`/skills update`, `/agents update`) |
+| `harness-update` | Revisiting skills, agents, or rules and guardrails against the specification and the runs (`/skills update`, `/agents update`, `/rules update`) |
+| `harness-reflect` | Learning from the workspace's runs: `.agents/EXPERIENCE.md` and the smallest changes to the harness (`/reflect`) |
 
 Their names are reserved: a file of your own can't replace one.
 

@@ -29,6 +29,7 @@ go_library(
         "project-setup.md",
         "project-spec.md",
         "harness-update.md",
+        "harness-reflect.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/agents/builtin",
     visibility = [

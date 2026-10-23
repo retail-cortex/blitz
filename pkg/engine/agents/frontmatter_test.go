@@ -78,6 +78,20 @@ func TestEmbeddedRegistry(t *testing.T) {
 		})
 	}
 
+	// /reflect's agent: reads the evidence with its tool, writes the
+	// experience only when chosen, with no shell (spec_harness_learning_048
+	// HE-03).
+	reflect, ok := reg.Get("harness-reflect")
+	require.True(t, ok)
+	assert.True(t, reg.IsBuiltin("harness-reflect"))
+	for _, tool := range []string{"harness_evidence", "ask_user_question", "create_file", "replace_in_file"} {
+		assert.Contains(t, reflect.Tools, tool)
+	}
+	assert.NotContains(t, reflect.Tools, "run_shell_command")
+	for _, want := range []string{".agents/EXPERIENCE.md", "`## How to work`", "`## This project`", "`@EXPERIENCE.md`", "multi_select", "at most five", "60 entries", "Write only what was chosen"} {
+		assert.Contains(t, reflect.SystemPrompt, want)
+	}
+
 	// Any kind of project, not only software: the spec agent asks the kind
 	// and records it; setup and the updates read it.
 	spec, _ := reg.Get("project-spec")
@@ -100,6 +114,17 @@ func TestEmbeddedRegistry(t *testing.T) {
 	assert.Contains(t, setup.SystemPrompt, "Unattended, don't invoke it")
 	assert.NotContains(t, setup.SystemPrompt, "Set up without a specification", "it no longer asks whether to")
 	assert.Contains(t, spec.SystemPrompt, "When /setup invoked you", "the spec agent doesn't send people back to /setup")
+
+	// What the harness learns (spec_harness_learning_048): setup starts
+	// the experience file and its import, keeps how to work apart from
+	// the project's facts, and offers rules and guardrails; the updates
+	// read the evidence and cite it.
+	for _, want := range []string{"`@EXPERIENCE.md`", "`## How to work` and `## This project`", `"How to work here"`, "**Rules and guardrails.**", "`builtin: limits`", "`paths:", "skip this step unattended"} {
+		assert.Contains(t, setup.SystemPrompt, want)
+	}
+	update, _ := reg.Get("harness-update")
+	assert.Contains(t, update.Tools, "harness_evidence")
+	assert.Contains(t, update.SystemPrompt, "citing both a spec and the evidence first")
 }
 
 func contains(s, substr string) bool {

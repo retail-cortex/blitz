@@ -44,10 +44,11 @@ export function parseCommand(line: string): { name: string; args: string } | und
   if (!m) return undefined;
   const name = m[1].toLowerCase();
   const args = (m[2] ?? "").trim();
-  // /skills update and /agents update are the bundled /skills-update and
-  // /agents-update (the engine reads them the same way).
+  // /skills update, /agents update and /rules update are the bundled
+  // /skills-update, /agents-update and /rules-update (the engine reads
+  // them the same way).
   const update = /^update(?:\s+([\s\S]*))?$/i.exec(args);
-  if ((name === "skills" || name === "agents") && update) return { name: `${name}-update`, args: (update[1] ?? "").trim() };
+  if ((name === "skills" || name === "agents" || name === "rules") && update) return { name: `${name}-update`, args: (update[1] ?? "").trim() };
   if (name === "set") return { name: "config", args }; // the terminal's other name for it
   return { name, args };
 }

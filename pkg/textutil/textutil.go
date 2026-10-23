@@ -59,6 +59,19 @@ func Ellipsize(s string, n int) string {
 	return TruncateUTF8(s, n-3) + "..."
 }
 
+// Tail is the end of s, at most n bytes on a rune boundary, after "…"
+// when cut: where a command's output says what went wrong.
+func Tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	i := len(s) - n
+	for i < len(s) && !utf8.RuneStart(s[i]) {
+		i++
+	}
+	return "…" + s[i:]
+}
+
 // SanitizeTerminal strips control characters that a terminal would interpret
 // (ESC sequences, BEL, backspace, carriage return, C1 controls) so untrusted
 // text from models, files, or tool output cannot rewrite the screen, change the

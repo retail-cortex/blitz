@@ -90,8 +90,8 @@ func (w *Workspace) JudgeRule(ctx context.Context, r gates.Rule, subject string)
 }
 
 // auditRule records a rule's verdict in the audit log.
-func (w *Workspace) auditRule(r gates.Rule, decision, reason string) {
-	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindRule, Tool: "rule:" + r.Name, Detail: reason, Decision: decision})
+func (w *Workspace) auditRule(ctx context.Context, r gates.Rule, decision, reason string) {
+	w.tools.Hooks().Audit().LogContext(ctx, audit.Entry{Kind: audit.KindRule, Tool: "rule:" + r.Name, Detail: reason, Decision: decision})
 }
 
 // beforeRules judges the prompt against each before-agent rule, in
@@ -105,18 +105,18 @@ func (w *Workspace) beforeRules(ctx context.Context, text string, notice func(st
 		v, err := w.JudgeRule(ctx, r, text)
 		switch {
 		case err != nil:
-			w.auditRule(r, "unjudged", err.Error())
+			w.auditRule(ctx, r, "unjudged", err.Error())
 			notice(i18n.T("rule.unjudged", "name", r.Name, "error", err.Error()), true)
 		case v.Pass:
-			w.auditRule(r, "pass", v.Reason)
+			w.auditRule(ctx, r, "pass", v.Reason)
 		case r.Action == gates.Block:
-			w.auditRule(r, "block", v.Reason)
+			w.auditRule(ctx, r, "block", v.Reason)
 			return "", &api.BlockedError{Reason: i18n.T("rule.blocked", "name", r.Name, "reason", v.Reason)}
 		case r.Action == gates.Revise:
-			w.auditRule(r, "revise", v.Reason)
+			w.auditRule(ctx, r, "revise", v.Reason)
 			lines = append(lines, fmt.Sprintf("Rule %q: %s", r.Name, v.Reason))
 		default:
-			w.auditRule(r, "warn", v.Reason)
+			w.auditRule(ctx, r, "warn", v.Reason)
 			notice(i18n.T("rule.warned", "name", r.Name, "reason", v.Reason), false)
 		}
 	}
@@ -141,18 +141,18 @@ func (w *Workspace) afterRules(ctx context.Context, sessionID, answer string, no
 		v, err := w.JudgeRule(ctx, r, subject)
 		switch {
 		case err != nil:
-			w.auditRule(r, "unjudged", err.Error())
+			w.auditRule(ctx, r, "unjudged", err.Error())
 			notice(i18n.T("rule.unjudged", "name", r.Name, "error", err.Error()), true)
 		case v.Pass:
-			w.auditRule(r, "pass", v.Reason)
+			w.auditRule(ctx, r, "pass", v.Reason)
 		case r.Action == gates.Revise:
-			w.auditRule(r, "revise", v.Reason)
+			w.auditRule(ctx, r, "revise", v.Reason)
 			revise = append(revise, fmt.Sprintf("The rule %q isn't met: %s", r.Name, v.Reason))
 		case r.Action == gates.Block:
-			w.auditRule(r, "block", v.Reason)
+			w.auditRule(ctx, r, "block", v.Reason)
 			notice(i18n.T("rule.failed", "name", r.Name, "reason", v.Reason), true)
 		default:
-			w.auditRule(r, "warn", v.Reason)
+			w.auditRule(ctx, r, "warn", v.Reason)
 			notice(i18n.T("rule.warned", "name", r.Name, "reason", v.Reason), false)
 		}
 	}

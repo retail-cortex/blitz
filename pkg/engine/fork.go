@@ -72,7 +72,6 @@ func (w *Workspace) ForkSession(ctx context.Context, turn int) (api.SessionInfo,
 			return api.SessionInfo{}, fmt.Errorf("fork the transcript: %w", err)
 		}
 	}
-	w.audit.SetContext(rec.ID, w.Dir())
 	w.switched(active, rec.ID, "fork", "fork")
 	info, _ := w.ActiveSession()
 	return info, nil

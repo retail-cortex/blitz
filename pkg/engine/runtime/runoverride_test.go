@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -61,6 +62,66 @@ func TestWithAgentRunsAsThatAgent(t *testing.T) {
 	require.Equal(t, "qa", authors[len(authors)-1], "authors %v, want qa", authors)
 	require.Equal(t, "blitz", f.eng.ActiveAgent(), "active agent changed to %s", f.eng.ActiveAgent())
 	require.Error(t, f.eng.Execute(context.Background(), "s", "x", nil, WithAgent("nobody")), "ran as an unknown agent")
+}
+
+// After a turn, the next one is still the agent the run asks for: a run's
+// own agent (a command's) or the active one after a switch, not the agent
+// that answered last.
+func TestTheAskedAgentAnswersAfterHistory(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{}, textContent("one"), textContent("two"), textContent("three"), textContent("four"))
+	last := func(opts ...ExecOption) string {
+		t.Helper()
+		var authors []string
+		require.NoError(t, f.eng.Execute(context.Background(), "s", "x", func(ev *session.Event) error {
+			if ev.Content != nil && ev.Author != "user" {
+				authors = append(authors, ev.Author)
+			}
+			return nil
+		}, opts...))
+		require.NotEmpty(t, authors)
+		return authors[len(authors)-1]
+	}
+	tests := []struct {
+		name string
+		run  func() string
+		want string
+	}{
+		{"the first turn", func() string { return last() }, "blitz"},
+		{"a command's agent, after blitz answered", func() string { return last(WithAgent("qa")) }, "qa"},
+		{"the active agent again, after qa answered", func() string { return last() }, "blitz"},
+		{"after a switch", func() string {
+			require.NoError(t, f.eng.SetActiveAgent(context.Background(), "qa"))
+			return last()
+		}, "qa"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.run())
+		})
+	}
+}
+
+// transfer_to_agent hands the rest of the turn to another agent; the next
+// turn is the active agent's again.
+func TestTransferLastsTheTurn(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{},
+		toolCall("transfer_to_agent", map[string]any{"agent_name": "qa"}), textContent("qa here"),
+		textContent("blitz again"))
+	authors := func(prompt string) []string {
+		t.Helper()
+		var out []string
+		require.NoError(t, f.eng.Execute(context.Background(), "s", prompt, func(ev *session.Event) error {
+			if ev.Content != nil && ev.Author != "user" {
+				out = append(out, ev.Author)
+			}
+			return nil
+		}))
+		return out
+	}
+	first := authors("test this")
+	require.NotEmpty(t, first)
+	assert.Equal(t, "qa", first[len(first)-1], "qa answers after the transfer: %v", first)
+	assert.Equal(t, []string{"blitz"}, authors("thanks"), "the next turn is the active agent's")
 }
 
 // The override runs the root agent even when it is pinned, and unpinned

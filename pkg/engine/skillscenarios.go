@@ -154,7 +154,7 @@ func (w *Workspace) skillPrompt(ctx context.Context, s *skills.Skill, agent, pro
 			}
 		}
 	}
-	out, spent, refusals, err := w.unattended(ctx, label, agent, prompt, sent, nil, on)
+	out, spent, refusals, err := w.unattended(ctx, label, agent, api.Turn{Text: prompt, Prompt: sent}, nil, on)
 	return out, used, spent, refusals, err
 }
 

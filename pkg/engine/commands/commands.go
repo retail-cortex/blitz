@@ -187,9 +187,9 @@ func (c Command) Expand(args string) string {
 }
 
 // subcommands are the words a command may be spelled with a subcommand:
-// /skills update is /skills-update (front ends keep /skills and /agents
-// for themselves).
-var subcommands = map[string]bool{"skills": true, "agents": true}
+// /skills update is /skills-update (front ends keep /skills, /agents and
+// /rules for themselves).
+var subcommands = map[string]bool{"skills": true, "agents": true, "rules": true}
 
 // Alias returns the command a line "/name args" runs, and its arguments:
 // "skills update x" is ("skills-update", "x"), and "agents update" is

@@ -483,6 +483,11 @@ service WorkspaceService {
   // Deletes one of those notes, by its name (NO_NOTE).
   rpc ForgetNote(ForgetNoteRequest) returns (ForgetNoteResponse);
 
+  // Returns what the harness has to learn from the workspace's runs: the
+  // patterns since the last reflection and the changes a scheduled
+  // reflection proposed, for a welcome to suggest /reflect.
+  rpc GetReflection(GetReflectionRequest) returns (GetReflectionResponse);
+
   // Reads an image or a PDF from the workspace for a prompt
   // (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
@@ -673,9 +678,18 @@ enum SuggestionKind {
   // A model's suggestion from the recent conversations: title on the tile,
   // prompt sent when it's chosen.
   SUGGESTION_KIND_IDEA = 5;
-  // The specification (.agents/specs/) changed after the skills and agents:
-  // run /skills update (then /agents update).
+  // Update the skills and agents; detail says why: "spec", the
+  // specification (.agents/specs/) changed after them (run /skills update,
+  // then /agents update); "skills" or "agents", the runs since they
+  // changed hold patterns about them (run /skills update or /agents
+  // update).
   SUGGESTION_KIND_HARNESS_UPDATE = 6;
+  // The workspace's runs since the last reflection hold count patterns
+  // (what went wrong more than once, or once at a cost): run /reflect.
+  SUGGESTION_KIND_REFLECT = 7;
+  // A scheduled reflection proposed count changes to the harness: run
+  // /reflect to review them.
+  SUGGESTION_KIND_REFLECT_REVIEW = 8;
 }
 
 // Suggestion is one welcome tile.
@@ -1981,6 +1995,20 @@ message ListNotesResponse {
   repeated Note notes = 1;
 }
 
+// Request message for WorkspaceService.GetReflection.
+message GetReflectionRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetReflection.
+message GetReflectionResponse {
+  // How many items of the evidence since the last reflection are patterns
+  // (0 without .agents/AGENTS.md or the audit log).
+  int32 patterns = 1;
+  // How many changes a scheduled reflection proposed, waiting for review.
+  int32 proposals = 2;
+}
+
 // Request message for WorkspaceService.ForgetNote.
 message ForgetNoteRequest {
   string workspace = 1;
@@ -3274,6 +3302,12 @@ message WorkspaceHealth {
   // How the last check ended: the items it judged, and those it couldn't.
   int32 last_judged = 17;
   repeated string last_errors = 18;
+  // The reflection's schedule ("" or "off", the default: only /reflect),
+  // its cost limit, and why the last scheduled one didn't run or stopped
+  // (spec_harness_learning_048 HE-06).
+  string reflect_schedule = 19;
+  double reflect_max_cost_usd = 20;
+  string reflect_skipped = 21;
 }
 
 // How far a check going is.

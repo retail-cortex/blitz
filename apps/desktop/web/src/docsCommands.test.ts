@@ -26,12 +26,13 @@ import { terminalCommands } from "./terminalCommands";
 const root = join(process.cwd(), "..", "..", "..");
 const read = (...p: string[]) => (existsSync(join(root, ...p)) ? readFileSync(join(root, ...p), "utf8") : "");
 
-/** The slash commands in the first column of the docs' command table. */
+/** The slash commands in the first column of the docs' command table ("/x update" is /x-update). */
 export function documentedCommands(md: string): string[] {
   const names = new Set<string>();
   for (const line of md.split("\n")) {
     const first = /^\|\s*([^|]+?)\s*\|/.exec(line)?.[1] ?? "";
-    for (const m of first.matchAll(/`\/([a-z][\w:-]*)/g)) names.add(m[1]);
+    // "/skills update" is the bundled /skills-update, as the engine reads it.
+    for (const m of first.matchAll(/`\/([a-z][\w:-]*)( update\b)?/g)) names.add(m[2] ? `${m[1]}-update` : m[1]);
   }
   return [...names].sort();
 }
@@ -52,5 +53,6 @@ describe("the docs' commands", () => {
   });
   it("reads a table's first column", () => {
     expect(documentedCommands("| `/memory [add]`, `/init` | x `/not-this` |\n| `/goal <c>` | y |\ntext `/nor-this`")).toEqual(["goal", "init", "memory"]);
+    expect(documentedCommands("| `/rules update [focus]` | x |")).toEqual(["rules-update"]);
   });
 });
