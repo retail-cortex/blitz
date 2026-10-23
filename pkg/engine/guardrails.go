@@ -24,7 +24,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -78,7 +77,6 @@ type guardState struct {
 // guarding holds the current turns' guardrails, by session.
 type guarding struct {
 	turns sync.Map // session ID → *guardState
-	last  atomic.Pointer[guardState]
 }
 
 // startGuardrails reads the guardrails for a turn in the session, and
@@ -86,7 +84,6 @@ type guarding struct {
 func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) {
 	st := &guardState{all: w.Guardrails()}
 	w.guards.turns.Store(sessionID, st)
-	w.guards.last.Store(st)
 	for _, g := range gates.Active(st.all, gates.StageAction, w.engine.ActiveAgent()) {
 		if g.Builtin != gates.BuiltinLimits {
 			continue
@@ -100,16 +97,14 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) {
 	}
 }
 
-// guardsFor are the guardrails of the session's turn (those of the last
-// turn to start, for a call outside one: a sub-agent's).
+// guardsFor are the guardrails of the session's turn. A call outside one
+// (a background task's after its turn ended) reads them afresh: never
+// another session's turn's, whose notices it would share.
 func (w *Workspace) guardsFor(sessionID string) *guardState {
 	if v, ok := w.guards.turns.Load(sessionID); ok {
 		return v.(*guardState)
 	}
-	if st := w.guards.last.Load(); st != nil {
-		return st
-	}
-	return &guardState{}
+	return &guardState{all: w.Guardrails()}
 }
 
 // once reports whether a notice for key hasn't been given this turn.
@@ -119,8 +114,8 @@ func (st *guardState) once(key string) bool {
 }
 
 // auditGuardrail records a guardrail's decision in the audit log.
-func (w *Workspace) auditGuardrail(g gates.Guardrail, decision, detail string) {
-	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindGuardrail, Tool: "guardrail:" + g.Name, Detail: detail, Decision: decision})
+func (w *Workspace) auditGuardrail(ctx context.Context, g gates.Guardrail, decision, detail string) {
+	w.tools.Hooks().Audit().LogContext(ctx, audit.Entry{Kind: audit.KindGuardrail, Tool: "guardrail:" + g.Name, Detail: detail, Decision: decision})
 }
 
 // judgeGuardrail judges subject against a custom guardrail, secrets
@@ -185,7 +180,7 @@ func (g guard) ToolCall(ctx context.Context, c runtime.GuardCall) runtime.GuardV
 		}
 		if gr.Builtin == gates.BuiltinLimits {
 			if why := g.overLimits(gr, c); why != "" {
-				g.w.auditGuardrail(gr, "block", why)
+				g.w.auditGuardrail(ctx, gr, "block", why)
 				v.Refusal = i18n.T("guardrail.refused", "name", gr.Name, "reason", why)
 				v.Notices = append(v.Notices, v.Refusal)
 				return v
@@ -196,21 +191,21 @@ func (g guard) ToolCall(ctx context.Context, c runtime.GuardCall) runtime.GuardV
 		verdict, err := g.w.judgeGuardrail(ctx, gr, fmt.Sprintf("Tool %s with arguments %s", c.Tool, args))
 		switch {
 		case err != nil && gr.Action == gates.Block:
-			g.w.auditGuardrail(gr, "unjudged-block", err.Error())
+			g.w.auditGuardrail(ctx, gr, "unjudged-block", err.Error())
 			v.Refusal = i18n.T("guardrail.unjudged_refused", "name", gr.Name, "error", err.Error())
 			return v
 		case err != nil:
-			g.w.auditGuardrail(gr, "unjudged", err.Error())
+			g.w.auditGuardrail(ctx, gr, "unjudged", err.Error())
 			v.Notices = append(v.Notices, i18n.T("guardrail.unjudged", "name", gr.Name, "error", err.Error()))
 		case verdict.Pass:
-			g.w.auditGuardrail(gr, "pass", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 		case gr.Action == gates.Block:
-			g.w.auditGuardrail(gr, "block", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "block", verdict.Reason)
 			v.Refusal = i18n.T("guardrail.refused", "name", gr.Name, "reason", verdict.Reason)
 			v.Notices = append(v.Notices, v.Refusal)
 			return v
 		default:
-			g.w.auditGuardrail(gr, "warn", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "warn", verdict.Reason)
 			v.Notices = append(v.Notices, i18n.T("guardrail.warned", "name", gr.Name, "reason", verdict.Reason))
 		}
 	}
@@ -271,7 +266,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 			caught, reason = true, i18n.T("guardrail.injection_found", "phrase", phrase)
 			if gr.Judge {
 				if verdict, err := gates.ConfirmInjection(ctx, g.w.ruleAsker(), textutil.Ellipsize(text, guardSubjectLimit)); err == nil && verdict.Pass {
-					g.w.auditGuardrail(gr, "pass", verdict.Reason)
+					g.w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 					continue // the judge says it's quoted, not aimed at the agent
 				}
 			}
@@ -285,7 +280,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 					continue
 				}
 			case verdict.Pass:
-				g.w.auditGuardrail(gr, "pass", verdict.Reason)
+				g.w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 				continue
 			default:
 				caught, reason = true, verdict.Reason
@@ -295,12 +290,12 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 			continue
 		}
 		if gr.Action == gates.Block {
-			g.w.auditGuardrail(gr, "block", reason)
+			g.w.auditGuardrail(ctx, gr, "block", reason)
 			v.Result = map[string]any{"error": i18n.T("guardrail.withheld", "name", gr.Name, "tool", c.Tool, "reason", reason)}
 			v.Notices = append(v.Notices, i18n.T("guardrail.withheld_notice", "name", gr.Name, "tool", c.Tool, "reason", reason))
 			return v
 		}
-		g.w.auditGuardrail(gr, "warn", reason)
+		g.w.auditGuardrail(ctx, gr, "warn", reason)
 		out = maps.Clone(out)
 		if out == nil {
 			out = map[string]any{}
@@ -329,18 +324,18 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 			case gates.Redact:
 				cur = masked
 				if st.once(gr.Name) {
-					g.w.auditGuardrail(gr, "redact", "")
+					g.w.auditGuardrail(ctx, gr, "redact", "")
 					v.Notices = append(v.Notices, i18n.T("guardrail.masked", "name", gr.Name))
 				}
 			case gates.Block:
 				cur = i18n.T("guardrail.withheld_text", "name", gr.Name)
 				if st.once(gr.Name) {
-					g.w.auditGuardrail(gr, "block", "")
+					g.w.auditGuardrail(ctx, gr, "block", "")
 					v.Notices = append(v.Notices, i18n.T("guardrail.withheld_answer", "name", gr.Name))
 				}
 			default:
 				if st.once(gr.Name) {
-					g.w.auditGuardrail(gr, "warn", "")
+					g.w.auditGuardrail(ctx, gr, "warn", "")
 					v.Notices = append(v.Notices, i18n.T("guardrail.secret_seen", "name", gr.Name))
 				}
 			}
@@ -352,20 +347,20 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 		verdict, err := g.w.judgeGuardrail(ctx, gr, cur)
 		switch {
 		case err != nil && gr.Action == gates.Block:
-			g.w.auditGuardrail(gr, "unjudged-block", err.Error())
+			g.w.auditGuardrail(ctx, gr, "unjudged-block", err.Error())
 			cur = i18n.T("guardrail.withheld_text", "name", gr.Name)
 			v.Notices = append(v.Notices, i18n.T("guardrail.unjudged", "name", gr.Name, "error", err.Error()))
 		case err != nil:
-			g.w.auditGuardrail(gr, "unjudged", err.Error())
+			g.w.auditGuardrail(ctx, gr, "unjudged", err.Error())
 			v.Notices = append(v.Notices, i18n.T("guardrail.unjudged", "name", gr.Name, "error", err.Error()))
 		case verdict.Pass:
-			g.w.auditGuardrail(gr, "pass", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 		case gr.Action == gates.Block:
-			g.w.auditGuardrail(gr, "block", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "block", verdict.Reason)
 			cur = i18n.T("guardrail.withheld_text", "name", gr.Name)
 			v.Notices = append(v.Notices, i18n.T("guardrail.withheld_answer_why", "name", gr.Name, "reason", verdict.Reason))
 		default:
-			g.w.auditGuardrail(gr, "warn", verdict.Reason)
+			g.w.auditGuardrail(ctx, gr, "warn", verdict.Reason)
 			v.Notices = append(v.Notices, i18n.T("guardrail.warned", "name", gr.Name, "reason", verdict.Reason))
 		}
 	}
@@ -383,18 +378,18 @@ func (w *Workspace) inputGuardrails(ctx context.Context, sessionID, text string,
 		verdict, err := w.judgeGuardrail(ctx, gr, text)
 		switch {
 		case err != nil && gr.Action == gates.Block:
-			w.auditGuardrail(gr, "unjudged-block", err.Error())
+			w.auditGuardrail(ctx, gr, "unjudged-block", err.Error())
 			return &api.BlockedError{Reason: i18n.T("guardrail.unjudged_refused", "name", gr.Name, "error", err.Error())}
 		case err != nil:
-			w.auditGuardrail(gr, "unjudged", err.Error())
+			w.auditGuardrail(ctx, gr, "unjudged", err.Error())
 			notice(i18n.T("guardrail.unjudged", "name", gr.Name, "error", err.Error()), true)
 		case verdict.Pass:
-			w.auditGuardrail(gr, "pass", verdict.Reason)
+			w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 		case gr.Action == gates.Block:
-			w.auditGuardrail(gr, "block", verdict.Reason)
+			w.auditGuardrail(ctx, gr, "block", verdict.Reason)
 			return &api.BlockedError{Reason: i18n.T("guardrail.prompt_blocked", "name", gr.Name, "reason", verdict.Reason)}
 		default:
-			w.auditGuardrail(gr, "warn", verdict.Reason)
+			w.auditGuardrail(ctx, gr, "warn", verdict.Reason)
 			notice(i18n.T("guardrail.warned", "name", gr.Name, "reason", verdict.Reason), false)
 		}
 	}

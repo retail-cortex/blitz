@@ -16,10 +16,12 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,9 +76,30 @@ func TestUpdateCommandsRunTurns(t *testing.T) {
 
 func TestIsUpdateCommand(t *testing.T) {
 	for line, want := range map[string]bool{
-		"/skills update": true, "/agents update x": true, "/Skills UPDATE": true,
+		"/skills update": true, "/agents update x": true, "/Skills UPDATE": true, "/rules update": true, "/rules": false,
 		"/skills": false, "/skills list": false, "/agents": false, "/skills-update": false, "/review update": false,
 	} {
 		assert.Equal(t, want, isUpdateCommand(line), line)
+	}
+}
+
+// The welcome says when the harness has something to learn.
+func TestReflectHint(t *testing.T) {
+	tests := []struct {
+		name string
+		r    api.Reflection
+		err  error
+		want string
+	}{
+		{name: "nothing yet", r: api.Reflection{Patterns: api.ReflectAt - 1}},
+		{name: "patterns", r: api.Reflection{Patterns: 6}, want: "Agents hit the same problems (6 patterns since the last reflection): /reflect to review what to learn"},
+		{name: "proposals", r: api.Reflection{Patterns: 6, Proposals: 1}, want: "1 change to the harness to review: /reflect"},
+		{name: "the service can't say", err: errors.New("unavailable")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &stubBackend{reflection: func() (api.Reflection, error) { return tt.r, tt.err }}
+			assert.Equal(t, tt.want, reflectHint(w))
+		})
 	}
 }

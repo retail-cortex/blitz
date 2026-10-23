@@ -187,6 +187,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"ListHooks":            func() error { return unary(w.ListHooks, &pb.ListHooksRequest{Workspace: ws}) },
 		"ListNotes":            func() error { return unary(w.ListNotes, &pb.ListNotesRequest{Workspace: ws}) },
 		"ForgetNote":           func() error { return unary(w.ForgetNote, &pb.ForgetNoteRequest{Workspace: ws}) },
+		"GetReflection":        func() error { return unary(w.GetReflection, &pb.GetReflectionRequest{Workspace: ws}) },
 		"ListTasks":            func() error { return unary(w.ListTasks, &pb.ListTasksRequest{Workspace: ws}) },
 		"GetTask":              func() error { return unary(w.GetTask, &pb.GetTaskRequest{Workspace: ws}) },
 		"StopTask":             func() error { return unary(w.StopTask, &pb.StopTaskRequest{Workspace: ws}) },
@@ -802,6 +803,9 @@ func TestWorkspaceHandlers(t *testing.T) {
 		assert.Equal(t, "The tests need Docker.", notes.Msg.Notes[0].Text)
 		require.NoError(t, unary(w.ForgetNote, &pb.ForgetNoteRequest{Workspace: dir, Name: note.Name}))
 		assert.Equal(t, "NO_NOTE", reason(t, unary(w.ForgetNote, &pb.ForgetNoteRequest{Workspace: dir, Name: note.Name})))
+		refl, err := w.GetReflection(ctx, connect.NewRequest(&pb.GetReflectionRequest{Workspace: dir}))
+		require.NoError(t, err)
+		assert.Zero(t, refl.Msg.Proposals, "nothing to review in a new workspace")
 
 		locales, err := w.ListLocales(ctx, connect.NewRequest(&pb.ListLocalesRequest{Workspace: dir}))
 		require.NoError(t, err)

@@ -503,6 +503,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		}, run: run.ID}, on, st, opts...)
 	}
 
+	w.auditTurnEnd(rec.ID, runErr)
 	u := w.engine.Usage(rec.ID)
 	run.Duration, run.CostUSD, run.Calls = time.Since(run.Started), u.CostUSD, u.Calls
 	run.Files = w.tools.Checkpoints().RunFiles(run.ID)

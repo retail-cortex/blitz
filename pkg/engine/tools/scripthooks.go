@@ -530,12 +530,12 @@ func (s *ScriptHooks) dispatch(ctx context.Context, event, tool string, args map
 		case o.Blocked:
 			entry.Decision = "block"
 			entry.Error = o.Reason
-			s.audit.Log(entry)
+			s.audit.LogContext(ctx, entry)
 			o.Context = strings.Join(append(contexts, o.Context), "\n\n")
 			return o
 		case err != nil:
 			entry.Error = err.Error()
-			s.audit.Log(entry)
+			s.audit.LogContext(ctx, entry)
 			slog.WarnContext(ctx, "hook failed", "event", event, "hook", h.Describe(), "error", err)
 			if h.FailClosed {
 				return Outcome{Blocked: true, Reason: fmt.Sprintf("hook %q failed and is fail_closed: %v", h.Describe(), err)}
@@ -545,13 +545,13 @@ func (s *ScriptHooks) dispatch(ctx context.Context, event, tool string, args map
 		}
 		if o.UpdatedArgs != nil && out.UpdatedArgs == nil && event == "pre_tool" {
 			out.UpdatedArgs = o.UpdatedArgs
-			s.audit.Log(audit.Entry{Kind: audit.KindHook, Tool: tool, Detail: event + ": " + h.Describe(), Decision: "updated-args", Args: o.UpdatedArgs})
+			s.audit.LogContext(ctx, audit.Entry{Kind: audit.KindHook, Tool: tool, Detail: event + ": " + h.Describe(), Decision: "updated-args", Args: o.UpdatedArgs})
 			args, payload = o.UpdatedArgs, s.reencode(payload, o.UpdatedArgs) // later hooks see them
 		}
 		if o.Decision != "" && out.Decision == "" {
 			out.Decision, out.Reason = o.Decision, o.Reason
 			entry.Decision = o.Decision
-			s.audit.Log(entry)
+			s.audit.LogContext(ctx, entry)
 		}
 		if o.Continue && !out.Continue {
 			out.Continue = true

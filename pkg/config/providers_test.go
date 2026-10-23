@@ -152,6 +152,27 @@ func TestSetValue(t *testing.T) {
 	assert.Error(t, err, "a key for a provider that takes none")
 }
 
+// The dashboard's and the reflector's schedules are a workspace's own
+// settings; their cost limits are saved as amounts, not text, so the file
+// still loads.
+func TestSetScheduleValues(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	for key, value := range map[string]string{
+		"health.schedule": "every day at 03:00", "health.max_cost_usd": "2",
+		"harness.reflect_schedule": "every monday at 09:00", "harness.max_cost_usd": "0.25",
+	} {
+		_, err := SetValue("", ws, key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, HealthConfig{Schedule: "every day at 03:00", MaxCostUSD: 2}, cfg.Health)
+	assert.Equal(t, HarnessConfig{ReflectSchedule: "every monday at 09:00", MaxCostUSD: 0.25}, cfg.Harness)
+	_, err = SetValue("", ws, "harness.max_cost_usd", "lots")
+	assert.Error(t, err)
+}
+
 // The form's provider, model and key are saved together, or not at all.
 func TestSetProvider(t *testing.T) {
 	_, store := keysEnv(t)

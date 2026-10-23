@@ -232,6 +232,87 @@ func TestEngineAuditsToolCalls(t *testing.T) {
 	}
 }
 
+// A failed call's result entry carries its arguments, for what agents
+// learn from their runs (spec_harness_learning_048 HE-02); one that
+// worked doesn't repeat them.
+func TestEngineAuditsWhatFailed(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{},
+		toolCall("list_files", map[string]any{}),
+		toolCall("read_file", map[string]any{"path": "missing.txt"}),
+		textContent("done"))
+	dir := t.TempDir()
+	log, _ := audit.Open(dir, nil)
+	f.tools.SetAudit(log)
+	_, err := functionResponses(t, f.eng, "s", "go")
+	require.NoError(t, err)
+	log.Close()
+	results := map[string]audit.Entry{}
+	for _, e := range audit.Read(dir, "", time.Now().Add(-time.Hour)) {
+		if e.Kind == audit.KindToolResult {
+			results[e.Tool] = e
+		}
+	}
+	require.Contains(t, results, "read_file")
+	assert.Equal(t, "error", results["read_file"].Decision)
+	assert.Equal(t, "missing.txt", results["read_file"].Args["path"], "the failed call's path")
+	assert.NotEmpty(t, results["read_file"].Agent, "and whose call it was")
+	assert.Equal(t, "ok", results["list_files"].Decision)
+	assert.Nil(t, results["list_files"].Args, "a call that worked isn't repeated")
+	assert.Empty(t, results["list_files"].Agent)
+}
+
+// The third time the same call fails the same way in a turn, the agent is
+// told to stop repeating it (spec_harness_learning_048 HE-07); another
+// call, or the next turn, counts afresh.
+func TestEngineSaysWhenAFailureRepeats(t *testing.T) {
+	missing := map[string]any{"path": "missing.txt"}
+	f := newEngineWith(t, fixtureOpts{},
+		toolCall("read_file", missing), toolCall("read_file", missing),
+		toolCall("read_file", map[string]any{"path": "other.txt"}),
+		toolCall("read_file", missing), textContent("giving up"),
+		toolCall("read_file", missing), textContent("again"))
+	var notes []bool
+	collectNotes := func(prompt string) {
+		t.Helper()
+		require.NoError(t, f.eng.Execute(context.Background(), "s", prompt, func(ev *session.Event) error {
+			if ev.Content != nil {
+				for _, p := range ev.Content.Parts {
+					if r := p.FunctionResponse; r != nil {
+						_, warned := r.Response["repeated_failure"]
+						notes = append(notes, warned)
+					}
+				}
+			}
+			return nil
+		}))
+	}
+	collectNotes("read it")
+	assert.Equal(t, []bool{false, false, false, true}, notes, "only the third identical failure; other.txt is another call")
+	notes = nil
+	collectNotes("once more")
+	assert.Equal(t, []bool{false}, notes, "a new turn counts afresh")
+}
+
+func TestExitCode(t *testing.T) {
+	tests := []struct {
+		name   string
+		result map[string]any
+		want   int
+	}{
+		{"int", map[string]any{"exit_code": 2}, 2},
+		{"int64", map[string]any{"exit_code": int64(3)}, 3},
+		{"from JSON", map[string]any{"exit_code": float64(127)}, 127},
+		{"zero", map[string]any{"exit_code": 0}, 0},
+		{"none", map[string]any{"output": "x"}, 0},
+		{"not a number", map[string]any{"exit_code": "1"}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, exitCode(tt.result))
+		})
+	}
+}
+
 func TestEnginePreToolHookBlocks(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) {
 		c.Hooks.PreTool = []config.HookConfig{{Match: "list_*", Command: `echo "listing is forbidden" >&2; exit 2`}}

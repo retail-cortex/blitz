@@ -32,7 +32,7 @@ Amazon Bedrock, Azure, Claude on Vertex AI, Ollama and company gateways are in [
 
 1. **`/setup [what you're working on]`** looks at the folder. With no specification yet, it starts there (with one, it reads it and goes to step 3): it guesses what kind of project it is, and asks you to confirm: **Software**, **Research or science**, **Data analysis**, **Writing or documentation**, or **Something else**. Then it interviews you, a few questions at a time, with options where there are likely answers. Every kind starts with what the project is for, who it's for, how you'll judge success and what's out of scope; then come the kind's own questions.
 2. It shows you the list of specs it plans to write and waits for your go-ahead, then writes them in `.agents/specs/`: `001-overview.md` first, then one spec per stage of the work, numbered in the order the work happens, with `README.md` as the index. `001-overview.md` records the kind on a `Kind:` line.
-3. **Then setup carries on**: it reads the specs (and the `Kind:` line) and asks only what they don't answer. It makes the folder a git repository with a `.gitignore` that fits, writes `.agents/AGENTS.md` (the instructions every agent reads), points `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` at it, and offers skills and agents for you to pick.
+3. **Then setup carries on**: it reads the specs (and the `Kind:` line) and asks only what they don't answer. It makes the folder a git repository with a `.gitignore` that fits, writes `.agents/AGENTS.md` (the instructions every agent reads, with a short "How to work here" section before the project's facts) and an empty `.agents/EXPERIENCE.md` for what agents learn later, points `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` at it, and offers skills, agents, and the rules and guardrails the specs' boundaries call for (the commands agents must never run, a rule for the migrations folder), for you to pick.
 
 Nothing is written until you've answered, and everything it writes is yours to edit. Unattended (`blitz init`), nobody can answer the specification's questions, so setup goes on from what the files show, lists its assumptions under "Open questions" and suggests `/spec` for later.
 
@@ -145,5 +145,17 @@ Plans change. Keep the specs ahead of the work:
 1. **Change the spec first.** Edit a file in `.agents/specs/`, or tell `/spec` what changed (`/spec we're adding a second dataset from the 2025 survey`): it asks what it can't work out and updates the specs it touches, keeping their IDs. A new stage takes the next free number; it renumbers only after asking.
 2. **Bring the helpers in line.** `/skills update` and `/agents update` compare the skills and agents with the specs and offer what to add, change or retire; nothing changes until you pick. In the desktop app, the welcome screen shows **The specification changed: update the skills and agents** when a spec is newer than them.
 3. **Then the work.** Ask the agent to work on a numbered item ("EXP-02 from `005-experiments.md`"), so the request, the result and any review name the same thing.
+
+## Learning from the runs
+
+The specs say what the project must do; the runs show where the harness falls short: a command that doesn't exist, an agent that keeps asking for a tool it doesn't have, the same correction typed twice. After a week or two of work, run **`/reflect`**. It reads what went wrong in this workspace's sessions, finds what happened more than once, and offers the smallest change for each, citing the runs:
+
+```text
+☐ add .agents/EXPERIENCE.md: Deploy with make deploy; there is no make push. — 3 failed runs of make push since 2026-10-01
+☐ update skill deploy: step 3 runs make deploy — the same 3 runs
+☐ update agent qa: give it run_shell_command — denied 4 times since 2026-10-02
+```
+
+Pick what's right; nothing else changes. Entries go in `.agents/EXPERIENCE.md`, which every agent reads from the next prompt. The welcome screen suggests `/reflect` when there's enough to learn from, and the update commands read the same runs: `/skills update`, `/agents update` and `/rules update` compare the harness with what happened as well as with the specs. More in [Extending](../guide/extending.md#what-agents-learn-from-the-runs).
 
 More: [Extending](../guide/extending.md) for instructions, skills and agents; [the command reference](../products/cli.md) for every command.

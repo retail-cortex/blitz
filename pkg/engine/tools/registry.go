@@ -79,6 +79,14 @@ type Registry struct {
 
 	notesMu sync.Mutex
 	notes   NoteSaver // nil: notes off
+	// evidence reads what went wrong in the workspace's sessions
+	// (harness_evidence), propose keeps a scheduled reflection's
+	// proposals (harness_propose), global adds an entry to the global
+	// file (save_global_experience); nil: off.
+	evidenceMu sync.Mutex
+	evidence   EvidenceReader
+	propose    ProposalSaver
+	global     GlobalExperienceSaver
 	// workspaceSearch searches the workspace (nil: search off); notesMu
 	// guards it.
 	workspaceSearch Searcher
@@ -402,6 +410,18 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the remember tool: %w", err)
+	}
+	if r.tools["harness_evidence"], err = NewHarnessEvidenceTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the harness_evidence tool: %w", err)
+	}
+	if r.tools["harness_propose"], err = NewHarnessProposeTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the harness_propose tool: %w", err)
+	}
+	if r.tools["save_global_experience"], err = NewSaveGlobalExperienceTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the save_global_experience tool: %w", err)
 	}
 	resourceTools, err := NewMCPResourceTools(r)
 	if err != nil {

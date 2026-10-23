@@ -101,6 +101,7 @@ func (s *Server) StartScheduler(ctx context.Context) {
 			sc.rescan(sc.base)
 			s.resumeDueTimers(sc.base)
 			s.healthDue()
+			s.reflectDue()
 			select {
 			case <-sc.base.Done():
 				return

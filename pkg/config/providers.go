@@ -431,15 +431,16 @@ var settableValues = map[string]bool{
 	"blitz.agency_level":    true,
 	"blitz.permission_mode": true,
 	// The workspace dashboard's judge and schedule (spec_health_044).
-	"health.model":        true,
-	"health.schedule":     true,
-	"health.max_cost_usd": true,
-	"ui.style":            true,
-	"ui.locale":           true,
-	"ui.notify":           true,
-	"ui.task_alerts":      true,
-	"ui.theme":            true,
-	"ui.editor":           true,
+	"health.model":    true,
+	"health.schedule": true,
+	// The scheduled reflection (spec_harness_learning_048 HE-06).
+	"harness.reflect_schedule": true,
+	"ui.style":                 true,
+	"ui.locale":                true,
+	"ui.notify":                true,
+	"ui.task_alerts":           true,
+	"ui.theme":                 true,
+	"ui.editor":                true,
 	// Workspace search, from its panel in the desktop app.
 	"search.embedding_model": true,
 	"search.enrich_model":    true,
@@ -463,6 +464,9 @@ var typedValues = map[string]string{
 	"workers.policy.max_cost_usd":         "usd",
 	"workers.policy.default_timeout":      "duration",
 	"workers.policy.max_timeout":          "duration",
+	// Cost limits of the dashboard's and the reflector's schedules.
+	"health.max_cost_usd":  "usd",
+	"harness.max_cost_usd": "usd",
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given

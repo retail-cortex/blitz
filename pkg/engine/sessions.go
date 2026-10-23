@@ -157,7 +157,6 @@ func (w *Workspace) MoveSession(id string) (api.SessionInfo, error) {
 	if err != nil {
 		return api.SessionInfo{}, err
 	}
-	w.audit.SetContext(rec.ID, w.Dir())
 	if rec.MovedFrom != "" {
 		w.hookCtxMu.Lock()
 		if w.moveNotes == nil {
@@ -229,7 +228,6 @@ func (w *Workspace) OpenSession(resume string, cont bool) (api.SessionInfo, bool
 	if err != nil {
 		return api.SessionInfo{}, false, err
 	}
-	w.audit.SetContext(rec.ID, w.Dir())
 	start := "startup"
 	if resumed {
 		start = "resume"

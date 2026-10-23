@@ -63,6 +63,26 @@ describe("welcome tiles", () => {
       { kind: SuggestionKind.HARNESS_UPDATE },
       ["6", "The specification changed: update the skills and agents", { type: "send", prompt: "/skills update" }],
     ],
+    [
+      "skills failing in the runs",
+      { kind: SuggestionKind.HARNESS_UPDATE, detail: "skills" },
+      ["6", "Skills went wrong in recent runs: update them", { type: "send", prompt: "/skills update" }],
+    ],
+    [
+      "agents failing in the runs",
+      { kind: SuggestionKind.HARNESS_UPDATE, detail: "agents" },
+      ["6", "Agents went wrong in recent runs: update them", { type: "send", prompt: "/agents update" }],
+    ],
+    [
+      "patterns in the runs",
+      { kind: SuggestionKind.REFLECT, count: 6 },
+      ["7", "Agents hit the same problems: review what to learn", { type: "send", prompt: "/reflect" }],
+    ],
+    [
+      "a scheduled reflection's proposals",
+      { kind: SuggestionKind.REFLECT_REVIEW, count: 1 },
+      ["8", "1 change to the harness to review", { type: "send", prompt: "/reflect" }],
+    ],
   ])("%s", (_, s, want) => {
     expect(tiles({ suggestions: [s] })).toEqual([want]);
   });

@@ -77,6 +77,10 @@ type Backend interface {
 	ListNotes() ([]Note, error)
 	ForgetNote(name string) error
 
+	// Reflection is what the harness has to learn from the workspace's
+	// runs, for the welcome (/reflect).
+	Reflection() (Reflection, error)
+
 	// Project settings.
 	ProjectSettings() ProjectSettings
 	// TrustProject records trusting (or declining) the project settings

@@ -26,6 +26,7 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
   - **high** (default) — complete the task autonomously; ask only when blocked by missing requirements or irreversible actions needing approval.
   - **extreme** — maximal persistence; don't stop while a background process gates completion; check progress.
 - **AG-03** The root agent uses the configured `blitz.agency_level` (changeable with `/set agency=`); sub-agents use their own frontmatter level.
+- **AG-04** *2026-10-22.* Each turn is the agent the run asks for: the active agent, or a command's (`agent:` in its frontmatter, such as `/spec`, `/skills update` and `/reflect`), whoever answered before. The other agents are the root's sub-agents for `transfer_to_agent`, built never to transfer back (`DisallowTransferToParent`), so the ADK runner, which otherwise hands the next turn to the agent that answered last, falls back to the root. A transfer lasts the rest of its turn. Before, once a conversation had a turn, a command's agent and a switch with `/agent` were ignored and the last agent kept answering (`TestTheAskedAgentAnswersAfterHistory`, `TestTransferLastsTheTurn`).
 
 ## 3. Registry
 

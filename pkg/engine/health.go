@@ -15,12 +15,10 @@
 package engine
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -60,6 +58,10 @@ type HealthReport struct {
 	MaxCostUSD      float64
 	// Next is when the schedule runs next (zero: it doesn't).
 	Next time.Time
+	// The reflection's schedule and cost limit ([harness]), and why the
+	// last scheduled one didn't run or stopped.
+	ReflectSchedule, ReflectSkipped string
+	ReflectMaxCostUSD               float64
 }
 
 // HealthCheck says which items a check judges.
@@ -89,12 +91,18 @@ var ErrHealthCheckRunning = errors.New("a health check of this workspace is runn
 
 // healthStore is the workspace's verdicts, in the service's storage.
 func (w *Workspace) healthStore() *health.Store {
+	return health.NewStore(filepath.Join(w.StorageDir(), "health", w.storeID()))
+}
+
+// storeID names the workspace in the service's storage: its settings
+// folder's name.
+func (w *Workspace) storeID() string {
 	id := filepath.Base(config.WorkspaceSettingsDir("", w.Dir()))
 	if id == "." || id == "" {
 		sum := sha256.Sum256([]byte(w.Dir()))
 		id = hex.EncodeToString(sum[:6])
 	}
-	return health.NewStore(filepath.Join(w.StorageDir(), "health", id))
+	return id
 }
 
 // healthModel is the judge's model reference.
@@ -113,7 +121,8 @@ func (w *Workspace) Health(ctx context.Context) HealthReport {
 	store := w.healthStore()
 	all := store.All()
 	r := HealthReport{Facts: f, Verdicts: map[string]health.Verdict{}, History: map[string][]float64{}, State: store.State(),
-		Model: w.healthModel(), Schedule: w.cfg.Health.Schedule, MaxCostUSD: w.cfg.Health.MaxCostUSD}
+		Model: w.healthModel(), Schedule: w.cfg.Health.Schedule, MaxCostUSD: w.cfg.Health.MaxCostUSD,
+		ReflectSchedule: w.cfg.Harness.ReflectSchedule, ReflectMaxCostUSD: w.cfg.Harness.MaxCostUSD, ReflectSkipped: w.harnessState().Skipped}
 	for _, v := range all {
 		if cur, ok := r.Verdicts[v.Key()]; !ok || !v.At.Before(cur.At) {
 			r.Verdicts[v.Key()] = v
@@ -429,38 +438,15 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 		in.Workers = append(in.Workers, s)
 	}
 
-	in.Audit = readAudit(config.ExpandHome(w.cfg.Audit.Dir), w.Dir(), since)
+	// Only entries that name this workspace: those written before entries
+	// named theirs (2026-10-22) could be any workspace's.
+	for _, e := range audit.Read(config.ExpandHome(w.cfg.Audit.Dir), w.Dir(), since) {
+		if e.Workspace != "" {
+			in.Audit = append(in.Audit, e)
+		}
+	}
 	_ = ctx
 	return in
-}
-
-// readAudit reads the audit entries about workspace since then, from the
-// daily files in dir (audit-YYYY-MM-DD.jsonl).
-func readAudit(dir, workspace string, since time.Time) []audit.Entry {
-	if dir == "" {
-		return nil
-	}
-	var out []audit.Entry
-	for d := since; !d.After(time.Now().Add(24 * time.Hour)); d = d.AddDate(0, 0, 1) {
-		f, err := os.Open(filepath.Join(dir, "audit-"+d.Format(time.DateOnly)+".jsonl"))
-		if err != nil {
-			continue
-		}
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
-		for sc.Scan() {
-			var e audit.Entry
-			if json.Unmarshal(sc.Bytes(), &e) != nil || e.Time.Before(since) {
-				continue
-			}
-			if e.Workspace != "" && e.Workspace != workspace {
-				continue
-			}
-			out = append(out, e)
-		}
-		f.Close()
-	}
-	return out
 }
 
 // fileHash is the SHA-256 of the file at path ("" when it can't be read;

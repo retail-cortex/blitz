@@ -603,6 +603,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	}
 	c.Command("skills", "list", "show", "search", "update", "install", "registry")
 	c.Command("agents", "update")
+	c.Command("rules", "update")
 	c.Command("session", "list", "new", "load", "save")
 	c.Command("search", "web", "session")
 	c.Command("envs", "prune", "remove")

@@ -28,7 +28,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -110,7 +109,9 @@ func newestFile(dir, ext string) time.Time {
 
 // Suggestions returns the workspace's welcome tiles: setup when it has no
 // agent instructions, an update of the skills and agents when the
-// specification changed after them, the latest conversation, uncommitted changes and a
+// specification changed after them or their runs went wrong since they
+// changed, /reflect when its runs show what to
+// learn, the latest conversation, uncommitted changes and a
 // failed worker, then up to three ideas from the recent conversations. When
 // those changed since the ideas were written, new ones are written in the
 // background (Pending) and the earlier ones are returned meanwhile.
@@ -119,7 +120,13 @@ func (w *Workspace) Suggestions(ctx context.Context) api.Suggestions {
 	if out.HarnessMissing {
 		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestSetup})
 	} else if w.HarnessStale() {
-		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestHarnessUpdate})
+		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestHarnessUpdate, Detail: api.HarnessUpdateSpec})
+	} else if which := w.harnessFailing(); which != "" {
+		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestHarnessUpdate, Detail: which})
+	}
+	r, _ := w.Reflection()
+	if tile, ok := r.Suggested(); ok {
+		out.Tiles = append(out.Tiles, tile)
 	}
 	recent := w.recentSessions()
 	if len(recent) > 0 {
@@ -300,7 +307,7 @@ func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecor
 			}
 		}
 		if lastReply != "" {
-			fmt.Fprintf(&b, "End of the agent's latest reply: %s\n", tail(lastReply, 600))
+			fmt.Fprintf(&b, "End of the agent's latest reply: %s\n", textutil.Tail(lastReply, 600))
 		}
 	}
 	if st, err := w.GitStatus(ctx); err == nil && st.Repo {
@@ -339,16 +346,4 @@ func parseIdeas(text string) ([]idea, error) {
 		}
 	}
 	return out, nil
-}
-
-// tail is the end of s, at most n bytes, on a rune boundary.
-func tail(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	i := len(s) - n
-	for i < len(s) && !utf8.RuneStart(s[i]) {
-		i++
-	}
-	return "…" + s[i:]
 }

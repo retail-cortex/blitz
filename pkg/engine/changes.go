@@ -51,7 +51,7 @@ func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
 	}
 	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
 	if len(res.Restored) > 0 {
-		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Detail: strings.Join(res.Restored, ", ")})
+		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Session: res.Turn.Session, Detail: strings.Join(res.Restored, ", ")})
 	}
 	return out, err
 }

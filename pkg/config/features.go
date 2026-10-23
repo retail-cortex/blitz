@@ -666,3 +666,15 @@ type HealthConfig struct {
 	// beforehand: one that would cost more doesn't run, and says why.
 	MaxCostUSD float64 `toml:"max_cost_usd"`
 }
+
+// HarnessConfig is what the harness learns from the workspace's runs
+// (spec_harness_learning_048). As [health], only the user's settings set
+// it: a project may not spend the user's money.
+type HarnessConfig struct {
+	// ReflectSchedule is when the reflector reads the evidence on its own
+	// and keeps its proposals for /reflect, in words or as cron ("off" or
+	// empty, the default: only /reflect). It never changes the workspace.
+	ReflectSchedule string `toml:"reflect_schedule"`
+	// MaxCostUSD stops a scheduled reflection that has cost this much.
+	MaxCostUSD float64 `toml:"max_cost_usd"`
+}

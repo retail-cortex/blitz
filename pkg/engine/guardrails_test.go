@@ -210,3 +210,18 @@ func TestWorkspaceGuardrails(t *testing.T) {
 	require.Len(t, all, 4)
 	assert.Equal(t, gates.BuiltinDefault(gates.Builtins[1]), all[1], "back to its defaults")
 }
+
+// A call outside its session's turn reads the guardrails afresh, never
+// the state of another session's turn (whose once-per-turn notices it
+// would use up).
+func TestGuardsForIsTheSessionsOwn(t *testing.T) {
+	w := openTest(t)
+	w.startGuardrails("a", &api.Turn{})
+	a := w.guardsFor("a")
+	assert.Same(t, a, w.guardsFor("a"), "the turn's own state")
+	b := w.guardsFor("b")
+	assert.NotSame(t, a, b, "not another session's turn's")
+	assert.Len(t, b.all, len(a.all), "the same guardrails, read afresh")
+	a.once("notice")
+	assert.True(t, b.once("notice"), "its notices are its own")
+}

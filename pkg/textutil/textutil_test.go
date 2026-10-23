@@ -48,6 +48,13 @@ func TestEllipsize(t *testing.T) {
 	assert.Equal(t, "...", got[len(got)-3:], "bad ellipsized value %q", got)
 }
 
+func TestTail(t *testing.T) {
+	assert.Equal(t, "short", Tail("short", 10))
+	assert.Equal(t, "…fgh", Tail("abcdefgh", 3))
+	assert.Equal(t, "…é", Tail("aaé", 2), "a cut rune is skipped") // é is two bytes
+	assert.Equal(t, "…", Tail("aé", 1))
+}
+
 func TestSanitizeTerminal(t *testing.T) {
 	// Positive: ordinary text, newlines, tabs and emoji survive untouched.
 	plain := "line1\n\tline2 🐶 ✅"

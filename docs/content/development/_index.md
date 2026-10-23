@@ -52,6 +52,7 @@ bazel run //tools:check_deps    # apps depend on pkg/ only; front ends never on 
 bazel run //:gazelle            # after adding a Go package or an import: update the BUILD files
 bazel test --config=race //...  # the Go tests with the race detector, as CI runs them
 bazel run //tools:tidy          # go mod tidy, bazel mod tidy, Gazelle (after changing dependencies)
+tools/test_one.sh //pkg/engine:engine_test 'TestReflect'   # one target's tests that match, unsharded; fails when none match (a filtered sharded run passes with none)
 tools/check_format.sh           # gofmt, BUILD files as Gazelle writes them, license headers
 bazel run //tools:license_headers   # add the Apache header to new files
 tools/third_party_notices.sh    # regenerate THIRD_PARTY_NOTICES after changing dependencies

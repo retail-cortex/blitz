@@ -55,6 +55,8 @@ type Config struct {
 	Suggestions SuggestionsConfig `toml:"suggestions"`
 	// Health is the workspace dashboard's judge and its schedule.
 	Health HealthConfig `toml:"health"`
+	// Harness is the scheduled reflection on the workspace's runs.
+	Harness HarnessConfig `toml:"harness"`
 	// Git is what Blitz does with git in a workspace that's a repository.
 	Git     GitConfig     `toml:"git"`
 	Tools   ToolsConfig   `toml:"tools"`
@@ -785,7 +787,8 @@ func DefaultConfig() *Config {
 
 			GoalMaxContinues: 20,
 		},
-		Health: HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
+		Health:  HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
+		Harness: HarnessConfig{MaxCostUSD: 0.5},
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,

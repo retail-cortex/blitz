@@ -50,6 +50,7 @@ type stubBackend struct {
 	addMemory        func(text string) (string, error)
 	listNotes        func() ([]api.Note, error)
 	forgetNote       func(name string) error
+	reflection       func() (api.Reflection, error)
 	set              func(key, value string) (string, error)
 	listStyles       func() []api.StyleInfo
 	listHooks        func() []api.HookInfo
@@ -234,6 +235,13 @@ func (s *stubBackend) ForgetNote(name string) error {
 		return s.forgetNote(name)
 	}
 	return s.Backend.ForgetNote(name)
+}
+
+func (s *stubBackend) Reflection() (api.Reflection, error) {
+	if s.reflection != nil {
+		return s.reflection()
+	}
+	return s.Backend.Reflection()
 }
 
 func (s *stubBackend) Set(ctx context.Context, key, value string) (string, error) {

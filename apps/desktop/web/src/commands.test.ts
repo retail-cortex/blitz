@@ -35,6 +35,7 @@ describe("commands", () => {
     // /skills update and /agents update: the bundled update commands.
     expect(parseCommand("/skills update the auth spec")).toEqual({ name: "skills-update", args: "the auth spec" });
     expect(parseCommand("/Agents UPDATE")).toEqual({ name: "agents-update", args: "" });
+    expect(parseCommand("/rules update")).toEqual({ name: "rules-update", args: "" });
     expect(parseCommand("/skills updated")).toEqual({ name: "skills", args: "updated" });
     expect(parseCommand("/review update")).toEqual({ name: "review", args: "update" });
     expect(parseCommand("/set effort=high")).toEqual({ name: "config", args: "effort=high" });

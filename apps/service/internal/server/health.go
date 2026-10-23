@@ -39,6 +39,7 @@ var watchHealthEvery = 5 * time.Second
 // healthProgress how far each is.
 var (
 	healthChecks   sync.Map // dir → context.CancelFunc
+	reflections    sync.Map // dir → true while a scheduled reflection runs
 	healthProgress sync.Map // dir → engine.HealthProgress
 )
 
@@ -61,7 +62,8 @@ func healthMsg(r engine.HealthReport, checking bool) *pb.WorkspaceHealth {
 	m := &pb.WorkspaceHealth{At: ts(r.At), Overall: r.Overall, ByKind: r.ByKind, PreviousOverall: r.PreviousOverall,
 		LastCheck: ts(r.State.LastCheck), LastCostUsd: r.State.LastCost, Skipped: r.State.Skipped,
 		Model: r.Model, Schedule: r.Schedule, Next: ts(r.Next), MaxCostUsd: r.MaxCostUSD, Checking: checking,
-		LastJudged: int32(r.State.Judged), LastErrors: r.State.Errors}
+		LastJudged: int32(r.State.Judged), LastErrors: r.State.Errors,
+		ReflectSchedule: r.ReflectSchedule, ReflectMaxCostUsd: r.ReflectMaxCostUSD, ReflectSkipped: r.ReflectSkipped}
 	for _, it := range r.Items {
 		pi := &pb.HealthItem{Kind: it.Kind, Name: it.Name, Path: it.Path, Detail: it.Detail, Problem: it.Problem, Flags: it.Flags,
 			Uses: int32(it.Uses), Fired: int32(it.Fired), History: r.History[it.Key()]}
@@ -250,5 +252,33 @@ func (s *Server) healthDue() {
 			continue
 		}
 		runCheck(w, engine.HealthCheck{}, true)
+	}
+}
+
+// reflectDue runs the scheduled reflections that are due, of the open
+// workspaces, in the background, one at a time per workspace
+// (spec_harness_learning_048 HE-06).
+func (s *Server) reflectDue() {
+	now := time.Now()
+	for _, dir := range s.openDirs() {
+		s.mu.Lock()
+		w := s.workspaces[dir]
+		s.mu.Unlock()
+		if w == nil {
+			continue
+		}
+		if _, busy := reflections.LoadOrStore(dir, true); busy {
+			continue
+		}
+		if !w.ReflectDue(now) {
+			reflections.Delete(dir)
+			continue
+		}
+		go func() {
+			defer reflections.Delete(dir)
+			if err := w.ScheduledReflect(context.Background()); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Warn("scheduled reflection", "workspace", dir, "error", err)
+			}
+		}()
 	}
 }

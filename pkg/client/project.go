@@ -81,6 +81,16 @@ func (r *Remote) ListNotes() ([]api.Note, error) {
 	return out, nil
 }
 
+// Reflection is what the harness has to learn
+// (WorkspaceService.GetReflection).
+func (r *Remote) Reflection() (api.Reflection, error) {
+	res, err := r.workspaces.GetReflection(context.Background(), connect.NewRequest(&pb.GetReflectionRequest{Workspace: r.dir}))
+	if err != nil {
+		return api.Reflection{}, fromAPI(err)
+	}
+	return api.Reflection{Patterns: int(res.Msg.Patterns), Proposals: int(res.Msg.Proposals)}, nil
+}
+
 // ForgetNote deletes one (WorkspaceService.ForgetNote).
 func (r *Remote) ForgetNote(name string) error {
 	_, err := r.workspaces.ForgetNote(context.Background(), connect.NewRequest(&pb.ForgetNoteRequest{Workspace: r.dir, Name: name}))

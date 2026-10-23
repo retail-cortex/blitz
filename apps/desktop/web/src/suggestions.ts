@@ -18,7 +18,20 @@
 // window's language (the state tiles carry data, a model's ideas carry
 // text), the setup first when the workspace has no agent instructions, and
 // the canned tiles when there's nothing else to go on.
-import { mdiAutoFix, mdiCalendarAlert, mdiFileCompare, mdiFormatListChecks, mdiHistory, mdiLightbulbOnOutline, mdiLightbulbOutline, mdiMagnify, mdiUpdate, mdiWrenchOutline } from "@mdi/js";
+import {
+  mdiAutoFix,
+  mdiCalendarAlert,
+  mdiClipboardCheckOutline,
+  mdiFileCompare,
+  mdiFormatListChecks,
+  mdiHeadLightbulbOutline,
+  mdiHistory,
+  mdiLightbulbOnOutline,
+  mdiLightbulbOutline,
+  mdiMagnify,
+  mdiUpdate,
+  mdiWrenchOutline,
+} from "@mdi/js";
 import { SuggestionKind, type GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 
@@ -71,9 +84,23 @@ export function welcomeTiles(res: GetSuggestionsResponse | undefined): Tile[] {
     const key = `${s.kind}-${i}`;
     switch (s.kind) {
       case SuggestionKind.HARNESS_UPDATE:
+        if (s.detail === "skills" || s.detail === "agents") {
+          // Their runs went wrong since they last changed (HE-12).
+          own.push({ key, icon: mdiUpdate, text: t(`desktop.suggest.harness_failing_${s.detail}`), detail: t("desktop.suggest.harness_failing_detail"), action: { type: "send", prompt: `/${s.detail} update` } });
+          break;
+        }
         // The specification changed after the skills and agents: revisit
         // them (/skills update ends by suggesting /agents update).
         own.push({ key, icon: mdiUpdate, text: t("desktop.suggest.harness_update"), detail: t("desktop.suggest.harness_update_detail"), action: { type: "send", prompt: "/skills update" } });
+        break;
+      case SuggestionKind.REFLECT:
+        // The runs since the last reflection hit the same problems: learn
+        // from them (spec_harness_learning_048 HE-05).
+        own.push({ key, icon: mdiHeadLightbulbOutline, text: t("desktop.suggest.reflect"), detail: tn("desktop.suggest.reflect_detail", s.count), action: { type: "send", prompt: "/reflect" } });
+        break;
+      case SuggestionKind.REFLECT_REVIEW:
+        // A scheduled reflection proposed changes: /reflect offers them.
+        own.push({ key, icon: mdiClipboardCheckOutline, text: tn("desktop.suggest.reflect_review", s.count), detail: t("desktop.suggest.reflect_review_detail"), action: { type: "send", prompt: "/reflect" } });
         break;
       case SuggestionKind.CONTINUE:
         if (s.sessionId) own.push({ key, icon: mdiHistory, text: t("desktop.suggest.continue", { title: s.title.trim() || t("desktop.untitled") }), action: { type: "session", id: s.sessionId } });

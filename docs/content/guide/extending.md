@@ -55,6 +55,24 @@ A rule that can't be checked lets the turn go on; a guardrail that can't be chec
 
 Edit any of these, or an agent or skill in `.agents/`, while you work: the change applies from your next message, in the same conversation or a new one. Blitz checks the files' sizes and times before each message and reloads only what changed. `/reload` (in the app, **Agents › Reload agent files**) reads them all again now and says what it loaded. MCP servers in `.mcp.json` or `.agents/mcp_config.json` are the exception: open the workspace again to apply a change to them.
 
+### What agents learn from the runs
+
+Instructions are what you hand down; `.agents/EXPERIENCE.md` is what agents found out here. `/setup` creates it with two headings, **How to work** (habits true in any project: read the error before retrying, run the tests before saying it's done) and **This project** (its commands, data and conventions), and `.agents/AGENTS.md` imports it with the line `@EXPERIENCE.md`, so every agent, in Blitz and in the tools that follow imports, reads it. Each entry is one sentence and, in brackets, the runs it came from.
+
+**`/reflect [since]`** fills it. The reflector reads what went wrong in this workspace's sessions since the last reflection (or the last 14 days; `since` is a date or a number of days), from the audit log: failed commands and tools, actions you or a rule refused, guardrail blocks, your corrections ("no, use pnpm"), undos, stopped turns and limits, and the skills and agents in those turns. It groups them into patterns (twice or more, or once at a cost), weighs each as a habit and as a fact about the project, and offers at most five changes in one question: an experience entry, a line in `.agents/AGENTS.md`, a step in a skill, an agent's tools, a rule or guardrail. It writes only what you pick. A habit that held in two or more of your workspaces can be offered for `~/.blitz/BLITZ.md`, so every workspace gets it. The evidence needs the audit log (`[audit] enabled`, on by default).
+
+When the runs since the last reflection hold five patterns, the welcome screen says **Agents hit the same problems: review what to learn** (the terminal says it under its banner). To have it look on its own, give the workspace a schedule in its own settings, never the project's (the Overview's settings in the desktop app):
+
+```toml
+[harness]
+reflect_schedule = "every monday at 09:00"   # off by default
+max_cost_usd = 0.5                           # a scheduled reflection stops here
+```
+
+A scheduled reflection reads and proposes but changes nothing: when there's something new, the welcome says **N changes to review**, and `/reflect` offers them.
+
+`/skills update`, `/agents update` and `/rules update` read the same evidence: a skill that fails at the same step, an agent denied the same tool again and again, a rule that keeps sending work back. When the runs since the skills or agents last changed show a pattern about them, the welcome offers their update.
+
 ### Notes the agent keeps
 
 The agent also keeps its own notes across sessions, with its `remember` tool: a fact about the project, how you like things done, or a mistake not to repeat. Each is a small Markdown file in `~/.blitz/memory/<workspace>-<hash>/`, with credentials masked before it's saved. They're added to the agent's instructions when a session starts (the newest first) as things it learned, never as permission to do anything.

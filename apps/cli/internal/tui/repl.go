@@ -248,6 +248,24 @@ func (p *Printer) Handle(ev api.Event) {
 	}
 }
 
+// reflectHint is the welcome's line about what the harness has to learn
+// (spec_harness_learning_048 HE-05): the proposals to review, else the
+// patterns since the last reflection once there are enough; "" if neither.
+func reflectHint(w api.Backend) string {
+	r, err := w.Reflection()
+	if err != nil {
+		return ""
+	}
+	tile, ok := r.Suggested()
+	switch {
+	case !ok:
+		return ""
+	case tile.Kind == api.SuggestReflectReview:
+		return i18n.N("repl.reflect_review_hint", tile.Count)
+	}
+	return i18n.N("repl.reflect_hint", tile.Count)
+}
+
 // RunREPL runs the interactive REPL prompt loop until /exit, EOF, or ctx is cancelled.
 func RunREPL(ctx context.Context, app *App) error {
 	applyTheme(app, app.Printer.Theme)
@@ -260,6 +278,10 @@ func RunREPL(ctx context.Context, app *App) error {
 			fmt.Printf("   %s%s%s\n", Dim, i18n.T("keys.hint"), Reset)
 		}
 		fmt.Println()
+	}
+
+	if hint := reflectHint(app.Workspace); hint != "" {
+		fmt.Printf("%s%s%s\n\n", Dim, hint, Reset)
 	}
 
 	if _, ok := app.Workspace.ActiveSession(); !ok {

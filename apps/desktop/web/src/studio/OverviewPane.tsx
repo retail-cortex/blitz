@@ -532,12 +532,14 @@ function ItemDetail({ it, runs, verdict, onRejudge, onImprove }: { it: HealthIte
   );
 }
 
-/** The judge's model, the schedule and a scheduled check's cost limit, kept in the workspace's own settings. */
+/** The judge's model, the schedule and a scheduled check's cost limit, and the reflection's schedule and limit, kept in the workspace's own settings. */
 function HealthSettings({ workspace, health, onClose }: { workspace: string; health: WorkspaceHealth; onClose: () => void }) {
   const snack = useSnackbar();
   const [schedule, setSchedule] = useState(health.schedule);
   const [limit, setLimit] = useState(health.maxCostUsd ? String(health.maxCostUsd) : "");
   const [model, setModel] = useState(health.model);
+  const [reflect, setReflect] = useState(health.reflectSchedule);
+  const [reflectLimit, setReflectLimit] = useState(health.reflectMaxCostUsd ? String(health.reflectMaxCostUsd) : "");
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
@@ -546,6 +548,8 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
         ["health.schedule", schedule.trim() || "off"],
         ["health.max_cost_usd", limit.trim() || "0"],
         ["health.model", model.trim()],
+        ["harness.reflect_schedule", reflect.trim() || "off"],
+        ["harness.max_cost_usd", reflectLimit.trim() || "0"],
       ] as const) {
         await config.setConfigValue({ workspace, key, value });
       }
@@ -580,6 +584,12 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
         </Field>
         <Field label={t("desktop.health.model")} supporting={t("desktop.health.model_hint")}>
           {(id) => <input id={id} className="input mono" value={model} placeholder={t("desktop.health.default_model")} onChange={(e) => setModel(e.target.value)} />}
+        </Field>
+        <Field label={t("desktop.health.reflect_schedule")} supporting={health.reflectSkipped ? t("desktop.health.reflect_skipped", { why: health.reflectSkipped }) : t("desktop.health.reflect_schedule_hint")}>
+          {(id) => <input id={id} className="input" value={reflect} placeholder={t("desktop.health.reflect_schedule_placeholder")} onChange={(e) => setReflect(e.target.value)} />}
+        </Field>
+        <Field label={t("desktop.health.reflect_max_cost")} supporting={t("desktop.health.reflect_max_cost_hint")}>
+          {(id) => <input id={id} className="input" inputMode="decimal" value={reflectLimit} placeholder="0.5" onChange={(e) => setReflectLimit(e.target.value)} />}
         </Field>
       </div>
     </Dialog>

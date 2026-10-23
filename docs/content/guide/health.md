@@ -43,3 +43,5 @@ max_cost_usd = 1                  # 0: no limit
 ```
 
 Scheduled checks run while the service runs and the workspace is open in it; a night missed runs at the next chance.
+
+The same dialog holds the **reflection schedule** (`[harness] reflect_schedule`, off by default, and its cost limit): the reflector reads what went wrong in the runs and keeps the changes it would make to the harness for `/reflect` to offer, changing nothing itself ([Extending](extending.md#what-agents-learn-from-the-runs)). Where the health check judges each item, the reflection looks for problems that repeat; a health check's suggested fixes are part of its evidence.

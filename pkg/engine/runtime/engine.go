@@ -100,6 +100,26 @@ type runState struct {
 	// taskID is the background task this run is ("" for a turn): its
 	// usage is counted for the task too.
 	taskID string
+	// failures counts the run's failed calls by tool, arguments and error
+	// (*atomic.Int32), to tell the agent when it repeats one.
+	failures sync.Map
+}
+
+// repeatWarnAt is how many times the same call may fail the same way in a
+// run before the agent is told to stop repeating it.
+const repeatWarnAt = 3
+
+// repeatedFailure counts a failed call in ctx's run and returns how often
+// this tool, with these arguments, failed with this error in it (0 outside
+// a run).
+func repeatedFailure(ctx context.Context, tool string, args map[string]any, why string) int {
+	st := stateFrom(ctx)
+	if st == nil {
+		return 0
+	}
+	b, _ := json.Marshal(args) // map keys sorted: the same arguments, the same key
+	n, _ := st.failures.LoadOrStore(tool+"\x00"+string(b)+"\x00"+why, new(atomic.Int32))
+	return int(n.(*atomic.Int32).Add(1))
 }
 
 func stateFrom(ctx context.Context) *runState {
@@ -629,6 +649,23 @@ func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction 
 // newLLMAgentWith is newLLMAgent with the tools of reg: a task isolated in
 // a worktree works on its files.
 func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset, extra ...tool.Tool) (agent.Agent, error) {
+	return llmagent.New(e.agentConfig(reg, spec, llm, instruction, subAgents, toolsets, extra...))
+}
+
+// newTreeSubAgent builds spec's agent as a sub-agent of a tree's root,
+// for transfer_to_agent. It never transfers back, so the ADK runner,
+// which hands the next turn to the agent that answered last if it can,
+// gives each turn to the root: the agent the run asked for (the active
+// one, or a command's), whoever answered before.
+func (e *Engine) newTreeSubAgent(spec *agents.AgentSpec, llm model.LLM, toolsets []tool.Toolset) (agent.Agent, error) {
+	cfg := e.agentConfig(e.toolReg, spec, llm, e.subInstruction(spec), nil, toolsets)
+	cfg.DisallowTransferToParent = true
+	return llmagent.New(cfg)
+}
+
+// agentConfig is the configuration of spec's agent on llm, with the tools
+// of reg.
+func (e *Engine) agentConfig(reg *tools.Registry, spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset, extra ...tool.Tool) llmagent.Config {
 	list := reg.GetToolsForAgent(spec.Tools)
 	for _, t := range extra {
 		if !slices.ContainsFunc(list, func(x tool.Tool) bool { return x.Name() == t.Name() }) {
@@ -639,7 +676,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	// treats every {ident} in prompts, AGENTS.md or notes as an ADK
 	// session-state template key and fails the turn when it is unset.
 	fullInstruction := instruction + e.imageInstruction(spec) + diagramInstruction + e.extraInstructions
-	return llmagent.New(llmagent.Config{
+	return llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
 		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return e.expandSecrets(fullInstruction), nil },
@@ -652,7 +689,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 		AfterModelCallbacks:   []llmagent.AfterModelCallback{e.afterModel},
 		BeforeToolCallbacks:   []llmagent.BeforeToolCallback{e.beforeTool},
 		AfterToolCallbacks:    []llmagent.AfterToolCallback{e.afterTool},
-	})
+	}
 }
 
 // beforeModel enforces the per-run model-call budget, and puts
@@ -811,7 +848,7 @@ func (e *Engine) noteFallback(ctx context.Context, resp *model.LLMResponse) {
 // Returning a result map skips the tool and hands that result to the model.
 func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
 	log := e.toolReg.Hooks().Audit()
-	log.Log(audit.Entry{Kind: audit.KindToolCall, Tool: t.Name(), Args: args})
+	log.LogContext(ctx, audit.Entry{Kind: audit.KindToolCall, Tool: t.Name(), Args: args})
 
 	if r := planRefusal(stateFrom(ctx), tools.PlanGateFrom(ctx).Planning(), t.Name()); r != nil {
 		return r, nil
@@ -820,7 +857,7 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 		return r, nil
 	}
 	if rule := e.toolReg.Rules().ToolDenied(t.Name(), args); rule != nil {
-		log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "rule-deny " + rule.String()})
+		log.LogContext(ctx, audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "rule-deny " + rule.String()})
 		return map[string]any{"error": fmt.Sprintf("denied by the permission rule deny %s", rule)}, nil
 	}
 	if r := e.preToolHooks(ctx, t, args); r != nil {
@@ -830,7 +867,7 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 		v := e.guard.ToolCall(ctx, e.guardCall(ctx, ctx, t.Name(), args))
 		e.tell(ctx, v.Notices)
 		if v.Refusal != "" {
-			log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "guardrail", Detail: v.Refusal})
+			log.LogContext(ctx, audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "guardrail", Detail: v.Refusal})
 			return map[string]any{"error": v.Refusal}, nil
 		}
 	}
@@ -893,6 +930,20 @@ func argsSummary(args map[string]any) string {
 	return textutil.Ellipsize(string(b), 300)
 }
 
+// exitCode is a command's exit code in a tool's result (run_shell_command,
+// run_skill_script); 0 when there's none.
+func exitCode(result map[string]any) int {
+	switch c := result["exit_code"].(type) {
+	case int:
+		return c
+	case int64:
+		return int(c)
+	case float64:
+		return int(c)
+	}
+	return 0
+}
+
 // afterTool runs post_tool hooks, audits the outcome, and attaches messages
 // the user sent while the turn was running (see Steer).
 func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[string]any, toolErr error) (map[string]any, error) {
@@ -906,7 +957,17 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 		entry.Decision, entry.Error = "error", msg
 	}
 	observability.RecordToolCall(ctx, t.Name(), entry.Decision)
-	e.toolReg.Hooks().Audit().Log(entry)
+	// What failed, for what agents learn from their runs
+	// (spec_harness_learning_048 HE-02): the call's arguments, and for a
+	// command that exited nonzero its code and the end of its output.
+	if code := exitCode(result); entry.Decision == "ok" && code != 0 {
+		out, _ := result["output"].(string)
+		entry.Decision, entry.Error, entry.Detail = "exit", fmt.Sprintf("exit code %d", code), textutil.Tail(strings.TrimSpace(out), 300)
+	}
+	if entry.Decision != "ok" {
+		entry.Args = args
+	}
+	e.toolReg.Hooks().Audit().LogContext(ctx, entry)
 	out := result
 	changed := false
 	if e.guard != nil && toolErr == nil { // guardrails on what the tool brought back: injection, custom checks
@@ -929,6 +990,18 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 		}
 		out["diagnostics"] = d
 		changed = true
+	}
+	// The same call failing the same way again (spec_harness_learning_048
+	// HE-07): say so, so the agent changes course instead of retrying.
+	if entry.Decision != "ok" {
+		if n := repeatedFailure(ctx, t.Name(), args, entry.Error); n >= repeatWarnAt {
+			out = maps.Clone(out)
+			if out == nil {
+				out = map[string]any{}
+			}
+			out["repeated_failure"] = fmt.Sprintf("This exact call has now failed %d times in this turn with the same error. Don't make it again: read the error, then change the call, try another way, or ask the user.", n)
+			changed = true
+		}
 	}
 	if text, ok := e.hookContext.LoadAndDelete(id); ok && id != "" {
 		out = maps.Clone(out)
@@ -1037,7 +1110,7 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		}
 		llm := e.modelInTreeLocked(spec.Name, active, override)
 		t.models[spec.Name] = llm
-		sub, err := e.newLLMAgent(spec, llm, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(spec.Name, false))
+		sub, err := e.newTreeSubAgent(spec, llm, e.toolReg.MCP().ToolsetsFor(spec.Name, false))
 		if err != nil {
 			return tree{}, fmt.Errorf("failed to build sub-agent %s: %w", spec.Name, err)
 		}
@@ -1125,6 +1198,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		return err
 	}
 	ctx = context.WithValue(ctx, runStateKey{}, st)
+	ctx = audit.WithSession(ctx, sessionID)
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
 	if n := e.cfg.Tools.MaxParallel; n > 0 {
 		ctx = platform.WithTaskRunner(ctx, boundedRunner(n))
