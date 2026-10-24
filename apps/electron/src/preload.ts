@@ -44,6 +44,7 @@ const methods = [
   "PreviewPicture",
   "DragOut",
   "TrashDropped",
+  "SignInWindow",
 ];
 const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"]);
 

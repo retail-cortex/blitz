@@ -859,6 +859,10 @@ function fakeAccepted(provider: string) {
 // A sales table for the table viewer (ReadTable reads it below).
 const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
 
+// Browser profiles, and the one each workspace browses with.
+const fakeProfiles: { name: string; created: ReturnType<typeof now>; allowDomains: string[] }[] = [{ name: "work", created: now(), allowDomains: ["mail.example.com"] }];
+const fakeProfileOf = new Map<string, string>();
+
 // Files being uploaded (dropped from the computer), by upload id.
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
@@ -2245,6 +2249,32 @@ export function installFake() {
         trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        // Browser profiles (spec_browser_profiles_049), kept in the page.
+        listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "" }),
+        createBrowserProfile: ({ name }) => {
+          if (fakeProfiles.some((p) => p.name === name)) throw new ConnectError(`a browser profile named "${name}" exists`, Code.InvalidArgument);
+          const p = { name, created: now(), allowDomains: [] as string[] };
+          fakeProfiles.push(p);
+          return { profile: p };
+        },
+        deleteBrowserProfile: ({ name }) => {
+          fakeProfiles.splice(0, fakeProfiles.length, ...fakeProfiles.filter((p) => p.name !== name));
+          for (const [ws, p] of fakeProfileOf) if (p === name) fakeProfileOf.delete(ws);
+          return {};
+        },
+        clearBrowserProfile: () => ({}),
+        setBrowserProfileDomains: ({ name, allowDomains }) => {
+          const p = fakeProfiles.find((x) => x.name === name);
+          if (!p) throw new ConnectError(`no browser profile "${name}"`, Code.NotFound);
+          p.allowDomains = allowDomains;
+          return { profile: p };
+        },
+        setWorkspaceBrowserProfile: ({ workspace, name }) => {
+          if (name) fakeProfileOf.set(workspace, name);
+          else fakeProfileOf.delete(workspace);
+          return {};
+        },
+        openBrowserProfile: () => ({ browser: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }),
         listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
         setSecret: ({ workspace, key }) => {
           const l = fakeSecrets.get(workspace) ?? [];

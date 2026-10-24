@@ -69,4 +69,6 @@ allow_local = true     # localhost and private addresses; cloud metadata never
 
 Running a script the agent wrote in a page asks first unless `allow_scripts` is set. Set `[browser] enabled = false` to turn the tool off.
 
+**Signed-in browsing.** By default the browser has a throwaway profile and is signed in nowhere. To let the agents use a site you sign in to (a mailbox, an internal wiki behind single sign-on, a dashboard), make a **browser profile** in Settings › Browser, sign in to the site in it, and choose it for the workspace (its settings › **Browser profile**). The agents then browse that workspace with your sign-ins; the profile's own sites go without asking and every other site asks, whatever `web.allow_domains` says. Profiles are yours: only your settings choose them, and a workspace whose project settings wait for your trust browses signed out. Google and some others refuse sign-ins in browsers that are automated; sign in to those in your own browser instead.
+
 `web_fetch` uses the browser too, by itself: when a plain request gets a bot check ("Just a moment…", a captcha) or a page that's only scripts, it loads the page in the browser and returns what it shows, saying so (`via: browser`). It doesn't ask again for a site you just approved. `[web] browser_fallback = false` turns that off.

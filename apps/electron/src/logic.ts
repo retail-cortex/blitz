@@ -46,6 +46,8 @@ export const windowMethods = [
   // The Files view's drags to and from the computer (EL-15).
   "DragOut",
   "TrashDropped",
+  // A browser profile's sign-in window (EL-16).
+  "SignInWindow",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
@@ -573,3 +575,11 @@ export class DroppedPaths {
     return taken;
   }
 }
+
+/** A browser profile's name as the page names it (lowercase letters, digits, - and _), or undefined. */
+export function profileName(v: unknown): string | undefined {
+  return typeof v === "string" && /^[a-z0-9][a-z0-9_-]{0,31}$/.test(v) ? v : undefined;
+}
+
+/** The Electron partition of browser profile name (EL-16): its own cookies and storage, kept. */
+export const profilePartition = (name: string) => `persist:profile-${name}`;

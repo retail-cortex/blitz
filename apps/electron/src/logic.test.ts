@@ -19,6 +19,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   absolutePaths,
+  profileName,
+  profilePartition,
   DroppedPaths,
   appMenu,
   bounds,
@@ -433,4 +435,16 @@ describe("DroppedPaths", () => {
     d.add(["/c", "/a"]);
     expect(d.take(["/a", "/b", "/c"])).toEqual(["/a", "/c"]);
   });
+});
+
+describe("browser profiles", () => {
+  it.each([
+    ["work", "work"],
+    ["client-a_2", "client-a_2"],
+    ["Work", undefined],
+    ["../x", undefined],
+    ["", undefined],
+    [7, undefined],
+  ])("profileName(%j)", (v, want) => expect(profileName(v)).toBe(want));
+  it("keeps each profile in its own partition", () => expect(profilePartition("work")).toBe("persist:profile-work"));
 });

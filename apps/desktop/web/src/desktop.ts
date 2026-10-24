@@ -117,6 +117,7 @@ type AppMethods = {
   PreviewPicture(id: string, url: string): Promise<{ ext: string; data: string }>;
   DragOut(paths: string[]): Promise<boolean>;
   TrashDropped(paths: string[]): Promise<string[]>;
+  SignInWindow(profile: string, url: string): Promise<void>;
 };
 
 /** Where a web preview goes in the window, in the page's pixels. */
@@ -433,6 +434,9 @@ export const dragOut = (paths: string[]) => app().DragOut(paths);
  * into the workspace; returns those it couldn't.
  */
 export const trashDropped = (paths: string[]) => app().TrashDropped(paths);
+
+/** Opens a window of the app's on browser profile's sign-ins, at url (EL-16), to sign in to a site. */
+export const signInWindow = (profile: string, url: string) => app().SignInWindow(profile, url);
 
 /** Shows a file or folder selected in the system's file manager (in the app, or from the tray). */
 export const revealPath = (path: string) => app().RevealPath(path);

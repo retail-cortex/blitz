@@ -238,3 +238,41 @@ func TestBrowserToolWithFakePage(t *testing.T) {
 	out = run(BrowserInput{Action: "close"})
 	assert.Nil(t, bt.b)
 }
+
+// With the workspace's browser profile (BP-03, BP-04) the browser keeps it
+// (ProfileDir), the profile's own sites go without asking and others ask
+// even when web.allow_domains has them; a change of profile is a new
+// browser.
+func TestBrowserToolUsesTheWorkspacesProfile(t *testing.T) {
+	page := browsertest.New(t)
+	hooks, reqs := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, nil)
+	bt.web.AllowDomains = []string{"shop.example"}
+	var launches []browser.Options
+	bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+		launches = append(launches, o)
+		return browser.Attach(ctx, page.URL, o)
+	}
+	dir, allow := "/profiles/work", []string{"mail.example"}
+	bt.r.SetBrowserProfile(func() (string, []string) { return dir, allow })
+	ctx := context.Background()
+
+	out := bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://mail.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, launches, 1)
+	assert.Equal(t, "/profiles/work", launches[0].ProfileDir)
+	assert.Empty(t, *reqs, "the profile's own site isn't asked about")
+	out = bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, *reqs, 1, "web.allow_domains doesn't cover a profile's browsing")
+
+	dir = ""
+	out = bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, launches, 2, "no profile now: a new browser")
+	assert.Empty(t, launches[1].ProfileDir)
+	assert.Len(t, *reqs, 1, "and web.allow_domains applies again")
+	bt.mu.Lock()
+	bt.closeLocked()
+	bt.mu.Unlock()
+}

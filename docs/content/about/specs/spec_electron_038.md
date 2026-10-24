@@ -42,6 +42,7 @@ This spec began as a trial of Electron beside the Wails app: Chromium on macOS, 
 - **EL-13** macOS's menu bar is the desktop app's (DSK-101): **About Blitz**, **Settings…** (⌘,), Hide, Hide Others, Show All, **Quit Blitz** (⌘Q), then Edit and Window, in the page's language (`SetMenu`). About and Settings tell the page (`menu:about`, `menu:settings`). Elsewhere there's no menu bar.
 - **EL-14** Closing the window, or quitting, with unsaved changes in the editor asks first, in the page's words (`SetUnsaved`).
 - **EL-15** The Files view's drags to and from the computer (FIL-36, v0.8.4). `DragOut(paths)` starts the system's own drag of the files at `paths` that are on this computer (absolute, existing), with the app's icon (`webContents.startDrag`), and says whether there were any. The preload's `pathsOf(files)` reads where dropped files are (`webUtils.getPathForFile`; `""` for one that isn't a file there) and tells the main process, which remembers the newest 1,000; `TrashDropped(paths)` moves to the system's trash only those of `paths` it remembers, each once, and returns the ones it couldn't. The page can't name other files for the trash: a `File` it makes has no path.
+- **EL-16** A browser profile's sign-in window (BP-05, v0.8.4): `SignInWindow(profile, url)` opens a window over the app's on the profile's partition (`persist:profile-<name>`, its permissions and downloads refused as the previews'), at a web address or a blank page; popups open in the same session, so OAuth's flows complete. The profile's name is checked as the service checks it.
 
 ## 4. What the page asks of the window
 
@@ -53,6 +54,7 @@ This spec began as a trial of Electron beside the Wails app: Chromium on macOS, 
   - `SetAppearance(theme)`: the window's theme (`system`, `light` or `dark`).
   - `SetMenu(labels)`, `SetUnsaved(u)`: EL-13 and EL-14.
   - `DragOut(paths)`, `TrashDropped(paths)`: EL-15.
+  - `SignInWindow(profile, url)`: EL-16.
   - `PendingLinks()`: the `blitz://` links that came before the page was ready.
   - `ToggleFullscreen()`.
 - **EL-21** Everything else the page asks of its host (the service's status and controls, preferences in `~/.blitz/desktop.json`, the CLI, the sandbox, files, licenses) goes to `/host/` (WIN-14), as on the Windows tray's page.

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -52,6 +53,10 @@ type Options struct {
 	Navigation func(u *url.URL) error
 	// Timeout bounds a page load (default 30s).
 	Timeout time.Duration
+	// ProfileDir is a profile kept between runs (a browser profile's,
+	// spec_browser_profiles_049 BP-03): its sign-ins and cookies last, and
+	// Close leaves it. Empty: a new, empty profile, removed on Close.
+	ProfileDir string
 }
 
 // ErrNoBrowser means no Chromium-family browser was found.
@@ -99,6 +104,7 @@ type Browser struct {
 	opts    Options
 	cmd     *exec.Cmd
 	profile string
+	keep    bool // the profile is kept (Options.ProfileDir)
 	proxy   *proxy
 	conn    *conn
 
@@ -142,7 +148,7 @@ func (t *tailBuffer) tail() string {
 
 const maxConsole = 200
 
-// Launch starts a browser with a new, empty profile.
+// Launch starts a browser with a new, empty profile, or opts.ProfileDir.
 func Launch(ctx context.Context, opts Options) (*Browser, error) {
 	path, err := Find(opts.Path)
 	if err != nil {
@@ -166,7 +172,19 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 	if b.proxy, err = startProxy(allowAddr, host, b.noteRefused); err != nil {
 		return nil, err
 	}
-	if b.profile, err = os.MkdirTemp("", "blitz-browser-"); err != nil {
+	if opts.ProfileDir != "" {
+		b.profile, b.keep = opts.ProfileDir, true
+		if err = os.MkdirAll(b.profile, 0o700); err == nil {
+			// The last run's port: connect waits for this run's.
+			err = os.Remove(filepath.Join(b.profile, "DevToolsActivePort"))
+			if errors.Is(err, fs.ErrNotExist) {
+				err = nil
+			}
+		}
+	} else {
+		b.profile, err = os.MkdirTemp("", "blitz-browser-")
+	}
+	if err != nil {
 		b.proxy.close()
 		return nil, err
 	}
@@ -778,12 +796,15 @@ func (b *Browser) Screenshot(ctx context.Context, full bool) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(res.Data)
 }
 
-// Close stops the browser and removes its profile.
+// Close stops the browser it launched (one it attached to isn't its to
+// close) and removes its profile, unless it's kept (ProfileDir).
 func (b *Browser) Close() error {
 	if b.conn != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		b.conn.call(ctx, "Browser.close", nil, nil)
-		cancel()
+		if b.cmd != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			b.conn.call(ctx, "Browser.close", nil, nil)
+			cancel()
+		}
 		b.conn.close()
 	}
 	if b.cmd != nil && b.cmd.Process != nil {
@@ -804,7 +825,7 @@ func (b *Browser) cleanup() {
 	if b.proxy != nil {
 		b.proxy.close()
 	}
-	if b.profile != "" {
+	if b.profile != "" && !b.keep {
 		os.RemoveAll(b.profile)
 	}
 }

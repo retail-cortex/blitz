@@ -96,6 +96,12 @@ type browserTool struct {
 	actMu sync.Mutex
 	act   context.Context // the running action's, to ask about navigations
 	host  string          // the current page's
+
+	// profile is the running browser's kept profile ("": a throwaway
+	// one), and allow its sites browsed without asking (BP-04); actMu
+	// guards them, for the page's navigations.
+	profile string
+	allow   []string
 }
 
 func newBrowserTool(r *Registry, cfg config.BrowserConfig, web WebFetchConfig, timeout time.Duration, dir string) *browserTool {
@@ -132,6 +138,7 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		out.Note = "The browser is closed."
 		return out
 	}
+	bt.syncProfile()
 	if action == "stop_recording" {
 		if bt.rec == "" {
 			return fail(errors.New("not recording"))
@@ -286,7 +293,7 @@ func (bt *browserTool) checkNavigate(ctx context.Context, raw string) (*url.URL,
 	if err := bt.checkURL(u); err != nil {
 		return nil, err
 	}
-	return u, approveWeb(ctx, bt.r.hooks, bt.web, "browser", "open "+u.String(), u)
+	return u, approveWeb(ctx, bt.r.hooks, bt.webRules(), "browser", "open "+u.String(), u)
 }
 
 // checkURL is what any page must pass: http(s), no credentials, not a
@@ -338,13 +345,13 @@ func (bt *browserTool) navigation(u *url.URL) error {
 	bt.actMu.Lock()
 	ctx, current := bt.act, bt.host
 	bt.actMu.Unlock()
-	if host == current || matchDomain(bt.web.AllowDomains, host) {
+	if host == current || matchDomain(bt.webRules().AllowDomains, host) {
 		return nil
 	}
 	if ctx == nil {
 		return fmt.Errorf("the page went to %s by itself; navigate there to ask", host)
 	}
-	return approveWeb(ctx, bt.r.hooks, bt.web, "browser", "open "+u.String()+" (the page went there)", u)
+	return approveWeb(ctx, bt.r.hooks, bt.webRules(), "browser", "open "+u.String()+" (the page went there)", u)
 }
 
 func (bt *browserTool) setAct(ctx context.Context) {
@@ -357,6 +364,37 @@ func (bt *browserTool) clearAct() {
 	bt.actMu.Lock()
 	defer bt.actMu.Unlock()
 	bt.act = nil
+}
+
+// webRules are the web rules the browser asks by: with a profile, its own
+// sites in place of web.allow_domains, since its sign-ins go with every
+// request (BP-04).
+func (bt *browserTool) webRules() WebFetchConfig {
+	w := bt.web
+	bt.actMu.Lock()
+	defer bt.actMu.Unlock()
+	if bt.profile != "" {
+		w.AllowDomains = bt.allow
+	}
+	return w
+}
+
+// syncProfile takes the workspace's browser profile as it is now (BP-03),
+// before an action is judged: a change of it closes the browser, so the
+// next one starts with it. bt.mu must be held.
+func (bt *browserTool) syncProfile() {
+	profile, allow := "", []string(nil)
+	if p := bt.r.browserProfile(); p != nil {
+		profile, allow = p()
+	}
+	bt.actMu.Lock()
+	changed := bt.profile != profile
+	bt.profile, bt.allow = profile, allow
+	bt.actMu.Unlock()
+	if changed && bt.b != nil {
+		bt.b.Close()
+		bt.b = nil
+	}
 }
 
 // browser is the running browser, started when needed.
@@ -376,9 +414,12 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 	if bt.b != nil {
 		return bt.b, nil
 	}
+	bt.actMu.Lock()
+	profile := bt.profile
+	bt.actMu.Unlock()
 	b, err := bt.launch(ctx, browser.Options{
 		Path: bt.cfg.Path, Visible: bt.cfg.Visible, Width: bt.cfg.Width, Height: bt.cfg.Height,
-		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout,
+		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout, ProfileDir: profile,
 		Host: func(host string) error {
 			if matchDomain(bt.web.DenyDomains, host) {
 				return fmt.Errorf("blocked by web.deny_domains")

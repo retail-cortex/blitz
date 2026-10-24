@@ -35,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/harness"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
@@ -322,6 +323,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		List:   w.ListWorkers,
 	})
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
+	w.tools.SetBrowserProfile(w.browserProfile)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
@@ -583,6 +585,30 @@ func (w *Workspace) instructions() string {
 		s += "\n\n" + p
 	}
 	return s + i18n.ReplyInstruction(w.replyIn())
+}
+
+// FindBrowser is the system's Chrome, Chromium, Edge or Brave (path when
+// set), for opening a browser profile to sign in by hand (BP-05).
+func FindBrowser(path string) (string, error) { return browser.Find(path) }
+
+// browserProfile is the browser profile the workspace browses with, as the
+// person chose it (spec_browser_profiles_049 BP-03): its folder and the
+// sites it browses without asking. None ("") when none is chosen, or the
+// project's settings wait for trust or were declined, since a project the
+// person hasn't trusted could steer the agent into their sign-ins.
+func (w *Workspace) browserProfile() (string, []string) {
+	switch w.project.State {
+	case "", "none", "trusted":
+	default:
+		return "", nil
+	}
+	store := config.OpenBrowserProfiles(settingsDir(w.cfg))
+	name := store.ForWorkspace(w.Dir())
+	p, ok := store.Get(name)
+	if name == "" || !ok {
+		return "", nil
+	}
+	return store.Dir(name), p.AllowDomains
 }
 
 // harnessFolders tells the agents about the harness's scratch folder and

@@ -93,6 +93,23 @@ type Registry struct {
 	// jobs makes and lists the workspace's jobs (create_job, list_jobs);
 	// nil: off. evidenceMu guards it.
 	jobs Jobs
+	// profile is the browser profile the workspace browses with (its
+	// folder and the sites it may browse without asking; "" for a
+	// throwaway one); nil: none. evidenceMu guards it.
+	profile func() (string, []string)
+}
+
+// SetBrowserProfile supplies the workspace's browser profile (BP-03).
+func (r *Registry) SetBrowserProfile(p func() (dir string, allow []string)) {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	r.profile = p
+}
+
+func (r *Registry) browserProfile() func() (string, []string) {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	return r.profile
 }
 
 // Rules are the permission rules in force; they can change while a

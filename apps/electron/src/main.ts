@@ -56,6 +56,8 @@ import {
   maxPictureBytes,
   previewContent,
   previewId,
+  profileName,
+  profilePartition,
   previewStep,
   addressURL,
   previewURL,
@@ -610,6 +612,16 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       }
       return failed;
     }
+    case "SignInWindow": {
+      // Signing in to a site in a browser profile (EL-16), for the
+      // agent's browsing in the app: a window of its own on the profile's
+      // partition, popups (OAuth's) in the same session.
+      const name = profileName(a[0]);
+      const url = addressURL(a[1]) ?? "about:blank";
+      if (!name) throw new Error(`not a browser profile: ${JSON.stringify(a[0])}`);
+      openSignIn(name, url);
+      return;
+    }
     case "OpenApp":
       return openApp();
     case "Quit":
@@ -639,6 +651,33 @@ function previewSessionOf(): Session {
   s.on("will-download", (e) => e.preventDefault());
   previewSession = s;
   return s;
+}
+
+// The browser profiles' sessions (EL-16): each its own persistent
+// partition, refusing permissions and downloads as the previews do.
+const profileSessions = new Map<string, Session>();
+function profileSessionOf(name: string): Session {
+  const had = profileSessions.get(name);
+  if (had) return had;
+  const s = session.fromPartition(profilePartition(name));
+  s.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
+  s.setPermissionCheckHandler((_wc, permission) => permission === "clipboard-sanitized-write");
+  s.on("will-download", (e) => e.preventDefault());
+  profileSessions.set(name, s);
+  return s;
+}
+
+/** A sign-in window on profile name's session, at url. */
+function openSignIn(name: string, url: string) {
+  const ses = profileSessionOf(name);
+  const prefs = { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false };
+  const w = new BrowserWindow({ width: 980, height: 760, title: `Sign in · ${name}`, parent: win ?? undefined, webPreferences: prefs });
+  w.webContents.setWindowOpenHandler(() => ({ action: "allow", overrideBrowserWindowOptions: { webPreferences: prefs } }));
+  w.webContents.on("page-title-updated", (e, title) => {
+    e.preventDefault();
+    w.setTitle(`${title} · ${name}`);
+  });
+  void w.loadURL(url);
 }
 
 /** A preview by the page's ID; it throws for one that isn't open. */
