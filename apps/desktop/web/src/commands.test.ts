@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allCommands, builtins, filterPalette, helpText, matchCommands, paletteResults, parseCommand, searchesFiles, type CommandSpec } from "./commands";
+import { allCommands, builtins, filterPalette, helpText, knownCommand, matchCommands, paletteResults, parseCommand, searchesFiles, type CommandSpec } from "./commands";
 
 const custom: CommandSpec[] = [
   { name: "review", description: "Review changes", source: "bundled" },
@@ -146,3 +146,12 @@ describe("help", () => {
   });
 });
 
+
+describe("knownCommand", () => {
+  it.each([
+    ["setup", [], true],
+    ["reflect", [], true],
+    ["deploy", [], false],
+    ["deploy", [{ name: "deploy", description: "Ship it", source: "project" }], true],
+  ] as [string, CommandSpec[], boolean][])("%s with %j", (name, all, want) => expect(knownCommand(name, all)).toBe(want));
+});

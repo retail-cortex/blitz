@@ -79,7 +79,7 @@ import { Decision, type ApprovalRequest, type Question, type Task, type Usage } 
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
 import { withTools } from "./turns";
-import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { allCommands, helpText, knownCommand, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
   addToContextEvent,
@@ -692,7 +692,11 @@ export function Conversation({
     if (!c) return false;
     const spec = commands.find((x) => x.name === c.name);
     if (!spec) {
-      say(t("desktop.cmd.unknown", { name: c.name }), "error");
+      // One of the engine's own, before the service's list has come.
+      if (knownCommand(c.name, commands)) {
+        if (running) say(t("desktop.cmd.wait", { name: c.name }), "error");
+        else run(line.trim(), { command: true });
+      } else say(t("desktop.cmd.unknown", { name: c.name }), "error");
       return true;
     }
     const own = spec.source === "builtin" ? builtin(c.name) : undefined;
