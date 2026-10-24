@@ -27,6 +27,7 @@ import {
   mdiEyeOutline,
   mdiHistory,
   mdiFilePlusOutline,
+  mdiFileReplaceOutline,
   mdiFolderOpenOutline,
   mdiFolderOutline,
   mdiFolderPlusOutline,
@@ -40,18 +41,20 @@ import {
   mdiPlusBoxOutline,
   mdiSourceBranch,
   mdiSourceCommit,
+  mdiTrayArrowDown,
   mdiUndoVariant,
 } from "@mdi/js";
-import { fileManager, revealPath } from "../desktop";
+import { canCall, canDragOut, droppedPaths, dragOut, fileManager, revealPath, trashDropped } from "../desktop";
 import { addToContext, showHistory } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
 import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
 import { gitActions, gitKeys, stagedKey } from "./gitMenu";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
+import { dropEntries, importDrop, readDrop, someNames, type DropItem, type OnConflict } from "./upload";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 import { useAdvanced } from "../state";
 
@@ -66,11 +69,34 @@ const gitIcons: Record<GitAction, string> = {
 
 const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "!" };
 
+/** p with forward slashes, to compare a path on Windows with the workspace's. */
+const slashes = (p: string) => p.replace(/\\/g, "/");
+
 /** The drag data type of a path dragged in the tree. */
 const dragType = "application/x-blitz-path";
 
 /** How long a drag rests on a closed folder before it opens. */
 const dragOpenMs = 600;
+
+/**
+ * Files and folders dropped from the computer, waiting on the user
+ * (FIL-36): how (copy or move, in the app) and, when names are taken,
+ * what to do with them.
+ */
+type Incoming = {
+  into: string;
+  items: DropItem[];
+  /** The dropped files' paths on the computer, by item index ("" where unknown). */
+  paths: string[];
+  /** The names in into. */
+  taken: Set<string>;
+  /** The items' names already in into. */
+  conflicts: string[];
+  /** Move can be offered: the app knows where the originals are. */
+  canMove: boolean;
+  move: boolean;
+  step: "how" | "conflict";
+};
 
 /** Something being named in the tree: a new file or folder, or a rename. */
 type Naming = { kind: "file" | "folder"; dir: string } | { kind: "rename"; path: string };
@@ -268,15 +294,19 @@ export function FilesShelf({
 
   const onDragOver = (ev: React.DragEvent) => {
     const from = dragging.current;
-    if (!from || !ev.dataTransfer.types.includes(dragType)) return;
+    const types = ev.dataTransfer.types;
     const into = folderAt(ev.target);
-    if (moveTarget(from, into) === null) {
+    // Files from the computer are taken anywhere; in the app a row's own
+    // drag is one too (DragOut), told apart at the drop.
+    const fromComputer = types.includes("Files");
+    const move = from !== null && (types.includes(dragType) || fromComputer) && moveTarget(from, into) !== null;
+    if (!move && !fromComputer) {
       setDropInto(null);
       stopOpenTimer();
       return;
     }
     ev.preventDefault();
-    ev.dataTransfer.dropEffect = "move";
+    ev.dataTransfer.dropEffect = move ? "move" : "copy";
     setDropInto(into);
     if (into && !tree.expanded.has(into) && openTimer.current?.path !== into) {
       stopOpenTimer();
@@ -289,9 +319,26 @@ export function FilesShelf({
     const from = dragging.current;
     const into = folderAt(ev.target);
     endDrag();
-    const to = from === null ? null : moveTarget(from, into);
-    if (from === null || to === null) return;
+    // Read while the event lasts: its data is gone after.
+    const drop = ev.dataTransfer.types.includes(dragType) ? null : dropEntries(ev.dataTransfer);
+    if (drop) {
+      ev.preventDefault();
+      const paths = await droppedPaths(drop.files);
+      // A row dragged out (DragOut) and dropped back in the tree: a move.
+      const own = from !== null && paths.length === 1 && slashes(paths[0]) === slashes(absolute(from));
+      if (own) await moveInTree(from, into);
+      else await receive(into, drop.entries, paths);
+      return;
+    }
+    if (from === null || moveTarget(from, into) === null) return;
     ev.preventDefault();
+    await moveInTree(from, into);
+  };
+
+  // Moves from into the folder into (a drag in the tree).
+  const moveInTree = async (from: string, into: string) => {
+    const to = moveTarget(from, into);
+    if (to === null) return;
     try {
       await files.renameFile({ workspace: dir, from, to });
       onMoved(from, to);
@@ -301,6 +348,51 @@ export function FilesShelf({
       setSelected(to);
     } catch (e) {
       snack(message(e), { error: true });
+    }
+  };
+
+  // Files dropped from the computer: asks how (copy or move) where the
+  // app can move them, and what to do with names already there; an item
+  // dropped onto itself is left alone.
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
+  const receive = async (into: string, entries: Parameters<typeof readDrop>[0], paths: string[]) => {
+    try {
+      const all = await readDrop(entries);
+      const items = all.filter((i) => !paths[i.index] || slashes(paths[i.index]) !== slashes(absolute(joinPath(into, i.name))));
+      if (items.length === 0) return;
+      const listing = await files.listDir({ workspace: dir, path: into, showHidden: true });
+      const taken = new Set(listing.entries.map((e) => e.name));
+      const conflicts = items.filter((i) => taken.has(i.name)).map((i) => i.name);
+      const canMove = canCall("TrashDropped") && items.every((i) => !!paths[i.index]);
+      const inc: Incoming = { into, items, paths, taken, conflicts, canMove, move: false, step: canMove ? "how" : "conflict" };
+      if (!canMove && conflicts.length === 0) await bringIn(inc, "skip");
+      else setIncoming(inc);
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  // The user chose copy or move.
+  const chooseHow = (inc: Incoming, move: boolean) => {
+    if (inc.conflicts.length > 0) setIncoming({ ...inc, move, step: "conflict" });
+    else void bringIn({ ...inc, move }, "skip");
+  };
+  const folderName = (into: string) => (into ? into.split("/").pop()! : t("desktop.files.drop.workspace"));
+  const bringIn = async (inc: Incoming, onConflict: OnConflict) => {
+    setIncoming(null);
+    const where = folderName(inc.into);
+    try {
+      const { added, done } = await importDrop(files, dir, inc.into, inc.items, inc.taken, onConflict);
+      let failed: string[] = [];
+      if (inc.move) failed = await trashDropped(done.map((d) => inc.paths[d.index]).filter(Boolean));
+      if (inc.into) setTree((tr) => setExpanded(tr, inc.into, true));
+      await load(inc.into);
+      if (added[0]) setSelected(added[0]);
+      onChanged();
+      if (failed.length > 0) snack(t("desktop.files.drop.not_trashed", { names: failed.map((p) => slashes(p).split("/").pop()).join(", ") }), { error: true });
+      else if (added.length > 0) snack(tn(inc.move ? "desktop.files.drop.moved" : "desktop.files.drop.copied", added.length, { name: added[0].split("/").pop()!, folder: where }));
+    } catch (e) {
+      snack(message(e), { error: true });
+      await load(inc.into).catch(() => undefined);
     }
   };
 
@@ -496,6 +588,14 @@ export function FilesShelf({
                   draggable
                   onDragStart={(ev) => {
                     dragging.current = e.path;
+                    // In the app, the computer's own drag: it can leave the
+                    // window with a copy (FIL-36), and back in the tree it's
+                    // a move.
+                    if (canDragOut()) {
+                      ev.preventDefault();
+                      void dragOut([absolute(e.path)]).catch((err) => snack(message(err), { error: true }));
+                      return;
+                    }
                     ev.dataTransfer.setData(dragType, e.path);
                     ev.dataTransfer.effectAllowed = "move";
                   }}
@@ -575,6 +675,48 @@ export function FilesShelf({
             }
           >
             <p>{t(isFolder(deleting) ? "desktop.files.delete_folder_body" : "desktop.files.delete_body", { path: deleting.path })}</p>
+          </Dialog>,
+          document.body,
+        )}
+      {incoming?.step === "how" &&
+        createPortal(
+          <Dialog
+            title={t("desktop.files.drop.title", { folder: folderName(incoming.into) })}
+            icon={mdiTrayArrowDown}
+            onClose={() => setIncoming(null)}
+            footer={
+              <>
+                <Button onClick={() => setIncoming(null)}>{t("desktop.cancel")}</Button>
+                <Button onClick={() => chooseHow(incoming, true)}>{t("desktop.files.drop.move")}</Button>
+                <Button variant="filled" onClick={() => chooseHow(incoming, false)}>
+                  {t("desktop.files.drop.copy")}
+                </Button>
+              </>
+            }
+          >
+            <p>{tn("desktop.files.drop.body", incoming.items.length, { names: someNames(incoming.items.map((i) => i.name)), folder: folderName(incoming.into) })}</p>
+            <p className="muted t-body-sm">{t("desktop.files.drop.move_detail")}</p>
+          </Dialog>,
+          document.body,
+        )}
+      {incoming?.step === "conflict" &&
+        createPortal(
+          <Dialog
+            title={tn("desktop.files.drop.conflict_title", incoming.conflicts.length, { names: someNames(incoming.conflicts), folder: folderName(incoming.into) })}
+            icon={mdiFileReplaceOutline}
+            onClose={() => setIncoming(null)}
+            footer={
+              <>
+                <Button onClick={() => setIncoming(null)}>{t("desktop.cancel")}</Button>
+                <Button onClick={() => void bringIn(incoming, "skip")}>{t("desktop.files.drop.skip")}</Button>
+                <Button onClick={() => void bringIn(incoming, "keep")}>{t("desktop.files.drop.keep_both")}</Button>
+                <Button variant="filled" danger onClick={() => void bringIn(incoming, "replace")}>
+                  {t("desktop.files.drop.replace")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t("desktop.files.drop.conflict_body")}</p>
           </Dialog>,
           document.body,
         )}

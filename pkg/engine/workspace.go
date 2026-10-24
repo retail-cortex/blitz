@@ -99,6 +99,8 @@ type Workspace struct {
 	appendPrompt string
 	goalMu       sync.Mutex
 	goals        map[string]api.Goal // by session
+	uploadMu     sync.Mutex
+	uploads      map[string]*upload // files being uploaded (UploadFile), by id
 	cfg          *config.Config
 	// cfgMu guards what changes in cfg once it's open (reloads and
 	// setters write it through setSettings), reply and mcpLive; readers
@@ -482,6 +484,7 @@ func (w *Workspace) Close() error {
 		w.engine.StopTasks() // before their tools close
 	}
 	if w.tools != nil {
+		w.dropUploads(time.Time{})
 		err = w.tools.Close()
 	}
 	w.audit.Close()

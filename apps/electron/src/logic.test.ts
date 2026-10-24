@@ -18,6 +18,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  absolutePaths,
+  DroppedPaths,
   appMenu,
   bounds,
   consoleLine,
@@ -404,4 +406,31 @@ describe("parseRunLink", () => {
     }));
   it("takes a Windows folder, and Blitz for a missing title", () => expect(parseRunLink("blitz://run?dir=C%3A%5Cshop")).toMatchObject({ title: "Blitz", open: { dir: "C:\\shop" } }));
   it.each(["blitz://run?dir=shop", "blitz://run", "blitz://tasks?dir=/x", "https://run?dir=/x", "nonsense"])("ignores %s", (raw) => expect(parseRunLink(raw)).toBeUndefined());
+});
+
+describe("absolutePaths", () => {
+  const abs = (p: string) => p.startsWith("/");
+  it.each([
+    ["absolute paths", ["/a/b", "/c"], ["/a/b", "/c"]],
+    ["relative ones left out", ["a/b", "/c", ""], ["/c"]],
+    ["anything but strings left out", ["/a", 7, null, { p: "/b" }], ["/a"]],
+    ["a NUL left out", ["/a\0b"], []],
+    ["not a list", "/a", []],
+  ])("%s", (_name, a, want) => expect(absolutePaths(a, abs)).toEqual(want));
+});
+
+describe("DroppedPaths", () => {
+  it("takes only what was dropped, once", () => {
+    const d = new DroppedPaths();
+    d.add(["/a", "/b"]);
+    expect(d.take(["/a", "/x", "/a"])).toEqual(["/a"]);
+    expect(d.take(["/a", "/b"])).toEqual(["/b"]);
+    expect(d.take(["/b"])).toEqual([]);
+  });
+  it("keeps the newest", () => {
+    const d = new DroppedPaths(2);
+    d.add(["/a", "/b"]);
+    d.add(["/c", "/a"]);
+    expect(d.take(["/a", "/b", "/c"])).toEqual(["/a", "/c"]);
+  });
 });

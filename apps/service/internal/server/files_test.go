@@ -74,6 +74,23 @@ func TestFileService(t *testing.T) {
 	_, err = files.WriteBinaryFile(ctx, connect.NewRequest(&pb.WriteBinaryFileRequest{Workspace: dir, Path: "notes.pdf", Data: []byte("%PDF-2"), Version: b.Msg.Version}))
 	require.NoError(t, err)
 
+	// A dropped file, in two chunks (FIL-22).
+	up, err := files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: dir, Path: "drop/pic.png", Data: []byte("\x89PN")}))
+	require.NoError(t, err)
+	require.NotEmpty(t, up.Msg.UploadId)
+	last, err := files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: dir, Path: "drop/pic.png", UploadId: up.Msg.UploadId, Data: []byte("G"), Done: true}))
+	require.NoError(t, err)
+	got, _ = os.ReadFile(filepath.Join(dir, "drop", "pic.png"))
+	assert.Equal(t, []byte("\x89PNG"), got)
+	assert.NotEmpty(t, last.Msg.Version)
+	_, err = files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: dir, Path: "drop/pic.png", UploadId: up.Msg.UploadId, Done: true}))
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code, "a finished upload: %v %v", code, info)
+	assert.Equal(t, "NO_UPLOAD", info.Reason, "a finished upload: %v %v", code, info)
+	_, err = files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: dir, Path: "drop/pic.png", Data: []byte("x"), Done: true}))
+	code, info = errorReason(t, err)
+	assert.Equal(t, "FILE_EXISTS", info.Reason, "over an existing file: %v %v", code, info)
+
 	for name, call := range map[string]struct {
 		err    error
 		reason string

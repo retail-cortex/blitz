@@ -28,12 +28,14 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type Session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
 import {
+  absolutePaths,
   appMenu,
   bounds,
   consoleLine,
   contentScript,
+  DroppedPaths,
   englishMenu,
   gpuOff,
   isExternal,
@@ -458,6 +460,20 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
   }
 }
 
+// Files dropped on the page, as its preload read them (TrashDropped).
+const dropped = new DroppedPaths();
+ipcMain.handle("blitz:dropped", (e, paths: unknown) => {
+  if (originOf(e.senderFrame?.url ?? "") !== origin || !win || BrowserWindow.fromWebContents(e.sender) !== win) throw new Error("not the page");
+  dropped.add(absolutePaths(paths, path.isAbsolute));
+});
+
+// The picture under the pointer while files are dragged out: the app's icon.
+let dragImage: NativeImage | undefined;
+function dragIcon() {
+  dragImage ??= nativeImage.createFromPath(path.join(app.getAppPath(), "icon.png")).resize({ width: 32, height: 32 });
+  return dragImage;
+}
+
 // The page's calls to the window, from its own origin only.
 ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
   if (originOf(e.senderFrame?.url ?? "") !== origin) throw new Error("not the page");
@@ -573,6 +589,26 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       // The page as it shows, for Save to workspace (EL-106).
       const pdf = await preview(a).view.webContents.printToPDF(printOptions(a[1]));
       return pdf.toString("base64");
+    }
+    case "DragOut": {
+      // Files dragged out of the Files view: the computer gets copies
+      // (EL-15). Only files there, so not a remote service's.
+      const files: string[] = [];
+      for (const p of absolutePaths(a[0], path.isAbsolute)) {
+        if (await stat(p).then(() => true, () => false)) files.push(p);
+      }
+      if (files.length === 0) return false;
+      e.sender.startDrag({ file: files[0], files, icon: dragIcon() });
+      return true;
+    }
+    case "TrashDropped": {
+      // A move from the computer into the workspace, once copied: only
+      // files the preload read from a drop (EL-15).
+      const failed: string[] = [];
+      for (const p of dropped.take(absolutePaths(a[0], path.isAbsolute))) {
+        await shell.trashItem(p).catch(() => failed.push(p));
+      }
+      return failed;
     }
     case "OpenApp":
       return openApp();

@@ -40,6 +40,10 @@ service FileService {
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   // Writes bytes (a PDF the editor exported) as WriteFile writes text.
   rpc WriteBinaryFile(WriteBinaryFileRequest) returns (WriteBinaryFileResponse);
+  // Uploads a file in chunks (a file dropped from the computer): the first
+  // call (upload_id "") starts it, each adds data, and the one with done
+  // puts it at path. Unfinished uploads are dropped after ten minutes idle.
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse);
   // Creates a folder, and any missing folders above it; it must not exist.
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   // Moves a file or folder; the destination must not exist.
@@ -188,6 +192,28 @@ message WriteBinaryFileRequest {
 // Response message for FileService.WriteBinaryFile.
 message WriteBinaryFileResponse {
   string version = 1;
+}
+
+// Request message for FileService.UploadFile.
+message UploadFileRequest {
+  string workspace = 1;
+  // Where the file goes, relative to the workspace.
+  string path = 2;
+  // The id the first call returned; "" on the first call.
+  string upload_id = 3;
+  // The next chunk (at most 16 MiB).
+  bytes data = 4;
+  // The last chunk: the file is put at path.
+  bool done = 5;
+  // A file already at path is replaced; otherwise it's an error.
+  bool replace = 6;
+}
+
+// Response message for FileService.UploadFile.
+message UploadFileResponse {
+  string upload_id = 1;
+  // The file's version, once done.
+  string version = 2;
 }
 
 // Request message for FileService.CreateFolder.

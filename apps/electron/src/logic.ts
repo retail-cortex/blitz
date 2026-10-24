@@ -43,6 +43,9 @@ export const windowMethods = [
   "PreviewConsole",
   "PreviewPrintPDF",
   "PreviewPicture",
+  // The Files view's drags to and from the computer (EL-15).
+  "DragOut",
+  "TrashDropped",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
@@ -536,4 +539,37 @@ export const maxPictureBytes = 10 << 20;
 export function pictureExtension(contentType: string): string {
   const type = contentType.split(";")[0].trim().toLowerCase();
   return { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg", "image/avif": "avif", "image/x-icon": "ico", "image/vnd.microsoft.icon": "ico", "image/bmp": "bmp" }[type] ?? "";
+}
+
+/** The absolute paths in a, a list from the page; anything else is left out. */
+export function absolutePaths(a: unknown, isAbsolute: (p: string) => boolean): string[] {
+  if (!Array.isArray(a)) return [];
+  return a.filter((p): p is string => typeof p === "string" && p !== "" && !p.includes("\0") && isAbsolute(p));
+}
+
+/**
+ * The paths of files dropped on the page, as its preload read them from
+ * the drop (webUtils.getPathForFile): the only ones TrashDropped moves to
+ * the trash, so the page can't name others (EL-15). The newest max are
+ * kept.
+ */
+export class DroppedPaths {
+  private paths: string[] = [];
+  constructor(private readonly max = 1000) {}
+
+  /** Remembers paths. */
+  add(paths: readonly string[]) {
+    for (const p of paths) {
+      this.paths = this.paths.filter((x) => x !== p);
+      this.paths.push(p);
+    }
+    if (this.paths.length > this.max) this.paths = this.paths.slice(-this.max);
+  }
+
+  /** Those of paths that were dropped, forgotten as they're taken. */
+  take(paths: readonly string[]): string[] {
+    const taken = paths.filter((p, i) => this.paths.includes(p) && paths.indexOf(p) === i);
+    this.paths = this.paths.filter((p) => !taken.includes(p));
+    return taken;
+  }
 }

@@ -859,6 +859,10 @@ function fakeAccepted(provider: string) {
 // A sales table for the table viewer (ReadTable reads it below).
 const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
 
+// Files being uploaded (dropped from the computer), by upload id.
+const fakeUploads = new Map<string, string>();
+let fakeUploadSeq = 0;
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
@@ -2562,6 +2566,18 @@ export function installFake() {
           const text = new TextDecoder().decode(data);
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
+        },
+        uploadFile: ({ path, uploadId, data, done, replace }) => {
+          const id = uploadId || `upload-${++fakeUploadSeq}`;
+          const text = (fakeUploads.get(id) ?? "") + new TextDecoder().decode(data);
+          if (!done) {
+            fakeUploads.set(id, text);
+            return { uploadId: id, version: "" };
+          }
+          fakeUploads.delete(id);
+          if (fakeFiles.has(path) && !replace) throw new ConnectError(`${path}: file already exists`, Code.AlreadyExists);
+          fakeFiles.set(path, text);
+          return { uploadId: id, version: fakeVersion(text) };
         },
         createFolder: ({ path }) => {
           fakeFiles.set(path + "/.keep", "");
