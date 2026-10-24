@@ -90,6 +90,9 @@ type Registry struct {
 	// workspaceSearch searches the workspace (nil: search off); notesMu
 	// guards it.
 	workspaceSearch Searcher
+	// jobs makes and lists the workspace's jobs (create_job, list_jobs);
+	// nil: off. evidenceMu guards it.
+	jobs Jobs
 }
 
 // Rules are the permission rules in force; they can change while a
@@ -422,6 +425,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if r.tools["save_global_experience"], err = NewSaveGlobalExperienceTool(r); err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the save_global_experience tool: %w", err)
+	}
+	if r.tools["create_job"], err = NewCreateJobTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the create_job tool: %w", err)
+	}
+	if r.tools["list_jobs"], err = NewListJobsTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the list_jobs tool: %w", err)
 	}
 	resourceTools, err := NewMCPResourceTools(r)
 	if err != nil {

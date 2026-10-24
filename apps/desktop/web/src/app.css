@@ -502,6 +502,18 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .rule { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .rule code { flex: 1; font-size: 12px; }
 .rule-effect { width: 92px; flex: none; }
+/* The job editor's rule builder (WK-62): the kind's names are longer. */
+.permission-rules .rule-add-row { align-items: center; }
+.permission-rules .rule-add-row .select.rule-kind { width: 200px; flex: none; }
+.permission-rules .rule-add-row .input { flex: 1; min-width: 0; width: auto; }
+/* The job editor's schedule picker (WK-63): the next runs beside a month
+   with their days marked, as the page's chips mark what's on. */
+.schedule-preview { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 32px; align-items: start; padding: 10px 12px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
+.schedule-month { border-collapse: collapse; text-align: center; }
+.schedule-month caption { padding-bottom: 4px; }
+.schedule-month th, .schedule-month td { width: 26px; height: 24px; padding: 0; font-size: 12px; }
+.schedule-month td.has-run { background: var(--accent-tint); color: var(--md-primary); font-weight: 600; border-radius: var(--md-shape-xs); }
+@media (max-width: 640px) { .schedule-preview { grid-template-columns: 1fr; } }
 .effect-allow { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); border-color: transparent; }
 .effect-deny { background: var(--md-error-container); color: var(--md-on-error-container); border-color: transparent; }
 .effect-ask { background: var(--md-warning-container); color: var(--md-on-warning-container); border-color: transparent; }

@@ -49,6 +49,8 @@ export function WorkerLimits({ policy, onChanged }: { policy: WorkerPolicySettin
   const field = (key: LimitField, type: "number" | "text", label: string) => (
     <input
       className="input"
+      // A cap left empty is none (WK-73): jobs may ask for more than the defaults.
+      placeholder={key.startsWith("max_") && key !== "max_concurrent" ? t("desktop.workers.limits.no_limit") : undefined}
       type={type}
       min={type === "number" ? 0 : undefined}
       step={key.endsWith("cost_usd") ? 0.01 : type === "number" ? 1 : undefined}

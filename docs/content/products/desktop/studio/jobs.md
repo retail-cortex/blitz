@@ -15,10 +15,16 @@ Each job shows its state (**New**, **Enabled**, **Disabled**, **Changed** or **I
 
 ## Make a job
 
+Ask in the chat, or use the form.
+
+**In the chat.** Say what to do and when: *"Create a job that runs every day at 8 am to fetch the latest AI news from news.google.com and write a summary report to reports/ai-news/ as MM-DD-YYYY.html, glass morphic with a dark theme."* The agent drafts the job and shows you its file and its next runs to approve. It's created paused: the card in the chat has **Review** and **Enable**.
+
+**With the form:**
+
 1. Choose **New job** (the calendar icon).
-2. Say **What it does** (the **Name** follows from it) and its **Schedule**: *Weekdays at 9:30*, *daily at 6 AM*, *every 2 hours*, or cron. **Time zone** starts as yours.
+2. Say **What it does** (the **Name** follows from it). Choose when it **Repeats**: every hour, every day, every weekday, every week on the days you pick, or every month on a day, and at what time; or **Custom** for words (*every 2 hours*) or cron. **Time zone** starts as yours. The next runs are listed and marked on a month.
 3. Under **Runs**, keep **Its prompt, as a turn** and write the **Prompt**, as you'd type it in the chat, or choose a workflow to run.
-4. List what it **May do without asking**, one `kind:pattern` a line (`shell`, `write`, `delete`, `web` or `mcp`): only what it needs. Leave **Agent**, **Model** and the limits empty for the workspace's and the defaults (50 model calls, $1, 30 minutes).
+4. Under **May do without asking**, **Add a rule** for each thing it may do: a kind (**Run commands**, **Write files**, **Delete files**, **Fetch from the web**, **Use MCP tools**) and what it covers (`reports/**`, `news.google.com`); each rule says what it allows. Only what it needs. Leave **Agent**, **Model** and the limits empty for the workspace's and the defaults (50 model calls, $1, 30 minutes); a job may set more, unless Settings › Jobs sets a cap.
 5. Choose **Create**. It's saved as `.agents/workers/<name>/WORKER.md`, and doesn't run yet.
 6. Open it, read what it may do, and choose **Enable as shown**.
 

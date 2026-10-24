@@ -54,6 +54,7 @@ import {
   mdiPlus,
   mdiProgressClock,
   mdiRobotOutline,
+  mdiCalendarClock,
   mdiShieldAlertOutline,
   mdiStop,
   mdiUndoVariant,
@@ -67,7 +68,8 @@ import {
   mdiPuzzleOutline,
   mdiLoading,
 } from "@mdi/js";
-import { files, serviceLost, sessions, workspaces } from "./api";
+import { files, serviceLost, sessions, workers, workspaces } from "./api";
+import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
 import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
 import { chatTitle, HistoryMenu } from "./HistoryMenu";
@@ -89,6 +91,7 @@ import {
   loadSessionEvent,
   openSettings,
   showPendingEvent,
+  showView,
   takePendingCompose,
   takePendingLoad,
   type AddToContextDetail,
@@ -925,7 +928,11 @@ export function Conversation({
               <div key={g.at}>
                 <ToolGroup tools={g.tools} live={running && g.at >= turnStart} />
                 {g.tools.map((x) =>
-                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} /> : null,
+                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? (
+                    <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} />
+                  ) : x.name === "create_job" && typeof x.result?.name === "string" && x.result.paused === true ? (
+                    <JobCard key={`job-${x.result.name}`} dir={dir} name={x.result.name} />
+                  ) : null,
                 )}
               </div>
             ) : (
@@ -1497,6 +1504,63 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
           {task?.error && <p className="error-text">{task.error}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A job the agent made from the chat (create_job, spec_workers_023 WK-70):
+ * paused until it's reviewed, with Review (Studio › Jobs, its details) and
+ * Enable here; once enabled, when it next runs.
+ */
+function JobCard({ dir, name }: { dir: string; name: string }) {
+  const snack = useSnackbar();
+  const [job, setJob] = useState<Worker>();
+  const [gone, setGone] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await workers.listWorkers({ workspace: dir });
+      const w = r.workers.find((x) => x.name === name);
+      if (w) setJob(w);
+      else setGone(true); // deleted since
+    } catch {
+      setGone(true);
+    }
+  }, [dir, name]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  if (gone || !job) return null;
+  const enabled = job.state === WorkerState.ENABLED;
+  const enable = async () => {
+    try {
+      const r = await workers.enableWorker({ workspace: dir, name, hash: job.hash });
+      if (r.worker) setJob(r.worker);
+      snack(t("desktop.jobcard.enabled", { name }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <div className="card task-card">
+      <div className="row">
+        <Icon path={mdiCalendarClock} size="sm" />
+        <span className="ellipsis" style={{ flex: 1 }}>
+          <b>{name}</b> · {job.schedule}
+          {" · "}
+          {enabled && job.nextRun ? t("desktop.jobcard.next", { when: timestampDate(job.nextRun).toLocaleString() }) : t(enabled ? "desktop.jobcard.on" : "desktop.jobcard.paused")}
+        </span>
+        <Button small onClick={() => showView({ dir, view: "workers", worker: name })}>
+          {t("desktop.jobcard.review")}
+        </Button>
+        {!enabled && job.state !== WorkerState.INVALID && (
+          <Button small variant="tonal" onClick={() => void enable()}>
+            {t("desktop.jobcard.enable")}
+          </Button>
+        )}
+      </div>
+      {job.permissions.length > 0 && <div className="muted ellipsis mono">{job.permissions.join("  ·  ")}</div>}
+      {job.problems.length > 0 && <div className="error-text t-body-sm">{job.problems.join("; ")}</div>}
     </div>
   );
 }

@@ -85,6 +85,10 @@ service WorkerService {
   // more, and the service no longer looks for its folder. Their files
   // aren't touched. Refused while one of them runs (RUN_IN_PROGRESS).
   rpc ForgetWorkspaceWorkers(ForgetWorkspaceWorkersRequest) returns (ForgetWorkspaceWorkersResponse);
+  // Says how a schedule is understood, for the job editor's schedule
+  // picker: its cron form and its next runs, or why it can't be read
+  // (problem, not an error, since it's asked as the user types).
+  rpc PreviewSchedule(PreviewScheduleRequest) returns (PreviewScheduleResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -472,3 +476,25 @@ message ForgetWorkspaceWorkersRequest {
 
 // Response message for WorkerService.ForgetWorkspaceWorkers.
 message ForgetWorkspaceWorkersResponse {}
+
+// Request message for WorkerService.PreviewSchedule.
+message PreviewScheduleRequest {
+  // As a job's schedule: plain text (every day at 8 am), a cron
+  // expression or a descriptor (@daily).
+  string schedule = 1;
+  // An IANA time zone; "" for the service machine's.
+  string timezone = 2;
+  // How many runs to list (default 5, at most 20).
+  int32 count = 3;
+}
+
+// Response message for WorkerService.PreviewSchedule.
+message PreviewScheduleResponse {
+  // How it was understood ("0 8 * * *", "@hourly").
+  string cron = 1;
+  // The time zone it runs in.
+  string timezone = 2;
+  repeated google.protobuf.Timestamp next_runs = 3;
+  // Why the schedule can't be read; empty when it can.
+  string problem = 4;
+}

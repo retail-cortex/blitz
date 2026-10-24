@@ -152,18 +152,12 @@ func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string,
 	if _, found := w.discoverWorkers()[spec.Name]; found {
 		return api.WorkerInfo{}, nil, fmt.Errorf("%w: %q", api.ErrWorkerExists, spec.Name)
 	}
-	roots := w.workerRoots()
-	if len(roots) == 0 {
-		return api.WorkerInfo{}, nil, fmt.Errorf("%w: workers.paths is empty", api.ErrWorkersDisabled)
-	}
-	data := workers.Render(spec)
-	problems, err := w.checkWorker(spec, data)
+	dir, data, problems, err := w.DraftWorker(spec)
 	if err != nil || len(problems) > 0 {
 		return api.WorkerInfo{}, problems, err
 	}
-
-	dir := filepath.Join(roots[0], spec.Name)
-	if err := os.MkdirAll(roots[0], 0o755); err != nil {
+	root := filepath.Dir(dir)
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return api.WorkerInfo{}, nil, err
 	}
 	if err := os.Mkdir(dir, 0o755); errors.Is(err, fs.ErrExist) {
@@ -176,6 +170,47 @@ func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string,
 	}
 	wk, err := workers.Load(dir)
 	return w.workerInfo(wk, err, time.Now()), nil, nil
+}
+
+// DraftWorker is what CreateWorker would write for spec, without writing
+// it: the worker's folder, its WORKER.md, and what keeps it from loading
+// as a valid worker (create_job shows it before asking).
+func (w *Workspace) DraftWorker(spec api.WorkerSpec) (string, []byte, []string, error) {
+	if !w.cfg.Workers.Enabled {
+		return "", nil, nil, api.ErrWorkersDisabled
+	}
+	spec.Name = strings.TrimSpace(spec.Name)
+	if !workers.ValidName(spec.Name) {
+		return "", nil, []string{fmt.Sprintf("name %q: lowercase letters, digits, - and _, up to 64", spec.Name)}, nil
+	}
+	roots := w.workerRoots()
+	if len(roots) == 0 {
+		return "", nil, nil, fmt.Errorf("%w: workers.paths is empty", api.ErrWorkersDisabled)
+	}
+	data := workers.Render(spec)
+	problems, err := w.checkWorker(spec, data)
+	return filepath.Join(roots[0], spec.Name), data, problems, err
+}
+
+// PreviewSchedule is how text is understood as a schedule in the time zone
+// tz ("" for the service machine's): its cron form and its next n runs
+// after now (at most 20), for the schedule picker (spec_workers_023
+// WK-72) and create_job. A schedule it can't read is the parser's error.
+func PreviewSchedule(text, tz string, n int, now time.Time) (api.SchedulePreview, error) {
+	s, err := workers.ParseSchedule(text, tz)
+	if err != nil {
+		return api.SchedulePreview{}, err
+	}
+	n = max(1, min(n, 20))
+	out := api.SchedulePreview{Cron: s.Cron, Timezone: s.Location.String()}
+	for t := now; len(out.Next) < n; {
+		t = s.Next(t)
+		if t.IsZero() {
+			break
+		}
+		out.Next = append(out.Next, t)
+	}
+	return out, nil
 }
 
 // checkWorker returns what keeps data, spec's WORKER.md, from loading as a

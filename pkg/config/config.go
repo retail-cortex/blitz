@@ -815,13 +815,12 @@ func DefaultConfig() *Config {
 			Paths:    []string{".agents/workers", "workers"},
 			NotifyOn: []string{"failed", "limited"},
 			Policy: WorkerPolicy{
-				Allow:             slices.Clone(WorkerPermissionKinds),
+				Allow: slices.Clone(WorkerPermissionKinds),
+				// Defaults, not caps (v0.8.4): a job may ask for more; a host
+				// that wants a cap sets max_*.
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
 				DefaultTimeout:    "30m",
-				MaxTurns:          200,
-				MaxCostUSD:        10,
-				MaxTimeout:        "2h",
 				MaxConcurrent:     2,
 			},
 		},

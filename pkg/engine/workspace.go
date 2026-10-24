@@ -312,6 +312,14 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	// harness (spec_harness_learning_048).
 	w.tools.SetEvidenceReader(w.readEvidence)
 	w.tools.SetProposalSaver(w.saveProposals)
+	w.tools.SetJobs(tools.Jobs{
+		Draft: w.DraftWorker,
+		Preview: func(schedule, tz string) (api.SchedulePreview, error) {
+			return PreviewSchedule(schedule, tz, 5, time.Now())
+		},
+		Create: w.CreateWorker,
+		List:   w.ListWorkers,
+	})
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))

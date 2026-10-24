@@ -2695,6 +2695,22 @@ export function installFake() {
           return { worker: w };
         },
         listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
+        // The schedule picker's preview: the picker's own cron forms, roughly
+        // (hours and minutes, every day or the weekdays named), else a problem.
+        previewSchedule: ({ schedule, count }) => {
+          const f = schedule.trim().split(/\s+/);
+          if (f.length !== 5 || !/^\d+$/.test(f[0])) return { problem: `can't read "${schedule}" (the fake reads only the picker's own cron)`, cron: "", timezone: "", nextRuns: [] };
+          const days = f[4] === "*" ? [0, 1, 2, 3, 4, 5, 6] : f[4] === "1-5" ? [1, 2, 3, 4, 5] : f[4].split(",").map(Number);
+          const runs: ReturnType<typeof now>[] = [];
+          for (let d = new Date(); runs.length < (count || 5); ) {
+            d = new Date(d.getTime() + (f[1] === "*" ? 3600e3 : 0));
+            if (f[1] !== "*") d.setDate(d.getDate() + 1);
+            d.setHours(f[1] === "*" ? d.getHours() : Number(f[1]), Number(f[0]), 0, 0);
+            if (/^\d+$/.test(f[2]) && d.getDate() !== Number(f[2])) continue;
+            if (days.includes(d.getDay())) runs.push(timestampFromDate(d));
+          }
+          return { cron: schedule.trim(), timezone: "Europe/Paris", nextRuns: runs, problem: "" };
+        },
         listAllWorkers: () => ({
           home: fakeHome,
           policy: fakePolicy,

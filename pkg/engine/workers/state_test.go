@@ -109,15 +109,31 @@ limits: { max_turns: 500, timeout: 5h }
 do it
 `))
 	require.NoError(t, err)
-	p := config.DefaultConfig().Workers.Policy
-	p.Allow = []string{"shell", "write"}
-	eff := Apply(w, p)
-	assert.Len(t, eff.Permissions, 1, "permissions %v", eff.Permissions)
-	assert.Equal(t, "shell", eff.Permissions[0].Kind, "permissions %v", eff.Permissions)
-	assert.Equal(t, p.MaxTurns, eff.Limits.MaxTurns, "limits %+v", eff.Limits)
-	assert.Equal(t, p.DefaultMaxCostUSD, eff.Limits.MaxCostUSD, "limits %+v", eff.Limits)
-	assert.Equal(t, 2*time.Hour, eff.Limits.Timeout, "limits %+v", eff.Limits)
-	assert.Len(t, eff.Notes, 3, "notes %q", eff.Notes)
+	tests := []struct {
+		name    string
+		cap     func(p *config.WorkerPolicy)
+		turns   int
+		timeout time.Duration
+		notes   int
+	}{
+		// The shipped policy has defaults, not caps (v0.8.4): a job may ask for more.
+		{name: "the shipped policy", cap: func(*config.WorkerPolicy) {}, turns: 500, timeout: 5 * time.Hour, notes: 1},
+		{name: "a host's caps", cap: func(p *config.WorkerPolicy) { p.MaxTurns, p.MaxTimeout = 200, "2h" }, turns: 200, timeout: 2 * time.Hour, notes: 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := config.DefaultConfig().Workers.Policy
+			p.Allow = []string{"shell", "write"}
+			tt.cap(&p)
+			eff := Apply(w, p)
+			assert.Len(t, eff.Permissions, 1, "permissions %v", eff.Permissions)
+			assert.Equal(t, "shell", eff.Permissions[0].Kind, "permissions %v", eff.Permissions)
+			assert.Equal(t, tt.turns, eff.Limits.MaxTurns, "limits %+v", eff.Limits)
+			assert.Equal(t, p.DefaultMaxCostUSD, eff.Limits.MaxCostUSD, "limits %+v", eff.Limits)
+			assert.Equal(t, tt.timeout, eff.Limits.Timeout, "limits %+v", eff.Limits)
+			assert.Len(t, eff.Notes, tt.notes, "notes %q", eff.Notes)
+		})
+	}
 }
 
 // TestApplyPolicyDefaultsAndCostCap checks that a worker without limits
