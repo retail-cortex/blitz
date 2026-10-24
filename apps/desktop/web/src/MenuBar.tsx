@@ -29,6 +29,8 @@ import {
   mdiLightningBolt,
   mdiPencilOutline,
   mdiSourceBranch,
+  mdiPlusBoxMultipleOutline,
+  mdiShieldKeyOutline,
   mdiSourceCommit,
   mdiWebPlus,
 } from "@mdi/js";
@@ -70,6 +72,8 @@ export function MenuBar({
   dir = "",
   onChanges,
   onCommit,
+  onIncludeAll,
+  onProtect,
   onHistory,
   onStudio,
   studioKind = null,
@@ -83,6 +87,10 @@ export function MenuBar({
   onChanges?: (s: ChangesSource) => void;
   /** Opens the commit dialog (Changes › Commit…). */
   onCommit?: () => void;
+  /** Include all changes (git add --all). */
+  onIncludeAll?: () => void;
+  /** Add the hook that stops secrets being committed. */
+  onProtect?: () => void;
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
   /** Opens Studio on a kind, or shows that kind when it's open. */
@@ -124,7 +132,10 @@ export function MenuBar({
     { label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") },
   ];
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
-  if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
+  if (onCommit) changes.push("divider");
+  if (onIncludeAll) changes.push({ label: t("desktop.commit.stage_all"), icon: mdiPlusBoxMultipleOutline, onSelect: onIncludeAll });
+  if (onProtect) changes.push({ label: t("desktop.secrethook.menu"), detail: t("desktop.secrethook.menu_detail"), icon: mdiShieldKeyOutline, onSelect: onProtect });
+  if (onCommit) changes.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
   const status = (w: { dir: string }) => {
     const a = activity[w.dir];

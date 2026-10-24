@@ -126,7 +126,7 @@ function GitItem({ dir }: { dir: string }) {
     .filter(Boolean)
     .join(" ");
   return (
-    <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes", source: advanced ? "git" : "session" })}>
+    <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes", source: advanced ? "git" : "session", toggle: true })}>
       <Icon path={merging ? mdiSourceMerge : mdiSourceBranch} size="sm" />
       <span className="ellipsis sb-branch">{git.branch}</span>
       {git.changed > 0 && <span className="sb-count">±{git.changed}</span>}
@@ -189,7 +189,7 @@ function FailedItem({ dir }: { dir: string }) {
   if (failed === 0) return null;
   const label = tn("desktop.status.failed_runs", failed);
   return (
-    <button className="sb-item sb-button sb-error" title={label} aria-label={label} onClick={() => showView({ dir, view: "workers" })}>
+    <button className="sb-item sb-button sb-error" title={label} aria-label={label} onClick={() => showView({ dir, view: "workers", toggle: true })}>
       <Icon path={mdiAlertCircleOutline} size="sm" />
       <span>{failed}</span>
     </button>

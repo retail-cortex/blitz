@@ -54,6 +54,8 @@ import {
   mdiPlus,
   mdiProgressClock,
   mdiRobotOutline,
+  mdiCalendarClock,
+  mdiHeadLightbulbOutline,
   mdiShieldAlertOutline,
   mdiStop,
   mdiUndoVariant,
@@ -67,7 +69,8 @@ import {
   mdiPuzzleOutline,
   mdiLoading,
 } from "@mdi/js";
-import { files, serviceLost, sessions, workspaces } from "./api";
+import { files, serviceLost, sessions, workers, workspaces } from "./api";
+import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
 import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
 import { chatTitle, HistoryMenu } from "./HistoryMenu";
@@ -77,7 +80,7 @@ import { Decision, type ApprovalRequest, type Question, type Task, type Usage } 
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
 import { withTools } from "./turns";
-import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { allCommands, helpText, knownCommand, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
   addToContextEvent,
@@ -89,6 +92,8 @@ import {
   loadSessionEvent,
   openSettings,
   showPendingEvent,
+  showView,
+  startReflect,
   takePendingCompose,
   takePendingLoad,
   type AddToContextDetail,
@@ -102,7 +107,8 @@ import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
-import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
+import { taskTimes, useNow, type TaskTime } from "./taskTimes";
+import { acceptAttribute, acceptedAs, clock, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -689,7 +695,11 @@ export function Conversation({
     if (!c) return false;
     const spec = commands.find((x) => x.name === c.name);
     if (!spec) {
-      say(t("desktop.cmd.unknown", { name: c.name }), "error");
+      // One of the engine's own, before the service's list has come.
+      if (knownCommand(c.name, commands)) {
+        if (running) say(t("desktop.cmd.wait", { name: c.name }), "error");
+        else run(line.trim(), { command: true });
+      } else say(t("desktop.cmd.unknown", { name: c.name }), "error");
       return true;
     }
     const own = spec.source === "builtin" ? builtin(c.name) : undefined;
@@ -925,11 +935,19 @@ export function Conversation({
               <div key={g.at}>
                 <ToolGroup tools={g.tools} live={running && g.at >= turnStart} />
                 {g.tools.map((x) =>
-                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} /> : null,
+                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? (
+                    <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} />
+                  ) : x.name === "create_job" && typeof x.result?.name === "string" && x.result.paused === true ? (
+                    <JobCard key={`job-${x.result.name}`} dir={dir} name={x.result.name} />
+                  ) : null,
                 )}
               </div>
             ) : (
-              <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
+              g.entry.kind === "reflect" ? (
+                <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
+              ) : (
+                <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
+              )
             ),
           )}
           {running && !pending && (
@@ -1168,6 +1186,8 @@ const EntryView = memo(function EntryView({
       return <Thought text={entry.text} open={entry.open} />;
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
+    case "reflect":
+      return null; // a ReflectCard, drawn with the workspace
     case "notice":
       return entry.markdown ? (
         <div className={`notice card ${entry.tone}`}>
@@ -1458,6 +1478,7 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
     const timer = setInterval(load, 2000);
     return () => clearInterval(timer);
   }, [runningNow, gone, load]);
+  const now = useNow(runningNow && !gone);
   if (gone) return null;
   const stop = async () => {
     try {
@@ -1467,15 +1488,15 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
       snack(message(e));
     }
   };
-  const started = task?.started ? timestampDate(task.started).getTime() : Date.now();
-  const ended = task?.ended ? timestampDate(task.ended).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((ended - started) / 1000));
+  const started = task?.started ? timestampDate(task.started).getTime() : now;
+  const ended = task?.ended ? timestampDate(task.ended).getTime() : now;
+  const seconds = Math.max(0, (ended - started) / 1000);
   return (
     <div className={`card task-card ${task?.state ?? "running"}`}>
       <div className="row">
         <Icon path={mdiRobotOutline} size="sm" />
         <span className="ellipsis" style={{ flex: 1 }}>
-          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · {t("desktop.task.runtime", { seconds })}
+          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · <span className="mono">{clock(seconds)}</span>
           {task?.usage?.costUsd ? ` · $${task.usage.costUsd.toFixed(2)}` : ""}
         </span>
         {runningNow && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
@@ -1497,6 +1518,107 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
           {task?.error && <p className="error-text">{task.error}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A job the agent made from the chat (create_job, spec_workers_023 WK-70):
+ * paused until it's reviewed, with Review (Studio › Jobs, its details) and
+ * Enable here; once enabled, when it next runs.
+ */
+/**
+ * The chat's suggestion to reflect (spec_harness_learning_048 HE-63): the
+ * runs since the last reflection hit the same problems. Reflect runs
+ * /reflect in a new chat; Not now holds the suggestion off for a week.
+ */
+function ReflectCard({ dir, patterns }: { dir: string; patterns: number }) {
+  const snack = useSnackbar();
+  const [done, setDone] = useState(false);
+  if (done) return null;
+  const later = async () => {
+    try {
+      await workspaces.snoozeReflection({ workspace: dir });
+      setDone(true);
+      snack(t("desktop.reflectcard.snoozed"));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <div className="card task-card">
+      <div className="row">
+        <Icon path={mdiHeadLightbulbOutline} size="sm" />
+        <span style={{ flex: 1 }}>
+          <b>{t("desktop.suggest.reflect")}</b>
+          <span className="t-body-sm muted"> · {tn("desktop.suggest.reflect_detail", patterns)}</span>
+        </span>
+        <Button small onClick={() => void later()}>
+          {t("desktop.reflectcard.not_now")}
+        </Button>
+        <Button
+          small
+          variant="filled"
+          onClick={() => {
+            setDone(true);
+            startReflect(dir);
+          }}
+        >
+          {t("desktop.reflectcard.reflect")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function JobCard({ dir, name }: { dir: string; name: string }) {
+  const snack = useSnackbar();
+  const [job, setJob] = useState<Worker>();
+  const [gone, setGone] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await workers.listWorkers({ workspace: dir });
+      const w = r.workers.find((x) => x.name === name);
+      if (w) setJob(w);
+      else setGone(true); // deleted since
+    } catch {
+      setGone(true);
+    }
+  }, [dir, name]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  if (gone || !job) return null;
+  const enabled = job.state === WorkerState.ENABLED;
+  const enable = async () => {
+    try {
+      const r = await workers.enableWorker({ workspace: dir, name, hash: job.hash });
+      if (r.worker) setJob(r.worker);
+      snack(t("desktop.jobcard.enabled", { name }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <div className="card task-card">
+      <div className="row">
+        <Icon path={mdiCalendarClock} size="sm" />
+        <span className="ellipsis" style={{ flex: 1 }}>
+          <b>{name}</b> · {job.schedule}
+          {" · "}
+          {enabled && job.nextRun ? t("desktop.jobcard.next", { when: timestampDate(job.nextRun).toLocaleString() }) : t(enabled ? "desktop.jobcard.on" : "desktop.jobcard.paused")}
+        </span>
+        <Button small onClick={() => showView({ dir, view: "workers", worker: name })}>
+          {t("desktop.jobcard.review")}
+        </Button>
+        {!enabled && job.state !== WorkerState.INVALID && (
+          <Button small variant="tonal" onClick={() => void enable()}>
+            {t("desktop.jobcard.enable")}
+          </Button>
+        )}
+      </div>
+      {job.permissions.length > 0 && <div className="muted ellipsis mono">{job.permissions.join("  ·  ")}</div>}
+      {job.problems.length > 0 && <div className="error-text t-body-sm">{job.problems.join("; ")}</div>}
     </div>
   );
 }
@@ -1611,11 +1733,18 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
   );
 }
 
+// How long a task list item has run, or ran, as m:ss.
+const ranFor = (time: TaskTime, now: number) => clock(((time.end ?? now) - time.start) / 1000);
+
 function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void }) {
   const done = tasks.filter((x) => x.status === "done").length;
   const allDone = done === tasks.length;
   const [open, setOpen] = useState(true);
   useEffect(() => setOpen(!allDone), [allDone]); // folds itself once every task is done
+  // How long each item has run (in progress, ticking) or ran (done).
+  const [times, setTimes] = useState<Map<string, TaskTime>>(new Map());
+  useEffect(() => setTimes((prev) => taskTimes(prev, tasks, Date.now())), [tasks]);
+  const now = useNow(tasks.some((x) => x.status === "in_progress"));
   return (
     <div className="tasks card outlined">
       <div className="row">
@@ -1639,6 +1768,7 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
             <li key={i} className={task.status}>
               <Icon path={task.status === "done" ? mdiCheckboxMarked : task.status === "in_progress" ? mdiProgressClock : mdiCheckboxBlankOutline} size="sm" className={task.status === "in_progress" ? "pulse" : ""} />
               <span>{task.content}</span>
+              {times.has(task.content) && <span className="muted mono task-time">{ranFor(times.get(task.content)!, now)}</span>}
             </li>
           ))}
         </ul>

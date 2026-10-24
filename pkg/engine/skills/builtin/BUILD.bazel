@@ -23,6 +23,7 @@ go_library(
         "git-workflow/SKILL.md",
         "testing-tdd/SKILL.md",
         "sql-query/SKILL.md",
+        "python-uv/SKILL.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/skills/builtin",
     visibility = [

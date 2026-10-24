@@ -88,7 +88,7 @@ func (r *Remote) Reflection() (api.Reflection, error) {
 	if err != nil {
 		return api.Reflection{}, fromAPI(err)
 	}
-	return api.Reflection{Patterns: int(res.Msg.Patterns), Proposals: int(res.Msg.Proposals)}, nil
+	return api.Reflection{Patterns: int(res.Msg.Patterns), Proposals: int(res.Msg.Proposals), Score: int(res.Msg.Score), Threshold: int(res.Msg.Threshold)}, nil
 }
 
 // ForgetNote deletes one (WorkspaceService.ForgetNote).

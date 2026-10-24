@@ -334,3 +334,92 @@ func TestIsCorrection(t *testing.T) {
 		})
 	}
 }
+
+func result(i int, session, tool, decision string, args map[string]any) audit.Entry {
+	return audit.Entry{Time: at(i), Session: session, Kind: audit.KindToolResult, Tool: tool, Decision: decision, Error: "failed", Args: args}
+}
+
+// A failed call carries what worked after it in its turn (HE-60).
+func TestBuildSaysWhatWorked(t *testing.T) {
+	sh := func(c string) map[string]any { return map[string]any{"command": c} }
+	tests := []struct {
+		name  string
+		audit []audit.Entry
+		then  string
+	}{
+		{"another command", []audit.Entry{prompt(0, "s", "deploy"),
+			call(1, "s", "run_shell_command", sh("make push")), result(1, "s", "run_shell_command", "exit", sh("make push")),
+			call(2, "s", "read_file", map[string]any{"path": "Makefile"}), result(2, "s", "read_file", "ok", nil),
+			call(3, "s", "run_shell_command", sh("make deploy")), result(3, "s", "run_shell_command", "ok", nil)}, "make deploy"},
+		{"the same call, made again", []audit.Entry{prompt(0, "s", "test"),
+			call(1, "s", "run_shell_command", sh("go test ./...")), result(1, "s", "run_shell_command", "exit", sh("go test ./...")),
+			call(2, "s", "run_shell_command", sh("go test ./...")), result(2, "s", "run_shell_command", "ok", nil)}, retried},
+		{"nothing worked", []audit.Entry{prompt(0, "s", "deploy"),
+			call(1, "s", "run_shell_command", sh("make push")), result(1, "s", "run_shell_command", "exit", sh("make push")),
+			call(2, "s", "read_file", map[string]any{"path": "Makefile"}), result(2, "s", "read_file", "ok", nil)}, ""},
+		{"only in its own turn", []audit.Entry{prompt(0, "s", "deploy"),
+			call(1, "s", "run_shell_command", sh("make push")), result(1, "s", "run_shell_command", "exit", sh("make push")),
+			prompt(2, "s", "something else"),
+			call(3, "s", "run_shell_command", sh("make deploy")), result(3, "s", "run_shell_command", "ok", nil)}, ""},
+		{"only in its own session", []audit.Entry{prompt(0, "s", "deploy"), prompt(0, "other", "deploy"),
+			call(1, "s", "run_shell_command", sh("make push")), result(1, "s", "run_shell_command", "exit", sh("make push")),
+			call(2, "other", "run_shell_command", sh("make deploy")), result(2, "other", "run_shell_command", "ok", nil)}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := Build(Inputs{Since: t0, Audit: tt.audit})
+			it := find(ev, ToolFailed, "run_shell_command")
+			require.NotNil(t, it)
+			require.Len(t, it.Seen, 1)
+			assert.Equal(t, tt.then, it.Seen[0].Then)
+			if tt.then != "" {
+				assert.Contains(t, ev.Text(), "→ then worked: `"+tt.then+"`")
+			}
+		})
+	}
+}
+
+// Scratch work done again in another session is a pattern; within one
+// session it's what scratch is for (HE-61).
+func TestBuildFindsScratchWorkDoneTwice(t *testing.T) {
+	write := func(i int, s, p string) audit.Entry { return call(i, s, "create_file", map[string]any{"path": p}) }
+	run := func(i int, s, c string) audit.Entry {
+		return call(i, s, "run_shell_command", map[string]any{"command": c})
+	}
+	ev := Build(Inputs{Since: t0, Audit: []audit.Entry{
+		prompt(0, "a", "get the data"), write(1, "a", ".agents/scratch/prices.csv"), write(2, "a", ".agents/scratch/prices.csv"),
+		run(3, "a", "python3 .agents/scratch/fetch.py --all"), write(4, "a", ".agents/scratch/notes.md"),
+		prompt(10, "b", "get the data again"), write(11, "b", "/home/me/shop/.agents/scratch/prices.csv"),
+		run(12, "b", "cd x && python3 .agents/scratch/fetch.py"), write(13, "b", "src/.agents/scratchy/x"),
+	}})
+	remade := find(ev, ScratchRemade, "scratch")
+	require.NotNil(t, remade)
+	assert.Equal(t, ".agents/scratch/prices.csv", remade.Target)
+	assert.Equal(t, 2, remade.Count, "sessions, not writes")
+	assert.True(t, remade.Patterned())
+	script := find(ev, ScratchScript, "scratch")
+	require.NotNil(t, script)
+	assert.Equal(t, ".agents/scratch/fetch.py", script.Target)
+	assert.Equal(t, 2, script.Count)
+	for _, it := range ev.Items {
+		assert.NotEqual(t, ".agents/scratch/notes.md", it.Target, "used in one session only")
+	}
+}
+
+// The score counts the costly patterns twice (HE-62).
+func TestScore(t *testing.T) {
+	deny := func(i int) []audit.Entry {
+		return []audit.Entry{call(i, "s", "run_shell_command", map[string]any{"command": "rm -rf build"}),
+			{Time: at(i), Session: "s", Kind: audit.KindDenial, Tool: "run_shell_command", Decision: "deny"}}
+	}
+	fail := func(i int) []audit.Entry {
+		return []audit.Entry{call(i, "s", "read_file", map[string]any{"path": "a.txt"}), result(i, "s", "read_file", "error", map[string]any{"path": "a.txt"})}
+	}
+	log := []audit.Entry{prompt(0, "s", "go")}
+	log = append(log, deny(1)...)                                                                                                                        // a pattern, costly: 2
+	log = append(append(log, fail(2)...), fail(3)...)                                                                                                    // a pattern: 1
+	log = append(log, call(4, "s", "read_file", map[string]any{"path": "b.txt"}), result(4, "s", "read_file", "error", map[string]any{"path": "b.txt"})) // once: 0
+	ev := Build(Inputs{Since: t0, Audit: log})
+	assert.Equal(t, 2, ev.Patterns())
+	assert.Equal(t, 3, ev.Score())
+}

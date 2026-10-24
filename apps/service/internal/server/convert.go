@@ -185,6 +185,8 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 			tasks.Items = append(tasks.Items, &pb.Task{Content: t.Content, Status: t.Status})
 		}
 		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
+	case e.Reflect != nil:
+		out.Kind = &pb.TurnEvent_ReflectDue{ReflectDue: &pb.ReflectDue{Patterns: int32(e.Reflect.Patterns), Score: int32(e.Reflect.Score)}}
 	case e.Notice != nil:
 		out.Kind = &pb.TurnEvent_Notice{Notice: &pb.Notice{Text: e.Notice.Text, Error: e.Notice.Error, Transient: e.Notice.Transient}}
 	case e.Step != nil:

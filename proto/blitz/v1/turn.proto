@@ -109,7 +109,17 @@ message TurnEvent {
     Notice notice = 10;
     // A workflow's step starting or ending (spec_workflows_043).
     FlowStep flow_step = 11;
+    // At a chat turn's end: the runs since the last reflection hit
+    // enough problems to /reflect on (spec_harness_learning_048 HE-63).
+    ReflectDue reflect_due = 12;
   }
+}
+
+// The evidence that suggests /reflect.
+message ReflectDue {
+  // Its patterns, and its score (the costly ones twice).
+  int32 patterns = 1;
+  int32 score = 2;
 }
 
 // A workflow's step starting, or how it ended.

@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiSourceBranchPlus, mdiSourceCommit, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiFileCompare, mdiPlusBoxMultipleOutline, mdiRefresh, mdiSourceBranch, mdiSourceBranchPlus, mdiSourceCommit, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { language, t, tn } from "./i18n";
@@ -24,6 +24,7 @@ import type { Checkpoint, GetGitStatusResponse } from "./gen/blitz/v1/workspace_
 import { filesTouched } from "./events";
 import { languageFor } from "./highlight";
 import { CommitDialog } from "./CommitDialog";
+import { includeAll } from "./includeAll";
 import { BranchMenu } from "./Branches";
 import { ConflictBar, MergeBanner, RemoteButtons } from "./RemoteSync";
 import { inProgress } from "./gitRemote";
@@ -171,6 +172,21 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
         {advanced && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />}
         {source === "git" && git?.repo && <BranchMenu dir={dir} git={git} onChanged={() => void refresh()} />}
         {source === "git" && git?.repo && git.remote && <RemoteButtons dir={dir} git={git} onStatus={setGit} onChanged={() => void refresh()} />}
+        {source === "git" && git?.repo && (
+          <Button
+            small
+            icon={mdiPlusBoxMultipleOutline}
+            disabled={git.changed === 0}
+            onClick={() =>
+              void includeAll(dir).then(
+                () => (snack(t("desktop.commit.included_all")), void refresh()),
+                (e: unknown) => snack(message(e), { error: true }),
+              )
+            }
+          >
+            {t("desktop.commit.stage_all")}
+          </Button>
+        )}
         {source === "git" && git?.repo && (
           <Button variant="tonal" small icon={mdiSourceCommit} disabled={inProgress(git) && git.conflicts.length > 0} onClick={() => setCommitting(true)}>
             {t("desktop.commit.open")}

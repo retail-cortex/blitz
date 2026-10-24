@@ -28,12 +28,19 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type Session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
 import {
+  absolutePaths,
+  agentRequestAllowed,
+  devToolsAllowed,
+  devToolsCommand,
+  stringList,
+  type AgentReach,
   appMenu,
   bounds,
   consoleLine,
   contentScript,
+  DroppedPaths,
   englishMenu,
   gpuOff,
   isExternal,
@@ -54,6 +61,8 @@ import {
   maxPictureBytes,
   previewContent,
   previewId,
+  profileName,
+  profilePartition,
   previewStep,
   addressURL,
   previewURL,
@@ -458,6 +467,20 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
   }
 }
 
+// Files dropped on the page, as its preload read them (TrashDropped).
+const dropped = new DroppedPaths();
+ipcMain.handle("blitz:dropped", (e, paths: unknown) => {
+  if (originOf(e.senderFrame?.url ?? "") !== origin || !win || BrowserWindow.fromWebContents(e.sender) !== win) throw new Error("not the page");
+  dropped.add(absolutePaths(paths, path.isAbsolute));
+});
+
+// The picture under the pointer while files are dragged out: the app's icon.
+let dragImage: NativeImage | undefined;
+function dragIcon() {
+  dragImage ??= nativeImage.createFromPath(path.join(app.getAppPath(), "icon.png")).resize({ width: 32, height: 32 });
+  return dragImage;
+}
+
 // The page's calls to the window, from its own origin only.
 ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
   if (originOf(e.senderFrame?.url ?? "") !== origin) throw new Error("not the page");
@@ -574,6 +597,80 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       const pdf = await preview(a).view.webContents.printToPDF(printOptions(a[1]));
       return pdf.toString("base64");
     }
+    case "DragOut": {
+      // Files dragged out of the Files view: the computer gets copies
+      // (EL-15). Only files there, so not a remote service's.
+      const files: string[] = [];
+      for (const p of absolutePaths(a[0], path.isAbsolute)) {
+        if (await stat(p).then(() => true, () => false)) files.push(p);
+      }
+      if (files.length === 0) return false;
+      e.sender.startDrag({ file: files[0], files, icon: dragIcon() });
+      return true;
+    }
+    case "TrashDropped": {
+      // A move from the computer into the workspace, once copied: only
+      // files the preload read from a drop (EL-15).
+      const failed: string[] = [];
+      for (const p of dropped.take(absolutePaths(a[0], path.isAbsolute))) {
+        await shell.trashItem(p).catch(() => failed.push(p));
+      }
+      return failed;
+    }
+    case "SignInWindow": {
+      // Signing in to a site in a browser profile (EL-16), for the
+      // agent's browsing in the app: a window of its own on the profile's
+      // partition, popups (OAuth's) in the same session.
+      const name = profileName(a[0]);
+      const url = addressURL(a[1]) ?? "about:blank";
+      if (!name) throw new Error(`not a browser profile: ${JSON.stringify(a[0])}`);
+      openSignIn(name, url);
+      return;
+    }
+    case "AgentBrowserOpen": {
+      // The agent's browser in the app (EL-17): a view of its own,
+      // watched (a preview the page shows as a tab) or off screen.
+      const id = previewId(a[0]);
+      if (!id || agents.has(id) || previews.has(id)) throw new Error("not a new view");
+      const profile = a[2] === "" || a[2] === undefined ? undefined : profileName(a[2]);
+      if (a[2] && !profile) throw new Error(`not a browser profile: ${JSON.stringify(a[2])}`);
+      await openAgentView(id, a[1] === "watch", profile, { allowLocal: a[3] === true, deny: stringList(a[4]) });
+      return;
+    }
+    case "AgentBrowserSend": {
+      const v = agents.get(previewId(a[0]) ?? "");
+      const cmd = devToolsCommand(a[1]);
+      if (!v || !cmd) throw new Error("no such view, or not a DevTools command");
+      const reply = (m: object) => send("agentbrowser:message", { id: v.id, message: JSON.stringify(m) });
+      if (!devToolsAllowed(cmd.method)) {
+        reply({ id: cmd.id, error: { code: -32601, message: `${cmd.method} isn't the agent's to send` } });
+        return;
+      }
+      v.view.webContents.debugger.sendCommand(cmd.method, cmd.params ?? {}, cmd.sessionId).then(
+        (result: unknown) => reply({ id: cmd.id, result: result ?? {} }),
+        (err: unknown) => reply({ id: cmd.id, error: { code: -32000, message: err instanceof Error ? err.message : String(err) } }),
+      );
+      return;
+    }
+    case "AgentBrowserTakeOver": {
+      // The user takes the watched view: the agent lets go, the tab stays.
+      const v = agents.get(previewId(a[0]) ?? "");
+      if (!v) return;
+      agents.delete(v.id);
+      if (v.view.webContents.debugger.isAttached()) v.view.webContents.debugger.detach();
+      send("agentbrowser:closed", { id: v.id, reason: "the user took over the page" });
+      return;
+    }
+    case "AgentBrowserClose": {
+      const id = previewId(a[0]) ?? "";
+      const v = agents.get(id);
+      if (!v) return;
+      agents.delete(id);
+      agentReach.delete(v.view.webContents.id);
+      if (previews.has(id)) closePreview(id);
+      else v.view.webContents.close();
+      return;
+    }
     case "OpenApp":
       return openApp();
     case "Quit":
@@ -603,6 +700,92 @@ function previewSessionOf(): Session {
   s.on("will-download", (e) => e.preventDefault());
   previewSession = s;
   return s;
+}
+
+// The browser profiles' sessions (EL-16): each its own persistent
+// partition, refusing permissions and downloads as the previews do.
+const profileSessions = new Map<string, Session>();
+function profileSessionOf(name: string): Session {
+  const had = profileSessions.get(name);
+  if (had) return had;
+  const s = session.fromPartition(profilePartition(name));
+  s.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
+  s.setPermissionCheckHandler((_wc, permission) => permission === "clipboard-sanitized-write");
+  s.on("will-download", (e) => e.preventDefault());
+  profileSessions.set(name, s);
+  return s;
+}
+
+/** A sign-in window on profile name's session, at url. */
+function openSignIn(name: string, url: string) {
+  const ses = profileSessionOf(name);
+  const prefs = { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false };
+  const w = new BrowserWindow({ width: 980, height: 760, title: `Sign in · ${name}`, parent: win ?? undefined, webPreferences: prefs });
+  w.webContents.setWindowOpenHandler(() => ({ action: "allow", overrideBrowserWindowOptions: { webPreferences: prefs } }));
+  w.webContents.on("page-title-updated", (e, title) => {
+    e.preventDefault();
+    w.setTitle(`${title} · ${name}`);
+  });
+  void w.loadURL(url);
+}
+
+// The agent's views (EL-17), by ID, and what each may reach, by its web
+// contents: the request filter of the sessions they're in reads it.
+const agents = new Map<string, { id: string; view: WebContentsView; watched: boolean }>();
+const agentReach = new Map<number, AgentReach>();
+const filtered = new WeakSet<Session>();
+
+/** Filters the agent's requests in ses (once a session); others' go through. */
+function filterAgentRequests(ses: Session) {
+  if (filtered.has(ses)) return;
+  filtered.add(ses);
+  ses.webRequest.onBeforeRequest((details, done) => {
+    const reach = details.webContentsId === undefined ? undefined : agentReach.get(details.webContentsId);
+    done({ cancel: reach !== undefined && !agentRequestAllowed(details.url, reach) });
+  });
+}
+
+/** A session of its own for a view without a profile: in memory, gone with it. */
+function throwawaySession(id: string): Session {
+  const s = session.fromPartition(`agent-${id}`);
+  s.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
+  s.setPermissionCheckHandler((_wc, permission) => permission === "clipboard-sanitized-write");
+  s.on("will-download", (e) => e.preventDefault());
+  return s;
+}
+
+/** Opens the agent's view id, its DevTools relayed to the page (and on to the service). */
+async function openAgentView(id: string, watched: boolean, profile: string | undefined, reach: AgentReach) {
+  if (!win) throw new Error("no window");
+  const ses = profile ? profileSessionOf(profile) : throwawaySession(id);
+  filterAgentRequests(ses);
+  const view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false, offscreen: !watched, backgroundThrottling: false } });
+  const wc = view.webContents;
+  agentReach.set(wc.id, reach);
+  agents.set(id, { id, view, watched });
+  if (watched) {
+    view.setVisible(false);
+    view.setBackgroundColor("#ffffff");
+    win.contentView.addChildView(view);
+    const p = { view, errors: [] };
+    previews.set(id, p);
+    watchPreview(id, p);
+  } else {
+    wc.setWindowOpenHandler(({ url }) => {
+      void wc.loadURL(url).catch(() => {});
+      return { action: "deny" };
+    });
+  }
+  wc.debugger.on("message", (_e, method, params, sessionId) => send("agentbrowser:message", { id, message: JSON.stringify({ method, params, sessionId: sessionId || undefined }) }));
+  wc.debugger.on("detach", (_e, reason) => {
+    if (agents.delete(id)) send("agentbrowser:closed", { id, reason: `the view closed (${reason})` });
+  });
+  wc.on("destroyed", () => {
+    agentReach.delete(wc.id);
+    if (agents.delete(id)) send("agentbrowser:closed", { id, reason: "the view closed" });
+  });
+  await wc.loadURL("about:blank");
+  wc.debugger.attach("1.3");
 }
 
 /** A preview by the page's ID; it throws for one that isn't open. */

@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { WorkerState } from "./gen/blitz/v1/worker_pb";
-import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, missing, permissionChanges, savePauses, validWorkerName, workerName, workerRequest, type WorkerFields } from "./workerForm";
+import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, missing, permissionChanges, savePauses, validWorkerName, workerName, workerRequest, limitHints, parseRules, rulesText, type WorkerFields } from "./workerForm";
 
 describe("workerName", () => {
   it.each([
@@ -152,5 +152,44 @@ describe("applyRewrite", () => {
   it("says which permissions a rewrite adds and drops", () => {
     expect(permissionChanges(f, r.permissions)).toEqual({ added: ["web:news.google.com", "write:daily-news/*"], removed: ["web:*", "write:./daily-news/*"] });
     expect(permissionChanges(f, ["web:*", "write:./daily-news/*"])).toEqual({ added: [], removed: [] });
+  });
+});
+
+describe("limitHints", () => {
+  it("shows the host's defaults, and caps only where set", () => {
+    const p = { defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 0, maxCostUsd: 0, maxTimeout: "" };
+    expect(limitHints(p)).toEqual({ maxTurns: { def: "50", cap: "" }, maxCostUSD: { def: "$1.00", cap: "" }, timeout: { def: "30m", cap: "" } });
+    expect(limitHints({ ...p, maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h" })).toEqual({ maxTurns: { def: "50", cap: "200" }, maxCostUSD: { def: "$1.00", cap: "$10.00" }, timeout: { def: "30m", cap: "2h" } });
+  });
+  it("says nothing before the policy is known", () => {
+    expect(limitHints(undefined)).toEqual({ maxTurns: { def: "", cap: "" }, maxCostUSD: { def: "", cap: "" }, timeout: { def: "", cap: "" } });
+  });
+});
+
+describe("the permission rule builder's rows", () => {
+  it("reads kind:pattern lines, keeping anything else as written", () => {
+    expect(parseRules("shell:go test ./...\n\n  web: news.google.com \nwrite:reports/**\nnetwork:all\nsomething")).toEqual([
+      { kind: "shell", pattern: "go test ./..." },
+      { kind: "web", pattern: "news.google.com" },
+      { kind: "write", pattern: "reports/**" },
+      { kind: "", pattern: "network:all" },
+      { kind: "", pattern: "something" },
+    ]);
+  });
+  it("writes them back, a row still without its pattern kept for editing but not sent", () => {
+    const rules = [
+      { kind: "web" as const, pattern: " news.google.com " },
+      { kind: "write" as const, pattern: "" },
+      { kind: "" as const, pattern: "network:all" },
+      { kind: "" as const, pattern: " " },
+    ];
+    const text = rulesText(rules);
+    expect(text).toBe("web: news.google.com \nwrite:\nnetwork:all"); // as typed; the request trims
+    expect(parseRules(text)).toHaveLength(3);
+    expect(workerRequest({ ...emptyWorkerForm, name: "x", schedule: "@daily", prompt: "p", permissions: text }).permissions).toEqual(["web:news.google.com", "network:all"]);
+  });
+  it("round-trips", () => {
+    const text = "shell:go test ./...\nwrite:reports/**\nmcp:github:create_issue";
+    expect(rulesText(parseRules(text))).toBe(text);
   });
 });

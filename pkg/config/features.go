@@ -435,7 +435,23 @@ type BrowserConfig struct {
 	// Width and Height are the viewport (1280×800).
 	Width  int `toml:"width"`
 	Height int `toml:"height"`
+	// Show is how the agent browses while the desktop app is open
+	// (spec_agent_browser_050): "watch", in a tab you see; "silent", off
+	// screen; or "ask" (the default), the first time in each chat.
+	// Without the app, the headless browser.
+	Show string `toml:"show"`
+	// Open is where a page the user asks to open shows while the desktop
+	// app is open (AB-10): "embedded", a web tab of the app's; "system",
+	// the system's browser; or "ask" (the default), the first time in
+	// each chat. Without the app, the system's browser.
+	Open string `toml:"open"`
 }
+
+// BrowserShows are browser.show's values.
+var BrowserShows = []string{"ask", "watch", "silent"}
+
+// BrowserOpens are browser.open's values.
+var BrowserOpens = []string{"ask", "embedded", "system"}
 
 // LSPServerConfig is a language server: the command that runs it (over
 // stdio), and the file extensions it's for.
@@ -524,6 +540,10 @@ type WebConfig struct {
 	MaxBytes int64 `toml:"max_bytes"`
 	// TimeoutSeconds stops a fetch or search that takes longer.
 	TimeoutSeconds int `toml:"timeout_seconds"`
+	// BrowserFallback has web_fetch load a page in the browser when a
+	// plain request gets a bot check or a page that needs JavaScript (with
+	// [browser] enabled; spec_web_008 WEB-09).
+	BrowserFallback bool `toml:"browser_fallback"`
 	// SearchProvider enables web_search and /search web: "brave",
 	// "tavily", "searxng" (self-hosted, needs SearchURL), or "google"
 	// (Gemini's grounding with Google Search; uses the Gemini API key).
@@ -642,8 +662,8 @@ func applyFeatureDefaults(c *Config) {
 	c.PDF = PDFConfig{PageSize: "auto"}
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
-	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
-	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}
+	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
+	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask", Open: "ask"}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())
@@ -677,4 +697,11 @@ type HarnessConfig struct {
 	ReflectSchedule string `toml:"reflect_schedule"`
 	// MaxCostUSD stops a scheduled reflection that has cost this much.
 	MaxCostUSD float64 `toml:"max_cost_usd"`
+	// ReflectThreshold is the evidence's score that suggests /reflect: its
+	// patterns, the costly ones twice (default DefaultReflectThreshold; 0
+	// never suggests it).
+	ReflectThreshold int `toml:"reflect_threshold"`
 }
+
+// DefaultReflectThreshold is [harness] reflect_threshold's default.
+const DefaultReflectThreshold = 5

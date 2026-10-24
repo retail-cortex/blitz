@@ -124,6 +124,39 @@ func covered(perms []Permission, kind api.ActionKind, target string) bool {
 		if ok, _ := path.Match(p.Pattern, target); ok {
 			return true
 		}
+		// In paths, ** is any number of folders (WK-20b): reports/** is
+		// everything under reports, at any depth.
+		if (kind == api.ActionWrite || kind == api.ActionDelete) && strings.Contains(p.Pattern, "**") && matchSegments(strings.Split(p.Pattern, "/"), strings.Split(target, "/")) {
+			return true
+		}
 	}
 	return false
+}
+
+// matchSegments matches a path's segments against a pattern's: a "**"
+// segment is zero or more segments, any other is path.Match's (so * stays
+// within one).
+func matchSegments(pattern, target []string) bool {
+	for len(pattern) > 0 {
+		if pattern[0] == "**" {
+			rest := pattern[1:]
+			if len(rest) == 0 {
+				return len(target) > 0 // reports/** is what's under reports, not reports itself
+			}
+			for i := 0; i <= len(target); i++ {
+				if matchSegments(rest, target[i:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(target) == 0 {
+			return false
+		}
+		if ok, _ := path.Match(pattern[0], target[0]); !ok {
+			return false
+		}
+		pattern, target = pattern[1:], target[1:]
+	}
+	return len(target) == 0
 }

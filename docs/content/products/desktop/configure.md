@@ -67,6 +67,7 @@ With **Show advanced** on, these panes hold what every workspace shares. A works
 | **Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
 | **MCP servers** | Servers that give the agent more tools, each switched on or off. **Add server** for a new one. [MCP servers](../../guide/mcp.md) |
 | **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. [Connectors](studio/connectors.md) |
+| **Browser** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in that workspace's settings (**Browser profile**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
 | **Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
 
 ![Settings › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)

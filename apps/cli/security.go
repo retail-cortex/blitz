@@ -18,9 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"os"
+	"slices"
 
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/sandboxsetup"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	"github.com/spf13/cobra"
 )
 
@@ -64,7 +68,81 @@ func newSecurityCommand() *cobra.Command {
 			return nil
 		},
 	})
+	cmd.AddCommand(newScanSecretsCommand(), newInstallHookCommand())
 	return cmd
+}
+
+// newScanSecretsCommand is `blitz security scan-secrets`: the files a
+// commit adds (--staged, what the pre-commit hook runs) or the files
+// named, searched for API keys and other secrets (pkg/secretscan). It
+// fails, naming each file and line with the value masked, when it finds
+// one.
+func newScanSecretsCommand() *cobra.Command {
+	var staged bool
+	cmd := &cobra.Command{
+		Use:   "scan-secrets [file...]",
+		Short: "Look for API keys and other secrets in the files a commit adds (--staged) or the files named",
+		RunE: func(cmd *cobra.Command, paths []string) error {
+			if staged == (len(paths) > 0) {
+				return errors.New(i18n.T("security.scan_usage"))
+			}
+			files := map[string][]byte{}
+			if staged {
+				var err error
+				if files, err = secretscan.Staged(cmd.Context(), "."); err != nil {
+					return err
+				}
+			} else {
+				for _, p := range paths {
+					data, err := os.ReadFile(p)
+					if err != nil {
+						return err
+					}
+					files[p] = data
+				}
+			}
+			var found []secretscan.Finding
+			for _, name := range slices.Sorted(maps.Keys(files)) {
+				found = append(found, secretscan.Scan(name, files[name])...)
+			}
+			if len(found) == 0 {
+				return nil
+			}
+			errOut := cmd.ErrOrStderr()
+			fmt.Fprintln(errOut, i18n.T("security.secrets_found"))
+			for _, f := range found {
+				fmt.Fprintf(errOut, "  %s:%d: %s (%s)\n", f.Path, f.Line, f.Kind, f.Masked)
+			}
+			fmt.Fprintln(errOut, i18n.T("security.secrets_how", "marker", secretscan.AllowMarker))
+			cmd.SilenceUsage = true
+			return withCode(exitFailure, errors.New(i18n.T("security.secrets_stopped", "n", len(found))))
+		},
+	}
+	cmd.Flags().BoolVar(&staged, "staged", false, "Scan what the commit being made adds (the pre-commit hook's)")
+	return cmd
+}
+
+// newInstallHookCommand is `blitz security install-hook`: the pre-commit
+// hook that stops commits adding secrets, in the repository dir (".") is
+// in, unless it uses other hooks.
+func newInstallHookCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install-hook [dir]",
+		Short: "Add a pre-commit hook that stops commits adding API keys or other secrets (.githooks/pre-commit)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			r, err := secretscan.Install(cmd.Context(), dir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("security.hook."+r.Status, "path", r.Path, "detail", r.Detail))
+			return nil
+		},
+	}
 }
 
 // printSandboxStatus says what Check found.

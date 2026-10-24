@@ -160,7 +160,7 @@ func TestSetScheduleValues(t *testing.T) {
 	ws := t.TempDir()
 	for key, value := range map[string]string{
 		"health.schedule": "every day at 03:00", "health.max_cost_usd": "2",
-		"harness.reflect_schedule": "every monday at 09:00", "harness.max_cost_usd": "0.25",
+		"harness.reflect_schedule": "every monday at 09:00", "harness.max_cost_usd": "0.25", "harness.reflect_threshold": "3",
 	} {
 		_, err := SetValue("", ws, key, value)
 		require.NoError(t, err, key)
@@ -168,9 +168,11 @@ func TestSetScheduleValues(t *testing.T) {
 	cfg, err := LoadWorkspace("", ws)
 	require.NoError(t, err)
 	assert.Equal(t, HealthConfig{Schedule: "every day at 03:00", MaxCostUSD: 2}, cfg.Health)
-	assert.Equal(t, HarnessConfig{ReflectSchedule: "every monday at 09:00", MaxCostUSD: 0.25}, cfg.Harness)
+	assert.Equal(t, HarnessConfig{ReflectSchedule: "every monday at 09:00", MaxCostUSD: 0.25, ReflectThreshold: 3}, cfg.Harness)
 	_, err = SetValue("", ws, "harness.max_cost_usd", "lots")
 	assert.Error(t, err)
+	_, err = SetValue("", ws, "harness.reflect_threshold", "-1")
+	assert.Error(t, err, "0 or more")
 }
 
 // The form's provider, model and key are saved together, or not at all.

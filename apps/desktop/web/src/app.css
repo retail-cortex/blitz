@@ -303,9 +303,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .progress-bar span { display: block; height: 100%; background: var(--md-primary); border-radius: 2px; transition: width 0.3s; }
 .task-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
 .task-items li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.task-items li.done { color: var(--md-on-surface-variant); text-decoration: line-through; }
+.task-items li.done { color: var(--md-on-surface-variant); }
+.task-items li.done > span:not(.task-time) { text-decoration: line-through; }
 .task-items li.done .icon { color: var(--md-tertiary); }
 .task-items li.in_progress { font-weight: 500; }
+.task-items .task-time { margin-left: auto; font-size: 12px; font-weight: 400; }
 .task-items li.in_progress .icon { color: var(--md-primary); }
 
 .composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: box-shadow 0.2s; }
@@ -502,6 +504,43 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .rule { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .rule code { flex: 1; font-size: 12px; }
 .rule-effect { width: 92px; flex: none; }
+/* The job editor's rule builder (WK-62): the kind's names are longer. */
+/* The agent's watched page (AB-03): a bar over it, as the chat's project bar. */
+.web-agent-bar { gap: 8px; margin: 6px 8px 0; padding: 6px 10px; }
+/* A composed job's prompt, its first lines (WK-74). */
+.compose-job-prompt { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+
+/* What a rule's patterns cover (WK-71): a panel of examples, each a row
+   that fills the pattern, as a menu's items. */
+.menu.floating.pattern-help { display: grid; gap: 6px; width: min(420px, calc(100vw - 16px)); padding: 12px; }
+.pattern-help-list { display: grid; gap: 2px; margin-top: 4px; }
+.pattern-help-row { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 12px; align-items: baseline; padding: 6px 8px; border: none; border-radius: var(--md-shape-sm); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.pattern-help-row:hover { background: var(--md-surface-container-high); }
+.permission-rules .rule-add-row { align-items: center; }
+.permission-rules .rule-add-row .select.rule-kind { width: 200px; flex: none; }
+.permission-rules .rule-add-row .input { flex: 1; min-width: 0; width: auto; }
+/* The job editor's schedule picker (WK-72): a card with the schedule in
+   words, the next runs as dated rows, and a month with their days marked
+   (filled, as a selected chip) and today ringed. */
+.schedule-preview { display: grid; gap: 12px; padding: 14px 16px; }
+.schedule-summary { gap: 10px; }
+.schedule-summary .chip { font-size: 12px; }
+.schedule-body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
+.schedule-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.schedule-run { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: var(--md-shape-md); }
+.schedule-run:first-child { background: var(--md-surface-container-low); }
+.schedule-date { display: grid; place-items: center; width: 44px; flex: none; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-sm); overflow: hidden; }
+.schedule-date-month { width: 100%; text-align: center; font: 500 10px/16px var(--md-font); letter-spacing: 0.5px; text-transform: uppercase; background: var(--accent-tint); color: var(--md-primary); }
+.schedule-date-day { font: 500 18px/26px var(--md-font-display); }
+.schedule-calendar { display: grid; gap: 6px; }
+.schedule-calendar-head { gap: 4px; }
+.schedule-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; justify-items: center; }
+.schedule-weekday { height: 24px; line-height: 24px; }
+.schedule-day { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--md-shape-full); font: 400 13px/1 var(--md-font); color: var(--md-on-surface-variant); }
+.schedule-day.has-run { background: var(--md-primary); color: var(--md-on-primary); font-weight: 500; }
+.schedule-day.today { box-shadow: inset 0 0 0 1px var(--md-primary); color: var(--md-primary); }
+.schedule-day.today.has-run { box-shadow: 0 0 0 2px var(--md-surface), 0 0 0 3px var(--md-primary); color: var(--md-on-primary); }
+@media (max-width: 760px) { .schedule-body { grid-template-columns: 1fr; } }
 .effect-allow { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); border-color: transparent; }
 .effect-deny { background: var(--md-error-container); color: var(--md-on-error-container); border-color: transparent; }
 .effect-ask { background: var(--md-warning-container); color: var(--md-on-warning-container); border-color: transparent; }

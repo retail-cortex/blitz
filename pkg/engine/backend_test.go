@@ -58,6 +58,23 @@ func TestProcessesAreScopedToSessions(t *testing.T) {
 	assert.Equal(t, bp.ID, info.ID)
 }
 
+// The user's own view (the tray's, EL-112): every session's running
+// processes, and a stop whichever session started it.
+func TestRunningProcessesAndStop(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	bp, err := w.Tools().Processes().Start("theirs", "sleep 30", w.Dir())
+	require.NoError(t, err)
+	running := w.RunningProcesses()
+	require.Len(t, running, 1)
+	assert.Equal(t, bp.ID, running[0].ID)
+	info, err := w.StopProcess(bp.ID)
+	require.NoError(t, err)
+	assert.False(t, info.Running)
+	assert.Empty(t, w.RunningProcesses(), "stopped")
+	_, err = w.StopProcess(999)
+	assert.ErrorIs(t, err, api.ErrUnknownProcess)
+}
+
 // SetUI routes approvals and questions to the front end; nil leaves the
 // current one in place.
 func TestSetUI(t *testing.T) {

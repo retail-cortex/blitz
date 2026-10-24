@@ -16,18 +16,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiCreationOutline, mdiRefresh } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAutoFix, mdiCreationOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { t } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
+import { PermissionRules } from "./PermissionRules";
+import { SchedulePicker } from "./SchedulePicker";
+import { ComposeDialog } from "./studio/ComposeDialog";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "./ui/controls";
-import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
-import type { RewriteWorkerResponse } from "./gen/blitz/v1/worker_pb";
+import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
+import type { RewriteWorkerResponse, WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
 
 // An example of the permissions field (syntax, not prose).
-const permissionsExample = ["shell:go test ./...", "write:reports/*"].join("\n");
-
 /** The worker a dialog edits: its name, its WORKER.md, and whether saving pauses it. */
 export interface WorkerEdit {
   name: string;
@@ -70,6 +71,15 @@ export function WorkerEditor({
   const catalog = useModelCatalog(dir);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
+  // The host's limits for every job, for the limit fields' defaults and caps.
+  const [policy, setPolicy] = useState<WorkerPolicySettings>();
+  useEffect(() => {
+    workers.listAllWorkers({}).then(
+      (r) => setPolicy(r.policy),
+      () => undefined, // the fields then say "Default"
+    );
+  }, []);
   // Editing: the file as loaded (its hash, and the form it made), and
   // whether it changed on disk since.
   const [hash, setHash] = useState("");
@@ -164,6 +174,11 @@ export function WorkerEditor({
   // Reloading the file from disk drops the form's edits: asked first when there are some.
   const reload = () => (edited(f, loaded) ? setConfirmReload(true) : void load());
 
+  const hints = limitHints(policy);
+  const limitProps = (h: { def: string; cap: string }) => ({
+    placeholder: h.def ? t("desktop.newworker.default_value", { value: h.def }) : t("desktop.newworker.policy_default"),
+    hint: h.cap ? t("desktop.newworker.capped_at", { value: h.cap }) : undefined,
+  });
   const field = (key: keyof WorkerForm, props: { hint?: string; placeholder?: string; mono?: boolean; type?: string }) => (
     <label className="field">
       <span className="t-label">{t(`desktop.newworker.${key}`)}</span>
@@ -189,7 +204,33 @@ export function WorkerEditor({
   );
   return (
     <>
+      {composing && (
+        <ComposeDialog
+          workspace={dir}
+          kind="job"
+          onClose={() => setComposing(false)}
+          onDraft={(d) => {
+            setComposing(false);
+            if (!d.worker) return;
+            const form = formFromWorker(d.worker);
+            setF({ ...form, name: d.name || form.name, description: form.description || d.summary, timezone: form.timezone || f.timezone });
+            setNamed(true);
+          }}
+        />
+      )}
       <div className="stack new-worker" style={{ gap: 14 }}>
+        {/* As Workflows does (WK-74): describe the job, a few questions, then a draft in this form. */}
+        {!edit && (
+          <div className="list">
+            <button type="button" className="list-item compose-entry" onClick={() => setComposing(true)}>
+              <Icon path={mdiAutoFix} />
+              <span className="lines">
+                <span className="ellipsis">{t("desktop.compose.entry")}</span>
+                <small className="ellipsis">{t("desktop.compose.entry_about_job")}</small>
+              </span>
+            </button>
+          </div>
+        )}
         {stale && (
           <div className="card error row" role="alert" style={{ gap: 8 }}>
             <Icon path={mdiAlertCircleOutline} size="sm" />
@@ -225,10 +266,7 @@ export function WorkerEditor({
             <span className={`t-body-sm ${f.name && !validWorkerName(f.name.trim()) ? "error-text" : "muted"}`}>{t(edit ? "desktop.editworker.name_fixed" : "desktop.newworker.name_hint")}</span>
           </label>
         </div>
-        <div className="pair">
-          {field("schedule", { placeholder: "Weekdays at 9:30", hint: t("desktop.newworker.schedule_hint") })}
-          {field("timezone", { placeholder: "Europe/Paris", hint: t("desktop.newworker.timezone_hint") })}
-        </div>
+        <SchedulePicker schedule={f.schedule} timezone={f.timezone} onSchedule={(v) => set("schedule", v)} onTimezone={(v) => set("timezone", v)} />
         <div className="pair">
           <label className="field">
             <span className="t-label">{t("desktop.newworker.agent")}</span>
@@ -277,15 +315,16 @@ export function WorkerEditor({
             </Button>
           </span>
         </div>
-        <label className="field">
+        <div className="field">
           <span className="t-label">{t("desktop.newworker.permissions")}</span>
-          <textarea className="input mono" value={f.permissions} placeholder={permissionsExample} rows={3} spellCheck={false} onChange={(e) => set("permissions", e.target.value)} />
+          <PermissionRules value={f.permissions} onChange={(v) => set("permissions", v)} allow={policy?.allow} />
           <span className="t-body-sm muted">{t("desktop.newworker.permissions_hint")}</span>
-        </label>
+        </div>
+        {/* The host's defaults fill in what's left empty; a job may ask for more, up to a cap the host set (WK-73). */}
         <div className="triple">
-          {field("maxTurns", { placeholder: t("desktop.newworker.policy_default"), type: "number" })}
-          {field("maxCostUSD", { placeholder: t("desktop.newworker.policy_default"), type: "number" })}
-          {field("timeout", { placeholder: "20m", mono: true })}
+          {field("maxTurns", { ...limitProps(hints.maxTurns), type: "number" })}
+          {field("maxCostUSD", { ...limitProps(hints.maxCostUSD), type: "number" })}
+          {field("timeout", { ...limitProps(hints.timeout), mono: true })}
         </div>
         <div className="row" style={{ gap: 12 }}>
           <span className="t-label">{t("desktop.newworker.catchUp")}</span>

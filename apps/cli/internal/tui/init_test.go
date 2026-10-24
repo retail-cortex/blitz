@@ -91,8 +91,8 @@ func TestReflectHint(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "nothing yet", r: api.Reflection{Patterns: api.ReflectAt - 1}},
-		{name: "patterns", r: api.Reflection{Patterns: 6}, want: "Agents hit the same problems (6 patterns since the last reflection): /reflect to review what to learn"},
+		{name: "nothing yet", r: api.Reflection{Patterns: 4, Score: 4, Threshold: 5}},
+		{name: "patterns", r: api.Reflection{Patterns: 6, Score: 7, Threshold: 5}, want: "Agents hit the same problems (6 patterns since the last reflection): /reflect to review what to learn"},
 		{name: "proposals", r: api.Reflection{Patterns: 6, Proposals: 1}, want: "1 change to the harness to review: /reflect"},
 		{name: "the service can't say", err: errors.New("unavailable")},
 	}

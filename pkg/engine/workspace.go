@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/harness"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
@@ -99,6 +101,9 @@ type Workspace struct {
 	appendPrompt string
 	goalMu       sync.Mutex
 	goals        map[string]api.Goal // by session
+	uploadMu     sync.Mutex
+	uploads      map[string]*upload // files being uploaded (UploadFile), by id
+	browsers     browserHub         // the desktop windows hosting the agent's browser
 	cfg          *config.Config
 	// cfgMu guards what changes in cfg once it's open (reloads and
 	// setters write it through setSettings), reply and mcpLive; readers
@@ -123,9 +128,13 @@ type Workspace struct {
 	memoryMu    sync.Mutex
 	// evidenceCache is the harness's evidence by the audit log's stamp
 	// (cachedEvidence), guarded by evidenceMu.
-	evidenceMu    sync.Mutex
-	evidenceCache map[string]harness.Evidence
-	locales       *i18n.Bundle
+	evidenceMu sync.Mutex
+	// reflectChecked is when the end of a turn last weighed the evidence
+	// for the chat's suggestion to reflect (offerReflect), guarded by
+	// evidenceMu.
+	reflectChecked time.Time
+	evidenceCache  map[string]harness.Evidence
+	locales        *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
 	// moveNotes tell a session's next prompt that /cd moved it here
@@ -310,7 +319,18 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	// harness (spec_harness_learning_048).
 	w.tools.SetEvidenceReader(w.readEvidence)
 	w.tools.SetProposalSaver(w.saveProposals)
+	w.tools.SetJobs(tools.Jobs{
+		Draft: w.DraftWorker,
+		Preview: func(schedule, tz string) (api.SchedulePreview, error) {
+			return PreviewSchedule(schedule, tz, 5, time.Now())
+		},
+		Create: w.CreateWorker,
+		List:   w.ListWorkers,
+	})
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
+	w.tools.SetBrowserProfile(w.browserProfile)
+	w.tools.SetAgentBrowserHost(w.openAgentBrowser)
+	w.tools.SetPageOpener(w.openPage)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
@@ -482,6 +502,7 @@ func (w *Workspace) Close() error {
 		w.engine.StopTasks() // before their tools close
 	}
 	if w.tools != nil {
+		w.dropUploads(time.Time{})
 		err = w.tools.Close()
 	}
 	w.audit.Close()
@@ -566,10 +587,57 @@ func (w *Workspace) instructions() string {
 		}
 	}
 	s += w.styleText()
+	s += harnessFolders(w.Dir())
 	if p := strings.TrimSpace(w.appendPrompt); p != "" {
 		s += "\n\n" + p
 	}
 	return s + i18n.ReplyInstruction(w.replyIn())
+}
+
+// FindBrowser is the system's Chrome, Chromium, Edge or Brave (path when
+// set), for opening a browser profile to sign in by hand (BP-05).
+func FindBrowser(path string) (string, error) { return browser.Find(path) }
+
+// browserProfile is the browser profile the workspace browses with, as the
+// person chose it (spec_browser_profiles_049 BP-03): its name, its folder
+// and the sites it browses without asking. None ("") when none is chosen, or the
+// project's settings wait for trust or were declined, since a project the
+// person hasn't trusted could steer the agent into their sign-ins.
+func (w *Workspace) browserProfile() tools.BrowserProfile {
+	switch w.project.State {
+	case "", "none", "trusted":
+	default:
+		return tools.BrowserProfile{}
+	}
+	store := config.OpenBrowserProfiles(settingsDir(w.cfg))
+	name := store.ForWorkspace(w.Dir())
+	p, ok := store.Get(name)
+	if name == "" || !ok {
+		return tools.BrowserProfile{}
+	}
+	return tools.BrowserProfile{Name: name, Dir: store.Dir(name), Allow: p.AllowDomains}
+}
+
+// harnessFolders tells the agents about the harness's scratch folder and
+// support scripts, when the workspace has them (spec_harness_learning_048
+// HE-50): where working files go, and what's there to run.
+func harnessFolders(dir string) string {
+	var b strings.Builder
+	if info, err := os.Stat(filepath.Join(dir, config.ProjectScratchDir)); err == nil && info.IsDir() {
+		fmt.Fprintf(&b, "\n\nPut working files (downloads, drafts, test data, notes) in `%s/`, which git ignores, not in /tmp or the workspace root.", config.ProjectScratchDir)
+	}
+	if entries, err := os.ReadDir(filepath.Join(dir, config.ProjectScriptsDir)); err == nil {
+		var names []string
+		for _, e := range entries {
+			if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				names = append(names, e.Name())
+			}
+		}
+		if len(names) > 0 {
+			fmt.Fprintf(&b, "\n\nThe project's support scripts are in `%s/` (%s): run them rather than repeating their steps; .agents/AGENTS.md says what each does.", config.ProjectScriptsDir, strings.Join(names, ", "))
+		}
+	}
+	return b.String()
 }
 
 // loadMemory reads instruction files and rules; imports of blocked paths

@@ -316,6 +316,9 @@ func onReady() {
 	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
 	// The running service's MCP servers: the service's, not a workspace's.
 	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
+	// The agents' background processes still running, each with Stop
+	// (spec_electron_038 EL-112).
+	procMenu := &submenu{parent: systray.AddMenuItem(tray.ProcessesTitle(0), "")}
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
@@ -435,6 +438,12 @@ func onReady() {
 			mcpMenu.show(tray.MCPEntries(extras), click)
 			live := tray.Live{Runs: runs.get(), JobRuns: extras.Runs}
 			spaces := tray.Spaces(openSpaces(), extras.Workers)
+			procMenu.parent.Show()
+			if title := tray.ProcessesTitle(len(extras.Processes)); procMenu.title != title {
+				procMenu.title = title
+				procMenu.parent.SetTitle(title)
+			}
+			procMenu.show(tray.ProcessEntries(extras.Processes, spaces), click)
 			going := tray.Going(live, spaces, time.Now())
 			runSlots.show(going, click)
 			if len(going) > 0 {
@@ -457,6 +466,7 @@ func onReady() {
 			icon.pulse(live.Busy())
 		} else {
 			mcpMenu.parent.Hide()
+			procMenu.parent.Hide()
 			runningHead.Hide()
 			spacesHead.Hide()
 			runSlots.show(nil, click)

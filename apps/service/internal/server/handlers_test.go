@@ -194,6 +194,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"ListTaskRequests":     func() error { return unary(w.ListTaskRequests, &pb.ListTaskRequestsRequest{Workspace: ws}) },
 		"GetGitStatus":         func() error { return unary(w.GetGitStatus, &pb.GetGitStatusRequest{Workspace: ws}) },
 		"InitGitRepo":          func() error { return unary(w.InitGitRepo, &pb.InitGitRepoRequest{Workspace: ws}) },
+		"InstallSecretHook":    func() error { return unary(w.InstallSecretHook, &pb.InstallSecretHookRequest{Workspace: ws}) },
 		"CloseWorkspace":       func() error { return unary(w.CloseWorkspace, &pb.CloseWorkspaceRequest{Workspace: ws}) },
 		"WatchTasks": func() error {
 			return streamErr(w.WatchTasks(ctx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: ws})))
@@ -580,9 +581,21 @@ func TestProcessesOverTheAPI(t *testing.T) {
 			assert.Equal(t, "UNKNOWN_PROCESS", reason(t, call()))
 		})
 	}
-	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, SessionIds: mine, Id: p.Id}))
+	// The tray's view: every open workspace's running ones, and its stop,
+	// whichever session started it (EL-112).
+	all, err := w.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, all.Msg.Processes, 1)
+	assert.Equal(t, p.Id, all.Msg.Processes[0].Process.Id)
+	assert.NotEmpty(t, all.Msg.Processes[0].Workspace)
+	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, Id: p.Id, AnySession: true}))
 	require.NoError(t, err)
 	assert.Equal(t, p.Id, killed.Msg.Process.Id)
+	assert.False(t, killed.Msg.Process.Running)
+	all, err = w.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, all.Msg.Processes, "stopped")
+	assert.Equal(t, "UNKNOWN_PROCESS", reason(t, unary(w.KillProcess, &pb.KillProcessRequest{Workspace: dir, Id: 999, AnySession: true})))
 	_, err = w.TakeProcessNotices(ctx, connect.NewRequest(&pb.TakeProcessNoticesRequest{Workspace: dir, SessionId: id}))
 	assert.NoError(t, err)
 }
@@ -806,6 +819,8 @@ func TestWorkspaceHandlers(t *testing.T) {
 		refl, err := w.GetReflection(ctx, connect.NewRequest(&pb.GetReflectionRequest{Workspace: dir}))
 		require.NoError(t, err)
 		assert.Zero(t, refl.Msg.Proposals, "nothing to review in a new workspace")
+		require.NoError(t, unary(w.SnoozeReflection, &pb.SnoozeReflectionRequest{Workspace: dir}), "Not now")
+		assert.Error(t, unary(w.SnoozeReflection, &pb.SnoozeReflectionRequest{Workspace: filepath.Join(t.TempDir(), "gone")}))
 
 		locales, err := w.ListLocales(ctx, connect.NewRequest(&pb.ListLocalesRequest{Workspace: dir}))
 		require.NoError(t, err)

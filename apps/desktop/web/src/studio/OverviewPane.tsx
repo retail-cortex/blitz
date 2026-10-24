@@ -540,6 +540,7 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
   const [model, setModel] = useState(health.model);
   const [reflect, setReflect] = useState(health.reflectSchedule);
   const [reflectLimit, setReflectLimit] = useState(health.reflectMaxCostUsd ? String(health.reflectMaxCostUsd) : "");
+  const [threshold, setThreshold] = useState(String(health.reflectThreshold));
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
@@ -550,6 +551,7 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
         ["health.model", model.trim()],
         ["harness.reflect_schedule", reflect.trim() || "off"],
         ["harness.max_cost_usd", reflectLimit.trim() || "0"],
+        ["harness.reflect_threshold", threshold.trim() || "0"],
       ] as const) {
         await config.setConfigValue({ workspace, key, value });
       }
@@ -590,6 +592,9 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
         </Field>
         <Field label={t("desktop.health.reflect_max_cost")} supporting={t("desktop.health.reflect_max_cost_hint")}>
           {(id) => <input id={id} className="input" inputMode="decimal" value={reflectLimit} placeholder="0.5" onChange={(e) => setReflectLimit(e.target.value)} />}
+        </Field>
+        <Field label={t("desktop.health.reflect_threshold")} supporting={t("desktop.health.reflect_threshold_hint")}>
+          {(id) => <input id={id} className="input" inputMode="numeric" value={threshold} placeholder="5" onChange={(e) => setThreshold(e.target.value)} />}
         </Field>
       </div>
     </Dialog>

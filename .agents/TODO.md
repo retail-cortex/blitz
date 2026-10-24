@@ -2,7 +2,7 @@
 
 One list, in the order to work through it. Sizes: S (hours), M (a day or
 two), L (a week or more). Each item says where the work is and what "done"
-means. Written 2026-09-28, last updated 2026-09-29; the backlog spec
+means. Written 2026-09-28, last updated 2026-10-23; the backlog spec
 (`docs/content/about/specs/spec_backlog_026.md`) keeps the long tail.
 
 ## Picking up
@@ -39,6 +39,313 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## Queued
 
+### v0.8.4 (branch `release-0.8.4`, planned 2026-10-23)
+
+One branch, one PR. Each item updates its spec and its site pages in the
+same commit; targeted tests per item, the full suite with `--config=race`
+and `tools/coverage.sh` only before the push. All built on the branch, each committed locally with its spec, docs and
+manual checks; nothing pushed. Routing to global and workspace
+sub-agents verified (`f14f2547`); 1 drag and drop with the computer
+(`454a1e73`); 2 pictures in Markdown (`e0870d3a`); 6 the status bar
+toggles (`2ab883d1`); 7 Include all changes and command-made files to
+git (`a136230e`); 9–12 jobs from the chat, the rule builder, the
+schedule picker, limits as defaults (`f47296fc`); 8 python-uv
+(`5231d53b`); 13 and 14 the secrets hook, scripts and scratch
+(`6fb4152a`); 3 web_fetch through the browser (`38e02a3f`); 5 browser
+profiles (`cd0583e4`); 4 the agent's browser in the app (`da9f64fc`).
+The full suite with `--config=race` and coverage passed 2026-10-24
+(`ea0381e8`: lint, a flaky test, a test race, coverage 94.04%). Fast
+follows 2026-10-24: the setup and reflect tiles no longer wait for the
+command list (`793b42d2`); closing the reflection loop, HE-60–HE-63 (what
+worked, scratch reuse, a score and threshold, the chat's card); pages
+you ask to see open in the embedded or system browser, AB-10–AB-12
+(`open_page`, `browser.open`, `294837d7`); the tray's Processes menu,
+EL-112 (each agent process still running, with Stop). Next: the owner's manual test
+(`.agents/v0.8.4-test-script.md`, §7.10, §7b and §8 new), the full
+suite again, then one PR.
+
+Order: see **Order of work** below the list. 1 → 2 share the drop
+plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
+5's partitions land first.
+
+1. **Drag and drop between the OS and the file tree (#70, M).**
+   - *In:* `FilesShelf.tsx` `onDragOver` (~:271) also accepts
+     `dataTransfer.types` `Files`; dropping on a folder (or the
+     background, for the root) asks **Copy here** / **Move here**.
+     Bytes go up with `WriteBinaryFile` (works in Electron, the
+     `/host/` page and a plain browser, and with the planned remote
+     service); folders through `webkitGetAsEntry()` + `CreateFolder`.
+     **Move** only in Electron: a new bridge method
+     (`webUtils.getPathForFile` in `preload.ts`) gives the sources'
+     paths, and Electron's main process trashes them
+     (`shell.trashItem`) after every copy succeeded. A plain browser
+     offers Copy only. A name that exists asks Replace / Keep both
+     (`name 2.ext`) / Skip, once for the batch.
+   - *Out:* `webContents.startDrag({files, icon})` from a new bridge
+     method, started on a tree row's `dragstart` when the pointer
+     leaves the window (Electron only). Always a copy (owner,
+     2026-10-23): the OS copies a dragged file and Electron can't tell
+     where it landed, so the workspace keeps its file.
+   - Check the API's request size limit for large drops (Connect's
+     read max); stream or chunk if it's below ~100 MiB.
+   - Specs: FIL-30/31 (spec_files_029), EL-12 (spec_electron_038).
+     Tests: shelf drop tests with the fake service; Electron bridge by
+     hand (manual-verification).
+2. **Images in Markdown (#71, M).**
+   - Drop a tree image (`application/x-blitz-path`) on the visual
+     editor (`VisualEditor.tsx` `editorProps.handleDrop`) or source
+     mode (CodeMirror drop handler): inserts `![name](relative path)`
+     at the drop point, relative to the document (`mdlinks.ts`).
+   - Drop or paste an image from the OS: saved beside the document
+     (or `images/` beside it if that folder exists), named after the
+     file, then inserted. This lifts VE-60's "pasted or dropped" for
+     images.
+   - **Image…** (`ImageEditor`, :715-760) becomes a picker: workspace
+     images (FindFiles filtered to image types) with thumbnails
+     (`pictureURL`), a folder tree, **From your computer…** (upload as
+     above), and the address field kept for URLs. Alt text stays.
+   - Specs: VE-11, VE-60 (spec_visual_editor_037), FIL-65.
+3. **web_fetch falls back to the browser (S–M).** Today `web.go`
+   `fetch` is a plain GET with no browser path at all. When the reply
+   is a challenge (403/429/503 with cf-chl / "Just a moment" / similar
+   markers) or HTML whose text is nearly empty (a JS-only page), and
+   `[browser] enabled`, it loads the page in the browser (Navigate +
+   text) and says so in the result (`via: "browser"`). Same approval
+   key (`web:<host>`), same `allow_domains`, same size cap; a
+   `web.browser_fallback` switch (default on). The registry builds the
+   browser before web_fetch so it can hold it. Specs: WEB-07, §6
+   "Known limits" (spec_web_008). Go tests with an httptest server and
+   the existing fake browser.
+4. **The agent's browser is the in-app browser (L).** When a desktop
+   window is connected, the `browser` tool (and 3's fallback) drives a
+   Blitz-owned `WebContentsView` the user can watch, instead of a
+   headless system Chrome. Electron relays `webContents.debugger` (CDP)
+   over a stream it opens to the service (a new
+   `BrowserBridge` RPC through blitz-tray: streams, not polling, and
+   it works for a remote service); `browser.Attach` gets a transport
+   that isn't a websocket URL. No `--remote-debugging-port` on the
+   app: it would let any local process drive the app's own page.
+   WEB-32's proxy filtering is replaced on that path by the session's
+   `webRequest` (deny rules, private addresses) plus the CDP `Fetch`
+   interception already used (WEB-34). Without a window, the headless
+   browser as today.
+   **Watch or silent** (owner, 2026-10-23): it offers to browse
+   silently. `browser.show = "ask" | "watch" | "silent"` (default
+   ask): the first browse of a session asks **Watch** / **Run
+   silently** (remembered for the session, or for good). Watch opens a
+   tab marked "Blitz is browsing" with **Take over** / **Stop**;
+   silent runs the view off screen (not attached to the window, or
+   `offscreen` rendering) with a small "Browsing example.com" chip in
+   the conversation that opens it as a tab. New spec
+   (spec_agent_browser_050), WEB-30.
+5. **Browser profiles for sign-ins (M–L).** Research below. Named
+   profiles, each an Electron partition `persist:profile-<name>` (the
+   in-app browser) and, for the headless browser, a persistent
+   `--user-data-dir` under `~/.blitz/browser/profiles/<name>` (0700).
+   The user signs in by hand in a preview tab on that profile; agents
+   then browse with its cookies. Settings › Browser: list, new,
+   **Sign in…** (opens a tab), clear data, delete. One profile per
+   workspace (owner, 2026-10-23): `browser.profile`, set from the
+   global settings only, never project settings (like WEB-38); every
+   agent in the workspace browses with it. Untrusted workspaces get a
+   throwaway profile. Each profile has its own
+   allowed domains; a domain outside them asks. Passkeys: handle
+   `select-webauthn-account` (macOS Touch ID). New spec
+   (spec_browser_profiles_049), WEB-30.
+
+6. **The status bar's branch toggles Changes (XS).** `StatusBar.tsx:129`
+   sends `showView({view: "changes"})`, which only opens. A second click
+   closes it: `ViewDetail.toggle`, and App's view handler closes the
+   view when it's the one shown. Same for the status bar's jobs button.
+   Spec: spec_desktop_024 (status bar).
+7. **Git: Add all, and created files caught (S–M).** Two parts:
+   - *Add all changes* (`git add --all`, .gitignore honoured) in the
+     Changes view's header and menu and the tree's background menu, at
+     any time (today only the commit dialog's **Include all changes**,
+     when nothing is staged, via `DraftCommit(stageAll)`). A
+     `StageAll` RPC in `pkg/engine/gitfiles.go`.
+   - *Why files are missed:* `[git] auto_add` (`stageCreated`,
+     `gitfiles.go:222`) adds only what the agent wrote with its file
+     tools (`Checkpoints().Created`). Files a shell command made (`uv
+     init`, a generator, a build), a job's, and dropped files never
+     are. Fix: list untracked files at the turn's start (`git ls-files
+     --others --exclude-standard`), again at its end, and add the new
+     ones (temporary files left out, as now). Specs: spec_files_029
+     FIL-59, the git settings' doc.
+8. **uv projects ask which layout (S–M).** A built-in skill
+   `python-uv` (`pkg/engine/skills/builtin/`, on by default, offered
+   to blitz and project-setup), triggered by "new Python project", "uv
+   init" and the like. Before running anything it asks (one
+   `ask_user_question`): **App** (`uv init --app`, a script-style
+   project), **Packaged app** (`--package`, `src/` layout, an entry
+   point), **Library** (`--lib`, `src/`, `py.typed`), **Single
+   script** (`uv init --script`, inline dependencies), or
+   **Workspace** (several packages, `[tool.uv.workspace]`); then Python
+   version, and test/lint tools (pytest, ruff). It never assumes a
+   flat project. Skill scenario tests (`skillscenarios.go`) for the
+   question being asked. Spec: spec_skills (built-in skills).
+9. **Jobs from the chat (M).** A `create_job` tool for the blitz agent
+   over `Workspace.CreateWorker` (`pkg/engine/workers.go:144`): name,
+   schedule in plain text (`ParseSchedule` already reads "every day at
+   8 am"), the job's prompt (with where and how it writes: the
+   folder, `month-day-year.html`, the style), its permissions
+   (`web:news.google.com`, `write:some/directory/**`), agent, model and
+   limits; plus `list_jobs`. The agent drafts and shows the job first
+   (schedule's next runs, permissions) and creates it on approval.
+   Created paused, as the New Job dialog does ("review and enable"),
+   with a card in the chat to **Review** / **Enable**. Paused for review
+   (decision e below). Spec: spec_workers_023.
+10. **"May do without asking" as a rule builder (M).** The New Job
+    dialog's free-form box (`desktop.newworker.permissions`, "one
+    kind:pattern a line") becomes rows: a kind select (**Run
+    commands**, **Write files**, **Delete files**, **Fetch from the
+    web**, **Use MCP tools**), a pattern field with that kind's
+    placeholder and examples (`reports/**`, `news.google.com`, `go
+    test *`), a sentence saying what the row allows, remove, and **Add
+    a rule**. Kinds the host's policy doesn't allow are disabled, with
+    why. `workerForm.ts` converts to and from the lines, so the file
+    format doesn't change. In `WorkerEditor.tsx` and Studio's
+    `WorkersPane.tsx`.
+11. **A calendar-like schedule picker (M).** Instead of the error-prone
+    text field: **Repeats** (Once, Every hour, Every day, Weekdays,
+    Every week with day chips, Every month on a day), a time picker,
+    a start date (calendar), the time zone as a searchable select, and
+    a preview of the next five runs. A new `PreviewSchedule` RPC
+    (wraps `workers.ParseSchedule`, returns the next runs or the
+    error), so the page and the service agree. Plain text and cron
+    stay under **Custom**; an existing job's schedule opens in the
+    picker when it fits, else in Custom.
+12. **Job limits are defaults, not caps (S–M).** `[workers.policy]`
+    ships `max_turns = 200`, `max_cost_usd = 10`, `max_timeout =
+    "2h"` (`pkg/config/config.go:822`), so a job can't ask for more,
+    and the editor's fields read as maximums. Change: no cap by
+    default (0 = none); the defaults (50 calls, $1, 30m) fill in what a
+    job leaves out, shown as the fields' placeholders, and a job may
+    set more. A host that wants a cap still sets `max_*` (Settings ›
+    Jobs: **The most it may ask for**, optional, "No limit"). Settings
+    files that set `max_*` keep it. Labels: "Model calls a run
+    (default 50)". Spec: spec_workers_023, the settings reference.
+13. **A pre-commit hook against committed keys (M).** When the harness
+    is set up (project-setup's `git init`) or the window makes a
+    repository (`GitInit`, `pkg/engine/changes.go:186`), Blitz adds
+    `.githooks/pre-commit` (versioned, so collaborators get it) and
+    sets `core.hooksPath` to it in the repository's own config. The
+    hook runs `blitz secrets scan --staged` when blitz is on PATH (a
+    new command: `pkg/redact`'s patterns plus key formats such as
+    `sk-`, `AKIA`, `ghp_`, `AIza`, private-key blocks, and high-entropy
+    values in `.env`-like files), else gitleaks if installed, else a
+    portable grep of the same patterns; it blocks the commit with the
+    file and line (the value masked) and says how to bypass for a
+    false alarm (`git commit --no-verify`, or an allow line). An
+    existing `core.hooksPath` or pre-commit framework (husky,
+    pre-commit) is left alone and the setup agent offers to add the
+    scan to it instead. Commits Blitz makes (the commit dialog) run it
+    too. For existing repositories: project-setup offers it, and
+    Settings › Git has **Protect against committing keys**. New spec
+    (spec_secret_hooks_051).
+
+14. **Support scripts and a scratch folder in the harness (S–M).**
+    project-setup (`pkg/engine/agents/builtin/project-setup.md`)
+    writes specs, instruction files, skills, agents and rules, but no
+    scripts, and nothing says where an agent's working files go.
+    - `.agents/scripts/` (versioned): scripts that support the
+      project, proposed from the survey and the answers like the skills
+      step (up to five, shown with one `multi_select` before writing):
+      setting up, fetching or refreshing data, checks, releases. Each
+      starts with a comment saying what it does, how to run it and what
+      it needs, and is executable. `.agents/AGENTS.md` lists them under
+      **Scripts**, so every agent knows them, and skills call them
+      instead of repeating their steps. Setup writes them and never
+      runs them (its rule stays: only `git rev-parse` and `git init`);
+      they run later with the usual approvals.
+    - `.agents/scratch/` (ignored by git): where agents put
+      intermediate files (downloads, drafts, test data, notes) instead
+      of `/tmp` or the workspace root. It ignores itself
+      (`.agents/scratch/.gitignore` holding `*`), so it works in a
+      repository that already exists and whatever the root
+      `.gitignore` says. The blitz agent's instructions say so when
+      the folder exists (the engine adds the line), and auto-add and
+      Add all leave it out (7).
+    - harness-update adds both to a harness that lacks them; the
+      setup's summary names them. Specs: the harness spec
+      (spec_harness_learning_048 or the setup's), the user guide's
+      harness page.
+
+**Order of work (all done 2026-10-23):** 1 and 2 → 6 and 7 (quick, and 7 feeds the hook)
+→ 9–12 together (one spec, the jobs editor) → 8 → 13 and 14 (both in
+the harness setup) → 3 → 5 → 4.
+
+**Decided (owner, 2026-10-23):** (e) a job the agent creates from the
+chat is paused for review, with **Enable** in the chat's card; (f) the
+key-scanning hook is versioned in `.githooks/`.
+
+**Research: Chromium profiles (2026-10-23).**
+- What exists: the web preview's `persist:preview` partition
+  (`apps/electron/src/main.ts:600`) already keeps the user's sign-ins,
+  but nothing on the engine side can use it. The agent's browser
+  (`pkg/engine/browser`) is the system's Chrome with a temporary
+  profile deleted on close (WEB-30), so it never has a sign-in.
+- Electron 44 gives what's needed: `session.fromPartition("persist:…")`
+  / `session.fromPath(abs)` are separate, persistent profiles
+  (cookies, localStorage, IndexedDB, cache); `ses.getStoragePath()`,
+  `ses.clearData()`, `ses.cookies`; per-session permission and device
+  handlers; `webContents.debugger` drives a view over CDP without
+  opening a debugging port. WebAuthn/passkeys go through
+  `select-webauthn-account` / `select-webauthn-authenticator`
+  (macOS); without a listener, Touch ID passkeys fail with
+  `NotAllowedError`.
+- Limits: Google (and some other identity providers) refuse sign-in
+  in embedded or automated browsers ("This browser or app may not be
+  secure", since 2021); a profile won't fix that. Blitz's own OAuth
+  (MCP servers, `pkg/mcpauth`) stays as RFC 8252 says: the system
+  browser with a loopback redirect. Chrome refuses
+  `--remote-debugging-port` on the user's default profile (Chrome 136
+  on), and its cookies are encrypted with the OS keychain, so using or
+  importing the user's real Chrome profile is out: profiles are
+  Blitz's own.
+- Security: a profile's cookies are credentials. Profiles stay in the
+  global settings and `~/.blitz`, are never chosen by project
+  settings, and `redact`/logs never print cookie values.
+
+
+### File tree: catching up with VS Code's Explorer
+
+`apps/desktop/web/src/files/FilesShelf.tsx` today: single selection,
+keyboard moves, inline new / rename, delete, move by drag in the tree,
+git letters, reveal in the file manager, refresh every 5 s. Missing, by
+value:
+
+- **Multi-select (M):** Shift/Cmd(Ctrl)-click and Shift+arrows; menu
+  actions, delete, drag and **Add to context** on the whole selection.
+- **Copy, cut, paste, duplicate (M):** Cmd+C/X/V and the menu, inside
+  the tree and with the OS clipboard's files. Needs a `CopyFile` RPC
+  (recursive, destination must not exist), shared with #70.
+- **Undoable delete (S):** to the OS trash or a workspace trash, with
+  **Undo** in a toast, instead of gone for good.
+- **Live updates (M):** the service streams file changes (fsnotify) to
+  the tree instead of the 5 s poll (FIL-33); streams over polling for
+  the remote service.
+- **Filter and type-to-find (S–M):** typing in the tree jumps to the
+  next match; a filter box narrows the tree (find in tree), using
+  `FindFiles`.
+- **Reveal the active file (S):** the tree follows the open tab
+  (setting), and **Reveal in Files** from a tab's menu.
+- **Nested new file (S):** `a/b/c.md` creates the folders.
+- **Compact folders (S):** single-child folder chains on one row
+  (`src/main/java`).
+- **Diagnostics in the tree (S–M):** LSP errors and warnings colour a
+  file and its folders (the `lsp` tool already knows them).
+- **Drag to the chat and the editor (S):** a row dropped on the
+  composer adds it as context; on the editor area opens it.
+- **Open to the side (M):** a second editor group (split).
+- **More in the menu (S):** Open in terminal, Find in folder
+  (`search_workspace` scoped), Copy name, Collapse folders below.
+- **Sorting and file nesting (S):** folders first / mixed / by type,
+  and nesting patterns (`*.ts` → `*.test.ts`, `package.json` → lock
+  files).
+- **Big folders (S):** a "show more" row at `maxListed` (5000) instead
+  of a silent cut; virtualised rows for long lists.
+
 ### Error-handling follow-ups (done 2026-10-03)
 
 All five done on the `search-index` branch, each with tests and its spec:
@@ -65,6 +372,28 @@ helper process (IMG-52).
 
 ## Waiting on something
 
+- **Drive the user's own Chrome (L), left out of v0.8.4 (owner, 2026-10-23).**
+  How others do it (2026-10-23):
+  - *Antigravity:* launches Chrome with its own persistent profile
+    (`--user-data-dir=~/.gemini/antigravity-browser-profile`,
+    `--remote-debugging-port=9222`) plus its "Browser Connector"
+    extension (`debugger`, `tabs` permissions), which gives the agent
+    a higher-level API (navigate, DOM, page readiness) over
+    `chrome.debugger`. Sign-ins last because the profile does; a
+    blue border marks the agent's control. That's Blitz's
+    `pkg/engine/browser` with a persistent profile, made visible.
+  - *Extension + native messaging* (Claude in Chrome, Codex's Chrome
+    control, OpenClaw, agent-browser): an MV3 extension in the user's
+    everyday Chrome talks to a local native-messaging host over
+    stdio and drives tabs with `chrome.debugger`. No debugging port
+    (Chrome 136+ ignores it on the default profile anyway), and the
+    user's real sign-ins work, Google's included, since it's real
+    Chrome. Costs: a Web Store extension, a native-host manifest per
+    browser and OS (registry keys on Windows), and an agent holding
+    every sign-in the user has: approvals per site, a tab group of
+    the agent's own.
+  - For Blitz: v0.8.4's items 4 and 5 cover most of it inside the app; this is the
+    path for sites that refuse embedded browsers.
 - **Claude on Vertex AI, live** (backlog BL-VER-04): needs Claude Opus
   quota in `rmcguinness-lab` (requested). Then BL-ENG-22: client-side
   refusal fallback on Vertex AI.

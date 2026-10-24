@@ -180,7 +180,14 @@ func ReadSpec(dir string) (api.WorkerSpec, string, error) {
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
-	spec := api.WorkerSpec{Name: filepath.Base(dir)}
+	return ParseSpec(filepath.Base(dir), data), hash, nil
+}
+
+// ParseSpec is ReadSpec's reading of a WORKER.md's data, for the worker
+// name: what it can of a file that isn't valid, the whole of one whose
+// frontmatter can't be read as its prompt (the composer's drafts too).
+func ParseSpec(name string, data []byte) api.WorkerSpec {
+	spec := api.WorkerSpec{Name: name}
 	fm, body, err := split(data)
 	var f frontmatter
 	if err == nil {
@@ -188,13 +195,13 @@ func ReadSpec(dir string) (api.WorkerSpec, string, error) {
 	}
 	if err != nil {
 		spec.Prompt = strings.TrimSpace(string(data))
-		return spec, hash, nil
+		return spec
 	}
 	spec.Description, spec.Schedule, spec.Timezone = f.Description, f.Schedule, f.Timezone
 	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp, spec.Workflow = f.Agent, f.Model, f.Permissions, f.CatchUp, f.Workflow
 	spec.Limits = api.Limits{MaxTurns: f.Limits.MaxTurns, MaxCostUSD: f.Limits.MaxCostUSD, TimeoutRaw: f.Limits.TimeoutRaw}
 	spec.Prompt = strings.TrimSpace(string(body))
-	return spec, hash, nil
+	return spec
 }
 
 // HashDir is the hash Load gives the worker in dir.

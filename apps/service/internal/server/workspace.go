@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -27,6 +29,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -611,11 +614,33 @@ func (h workspaceService) KillProcess(ctx context.Context, r req[pb.KillProcessR
 	if err != nil {
 		return nil, err
 	}
-	p, err := w.KillProcess(r.Msg.SessionIds, int(r.Msg.Id))
+	var p api.ProcessInfo
+	if r.Msg.AnySession {
+		p, err = w.StopProcess(int(r.Msg.Id))
+	} else {
+		p, err = w.KillProcess(r.Msg.SessionIds, int(r.Msg.Id))
+	}
 	if err != nil {
 		return nil, toAPI(err)
 	}
 	return ok(&pb.KillProcessResponse{Process: processMsg(p)})
+}
+
+func (h workspaceService) ListRunningProcesses(_ context.Context, _ req[pb.ListRunningProcessesRequest]) (*connect.Response[pb.ListRunningProcessesResponse], error) {
+	h.s.mu.Lock()
+	ws := make([]*workspace, 0, len(h.s.workspaces))
+	for _, w := range h.s.workspaces {
+		ws = append(ws, w)
+	}
+	h.s.mu.Unlock()
+	slices.SortFunc(ws, func(a, b *workspace) int { return strings.Compare(a.Dir(), b.Dir()) })
+	out := &pb.ListRunningProcessesResponse{}
+	for _, w := range ws {
+		for _, p := range w.RunningProcesses() {
+			out.Processes = append(out.Processes, &pb.WorkspaceProcess{Workspace: w.Dir(), Process: processMsg(p)})
+		}
+	}
+	return ok(out)
 }
 
 func (h workspaceService) AuditShell(ctx context.Context, r req[pb.AuditShellRequest]) (*connect.Response[pb.AuditShellResponse], error) {
@@ -886,6 +911,29 @@ func scopedSessions(ids []string) []string {
 	return ids
 }
 
+func (h workspaceService) WatchAgentBrowser(ctx context.Context, r req[pb.WatchAgentBrowserRequest], stream *connect.ServerStream[pb.WatchAgentBrowserResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	return w.WatchAgentBrowser(ctx, func(c api.AgentBrowserCommand) error {
+		return stream.Send(&pb.WatchAgentBrowserResponse{Command: &pb.AgentBrowserCommand{
+			BrowserId: c.BrowserID, Kind: c.Kind, Message: c.Message, Show: c.Show, Profile: c.Profile, AllowLocal: c.AllowLocal, DenyDomains: c.DenyDomains, Url: c.URL,
+		}})
+	})
+}
+
+func (h workspaceService) AgentBrowserReply(ctx context.Context, r req[pb.AgentBrowserReplyRequest]) (*connect.Response[pb.AgentBrowserReplyResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.AgentBrowserReply(r.Msg.BrowserId, r.Msg.Messages, r.Msg.Closed, r.Msg.Reason); err != nil {
+		return nil, apiError(connect.CodeNotFound, "NO_AGENT_BROWSER", err)
+	}
+	return ok(&pb.AgentBrowserReplyResponse{})
+}
+
 func (h workspaceService) WatchTasks(ctx context.Context, r req[pb.WatchTasksRequest], stream *connect.ServerStream[pb.WatchTasksResponse]) error {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
@@ -964,6 +1012,21 @@ func (h workspaceService) InitGitRepo(ctx context.Context, r req[pb.InitGitRepoR
 		return nil, apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
 	}
 	return ok(&pb.InitGitRepoResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) InstallSecretHook(ctx context.Context, r req[pb.InstallSecretHookRequest]) (*connect.Response[pb.InstallSecretHookResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.InstallSecretHook(ctx)
+	switch {
+	case errors.Is(err, secretscan.ErrNotARepository):
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
+	case err != nil:
+		return nil, err
+	}
+	return ok(&pb.InstallSecretHookResponse{Status: res.Status, Path: res.Path, Detail: res.Detail})
 }
 
 func (h workspaceService) DraftCommit(ctx context.Context, r req[pb.DraftCommitRequest]) (*connect.Response[pb.DraftCommitResponse], error) {

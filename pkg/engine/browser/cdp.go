@@ -28,10 +28,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// Transport carries a DevTools Protocol connection's messages, whole, as
+// JSON: a WebSocket to a browser Blitz started, or a relay to one someone
+// else runs, such as the desktop app's own view (spec_agent_browser_050).
+// ReadJSON blocks for the next message and fails once it's closed.
+type Transport interface {
+	WriteJSON(v any) error
+	ReadJSON(v any) error
+	Close() error
+}
+
 // conn is a DevTools Protocol connection to one page: commands and their
 // replies, and events to the handlers registered for them.
 type conn struct {
-	ws *websocket.Conn
+	ws Transport
 
 	writeMu sync.Mutex
 	mu      sync.Mutex
@@ -69,9 +79,14 @@ func dial(ctx context.Context, wsURL string) (*conn, error) {
 		return nil, err
 	}
 	ws.SetReadLimit(64 << 20) // screenshots
-	c := &conn{ws: ws, pending: map[int64]chan reply{}, on: map[string][]func(json.RawMessage){}, done: make(chan struct{})}
+	return newConn(ws), nil
+}
+
+// newConn reads t's messages as they come.
+func newConn(t Transport) *conn {
+	c := &conn{ws: t, pending: map[int64]chan reply{}, on: map[string][]func(json.RawMessage){}, done: make(chan struct{})}
 	go c.read()
-	return c, nil
+	return c
 }
 
 func (c *conn) read() {

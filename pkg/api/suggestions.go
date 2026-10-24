@@ -27,7 +27,7 @@ const (
 	// (/skills update or /agents update).
 	SuggestHarnessUpdate SuggestionKind = "harness_update"
 	// SuggestReflect suggests /reflect: the evidence since the last
-	// reflection holds Count patterns, at least ReflectAt.
+	// reflection holds Count patterns, and its score reached the threshold.
 	SuggestReflect SuggestionKind = "reflect"
 	// SuggestReflectReview suggests /reflect to review the Count changes a
 	// scheduled reflection proposed.
@@ -71,28 +71,29 @@ type Suggestions struct {
 	Pending bool
 }
 
-// ReflectAt is how many patterns since the last reflection make the
-// welcome screen suggest /reflect (spec_harness_learning_048 HE-05).
-const ReflectAt = 5
-
 // Reflection is what a workspace's harness has to learn, as the welcome
 // screens say it.
 type Reflection struct {
 	// Patterns is how many items of the evidence since the last
 	// reflection are patterns.
 	Patterns int
+	// Score weighs them, the costly ones twice; /reflect is suggested once
+	// it reaches Threshold ([harness] reflect_threshold; 0: never)
+	// (spec_harness_learning_048 HE-62).
+	Score     int
+	Threshold int
 	// Proposals is how many changes a scheduled reflection proposed,
 	// waiting for /reflect.
 	Proposals int
 }
 
 // Suggested is the welcome tile it makes, if any: the proposals to
-// review, else /reflect once there are ReflectAt patterns.
+// review, else /reflect once the score reaches the threshold.
 func (r Reflection) Suggested() (Suggestion, bool) {
 	switch {
 	case r.Proposals > 0:
 		return Suggestion{Kind: SuggestReflectReview, Count: r.Proposals}, true
-	case r.Patterns >= ReflectAt:
+	case r.Threshold > 0 && r.Score >= r.Threshold:
 		return Suggestion{Kind: SuggestReflect, Count: r.Patterns}, true
 	}
 	return Suggestion{}, false

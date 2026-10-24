@@ -16,7 +16,9 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -25,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/browser"
@@ -237,4 +240,151 @@ func TestBrowserToolWithFakePage(t *testing.T) {
 	assert.Len(t, out.Frames, 6, "navigate, click, type, select, script and back: the steps that worked")
 	out = run(BrowserInput{Action: "close"})
 	assert.Nil(t, bt.b)
+}
+
+// With the workspace's browser profile (BP-03, BP-04) the browser keeps it
+// (ProfileDir), the profile's own sites go without asking and others ask
+// even when web.allow_domains has them; a change of profile is a new
+// browser.
+func TestBrowserToolUsesTheWorkspacesProfile(t *testing.T) {
+	page := browsertest.New(t)
+	hooks, reqs := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, nil)
+	bt.web.AllowDomains = []string{"shop.example"}
+	var launches []browser.Options
+	bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+		launches = append(launches, o)
+		return browser.Attach(ctx, page.URL, o)
+	}
+	dir, allow := "/profiles/work", []string{"mail.example"}
+	bt.r.SetBrowserProfile(func() BrowserProfile { return BrowserProfile{Name: "work", Dir: dir, Allow: allow} })
+	ctx := context.Background()
+
+	out := bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://mail.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, launches, 1)
+	assert.Equal(t, "/profiles/work", launches[0].ProfileDir)
+	assert.Empty(t, *reqs, "the profile's own site isn't asked about")
+	out = bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, *reqs, 1, "web.allow_domains doesn't cover a profile's browsing")
+
+	dir = ""
+	out = bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	require.Empty(t, out.Error)
+	require.Len(t, launches, 2, "no profile now: a new browser")
+	assert.Empty(t, launches[1].ProfileDir)
+	assert.Len(t, *reqs, 1, "and web.allow_domains applies again")
+	bt.mu.Lock()
+	bt.closeLocked()
+	bt.mu.Unlock()
+}
+
+// With the desktop app open, the agent browses in its view (AB-01): as
+// browser.show says, or for "ask" as the chat answers, asked once (silent
+// where no one can answer); no view, Chrome as before.
+func TestBrowserToolInTheApp(t *testing.T) {
+	tests := []struct {
+		name     string
+		show     string
+		answer   string
+		noWindow bool
+		want     string // the view's show; "" for Chrome
+		asked    int
+	}{
+		{name: "watch", show: "watch", want: "watch"},
+		{name: "silent", show: "silent", want: "silent"},
+		{name: "ask, watched", show: "ask", answer: "Watch it in a tab", want: "watch", asked: 1},
+		{name: "ask, silent", show: "ask", answer: "Run silently", want: "silent", asked: 1},
+		{name: "ask, no one to answer", show: "ask", want: "silent"},
+		{name: "no window", show: "watch", noWindow: true, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page := browsertest.New(t)
+			hooks, _ := decisionHooks(api.DecisionOnce)
+			asked := 0
+			if tt.answer != "" {
+				hooks.SetUserPrompter(func(_ context.Context, q string, options []string) (string, error) {
+					asked++
+					assert.Equal(t, []string{"Watch it in a tab", "Run silently"}, options)
+					return tt.answer, nil
+				})
+			}
+			bt := testBrowserTool(t, hooks, func(c *config.BrowserConfig, _ *WebFetchConfig) { c.Show = tt.show })
+			launched := 0
+			bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+				launched++
+				return browser.Attach(ctx, page.URL, o)
+			}
+			var opened []AgentBrowserOptions
+			bt.r.SetBrowserProfile(func() BrowserProfile { return BrowserProfile{Name: "work", Dir: "/profiles/work"} })
+			bt.r.SetAgentBrowserHost(func(ctx context.Context, o AgentBrowserOptions) (browser.Transport, error) {
+				if tt.noWindow {
+					return nil, errors.New("no desktop window")
+				}
+				opened = append(opened, o)
+				ws, _, err := websocket.DefaultDialer.DialContext(ctx, page.URL, nil)
+				return ws, err
+			})
+			ctx := context.Background()
+			for range 2 {
+				out := bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+				require.Empty(t, out.Error)
+				bt.mu.Lock()
+				bt.closeLocked() // a new browser: the chat's choice is kept
+				bt.mu.Unlock()
+			}
+			if tt.want == "" {
+				assert.Equal(t, 2, launched, "Chrome")
+				assert.Empty(t, opened)
+				return
+			}
+			assert.Zero(t, launched)
+			require.Len(t, opened, 2)
+			assert.Equal(t, tt.want, opened[0].Show)
+			assert.Equal(t, "work", opened[0].Profile, "the profile's partition")
+			assert.Equal(t, asked, tt.asked, "asked once a chat")
+		})
+	}
+}
+
+// web_fetch's fallback reads a page's text through the browser, under the
+// browser's checks (WEB-09).
+func TestBrowserPageText(t *testing.T) {
+	page := browsertest.New(t)
+	hooks, _ := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, nil)
+	bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+		return browser.Attach(ctx, page.URL, o)
+	}
+	ctx := context.Background()
+
+	out, err := bt.pageText(ctx, "https://shop.example/")
+	require.NoError(t, err)
+	assert.Equal(t, browsertest.Title, out.Title)
+	assert.NotEmpty(t, out.Text)
+	_, err = bt.pageText(ctx, "https://a.blocked.example/")
+	assert.ErrorContains(t, err, "web.deny_domains")
+}
+
+// deadTransport is a desktop view that went before it answered.
+type deadTransport struct{}
+
+func (deadTransport) WriteJSON(any) error { return nil }
+func (deadTransport) ReadJSON(any) error  { return io.EOF }
+func (deadTransport) Close() error        { return nil }
+
+// A desktop view that goes before it's set up is an error, not a page.
+func TestBrowserToolViewThatWontConnect(t *testing.T) {
+	hooks, _ := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, func(c *config.BrowserConfig, _ *WebFetchConfig) { c.Show = "silent" })
+	bt.timeout = time.Second
+	bt.launch = func(context.Context, browser.Options) (*browser.Browser, error) {
+		t.Fatal("not Chrome: a window is watching")
+		return nil, nil
+	}
+	bt.r.SetAgentBrowserHost(func(context.Context, AgentBrowserOptions) (browser.Transport, error) { return deadTransport{}, nil })
+	out := bt.run(context.Background(), BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	assert.NotEmpty(t, out.Error)
 }

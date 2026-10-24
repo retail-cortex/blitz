@@ -96,6 +96,18 @@ type browserTool struct {
 	actMu sync.Mutex
 	act   context.Context // the running action's, to ask about navigations
 	host  string          // the current page's
+
+	// profile is the running browser's kept profile ("": a throwaway
+	// one), profileName its name, and allow its sites browsed without
+	// asking (BP-04); actMu guards them, for the page's navigations.
+	profile     string
+	profileName string
+	allow       []string
+	// shows are how each chat chose to see the agent browse in the app
+	// ("watch" or "silent", AB-02), and inApp says the running browser is
+	// the app's view, shown so.
+	shows map[string]string
+	inApp string
 }
 
 func newBrowserTool(r *Registry, cfg config.BrowserConfig, web WebFetchConfig, timeout time.Duration, dir string) *browserTool {
@@ -132,6 +144,7 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		out.Note = "The browser is closed."
 		return out
 	}
+	bt.syncProfile()
 	if action == "stop_recording" {
 		if bt.rec == "" {
 			return fail(errors.New("not recording"))
@@ -243,6 +256,19 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 	return out
 }
 
+// pageText opens u in the browser and reads its text: web_fetch's
+// fallback (WEB-09), under the browser's own checks and web rules.
+func (bt *browserTool) pageText(ctx context.Context, u string) (BrowserOutput, error) {
+	if out := bt.run(ctx, BrowserInput{Action: "navigate", URL: u}); out.Error != "" {
+		return out, errors.New(out.Error)
+	}
+	out := bt.run(ctx, BrowserInput{Action: "read"})
+	if out.Error != "" {
+		return out, errors.New(out.Error)
+	}
+	return out, nil
+}
+
 var browserActions = map[string]bool{
 	"navigate": true, "click": true, "type": true, "select": true, "read": true, "html": true, "screenshot": true,
 	"console": true, "script": true, "back": true, "record": true, "stop_recording": true, "close": true,
@@ -273,7 +299,7 @@ func (bt *browserTool) checkNavigate(ctx context.Context, raw string) (*url.URL,
 	if err := bt.checkURL(u); err != nil {
 		return nil, err
 	}
-	return u, approveWeb(ctx, bt.r.hooks, bt.web, "browser", "open "+u.String(), u)
+	return u, approveWeb(ctx, bt.r.hooks, bt.webRules(), "browser", "open "+u.String(), u)
 }
 
 // checkURL is what any page must pass: http(s), no credentials, not a
@@ -325,13 +351,13 @@ func (bt *browserTool) navigation(u *url.URL) error {
 	bt.actMu.Lock()
 	ctx, current := bt.act, bt.host
 	bt.actMu.Unlock()
-	if host == current || matchDomain(bt.web.AllowDomains, host) {
+	if host == current || matchDomain(bt.webRules().AllowDomains, host) {
 		return nil
 	}
 	if ctx == nil {
 		return fmt.Errorf("the page went to %s by itself; navigate there to ask", host)
 	}
-	return approveWeb(ctx, bt.r.hooks, bt.web, "browser", "open "+u.String()+" (the page went there)", u)
+	return approveWeb(ctx, bt.r.hooks, bt.webRules(), "browser", "open "+u.String()+" (the page went there)", u)
 }
 
 func (bt *browserTool) setAct(ctx context.Context) {
@@ -344,6 +370,67 @@ func (bt *browserTool) clearAct() {
 	bt.actMu.Lock()
 	defer bt.actMu.Unlock()
 	bt.act = nil
+}
+
+// webRules are the web rules the browser asks by: with a profile, its own
+// sites in place of web.allow_domains, since its sign-ins go with every
+// request (BP-04).
+func (bt *browserTool) webRules() WebFetchConfig {
+	w := bt.web
+	bt.actMu.Lock()
+	defer bt.actMu.Unlock()
+	if bt.profile != "" {
+		w.AllowDomains = bt.allow
+	}
+	return w
+}
+
+// syncProfile takes the workspace's browser profile as it is now (BP-03),
+// before an action is judged: a change of it closes the browser, so the
+// next one starts with it. bt.mu must be held.
+func (bt *browserTool) syncProfile() {
+	var p BrowserProfile
+	if f := bt.r.browserProfile(); f != nil {
+		p = f()
+	}
+	bt.actMu.Lock()
+	changed := bt.profile != p.Dir
+	bt.profile, bt.profileName, bt.allow = p.Dir, p.Name, p.Allow
+	bt.actMu.Unlock()
+	if changed && bt.b != nil {
+		bt.b.Close()
+		bt.b = nil
+	}
+}
+
+// showAsk is the question browser.show "ask" puts, and its answers.
+const (
+	showAsk    = "Watch Blitz browse in a tab, or let it run silently?"
+	showWatch  = "Watch it in a tab"
+	showSilent = "Run silently"
+)
+
+// show is how the chat sees the agent browse in the app (AB-02):
+// browser.show, or for "ask" the chat's answer, asked the first time
+// (silent where no one can answer, as a job's run).
+func (bt *browserTool) show(ctx context.Context) string {
+	switch bt.cfg.Show {
+	case "watch", "silent":
+		return bt.cfg.Show
+	}
+	session := sessionOf(ctx)
+	if v, ok := bt.shows[session]; ok {
+		return v
+	}
+	v := "silent"
+	if answer, err := bt.r.hooks.askUser(ctx, showAsk, []string{showWatch, showSilent}); err == nil && answer == showWatch {
+		v = "watch"
+	}
+	if bt.shows == nil {
+		bt.shows = map[string]string{}
+	}
+	bt.shows[session] = v
+	return v
 }
 
 // browser is the running browser, started when needed.
@@ -363,9 +450,26 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 	if bt.b != nil {
 		return bt.b, nil
 	}
+	bt.actMu.Lock()
+	profile, profileName := bt.profile, bt.profileName
+	bt.actMu.Unlock()
+	// The desktop app's own view when a window is watching (AB-01),
+	// watched or silent as the chat chose; else Chrome, headless.
+	if host := bt.r.agentBrowserHost(); host != nil {
+		show := bt.show(ctx)
+		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains}); err == nil {
+			b, err := browser.AttachTransport(ctx, t, browser.Options{Width: bt.cfg.Width, Height: bt.cfg.Height, Timeout: bt.timeout, KeepViewport: show == "watch", Navigation: bt.navigation})
+			if err != nil {
+				return nil, err
+			}
+			bt.b, bt.inApp = b, show
+			return b, nil
+		}
+	}
+	bt.inApp = ""
 	b, err := bt.launch(ctx, browser.Options{
 		Path: bt.cfg.Path, Visible: bt.cfg.Visible, Width: bt.cfg.Width, Height: bt.cfg.Height,
-		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout,
+		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout, ProfileDir: profile,
 		Host: func(host string) error {
 			if matchDomain(bt.web.DenyDomains, host) {
 				return fmt.Errorf("blocked by web.deny_domains")

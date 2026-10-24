@@ -78,14 +78,14 @@ Nobody is there to approve anything, so a job gets exactly the permissions it li
 | Permission | Allows |
 |---|---|
 | `shell:go test ./...` | That command (a `*` glob matches any words) |
-| `write:reports/` | Writing files under a path (`*` doesn't cross `/`) |
+| `write:reports/` or `write:reports/**` | Writing files anywhere under `reports/`, in folders too (`*` alone stays in one folder: `write:reports/*` is only the files directly in it) |
 | `delete:tmp/*.log` | Deleting matching files |
 | `web:api.github.com` | Fetching from that host (or using that search provider) |
 | `mcp:github:create_*` | That MCP server's matching tools |
 
 Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`, backquotes or redirection is allowed only by a permission that spells it exactly. Your `deny` rules still apply, an `ask` rule refuses, and permission modes and remembered approvals don't apply. A job can't ask you questions or start background agents. Every refusal is recorded in its run.
 
-`[workers.policy]` in your settings caps every job: which kinds of permission are allowed at all, and the most turns, cost and time (200 calls, $10, 2 hours by default), and how many runs at once across workspaces (`max_concurrent`, 2).
+`[workers.policy]` in your settings governs every job: which kinds of permission are allowed at all, the limits a job that sets none gets (50 calls, $1, 30 minutes), an optional cap on what one may ask for (`max_turns`, `max_cost_usd`, `max_timeout`; none by default since v0.8.4, so a job may set more than the defaults), and how many runs at once across workspaces (`max_concurrent`, 2).
 
 ## Enabling, editing and running
 
@@ -115,11 +115,11 @@ Some work belongs to no project: a morning news digest, tidying your downloads. 
 
 ## Limits for every job
 
-**Settings › Jobs › Limits for every job** caps what any job may do, in your global settings (`[workers.policy]`):
+**Settings › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
 
 | Setting | What it does |
 |---|---|
-| Model calls, Cost, Time | What a job that sets no limit gets, and the most one may ask for |
+| Model calls, Cost, Time | What a job that sets no limit gets, and a cap on what one may ask for (empty: no limit) |
 | Runs at once | How many runs go at the same time, across every workspace (applies when the service restarts) |
 | Jobs may be given | The permission kinds a job may have: shell commands, writing files, deleting files, the web, MCP tools. All off: jobs may only read |
 

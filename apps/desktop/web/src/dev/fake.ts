@@ -470,6 +470,8 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   }
   s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 4, input: s.usage.input + 9120n, output: s.usage.output + 812n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0061 });
   sess.messageCount = sess.messages.length;
+  // ?reflectdue: the turn says it's time to /reflect (HE-63).
+  if (new URLSearchParams(location.search).has("reflectdue")) yield ev({ case: "reflectDue", value: { patterns: 6, score: 8 } });
   yield ev({ case: "finished", value: { before, after: s.usage } });
 }
 
@@ -859,6 +861,14 @@ function fakeAccepted(provider: string) {
 // A sales table for the table viewer (ReadTable reads it below).
 const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
 
+// Browser profiles, and the one each workspace browses with.
+const fakeProfiles: { name: string; created: ReturnType<typeof now>; allowDomains: string[] }[] = [{ name: "work", created: now(), allowDomains: ["mail.example.com"] }];
+const fakeProfileOf = new Map<string, string>();
+
+// Files being uploaded (dropped from the computer), by upload id.
+const fakeUploads = new Map<string, string>();
+let fakeUploadSeq = 0;
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
@@ -1155,6 +1165,7 @@ const fakeHealth: WorkspaceHealth = create(WorkspaceHealthSchema, {
   at: ago(0),
   overall: 3.9,
   previousOverall: 3.6,
+  reflectThreshold: 5,
   byKind: { agent: 4.2, skill: 3.4, rule: 4.6, guardrail: 4.8, eval: 3.1, workflow: 3.3, worker: 4.0 },
   lastCheck: ago(60 * 9),
   lastCostUsd: 0.034,
@@ -1580,10 +1591,24 @@ export function installFake() {
         watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
         // The composer: one question, then a three-step draft.
-        startCompose: ({ request }) => ({
-          session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] },
-        }),
-        answerCompose: ({ answer }) => {
+        startCompose: ({ request, kind }) =>
+          kind === "job"
+            ? { session: { id: "compose-fake-job", kind, asking: true, costUsd: 0.0011, turns: [{ role: "user", text: request }, { role: "composer", text: "Which time zone should 8 am be in?", options: ["America/Chicago", "Europe/Paris", "The service machine's"] }] } }
+            : { session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] } },
+        answerCompose: ({ answer, id }) => {
+          if (id === "compose-fake-job") {
+            const worker = { name: "ai-news", description: "A summary of the day's AI news", schedule: "0 8 * * *", timezone: answer.includes("/") ? answer : "", agent: "", model: "", permissions: ["web:news.google.com", "write:reports/ai-news/**"], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "Fetch the latest AI news from news.google.com.\nWrite a one-page summary to reports/ai-news/MM-DD-YYYY.html, glass morphic with a dark theme.", workflow: "" };
+            return {
+              session: {
+                id: "compose-fake-job",
+                kind: "job",
+                asking: false,
+                costUsd: 0.0024,
+                turns: [{ role: "user", text: "AI news every morning" }, { role: "composer", text: "Which time zone should 8 am be in?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Every day at 8:00, fetches the AI news and writes a summary page." }],
+                draft: { name: "ai-news", summary: "Every day at 8:00, fetches the AI news and writes a summary page.", file: "", problems: [], worker },
+              },
+            };
+          }
           const file = "description: A daily brief from the notes\nnodes:\n  - {id: notes, type: read_file, title: Read the notes, path: notes/today.md, position: {x: 0, y: 80}}\n  - {id: draft, type: agent, title: Draft the brief, instructions: Write a short brief for the team., position: {x: 280, y: 80}}\n  - {id: save, type: save_file, title: Save it, path: briefs/today.md, position: {x: 560, y: 80}}\nedges:\n  - {from: notes, to: draft}\n  - {from: draft, to: save}\n";
           return {
             session: {
@@ -2106,6 +2131,7 @@ export function installFake() {
           await sleep(150);
           return fakeSuggestions(workspace);
         },
+        snoozeReflection: () => ({}),
         listCommands: () => ({
           commands: [
             { name: "setup", description: "Set up the agent harness: .agents/AGENTS.md, skills and agents", source: "bundled" },
@@ -2223,6 +2249,7 @@ export function installFake() {
           fakeStaged = false;
           return { hash: "3f2a9c1", subject: message.split("\n")[0] };
         },
+        installSecretHook: ({ workspace }) => ({ status: "installed", path: `${workspace}/.githooks/pre-commit`, detail: "" }),
         initGitRepo: () => {
           fakeRepo = true;
           return { status: { git: true, repo: true, branch: "main", changed: 0 } };
@@ -2240,6 +2267,32 @@ export function installFake() {
         trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        // Browser profiles (spec_browser_profiles_049), kept in the page.
+        listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
+        createBrowserProfile: ({ name }) => {
+          if (fakeProfiles.some((p) => p.name === name)) throw new ConnectError(`a browser profile named "${name}" exists`, Code.InvalidArgument);
+          const p = { name, created: now(), allowDomains: [] as string[] };
+          fakeProfiles.push(p);
+          return { profile: p };
+        },
+        deleteBrowserProfile: ({ name }) => {
+          fakeProfiles.splice(0, fakeProfiles.length, ...fakeProfiles.filter((p) => p.name !== name));
+          for (const [ws, p] of fakeProfileOf) if (p === name) fakeProfileOf.delete(ws);
+          return {};
+        },
+        clearBrowserProfile: () => ({}),
+        setBrowserProfileDomains: ({ name, allowDomains }) => {
+          const p = fakeProfiles.find((x) => x.name === name);
+          if (!p) throw new ConnectError(`no browser profile "${name}"`, Code.NotFound);
+          p.allowDomains = allowDomains;
+          return { profile: p };
+        },
+        setWorkspaceBrowserProfile: ({ workspace, name }) => {
+          if (name) fakeProfileOf.set(workspace, name);
+          else fakeProfileOf.delete(workspace);
+          return {};
+        },
+        openBrowserProfile: () => ({ browser: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }),
         listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
         setSecret: ({ workspace, key }) => {
           const l = fakeSecrets.get(workspace) ?? [];
@@ -2563,6 +2616,18 @@ export function installFake() {
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
         },
+        uploadFile: ({ path, uploadId, data, done, replace }) => {
+          const id = uploadId || `upload-${++fakeUploadSeq}`;
+          const text = (fakeUploads.get(id) ?? "") + new TextDecoder().decode(data);
+          if (!done) {
+            fakeUploads.set(id, text);
+            return { uploadId: id, version: "" };
+          }
+          fakeUploads.delete(id);
+          if (fakeFiles.has(path) && !replace) throw new ConnectError(`${path}: file already exists`, Code.AlreadyExists);
+          fakeFiles.set(path, text);
+          return { uploadId: id, version: fakeVersion(text) };
+        },
         createFolder: ({ path }) => {
           fakeFiles.set(path + "/.keep", "");
           return {};
@@ -2617,14 +2682,18 @@ export function installFake() {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
           return {};
         },
-        findFiles: ({ query, folders, limit }) => {
+        findFiles: ({ query, folders, limit, extensions }) => {
           const q = query.toLowerCase().replace(/\s/g, "");
           const match = (p: string) => {
             let i = 0;
             for (const c of p.toLowerCase()) if (c === q[i]) i++;
             return i === q.length;
           };
-          const all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
+          let all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
+          if (extensions.length > 0) {
+            all = all.filter((p) => extensions.some((e) => p.toLowerCase().endsWith("." + e.replace(/^\./, "").toLowerCase())));
+            folders = false;
+          }
           if (folders) for (const p of [...all]) for (let d = p.slice(0, p.lastIndexOf("/")); d; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) if (!all.includes(d + "/")) all.push(d + "/");
           return { paths: all.filter(match).sort((a, b) => a.length - b.length).slice(0, limit || 50) };
         },
@@ -2675,6 +2744,22 @@ export function installFake() {
           return { worker: w };
         },
         listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
+        // The schedule picker's preview: the picker's own cron forms, roughly
+        // (hours and minutes, every day or the weekdays named), else a problem.
+        previewSchedule: ({ schedule, count }) => {
+          const f = schedule.trim().split(/\s+/);
+          if (f.length !== 5 || !/^\d+$/.test(f[0])) return { problem: `can't read "${schedule}" (the fake reads only the picker's own cron)`, cron: "", timezone: "", nextRuns: [] };
+          const days = f[4] === "*" ? [0, 1, 2, 3, 4, 5, 6] : f[4] === "1-5" ? [1, 2, 3, 4, 5] : f[4].split(",").map(Number);
+          const runs: ReturnType<typeof now>[] = [];
+          for (let d = new Date(); runs.length < (count || 5); ) {
+            d = new Date(d.getTime() + (f[1] === "*" ? 3600e3 : 0));
+            if (f[1] !== "*") d.setDate(d.getDate() + 1);
+            d.setHours(f[1] === "*" ? d.getHours() : Number(f[1]), Number(f[0]), 0, 0);
+            if (/^\d+$/.test(f[2]) && d.getDate() !== Number(f[2])) continue;
+            if (days.includes(d.getDay())) runs.push(timestampFromDate(d));
+          }
+          return { cron: schedule.trim(), timezone: "Europe/Paris", nextRuns: runs, problem: "" };
+        },
         listAllWorkers: () => ({
           home: fakeHome,
           policy: fakePolicy,

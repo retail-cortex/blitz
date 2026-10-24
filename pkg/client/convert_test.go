@@ -34,6 +34,13 @@ func TestNoticeFromTheService(t *testing.T) {
 	assert.Equal(t, &api.Notice{Text: "Couldn't save this message", Error: true}, got.Notice)
 }
 
+// The chat's suggestion to reflect reaches the front end as api.Event.Reflect.
+func TestReflectDueFromTheService(t *testing.T) {
+	got, ok := event(&pb.TurnEvent{Kind: &pb.TurnEvent_ReflectDue{ReflectDue: &pb.ReflectDue{Patterns: 6, Score: 8}}})
+	require.True(t, ok)
+	assert.Equal(t, &api.ReflectDue{Patterns: 6, Score: 8}, got.Reflect)
+}
+
 // Each typed error the service reports comes back as api's error, with
 // its data; an unknown reason keeps the service's message.
 func TestErrorsFromTheService(t *testing.T) {

@@ -36,6 +36,7 @@ import {
   mdiPencilOutline,
   mdiPowerPlugOutline,
   mdiConnection,
+  mdiWeb,
   mdiScaleBalance,
   mdiServerNetwork,
   mdiTextBoxSearchOutline,
@@ -62,6 +63,7 @@ import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
+import { BrowserSettings } from "./BrowserSettings";
 import { McpSettings } from "./McpSettings";
 import { ConnectorsPane } from "./studio/ConnectorsPane";
 import { useDiscardGuard } from "./studio/paneParts";
@@ -93,6 +95,7 @@ const sectionIcons: Record<SectionId, string> = {
   workers: mdiCalendarClock,
   mcp: mdiPowerPlugOutline,
   connectors: mdiConnection,
+  browser: mdiWeb,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -177,6 +180,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "mcp" && <McpSettings />}
+            {section === "browser" && <BrowserSettings />}
             {section === "connectors" && (
               <div className="slide-box">
                 <ConnectorsPane onDirty={setDirty} />

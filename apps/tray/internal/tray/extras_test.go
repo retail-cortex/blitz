@@ -16,6 +16,7 @@ package tray
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -84,6 +85,15 @@ func (f *fakeExtras) SetConnectorEnabled(_ context.Context, r *connect.Request[p
 	return connect.NewResponse(&pb.SetConnectorEnabledResponse{}), nil
 }
 
+func (f *fakeExtras) ListRunningProcesses(context.Context, *connect.Request[pb.ListRunningProcessesRequest]) (*connect.Response[pb.ListRunningProcessesResponse], error) {
+	return connect.NewResponse(&pb.ListRunningProcessesResponse{Processes: []*pb.WorkspaceProcess{{Workspace: "/w", Process: &pb.Process{Id: 3, Command: "npm run dev", Running: true}}}}), nil
+}
+
+func (f *fakeExtras) KillProcess(_ context.Context, r *connect.Request[pb.KillProcessRequest]) (*connect.Response[pb.KillProcessResponse], error) {
+	f.note(fmt.Sprintf("kill %s %d any=%v", r.Msg.Workspace, r.Msg.Id, r.Msg.AnySession))
+	return connect.NewResponse(&pb.KillProcessResponse{}), nil
+}
+
 func (f *fakeExtras) note(s string) { f.mu.Lock(); f.asked = append(f.asked, s); f.mu.Unlock() }
 
 func (f *fakeExtras) ListMCPServerConfigs(context.Context, *connect.Request[pb.ListMCPServerConfigsRequest]) (*connect.Response[pb.ListMCPServerConfigsResponse], error) {
@@ -145,6 +155,7 @@ func TestFetchExtrasAndDo(t *testing.T) {
 	assert.Equal(t, "github", e.MCP[0].Name)
 	assert.Equal(t, "nightly", e.Workers[0].Name)
 	assert.Equal(t, "r1", e.Runs[0].Id)
+	assert.Equal(t, "npm run dev", e.Processes[0].Process.Command)
 
 	var opened string
 	open := func(link string) error { opened = link; return nil }
@@ -158,11 +169,12 @@ func TestFetchExtrasAndDo(t *testing.T) {
 		{Kind: RunWorkflow, Workspace: "/w", Name: "brief"},
 		{Kind: StopWorkflow, Workspace: "/w", RunID: "f1"},
 		{Kind: SetConnector, Workspace: "/w", Category: "databases", Scope: "global", Name: "sales", On: false},
+		{Kind: StopProcess, Workspace: "/w", ID: 3},
 		{Kind: NoAction},
 	} {
 		require.NoError(t, Do(ctx, sock, a, open), "%+v", a)
 	}
-	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1", "connector /w global/databases/sales off"}, f.asked)
+	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1", "connector /w global/databases/sales off", "kill /w 3 any=true"}, f.asked)
 	assert.Equal(t, "blitz://workers?dir=%2Fw", opened)
 	require.NoError(t, Do(ctx, sock, Action{Kind: ShowWorkflow, Workspace: "/w", Name: "brief", RunID: "f1"}, open))
 	assert.Equal(t, "blitz://workflow?dir=%2Fw&run=f1&workflow=brief", opened)

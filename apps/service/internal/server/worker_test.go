@@ -537,7 +537,8 @@ func TestAllWorkersOverTheAPI(t *testing.T) {
 	if p := all.Msg.Policy; assert.NotNil(t, p, "the global limits") {
 		assert.Equal(t, int32(2), p.RunningMaxConcurrent, "as the scheduler runs")
 		assert.Equal(t, config.WorkerPermissionKinds, p.Allow)
-		assert.NotZero(t, p.MaxTurns)
+		assert.Equal(t, int32(50), p.DefaultMaxTurns)
+		assert.Zero(t, p.MaxTurns, "no cap by default (WK-73)")
 		assert.NotEmpty(t, p.Path)
 	}
 
@@ -582,6 +583,40 @@ func TestWithLive(t *testing.T) {
 				ids = append(ids, r.ID)
 			}
 			assert.Equal(t, tc.want, ids)
+		})
+	}
+}
+
+// The schedule picker's preview: a schedule as understood, its next runs,
+// or why it can't be read, as a problem rather than an error.
+func TestPreviewScheduleOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	tests := []struct {
+		name, schedule, tz string
+		count              int32
+		cron, problem      string
+		runs               int
+	}{
+		{name: "plain text", schedule: "every day at 8 am", tz: "UTC", cron: "0 8 * * *", runs: 5},
+		{name: "a count", schedule: "@hourly", tz: "UTC", count: 3, cron: "@hourly", runs: 3},
+		{name: "unreadable", schedule: "whenever", tz: "UTC", problem: "whenever"},
+		{name: "unknown time zone", schedule: "@daily", tz: "Mars/Olympus", problem: "Mars/Olympus"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := c.PreviewSchedule(ctx, connect.NewRequest(&pb.PreviewScheduleRequest{Schedule: tt.schedule, Timezone: tt.tz, Count: tt.count}))
+			require.NoError(t, err)
+			if tt.problem != "" {
+				assert.Contains(t, r.Msg.Problem, tt.problem)
+				assert.Empty(t, r.Msg.NextRuns)
+				return
+			}
+			assert.Empty(t, r.Msg.Problem)
+			assert.Equal(t, tt.cron, r.Msg.Cron)
+			assert.Equal(t, "UTC", r.Msg.Timezone)
+			require.Len(t, r.Msg.NextRuns, tt.runs)
+			assert.True(t, r.Msg.NextRuns[0].AsTime().After(time.Now()))
 		})
 	}
 }

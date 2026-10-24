@@ -21,6 +21,8 @@ package harness
 import (
 	"cmp"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -45,7 +47,25 @@ const (
 	Limited    Kind = "limited"     // a turn that reached a limit (Target: steps, cost or time)
 	Skill      Kind = "skill"       // a skill used in turns that went wrong
 	Agent      Kind = "agent"       // an agent invoked in turns that went wrong
+	// ScratchRemade is a file under .agents/scratch written again in
+	// another session; ScratchScript a script there run again in another
+	// session (HE-61). Each counts sessions, not writes or runs.
+	ScratchRemade Kind = "scratch_remade"
+	ScratchScript Kind = "scratch_script"
 )
+
+// scratchDir is the harness's scratch folder (config.ProjectScratchDir),
+// as paths name it.
+const scratchDir = ".agents/scratch/"
+
+// scratchScript finds a script under the scratch folder in a command.
+var scratchScript = regexp.MustCompile(`\.agents/scratch/[\w./-]+\.(?:sh|py|js|ts|rb|pl)\b`)
+
+// fileWriters are the tools that write a file at their path argument.
+var fileWriters = []string{"create_file", "replace_in_file", "write_file", "edit_file"}
+
+// retried is Seen.Then when the failed call itself worked when made again.
+const retried = "the same call, retried"
 
 // MaxItems bounds the evidence, so the reflector's prompt stays small.
 const MaxItems = 200
@@ -92,6 +112,10 @@ type Seen struct {
 	// Agent is the agent that was refused or whose tool failed, when the
 	// audit log says.
 	Agent string
+	// Then is, for a failed call, what worked after it in the same turn:
+	// the next call of the same tool that succeeded, by its command or
+	// path, or "the same call, retried" (HE-60); "" when none did.
+	Then string
 }
 
 // Item is one thing that happened, as often as it happened.
@@ -131,6 +155,21 @@ type Evidence struct {
 	Used map[string]int
 	// NoAudit means the audit log is off, so there's no evidence.
 	NoAudit bool
+}
+
+// Score is what the suggestion to reflect weighs (HE-62): the patterns,
+// the costly ones (an undo, a limit, a refusal by the user) twice.
+func (e Evidence) Score() int {
+	n := 0
+	for _, it := range e.Items {
+		if it.Patterned() {
+			n++
+			if it.costly {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // Patterns is how many items are patterns: what the welcome tile counts
@@ -189,11 +228,24 @@ type turnState struct {
 type builder struct {
 	in    Inputs
 	items map[string]*Item
+	// scratch are the sessions that wrote or ran each scratch file, by
+	// kind and path.
+	scratch map[string]map[string]bool
+}
+
+// fix is a failed call's occurrence waiting for what worked after it.
+type fix struct {
+	key          string // its item
+	i            int    // its occurrence
+	tool, target string
 }
 
 // Build makes the evidence from in.
 func Build(in Inputs) Evidence {
-	b := &builder{in: in, items: map[string]*Item{}}
+	b := &builder{in: in, items: map[string]*Item{}, scratch: map[string]map[string]bool{}}
+	// waiting are the session's failed calls this turn, for what worked
+	// after them (HE-60).
+	waiting := map[string][]fix{}
 	used := map[string]int{}
 	turns := map[string]*turnState{}
 	lastCall := map[string]audit.Entry{}
@@ -233,6 +285,7 @@ func Build(in Inputs) Evidence {
 			}
 			t = &turnState{session: e.Session, n: n, prompt: e.Detail, used: map[string]bool{}, at: e.Time}
 			turns[e.Session] = t
+			delete(waiting, e.Session)
 			if n > 1 && IsCorrection(e.Detail) {
 				t.troubled = true
 				b.add(t, Corrected, b.agent(e.Session), "", e.Time, e.Detail, false)
@@ -250,6 +303,7 @@ func Build(in Inputs) Evidence {
 			b.add(t, Steered, b.agent(e.Session), "", e.Time, e.Detail, false)
 		case audit.KindToolCall:
 			lastCall[e.Session] = e
+			b.scratchUse(t, e)
 			switch e.Tool {
 			case "activate_skill", "run_skill_script":
 				if name := argString(e.Args, "skill_name", "skill", "name"); name != "" {
@@ -262,6 +316,7 @@ func Build(in Inputs) Evidence {
 			}
 		case audit.KindToolResult:
 			if e.Decision == "ok" || e.Decision == "" {
+				waiting[e.Session] = b.worked(waiting[e.Session], e.Tool, lastCall[e.Session])
 				continue
 			}
 			if refused[e.Session] == e.Tool {
@@ -276,7 +331,10 @@ func Build(in Inputs) Evidence {
 			if e.Detail != "" {
 				why += ": " + e.Detail
 			}
-			b.add(t, ToolFailed, e.Tool, target(e.Args), e.Time, why, false).Agent = e.Agent
+			tgt := target(e.Args)
+			b.add(t, ToolFailed, e.Tool, tgt, e.Time, why, false).Agent = e.Agent
+			key := string(ToolFailed) + "\x00" + e.Tool + "\x00" + tgt
+			waiting[e.Session] = append(waiting[e.Session], fix{key: key, i: len(b.items[key].Seen) - 1, tool: e.Tool, target: tgt})
 		case audit.KindDenial:
 			refused[e.Session] = e.Tool
 			by, user := denier(e.Decision)
@@ -344,6 +402,58 @@ func (b *builder) add(t *turnState, kind Kind, subject, target string, at time.T
 	return &it.Seen[len(it.Seen)-1]
 }
 
+// worked fills in what worked for the failed calls of tool waiting, now
+// that its call c succeeded, and returns those still waiting.
+func (b *builder) worked(waiting []fix, tool string, c audit.Entry) []fix {
+	if c.Tool != tool {
+		return waiting
+	}
+	tgt := target(c.Args)
+	rest := waiting[:0]
+	for _, f := range waiting {
+		if f.tool != tool {
+			rest = append(rest, f)
+			continue
+		}
+		then := tgt
+		if then == f.target {
+			then = retried
+		}
+		b.items[f.key].Seen[f.i].Then = then
+	}
+	return rest
+}
+
+// scratchUse counts a call that writes a scratch file or runs a scratch
+// script, once a session (HE-61).
+func (b *builder) scratchUse(t *turnState, e audit.Entry) {
+	var kind Kind
+	var path string
+	switch {
+	case slices.Contains(fileWriters, e.Tool):
+		p := filepath.ToSlash(argString(e.Args, "path", "file_path"))
+		if i := strings.Index(p, scratchDir); i >= 0 && (i == 0 || p[i-1] == '/') {
+			kind, path = ScratchRemade, p[i:]
+		}
+	case e.Tool == "run_shell_command":
+		if m := scratchScript.FindString(argString(e.Args, "command")); m != "" {
+			kind, path = ScratchScript, m
+		}
+	}
+	if kind == "" || e.Session == "" {
+		return
+	}
+	k := string(kind) + "\x00" + path
+	if b.scratch[k] == nil {
+		b.scratch[k] = map[string]bool{}
+	}
+	if b.scratch[k][e.Session] {
+		return
+	}
+	b.scratch[k][e.Session] = true
+	b.add(t, kind, "scratch", path, e.Time, t.prompt, false)
+}
+
 // agent is a session's agent, what corrections and stops are about.
 func (b *builder) agent(session string) string {
 	return cmp.Or(b.in.Sessions[session].Agent, "blitz")
@@ -353,6 +463,9 @@ func (b *builder) agent(session string) string {
 func (b *builder) evidence(used map[string]int) Evidence {
 	ev := Evidence{Since: b.in.Since, Used: used, NoAudit: b.in.NoAudit}
 	for _, it := range b.items {
+		if (it.Kind == ScratchRemade || it.Kind == ScratchScript) && it.Count < 2 {
+			continue // used in one session: what scratch is for
+		}
 		slices.SortStableFunc(it.Seen, func(a, b Seen) int { return b.Time.Compare(a.Time) })
 		if len(it.Seen) > maxSeen {
 			it.Seen = it.Seen[:maxSeen]
@@ -473,6 +586,9 @@ func (e Evidence) Text() string {
 			}
 			if s.Excerpt != "" {
 				fmt.Fprintf(&b, ": %s", strings.ReplaceAll(s.Excerpt, "\n", " ⏎ "))
+			}
+			if s.Then != "" {
+				fmt.Fprintf(&b, " → then worked: `%s`", s.Then)
 			}
 			b.WriteByte('\n')
 		}

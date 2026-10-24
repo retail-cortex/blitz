@@ -18,6 +18,7 @@ package blitz.v1;
 
 import "blitz/v1/session.proto";
 import "blitz/v1/turn.proto";
+import "blitz/v1/worker.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -96,6 +97,11 @@ service WorkspaceService {
   // already, and returns its git status (NO_GIT without git on the
   // service's PATH, GIT_FAILED).
   rpc InitGitRepo(InitGitRepoRequest) returns (InitGitRepoResponse);
+  // Adds the pre-commit hook that stops commits adding API keys or other
+  // secrets to the workspace's repository (.githooks/pre-commit and
+  // core.hooksPath; InitGitRepo adds it too), unless it uses other hooks
+  // (status other_hooks, with which in detail). NOT_A_REPOSITORY outside one.
+  rpc InstallSecretHook(InstallSecretHookRequest) returns (InstallSecretHookResponse);
   // Lists what's staged (everything staged first with stage_all, as git
   // add --all) and has the model draft a commit message from its diff,
   // secrets redacted; nothing is asked with nothing staged, and a model
@@ -433,6 +439,9 @@ service WorkspaceService {
   // Stops a background process and its descendants (UNKNOWN_PROCESS unless
   // one of the given sessions started it).
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
+  // Returns the agents' background processes still running, in every open
+  // workspace (the tray's Processes menu, spec_electron_038 EL-112).
+  rpc ListRunningProcesses(ListRunningProcessesRequest) returns (ListRunningProcessesResponse);
   // Records in the workspace's audit log a command the user ran directly
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
@@ -450,6 +459,14 @@ service WorkspaceService {
   // turns: first their active tasks and waiting requests, then ready,
   // then each change. Requests are answered with SessionService.Approve and Answer.
   rpc WatchTasks(WatchTasksRequest) returns (stream WatchTasksResponse);
+  // A desktop window hosts the agent's browser views while it watches
+  // (spec_agent_browser_050): each command for them (open a view, a
+  // DevTools message for one, close it), in order; the newest window
+  // hosts new ones. It answers with AgentBrowserReply.
+  rpc WatchAgentBrowser(WatchAgentBrowserRequest) returns (stream WatchAgentBrowserResponse);
+  // What a window says of a view it hosts: its DevTools messages (its
+  // first, {"blitz":"opened"}, says it's ready), or that it closed.
+  rpc AgentBrowserReply(AgentBrowserReplyRequest) returns (AgentBrowserReplyResponse);
   // Returns the given sessions' tasks' approval requests and questions
   // waiting for an answer.
   rpc ListTaskRequests(ListTaskRequestsRequest) returns (ListTaskRequestsResponse);
@@ -487,6 +504,10 @@ service WorkspaceService {
   // patterns since the last reflection and the changes a scheduled
   // reflection proposed, for a welcome to suggest /reflect.
   rpc GetReflection(GetReflectionRequest) returns (GetReflectionResponse);
+
+  // Holds off the chat's suggestion to reflect (TurnEvent.reflect_due) for
+  // a week: its Not now (spec_harness_learning_048 HE-63).
+  rpc SnoozeReflection(SnoozeReflectionRequest) returns (SnoozeReflectionResponse);
 
   // Reads an image or a PDF from the workspace for a prompt
   // (IMAGES_DISABLED).
@@ -1730,12 +1751,29 @@ message KillProcessRequest {
   // The sessions the asking client ran turns in.
   repeated string session_ids = 2;
   int32 id = 3;
+  // Whichever session started it: the user's own stop (the tray's).
+  bool any_session = 4;
 }
 
 // Response message for WorkspaceService.KillProcess.
 message KillProcessResponse {
   // How it is after the kill.
   Process process = 1;
+}
+
+// Request message for WorkspaceService.ListRunningProcesses.
+message ListRunningProcessesRequest {}
+
+// A background process and the workspace it runs in.
+message WorkspaceProcess {
+  string workspace = 1;
+  Process process = 2;
+}
+
+// Response message for WorkspaceService.ListRunningProcesses.
+message ListRunningProcessesResponse {
+  // By workspace, then ID.
+  repeated WorkspaceProcess processes = 1;
 }
 
 // Request message for WorkspaceService.AuditShell.
@@ -2000,6 +2038,14 @@ message GetReflectionRequest {
   string workspace = 1;
 }
 
+// Request message for WorkspaceService.SnoozeReflection.
+message SnoozeReflectionRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.SnoozeReflection.
+message SnoozeReflectionResponse {}
+
 // Response message for WorkspaceService.GetReflection.
 message GetReflectionResponse {
   // How many items of the evidence since the last reflection are patterns
@@ -2007,6 +2053,10 @@ message GetReflectionResponse {
   int32 patterns = 1;
   // How many changes a scheduled reflection proposed, waiting for review.
   int32 proposals = 2;
+  // The patterns weighed, the costly ones twice, and the score that
+  // suggests /reflect ([harness] reflect_threshold; 0: never).
+  int32 score = 3;
+  int32 threshold = 4;
 }
 
 // Request message for WorkspaceService.ForgetNote.
@@ -2265,6 +2315,21 @@ enum GitOperation {
   GIT_OPERATION_MERGE = 1;
   // A rebase, to continue or abort.
   GIT_OPERATION_REBASE = 2;
+}
+
+// Request message for WorkspaceService.InstallSecretHook.
+message InstallSecretHookRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.InstallSecretHook.
+message InstallSecretHookResponse {
+  // installed, present (it was there) or other_hooks (nothing changed).
+  string status = 1;
+  // The hook, absolute.
+  string path = 2;
+  // For other_hooks: which hooks the repository uses.
+  string detail = 3;
 }
 
 // Request message for WorkspaceService.InitGitRepo.
@@ -3308,6 +3373,9 @@ message WorkspaceHealth {
   string reflect_schedule = 19;
   double reflect_max_cost_usd = 20;
   string reflect_skipped = 21;
+  // The evidence's score that suggests /reflect ([harness]
+  // reflect_threshold; 0: never) (HE-62).
+  int32 reflect_threshold = 22;
 }
 
 // How far a check going is.
@@ -3508,6 +3576,8 @@ message ComposeDraft {
   string file = 3;
   repeated string problems = 4;
   WorkflowFile workflow = 5;
+  // A job's draft, as the New Job form reads it (kind job).
+  WorkerDefinition worker = 6;
 }
 
 // Request message for WorkspaceService.StartCompose.
@@ -3842,3 +3912,48 @@ message DraftConnectorQueryResponse {
   // Why there's no draft ("" when there is).
   string problem = 4;
 }
+
+// Request message for WorkspaceService.WatchAgentBrowser.
+message WatchAgentBrowserRequest {
+  string workspace = 1;
+}
+
+// A command for a view of the agent's browser.
+message AgentBrowserCommand {
+  // The view's ID, the same in every command and reply.
+  string browser_id = 1;
+  // open, message or close; or page (a web tab) or external (the system's
+  // browser), for a page the user asked to see, with url.
+  string kind = 2;
+  // A DevTools Protocol command, as JSON (message).
+  string message = 3;
+  // watch (a tab) or silent (off screen), for open.
+  string show = 4;
+  // The browser profile whose sign-ins it uses ("": a throwaway session).
+  string profile = 5;
+  // It may reach loopback and private addresses.
+  bool allow_local = 6;
+  // Never reached (web.deny_domains).
+  repeated string deny_domains = 7;
+  // The page to show, for page and external.
+  string url = 8;
+}
+
+// Response message for WorkspaceService.WatchAgentBrowser.
+message WatchAgentBrowserResponse {
+  AgentBrowserCommand command = 1;
+}
+
+// Request message for WorkspaceService.AgentBrowserReply.
+message AgentBrowserReplyRequest {
+  string workspace = 1;
+  string browser_id = 2;
+  // DevTools messages from the view, in order.
+  repeated string messages = 3;
+  // The view closed (or couldn't open); reason says why.
+  bool closed = 4;
+  string reason = 5;
+}
+
+// Response message for WorkspaceService.AgentBrowserReply.
+message AgentBrowserReplyResponse {}

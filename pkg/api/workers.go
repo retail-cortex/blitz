@@ -146,6 +146,14 @@ type WorkerSpec struct {
 	Prompt             string
 }
 
+// SchedulePreview is how a schedule is understood: its cron form, the
+// time zone it runs in, and its next runs.
+type SchedulePreview struct {
+	Cron     string
+	Timezone string
+	Next     []time.Time
+}
+
 // ErrWorkerExists reports creating a worker with a name the workspace
 // already has.
 var ErrWorkerExists = errors.New("a worker with that name exists")

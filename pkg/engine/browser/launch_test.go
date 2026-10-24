@@ -104,6 +104,25 @@ func TestLaunch(t *testing.T) {
 	assert.NoDirExists(t, profile, "the profile is removed")
 }
 
+// A kept profile (a browser profile's, BP-03): the last run's port file
+// is ignored, and Close leaves the profile with its sign-ins.
+func TestLaunchWithAKeptProfile(t *testing.T) {
+	page := browsertest.New(t)
+	port := devToolsList(t, map[string]string{"type": "page", "webSocketDebuggerUrl": page.URL})
+	profile := filepath.Join(t.TempDir(), "profiles", "work")
+	require.NoError(t, os.MkdirAll(profile, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(profile, "DevToolsActivePort"), []byte("1\n/devtools/browser/stale\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(profile, "Cookies"), []byte("signed in"), 0o600))
+	chrome := fakeChrome(t, "sleep 0.1\nprintf '%s\\n/devtools/browser/x\\n' "+port+" > \"$dir/DevToolsActivePort\"\nexec sleep 30")
+	b, err := Launch(context.Background(), Options{Path: chrome, AllowLocal: true, ProfileDir: profile})
+	require.NoError(t, err, "the stale port file isn't read")
+	assert.Equal(t, profile, b.profile)
+	require.NoError(t, b.Close())
+	data, err := os.ReadFile(filepath.Join(profile, "Cookies"))
+	require.NoError(t, err, "the profile is kept")
+	assert.Equal(t, "signed in", string(data))
+}
+
 // Launch says why the browser couldn't be started or driven.
 func TestLaunchFails(t *testing.T) {
 	noPage := devToolsList(t)

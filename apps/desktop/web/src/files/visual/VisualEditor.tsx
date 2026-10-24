@@ -51,11 +51,15 @@ import {
   mdiTableRemove,
   mdiTableRowPlusAfter,
   mdiTableRowRemove,
+  mdiUpload,
 } from "@mdi/js";
+import { message } from "../../errors";
 import { t } from "../../i18n";
 import { followLink } from "../../Markdown";
 import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
 import type { LanguageHooks } from "../language";
+import { files } from "../../api";
+import { altText, imageExtensions, insertsIn, readDocDrop, relativeLink, type Insert } from "../docDrop";
 import { pictureURL } from "../pictures";
 import { CodeBlockView, type BlockContext } from "./codeBlock";
 import { MathInlineView } from "./mathInline";
@@ -218,8 +222,38 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
     editorProps: {
       attributes: { class: "markdown visual-doc", spellcheck: "true", "aria-label": t("desktop.visual.label") },
       clipboardTextSerializer: sliceMarkdown,
+      // A file dropped from the tree or the computer: linked, or saved
+      // beside the document first (VE-11a).
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved || !event.dataTransfer) return false;
+        const drop = readDocDrop(event.dataTransfer);
+        if (!drop) return false;
+        event.preventDefault();
+        const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from;
+        void insertsIn(dir, path, drop).then(
+          (ins) => {
+            if (!editor) return;
+            const pos = Math.min(at, editor.state.doc.content.size);
+            const doc = editor.state.doc;
+            const before = pos > 0 ? doc.textBetween(pos - 1, pos, "\n", "\n") : "";
+            const after = pos < doc.content.size ? doc.textBetween(pos, pos + 1, "\n", "\n") : "";
+            editor.chain().focus().insertContentAt(pos, insertContent(ins, before, after)).run();
+          },
+          (e: unknown) => snack(message(e), { error: true }),
+        );
+        return true;
+      },
       handlePaste: (view, event) => {
         const data = event.clipboardData;
+        // A picture pasted (a screenshot): saved beside the document.
+        const pics = Array.from(data?.files ?? []).filter((f) => f.type.startsWith("image/"));
+        if (pics.length > 0) {
+          void insertsIn(dir, path, { paths: [], files: pics }).then(
+            (ins) => editor?.chain().focus().insertContent(insertContent(ins)).run(),
+            (e: unknown) => snack(message(e), { error: true }),
+          );
+          return true;
+        }
         const plain = data?.getData("text/plain") ?? "";
         if (!data || data.getData("text/html") || !looksLikeMarkdown.test(plain)) return false; // HTML: cleaned to the schema by ProseMirror
         const content = withoutSources(parseMarkdown(plain).doc.content ?? []);
@@ -354,7 +388,7 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
         />
       )}
       {linking && <LinkEditor editor={editor} state={linking} onClose={() => setLinking(null)} />}
-      {imaging && <ImageEditor editor={editor} state={imaging} onClose={() => setImaging(null)} />}
+      {imaging && <ImageEditor editor={editor} state={imaging} dir={dir} path={path} onClose={() => setImaging(null)} />}
     </div>
   );
 }
@@ -697,6 +731,24 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
 // selected or a new one at the cursor. Pictures show as boxes, never
 // loaded (DSK-24).
 
+/**
+ * What inserts put in the document: images, and links to other files, a
+ * space apart, and from the text around them (before, after) where it
+ * isn't space.
+ */
+function insertContent(ins: Insert[], before = "", after = ""): JSONContent[] {
+  const space = { type: "text", text: " " };
+  const pad = (c: string) => c !== "" && !/\s/.test(c);
+  return [
+    ...(pad(before) ? [space] : []),
+    ...ins.flatMap((i, n) => [
+      ...(n > 0 ? [space] : []),
+      i.kind === "image" ? { type: "image", attrs: { src: i.src, alt: i.text, title: null } } : { type: "text", text: i.text, marks: [{ type: "link", attrs: { href: i.src } }] },
+    ]),
+    ...(pad(after) ? [space] : []),
+  ];
+}
+
 interface ImageState {
   src: string;
   alt: string;
@@ -712,10 +764,47 @@ function imageAt(editor: Editor): ImageState {
   return { src: "", alt: "", pos: null };
 }
 
-function ImageEditor({ editor, state, onClose }: { editor: Editor; state: ImageState; onClose: () => void }) {
+function ImageEditor({ editor, state, dir, path, onClose }: { editor: Editor; state: ImageState; dir: string; path: string; onClose: () => void }) {
   const [src, setSrc] = useState(state.src);
   const [alt, setAlt] = useState(state.alt);
+  const snack = useSnackbar();
   const at = editor.view.coordsAtPos(state.pos ?? editor.state.selection.from);
+  // The workspace's pictures, found as you type (VE-11).
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<string[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(
+      () =>
+        void files.findFiles({ workspace: dir, query, limit: 60, extensions: imageExtensions }).then(
+          (r) => live && setFound(r.paths),
+          () => live && setFound([]),
+        ),
+      query ? 150 : 0,
+    );
+    return () => {
+      live = false;
+      clearTimeout(id);
+    };
+  }, [dir, query]);
+  const choose = (p: string) => {
+    setSrc(relativeLink(path, p));
+    if (!alt.trim()) setAlt(altText(p));
+  };
+  // A picture from the computer: saved beside the document, then chosen.
+  const picker = useRef<HTMLInputElement>(null);
+  const fromComputer = async (list: FileList | null) => {
+    const f = list?.[0];
+    if (!f) return;
+    try {
+      const [ins] = await insertsIn(dir, path, { paths: [], files: [f] });
+      if (!ins) return;
+      setSrc(ins.src);
+      if (!alt.trim()) setAlt(ins.text);
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const apply = () => {
     if (!src.trim()) return onClose();
     const attrs = { src: src.trim(), alt: alt.trim(), title: null };
@@ -723,32 +812,60 @@ function ImageEditor({ editor, state, onClose }: { editor: Editor; state: ImageS
     else editor.chain().focus().insertContent({ type: "image", attrs }).run();
     onClose();
   };
+  const close = () => {
+    onClose();
+    editor.commands.focus();
+  };
   const keys = (e: ReactKeyboardEvent) => {
     if (e.key === "Enter" || e.key === "Escape") e.preventDefault(); // not the document's too
     if (e.key === "Enter") apply();
-    if (e.key === "Escape") {
-      onClose();
-      editor.commands.focus();
-    }
+    if (e.key === "Escape") close();
   };
   return (
     <Popover at={at} className="visual-image">
+      <label className="t-label-sm muted" htmlFor="visual-image-find">
+        {t("desktop.visual.image_find")}
+      </label>
+      <input
+        id="visual-image-find"
+        className="input"
+        autoFocus
+        value={query}
+        placeholder={t("desktop.visual.image_find_placeholder")}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter takes the first picture found; Escape closes.
+          if (e.key === "Enter" && found?.[0]) {
+            e.preventDefault();
+            choose(found[0]);
+          } else if (e.key === "Escape") keys(e);
+        }}
+      />
+      <div className="visual-image-grid" role="listbox" aria-label={t("desktop.visual.image_find")}>
+        {found?.map((p) => (
+          <button key={p} type="button" role="option" aria-selected={relativeLink(path, p) === src.trim()} className={`visual-image-tile ${relativeLink(path, p) === src.trim() ? "selected" : ""}`} title={p} onClick={() => choose(p)}>
+            <Thumbnail dir={dir} path={p} />
+            <span className="ellipsis t-body-sm">{p.split("/").pop()}</span>
+          </button>
+        ))}
+        {found?.length === 0 && <p className="muted t-body-sm">{t(query ? "desktop.visual.image_none_match" : "desktop.visual.image_none")}</p>}
+      </div>
+      <div>
+        <Button small icon={mdiUpload} onClick={() => picker.current?.click()}>
+          {t("desktop.visual.image_from_computer")}
+        </Button>
+        <input ref={picker} type="file" accept="image/*" hidden onChange={(e) => void fromComputer(e.target.files)} />
+      </div>
       <label className="t-label-sm muted" htmlFor="visual-image-src">
         {t("desktop.visual.image_address")}
       </label>
-      <input id="visual-image-src" className="input" autoFocus value={src} placeholder={t("desktop.visual.image_placeholder")} onChange={(e) => setSrc(e.target.value)} onKeyDown={keys} />
+      <input id="visual-image-src" className="input" value={src} placeholder={t("desktop.visual.image_placeholder")} onChange={(e) => setSrc(e.target.value)} onKeyDown={keys} />
       <label className="t-label-sm muted" htmlFor="visual-image-alt">
         {t("desktop.visual.image_alt")}
       </label>
       <input id="visual-image-alt" className="input" value={alt} onChange={(e) => setAlt(e.target.value)} onKeyDown={keys} />
       <div className="visual-popover-actions">
-        <Button
-          small
-          onClick={() => {
-            onClose();
-            editor.commands.focus();
-          }}
-        >
+        <Button small onClick={close}>
           {t("desktop.cancel")}
         </Button>
         <Button small variant="filled" icon={mdiImageOutline} disabled={!src.trim()} onClick={apply}>
@@ -757,4 +874,20 @@ function ImageEditor({ editor, state, onClose }: { editor: Editor; state: ImageS
       </div>
     </Popover>
   );
+}
+
+/** A workspace picture, small (its bytes read once, as the editor's pictures are). */
+function Thumbnail({ dir, path }: { dir: string; path: string }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let live = true;
+    pictureURL(dir, "", path).then(
+      (u) => live && setUrl(u),
+      () => live && setUrl(""),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dir, path]);
+  return url ? <img src={url} alt="" loading="lazy" /> : <Icon path={mdiImageOutline} />;
 }

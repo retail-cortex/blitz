@@ -54,6 +54,12 @@ export function startSetup(dir: string) {
   compose({ dir, text: setupCommand, run: true, fresh: true });
 }
 
+/** Runs /reflect in a new chat in a workspace, showing the chat (HE-63). */
+export function startReflect(dir: string) {
+  showView({ dir, view: "chat" });
+  compose({ dir, text: "/reflect", run: true, fresh: true });
+}
+
 /** The text waiting for a workspace's composer, once. */
 export function takePendingCompose(dir: string): ComposeDetail | undefined {
   const d = pendingCompose.get(dir);
@@ -114,7 +120,17 @@ export interface ViewDetail {
   run?: string;
   /** Studio › Jobs: the job whose details to open. */
   worker?: string;
+  /** Closes the view instead when it's the one shown (the status bar's buttons). */
+  toggle?: boolean;
 }
+/**
+ * The drawer after a request for the changes: none when it's a toggle and
+ * the changes are shown, else the changes from source.
+ */
+export function changesAfter<D extends { kind: string }, S>(cur: D | null, toggle: boolean | undefined, source: S): D | { kind: "changes"; source: S } | null {
+  return toggle && cur?.kind === "changes" ? null : { kind: "changes", source };
+}
+
 // Views for a workspace that isn't there yet (it's opening), shown when it
 // mounts.
 const pendingViews = new Map<string, ViewDetail>();

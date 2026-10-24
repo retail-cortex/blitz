@@ -11,7 +11,7 @@ File edits show a coloured diff before you approve them. Answer `y` for once, `s
 
 ## Plans and task lists
 
-In plan mode, with `/plan`, or when the agent chooses to plan first, it presents a plan for approval: approving it carries it out, and typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always`, `agent-decides` (the default) or `never`. For work with several steps, the agent keeps a task list, shown as a checklist that updates as it goes.
+In plan mode, with `/plan`, or when the agent chooses to plan first, it presents a plan for approval: approving it carries it out, and typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always`, `agent-decides` (the default) or `never`. For work with several steps, the agent keeps a task list, shown as a checklist that updates as it goes; in the desktop app each item shows how long it has been running, and once done, how long it took. A background agent's card shows its running time the same way.
 
 ## Permission modes
 
@@ -83,9 +83,13 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 
 Background processes never outlive Blitz. Exiting with processes running asks whether to kill them or wait; a second Ctrl+C force-quits. Each process group is guarded so it's killed if Blitz dies, even by `SIGKILL`.
 
+**From the tray.** The tray's **Processes** menu lists every background process an agent started that's still running, in every open workspace, each with its workspace and **Stop**, so a dev server or a watcher left behind can be found and ended without opening the chat that started it.
+
 ## Secrets
 
 Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). Blitz's sign-ins stay its own: `~/.config/gcloud` is blocked, and so is the `ant` command's directory (`~/.config/anthropic`) unless Claude signs in with it. With `[sandbox] share_adc = true` (your settings only; a project can't set it) and a provider on Google Cloud ADC, the agent's commands get that sign-in: each its own copy of the credentials file, named by `GOOGLE_APPLICATION_CREDENTIALS` and removed when the command ends, so code that calls Google Cloud works from them. The copy holds a refresh token, which a command with the network could send anywhere: turn it on only for workspaces you trust. The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.
+
+**Keys in commits.** A repository Blitz sets up (`/setup`, or the window's **Make it a repository**) gets a pre-commit hook, `.githooks/pre-commit`, that stops a commit adding an API key, a token or a private key, and names the file and line with the value masked. Commit the `.githooks` folder so collaborators get it (`git config core.hooksPath .githooks` in their clone). For a repository you already have: **Changes › Protect against committing keys**, or `blitz security install-hook`. A false alarm: add `blitz:allow-secret` to the line, or `git commit --no-verify`. A repository that uses husky or pre-commit is left alone: add `blitz security scan-secrets --staged` to its hooks.
 
 ## Checkpoints and undo
 

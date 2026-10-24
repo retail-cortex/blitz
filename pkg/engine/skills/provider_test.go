@@ -17,6 +17,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -40,6 +41,24 @@ func TestEmbeddedSkills(t *testing.T) {
 
 	matches := p.Search("git")
 	assert.NotEqual(t, 0, len(matches), "expected search for 'git' to return at least 1 match")
+}
+
+// python-uv asks which layout before it makes a uv project, and is the
+// blitz agent's, found by the requests that need it.
+func TestPythonUVSkill(t *testing.T) {
+	p, err := NewProvider()
+	require.NoError(t, err)
+	s, ok := p.Get("python-uv")
+	require.True(t, ok, "the python-uv skill is built in")
+	assert.True(t, s.OfferedTo("blitz"))
+	assert.False(t, s.OfferedTo("qa"), "only the agent that makes projects")
+	for _, request := range []string{"start a new Python project with uv", "uv init a CLI tool", "set up a python package for our library", "create a python library"} {
+		assert.True(t, slices.ContainsFunc(s.TriggerPhrases, func(ph string) bool { return TriggerMatches(request, ph) }), "%q finds it", request)
+	}
+	assert.False(t, slices.ContainsFunc(s.TriggerPhrases, func(ph string) bool { return TriggerMatches("fix the checkout bug", ph) }))
+	for _, layout := range []string{"uv init --app", "uv init --package", "uv init --lib", "uv init --script", "[tool.uv.workspace]", "ask_user_question", "Never assume a simple project"} {
+		assert.Contains(t, s.Content, layout)
+	}
 }
 
 func TestExternalSkillDiscovery(t *testing.T) {

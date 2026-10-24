@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/harness"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -279,7 +281,7 @@ func TestReflectionTile(t *testing.T) {
 
 	write(t, w.Dir(), ".agents/AGENTS.md", "Use tabs.\n")
 	r, _ = w.Reflection()
-	assert.Equal(t, api.Reflection{Patterns: 4}, r)
+	assert.Equal(t, api.Reflection{Patterns: 4, Score: 4, Threshold: config.DefaultReflectThreshold}, r)
 	assert.NotContains(t, kinds(w.Suggestions(context.Background())), api.SuggestReflect, "four aren't enough")
 
 	failCommands(t, w, s.ID, "make e")
@@ -294,7 +296,23 @@ func TestReflectionTile(t *testing.T) {
 
 	w.reflected(time.Now())
 	r, _ = w.Reflection()
-	assert.Zero(t, r, "a reflection reviewed them, and the evidence starts after it")
+	assert.Equal(t, api.Reflection{Threshold: config.DefaultReflectThreshold}, r, "a reflection reviewed them, and the evidence starts after it")
+}
+
+// [harness] reflect_threshold says when: lower, sooner; 0, never (HE-62).
+func TestReflectionThreshold(t *testing.T) {
+	for _, tt := range []struct {
+		threshold int
+		suggested bool
+	}{{2, true}, {0, false}} {
+		t.Run(fmt.Sprint(tt.threshold), func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Harness.ReflectThreshold = tt.threshold }, text("hello"))
+			s := chatted(t, w)
+			write(t, w.Dir(), ".agents/AGENTS.md", "Use tabs.\n")
+			failCommands(t, w, s.ID, "make a", "make b")
+			assert.Equal(t, tt.suggested, slices.Contains(kinds(w.Suggestions(context.Background())), api.SuggestReflect))
+		})
+	}
 }
 
 func TestReflectionWithoutTheAuditLog(t *testing.T) {
@@ -508,4 +526,47 @@ func TestGlobalExperience(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "## How to work\n\n- Read the error before retrying.\n", string(data), "once")
 	assert.Contains(t, w.globalExperienceText(), "holds:\n## How to work")
+}
+
+// A chat turn says when it's time to reflect, once a day; Not now holds
+// it off for a week; /reflect clears both; a command's turn or an
+// unattended run never says it (HE-63).
+func TestChatSuggestsReflecting(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Harness.ReflectThreshold = 2 }, text("a"), text("b"), text("c"), text("d"), text("e"), text("f"))
+	s := chatted(t, w)
+	write(t, w.Dir(), ".agents/AGENTS.md", "Use tabs.\n")
+	failCommands(t, w, s.ID, "make a", "make b")
+	turn := func(ctx context.Context, tt api.Turn) *api.ReflectDue {
+		t.Helper()
+		w.evidenceMu.Lock()
+		w.reflectChecked = time.Time{} // weighed afresh each turn here
+		w.evidenceMu.Unlock()
+		var due *api.ReflectDue
+		_, err := w.Run(ctx, s.ID, tt, func(e api.Event) {
+			if e.Reflect != nil {
+				due = e.Reflect
+			}
+		})
+		require.NoError(t, err)
+		return due
+	}
+	ctx := context.Background()
+
+	assert.Nil(t, turn(tools.Unattended(ctx, nil), api.Turn{Text: "nobody's there"}), "unattended")
+	due := turn(ctx, api.Turn{Text: "next"})
+	require.NotNil(t, due)
+	assert.Equal(t, api.ReflectDue{Patterns: 2, Score: 2}, *due)
+	assert.Nil(t, turn(ctx, api.Turn{Text: "again"}), "once a day")
+
+	w.updateHarnessState(func(st *harnessState) { st.Nudged = time.Now().Add(-25 * time.Hour) })
+	w.SnoozeReflection(time.Now())
+	assert.Nil(t, turn(ctx, api.Turn{Text: "after a day"}), "not now: a week")
+
+	w.updateHarnessState(func(st *harnessState) { st.Snoozed = time.Now().Add(-time.Minute) })
+	assert.NotNil(t, turn(ctx, api.Turn{Text: "after the week"}))
+
+	w.reflected(time.Now().Add(-time.Hour))
+	st := w.harnessState()
+	assert.Zero(t, st.Nudged, "a reflection clears it")
+	assert.Zero(t, st.Snoozed)
 }

@@ -29,6 +29,24 @@ option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 // Every request names its scope: workspace is an absolute directory, or ""
 // for the global settings.
 service ConfigService {
+  // The browser profiles (spec_browser_profiles_049): each with the sites
+  // the agents browse with it without asking, and the one the workspace
+  // named browses with (none: a throwaway profile each time).
+  rpc ListBrowserProfiles(ListBrowserProfilesRequest) returns (ListBrowserProfilesResponse);
+  // Makes an empty profile (lowercase letters, digits, - and _).
+  rpc CreateBrowserProfile(CreateBrowserProfileRequest) returns (CreateBrowserProfileResponse);
+  // Removes a profile, its sign-ins, and the workspaces' choice of it.
+  rpc DeleteBrowserProfile(DeleteBrowserProfileRequest) returns (DeleteBrowserProfileResponse);
+  // Signs a profile out of everything (its data removed, the profile kept).
+  rpc ClearBrowserProfile(ClearBrowserProfileRequest) returns (ClearBrowserProfileResponse);
+  // The sites a profile browses without asking.
+  rpc SetBrowserProfileDomains(SetBrowserProfileDomainsRequest) returns (SetBrowserProfileDomainsResponse);
+  // Which profile a workspace browses with ("": none).
+  rpc SetWorkspaceBrowserProfile(SetWorkspaceBrowserProfileRequest) returns (SetWorkspaceBrowserProfileResponse);
+  // Opens the system's Chrome (Chromium, Edge, Brave) on the profile, on
+  // the service's machine, to sign in by hand for the browsing done
+  // without the desktop app (jobs, the CLI). NO_BROWSER without one.
+  rpc OpenBrowserProfile(OpenBrowserProfileRequest) returns (OpenBrowserProfileResponse);
   // What a scope sets: providers and where their keys come from (never the
   // keys themselves).
   rpc DescribeConfig(DescribeConfigRequest) returns (DescribeConfigResponse);
@@ -995,4 +1013,89 @@ message DraftGlobalConnectorQueryResponse {
   int32 tables = 3;
   // Why there's no draft ("" when there is).
   string problem = 4;
+}
+
+// A browser profile.
+message BrowserProfile {
+  string name = 1;
+  google.protobuf.Timestamp created = 2;
+  // Sites browsed with it without asking (globs like *.example.com).
+  repeated string allow_domains = 3;
+}
+
+// Request message for ConfigService.ListBrowserProfiles.
+message ListBrowserProfilesRequest {
+  // A workspace whose choice to return; "" for none.
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListBrowserProfiles.
+message ListBrowserProfilesResponse {
+  repeated BrowserProfile profiles = 1;
+  // The workspace's profile ("": none).
+  string workspace_profile = 2;
+  // browser.show: ask, watch or silent (spec_agent_browser_050).
+  string show = 3;
+  // browser.open: ask, embedded or system (AB-10).
+  string open = 4;
+}
+
+// Request message for ConfigService.CreateBrowserProfile.
+message CreateBrowserProfileRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.CreateBrowserProfile.
+message CreateBrowserProfileResponse {
+  BrowserProfile profile = 1;
+}
+
+// Request message for ConfigService.DeleteBrowserProfile.
+message DeleteBrowserProfileRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.DeleteBrowserProfile.
+message DeleteBrowserProfileResponse {}
+
+// Request message for ConfigService.ClearBrowserProfile.
+message ClearBrowserProfileRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.ClearBrowserProfile.
+message ClearBrowserProfileResponse {}
+
+// Request message for ConfigService.SetBrowserProfileDomains.
+message SetBrowserProfileDomainsRequest {
+  string name = 1;
+  repeated string allow_domains = 2;
+}
+
+// Response message for ConfigService.SetBrowserProfileDomains.
+message SetBrowserProfileDomainsResponse {
+  BrowserProfile profile = 1;
+}
+
+// Request message for ConfigService.SetWorkspaceBrowserProfile.
+message SetWorkspaceBrowserProfileRequest {
+  string workspace = 1;
+  // "" for none.
+  string name = 2;
+}
+
+// Response message for ConfigService.SetWorkspaceBrowserProfile.
+message SetWorkspaceBrowserProfileResponse {}
+
+// Request message for ConfigService.OpenBrowserProfile.
+message OpenBrowserProfileRequest {
+  string name = 1;
+  // The page to open (the site to sign in to); "" for a blank one.
+  string url = 2;
+}
+
+// Response message for ConfigService.OpenBrowserProfile.
+message OpenBrowserProfileResponse {
+  // The browser opened.
+  string browser = 1;
 }

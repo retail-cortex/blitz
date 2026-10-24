@@ -615,3 +615,46 @@ func TestSpeechModelReload(t *testing.T) {
 	assert.False(t, hasTool())
 	assert.Contains(t, w.Settings().SpeechError, "can't generate speech")
 }
+
+// The agents hear of the harness's scratch folder and support scripts
+// when the workspace has them, and of nothing when it doesn't.
+func TestHarnessFolders(t *testing.T) {
+	dir := t.TempDir()
+	assert.Empty(t, harnessFolders(dir))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "scratch"), 0o755))
+	assert.Contains(t, harnessFolders(dir), "Put working files")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "scripts"), 0o755))
+	assert.NotContains(t, harnessFolders(dir), "support scripts", "an empty folder")
+	for _, name := range []string{"setup.sh", "refresh_data.py", ".keep"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "scripts", name), []byte("#\n"), 0o755))
+	}
+	got := harnessFolders(dir)
+	assert.Contains(t, got, "`.agents/scripts/` (refresh_data.py, setup.sh)")
+	assert.NotContains(t, got, ".keep")
+}
+
+// The workspace browses with the profile the person chose for it, with
+// its sites, unless its project settings aren't trusted (BP-03).
+func TestWorkspaceBrowserProfile(t *testing.T) {
+	w := openTest(t)
+	store := config.OpenBrowserProfiles(filepath.Join(os.Getenv("HOME"), ".blitz"))
+	assert.Empty(t, w.browserProfile().Name, "none chosen")
+
+	_, err := store.Create("work", time.Now())
+	require.NoError(t, err)
+	require.NoError(t, store.SetAllowDomains("work", []string{"mail.example.com"}))
+	require.NoError(t, store.SetWorkspace(w.Dir(), "work"))
+	got := w.browserProfile()
+	assert.Equal(t, "work", got.Name)
+	assert.Equal(t, store.Dir("work"), got.Dir)
+	assert.Equal(t, []string{"mail.example.com"}, got.Allow)
+
+	for _, state := range []string{"pending", "declined"} {
+		t.Run("project settings "+state, func(t *testing.T) {
+			old := w.project.State
+			w.project.State = state
+			t.Cleanup(func() { w.project.State = old })
+			assert.Empty(t, w.browserProfile().Name, "a project not trusted never reaches the sign-ins")
+		})
+	}
+}

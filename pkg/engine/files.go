@@ -609,11 +609,20 @@ func (w *Workspace) FindFiles(ctx context.Context, query string, limit int) ([]s
 }
 
 // FindPaths is FindFiles, with folders also the folders the files are in
-// ("src/cart/", with a trailing slash), matched the same way.
-func (w *Workspace) FindPaths(ctx context.Context, query string, limit int, folders bool) ([]string, error) {
+// ("src/cart/", with a trailing slash), matched the same way. With
+// extensions ("png", any case), only files that have one of them (and no
+// folders).
+func (w *Workspace) FindPaths(ctx context.Context, query string, limit int, folders bool, extensions ...string) ([]string, error) {
 	paths, err := w.allFiles(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if len(extensions) > 0 {
+		paths = slices.DeleteFunc(slices.Clone(paths), func(p string) bool {
+			ext := strings.TrimPrefix(path.Ext(p), ".")
+			return !slices.ContainsFunc(extensions, func(e string) bool { return strings.EqualFold(strings.TrimPrefix(e, "."), ext) })
+		})
+		folders = false
 	}
 	if folders {
 		paths = withFolders(paths)

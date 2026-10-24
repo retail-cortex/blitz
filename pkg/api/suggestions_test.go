@@ -28,8 +28,9 @@ func TestReflectionSuggested(t *testing.T) {
 		ok   bool
 	}{
 		{"nothing to learn", Reflection{}, Suggestion{}, false},
-		{"too few patterns", Reflection{Patterns: ReflectAt - 1}, Suggestion{}, false},
-		{"enough patterns", Reflection{Patterns: ReflectAt}, Suggestion{Kind: SuggestReflect, Count: ReflectAt}, true},
+		{"below the threshold", Reflection{Patterns: 4, Score: 4, Threshold: 5}, Suggestion{}, false},
+		{"at the threshold", Reflection{Patterns: 3, Score: 5, Threshold: 5}, Suggestion{Kind: SuggestReflect, Count: 3}, true},
+		{"turned off", Reflection{Patterns: 9, Score: 12}, Suggestion{}, false},
 		{"proposals first", Reflection{Patterns: 9, Proposals: 2}, Suggestion{Kind: SuggestReflectReview, Count: 2}, true},
 	}
 	for _, tt := range tests {

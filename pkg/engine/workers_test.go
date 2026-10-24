@@ -365,6 +365,19 @@ func TestWorkersOffRefuseEverything(t *testing.T) {
 	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
 	_, err = w.RunWorker(context.Background(), "a", RunOptions{})
 	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+	_, _, _, err = w.DraftWorker(api.WorkerSpec{Name: "a", Schedule: "@daily", Prompt: "x"})
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+}
+
+// A draft with a name that can't be a folder's is a problem to fix, not
+// an error.
+func TestDraftWorkerBadName(t *testing.T) {
+	w := openTest(t)
+	_, data, problems, err := w.DraftWorker(api.WorkerSpec{Name: " Not A Name ", Schedule: "@daily", Prompt: "x"})
+	require.NoError(t, err)
+	assert.Nil(t, data)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], `name "Not A Name"`)
 }
 
 // With no worker folders configured, a new worker has nowhere to go.
@@ -503,4 +516,75 @@ func TestWorkerNotifyFailureWarns(t *testing.T) {
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "workers.notify for deps")
 	assert.Contains(t, warnings[0], "nope")
+}
+
+// A job asked for in the chat: the agent's create_job is asked about and
+// makes a paused job in the workspace, as the New Job dialog does (WK-70).
+func TestCreateJobFromTheChat(t *testing.T) {
+	call := toolCall("create_job", map[string]any{
+		"name":        "ai-news",
+		"schedule":    "every day at 8 am",
+		"prompt":      "Fetch the latest AI news from news.google.com and write a summary report to reports/ai-news/MM-DD-YYYY.html, glass morphic with a dark theme.",
+		"permissions": []any{"web:news.google.com", "write:reports/ai-news/**"},
+	})
+	w, _ := openTestWith(t, nil, call, text("Created ai-news, paused: review and enable it."))
+	var asked []api.ApprovalRequest
+	w.SetUI(func(_ context.Context, r api.ApprovalRequest) (api.Decision, error) {
+		asked = append(asked, r)
+		return api.DecisionOnce, nil
+	}, nil)
+	s, _ := w.NewSession()
+	var result map[string]any
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "Create a job that runs every day at 8 am to fetch the AI news"}, func(e api.Event) {
+		if e.ToolResult != nil && e.ToolResult.Name == "create_job" {
+			result = e.ToolResult.Result
+		}
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result["error"], "result %v", result)
+	assert.Equal(t, true, result["paused"])
+	require.Len(t, asked, 1)
+	assert.Equal(t, "create_job", asked[0].Tool)
+	assert.Contains(t, asked[0].Diff, "news.google.com")
+
+	jobs, err := w.ListWorkers()
+	require.NoError(t, err)
+	require.Len(t, jobs, 1)
+	assert.Equal(t, "ai-news", jobs[0].Name)
+	assert.Equal(t, api.StateNew, jobs[0].State, "paused until enabled")
+	assert.Equal(t, "0 8 * * *", jobs[0].Cron)
+	assert.ElementsMatch(t, []string{"web:news.google.com", "write:reports/ai-news/**"}, jobs[0].Permissions)
+}
+
+func TestPreviewSchedule(t *testing.T) {
+	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name, text, tz string
+		n              int
+		cron           string
+		first          string
+		count          int
+		err            bool
+	}{
+		{name: "plain text", text: "every day at 8 am", tz: "UTC", n: 3, cron: "0 8 * * *", first: "2026-10-24T08:00:00Z", count: 3},
+		{name: "cron", text: "30 9 * * 1-5", tz: "UTC", n: 2, cron: "30 9 * * 1-5", first: "2026-10-23T09:30:00Z", count: 2},
+		{name: "in a time zone", text: "daily at 6 AM", tz: "America/Chicago", n: 1, cron: "0 6 * * *", first: "2026-10-23T06:00:00-05:00", count: 1},
+		{name: "at most twenty", text: "@hourly", tz: "UTC", n: 99, cron: "@hourly", first: "2026-10-23T10:00:00Z", count: 20},
+		{name: "unreadable", text: "someday soon", tz: "UTC", n: 3, err: true},
+		{name: "unknown zone", text: "@daily", tz: "Mars/Olympus", n: 3, err: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := PreviewSchedule(tt.text, tt.tz, tt.n, now)
+			if tt.err {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.cron, p.Cron)
+			require.Len(t, p.Next, tt.count)
+			assert.Equal(t, tt.first, p.Next[0].Format(time.RFC3339))
+		})
+	}
 }

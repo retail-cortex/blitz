@@ -788,7 +788,7 @@ func DefaultConfig() *Config {
 			GoalMaxContinues: 20,
 		},
 		Health:  HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
-		Harness: HarnessConfig{MaxCostUSD: 0.5},
+		Harness: HarnessConfig{MaxCostUSD: 0.5, ReflectThreshold: DefaultReflectThreshold},
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,
@@ -815,13 +815,12 @@ func DefaultConfig() *Config {
 			Paths:    []string{".agents/workers", "workers"},
 			NotifyOn: []string{"failed", "limited"},
 			Policy: WorkerPolicy{
-				Allow:             slices.Clone(WorkerPermissionKinds),
+				Allow: slices.Clone(WorkerPermissionKinds),
+				// Defaults, not caps (v0.8.4): a job may ask for more; a host
+				// that wants a cap sets max_*.
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
 				DefaultTimeout:    "30m",
-				MaxTurns:          200,
-				MaxCostUSD:        10,
-				MaxTimeout:        "2h",
 				MaxConcurrent:     2,
 			},
 		},
@@ -968,6 +967,13 @@ const UserAgentsDir = "~/.blitz/agents"
 
 // ProjectAgentsDir holds a workspace's agents, relative to it.
 const ProjectAgentsDir = ".agents/agents"
+
+// ProjectScratchDir is a workspace's scratch folder for the agents'
+// working files, relative to it; git ignores it (its own .gitignore).
+const ProjectScratchDir = ".agents/scratch"
+
+// ProjectScriptsDir holds a workspace's support scripts, relative to it.
+const ProjectScriptsDir = ".agents/scripts"
 
 // AgentSearchPaths returns directories to scan for user-defined agents,
 // resolved like SkillSearchPaths: the user's, then the workspace's.

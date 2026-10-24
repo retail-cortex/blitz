@@ -35,6 +35,8 @@ import type { Cursor } from "../status";
 import { ServerState } from "../gen/blitz/v1/language_pb";
 import { languageSession, type LanguageStatus } from "./language";
 import { goToLine, languageOf, setWrap } from "./codemirror";
+import { insertMarkdown, insertsIn, readDocDrop, spaced } from "./docDrop";
+import { dragType } from "./tree";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
 import { tabsToClose, type CloseWhich } from "./tabMenu";
@@ -260,6 +262,58 @@ export function EditorPane({
       cursorTo.current?.(undefined);
     };
     // The model's functions read refs; the view lives as long as the pane.
+  }, []);
+
+  // Files dropped (from the tree or the computer) or pictures pasted into
+  // a Markdown file (VE-11a): Markdown links at the drop point, the
+  // computer's files saved beside the document first.
+  useEffect(() => {
+    const el = host.current;
+    const v = view.current;
+    if (!el || !v) return;
+    const markdownTab = () => !!shown.current && languageOf(shown.current)?.name === "Markdown";
+    const insert = (pos: number, drop: { paths: string[]; files: File[] }) => {
+      const doc = shown.current!;
+      void insertsIn(model.dir, doc, drop).then(
+        (ins) => {
+          if (shown.current !== doc || ins.length === 0) return;
+          const at = Math.min(pos, v.state.doc.length);
+          const text = spaced(v.state.sliceDoc(at - 1, at), insertMarkdown(ins), v.state.sliceDoc(at, at + 1));
+          v.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length } });
+          v.focus();
+        },
+        (e: unknown) => snack(message(e), { error: true }),
+      );
+    };
+    const takes = (dt: DataTransfer | null) => !!dt && (dt.types.includes("Files") || dt.types.includes(dragType));
+    const over = (e: DragEvent) => {
+      if (markdownTab() && takes(e.dataTransfer)) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!markdownTab() || !e.dataTransfer) return;
+      const d = readDocDrop(e.dataTransfer);
+      if (!d) return;
+      e.preventDefault();
+      e.stopPropagation(); // not CodeMirror's own drop
+      insert(v.posAtCoords({ x: e.clientX, y: e.clientY }) ?? v.state.selection.main.head, d);
+    };
+    const paste = (e: ClipboardEvent) => {
+      if (!markdownTab()) return;
+      const pics = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (pics.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      insert(v.state.selection.main.head, { paths: [], files: pics });
+    };
+    el.addEventListener("dragover", over, true);
+    el.addEventListener("drop", drop, true);
+    el.addEventListener("paste", paste, true);
+    return () => {
+      el.removeEventListener("dragover", over, true);
+      el.removeEventListener("drop", drop, true);
+      el.removeEventListener("paste", paste, true);
+    };
+    // As the view: the model's functions and snack read refs.
   }, []);
 
   // Show the active tab's state (once it has loaded, and again when it's

@@ -174,6 +174,77 @@ func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
 	return r.Rename(from, to)
 }
 
+// UserCreateUpload starts a file the user uploads to rel: an empty hidden
+// file beside it (its folders made), which UserAppend fills and
+// UserFinishUpload puts in place. It returns the hidden file's path.
+func (w *Workspace) UserCreateUpload(rel string) (string, error) {
+	if rel == "." {
+		return "", errors.New("path must name a file")
+	}
+	r := w.userRoot()
+	if err := mkdirParent(r, rel); err != nil {
+		return "", err
+	}
+	tmp, err := tempName(rel)
+	if err != nil {
+		return "", err
+	}
+	f, err := r.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", err
+	}
+	return tmp, f.Close()
+}
+
+// UserAppend adds data to the end of the upload tmp.
+func (w *Workspace) UserAppend(tmp string, data []byte) error {
+	f, err := w.userRoot().OpenFile(tmp, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// UserFinishUpload puts the upload tmp at rel, under rel's lock. rel must
+// not exist unless replace, and a folder is never replaced.
+func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, replace bool) error {
+	unlock, err := w.lockPaths(ctx, rel)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	r := w.userRoot()
+	if info, err := r.Lstat(rel); err == nil {
+		if !replace {
+			return fmt.Errorf("%s: %w", filepath.ToSlash(rel), fs.ErrExist)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("%s is a folder", filepath.ToSlash(rel))
+		}
+	}
+	f, err := r.OpenFile(tmp, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return r.Rename(tmp, rel)
+}
+
+// UserDiscardUpload removes the unfinished upload tmp.
+func (w *Workspace) UserDiscardUpload(tmp string) {
+	_ = w.userRoot().Remove(tmp)
+}
+
 // UserRemove deletes rel, a folder with everything in it.
 func (w *Workspace) UserRemove(ctx context.Context, rel string) error {
 	if rel == "." {

@@ -18,7 +18,7 @@
 // else: its calls go to the main process by name, checked there, and it
 // hears only the window's own events. A sandboxed preload can't load the
 // app's other modules, so the lists are here as well as in logic.ts.
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 
 const methods = [
   "ChooseWorkspace",
@@ -42,8 +42,15 @@ const methods = [
   "PreviewConsole",
   "PreviewPrintPDF",
   "PreviewPicture",
+  "DragOut",
+  "TrashDropped",
+  "SignInWindow",
+  "AgentBrowserOpen",
+  "AgentBrowserSend",
+  "AgentBrowserClose",
+  "AgentBrowserTakeOver",
 ];
-const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"]);
+const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open", "agentbrowser:message", "agentbrowser:closed"]);
 
 contextBridge.exposeInMainWorld("blitzElectron", {
   /** The calls the window answers. */
@@ -52,6 +59,22 @@ contextBridge.exposeInMainWorld("blitzElectron", {
   nativeGlass: process.platform === "darwin",
   /** Calls one of methods with its arguments. */
   call: (method: string, ...args: unknown[]) => ipcRenderer.invoke("blitz:call", method, args),
+  /**
+   * The paths on the computer of files dropped on the page (EL-15), ""
+   * for one that isn't a file there. The window remembers them: they're
+   * the only ones TrashDropped (a move into the workspace) can take.
+   */
+  pathsOf: async (files: File[]) => {
+    const paths = files.map((f) => {
+      try {
+        return webUtils.getPathForFile(f);
+      } catch {
+        return "";
+      }
+    });
+    await ipcRenderer.invoke("blitz:dropped", paths.filter(Boolean));
+    return paths;
+  },
   /** Calls f with each of the window's event; returns what stops that. */
   on: (event: string, f: (arg: unknown) => void) => {
     if (!events.has(event)) return () => {};

@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -33,6 +34,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // workerService implements WorkerService.
@@ -415,6 +417,22 @@ func (h workerService) WatchWorkerRun(ctx context.Context, r req[pb.WatchWorkerR
 			return ctx.Err()
 		}
 	}
+}
+
+func (h workerService) PreviewSchedule(_ context.Context, r req[pb.PreviewScheduleRequest]) (*connect.Response[pb.PreviewScheduleResponse], error) {
+	n := int(r.Msg.Count)
+	if n <= 0 {
+		n = 5
+	}
+	p, err := engine.PreviewSchedule(r.Msg.Schedule, r.Msg.Timezone, n, time.Now())
+	if err != nil {
+		return ok(&pb.PreviewScheduleResponse{Problem: err.Error()})
+	}
+	out := &pb.PreviewScheduleResponse{Cron: p.Cron, Timezone: p.Timezone}
+	for _, t := range p.Next {
+		out.NextRuns = append(out.NextRuns, timestamppb.New(t))
+	}
+	return ok(out)
 }
 
 func (h workerService) ListAllWorkers(ctx context.Context, _ req[pb.ListAllWorkersRequest]) (*connect.Response[pb.ListAllWorkersResponse], error) {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -190,5 +191,14 @@ func (h workspaceService) GetReflection(ctx context.Context, r req[pb.GetReflect
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	return ok(&pb.GetReflectionResponse{Patterns: int32(refl.Patterns), Proposals: int32(refl.Proposals)})
+	return ok(&pb.GetReflectionResponse{Patterns: int32(refl.Patterns), Proposals: int32(refl.Proposals), Score: int32(refl.Score), Threshold: int32(refl.Threshold)})
+}
+
+func (h workspaceService) SnoozeReflection(ctx context.Context, r req[pb.SnoozeReflectionRequest]) (*connect.Response[pb.SnoozeReflectionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	w.SnoozeReflection(time.Now())
+	return ok(&pb.SnoozeReflectionResponse{})
 }

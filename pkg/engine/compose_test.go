@@ -70,7 +70,39 @@ func TestComposeWorkflow(t *testing.T) {
 	w.DropCompose(s.ID)
 	_, err = w.AnswerCompose(context.Background(), s.ID, "again")
 	assert.ErrorIs(t, err, compose.ErrNoSession)
-	assert.Equal(t, []string{"workflow"}, ComposeKinds())
+	assert.Equal(t, []string{"workflow", "job"}, ComposeKinds())
+}
+
+// A job composed in a conversation (WK-74): a draft that doesn't load goes
+// back with its problems, and the one that does is the job.
+func TestComposeJob(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	good := "---\ndescription: AI news every morning\nschedule: \"0 8 * * *\"\npermissions: [\"web:news.google.com\", \"write:reports/ai-news/**\"]\n---\nFetch the AI news and write reports/ai-news/MM-DD-YYYY.html.\n"
+	llm := runtime.NewMockLLM("composer",
+		text(`{"question": "Which time zone?", "options": ["America/Chicago", "The service's"]}`),
+		text(composeDraft("ai-news", "---\nschedule: someday\n---\nFetch.\n")),
+		text(composeDraft("ai-news", good)))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return llm, nil }
+	s, err := w.StartCompose(context.Background(), "job", "every day at 8 fetch the AI news into reports", "")
+	require.NoError(t, err)
+	assert.True(t, s.Asking())
+	assert.Contains(t, llm.Requests[0].Contents[0].Parts[0].Text, "WORKER.md", "the job's brief")
+	s, err = w.AnswerCompose(context.Background(), s.ID, "America/Chicago")
+	require.NoError(t, err)
+	require.NotNil(t, s.Draft)
+	assert.Empty(t, s.Draft.Problems, "fixed after the unreadable schedule went back")
+	assert.Equal(t, "ai-news", s.Draft.Name)
+	assert.Contains(t, llm.Requests[2].Contents[0].Parts[0].Text, "someday")
+}
+
+func TestCheckJobDraft(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	good := "---\nschedule: \"@daily\"\n---\nDo it.\n"
+	assert.Empty(t, w.checkJobDraft("daily", good))
+	assert.Contains(t, w.checkJobDraft("Bad Name", good)[0], "name")
+	assert.NotEmpty(t, w.checkJobDraft("daily", "---\nschedule: whenever\n---\nDo it.\n"), "an unreadable schedule")
+	assert.NotEmpty(t, w.checkJobDraft("daily", "---\nschedule: \"@daily\"\nagent: nobody\n---\nDo it.\n"), "an unknown agent")
+	assert.NotEmpty(t, w.checkJobDraft("daily", "---\nschedule: [\n---\nx\n"), "frontmatter that isn't YAML")
 }
 
 func TestCheckWorkflowDraft(t *testing.T) {

@@ -239,6 +239,45 @@ func TestPermissions(t *testing.T) {
 		got := Allows(perms, c.req)
 		assert.Equal(t, c.want, got, "%v %v: %v, want %v", c.req.Kind, c.req.Targets, got, c.want)
 	}
+}
+
+// In write and delete paths, ** is any number of folders (WK-20b); * and
+// the other globs stay within one.
+func TestPermissionsDoubleStar(t *testing.T) {
+	perm := func(s string) Permission {
+		p, err := ParsePermission(s)
+		require.NoError(t, err)
+		return p
+	}
+	write := func(target string) api.ApprovalRequest {
+		return api.ApprovalRequest{Kind: api.ActionWrite, Targets: []string{target}}
+	}
+	tests := []struct {
+		pattern, target string
+		want            bool
+	}{
+		{"write:reports/**", "reports/a.html", true},
+		{"write:reports/**", "reports/ai-news/10-23-2026.html", true},
+		{"write:reports/**", "reports/a/b/c/d.md", true},
+		{"write:reports/**", "reports", false},
+		{"write:reports/**", "reportsX/a.html", false},
+		{"write:reports/**", "other/reports/a.html", false},
+		{"write:reports/**/*.html", "reports/a.html", true},
+		{"write:reports/**/*.html", "reports/x/y/a.html", true},
+		{"write:reports/**/*.html", "reports/x/a.md", false},
+		{"write:**/notes.md", "notes.md", true},
+		{"write:**/notes.md", "a/b/notes.md", true},
+		{"write:reports/*", "reports/a.html", true},
+		{"write:reports/*", "reports/x/a.html", false}, // one * stays within a folder
+		{"write:reports/**", "reports/../main.go", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.pattern+" "+tt.target, func(t *testing.T) {
+			assert.Equal(t, tt.want, Allows([]Permission{perm(tt.pattern)}, write(tt.target)))
+		})
+	}
+	// Commands are unchanged: their globs are path.Match's, ** included.
+	assert.False(t, Allows([]Permission{perm("shell:go test **")}, api.ApprovalRequest{Kind: api.ActionCommand, Targets: []string{"go test ./..."}}))
 	for _, bad := range []string{"read:x", "shell", "write:../x", "write:/abs", "web:"} {
 		t.Run(bad, func(t *testing.T) {
 			_, err := ParsePermission(bad)

@@ -15,7 +15,7 @@
  */
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { compose, composeEvent, showView, startSetup, takePendingCompose, takePendingView, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
+import { changesAfter, compose, composeEvent, showView, startSetup, takePendingCompose, takePendingView, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
 
 // Tests run without a DOM: the window is an event target.
 beforeAll(() => {
@@ -75,4 +75,15 @@ describe("compose", () => {
     compose({ dir: "/u", text: "/help", run: true });
     expect(takePendingCompose("/u")).toBeUndefined();
   });
+});
+
+describe("changesAfter", () => {
+  const history = { kind: "history", path: "a.go" };
+  it.each([
+    ["opens the changes", null, false, { kind: "changes", source: "git" }],
+    ["a toggle opens them when closed", null, true, { kind: "changes", source: "git" }],
+    ["a toggle closes them when shown", { kind: "changes", source: "git" }, true, null],
+    ["a plain request keeps them shown", { kind: "changes", source: "session" }, false, { kind: "changes", source: "git" }],
+    ["a toggle over the history shows the changes", history, true, { kind: "changes", source: "git" }],
+  ])("%s", (_name, cur, toggle, want) => expect(changesAfter(cur, toggle, "git")).toEqual(want));
 });

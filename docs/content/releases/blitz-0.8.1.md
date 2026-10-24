@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.1
-weight: 2
+weight: 3
 ---
 
 **Your company's AI, now in Blitz.** Most companies don't hand out API keys. They run a model gateway: one address, company sign-in, every request accounted for. Until now, that left Blitz out. Blitz 0.8.1 plugs straight in: Claude and GPT on your company's account, under your company's rules, with no key of your own and nothing extra to install.

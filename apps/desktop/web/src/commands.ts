@@ -68,6 +68,18 @@ export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] 
   return [...starts, ...contains].slice(0, 12);
 }
 
+/**
+ * The engine's bundled commands the page itself starts (the welcome
+ * tiles, Set up this workspace): known before, or without, the service's
+ * list, which a workspace still opening may not have sent yet.
+ */
+export const engineCommands: ReadonlySet<string> = new Set(["setup", "reflect", "skills-update", "agents-update", "rules-update"]);
+
+/** Whether name is a command: one in all, or one of the engine's own. */
+export function knownCommand(name: string, all: CommandSpec[]): boolean {
+  return engineCommands.has(name) || all.some((c) => c.name === name);
+}
+
 /** Every command: the built-in ones first, then the workspace's (a built-in name wins). */
 export function allCommands(custom: CommandSpec[]): CommandSpec[] {
   const own = builtins();

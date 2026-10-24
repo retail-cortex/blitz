@@ -26,6 +26,7 @@ import (
 	"net/netip"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -56,6 +57,10 @@ type WebFetchConfig struct {
 	// Rules are the permission rules: web(host) deny refuses, ask always
 	// asks (even for allow_domains), allow skips the question.
 	Rules *PermissionRules
+	// Browser, when set, loads a page in the browser and reads its text:
+	// web_fetch's fallback for a bot check or a page that needs
+	// JavaScript (WEB-09). nil: no fallback.
+	Browser func(ctx context.Context, u string) (BrowserOutput, error)
 }
 
 // ErrBlockedAddress is returned when a request targets a non-public address.
@@ -260,7 +265,10 @@ type WebFetchOutput struct {
 	ContentType string `json:"content_type,omitempty"`
 	Content     string `json:"content,omitempty"`
 	Truncated   bool   `json:"truncated,omitempty"`
-	Error       string `json:"error,omitempty"`
+	// Via is "browser" when the page was loaded in the browser (WEB-09).
+	Via   string `json:"via,omitempty"`
+	Note  string `json:"note,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // NewWebFetchTool creates web_fetch: it retrieves a public web page and
@@ -340,6 +348,48 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 	if resp.StatusCode >= 400 {
 		out.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
+	if why := needsBrowser(resp.StatusCode, mediaType, body, text); why != "" && f.cfg.Browser != nil {
+		return f.viaBrowser(ctx, out, why)
+	}
+	return out
+}
+
+// challengeMarkers are what bot checks and pages that need JavaScript say.
+var challengeMarkers = []string{"cf-chl", "challenge-platform", "just a moment", "attention required", "checking your browser", "enable javascript", "javascript is required", "javascript is disabled", "please turn javascript on", "captcha", "ddos protection"}
+
+// needsBrowser says why a plain request's answer isn't the page (a bot
+// check, or HTML whose text is nearly nothing but scripts), or "".
+func needsBrowser(status int, mediaType string, body []byte, text string) string {
+	if mediaType != "text/html" && mediaType != "application/xhtml+xml" {
+		return ""
+	}
+	lower := strings.ToLower(string(body))
+	marked := slices.ContainsFunc(challengeMarkers, func(m string) bool { return strings.Contains(lower, m) })
+	switch {
+	case (status == http.StatusForbidden || status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable) && marked:
+		return "a bot check answered the plain request"
+	case status < 400 && len(strings.TrimSpace(text)) < 200 && (marked || strings.Count(lower, "<script") >= 2):
+		return "the page needs JavaScript"
+	}
+	return ""
+}
+
+// viaBrowser loads out's page in the browser instead, the URL already
+// approved for this request, and returns its text; the plain answer when
+// the browser can't (its error in the note).
+func (f *webFetcher) viaBrowser(ctx context.Context, plain WebFetchOutput, why string) WebFetchOutput {
+	u := plain.FinalURL
+	if u == "" {
+		u = plain.URL
+	}
+	page, err := f.cfg.Browser(WithFetchGrants(ctx, []string{plain.URL, u}), u)
+	if err != nil {
+		plain.Note = fmt.Sprintf("%s; the browser couldn't load it either: %v", why, err)
+		return plain
+	}
+	out := WebFetchOutput{URL: plain.URL, FinalURL: page.URL, ContentType: "text/html", Via: "browser", Truncated: page.Truncated}
+	out.Content = strings.TrimSpace(page.Title + "\n\n" + page.Text)
+	out.Note = "Loaded in the browser: " + why + "."
 	return out
 }
 

@@ -72,6 +72,10 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 			w.warn(rerr.Error())
 		}
 	}
+	if err == nil && !t.Command && !t.Aside && tools.Attended(ctx) {
+		// Time to learn from the runs? Said in the chat (HE-63).
+		w.offerReflect(on, time.Now())
+	}
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	w.auditTurnEnd(sessionID, err)
 	// A long turn's end is worth telling you about (spec_parity_027
@@ -316,6 +320,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	prompt = withHookContext(prompt, "rules", ruleGuidance)
 	prompt = w.withMentions(ctx, prompt, t.Text)
 	prompt = withAdded(prompt, t.Context)
+	// What git doesn't track yet, so the files the turn's commands make
+	// are added at its end too (auto_add).
+	var untracked map[string]bool
+	if !t.Aside {
+		untracked = w.untrackedNow(ctx)
+	}
 	var err error
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
@@ -401,7 +411,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if !t.Aside {
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
-		w.stageCreated(ctx, sessionID, on)
+		w.stageCreated(ctx, sessionID, untracked, on)
 	}
 	if t.OnFinished != nil {
 		t.OnFinished()

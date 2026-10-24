@@ -90,10 +90,10 @@ export function workerRequest(f: WorkerForm) {
     agent: f.agent,
     workflow: f.workflow,
     model: f.model.trim(),
-    permissions: f.permissions
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean),
+    // As the rule builder's rows, tidied; one without its pattern yet ("write:") isn't one.
+    permissions: parseRules(f.permissions)
+      .filter((r) => r.pattern.trim())
+      .map((r) => (r.kind ? `${r.kind}:${r.pattern.trim()}` : r.pattern.trim())),
     maxTurns: Math.floor(num(f.maxTurns)),
     maxCostUsd: num(f.maxCostUSD),
     timeout: f.timeout.trim(),
@@ -163,3 +163,71 @@ export function permissionChanges(f: WorkerForm, suggested: string[]): { added: 
   const now = workerRequest(f).permissions;
   return { added: suggested.filter((p) => !now.includes(p)), removed: now.filter((p) => !suggested.includes(p)) };
 }
+
+/** What a job's limit fields show from the host's policy: its default (in the placeholder) and its cap, if any ("": none). */
+export function limitHints(p: { defaultMaxTurns: number; defaultMaxCostUsd: number; defaultTimeout: string; maxTurns: number; maxCostUsd: number; maxTimeout: string } | undefined): Record<"maxTurns" | "maxCostUSD" | "timeout", { def: string; cap: string }> {
+  const n = (v: number | undefined) => (v ? String(v) : "");
+  const usd = (v: number | undefined) => (v ? `$${v.toFixed(2)}` : "");
+  return {
+    maxTurns: { def: n(p?.defaultMaxTurns), cap: n(p?.maxTurns) },
+    maxCostUSD: { def: usd(p?.defaultMaxCostUsd), cap: usd(p?.maxCostUsd) },
+    timeout: { def: p?.defaultTimeout ?? "", cap: p?.maxTimeout ?? "" },
+  };
+}
+
+/** A permission kind a job may be given, as the rule builder offers them (WK-71). */
+export const ruleKinds = ["shell", "write", "delete", "web", "mcp"] as const;
+/** One of ruleKinds. */
+export type RuleKind = (typeof ruleKinds)[number];
+
+/** One row of the rule builder: a kind and its pattern; kind "" is a line that isn't kind:pattern, kept as written. */
+export interface Rule {
+  kind: RuleKind | "";
+  pattern: string;
+}
+
+/** The form's permission lines as the rule builder's rows (blank lines dropped). */
+export function parseRules(text: string): Rule[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const i = l.indexOf(":");
+      const kind = i > 0 ? l.slice(0, i).trim() : "";
+      return (ruleKinds as readonly string[]).includes(kind) ? { kind: kind as RuleKind, pattern: l.slice(i + 1).trim() } : { kind: "" as const, pattern: l };
+    });
+}
+
+/**
+ * The rows back as the form's lines, kind:pattern. A row without a pattern
+ * stays as "kind:" while it's edited (workerRequest leaves it out); an
+ * other row without text goes.
+ */
+export function rulesText(rules: Rule[]): string {
+  return rules
+    .filter((r) => r.kind || r.pattern.trim())
+    .map((r) => (r.kind ? `${r.kind}:${r.pattern}` : r.pattern))
+    .join("\n");
+}
+
+/** Examples for a kind's pattern, the first the field's placeholder. */
+export const ruleExamples: Record<RuleKind, string[]> = {
+  shell: ["go test ./...", "npm run build", "python scripts/*.py"],
+  write: ["reports/**", "docs/changelog.md"],
+  delete: ["tmp/**"],
+  web: ["news.google.com", "*.github.com"],
+  mcp: ["github:create_issue", "linear:*"],
+};
+
+/**
+ * What a kind's patterns cover, for the rule builder's help (WK-71,
+ * WK-20b): examples, each with its meaning (desktop.newworker.pattern.<kind>.<i>).
+ */
+export const ruleHelp: Record<RuleKind, string[]> = {
+  shell: ["go test ./...", "npm run *", "python scripts/report.py"],
+  write: ["reports/summary.html", "reports/*", "reports/**", "reports/**/*.html", "**/notes.md"],
+  delete: ["tmp/*.log", "tmp/**"],
+  web: ["news.google.com", "*.example.com"],
+  mcp: ["github:create_issue", "github:*"],
+};

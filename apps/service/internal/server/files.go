@@ -41,6 +41,10 @@ func fileError(err error) error {
 		return apiError(connect.CodeNotFound, "FILE_NOT_FOUND", err)
 	case errors.Is(err, fs.ErrExist):
 		return apiError(connect.CodeAlreadyExists, "FILE_EXISTS", err)
+	case errors.Is(err, engine.ErrNoUpload):
+		return apiError(connect.CodeNotFound, "NO_UPLOAD", err)
+	case errors.Is(err, engine.ErrUploadTooLarge):
+		return apiError(connect.CodeResourceExhausted, "UPLOAD_TOO_LARGE", err)
 	case errors.Is(err, engine.ErrNoPreview):
 		return apiError(connect.CodeInvalidArgument, "NO_PREVIEW", err)
 	case errors.Is(err, engine.ErrNotTable):
@@ -130,6 +134,18 @@ func (h fileService) WriteBinaryFile(ctx context.Context, r req[pb.WriteBinaryFi
 		return nil, fileError(err)
 	}
 	return ok(&pb.WriteBinaryFileResponse{Version: v})
+}
+
+func (h fileService) UploadFile(ctx context.Context, r req[pb.UploadFileRequest]) (*connect.Response[pb.UploadFileResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	id, v, err := w.UploadFile(ctx, r.Msg.Path, r.Msg.UploadId, r.Msg.Data, r.Msg.Done, r.Msg.Replace)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.UploadFileResponse{UploadId: id, Version: v})
 }
 
 func (h fileService) CreateFolder(ctx context.Context, r req[pb.CreateFolderRequest]) (*connect.Response[pb.CreateFolderResponse], error) {
@@ -265,7 +281,7 @@ func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) 
 	if err != nil {
 		return nil, err
 	}
-	paths, err := w.FindPaths(ctx, r.Msg.Query, int(r.Msg.Limit), r.Msg.Folders)
+	paths, err := w.FindPaths(ctx, r.Msg.Query, int(r.Msg.Limit), r.Msg.Folders, r.Msg.Extensions...)
 	if err != nil {
 		return nil, fileError(err)
 	}

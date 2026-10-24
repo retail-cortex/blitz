@@ -148,6 +148,7 @@ func TestGitInit(t *testing.T) {
 		assert.True(t, st.Repo)
 		assert.NotEmpty(t, st.Branch)
 		assert.DirExists(t, filepath.Join(w.Dir(), ".git"))
+		assert.FileExists(t, filepath.Join(w.Dir(), ".githooks", "pre-commit"), "a new repository gets the secrets hook (SH-02)")
 		again, err := w.GitInit(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, st, again)

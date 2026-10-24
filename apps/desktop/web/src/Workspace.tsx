@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -35,8 +35,14 @@ import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
+import { message } from "./errors";
 import { t } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
+import { includeAll } from "./includeAll";
+import { relayEnds, runRelay } from "./agentBrowserRelay";
+import { agentBrowser } from "./desktop";
+import { adoptPreview } from "./files/WebPreview";
+import { workspaces } from "./api";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -86,6 +92,9 @@ export function Workspace({
   const [studioClose, setStudioClose] = useState(0);
   const [studioAsk, setStudioAsk] = useState<{ kind: StudioKind; n: number }>({ kind: "overview", n: 0 });
   const [studioKind, setStudioKind] = useState<StudioKind | null>(null);
+  // What Studio shows now, while it's open (the status bar's toggle).
+  const shownKind = useRef<StudioKind | null>(null);
+  shownKind.current = studio ? studioKind : null;
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
@@ -98,8 +107,13 @@ export function Workspace({
   // editor (what's open beside or over it closes), or the changes or
   // workers in the drawer.
   const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session", d?: ViewDetail) => {
-    if (v === "changes") setDrawer({ kind: "changes", source });
-    else if (v === "workers") setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
+    // A toggle (the status bar's) closes the view when it's the one shown.
+    if (v === "changes") setDrawer((cur) => changesAfter(cur, d?.toggle, source));
+    else if (v === "workers") {
+      // Studio closes through its own request, which asks about unsaved edits.
+      if (d?.toggle && shownKind.current === "workers") setStudioClose((n) => n + 1);
+      else setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
+    }
     else if (v === "workflows") setStudio({ kind: "workflows", intent: newIntent("show", d?.workflow ?? ""), run: d?.run });
     else {
       setDrawer(null);
@@ -122,8 +136,37 @@ export function Workspace({
     return () => window.removeEventListener(viewEvent, f);
   }, [dir, showView]);
 
+  // The agent's browser in the app (spec_agent_browser_050): this
+  // workspace's views, relayed while it's open; a watched one is a tab.
+  useEffect(() => {
+    if (!agentBrowser.supported()) return;
+    const ctl = new AbortController();
+    void runRelay(
+      relayEnds(dir, (id) => {
+        adoptPreview(id);
+        editorRef.current?.openAgentWeb(id);
+      }),
+      ctl.signal,
+    );
+    return () => ctl.abort();
+  }, [dir]);
+
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const snack = useSnackbar();
+  // Protect against committing keys (spec_secret_hooks_051 SH-03): the
+  // hook goes in the repository, or the snack says why not.
+  const protectRepository = () =>
+    workspaces.installSecretHook({ workspace: dir }).then(
+      (r) => (snack(t(`desktop.secrethook.${r.status}`, { path: r.path, detail: r.detail }), { error: r.status === "other_hooks" }), setTouched((n) => n + 1)),
+      (e: unknown) => snack(message(e), { error: true }),
+    );
+  // Include all changes, from the Changes menu: the tree and the Changes
+  // view see it.
+  const includeAllChanges = () =>
+    includeAll(dir).then(
+      () => (snack(t("desktop.commit.included_all")), setTouched((n) => n + 1)),
+      (e: unknown) => snack(message(e), { error: true }),
+    );
   const editor = useEditor(dir, {
     // A definition outside the workspace (the standard library, a module) can't open here.
     outside: (loc) => snack(t("desktop.files.definition_outside", { path: loc.path, line: loc.line })),
@@ -253,6 +296,8 @@ export function Workspace({
           dir={dir}
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
+          onIncludeAll={() => void includeAllChanges()}
+          onProtect={() => void protectRepository()}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
           onStudio={(kind) => (studio ? setStudioAsk((a) => ({ kind, n: a.n + 1 })) : setStudio({ kind }))}
           studioKind={studio ? studioKind : null}

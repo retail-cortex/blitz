@@ -20,6 +20,7 @@ go_library(
         "agents.go",
         "background.go",
         "broker.go",
+        "browserprofiles.go",
         "compose.go",
         "config.go",
         "connectors.go",
@@ -75,6 +76,7 @@ go_library(
         "//pkg/observability",
         "//pkg/redact",
         "//pkg/secrets",
+        "//pkg/secretscan",
         "//pkg/signin",
         "//pkg/skillreg",
         "//proto/blitz/v1:blitzv1_go_proto",
@@ -93,6 +95,7 @@ go_test(
     srcs = [
         "background_test.go",
         "broker_test.go",
+        "browserprofiles_test.go",
         "compose_test.go",
         "config_test.go",
         "connectors_test.go",

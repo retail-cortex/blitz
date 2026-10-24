@@ -62,7 +62,7 @@ func TestMakeConnectorGlobal(t *testing.T) {
 	secrets.SetDefault(&secrets.Memory{})
 	w := openTest(t)
 	ctx := context.Background()
-	g := GlobalConnectors{Config: w.cfg}
+	g := GlobalConnectors{Config: w.settings()}
 
 	saved, problems, err := w.SaveConnector(ctx, shop(), map[string]string{"password": "s3cret"}, "")
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestGlobalConnectors(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
 	llm := &promptLLM{reply: `{"name": "slow", "statement": "SELECT name FROM recipes WHERE minutes > 60"}`}
-	g := GlobalConnectors{Config: w.cfg, NewModel: func(context.Context, *config.Config, string) (model.LLM, error) { return llm, nil }}
+	g := GlobalConnectors{Config: w.settings(), NewModel: func(context.Context, *config.Config, string) (model.LLM, error) { return llm, nil }}
 
 	c := kitchen(t)
 	c.Scope = connectors.ScopeWorkspace // Settings' are global whatever it says

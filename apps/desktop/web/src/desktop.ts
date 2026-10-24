@@ -115,6 +115,13 @@ type AppMethods = {
   PreviewConsole(id: string): Promise<string[]>;
   PreviewPrintPDF(id: string, pageSize: string): Promise<string>;
   PreviewPicture(id: string, url: string): Promise<{ ext: string; data: string }>;
+  DragOut(paths: string[]): Promise<boolean>;
+  TrashDropped(paths: string[]): Promise<string[]>;
+  SignInWindow(profile: string, url: string): Promise<void>;
+  AgentBrowserOpen(id: string, show: string, profile: string, allowLocal: boolean, deny: string[]): Promise<void>;
+  AgentBrowserSend(id: string, message: string): Promise<void>;
+  AgentBrowserClose(id: string): Promise<void>;
+  AgentBrowserTakeOver(id: string): Promise<void>;
 };
 
 /** Where a web preview goes in the window, in the page's pixels. */
@@ -213,6 +220,7 @@ type ElectronWindow = {
   nativeGlass: boolean;
   call(method: string, ...args: unknown[]): Promise<unknown>;
   on(event: string, f: (arg: unknown) => void): () => void;
+  pathsOf?(files: File[]): Promise<string[]>;
 };
 
 function electronWindow(): ElectronWindow | undefined {
@@ -408,6 +416,45 @@ export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise
   const b64 = await app().PrintPDF(html, pageSize); // Go's []byte comes as base64
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
+
+/**
+ * Where files dropped on the page are on the computer, in the app's
+ * window ("" for each elsewhere, or for one that isn't a file there). The
+ * window remembers them for trashDropped.
+ */
+export async function droppedPaths(files: File[]): Promise<string[]> {
+  const w = electronWindow();
+  return w?.pathsOf ? w.pathsOf(files) : files.map(() => "");
+}
+
+/** Whether the Files view's rows can be dragged out to the computer (the app's window). */
+export const canDragOut = () => windowHas("DragOut");
+
+/** Starts dragging the files at paths out of the window (copies); false when none is on this computer. */
+export const dragOut = (paths: string[]) => app().DragOut(paths);
+
+/**
+ * Moves dropped files (droppedPaths') to the trash, once they're copied
+ * into the workspace; returns those it couldn't.
+ */
+export const trashDropped = (paths: string[]) => app().TrashDropped(paths);
+
+/**
+ * The agent's browser in the app (spec_agent_browser_050, EL-17): the
+ * window's views for it, and their events (agentbrowser:message, a
+ * DevTools message from one; agentbrowser:closed). Electron's only.
+ */
+export const agentBrowser = {
+  supported: () => windowHas("AgentBrowserOpen"),
+  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[]) => app().AgentBrowserOpen(id, show, profile, allowLocal, deny),
+  send: (id: string, message: string) => app().AgentBrowserSend(id, message),
+  close: (id: string) => app().AgentBrowserClose(id),
+  takeOver: (id: string) => app().AgentBrowserTakeOver(id),
+  on: (event: "agentbrowser:message" | "agentbrowser:closed", f: (arg: unknown) => void) => windowEvents()?.(event, f) ?? (() => {}),
+};
+
+/** Opens a window of the app's on browser profile's sign-ins, at url (EL-16), to sign in to a site. */
+export const signInWindow = (profile: string, url: string) => app().SignInWindow(profile, url);
 
 /** Shows a file or folder selected in the system's file manager (in the app, or from the tray). */
 export const revealPath = (path: string) => app().RevealPath(path);

@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/images"
@@ -71,6 +72,7 @@ type Registry struct {
 	rules    *PermissionRules
 
 	browser *browserTool // nil: no browser tool
+	page    pageTool     // open_page (spec_agent_browser_050 AB-10)
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
 
 	mediaMu    sync.RWMutex
@@ -90,6 +92,64 @@ type Registry struct {
 	// workspaceSearch searches the workspace (nil: search off); notesMu
 	// guards it.
 	workspaceSearch Searcher
+	// jobs makes and lists the workspace's jobs (create_job, list_jobs);
+	// nil: off. evidenceMu guards it.
+	jobs Jobs
+	// profile is the browser profile the workspace browses with; nil:
+	// none. agentBrowser opens a view of the desktop app's for the
+	// agent's browser (spec_agent_browser_050); nil: none. evidenceMu
+	// guards them.
+	profile      func() BrowserProfile
+	agentBrowser AgentBrowserHost
+}
+
+// BrowserProfile is the browser profile a workspace browses with (BP-03):
+// its name (the app's partition), its folder (Chrome's), and the sites it
+// browses without asking; the zero value is none, a throwaway profile.
+type BrowserProfile struct {
+	Name, Dir string
+	Allow     []string
+}
+
+// SetBrowserProfile supplies the workspace's browser profile (BP-03).
+func (r *Registry) SetBrowserProfile(p func() BrowserProfile) {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	r.profile = p
+}
+
+func (r *Registry) browserProfile() func() BrowserProfile {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	return r.profile
+}
+
+// AgentBrowserOptions are what a view of the app's for the agent opens
+// with (spec_agent_browser_050).
+type AgentBrowserOptions struct {
+	// Show is "watch" or "silent".
+	Show        string
+	Profile     string
+	AllowLocal  bool
+	DenyDomains []string
+}
+
+// AgentBrowserHost opens a view of the desktop app's for the agent's
+// browser and returns its DevTools connection; an error when no window
+// can (the headless browser is used then).
+type AgentBrowserHost func(ctx context.Context, o AgentBrowserOptions) (browser.Transport, error)
+
+// SetAgentBrowserHost supplies the desktop app's views (AB-01).
+func (r *Registry) SetAgentBrowserHost(h AgentBrowserHost) {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	r.agentBrowser = h
+}
+
+func (r *Registry) agentBrowserHost() AgentBrowserHost {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	return r.agentBrowser
 }
 
 // Rules are the permission rules in force; they can change while a
@@ -289,7 +349,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	}
 	if cfg.Web.Enabled {
 		entries = append(entries, entry{[]string{"web_fetch"}, func() (tool.Tool, error) {
-			return NewWebFetchTool(WebFetchConfig{
+			wc := WebFetchConfig{
 				AllowDomains: cfg.Web.AllowDomains,
 				DenyDomains:  cfg.Web.DenyDomains,
 				AllowPrivate: cfg.Web.AllowPrivate,
@@ -297,11 +357,17 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 				MaxBytes:     cfg.Web.MaxBytes,
 				Rules:        rules,
 				Timeout:      time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-			}, r.hooks)
+			}
+			// The browser is made below, before this runs.
+			if cfg.Web.BrowserFallback && r.browser != nil {
+				wc.Browser = r.browser.pageText
+			}
+			return NewWebFetchTool(wc, r.hooks)
 		}})
 	}
 	r.fetch = cfg.Web.Enabled
 	r.webOn = cfg.Web.Enabled
+	r.page.open = cfg.Browser.Open
 	r.web = WebFetchConfig{
 		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
 		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
@@ -422,6 +488,22 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if r.tools["save_global_experience"], err = NewSaveGlobalExperienceTool(r); err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the save_global_experience tool: %w", err)
+	}
+	if r.tools["create_job"], err = NewCreateJobTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the create_job tool: %w", err)
+	}
+	if r.tools["list_jobs"], err = NewListJobsTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the list_jobs tool: %w", err)
+	}
+	if r.tools["open_page"], err = NewOpenPageTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the open_page tool: %w", err)
+	}
+	if r.tools["install_secret_hook"], err = NewInstallSecretHookTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the install_secret_hook tool: %w", err)
 	}
 	resourceTools, err := NewMCPResourceTools(r)
 	if err != nil {
