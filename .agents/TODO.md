@@ -53,8 +53,13 @@ schedule picker, limits as defaults (`f47296fc`); 8 python-uv
 (`5231d53b`); 13 and 14 the secrets hook, scripts and scratch
 (`6fb4152a`); 3 web_fetch through the browser (`38e02a3f`); 5 browser
 profiles (`cd0583e4`); 4 the agent's browser in the app (`da9f64fc`).
-Next: the owner's manual test (`.agents/v0.8.4-test-script.md`), then
-the full suite with `--config=race` and coverage, then one PR.
+The full suite with `--config=race` and coverage passed 2026-10-24
+(`ea0381e8`: lint, a flaky test, a test race, coverage 94.04%). Fast
+follows 2026-10-24: the setup and reflect tiles no longer wait for the
+command list (`793b42d2`); closing the reflection loop, HE-60–HE-63 (what
+worked, scratch reuse, a score and threshold, the chat's card). Next: the
+owner's manual test (`.agents/v0.8.4-test-script.md`, §8 new), the full
+suite again, then one PR.
 
 Order: see **Order of work** below the list. 1 → 2 share the drop
 plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so

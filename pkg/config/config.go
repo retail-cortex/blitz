@@ -788,7 +788,7 @@ func DefaultConfig() *Config {
 			GoalMaxContinues: 20,
 		},
 		Health:  HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
-		Harness: HarnessConfig{MaxCostUSD: 0.5},
+		Harness: HarnessConfig{MaxCostUSD: 0.5, ReflectThreshold: DefaultReflectThreshold},
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,

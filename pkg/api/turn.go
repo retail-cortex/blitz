@@ -118,6 +118,17 @@ type Event struct {
 	Notice *Notice
 	// Step is a workflow's step starting or ending (spec_workflows_043).
 	Step *FlowStep
+	// Reflect, at a chat turn's end, says the runs since the last
+	// reflection hit enough problems to /reflect on
+	// (spec_harness_learning_048 HE-63).
+	Reflect *ReflectDue
+}
+
+// ReflectDue is the evidence that suggests /reflect: its patterns, and
+// its score (the costly patterns twice).
+type ReflectDue struct {
+	Patterns int
+	Score    int
 }
 
 // FlowStep is a workflow's step starting, or how it ended.

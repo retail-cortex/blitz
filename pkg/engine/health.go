@@ -62,6 +62,7 @@ type HealthReport struct {
 	// last scheduled one didn't run or stopped.
 	ReflectSchedule, ReflectSkipped string
 	ReflectMaxCostUSD               float64
+	ReflectThreshold                int
 }
 
 // HealthCheck says which items a check judges.
@@ -122,7 +123,7 @@ func (w *Workspace) Health(ctx context.Context) HealthReport {
 	all := store.All()
 	r := HealthReport{Facts: f, Verdicts: map[string]health.Verdict{}, History: map[string][]float64{}, State: store.State(),
 		Model: w.healthModel(), Schedule: w.cfg.Health.Schedule, MaxCostUSD: w.cfg.Health.MaxCostUSD,
-		ReflectSchedule: w.cfg.Harness.ReflectSchedule, ReflectMaxCostUSD: w.cfg.Harness.MaxCostUSD, ReflectSkipped: w.harnessState().Skipped}
+		ReflectSchedule: w.cfg.Harness.ReflectSchedule, ReflectMaxCostUSD: w.cfg.Harness.MaxCostUSD, ReflectThreshold: w.cfg.Harness.ReflectThreshold, ReflectSkipped: w.harnessState().Skipped}
 	for _, v := range all {
 		if cur, ok := r.Verdicts[v.Key()]; !ok || !v.At.Before(cur.At) {
 			r.Verdicts[v.Key()] = v

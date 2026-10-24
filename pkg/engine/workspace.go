@@ -128,9 +128,13 @@ type Workspace struct {
 	memoryMu    sync.Mutex
 	// evidenceCache is the harness's evidence by the audit log's stamp
 	// (cachedEvidence), guarded by evidenceMu.
-	evidenceMu    sync.Mutex
-	evidenceCache map[string]harness.Evidence
-	locales       *i18n.Bundle
+	evidenceMu sync.Mutex
+	// reflectChecked is when the end of a turn last weighed the evidence
+	// for the chat's suggestion to reflect (offerReflect), guarded by
+	// evidenceMu.
+	reflectChecked time.Time
+	evidenceCache  map[string]harness.Evidence
+	locales        *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
 	// moveNotes tell a session's next prompt that /cd moved it here

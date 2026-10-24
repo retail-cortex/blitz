@@ -31,14 +31,15 @@ Work through these steps in order, and keep a todo list of them.
 
 1. **Read, without changing anything.** If `.agents/AGENTS.md` doesn't exist, say that the experience belongs to a harness /setup makes, suggest /setup, and stop. Otherwise call harness_evidence (with the since the prompt gives, if any) and read what it returns. Then read `.agents/AGENTS.md`, `.agents/EXPERIENCE.md` if it exists, the specs' README, and the descriptions of the skills (list_or_search_skills) and agents (list_agents); open a skill's, agent's or rule's file when a pattern is about it. If the evidence says the audit log is off or has no items, say so and stop.
 
-2. **Find the patterns.** Group the evidence into patterns: something that happened at least twice, or once with a cost (an undo, a limit, an action the user refused). The items marked [pattern] are the start; items about the same thing (a failed `make push` and a correction saying "use make deploy") are one pattern. Ignore one-offs without a cost.
+2. **Find the patterns.** Group the evidence into patterns: something that happened at least twice, or once with a cost (an undo, a limit, an action the user refused). The items marked [pattern] are the start; items about the same thing (a failed `make push` and a correction saying "use make deploy") are one pattern. Ignore one-offs without a cost. An occurrence ending `→ then worked: <command or path>` says what the agent did instead that succeeded: that's the fix to write down. `scratch_remade` and `scratch_script` items are work agents did again in `.agents/scratch/` in different sessions.
 
 3. **Choose the smallest fix for each.** For each pattern, think of two candidates before choosing: a general habit (`How to work`: "read the error before retrying a command") and a fact about this project (`This project`: "deploy with make deploy; there is no make push"). Offer the one the evidence fits best, not both. Then pick where it belongs, smallest first:
-   - an entry in `.agents/EXPERIENCE.md`, for what agents learned;
+   - an entry in `.agents/EXPERIENCE.md`, for what agents learned; when the evidence says what worked, the entry says what to do, not only what failed ("Deploy with `make deploy`; there is no `make push`."). Without a "then worked", never guess the fix: say what failed and how to find out;
    - a line in `.agents/AGENTS.md` (a command, a boundary, a gotcha), when it's a rule the project sets;
    - a step in a skill whose runs failed at that step;
    - an agent's `tools` or instructions, when it was denied the same tool repeatedly or its turns were stopped or corrected;
-   - a rule or guardrail, when the same unwanted action keeps reaching the user.
+   - a rule or guardrail, when the same unwanted action keeps reaching the user;
+   - a support script in `.agents/scripts/`, for a `scratch_script` (the scratch script, read and saved there under a name that says what it does) or a `scratch_remade` (a script that makes that file, from the commands that made it), listed under `## Scripts` in `.agents/AGENTS.md` with one line on what it does, so the next agent runs it instead of writing it again.
 
 4. **Drop what the harness already says.** If an instruction, entry, skill or agent already covers a pattern and it happened anyway, the wording may be unclear: propose rewording it, not repeating it, and say that it happened in spite of it. Never duplicate an entry.
 

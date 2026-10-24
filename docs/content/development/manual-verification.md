@@ -389,6 +389,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] The schedule picker (WK-72): **Repeats** › Every week, Monday and Friday, 08:00. **Expected:** the next five runs on Mondays and Fridays at 8:00 in the job's zone, their days marked on the month, `0 8 * * 1,5` under them; **Custom** with `whenever` says Blitz can't read it. Edit a job written as `Daily at 6 AM`: it opens in Custom, unchanged.
 - [ ] Limits as defaults (WK-73): New job's limit fields say "Default: 50", "Default: $1.00", "Default: 30m"; set 300 model calls and save: the job keeps 300. Settings › Jobs › Cap: set 200, reopen the job: "At most 200" under the field, and a run is capped.
 - [ ] Compose a job (WK-74): New job › Compose with AI, describe a daily report; answer its question; the draft shows the schedule, permissions and prompt; Use this job fills the form. The schedule's card says it in a sentence with the cron chip, dated next runs and a month (arrows step it); the time zone is a dropdown by region with offsets; the ? on a rule lists what patterns cover and fills one in.
+- [ ] Closing the reflection loop (HE-60–HE-63): after a failed `make push` and a working `make deploy` in one turn, /reflect's evidence says `→ then worked: make deploy`; a scratch script run in two sessions is offered as a support script; with Overview › Settings › Suggest reflecting at = 2, a chat turn ends with the reflect card once a day, Not now holds it off a week, 0 turns it off; the setup card starts /setup in a workspace still opening.
 
 ## 37. Desktop app
 

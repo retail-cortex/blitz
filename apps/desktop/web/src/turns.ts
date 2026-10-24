@@ -39,7 +39,9 @@ export type Entry =
   | { kind: "model"; text: string; author: string; open: boolean }
   | { kind: "thought"; text: string; open: boolean }
   | { kind: "tool"; id: string; name: string; args?: JsonObject; result?: JsonObject }
-  | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean };
+  | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean }
+  // Time to /reflect, said at a chat turn's end (spec_harness_learning_048 HE-63).
+  | { kind: "reflect"; patterns: number };
 
 const subKinds: Record<string, UserEntry["sub"]> = { steer: "steer", hook: "hook", plan: "plan" };
 
@@ -229,6 +231,8 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
     }
     case "notice":
       return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
+    case "reflectDue":
+      return [...close(entries), { kind: "reflect", patterns: k.value.patterns }];
     case "flowStep": {
       // A workflow's step: a line as it starts, and if it fails.
       const s = k.value;

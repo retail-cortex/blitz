@@ -54,6 +54,12 @@ export function startSetup(dir: string) {
   compose({ dir, text: setupCommand, run: true, fresh: true });
 }
 
+/** Runs /reflect in a new chat in a workspace, showing the chat (HE-63). */
+export function startReflect(dir: string) {
+  showView({ dir, view: "chat" });
+  compose({ dir, text: "/reflect", run: true, fresh: true });
+}
+
 /** The text waiting for a workspace's composer, once. */
 export function takePendingCompose(dir: string): ComposeDetail | undefined {
   const d = pendingCompose.get(dir);

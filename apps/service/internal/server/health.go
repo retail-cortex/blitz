@@ -63,7 +63,7 @@ func healthMsg(r engine.HealthReport, checking bool) *pb.WorkspaceHealth {
 		LastCheck: ts(r.State.LastCheck), LastCostUsd: r.State.LastCost, Skipped: r.State.Skipped,
 		Model: r.Model, Schedule: r.Schedule, Next: ts(r.Next), MaxCostUsd: r.MaxCostUSD, Checking: checking,
 		LastJudged: int32(r.State.Judged), LastErrors: r.State.Errors,
-		ReflectSchedule: r.ReflectSchedule, ReflectMaxCostUsd: r.ReflectMaxCostUSD, ReflectSkipped: r.ReflectSkipped}
+		ReflectSchedule: r.ReflectSchedule, ReflectMaxCostUsd: r.ReflectMaxCostUSD, ReflectThreshold: int32(r.ReflectThreshold), ReflectSkipped: r.ReflectSkipped}
 	for _, it := range r.Items {
 		pi := &pb.HealthItem{Kind: it.Kind, Name: it.Name, Path: it.Path, Detail: it.Detail, Problem: it.Problem, Flags: it.Flags,
 			Uses: int32(it.Uses), Fired: int32(it.Fired), History: r.History[it.Key()]}

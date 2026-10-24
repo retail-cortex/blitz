@@ -689,4 +689,11 @@ type HarnessConfig struct {
 	ReflectSchedule string `toml:"reflect_schedule"`
 	// MaxCostUSD stops a scheduled reflection that has cost this much.
 	MaxCostUSD float64 `toml:"max_cost_usd"`
+	// ReflectThreshold is the evidence's score that suggests /reflect: its
+	// patterns, the costly ones twice (default DefaultReflectThreshold; 0
+	// never suggests it).
+	ReflectThreshold int `toml:"reflect_threshold"`
 }
+
+// DefaultReflectThreshold is [harness] reflect_threshold's default.
+const DefaultReflectThreshold = 5

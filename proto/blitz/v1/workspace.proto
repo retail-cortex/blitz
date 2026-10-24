@@ -502,6 +502,10 @@ service WorkspaceService {
   // reflection proposed, for a welcome to suggest /reflect.
   rpc GetReflection(GetReflectionRequest) returns (GetReflectionResponse);
 
+  // Holds off the chat's suggestion to reflect (TurnEvent.reflect_due) for
+  // a week: its Not now (spec_harness_learning_048 HE-63).
+  rpc SnoozeReflection(SnoozeReflectionRequest) returns (SnoozeReflectionResponse);
+
   // Reads an image or a PDF from the workspace for a prompt
   // (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
@@ -2014,6 +2018,14 @@ message GetReflectionRequest {
   string workspace = 1;
 }
 
+// Request message for WorkspaceService.SnoozeReflection.
+message SnoozeReflectionRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.SnoozeReflection.
+message SnoozeReflectionResponse {}
+
 // Response message for WorkspaceService.GetReflection.
 message GetReflectionResponse {
   // How many items of the evidence since the last reflection are patterns
@@ -2021,6 +2033,10 @@ message GetReflectionResponse {
   int32 patterns = 1;
   // How many changes a scheduled reflection proposed, waiting for review.
   int32 proposals = 2;
+  // The patterns weighed, the costly ones twice, and the score that
+  // suggests /reflect ([harness] reflect_threshold; 0: never).
+  int32 score = 3;
+  int32 threshold = 4;
 }
 
 // Request message for WorkspaceService.ForgetNote.
@@ -3337,6 +3353,9 @@ message WorkspaceHealth {
   string reflect_schedule = 19;
   double reflect_max_cost_usd = 20;
   string reflect_skipped = 21;
+  // The evidence's score that suggests /reflect ([harness]
+  // reflect_threshold; 0: never) (HE-62).
+  int32 reflect_threshold = 22;
 }
 
 // How far a check going is.

@@ -467,6 +467,8 @@ var typedValues = map[string]string{
 	// Cost limits of the dashboard's and the reflector's schedules.
 	"health.max_cost_usd":  "usd",
 	"harness.max_cost_usd": "usd",
+	// When /reflect is suggested (spec_harness_learning_048 HE-62).
+	"harness.reflect_threshold": "int",
 	// Settings › Browser (spec_agent_browser_050 AB-02, spec_web_008 WEB-09).
 	"browser.show":         "show",
 	"web.browser_fallback": "bool",

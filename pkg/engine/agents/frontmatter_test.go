@@ -88,7 +88,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 		assert.Contains(t, reflect.Tools, tool)
 	}
 	assert.NotContains(t, reflect.Tools, "run_shell_command")
-	for _, want := range []string{".agents/EXPERIENCE.md", "`## How to work`", "`## This project`", "`@EXPERIENCE.md`", "multi_select", "at most five", "60 entries", "Write only what was chosen"} {
+	for _, want := range []string{".agents/EXPERIENCE.md", "`## How to work`", "`## This project`", "`@EXPERIENCE.md`", "multi_select", "at most five", "60 entries", "Write only what was chosen", "then worked", "never guess the fix", "`.agents/scripts/`", "`scratch_script`"} {
 		assert.Contains(t, reflect.SystemPrompt, want)
 	}
 

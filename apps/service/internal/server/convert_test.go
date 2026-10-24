@@ -37,6 +37,15 @@ func TestNoticeEvent(t *testing.T) {
 	}
 }
 
+// The chat's suggestion to reflect goes to clients as its own event (HE-63).
+func TestReflectDueEvent(t *testing.T) {
+	got := eventMsg(api.Event{Reflect: &api.ReflectDue{Patterns: 6, Score: 8}})
+	k, ok := got.Kind.(*pb.TurnEvent_ReflectDue)
+	require.True(t, ok, "kind %T", got.Kind)
+	assert.Equal(t, int32(6), k.ReflectDue.Patterns)
+	assert.Equal(t, int32(8), k.ReflectDue.Score)
+}
+
 // The engine's values become the API's messages field for field; values
 // the engine leaves out stay unset.
 func TestConversions(t *testing.T) {

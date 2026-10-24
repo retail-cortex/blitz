@@ -91,6 +91,10 @@ type harnessState struct {
 	LastScheduled time.Time `json:"last_scheduled,omitzero"`
 	Skipped       string    `json:"skipped,omitempty"`
 	LastCost      float64   `json:"last_cost,omitempty"`
+	// Nudged is when a chat last suggested /reflect, and Snoozed until
+	// when its Not now holds that off (HE-63).
+	Nudged  time.Time `json:"nudged,omitzero"`
+	Snoozed time.Time `json:"snoozed,omitzero"`
 }
 
 // harnessStateMu serializes changes to the harness states.
@@ -136,6 +140,7 @@ func (w *Workspace) reflected(start time.Time) {
 	w.updateHarnessState(func(st *harnessState) {
 		st.LastReflect = start
 		st.Proposals, st.Proposed = nil, time.Time{}
+		st.Nudged, st.Snoozed = time.Time{}, time.Time{}
 	})
 }
 
@@ -333,7 +338,8 @@ func (w *Workspace) Reflection() (api.Reflection, error) {
 		return api.Reflection{}, nil
 	}
 	r := api.Reflection{Proposals: len(w.harnessState().Proposals)}
-	r.Patterns = w.cachedEvidence(w.reflectSince()).Patterns()
+	ev := w.cachedEvidence(w.reflectSince())
+	r.Patterns, r.Score, r.Threshold = ev.Patterns(), ev.Score(), w.cfg.Harness.ReflectThreshold
 	return r, nil
 }
 
@@ -471,6 +477,53 @@ func (w *Workspace) ScheduledReflect(ctx context.Context) error {
 		}
 	})
 	return err
+}
+
+// The chat's suggestion to reflect (HE-63): said at most once a day, held
+// off a week by Not now, and the evidence weighed for it at most every
+// reflectRecheck, since every turn changes the audit log.
+const (
+	reflectNudgeEvery = 24 * time.Hour
+	reflectSnooze     = 7 * 24 * time.Hour
+	reflectRecheck    = 10 * time.Minute
+)
+
+// offerReflect says at the end of a chat turn, through on, that the
+// evidence's score has reached the threshold: time to /reflect. It only
+// offers; reflecting stays the person's choice.
+func (w *Workspace) offerReflect(on func(api.Event), now time.Time) {
+	st := w.harnessState()
+	if now.Before(st.Snoozed) || now.Sub(st.Nudged) < reflectNudgeEvery {
+		return
+	}
+	w.evidenceMu.Lock()
+	recent := now.Sub(w.reflectChecked) < reflectRecheck
+	if !recent {
+		w.reflectChecked = now
+	}
+	w.evidenceMu.Unlock()
+	if recent {
+		return
+	}
+	r, err := w.Reflection()
+	if err != nil || r.Threshold <= 0 || r.Score < r.Threshold {
+		return
+	}
+	say := false
+	w.updateHarnessState(func(st *harnessState) {
+		if say = now.Sub(st.Nudged) >= reflectNudgeEvery && !now.Before(st.Snoozed); say {
+			st.Nudged = now
+		}
+	})
+	if say {
+		on(api.Event{Reflect: &api.ReflectDue{Patterns: r.Patterns, Score: r.Score}})
+	}
+}
+
+// SnoozeReflection holds off the chat's suggestion to reflect for a week
+// from now: its Not now (HE-63).
+func (w *Workspace) SnoozeReflection(now time.Time) {
+	w.updateHarnessState(func(st *harnessState) { st.Snoozed = now.Add(reflectSnooze) })
 }
 
 // isReflect reports whether a command turn's text runs /reflect.

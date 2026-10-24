@@ -72,6 +72,10 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 			w.warn(rerr.Error())
 		}
 	}
+	if err == nil && !t.Command && !t.Aside && tools.Attended(ctx) {
+		// Time to learn from the runs? Said in the chat (HE-63).
+		w.offerReflect(on, time.Now())
+	}
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	w.auditTurnEnd(sessionID, err)
 	// A long turn's end is worth telling you about (spec_parity_027

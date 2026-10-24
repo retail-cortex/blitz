@@ -55,6 +55,7 @@ import {
   mdiProgressClock,
   mdiRobotOutline,
   mdiCalendarClock,
+  mdiHeadLightbulbOutline,
   mdiShieldAlertOutline,
   mdiStop,
   mdiUndoVariant,
@@ -92,6 +93,7 @@ import {
   openSettings,
   showPendingEvent,
   showView,
+  startReflect,
   takePendingCompose,
   takePendingLoad,
   type AddToContextDetail,
@@ -940,7 +942,11 @@ export function Conversation({
                 )}
               </div>
             ) : (
-              <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
+              g.entry.kind === "reflect" ? (
+                <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
+              ) : (
+                <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
+              )
             ),
           )}
           {running && !pending && (
@@ -1179,6 +1185,8 @@ const EntryView = memo(function EntryView({
       return <Thought text={entry.text} open={entry.open} />;
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
+    case "reflect":
+      return null; // a ReflectCard, drawn with the workspace
     case "notice":
       return entry.markdown ? (
         <div className={`notice card ${entry.tone}`}>
@@ -1517,6 +1525,50 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
  * paused until it's reviewed, with Review (Studio › Jobs, its details) and
  * Enable here; once enabled, when it next runs.
  */
+/**
+ * The chat's suggestion to reflect (spec_harness_learning_048 HE-63): the
+ * runs since the last reflection hit the same problems. Reflect runs
+ * /reflect in a new chat; Not now holds the suggestion off for a week.
+ */
+function ReflectCard({ dir, patterns }: { dir: string; patterns: number }) {
+  const snack = useSnackbar();
+  const [done, setDone] = useState(false);
+  if (done) return null;
+  const later = async () => {
+    try {
+      await workspaces.snoozeReflection({ workspace: dir });
+      setDone(true);
+      snack(t("desktop.reflectcard.snoozed"));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <div className="card task-card">
+      <div className="row">
+        <Icon path={mdiHeadLightbulbOutline} size="sm" />
+        <span style={{ flex: 1 }}>
+          <b>{t("desktop.suggest.reflect")}</b>
+          <span className="t-body-sm muted"> · {tn("desktop.suggest.reflect_detail", patterns)}</span>
+        </span>
+        <Button small onClick={() => void later()}>
+          {t("desktop.reflectcard.not_now")}
+        </Button>
+        <Button
+          small
+          variant="filled"
+          onClick={() => {
+            setDone(true);
+            startReflect(dir);
+          }}
+        >
+          {t("desktop.reflectcard.reflect")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function JobCard({ dir, name }: { dir: string; name: string }) {
   const snack = useSnackbar();
   const [job, setJob] = useState<Worker>();

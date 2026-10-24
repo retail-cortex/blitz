@@ -215,6 +215,11 @@ func (p *Printer) Handle(ev api.Event) {
 		p.flushText()
 		fmt.Fprint(p.out, FormatTasks(ev.Tasks))
 		p.spin.Start(i18n.T("spinner.working"))
+	case ev.Reflect != nil:
+		p.spin.Stop()
+		p.flushText()
+		fmt.Fprintf(p.out, "%s%s%s\n", Dim, i18n.N("repl.reflect_hint", ev.Reflect.Patterns), Reset)
+		p.spin.Start(i18n.T("spinner.working"))
 	case ev.Notice != nil:
 		p.spin.Stop()
 		p.flushText()

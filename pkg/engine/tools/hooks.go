@@ -224,6 +224,10 @@ func Unattended(ctx context.Context, decide api.Approver) context.Context {
 	return context.WithValue(ctx, unattendedKey{}, decide)
 }
 
+// Attended reports whether someone can answer in ctx: not an unattended
+// run or a background task.
+func Attended(ctx context.Context) bool { return !isUnattended(ctx) }
+
 // isUnattended reports whether ctx is an unattended run, or a background
 // task: nobody can answer a question.
 func isUnattended(ctx context.Context) bool {

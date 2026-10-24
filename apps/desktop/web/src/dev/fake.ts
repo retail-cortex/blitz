@@ -470,6 +470,8 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   }
   s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 4, input: s.usage.input + 9120n, output: s.usage.output + 812n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0061 });
   sess.messageCount = sess.messages.length;
+  // ?reflectdue: the turn says it's time to /reflect (HE-63).
+  if (new URLSearchParams(location.search).has("reflectdue")) yield ev({ case: "reflectDue", value: { patterns: 6, score: 8 } });
   yield ev({ case: "finished", value: { before, after: s.usage } });
 }
 
@@ -1163,6 +1165,7 @@ const fakeHealth: WorkspaceHealth = create(WorkspaceHealthSchema, {
   at: ago(0),
   overall: 3.9,
   previousOverall: 3.6,
+  reflectThreshold: 5,
   byKind: { agent: 4.2, skill: 3.4, rule: 4.6, guardrail: 4.8, eval: 3.1, workflow: 3.3, worker: 4.0 },
   lastCheck: ago(60 * 9),
   lastCostUsd: 0.034,
@@ -2128,6 +2131,7 @@ export function installFake() {
           await sleep(150);
           return fakeSuggestions(workspace);
         },
+        snoozeReflection: () => ({}),
         listCommands: () => ({
           commands: [
             { name: "setup", description: "Set up the agent harness: .agents/AGENTS.md, skills and agents", source: "bundled" },
