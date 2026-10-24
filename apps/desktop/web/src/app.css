@@ -303,9 +303,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .progress-bar span { display: block; height: 100%; background: var(--md-primary); border-radius: 2px; transition: width 0.3s; }
 .task-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
 .task-items li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.task-items li.done { color: var(--md-on-surface-variant); text-decoration: line-through; }
+.task-items li.done { color: var(--md-on-surface-variant); }
+.task-items li.done > span:not(.task-time) { text-decoration: line-through; }
 .task-items li.done .icon { color: var(--md-tertiary); }
 .task-items li.in_progress { font-weight: 500; }
+.task-items .task-time { margin-left: auto; font-size: 12px; font-weight: 400; }
 .task-items li.in_progress .icon { color: var(--md-primary); }
 
 .composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: box-shadow 0.2s; }

@@ -66,7 +66,7 @@ weight: 32
 - **BGA-31 Exiting.** The exit prompt counts running tasks alongside background processes, with the same kill, wait and cancel choices. Attached, they belong to the service and keep running after the client exits, as processes do, and the client lists only its own sessions' tasks.
 - **BGA-32 Idle notification.** A server stream, `WorkspaceService.WatchTasks(workspace, session_ids)`, carries events outside turns: first the sessions' active tasks and waiting requests, then `ready` (which also sends the response headers), then each task starting, waiting, running again or ending, each request waiting, and each request resolved. The desktop app follows it while a chat is open; a task that ends adds a notice, and with Settings › **Continue after background tasks** (a preference of the app, `task_continue`, off by default) it also starts a turn, "Background task task-3 has ended: carry on with its result.", when nothing runs. The REPL, which reads a line at a time, doesn't stream: it looks at its prompt (`ListTasks`, `ListTaskRequests`).
 - **BGA-33 Desktop app.**
-  - A background `invoke_agent` shows as a task card under its tool group (agent, state, runtime, cost, the prompt, **Show** and **Stop**), refreshed every 2 s until it ends ([spec_desktop_024](spec_desktop_024.md) DSK-80a).
+  - A background `invoke_agent` shows as a task card under its tool group (agent, state, runtime, cost, the prompt, **Show** and **Stop**), refreshed every 2 s until it ends; *2026-10-24 (v0.8.4):* its runtime is a clock (m:ss, h:mm:ss past an hour) that ticks each second while it runs ([spec_desktop_024](spec_desktop_024.md) DSK-80a).
   - A **Tasks** section in the run settings panel wasn't built: the cards and `/tasks` cover it.
 
 ## 7. Approvals

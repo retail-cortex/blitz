@@ -3446,7 +3446,6 @@
     "exit.tasks_running.other": "{count} tâches en arrière-plan toujours en cours :",
     "exit.tasks_stopped.one": "{count} tâche en arrière-plan arrêtée.",
     "exit.tasks_stopped.other": "{count} tâches en arrière-plan arrêtées.",
-    "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Afficher",
     "desktop.task.hide": "Masquer",
     "desktop.task.stop": "Arrêter",

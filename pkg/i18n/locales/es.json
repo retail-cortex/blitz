@@ -3446,7 +3446,6 @@
     "exit.tasks_running.other": "{count} tareas en segundo plano siguen en curso:",
     "exit.tasks_stopped.one": "Se detuvo {count} tarea en segundo plano.",
     "exit.tasks_stopped.other": "Se detuvieron {count} tareas en segundo plano.",
-    "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Mostrar",
     "desktop.task.hide": "Ocultar",
     "desktop.task.stop": "Detener",

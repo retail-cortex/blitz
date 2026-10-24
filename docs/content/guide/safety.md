@@ -11,7 +11,7 @@ File edits show a coloured diff before you approve them. Answer `y` for once, `s
 
 ## Plans and task lists
 
-In plan mode, with `/plan`, or when the agent chooses to plan first, it presents a plan for approval: approving it carries it out, and typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always`, `agent-decides` (the default) or `never`. For work with several steps, the agent keeps a task list, shown as a checklist that updates as it goes.
+In plan mode, with `/plan`, or when the agent chooses to plan first, it presents a plan for approval: approving it carries it out, and typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always`, `agent-decides` (the default) or `never`. For work with several steps, the agent keeps a task list, shown as a checklist that updates as it goes; in the desktop app each item shows how long it has been running, and once done, how long it took. A background agent's card shows its running time the same way.
 
 ## Permission modes
 

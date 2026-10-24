@@ -3446,7 +3446,6 @@
     "exit.tasks_running.other": "{count} background tasks still running:",
     "exit.tasks_stopped.one": "Stopped {count} background task.",
     "exit.tasks_stopped.other": "Stopped {count} background tasks.",
-    "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Show",
     "desktop.task.hide": "Hide",
     "desktop.task.stop": "Stop",

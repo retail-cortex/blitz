@@ -107,7 +107,8 @@ import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
-import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
+import { taskTimes, useNow, type TaskTime } from "./taskTimes";
+import { acceptAttribute, acceptedAs, clock, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -1477,6 +1478,7 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
     const timer = setInterval(load, 2000);
     return () => clearInterval(timer);
   }, [runningNow, gone, load]);
+  const now = useNow(runningNow && !gone);
   if (gone) return null;
   const stop = async () => {
     try {
@@ -1486,15 +1488,15 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
       snack(message(e));
     }
   };
-  const started = task?.started ? timestampDate(task.started).getTime() : Date.now();
-  const ended = task?.ended ? timestampDate(task.ended).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((ended - started) / 1000));
+  const started = task?.started ? timestampDate(task.started).getTime() : now;
+  const ended = task?.ended ? timestampDate(task.ended).getTime() : now;
+  const seconds = Math.max(0, (ended - started) / 1000);
   return (
     <div className={`card task-card ${task?.state ?? "running"}`}>
       <div className="row">
         <Icon path={mdiRobotOutline} size="sm" />
         <span className="ellipsis" style={{ flex: 1 }}>
-          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · {t("desktop.task.runtime", { seconds })}
+          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · <span className="mono">{clock(seconds)}</span>
           {task?.usage?.costUsd ? ` · $${task.usage.costUsd.toFixed(2)}` : ""}
         </span>
         {runningNow && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
@@ -1731,11 +1733,18 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
   );
 }
 
+// How long a task list item has run, or ran, as m:ss.
+const ranFor = (time: TaskTime, now: number) => clock(((time.end ?? now) - time.start) / 1000);
+
 function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void }) {
   const done = tasks.filter((x) => x.status === "done").length;
   const allDone = done === tasks.length;
   const [open, setOpen] = useState(true);
   useEffect(() => setOpen(!allDone), [allDone]); // folds itself once every task is done
+  // How long each item has run (in progress, ticking) or ran (done).
+  const [times, setTimes] = useState<Map<string, TaskTime>>(new Map());
+  useEffect(() => setTimes((prev) => taskTimes(prev, tasks, Date.now())), [tasks]);
+  const now = useNow(tasks.some((x) => x.status === "in_progress"));
   return (
     <div className="tasks card outlined">
       <div className="row">
@@ -1759,6 +1768,7 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
             <li key={i} className={task.status}>
               <Icon path={task.status === "done" ? mdiCheckboxMarked : task.status === "in_progress" ? mdiProgressClock : mdiCheckboxBlankOutline} size="sm" className={task.status === "in_progress" ? "pulse" : ""} />
               <span>{task.content}</span>
+              {times.has(task.content) && <span className="muted mono task-time">{ranFor(times.get(task.content)!, now)}</span>}
             </li>
           ))}
         </ul>
