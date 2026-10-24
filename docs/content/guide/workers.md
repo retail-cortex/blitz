@@ -78,7 +78,7 @@ Nobody is there to approve anything, so a job gets exactly the permissions it li
 | Permission | Allows |
 |---|---|
 | `shell:go test ./...` | That command (a `*` glob matches any words) |
-| `write:reports/` | Writing files under a path (`*` doesn't cross `/`) |
+| `write:reports/` or `write:reports/**` | Writing files anywhere under `reports/`, in folders too (`*` alone stays in one folder: `write:reports/*` is only the files directly in it) |
 | `delete:tmp/*.log` | Deleting matching files |
 | `web:api.github.com` | Fetching from that host (or using that search provider) |
 | `mcp:github:create_*` | That MCP server's matching tools |
