@@ -177,8 +177,8 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
    limits; plus `list_jobs`. The agent drafts and shows the job first
    (schedule's next runs, permissions) and creates it on approval.
    Created paused, as the New Job dialog does ("review and enable"),
-   with a card in the chat to **Review** / **Enable**. Open question
-   (e) below. Spec: spec_workers_023.
+   with a card in the chat to **Review** / **Enable**. Paused for review
+   (decision e below). Spec: spec_workers_023.
 10. **"May do without asking" as a rule builder (M).** The New Job
     dialog's free-form box (`desktop.newworker.permissions`, "one
     kind:pattern a line") becomes rows: a kind select (**Run
@@ -228,14 +228,40 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
     Settings › Git has **Protect against committing keys**. New spec
     (spec_secret_hooks_051).
 
-**Order of work:** 1 (done) → 2 → 6 and 7 (quick, and 7 feeds the hook)
-→ 9–12 together (one spec, the jobs editor) → 8 → 13 → 3 → 5 → 4.
+14. **Support scripts and a scratch folder in the harness (S–M).**
+    project-setup (`pkg/engine/agents/builtin/project-setup.md`)
+    writes specs, instruction files, skills, agents and rules, but no
+    scripts, and nothing says where an agent's working files go.
+    - `.agents/scripts/` (versioned): scripts that support the
+      project, proposed from the survey and the answers like the skills
+      step (up to five, shown with one `multi_select` before writing):
+      setting up, fetching or refreshing data, checks, releases. Each
+      starts with a comment saying what it does, how to run it and what
+      it needs, and is executable. `.agents/AGENTS.md` lists them under
+      **Scripts**, so every agent knows them, and skills call them
+      instead of repeating their steps. Setup writes them and never
+      runs them (its rule stays: only `git rev-parse` and `git init`);
+      they run later with the usual approvals.
+    - `.agents/scratch/` (ignored by git): where agents put
+      intermediate files (downloads, drafts, test data, notes) instead
+      of `/tmp` or the workspace root. It ignores itself
+      (`.agents/scratch/.gitignore` holding `*`), so it works in a
+      repository that already exists and whatever the root
+      `.gitignore` says. The blitz agent's instructions say so when
+      the folder exists (the engine adds the line), and auto-add and
+      Add all leave it out (7).
+    - harness-update adds both to a harness that lacks them; the
+      setup's summary names them. Specs: the harness spec
+      (spec_harness_learning_048 or the setup's), the user guide's
+      harness page.
 
-**Open questions for the owner:** (e) A job the agent creates from the
-chat: paused for review like the dialog's, or enabled at once after
-the approval in the chat? (f) The key-scanning hook: versioned in
-`.githooks/` (collaborators get it) or only in `.git/hooks` (this
-clone)?
+**Order of work:** 1 (done) → 2 → 6 and 7 (quick, and 7 feeds the hook)
+→ 9–12 together (one spec, the jobs editor) → 8 → 13 and 14 (both in
+the harness setup) → 3 → 5 → 4.
+
+**Decided (owner, 2026-10-23):** (e) a job the agent creates from the
+chat is paused for review, with **Enable** in the chat's card; (f) the
+key-scanning hook is versioned in `.githooks/`.
 
 **Research: Chromium profiles (2026-10-23).**
 - What exists: the web preview's `persist:preview` partition
