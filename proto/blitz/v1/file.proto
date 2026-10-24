@@ -406,6 +406,8 @@ message FindFilesRequest {
   // Also the folders the files are in, with a trailing slash (for @
   // mentions).
   bool folders = 4;
+  // Only files with these extensions ("png", any case); none: every file.
+  repeated string extensions = 5;
 }
 
 // Response message for FileService.FindFiles.

@@ -55,7 +55,7 @@ import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEn
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { dropEntries, importDrop, readDrop, someNames, type DropItem, type OnConflict } from "./upload";
-import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+import { ancestors, dragType, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 import { useAdvanced } from "../state";
 
 const gitIcons: Record<GitAction, string> = {
@@ -72,8 +72,6 @@ const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted:
 /** p with forward slashes, to compare a path on Windows with the workspace's. */
 const slashes = (p: string) => p.replace(/\\/g, "/");
 
-/** The drag data type of a path dragged in the tree. */
-const dragType = "application/x-blitz-path";
 
 /** How long a drag rests on a closed folder before it opens. */
 const dragOpenMs = 600;

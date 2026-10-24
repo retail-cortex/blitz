@@ -2633,14 +2633,18 @@ export function installFake() {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
           return {};
         },
-        findFiles: ({ query, folders, limit }) => {
+        findFiles: ({ query, folders, limit, extensions }) => {
           const q = query.toLowerCase().replace(/\s/g, "");
           const match = (p: string) => {
             let i = 0;
             for (const c of p.toLowerCase()) if (c === q[i]) i++;
             return i === q.length;
           };
-          const all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
+          let all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
+          if (extensions.length > 0) {
+            all = all.filter((p) => extensions.some((e) => p.toLowerCase().endsWith("." + e.replace(/^\./, "").toLowerCase())));
+            folders = false;
+          }
           if (folders) for (const p of [...all]) for (let d = p.slice(0, p.lastIndexOf("/")); d; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) if (!all.includes(d + "/")) all.push(d + "/");
           return { paths: all.filter(match).sort((a, b) => a.length - b.length).slice(0, limit || 50) };
         },

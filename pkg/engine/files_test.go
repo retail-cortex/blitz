@@ -229,7 +229,7 @@ func TestUserEditsReachTheNextTurn(t *testing.T) {
 
 func TestFindFiles(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Sandbox.BlockedPaths = []string{"*.pem"} })
-	for _, p := range []string{"internal/cart/discount.go", "internal/cart/discount_test.go", "docs/discounts.md", "cmd/shop/main.go", ".hidden/x.go", "key.pem"} {
+	for _, p := range []string{"internal/cart/discount.go", "internal/cart/discount_test.go", "docs/discounts.md", "cmd/shop/main.go", ".hidden/x.go", "key.pem", "docs/shot.PNG", "img/logo.svg", "img/notes.txt"} {
 		write(t, w.Dir(), p, "x")
 	}
 	got, err := w.FindFiles(context.Background(), "discount", 10)
@@ -252,6 +252,10 @@ func TestFindFiles(t *testing.T) {
 	assert.NotContains(t, all, ".hidden/", "hidden folders found: %v", all)
 	files, _ := w.FindFiles(context.Background(), "cart", 10)
 	assert.NotContains(t, files, "internal/cart/", "FindFiles gave a folder: %v", files)
+
+	// Only some extensions (the image picker's), any case, never folders.
+	pics, _ := w.FindPaths(context.Background(), "", 100, true, "png", ".svg")
+	assert.ElementsMatch(t, []string{"docs/shot.PNG", "img/logo.svg"}, pics)
 }
 
 func TestUserPath(t *testing.T) {

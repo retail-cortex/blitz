@@ -122,3 +122,6 @@ export function ancestors(path: string): string[] {
   const parts = path.split("/");
   return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
 }
+
+/** The drag data type of a workspace path dragged from the tree (the editor takes it too). */
+export const dragType = "application/x-blitz-path";
