@@ -969,6 +969,10 @@ const UserAgentsDir = "~/.blitz/agents"
 // ProjectAgentsDir holds a workspace's agents, relative to it.
 const ProjectAgentsDir = ".agents/agents"
 
+// ProjectScratchDir is a workspace's scratch folder for the agents'
+// working files, relative to it; git ignores it (its own .gitignore).
+const ProjectScratchDir = ".agents/scratch"
+
 // AgentSearchPaths returns directories to scan for user-defined agents,
 // resolved like SkillSearchPaths: the user's, then the workspace's.
 func (c *Config) AgentSearchPaths(workspace string) []string {

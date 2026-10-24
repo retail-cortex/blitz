@@ -107,6 +107,56 @@ func TestNewFilesGoToGit(t *testing.T) {
 	}
 }
 
+// Files a turn's commands made (not the agent's file tools) go to git at
+// its end too: those untracked that weren't there when it started, without
+// what git ignores, scratch files or .agents/scratch.
+func TestFilesCommandsMadeGoToGit(t *testing.T) {
+	needGit(t)
+	tests := []struct {
+		name   string
+		off    bool
+		staged string
+	}{
+		{"auto_add on", false, "gen/client.go\npyproject.toml"},
+		{"auto_add off", true, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Git.AutoAdd = !tt.off })
+			ctx := context.Background()
+			dir := w.Dir()
+			gitOut(t, dir, "init", "-q")
+			write(t, dir, ".gitignore", "*.log\n")
+			write(t, dir, "before.txt", "untracked before the turn\n")
+			before := w.untrackedNow(ctx)
+			if tt.off {
+				assert.Nil(t, before, "nothing listed with auto_add off")
+			}
+			// What `uv init` or a generator would leave.
+			write(t, dir, "pyproject.toml", "[project]\n")
+			write(t, dir, "gen/client.go", "package gen\n")
+			write(t, dir, "build.log", "ignored\n")
+			write(t, dir, "notes.tmp", "temporary\n")
+			write(t, dir, ".agents/scratch/draft.md", "scratch\n")
+			write(t, dir, "web/node_modules/x/index.js", "build output\n")
+			write(t, dir, ".venv/lib/site.py", "an environment\n")
+			var notices []string
+			w.stageCreated(ctx, "s", before, func(e api.Event) {
+				if e.Notice != nil {
+					notices = append(notices, e.Notice.Text)
+				}
+			})
+			assert.Equal(t, tt.staged, gitOut(t, dir, "diff", "--cached", "--name-only"))
+			if tt.staged != "" {
+				require.Len(t, notices, 1)
+				assert.Contains(t, notices[0], "gen/client.go, pyproject.toml")
+			} else {
+				assert.Empty(t, notices)
+			}
+		})
+	}
+}
+
 // The Files view's git actions: stage, unstage, discard and ignore.
 func TestGitFileAction(t *testing.T) {
 	needGit(t)
@@ -158,8 +208,44 @@ func TestGitFileAction(t *testing.T) {
 	assert.Equal(t, "/build/\n/f.txt\n", string(ignore), "anchored, a folder with /, each once")
 
 	assert.ErrorIs(t, w.GitFileAction(ctx, "../outside", GitStage), ErrBadPath)
-	assert.ErrorIs(t, w.GitFileAction(ctx, "", GitStage), ErrBadPath)
+	assert.ErrorIs(t, w.GitFileAction(ctx, "", GitDiscard), ErrBadPath, "the whole workspace only to include or leave out")
+	assert.ErrorIs(t, w.GitFileAction(ctx, "", GitIgnore), ErrBadPath)
 	assert.Error(t, w.GitFileAction(ctx, "f.txt", "push"))
+}
+
+// Include all changes: every change in the workspace, new files too,
+// what git ignores left out; and leaving them all out again.
+func TestIncludeAllChanges(t *testing.T) {
+	needGit(t)
+	w := openTest(t)
+	ctx := context.Background()
+	dir := w.Dir()
+	gitOut(t, dir, "init", "-q")
+	write(t, dir, ".gitignore", "*.log\n")
+	write(t, dir, "kept.txt", "one\n")
+	gitOut(t, dir, "add", ".")
+	gitOut(t, dir, "commit", "-qm", "init")
+	write(t, dir, "kept.txt", "two\n")
+	write(t, dir, "new/made-by-a-script.py", "print(1)\n")
+	write(t, dir, "run.log", "ignored\n")
+	require.NoError(t, os.Remove(filepath.Join(dir, ".gitignore")))
+	write(t, dir, ".gitignore", "*.log\n# changed\n")
+
+	for _, all := range []string{"", "."} {
+		require.NoError(t, w.GitFileAction(ctx, all, GitStage))
+		assert.Equal(t, ".gitignore\nkept.txt\nnew/made-by-a-script.py", gitOut(t, dir, "diff", "--cached", "--name-only"), "included with %q", all)
+		require.NoError(t, w.GitFileAction(ctx, all, GitUnstage))
+		assert.Empty(t, gitOut(t, dir, "diff", "--cached", "--name-only"), "left out with %q", all)
+	}
+}
+
+func TestInBuildDir(t *testing.T) {
+	for p, want := range map[string]bool{
+		"a.go": false, "src/builder.go": false, "docs/build.md": false,
+		"build/out.o": true, "web/node_modules/x/i.js": true, ".venv/lib/a.py": true, "pkg/__pycache__/a.pyc": true,
+	} {
+		assert.Equal(t, want, inBuildDir(p), p)
+	}
 }
 
 func TestIsTemporary(t *testing.T) {

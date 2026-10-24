@@ -52,8 +52,9 @@ service FileService {
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   // Runs a git action on a file or folder of the workspace: stage it,
   // unstage it, discard its changes (back to the last commit), or add it to
-  // the workspace's .gitignore or take it out again. Git runs with the
-  // repository's filter drivers and fsmonitor switched off.
+  // the workspace's .gitignore or take it out again; the path "" stages or
+  // unstages every change in the workspace (Include all changes). Git runs
+  // with the repository's filter drivers and fsmonitor switched off.
   // NOT_A_REPOSITORY outside one; IGNORED_ELSEWHERE when another rule
   // still ignores what's taken out (pattern and source in the metadata).
   rpc GitFileAction(GitFileActionRequest) returns (GitFileActionResponse);

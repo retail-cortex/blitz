@@ -764,6 +764,7 @@
     "desktop.commit.nothing": "No changes are included yet",
     "desktop.commit.nothing.detail": "Include files from the Files tree's menu, or include every change in the workspace and draft a message for all of it.",
     "desktop.commit.stage_all": "Include all changes",
+    "desktop.commit.included_all": "Included all changes in the next commit",
     "desktop.commit.staged.one": "{count} file included",
     "desktop.commit.staged.other": "{count} files included",
     "desktop.commit.status.added": "Added",

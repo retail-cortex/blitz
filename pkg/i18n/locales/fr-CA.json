@@ -764,6 +764,7 @@
     "desktop.commit.nothing": "Aucune modification n'est encore incluse",
     "desktop.commit.nothing.detail": "Incluez des fichiers depuis le menu de l'arborescence, ou incluez toutes les modifications de l'espace de travail et rédigez un message pour l'ensemble.",
     "desktop.commit.stage_all": "Inclure toutes les modifications",
+    "desktop.commit.included_all": "Toutes les modifications sont incluses dans le prochain commit",
     "desktop.commit.staged.one": "{count} fichier inclus",
     "desktop.commit.staged.other": "{count} fichiers inclus",
     "desktop.commit.status.added": "Ajouté",

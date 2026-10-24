@@ -764,6 +764,7 @@
     "desktop.commit.nothing": "Aún no hay cambios incluidos",
     "desktop.commit.nothing.detail": "Incluye archivos desde el menú del árbol de archivos, o incluye todos los cambios del espacio de trabajo y redacta un mensaje para todos.",
     "desktop.commit.stage_all": "Incluir todos los cambios",
+    "desktop.commit.included_all": "Todos los cambios se incluyen en el próximo commit",
     "desktop.commit.staged.one": "{count} archivo incluido",
     "desktop.commit.staged.other": "{count} archivos incluidos",
     "desktop.commit.status.added": "Añadido",

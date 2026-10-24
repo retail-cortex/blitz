@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
@@ -112,8 +113,14 @@ func (w *Workspace) GitFileAction(ctx context.Context, p string, action GitActio
 	if err != nil {
 		return err
 	}
-	if rel == "." || rel == "" {
+	// The whole workspace ("") only to include or leave out all of it
+	// (Include all changes).
+	all := rel == "." || rel == ""
+	if all && action != GitStage && action != GitUnstage {
 		return fmt.Errorf("%w: name a file or folder", ErrBadPath)
+	}
+	if all {
+		slash = "."
 	}
 	if !w.inRepository(ctx) {
 		return ErrNotARepository
@@ -214,37 +221,77 @@ func (w *Workspace) ignoredBy(ctx context.Context, slash string) *IgnoredElsewhe
 	return nil
 }
 
-// stageCreated adds the files the agent created in the session's turn to
-// git in one git add, when [git] auto_add is on and the workspace is in a
-// repository, and says so in the turn. Files git ignores, temporary files
-// and files gone by the turn's end are left out; files that existed before
-// (tracked or not) are left as they are.
-func (w *Workspace) stageCreated(ctx context.Context, sessionID string, on func(api.Event)) {
+// untrackedNow is the set of files git doesn't track or ignore in the
+// workspace, when [git] auto_add is on and it's a repository (nil
+// otherwise, or with more than maxWalked of them): what a turn's end
+// compares against to find the files its commands made.
+func (w *Workspace) untrackedNow(ctx context.Context) map[string]bool {
+	if !w.cfg.Git.AutoAdd || !w.inRepository(ctx) {
+		return nil
+	}
+	out, err := w.gitDo(ctx, nil, "ls-files", "--others", "--exclude-standard", "-z", "--", ".")
+	if err != nil {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			set[p] = true
+		}
+	}
+	if len(set) > maxWalked {
+		return nil
+	}
+	return set
+}
+
+// stageCreated adds the files the session's turn created to git in one git
+// add, when [git] auto_add is on and the workspace is in a repository, and
+// says so in the turn: those the agent wrote, and those that weren't there
+// before it (untracked, from untrackedNow at its start), such as a shell
+// command's, a generator's or a job's. Files git ignores, temporary files,
+// files under .agents/scratch and files gone by the turn's end are left
+// out; files that existed before (tracked or not) are left as they are.
+func (w *Workspace) stageCreated(ctx context.Context, sessionID string, before map[string]bool, on func(api.Event)) {
 	if !w.cfg.Git.AutoAdd {
 		return
 	}
 	created := w.tools.Checkpoints().Created(sessionID)
-	if len(created) == 0 {
+	ctx = context.WithoutCancel(ctx) // a stopped turn's files are added too
+	if len(created) == 0 && before == nil {
 		return
 	}
-	ctx = context.WithoutCancel(ctx) // a stopped turn's files are added too
 	if !w.inRepository(ctx) {
 		return
 	}
 	var paths []string
+	keep := func(slash string) {
+		if isTemporary(slash) || strings.HasPrefix(slash, config.ProjectScratchDir+"/") || slices.Contains(paths, slash) {
+			return
+		}
+		if info, err := os.Stat(filepath.Join(w.Dir(), filepath.FromSlash(slash))); err != nil || !info.Mode().IsRegular() {
+			return
+		}
+		paths = append(paths, slash)
+	}
 	for _, abs := range created {
 		rel, err := filepath.Rel(w.Dir(), abs)
 		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 			continue
 		}
-		slash := filepath.ToSlash(rel)
-		if isTemporary(slash) {
-			continue
+		keep(filepath.ToSlash(rel))
+	}
+	if before != nil {
+		var made []string
+		for p := range w.untrackedNow(ctx) {
+			if !before[p] && !inBuildDir(p) {
+				made = append(made, p)
+			}
 		}
-		if info, err := os.Stat(abs); err != nil || !info.Mode().IsRegular() {
-			continue
+		slices.Sort(made)
+		for _, p := range made {
+			keep(p)
 		}
-		paths = append(paths, slash)
 	}
 	if len(paths) == 0 {
 		return
@@ -280,6 +327,17 @@ var (
 	temporaryNames    = []string{".DS_Store", "Thumbs.db", "desktop.ini"}
 	temporaryDirs     = []string{"tmp", "temp", ".tmp", ".cache"}
 )
+
+// buildDirs hold what builds, installs and test runs make: a command's new
+// files there never go to git, even when no .gitignore says so (the
+// agent's own files are still judged by isTemporary alone).
+var buildDirs = []string{"node_modules", "dist", "build", "target", "out", "bin", "obj", "coverage", "__pycache__", ".venv", "venv", ".tox", ".nox", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".gradle", ".next", ".nuxt", ".turbo", ".parcel-cache"}
+
+// inBuildDir reports whether a workspace-relative path is under one of
+// buildDirs, at any depth.
+func inBuildDir(slash string) bool {
+	return slices.ContainsFunc(strings.Split(path.Dir(slash), "/"), func(d string) bool { return slices.Contains(buildDirs, d) })
+}
 
 // isTemporary reports whether a workspace-relative path looks like a
 // scratch file.

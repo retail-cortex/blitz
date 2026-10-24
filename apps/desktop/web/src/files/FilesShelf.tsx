@@ -38,6 +38,7 @@ import {
   mdiAt,
   mdiMessagePlusOutline,
   mdiMinusBoxOutline,
+  mdiPlusBoxMultipleOutline,
   mdiPlusBoxOutline,
   mdiSourceBranch,
   mdiSourceCommit,
@@ -46,6 +47,7 @@ import {
 } from "@mdi/js";
 import { canCall, canDragOut, droppedPaths, dragOut, fileManager, revealPath, trashDropped } from "../desktop";
 import { addToContext, showHistory } from "../events";
+import { includeAll } from "../includeAll";
 import { files } from "../api";
 import { message } from "../errors";
 import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
@@ -462,6 +464,18 @@ export function FilesShelf({
         { label: t("desktop.files.copy_path"), icon: mdiContentCopy, onSelect: () => void copy(absolute(e.path)) },
       );
       if (advanced) items.push({ label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) });
+    }
+    if (!e && advanced && repo) {
+      items.push("divider", { heading: t("desktop.files.git.heading") }, {
+        label: t("desktop.commit.stage_all"),
+        icon: mdiPlusBoxMultipleOutline,
+        onSelect: () =>
+          void includeAll(dir).then(
+            () => (snack(t("desktop.commit.included_all")), onChanged()),
+            (err: unknown) => snack(message(err), { error: true }),
+          ),
+      });
+      if (onCommit) items.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
     }
     if (manager !== null) {
       if (!e) items.push("divider");

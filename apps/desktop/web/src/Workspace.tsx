@@ -35,8 +35,10 @@ import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
+import { message } from "./errors";
 import { t } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
+import { includeAll } from "./includeAll";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -132,6 +134,13 @@ export function Workspace({
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const snack = useSnackbar();
+  // Include all changes, from the Changes menu: the tree and the Changes
+  // view see it.
+  const includeAllChanges = () =>
+    includeAll(dir).then(
+      () => (snack(t("desktop.commit.included_all")), setTouched((n) => n + 1)),
+      (e: unknown) => snack(message(e), { error: true }),
+    );
   const editor = useEditor(dir, {
     // A definition outside the workspace (the standard library, a module) can't open here.
     outside: (loc) => snack(t("desktop.files.definition_outside", { path: loc.path, line: loc.line })),
@@ -261,6 +270,7 @@ export function Workspace({
           dir={dir}
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
+          onIncludeAll={() => void includeAllChanges()}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
           onStudio={(kind) => (studio ? setStudioAsk((a) => ({ kind, n: a.n + 1 })) : setStudio({ kind }))}
           studioKind={studio ? studioKind : null}
