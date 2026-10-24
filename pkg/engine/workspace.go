@@ -330,6 +330,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
 	w.tools.SetBrowserProfile(w.browserProfile)
 	w.tools.SetAgentBrowserHost(w.openAgentBrowser)
+	w.tools.SetPageOpener(w.openPage)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}

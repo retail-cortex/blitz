@@ -42,6 +42,7 @@ type fakeWindow struct {
 	opened []api.AgentBrowserCommand
 	views  map[string]*websocket.Conn
 	refuse bool
+	pages  []string // the pages it was asked to show
 }
 
 func (f *fakeWindow) serve(ctx context.Context) {
@@ -81,9 +82,49 @@ func (f *fakeWindow) serve(ctx context.Context) {
 			if ws := f.views[c.BrowserID]; ws != nil {
 				ws.Close()
 			}
+		case "page", "external":
+			f.mu.Lock()
+			f.pages = append(f.pages, c.Kind+" "+c.URL)
+			f.mu.Unlock()
 		}
 		return nil
 	})
+}
+
+// A page the user asked to see (AB-10) goes to the newest window, as a
+// web tab or for the system's browser; no window, none to open it.
+func TestOpenPageInTheWindow(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	assert.ErrorIs(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded), ErrNoBrowserWindow)
+
+	win := &fakeWindow{t: t, w: w}
+	wctx, stop := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { win.serve(wctx); close(done) }()
+	require.Eventually(t, func() bool {
+		w.browsers.mu.Lock()
+		defer w.browsers.mu.Unlock()
+		return len(w.browsers.windows) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+	require.NoError(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded))
+	require.NoError(t, w.openPage(ctx, "https://example.com", tools.PageSystem))
+	require.Eventually(t, func() bool {
+		win.mu.Lock()
+		defer win.mu.Unlock()
+		return len(win.pages) == 2
+	}, 2*time.Second, 5*time.Millisecond)
+	assert.Equal(t, []string{"page https://github.com", "external https://example.com"}, win.pages)
+	stop()
+	<-done
+
+	// A window that stopped reading: the call's context ends the wait.
+	w.browsers.mu.Lock()
+	w.browsers.windows = []*browserWindow{{send: make(chan api.AgentBrowserCommand)}}
+	w.browsers.mu.Unlock()
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	assert.ErrorIs(t, w.openPage(cctx, "https://github.com", tools.PageEmbedded), context.Canceled)
 }
 
 // The agent's browser in the app (AB-01): with a window watching, the

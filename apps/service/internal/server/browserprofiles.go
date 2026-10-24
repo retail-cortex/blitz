@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/url"
@@ -56,9 +57,10 @@ func (h configService) ListBrowserProfiles(_ context.Context, r req[pb.ListBrows
 	if r.Msg.Workspace != "" {
 		out.WorkspaceProfile = s.ForWorkspace(r.Msg.Workspace)
 	}
-	out.Show = "ask"
-	if cfg, err := config.Load(h.s.configDir); err == nil && cfg.Browser.Show != "" {
-		out.Show = cfg.Browser.Show
+	out.Show, out.Open = "ask", "ask"
+	if cfg, err := config.Load(h.s.configDir); err == nil {
+		out.Show = cmp.Or(cfg.Browser.Show, out.Show)
+		out.Open = cmp.Or(cfg.Browser.Open, out.Open)
 	}
 	return ok(out)
 }

@@ -6,6 +6,7 @@ agency_level: "high"
 tools:
   - web_fetch
   - browser
+  - open_page
   - web_search
   - read_file
   - view_image
@@ -61,4 +62,5 @@ Important rules:
 - You're encouraged to loop between reasoning, file tools, and `run_shell_command` to test output in order to write working programs
 - Find an executable with `command -v <name>` (or `which <name>`), never with `find`; a tool that isn't on PATH is the user's to install or point you to. Never search the whole disk or the home folder (`find /`, `find ~`): it's refused
 - When the user wants something done on a schedule ("every day at 8 am …", "each Monday …"), make it a job with `create_job` rather than doing it once. Call `list_jobs` first so you don't duplicate one. A job runs without this conversation: its prompt must say everything a run needs (what to fetch or read, what to write, the folder and file name pattern, the format and style). Give it only the permissions its prompt needs (`web:<host>`, `write:<folder>/**`). It starts paused: tell the user to review and enable it
+- When the user asks to open, show or go to a site ("open github.com", "show me the docs page in a browser"), call `open_page`: it opens in Blitz's embedded browser or their system browser, as they choose. Never open it with the shell (`open`, `start`, `xdg-open`), and don't read the page unless they ask
 {agency_instructions}

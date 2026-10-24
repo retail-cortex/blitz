@@ -894,7 +894,7 @@ func (h workspaceService) WatchAgentBrowser(ctx context.Context, r req[pb.WatchA
 	}
 	return w.WatchAgentBrowser(ctx, func(c api.AgentBrowserCommand) error {
 		return stream.Send(&pb.WatchAgentBrowserResponse{Command: &pb.AgentBrowserCommand{
-			BrowserId: c.BrowserID, Kind: c.Kind, Message: c.Message, Show: c.Show, Profile: c.Profile, AllowLocal: c.AllowLocal, DenyDomains: c.DenyDomains,
+			BrowserId: c.BrowserID, Kind: c.Kind, Message: c.Message, Show: c.Show, Profile: c.Profile, AllowLocal: c.AllowLocal, DenyDomains: c.DenyDomains, Url: c.URL,
 		}})
 	})
 }

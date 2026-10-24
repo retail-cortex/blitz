@@ -72,6 +72,7 @@ type Registry struct {
 	rules    *PermissionRules
 
 	browser *browserTool // nil: no browser tool
+	page    pageTool     // open_page (spec_agent_browser_050 AB-10)
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
 
 	mediaMu    sync.RWMutex
@@ -366,6 +367,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	}
 	r.fetch = cfg.Web.Enabled
 	r.webOn = cfg.Web.Enabled
+	r.page.open = cfg.Browser.Open
 	r.web = WebFetchConfig{
 		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
 		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
@@ -494,6 +496,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if r.tools["list_jobs"], err = NewListJobsTool(r); err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the list_jobs tool: %w", err)
+	}
+	if r.tools["open_page"], err = NewOpenPageTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the open_page tool: %w", err)
 	}
 	if r.tools["install_secret_hook"], err = NewInstallSecretHookTool(r); err != nil {
 		r.Close()

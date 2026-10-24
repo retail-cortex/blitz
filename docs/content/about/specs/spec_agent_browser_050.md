@@ -9,7 +9,7 @@ weight: 50
 |---|---|
 | Status | **Built** (v0.8.4, the owner's request: "I like the idea of the agent driving the built-in browser, but it should offer to do it silently") |
 | Source | `pkg/engine/browser` (`Transport`, `AttachTransport`, `Options.KeepViewport`), `pkg/engine/agentbrowser.go` (the windows and the relays), `pkg/engine/tools/browser.go` (`show`, the view or Chrome), `AgentBrowserHost` in `pkg/engine/tools/registry.go`, `WorkspaceService.WatchAgentBrowser` and `AgentBrowserReply` (`apps/service/internal/server/workspace.go`); the page's `agentBrowserRelay.ts`, `Workspace.tsx`, `files/WebPreview.tsx` (the bar), `files/useEditor.ts` (`openAgentWeb`), `BrowserSettings.tsx`; the Electron app's `AgentBrowserOpen`, `AgentBrowserSend`, `AgentBrowserClose`, `AgentBrowserTakeOver` (`apps/electron/src/main.ts`, `logic.ts`) |
-| Tests | `pkg/engine/agentbrowser_test.go`, `pkg/engine/tools/browser_test.go` (`TestBrowserToolInTheApp`), `apps/desktop/web/src/agentBrowserRelay.test.ts`, `apps/electron/src/logic.test.ts` (the agent's view), `apps/service/internal/server/browserprofiles_test.go` (`browser.show`) |
+| Tests | `pkg/engine/agentbrowser_test.go`, `pkg/engine/tools/browser_test.go` (`TestBrowserToolInTheApp`), `apps/desktop/web/src/agentBrowserRelay.test.ts`, `apps/electron/src/logic.test.ts` (the agent's view), `apps/service/internal/server/browserprofiles_test.go` (`browser.show`, `browser.open`), `pkg/engine/tools/openpage_test.go` (AB-10–AB-12), `pkg/engine/agentbrowser_test.go` (`TestOpenPageInTheWindow`) |
 | Depends on | [spec_web_008](spec_web_008.md) (the browser tool, WEB-30–38), [spec_electron_038](spec_electron_038.md) (the window, EL-100 previews), [spec_browser_profiles_049](spec_browser_profiles_049.md) (profiles) |
 
 ## 1. Purpose
@@ -27,6 +27,14 @@ The `browser` tool drove a headless Chrome of its own: nothing to see, and none 
 - **AB-02** `browser.show` (your settings; Settings › Browser › **How the agent browses**): `watch`, `silent`, or `ask` (the default), which asks the first time the agent browses in a chat, **Watch it in a tab** or **Run silently**, and keeps the answer for the chat. Where no one can answer (a job's run), silently.
 - **AB-03** Watched: the view is a web tab (EL-100) in the workspace's editor, the page's own size (no viewport emulation, `KeepViewport`), with a bar saying Blitz is browsing: **Take over** lets the agent go (its browser closes, the tab stays yours) and **Stop** closes the view. Silent: the view is off screen (offscreen rendering), never shown.
 - **AB-04** The view uses the workspace's browser profile's partition (`persist:profile-<name>`, BP-05), so the sign-ins made with **Sign in…** apply; none, a session of its own in memory, gone with the view.
+
+## 3a. Pages you ask to see
+
+*v0.8.4, the owner's request (2026-10-24): "if a user asks to open a site in a browser, it should open it in the embedded browser first, or ask 'Embedded Browser' or 'System Browser'".*
+
+- **AB-10** `open_page(url)` (`pkg/engine/tools/openpage.go`; the blitz agent has it, and its prompt says to use it, never the shell's `open`, when the user asks to open, show or go to a site). It shows the page to the user and doesn't read it. Only `http` and `https` (a bare host gets `https://`), never a host `web.deny_domains` or a `deny web(...)` rule refuses; it needs no approval, since it reads nothing.
+- **AB-11** Where: `browser.open` (your settings; Settings › Browser › **Where pages you ask to open show**): `embedded`, a web tab of the app's (EL-100); `system`, the system's browser; or `ask` (the default), which asks the first time in a chat, **Embedded browser** (first) or **System browser**, and keeps the answer for the chat; no answer, the embedded browser.
+- **AB-12** It's carried on the same stream as the views (AB-01): the engine sends the newest window `page` (a web tab) or `external` (the system's browser, Electron's `openExternal`) with the URL, and the page opens it (no web tabs outside Electron: the system's browser). No window, or one that can't take it: the system's browser on the service's machine (`open`, `xdg-open`, `url.dll`). A run no one watches (a job's) opens nothing and says so.
 
 ## 4. Not in scope
 

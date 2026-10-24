@@ -17,9 +17,12 @@
 // The agent's browser in the desktop app (spec_agent_browser_050): the
 // page carries the service's commands for the window's views (open one,
 // a DevTools message, close it) to the window, and the views' messages
-// back, in order, a view at a time. A watched view shows as a tab.
+// back, in order, a view at a time. A watched view shows as a tab. A page
+// the user asked the agent to open shows in a web tab or the system's
+// browser (AB-10).
 import { workspaces } from "./api";
-import { agentBrowser } from "./desktop";
+import { agentBrowser, canPreview, openURL } from "./desktop";
+import { openWeb } from "./events";
 import type { AgentBrowserCommand } from "./gen/blitz/v1/workspace_pb";
 
 /** What the relay needs of the window and the service (replaced in tests). */
@@ -32,6 +35,8 @@ export interface RelayEnds {
   on: (event: "agentbrowser:message" | "agentbrowser:closed", f: (arg: unknown) => void) => () => void;
   /** Shows the watched view id as a tab. */
   showTab: (id: string) => void;
+  /** Opens a page the user asked to see (AB-10): in a web tab, or the system's browser when external. */
+  openPage: (url: string, external: boolean) => unknown;
 }
 
 /** The ends for workspace dir: the service's stream and the Electron window. */
@@ -44,6 +49,7 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     close: agentBrowser.close,
     on: agentBrowser.on,
     showTab,
+    openPage: (url, external) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url })),
   };
 }
 
@@ -93,6 +99,8 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
             void ends.send(c.browserId, c.message).catch((e: unknown) => {
               if (mine.delete(c.browserId)) void reply(c.browserId, [], true, e instanceof Error ? e.message : String(e));
             });
+          } else if (c.kind === "page" || c.kind === "external") {
+            ends.openPage(c.url, c.kind === "external");
           } else if (c.kind === "close") {
             mine.delete(c.browserId);
             void ends.close(c.browserId).catch(() => undefined);

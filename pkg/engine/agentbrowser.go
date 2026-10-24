@@ -188,6 +188,29 @@ func (w *Workspace) openAgentBrowser(ctx context.Context, o tools.AgentBrowserOp
 	}
 }
 
+// openPage has the newest window show u for the user (tools.PageOpener,
+// AB-10): in a web tab, or the system's browser.
+func (w *Workspace) openPage(ctx context.Context, u, where string) error {
+	h := &w.browsers
+	h.mu.Lock()
+	if len(h.windows) == 0 {
+		h.mu.Unlock()
+		return ErrNoBrowserWindow
+	}
+	win := h.windows[len(h.windows)-1]
+	h.mu.Unlock()
+	kind := "page"
+	if where == tools.PageSystem {
+		kind = "external"
+	}
+	select {
+	case win.send <- api.AgentBrowserCommand{Kind: kind, URL: u}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // push hands cmd to the window, unless the view or ctx ends first.
 func (r *browserRelay) push(ctx context.Context, cmd api.AgentBrowserCommand) error {
 	// Closed wins: a select of ready cases picks at random.

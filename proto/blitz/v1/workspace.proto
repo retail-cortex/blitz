@@ -3902,7 +3902,8 @@ message WatchAgentBrowserRequest {
 message AgentBrowserCommand {
   // The view's ID, the same in every command and reply.
   string browser_id = 1;
-  // open, message or close.
+  // open, message or close; or page (a web tab) or external (the system's
+  // browser), for a page the user asked to see, with url.
   string kind = 2;
   // A DevTools Protocol command, as JSON (message).
   string message = 3;
@@ -3914,6 +3915,8 @@ message AgentBrowserCommand {
   bool allow_local = 6;
   // Never reached (web.deny_domains).
   repeated string deny_domains = 7;
+  // The page to show, for page and external.
+  string url = 8;
 }
 
 // Response message for WorkspaceService.WatchAgentBrowser.

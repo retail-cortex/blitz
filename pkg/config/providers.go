@@ -471,6 +471,7 @@ var typedValues = map[string]string{
 	"harness.reflect_threshold": "int",
 	// Settings › Browser (spec_agent_browser_050 AB-02, spec_web_008 WEB-09).
 	"browser.show":         "show",
+	"browser.open":         "open",
 	"web.browser_fallback": "bool",
 }
 
@@ -516,6 +517,11 @@ func typedValue(kind, key, value string) (string, any, error) {
 	case "show":
 		if !slices.Contains(BrowserShows, value) {
 			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(BrowserShows, ", "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "open":
+		if !slices.Contains(BrowserOpens, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(BrowserOpens, ", "), value)
 		}
 		return strconv.Quote(value), value, nil
 	case "kinds":

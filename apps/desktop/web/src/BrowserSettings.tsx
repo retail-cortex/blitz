@@ -48,11 +48,13 @@ export function BrowserSettings() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState("");
   const [show, setShow] = useState("ask");
+  const [open, setOpen] = useState("ask");
   const load = useCallback(async () => {
     try {
       const r = await config.listBrowserProfiles({});
       setProfiles(r.profiles);
       setShow(r.show || "ask");
+      setOpen(r.open || "ask");
       setError("");
     } catch (e) {
       setError(message(e));
@@ -87,6 +89,18 @@ export function BrowserSettings() {
           ))}
         </select>
         <span className="t-body-sm muted">{t("desktop.browser.show_hint")}</span>
+      </label>
+      {/* Where a page you ask the agent to open shows (AB-10). */}
+      <label className="field">
+        <span className="t-label">{t("desktop.browser.open")}</span>
+        <select className="select" value={open} disabled={busy} onChange={(e) => void act(() => config.setConfigValue({ workspace: "", key: "browser.open", value: e.target.value }), t("desktop.browser.open_saved"))}>
+          {["ask", "embedded", "system"].map((v) => (
+            <option key={v} value={v}>
+              {t(`desktop.browser.open.${v}`)}
+            </option>
+          ))}
+        </select>
+        <span className="t-body-sm muted">{t("desktop.browser.open_hint")}</span>
       </label>
       <p className="t-body-sm muted">{t("desktop.browser.intro")}</p>
       {error && <p className="error-text">{error}</p>}

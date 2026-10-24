@@ -1036,6 +1036,8 @@ message ListBrowserProfilesResponse {
   string workspace_profile = 2;
   // browser.show: ask, watch or silent (spec_agent_browser_050).
   string show = 3;
+  // browser.open: ask, embedded or system (AB-10).
+  string open = 4;
 }
 
 // Request message for ConfigService.CreateBrowserProfile.

@@ -440,10 +440,18 @@ type BrowserConfig struct {
 	// screen; or "ask" (the default), the first time in each chat.
 	// Without the app, the headless browser.
 	Show string `toml:"show"`
+	// Open is where a page the user asks to open shows while the desktop
+	// app is open (AB-10): "embedded", a web tab of the app's; "system",
+	// the system's browser; or "ask" (the default), the first time in
+	// each chat. Without the app, the system's browser.
+	Open string `toml:"open"`
 }
 
 // BrowserShows are browser.show's values.
 var BrowserShows = []string{"ask", "watch", "silent"}
+
+// BrowserOpens are browser.open's values.
+var BrowserOpens = []string{"ask", "embedded", "system"}
 
 // LSPServerConfig is a language server: the command that runs it (over
 // stdio), and the file extensions it's for.
@@ -655,7 +663,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
-	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask"}
+	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask", Open: "ask"}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())

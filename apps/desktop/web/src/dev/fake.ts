@@ -2268,7 +2268,7 @@ export function installFake() {
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
         // Browser profiles (spec_browser_profiles_049), kept in the page.
-        listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask" }),
+        listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
         createBrowserProfile: ({ name }) => {
           if (fakeProfiles.some((p) => p.name === name)) throw new ConnectError(`a browser profile named "${name}" exists`, Code.InvalidArgument);
           const p = { name, created: now(), allowDomains: [] as string[] };

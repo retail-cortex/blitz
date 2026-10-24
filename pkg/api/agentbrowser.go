@@ -20,7 +20,9 @@ package api
 type AgentBrowserCommand struct {
 	// BrowserID names the view, the same in every command and reply.
 	BrowserID string
-	// Kind is "open", "message" or "close".
+	// Kind is "open", "message" or "close"; or, for a page the user asked
+	// to see (AB-10), "page" (a web tab) or "external" (the system's
+	// browser), with URL and no BrowserID.
 	Kind string
 	// Message is a DevTools Protocol command as JSON (Kind "message").
 	Message string
@@ -33,4 +35,6 @@ type AgentBrowserCommand struct {
 	// DenyDomains are never reached (web.deny_domains), for "open".
 	AllowLocal  bool
 	DenyDomains []string
+	// URL is the page to show, for "page" and "external".
+	URL string
 }

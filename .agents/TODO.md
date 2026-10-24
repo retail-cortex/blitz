@@ -57,8 +57,10 @@ The full suite with `--config=race` and coverage passed 2026-10-24
 (`ea0381e8`: lint, a flaky test, a test race, coverage 94.04%). Fast
 follows 2026-10-24: the setup and reflect tiles no longer wait for the
 command list (`793b42d2`); closing the reflection loop, HE-60–HE-63 (what
-worked, scratch reuse, a score and threshold, the chat's card). Next: the
-owner's manual test (`.agents/v0.8.4-test-script.md`, §8 new), the full
+worked, scratch reuse, a score and threshold, the chat's card); pages
+you ask to see open in the embedded or system browser, AB-10–AB-12
+(`open_page`, `browser.open`). Next: the owner's manual test
+(`.agents/v0.8.4-test-script.md`, §7.10 and §8 new), the full
 suite again, then one PR.
 
 Order: see **Order of work** below the list. 1 → 2 share the drop

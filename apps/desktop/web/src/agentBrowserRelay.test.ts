@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { AgentBrowserCommandSchema } from "./gen/blitz/v1/workspace_pb";
 import { openedMessage, runRelay, type RelayEnds } from "./agentBrowserRelay";
 
-const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[] }>) => ({ command: create(AgentBrowserCommandSchema, c) });
+const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[]; url: string }>) => ({ command: create(AgentBrowserCommandSchema, c) });
 
 /** Ends whose stream yields commands as they're pushed, recording what the relay did. */
 function fakeEnds(failOpen = false) {
@@ -55,6 +55,7 @@ function fakeEnds(failOpen = false) {
       return () => delete listeners[event];
     },
     showTab: (id) => void log.push(`tab ${id}`),
+    openPage: (url, external) => void log.push(`${external ? "external" : "page"} ${url}`),
   };
   return { ends, log, push, emit: (event: string, arg: unknown) => listeners[event]?.(arg), listening: () => Object.keys(listeners).length };
 }
@@ -118,6 +119,19 @@ describe("the agent's browser relay", () => {
     f.push(null);
     await done;
     expect(f.log).toEqual(["reply agent-4  closed: no window"]);
+  });
+
+  it("opens a page the user asked to see, in a web tab or the system's browser (AB-10)", async () => {
+    const f = fakeEnds();
+    const ctl = new AbortController();
+    const done = runRelay(f.ends, ctl.signal, 1);
+    f.push(cmd({ kind: "page", url: "https://github.com/" }));
+    f.push(cmd({ kind: "external", url: "https://example.com/" }));
+    await settle();
+    ctl.abort();
+    f.push(null);
+    await done;
+    expect(f.log).toEqual(["page https://github.com/", "external https://example.com/"]);
   });
 
   it("watches again when the stream ends (a service restart)", async () => {
