@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.2
-weight: 1
+weight: 2
 ---
 
 **A guide you can see.** Blitz 0.8.2 brings a new user guide that shows you every step. Setting up a provider, finding your way around Settings, building agents in Studio, connecting a database: each one is walked through with screenshots of the app itself, in light and dark to match how you work. And it's all inside Blitz too: **Help › User guide** opens it, offline, for the version you have.
