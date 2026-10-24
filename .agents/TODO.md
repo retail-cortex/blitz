@@ -163,31 +163,6 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
   global settings and `~/.blitz`, are never chosen by project
   settings, and `redact`/logs never print cookie values.
 
-6. **Option: drive the user's own Chrome (L, not yet decided).** How
-   others do it (2026-10-23):
-   - *Antigravity:* launches Chrome with its own persistent profile
-     (`--user-data-dir=~/.gemini/antigravity-browser-profile`,
-     `--remote-debugging-port=9222`) plus its "Browser Connector"
-     extension (`debugger`, `tabs` permissions), which gives the agent
-     a higher-level API (navigate, DOM, page readiness) over
-     `chrome.debugger`. Sign-ins last because the profile does; a
-     blue border marks the agent's control. That's Blitz's
-     `pkg/engine/browser` with a persistent profile, made visible.
-   - *Extension + native messaging* (Claude in Chrome, Codex's Chrome
-     control, OpenClaw, agent-browser): an MV3 extension in the user's
-     everyday Chrome talks to a local native-messaging host over
-     stdio and drives tabs with `chrome.debugger`. No debugging port
-     (Chrome 136+ ignores it on the default profile anyway), and the
-     user's real sign-ins work, Google's included, since it's real
-     Chrome. Costs: a Web Store extension, a native-host manifest per
-     browser and OS (registry keys on Windows), and an agent holding
-     every sign-in the user has: approvals per site, a tab group of
-     the agent's own.
-   - For Blitz: 4 + 5 cover most of it inside the app; this is the
-     path for sites that refuse embedded browsers.
-
-**Open question for the owner:** (d) Is 6 wanted, and in v0.8.4 or
-later?
 
 ### File tree: catching up with VS Code's Explorer
 
@@ -253,6 +228,28 @@ helper process (IMG-52).
 
 ## Waiting on something
 
+- **Drive the user's own Chrome (L), left out of v0.8.4 (owner, 2026-10-23).**
+  How others do it (2026-10-23):
+  - *Antigravity:* launches Chrome with its own persistent profile
+    (`--user-data-dir=~/.gemini/antigravity-browser-profile`,
+    `--remote-debugging-port=9222`) plus its "Browser Connector"
+    extension (`debugger`, `tabs` permissions), which gives the agent
+    a higher-level API (navigate, DOM, page readiness) over
+    `chrome.debugger`. Sign-ins last because the profile does; a
+    blue border marks the agent's control. That's Blitz's
+    `pkg/engine/browser` with a persistent profile, made visible.
+  - *Extension + native messaging* (Claude in Chrome, Codex's Chrome
+    control, OpenClaw, agent-browser): an MV3 extension in the user's
+    everyday Chrome talks to a local native-messaging host over
+    stdio and drives tabs with `chrome.debugger`. No debugging port
+    (Chrome 136+ ignores it on the default profile anyway), and the
+    user's real sign-ins work, Google's included, since it's real
+    Chrome. Costs: a Web Store extension, a native-host manifest per
+    browser and OS (registry keys on Windows), and an agent holding
+    every sign-in the user has: approvals per site, a tab group of
+    the agent's own.
+  - For Blitz: v0.8.4's items 4 and 5 cover most of it inside the app; this is the
+    path for sites that refuse embedded browsers.
 - **Claude on Vertex AI, live** (backlog BL-VER-04): needs Claude Opus
   quota in `rmcguinness-lab` (requested). Then BL-ENG-22: client-side
   refusal fallback on Vertex AI.
