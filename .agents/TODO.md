@@ -45,10 +45,12 @@ One branch, one PR. Each item updates its spec and its site pages in the
 same commit; targeted tests per item, the full suite with `--config=race`
 and `tools/coverage.sh` only before the push. Done so far: routing to
 global (`~/.blitz/agents`) and workspace (`.agents/agents`) sub-agents
-verified, by transfer and by `invoke_agent` (`f14f2547`).
+verified, by transfer and by `invoke_agent` (`f14f2547`); 1, drag and
+drop with the computer (`454a1e73`, to be tried in the app).
 
-Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
-5 share the Electron browser bridge, so 5's partitions land first.
+Order: see **Order of work** below the list. 1 → 2 share the drop
+plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
+5's partitions land first.
 
 1. **Drag and drop between the OS and the file tree (#70, M).**
    - *In:* `FilesShelf.tsx` `onDragOver` (~:271) also accepts
@@ -134,6 +136,106 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
    allowed domains; a domain outside them asks. Passkeys: handle
    `select-webauthn-account` (macOS Touch ID). New spec
    (spec_browser_profiles_049), WEB-30.
+
+6. **The status bar's branch toggles Changes (XS).** `StatusBar.tsx:129`
+   sends `showView({view: "changes"})`, which only opens. A second click
+   closes it: `ViewDetail.toggle`, and App's view handler closes the
+   view when it's the one shown. Same for the status bar's jobs button.
+   Spec: spec_desktop_024 (status bar).
+7. **Git: Add all, and created files caught (S–M).** Two parts:
+   - *Add all changes* (`git add --all`, .gitignore honoured) in the
+     Changes view's header and menu and the tree's background menu, at
+     any time (today only the commit dialog's **Include all changes**,
+     when nothing is staged, via `DraftCommit(stageAll)`). A
+     `StageAll` RPC in `pkg/engine/gitfiles.go`.
+   - *Why files are missed:* `[git] auto_add` (`stageCreated`,
+     `gitfiles.go:222`) adds only what the agent wrote with its file
+     tools (`Checkpoints().Created`). Files a shell command made (`uv
+     init`, a generator, a build), a job's, and dropped files never
+     are. Fix: list untracked files at the turn's start (`git ls-files
+     --others --exclude-standard`), again at its end, and add the new
+     ones (temporary files left out, as now). Specs: spec_files_029
+     FIL-59, the git settings' doc.
+8. **uv projects ask which layout (S–M).** A built-in skill
+   `python-uv` (`pkg/engine/skills/builtin/`, on by default, offered
+   to blitz and project-setup), triggered by "new Python project", "uv
+   init" and the like. Before running anything it asks (one
+   `ask_user_question`): **App** (`uv init --app`, a script-style
+   project), **Packaged app** (`--package`, `src/` layout, an entry
+   point), **Library** (`--lib`, `src/`, `py.typed`), **Single
+   script** (`uv init --script`, inline dependencies), or
+   **Workspace** (several packages, `[tool.uv.workspace]`); then Python
+   version, and test/lint tools (pytest, ruff). It never assumes a
+   flat project. Skill scenario tests (`skillscenarios.go`) for the
+   question being asked. Spec: spec_skills (built-in skills).
+9. **Jobs from the chat (M).** A `create_job` tool for the blitz agent
+   over `Workspace.CreateWorker` (`pkg/engine/workers.go:144`): name,
+   schedule in plain text (`ParseSchedule` already reads "every day at
+   8 am"), the job's prompt (with where and how it writes: the
+   folder, `month-day-year.html`, the style), its permissions
+   (`web:news.google.com`, `write:some/directory/**`), agent, model and
+   limits; plus `list_jobs`. The agent drafts and shows the job first
+   (schedule's next runs, permissions) and creates it on approval.
+   Created paused, as the New Job dialog does ("review and enable"),
+   with a card in the chat to **Review** / **Enable**. Open question
+   (e) below. Spec: spec_workers_023.
+10. **"May do without asking" as a rule builder (M).** The New Job
+    dialog's free-form box (`desktop.newworker.permissions`, "one
+    kind:pattern a line") becomes rows: a kind select (**Run
+    commands**, **Write files**, **Delete files**, **Fetch from the
+    web**, **Use MCP tools**), a pattern field with that kind's
+    placeholder and examples (`reports/**`, `news.google.com`, `go
+    test *`), a sentence saying what the row allows, remove, and **Add
+    a rule**. Kinds the host's policy doesn't allow are disabled, with
+    why. `workerForm.ts` converts to and from the lines, so the file
+    format doesn't change. In `WorkerEditor.tsx` and Studio's
+    `WorkersPane.tsx`.
+11. **A calendar-like schedule picker (M).** Instead of the error-prone
+    text field: **Repeats** (Once, Every hour, Every day, Weekdays,
+    Every week with day chips, Every month on a day), a time picker,
+    a start date (calendar), the time zone as a searchable select, and
+    a preview of the next five runs. A new `PreviewSchedule` RPC
+    (wraps `workers.ParseSchedule`, returns the next runs or the
+    error), so the page and the service agree. Plain text and cron
+    stay under **Custom**; an existing job's schedule opens in the
+    picker when it fits, else in Custom.
+12. **Job limits are defaults, not caps (S–M).** `[workers.policy]`
+    ships `max_turns = 200`, `max_cost_usd = 10`, `max_timeout =
+    "2h"` (`pkg/config/config.go:822`), so a job can't ask for more,
+    and the editor's fields read as maximums. Change: no cap by
+    default (0 = none); the defaults (50 calls, $1, 30m) fill in what a
+    job leaves out, shown as the fields' placeholders, and a job may
+    set more. A host that wants a cap still sets `max_*` (Settings ›
+    Jobs: **The most it may ask for**, optional, "No limit"). Settings
+    files that set `max_*` keep it. Labels: "Model calls a run
+    (default 50)". Spec: spec_workers_023, the settings reference.
+13. **A pre-commit hook against committed keys (M).** When the harness
+    is set up (project-setup's `git init`) or the window makes a
+    repository (`GitInit`, `pkg/engine/changes.go:186`), Blitz adds
+    `.githooks/pre-commit` (versioned, so collaborators get it) and
+    sets `core.hooksPath` to it in the repository's own config. The
+    hook runs `blitz secrets scan --staged` when blitz is on PATH (a
+    new command: `pkg/redact`'s patterns plus key formats such as
+    `sk-`, `AKIA`, `ghp_`, `AIza`, private-key blocks, and high-entropy
+    values in `.env`-like files), else gitleaks if installed, else a
+    portable grep of the same patterns; it blocks the commit with the
+    file and line (the value masked) and says how to bypass for a
+    false alarm (`git commit --no-verify`, or an allow line). An
+    existing `core.hooksPath` or pre-commit framework (husky,
+    pre-commit) is left alone and the setup agent offers to add the
+    scan to it instead. Commits Blitz makes (the commit dialog) run it
+    too. For existing repositories: project-setup offers it, and
+    Settings › Git has **Protect against committing keys**. New spec
+    (spec_secret_hooks_051).
+
+**Order of work:** 1 (done) → 2 → 6 and 7 (quick, and 7 feeds the hook)
+→ 9–12 together (one spec, the jobs editor) → 8 → 13 → 3 → 5 → 4.
+
+**Open questions for the owner:** (e) A job the agent creates from the
+chat: paused for review like the dialog's, or enabled at once after
+the approval in the chat? (f) The key-scanning hook: versioned in
+`.githooks/` (collaborators get it) or only in `.git/hooks` (this
+clone)?
 
 **Research: Chromium profiles (2026-10-23).**
 - What exists: the web preview's `persist:preview` partition
