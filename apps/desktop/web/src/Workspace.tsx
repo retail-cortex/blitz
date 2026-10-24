@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -86,6 +86,9 @@ export function Workspace({
   const [studioClose, setStudioClose] = useState(0);
   const [studioAsk, setStudioAsk] = useState<{ kind: StudioKind; n: number }>({ kind: "overview", n: 0 });
   const [studioKind, setStudioKind] = useState<StudioKind | null>(null);
+  // What Studio shows now, while it's open (the status bar's toggle).
+  const shownKind = useRef<StudioKind | null>(null);
+  shownKind.current = studio ? studioKind : null;
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
@@ -98,8 +101,13 @@ export function Workspace({
   // editor (what's open beside or over it closes), or the changes or
   // workers in the drawer.
   const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session", d?: ViewDetail) => {
-    if (v === "changes") setDrawer({ kind: "changes", source });
-    else if (v === "workers") setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
+    // A toggle (the status bar's) closes the view when it's the one shown.
+    if (v === "changes") setDrawer((cur) => changesAfter(cur, d?.toggle, source));
+    else if (v === "workers") {
+      // Studio closes through its own request, which asks about unsaved edits.
+      if (d?.toggle && shownKind.current === "workers") setStudioClose((n) => n + 1);
+      else setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
+    }
     else if (v === "workflows") setStudio({ kind: "workflows", intent: newIntent("show", d?.workflow ?? ""), run: d?.run });
     else {
       setDrawer(null);
