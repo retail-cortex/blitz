@@ -18,6 +18,7 @@ package blitz.v1;
 
 import "blitz/v1/session.proto";
 import "blitz/v1/turn.proto";
+import "blitz/v1/worker.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -3536,6 +3537,8 @@ message ComposeDraft {
   string file = 3;
   repeated string problems = 4;
   WorkflowFile workflow = 5;
+  // A job's draft, as the New Job form reads it (kind job).
+  WorkerDefinition worker = 6;
 }
 
 // Request message for WorkspaceService.StartCompose.

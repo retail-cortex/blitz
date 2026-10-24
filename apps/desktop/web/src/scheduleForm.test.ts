@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { defaultPick, fromSchedule, monthGrid, runDays, toSchedule, type SchedulePick } from "./scheduleForm";
+import { defaultPick, describe as describeSchedule, fromNow, fromSchedule, monthGrid, runDays, toSchedule, zoneGroups, zoneOffset, type SchedulePick } from "./scheduleForm";
 
 const pick = (p: Partial<SchedulePick>): SchedulePick => ({ ...defaultPick, ...p });
 
@@ -67,5 +67,46 @@ describe("the calendar", () => {
     const runs = [new Date(2026, 9, 24, 8), new Date(2026, 9, 25, 8), new Date(2026, 10, 1, 8)];
     expect([...runDays(runs, 2026, 9)]).toEqual([24, 25]);
     expect([...runDays(runs, 2026, 10)]).toEqual([1]);
+  });
+});
+
+describe("the schedule's summary", () => {
+  it.each([
+    [pick({ repeat: "daily", time: "08:00" }), "desktop.schedule.says.daily", { time: "8:00 AM" }],
+    [pick({ repeat: "weekdays", time: "21:30" }), "desktop.schedule.says.weekdays", { time: "9:30 PM" }],
+    [pick({ repeat: "weekly", time: "08:00", days: [5, 1] }), "desktop.schedule.says.weekly", { days: "Monday and Friday", time: "8:00 AM" }],
+    [pick({ repeat: "monthly", day: 15, time: "06:45" }), "desktop.schedule.says.monthly", { day: "15", time: "6:45 AM" }],
+    [pick({ repeat: "hourly", time: "00:05" }), "desktop.schedule.says.hourly", { minute: "05" }],
+    [pick({ repeat: "custom", text: " every 2 hours " }), "desktop.schedule.says.custom", { text: "every 2 hours" }],
+  ])("%j", (p, key, values) => expect(describeSchedule(p, "en-US")).toEqual({ key, values }));
+
+  it("says when a run is from now", () => {
+    const now = new Date(2026, 9, 23, 9, 0);
+    expect(fromNow(new Date(2026, 9, 23, 9, 20), now, "en-US")).toBe("in 20 minutes");
+    expect(fromNow(new Date(2026, 9, 23, 17, 0), now, "en-US")).toBe("in 8 hours");
+    expect(fromNow(new Date(2026, 9, 24, 8, 0), now, "en-US")).toBe("tomorrow");
+    expect(fromNow(new Date(2026, 9, 26, 8, 0), now, "en-US")).toBe("in 3 days");
+  });
+});
+
+describe("the time zones", () => {
+  const now = new Date(Date.UTC(2026, 0, 15, 12)); // winter: no daylight saving north
+  it("groups them by region, labelled by place and offset", () => {
+    const g = zoneGroups(["America/Chicago", "Europe/Paris", "America/Argentina/Buenos_Aires", "UTC", "Asia/Kolkata"], now);
+    expect(g.map((x) => x.region)).toEqual(["America", "Asia", "Europe", "Other"]);
+    expect(g[0].zones).toEqual([
+      { value: "America/Argentina/Buenos_Aires", label: "Argentina / Buenos Aires (UTC−03:00)" },
+      { value: "America/Chicago", label: "Chicago (UTC−06:00)" },
+    ]);
+    expect(g[1].zones[0]).toEqual({ value: "Asia/Kolkata", label: "Kolkata (UTC+05:30)" });
+    expect(g[3].zones[0].value).toBe("UTC");
+  });
+  it("keeps a zone it doesn't know, the job's own", () => {
+    const g = zoneGroups(["Europe/Paris"], now, "America/Chicago");
+    expect(g.flatMap((x) => x.zones.map((z) => z.value))).toEqual(["America/Chicago", "Europe/Paris"]);
+  });
+  it("reads an offset", () => {
+    expect(zoneOffset("Europe/Paris", now)).toBe("UTC+01:00");
+    expect(zoneOffset("Not/AZone", now)).toBe("");
   });
 });

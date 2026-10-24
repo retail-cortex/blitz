@@ -22,6 +22,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/compose"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -34,9 +35,13 @@ func composeMsg(s compose.Session) *pb.ComposeSession {
 	}
 	if d := s.Draft; d != nil {
 		m.Draft = &pb.ComposeDraft{Name: d.Name, Summary: d.Summary, File: d.File, Problems: d.Problems}
-		if s.Kind == "workflow" {
+		switch s.Kind {
+		case "workflow":
 			// What the canvas opens, as written even with problems.
 			m.Draft.Workflow = workflowMsg(flows.Parse(d.Name, "", []byte(d.File)))
+		case "job":
+			// What the New Job form opens (WK-74).
+			m.Draft.Worker = workerDefinition(workers.ParseSpec(d.Name, []byte(d.File)))
 		}
 	}
 	return m

@@ -16,13 +16,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiCreationOutline, mdiRefresh } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAutoFix, mdiCreationOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { t } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { PermissionRules } from "./PermissionRules";
 import { SchedulePicker } from "./SchedulePicker";
+import { ComposeDialog } from "./studio/ComposeDialog";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "./ui/controls";
 import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
 import type { RewriteWorkerResponse, WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
@@ -70,6 +71,7 @@ export function WorkerEditor({
   const catalog = useModelCatalog(dir);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
   // The host's limits for every job, for the limit fields' defaults and caps.
   const [policy, setPolicy] = useState<WorkerPolicySettings>();
   useEffect(() => {
@@ -202,7 +204,33 @@ export function WorkerEditor({
   );
   return (
     <>
+      {composing && (
+        <ComposeDialog
+          workspace={dir}
+          kind="job"
+          onClose={() => setComposing(false)}
+          onDraft={(d) => {
+            setComposing(false);
+            if (!d.worker) return;
+            const form = formFromWorker(d.worker);
+            setF({ ...form, name: d.name || form.name, description: form.description || d.summary, timezone: form.timezone || f.timezone });
+            setNamed(true);
+          }}
+        />
+      )}
       <div className="stack new-worker" style={{ gap: 14 }}>
+        {/* As Workflows does (WK-74): describe the job, a few questions, then a draft in this form. */}
+        {!edit && (
+          <div className="list">
+            <button type="button" className="list-item compose-entry" onClick={() => setComposing(true)}>
+              <Icon path={mdiAutoFix} />
+              <span className="lines">
+                <span className="ellipsis">{t("desktop.compose.entry")}</span>
+                <small className="ellipsis">{t("desktop.compose.entry_about_job")}</small>
+              </span>
+            </button>
+          </div>
+        )}
         {stale && (
           <div className="card error row" role="alert" style={{ gap: 8 }}>
             <Icon path={mdiAlertCircleOutline} size="sm" />

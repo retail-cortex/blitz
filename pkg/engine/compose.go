@@ -26,6 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/compose"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 )
 
 // The composer (spec_composer_045): a guided conversation that makes a
@@ -38,13 +39,15 @@ var composeSessions compose.Store
 var ErrNoRecipe = errors.New("the composer can't make that kind of component")
 
 // ComposeKinds are the kinds the composer makes.
-func ComposeKinds() []string { return []string{"workflow"} }
+func ComposeKinds() []string { return []string{"workflow", "job"} }
 
 // recipe is kind's recipe for this workspace.
 func (w *Workspace) recipe(kind string) (compose.Recipe, error) {
 	switch kind {
 	case "workflow":
 		return compose.Recipe{Kind: "workflow", Brief: workflowBrief, Check: checkWorkflowDraft}, nil
+	case "job":
+		return compose.Recipe{Kind: "job", Brief: jobBrief, Check: w.checkJobDraft}, nil
 	}
 	return compose.Recipe{}, fmt.Errorf("%w: %q", ErrNoRecipe, kind)
 }
@@ -60,6 +63,38 @@ func checkWorkflowDraft(name, file string) []string {
 	}
 	return strings.Split(f.Problem, "; ")
 }
+
+// checkJobDraft is what doesn't hold in a drafted job's WORKER.md, checked
+// as the scheduler reads it (WK-74).
+func (w *Workspace) checkJobDraft(name, file string) []string {
+	if !workers.ValidName(name) {
+		return []string{fmt.Sprintf("name %q: lowercase letters, digits, - and _, up to 64", name)}
+	}
+	problems, err := w.checkWorker(workers.ParseSpec(name, []byte(file)), []byte(file))
+	if err != nil {
+		return []string{err.Error()}
+	}
+	return problems
+}
+
+// jobBrief tells the model what a job is and its file.
+const jobBrief = `A job runs a prompt (or a workflow) on a schedule, unattended, with only the permissions it lists (.agents/workers/<name>/WORKER.md). The file:
+
+---
+description: one line saying what it does
+schedule: "0 8 * * *"        # cron (minute hour day month weekday), a descriptor (@daily), or plain text (every day at 8 am, weekdays at 9:30, every Monday at 8 PM)
+timezone: America/Chicago    # an IANA zone; leave out for the service machine's
+permissions:                 # only what the prompt needs; nobody approves anything in a run
+  - web:news.google.com      # fetch from a host (*.example.com for its subdomains)
+  - write:reports/ai-news/** # write files (* stays in one folder, ** is any folders)
+  # also shell:<command, * any text>, delete:<path>, mcp:<server>:<tool>
+limits: {max_turns: 50, max_cost_usd: 1, timeout: 30m}   # leave out for the host's defaults
+catch_up: none               # once: run once when a time was missed while the service was off
+# agent: <a named agent>, model: provider/model, workflow: <a workflow's name, the body its input>
+---
+The prompt: what each run does, step by step. It runs without any conversation, so say everything: what to fetch or read, what to write, the folder and the file name (month-day-year.html), the format and the style.
+
+Ask about anything the request leaves open that changes the job: when it runs and in which time zone, where the output goes and how it's named, what it may reach. Keep the permissions as narrow as the job allows.`
 
 // workflowBrief tells the model what a workflow is and its file.
 const workflowBrief = `A workflow is steps run in order, each step's output the next one's input (.agents/workflows/<name>.flow.yaml). The file:

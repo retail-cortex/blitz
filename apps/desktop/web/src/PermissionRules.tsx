@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { mdiDeleteOutline, mdiPlus } from "@mdi/js";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { mdiDeleteOutline, mdiHelpCircleOutline, mdiPlus } from "@mdi/js";
 import { t } from "./i18n";
-import { Button, IconButton } from "./ui/controls";
-import { parseRules, ruleExamples, ruleKinds, rulesText, type Rule, type RuleKind } from "./workerForm";
+import { Button, IconButton, nudge, useAnchoredMenu } from "./ui/controls";
+import { parseRules, ruleExamples, ruleHelp, ruleKinds, rulesText, type Rule, type RuleKind } from "./workerForm";
 
 /**
  * What a job may do without asking, as rows (spec_workers_023 WK-71): a
@@ -69,6 +70,7 @@ export function PermissionRules({ value, onChange, allow }: { value: string; onC
               placeholder={r.kind ? ruleExamples[r.kind][0] : ""}
               onChange={(e) => set(i, { ...r, pattern: e.target.value })}
             />
+            {r.kind && <PatternHelp kind={r.kind} onPick={(pattern) => set(i, { ...r, pattern })} />}
             <IconButton icon={mdiDeleteOutline} label={t("desktop.newworker.rule_remove")} small onClick={() => remove(i)} />
           </div>
           <span className={`t-body-sm ${r.kind && !allowed(r.kind) ? "error-text" : "muted"}`}>
@@ -89,5 +91,49 @@ export function PermissionRules({ value, onChange, allow }: { value: string; onC
         </Button>
       </span>
     </div>
+  );
+}
+
+/**
+ * What a kind's patterns cover (WK-71): an info button opening a panel of
+ * examples and their meaning; choosing one fills the row's pattern.
+ */
+function PatternHelp({ kind, onPick }: { kind: RuleKind; onPick: (pattern: string) => void }) {
+  const { at, toggle, close, ref, layer } = useAnchoredMenu<HTMLSpanElement>("down end");
+  // Kept in the window, as a menu is.
+  useLayoutEffect(() => {
+    const el = layer.current;
+    if (!el || !at) return;
+    const { x, y } = nudge(el.getBoundingClientRect(), window.innerWidth, window.innerHeight);
+    el.style.transform = x || y ? `translate(${x}px, ${y}px)` : "";
+  }, [at, layer]);
+  return (
+    <span className="menu-anchor" ref={ref}>
+      <IconButton icon={mdiHelpCircleOutline} label={t("desktop.newworker.pattern_help")} small selected={!!at} aria-expanded={!!at} aria-haspopup="dialog" onClick={toggle} />
+      {at &&
+        createPortal(
+          <div className="menu floating pattern-help" role="dialog" aria-label={t("desktop.newworker.pattern_help")} style={at} ref={layer}>
+            <span className="t-title-sm">{t(`desktop.newworker.rule_kind.${kind}`)}</span>
+            <span className="t-body-sm muted">{t(`desktop.newworker.pattern.${kind}.intro`)}</span>
+            <div className="pattern-help-list">
+              {ruleHelp[kind].map((pattern, i) => (
+                <button
+                  key={pattern}
+                  type="button"
+                  className="pattern-help-row"
+                  onClick={() => {
+                    onPick(pattern);
+                    close();
+                  }}
+                >
+                  <code>{pattern}</code>
+                  <span className="t-body-sm">{t(`desktop.newworker.pattern.${kind}.${i}`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </span>
   );
 }

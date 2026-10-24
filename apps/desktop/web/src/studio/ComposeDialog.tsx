@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiAutoFix, mdiLoading, mdiRestart, mdiSend, mdiSitemapOutline } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAutoFix, mdiCalendarClock, mdiLoading, mdiRestart, mdiSend, mdiSitemapOutline } from "@mdi/js";
 import { workspaces } from "../api";
 import { message } from "../errors";
 import type { ComposeDraft, ComposeSession } from "../gen/blitz/v1/workspace_pb";
@@ -30,7 +30,7 @@ import { draftSteps, question } from "./compose";
  * conversation, then the drafted component, checked, to open in its
  * editor (onDraft). Closing ends the session.
  */
-export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace: string; kind: "workflow"; onDraft: (d: ComposeDraft) => void; onClose: () => void }) {
+export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace: string; kind: "workflow" | "job"; onDraft: (d: ComposeDraft) => void; onClose: () => void }) {
   const snack = useSnackbar();
   const [session, setSession] = useState<ComposeSession>();
   const [request, setRequest] = useState("");
@@ -40,7 +40,11 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
   const end = useRef<HTMLDivElement>(null);
   const id = useRef("");
   useEffect(() => () => void (id.current && workspaces.dropCompose({ workspace, id: id.current }).catch(() => {})), [workspace]);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [session, busy]);
+  // Braces: scrollIntoView returns a promise in newer Chromium, and an
+  // effect may return only its clean-up.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [session, busy]);
 
   const run = async (f: () => Promise<ComposeSession | undefined>) => {
     setBusy(true);
@@ -92,13 +96,13 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
           {draft ? (
             <Button
               variant="filled"
-              icon={mdiSitemapOutline}
+              icon={kind === "job" ? mdiCalendarClock : mdiSitemapOutline}
               onClick={() => {
                 onDraft(draft);
-                snack(t("desktop.compose.opened"));
+                snack(t(kind === "job" ? "desktop.compose.opened_job" : "desktop.compose.opened"));
               }}
             >
-              {t("desktop.compose.open")}
+              {t(kind === "job" ? "desktop.compose.open_job" : "desktop.compose.open")}
             </Button>
           ) : (
             !session && (
@@ -120,7 +124,7 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
               autoFocus
               value={request}
               placeholder={t(`desktop.compose.placeholder.${kind}`)}
-              aria-label={t("desktop.compose.request")}
+              aria-label={t(kind === "job" ? "desktop.compose.request_job" : "desktop.compose.request")}
               onChange={(e) => setRequest(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && start()}
             />
@@ -148,16 +152,38 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
             )}
             {draft && (
               <div className="card compose-draft stack" style={{ gap: 8 }}>
-                <span className="t-title-sm">
-                  {draft.name} <span className="t-body-sm muted">· {t("desktop.compose.steps", { count: steps.length })}</span>
-                </span>
-                <ol className="compose-steps t-body-sm">
-                  {steps.map((s) => (
-                    <li key={s.id}>
-                      {s.title} <span className="muted">· {t(`desktop.flows.type.${s.type}`)}</span>
-                    </li>
-                  ))}
-                </ol>
+                {draft.worker ? (
+                  // A job's draft (WK-74): what it does, when, and what it may do.
+                  <>
+                    <span className="t-title-sm">
+                      {draft.name} <span className="t-body-sm muted">· {draft.worker.schedule}{draft.worker.timezone ? ` (${draft.worker.timezone})` : ""}</span>
+                    </span>
+                    {draft.worker.description && <span className="t-body-sm">{draft.worker.description}</span>}
+                    {draft.worker.permissions.length > 0 && (
+                      <div className="row wrap" style={{ gap: 6 }}>
+                        {draft.worker.permissions.map((p) => (
+                          <code key={p} className="chip static mono">
+                            {p}
+                          </code>
+                        ))}
+                      </div>
+                    )}
+                    <span className="t-body-sm muted compose-job-prompt">{draft.worker.prompt}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="t-title-sm">
+                      {draft.name} <span className="t-body-sm muted">· {t("desktop.compose.steps", { count: steps.length })}</span>
+                    </span>
+                    <ol className="compose-steps t-body-sm">
+                      {steps.map((s) => (
+                        <li key={s.id}>
+                          {s.title} <span className="muted">· {t(`desktop.flows.type.${s.type}`)}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                )}
                 {draft.problems.length > 0 && (
                   <div className="card warn stack" style={{ gap: 4 }}>
                     <span className="t-body-sm">{t("desktop.compose.problems")}</span>

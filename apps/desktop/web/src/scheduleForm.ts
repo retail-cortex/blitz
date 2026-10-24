@@ -100,3 +100,76 @@ export function monthGrid(year: number, month: number): number[][] {
 export function runDays(runs: Date[], year: number, month: number): Set<number> {
   return new Set(runs.filter((d) => d.getFullYear() === year && d.getMonth() === month).map((d) => d.getDate()));
 }
+
+/** What the summary says for p: a key (desktop.schedule.says.<repeat>) and its values, in locale. */
+export function describe(p: SchedulePick, locale: string): { key: string; values: Record<string, string> } {
+  const [h, m] = hm(p.time);
+  const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(new Date(2026, 0, 5, h, m));
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "long" });
+  const dayName = (d: number) => weekday.format(new Date(2026, 9, 18 + d)); // 18 Oct 2026 is a Sunday
+  switch (p.repeat) {
+    case "hourly":
+      return { key: "desktop.schedule.says.hourly", values: { minute: pad(m) } };
+    case "weekly": {
+      const days = [...new Set(p.days)].sort((a, b) => a - b);
+      const list = new Intl.ListFormat(locale, { type: "conjunction" }).format((days.length ? days : [1]).map(dayName));
+      return { key: "desktop.schedule.says.weekly", values: { days: list, time } };
+    }
+    case "monthly":
+      return { key: "desktop.schedule.says.monthly", values: { day: String(Math.max(1, Math.min(28, Math.floor(p.day) || 1))), time } };
+    case "custom":
+      return { key: "desktop.schedule.says.custom", values: { text: p.text.trim() } };
+    default:
+      return { key: `desktop.schedule.says.${p.repeat}`, values: { time } };
+  }
+}
+
+/** When d is from now, in words ("tomorrow", "in 3 days", "in 5 hours"). */
+export function fromNow(d: Date, now: Date, locale: string): string {
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const minutes = Math.round((d.getTime() - now.getTime()) / 60000);
+  if (Math.abs(minutes) < 60) return rtf.format(minutes, "minute");
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((midnight(d) - midnight(now)) / 86400000);
+  if (days === 0) return rtf.format(Math.round(minutes / 60), "hour");
+  return rtf.format(days, "day");
+}
+
+/** A time zone as the dropdown offers it. */
+export interface ZoneOption {
+  value: string;
+  /** Its place ("Chicago", "Buenos Aires") and offset now ("UTC−05:00"). */
+  label: string;
+}
+
+/** zone's offset from UTC at now, as "UTC+05:30" ("UTC" for none). */
+export function zoneOffset(zone: string, now: Date): string {
+  try {
+    const part = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" }).formatToParts(now).find((p) => p.type === "timeZoneName")?.value ?? "";
+    const off = part.replace(/^GMT/, "");
+    return off ? `UTC${off.replace("-", "−")}` : "UTC";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The time zones grouped by region (America, Europe, …), each labelled
+ * by its place and offset, by place; zones without a region (UTC) under
+ * "Other". current is added when it isn't among them.
+ */
+export function zoneGroups(zones: readonly string[], now: Date, current = ""): { region: string; zones: ZoneOption[] }[] {
+  const all = [...new Set([...zones, ...(current ? [current] : [])])];
+  const groups = new Map<string, ZoneOption[]>();
+  for (const z of all) {
+    const slash = z.indexOf("/");
+    const region = slash > 0 ? z.slice(0, slash) : "Other";
+    const place = (slash > 0 ? z.slice(slash + 1) : z).replace(/_/g, " ").replace(/\//g, " / ");
+    const off = zoneOffset(z, now);
+    if (!groups.has(region)) groups.set(region, []);
+    groups.get(region)!.push({ value: z, label: off ? `${place} (${off})` : place });
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "Other" ? 1 : b === "Other" ? -1 : a.localeCompare(b)))
+    .map(([region, zs]) => ({ region, zones: zs.sort((a, b) => a.label.localeCompare(b.label)) }));
+}

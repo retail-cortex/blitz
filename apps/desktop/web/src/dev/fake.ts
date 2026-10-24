@@ -1588,10 +1588,24 @@ export function installFake() {
         watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
         // The composer: one question, then a three-step draft.
-        startCompose: ({ request }) => ({
-          session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] },
-        }),
-        answerCompose: ({ answer }) => {
+        startCompose: ({ request, kind }) =>
+          kind === "job"
+            ? { session: { id: "compose-fake-job", kind, asking: true, costUsd: 0.0011, turns: [{ role: "user", text: request }, { role: "composer", text: "Which time zone should 8 am be in?", options: ["America/Chicago", "Europe/Paris", "The service machine's"] }] } }
+            : { session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] } },
+        answerCompose: ({ answer, id }) => {
+          if (id === "compose-fake-job") {
+            const worker = { name: "ai-news", description: "A summary of the day's AI news", schedule: "0 8 * * *", timezone: answer.includes("/") ? answer : "", agent: "", model: "", permissions: ["web:news.google.com", "write:reports/ai-news/**"], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "Fetch the latest AI news from news.google.com.\nWrite a one-page summary to reports/ai-news/MM-DD-YYYY.html, glass morphic with a dark theme.", workflow: "" };
+            return {
+              session: {
+                id: "compose-fake-job",
+                kind: "job",
+                asking: false,
+                costUsd: 0.0024,
+                turns: [{ role: "user", text: "AI news every morning" }, { role: "composer", text: "Which time zone should 8 am be in?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Every day at 8:00, fetches the AI news and writes a summary page." }],
+                draft: { name: "ai-news", summary: "Every day at 8:00, fetches the AI news and writes a summary page.", file: "", problems: [], worker },
+              },
+            };
+          }
           const file = "description: A daily brief from the notes\nnodes:\n  - {id: notes, type: read_file, title: Read the notes, path: notes/today.md, position: {x: 0, y: 80}}\n  - {id: draft, type: agent, title: Draft the brief, instructions: Write a short brief for the team., position: {x: 280, y: 80}}\n  - {id: save, type: save_file, title: Save it, path: briefs/today.md, position: {x: 560, y: 80}}\nedges:\n  - {from: notes, to: draft}\n  - {from: draft, to: save}\n";
           return {
             session: {

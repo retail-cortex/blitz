@@ -21,10 +21,10 @@ Ask in the chat, or use the form.
 
 **With the form:**
 
-1. Choose **New job** (the calendar icon).
-2. Say **What it does** (the **Name** follows from it). Choose when it **Repeats**: every hour, every day, every weekday, every week on the days you pick, or every month on a day, and at what time; or **Custom** for words (*every 2 hours*) or cron. **Time zone** starts as yours. The next runs are listed and marked on a month.
+1. Choose **New job** (the calendar icon). At its top, **Compose with AI** asks what the job should do and a few questions, then fills the form for you to review.
+2. Say **What it does** (the **Name** follows from it). Choose when it **Repeats**: every hour, every day, every weekday, every week on the days you pick, or every month on a day, and at what time; or **Custom** for words (*every 2 hours*) or cron. **Time zone** is a list by region, with each zone's offset; it starts as yours. The schedule shows as a sentence, the next runs with how far off they are, and a month with their days marked.
 3. Under **Runs**, keep **Its prompt, as a turn** and write the **Prompt**, as you'd type it in the chat, or choose a workflow to run.
-4. Under **May do without asking**, **Add a rule** for each thing it may do: a kind (**Run commands**, **Write files**, **Delete files**, **Fetch from the web**, **Use MCP tools**) and what it covers (`reports/**`, `news.google.com`); each rule says what it allows. Only what it needs. Leave **Agent**, **Model** and the limits empty for the workspace's and the defaults (50 model calls, $1, 30 minutes); a job may set more, unless Settings › Jobs sets a cap.
+4. Under **May do without asking**, **Add a rule** for each thing it may do: a kind (**Run commands**, **Write files**, **Delete files**, **Fetch from the web**, **Use MCP tools**) and what it covers (`reports/**`, `news.google.com`); each rule says what it allows, and its **?** shows what patterns cover (`reports/*` is only the files in `reports/`; `reports/**` is everything under it). Only what it needs. Leave **Agent**, **Model** and the limits empty for the workspace's and the defaults (50 model calls, $1, 30 minutes); a job may set more, unless Settings › Jobs sets a cap.
 5. Choose **Create**. It's saved as `.agents/workers/<name>/WORKER.md`, and doesn't run yet.
 6. Open it, read what it may do, and choose **Enable as shown**.
 

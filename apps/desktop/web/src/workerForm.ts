@@ -218,3 +218,15 @@ export const ruleExamples: Record<RuleKind, string[]> = {
   web: ["news.google.com", "*.github.com"],
   mcp: ["github:create_issue", "linear:*"],
 };
+
+/**
+ * What a kind's patterns cover, for the rule builder's help (WK-71,
+ * WK-20b): examples, each with its meaning (desktop.newworker.pattern.<kind>.<i>).
+ */
+export const ruleHelp: Record<RuleKind, string[]> = {
+  shell: ["go test ./...", "npm run *", "python scripts/report.py"],
+  write: ["reports/summary.html", "reports/*", "reports/**", "reports/**/*.html", "**/notes.md"],
+  delete: ["tmp/*.log", "tmp/**"],
+  web: ["news.google.com", "*.example.com"],
+  mcp: ["github:create_issue", "github:*"],
+};

@@ -16,16 +16,25 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { mdiCheck } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiCalendarClock, mdiCheck, mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import { workers } from "./api";
 import { message } from "./errors";
 import { language, t } from "./i18n";
-import { fromSchedule, monthGrid, runDays, toSchedule, type Repeat, type SchedulePick } from "./scheduleForm";
-import { Chip } from "./ui/controls";
+import { describe, fromNow, fromSchedule, monthGrid, runDays, toSchedule, zoneGroups, zoneOffset, type Repeat, type SchedulePick } from "./scheduleForm";
+import { Chip, Icon, IconButton } from "./ui/controls";
 
 const repeats: Repeat[] = ["hourly", "daily", "weekdays", "weekly", "monthly", "custom"];
 
-/** The time zones the browser knows, for the time zone field's suggestions. */
+/** The machine's own time zone, for the dropdown's first choice. */
+const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** The weekdays' names, Sunday first, in the page's language. */
+function weekdayNames(width: "short" | "narrow"): string[] {
+  const f = new Intl.DateTimeFormat(language(), { weekday: width });
+  return [0, 1, 2, 3, 4, 5, 6].map((d) => f.format(new Date(2026, 9, 18 + d))); // 18 Oct 2026 is a Sunday
+}
+
+/** The time zones the browser knows, for the time zone dropdown. */
 const zones: string[] = (() => {
   try {
     return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
@@ -69,7 +78,7 @@ export function SchedulePicker({ schedule, timezone, onSchedule, onTimezone }: {
     if (!text) return setPreview(undefined);
     let live = true;
     const id = setTimeout(() => {
-      workers.previewSchedule({ schedule: text, timezone: timezone.trim(), count: 8 }).then(
+      workers.previewSchedule({ schedule: text, timezone: timezone.trim(), count: 20 }).then(
         (r) => live && setPreview({ runs: r.nextRuns.map((x) => timestampDate(x)), zone: r.timezone, problem: r.problem }),
         (e: unknown) => live && setPreview({ runs: [], zone: "", problem: message(e) }),
       );
@@ -80,11 +89,9 @@ export function SchedulePicker({ schedule, timezone, onSchedule, onTimezone }: {
     };
   }, [text, timezone]);
 
-  const weekday = useMemo(() => new Intl.DateTimeFormat(language(), { weekday: "short" }), []);
-  const dayNames = [0, 1, 2, 3, 4, 5, 6].map((d) => weekday.format(new Date(2026, 9, 18 + d))); // 18 Oct 2026 is a Sunday
-  const when = (d: Date) => d.toLocaleString(language(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: preview?.zone || undefined });
-  const first = preview?.runs[0];
-  const month = first ? { y: first.getFullYear(), m: first.getMonth() } : undefined;
+  const dayNames = useMemo(() => weekdayNames("short"), []);
+  const now = useMemo(() => new Date(), []);
+  const groups = useMemo(() => zoneGroups(zones, now, timezone), [now, timezone]);
 
   return (
     <div className="stack schedule-picker" style={{ gap: 8 }}>
@@ -137,60 +144,111 @@ export function SchedulePicker({ schedule, timezone, onSchedule, onTimezone }: {
       )}
       <label className="field">
         <span className="t-label">{t("desktop.newworker.timezone")}</span>
-        <input className="input" list="schedule-zones" value={timezone} placeholder={t("desktop.schedule.zone_placeholder")} spellCheck={false} onChange={(e) => onTimezone(e.target.value)} />
-        <datalist id="schedule-zones">
-          {zones.map((z) => (
-            <option key={z} value={z} />
+        <select className="select" value={timezone} onChange={(e) => onTimezone(e.target.value)}>
+          <option value="">{t("desktop.schedule.zone_service", { offset: zoneOffset(localZone, now) })}</option>
+          {groups.map((g) => (
+            <optgroup key={g.region} label={g.region}>
+              {g.zones.map((z) => (
+                <option key={z.value} value={z.value}>
+                  {z.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
-        </datalist>
-        <span className="t-body-sm muted">{t("desktop.newworker.timezone_hint")}</span>
+        </select>
       </label>
       {preview?.problem ? (
-        <p className="t-body-sm error-text" role="alert">
-          {t("desktop.schedule.problem", { problem: preview.problem })}
+        <p className="card warn row t-body-sm" role="alert">
+          <Icon path={mdiAlertCircleOutline} size="sm" />
+          <span>{t("desktop.schedule.problem", { problem: preview.problem })}</span>
         </p>
       ) : (
-        preview &&
-        month && (
-          <div className="schedule-preview">
-            <div className="stack" style={{ gap: 2 }}>
-              <span className="t-label">{t("desktop.schedule.next_runs")}</span>
-              {preview.runs.slice(0, 5).map((d) => (
-                <span key={d.getTime()} className="t-body-sm">
-                  {when(d)}
-                </span>
-              ))}
-              <span className="t-body-sm muted mono">{text}</span>
-            </div>
-            <table className="schedule-month" aria-label={new Date(month.y, month.m).toLocaleString(language(), { month: "long", year: "numeric" })}>
-              <caption className="t-label-sm">{new Date(month.y, month.m).toLocaleString(language(), { month: "long", year: "numeric" })}</caption>
-              <thead>
-                <tr>
-                  {dayNames.map((n) => (
-                    <th key={n} className="t-label-sm muted">
-                      {n.slice(0, 2)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {monthGrid(month.y, month.m).map((week, i) => {
-                  const marks = runDays(preview.runs, month.y, month.m);
-                  return (
-                    <tr key={i}>
-                      {week.map((d, j) => (
-                        <td key={j} className={d && marks.has(d) ? "has-run" : ""}>
-                          {d || ""}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )
+        preview && <SchedulePreview pick={p} cron={text} runs={preview.runs} zone={preview.zone} now={now} />
       )}
     </div>
+  );
+}
+
+/**
+ * What the schedule does (WK-72): a sentence and its cron form, the next
+ * runs as dated rows (when, and how far off), and a month with their
+ * days marked, today ringed, stepped month by month.
+ */
+function SchedulePreview({ pick, cron, runs, zone, now }: { pick: SchedulePick; cron: string; runs: Date[]; zone: string; now: Date }) {
+  const lang = language();
+  const said = describe(pick, lang);
+  const first = runs[0] ?? now;
+  const [shown, setShown] = useState({ y: first.getFullYear(), m: first.getMonth() });
+  useEffect(() => setShown({ y: first.getFullYear(), m: first.getMonth() }), [first.getFullYear(), first.getMonth()]);
+  const step = (n: number) => setShown(({ y, m }) => ({ y: y + Math.floor((m + n) / 12), m: (((m + n) % 12) + 12) % 12 }));
+  // The runs' days as the job's time zone has them, as the list says them.
+  const ymd = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "numeric", day: "numeric", timeZone: zone || undefined });
+  const marks = runDays(
+    runs.map((d) => {
+      const [y, m, dd] = ymd.format(d).split("-").map(Number);
+      return new Date(y, m - 1, dd);
+    }),
+    shown.y,
+    shown.m,
+  );
+  const isToday = (d: number) => d === now.getDate() && shown.m === now.getMonth() && shown.y === now.getFullYear();
+  const narrow = weekdayNames("narrow");
+  const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(lang, { ...o, timeZone: zone || undefined });
+  const day = fmt({ day: "numeric" });
+  const month = fmt({ month: "short" });
+  const weekday = fmt({ weekday: "short" });
+  const time = fmt({ hour: "numeric", minute: "2-digit" });
+  return (
+    <section className="card outlined schedule-preview" aria-label={t("desktop.schedule.next_runs")}>
+      <div className="row schedule-summary">
+        <Icon path={mdiCalendarClock} />
+        <span className="t-title-sm spacer">{t(said.key, said.values)}</span>
+        <code className="chip static mono" title={t("desktop.schedule.cron_title")}>
+          {cron}
+        </code>
+      </div>
+      <div className="schedule-body">
+        <ol className="schedule-runs">
+          {runs.slice(0, 5).map((d) => (
+            <li key={d.getTime()} className="schedule-run">
+              <span className="schedule-date" aria-hidden="true">
+                <span className="schedule-date-month">{month.format(d)}</span>
+                <span className="schedule-date-day">{day.format(d)}</span>
+              </span>
+              <span className="stack" style={{ gap: 0 }}>
+                <span className="t-title-sm">
+                  {weekday.format(d)} · {time.format(d)}
+                </span>
+                <span className="t-body-sm muted">{fromNow(d, now, lang)}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div className="schedule-calendar">
+          <div className="row schedule-calendar-head">
+            <IconButton icon={mdiChevronLeft} label={t("desktop.schedule.month_before")} small onClick={() => step(-1)} />
+            <span className="t-title-sm spacer" style={{ textAlign: "center" }}>
+              {new Date(shown.y, shown.m).toLocaleString(lang, { month: "long", year: "numeric" })}
+            </span>
+            <IconButton icon={mdiChevronRight} label={t("desktop.schedule.month_after")} small onClick={() => step(1)} />
+          </div>
+          <div className="schedule-grid" role="grid">
+            {narrow.map((n, i) => (
+              <span key={`h${i}`} className="schedule-weekday t-label muted" role="columnheader">
+                {n}
+              </span>
+            ))}
+            {monthGrid(shown.y, shown.m)
+              .flat()
+              .map((d, i) => (
+                <span key={i} role="gridcell" aria-selected={!!d && marks.has(d)} className={`schedule-day ${d && marks.has(d) ? "has-run" : ""} ${d && isToday(d) ? "today" : ""}`}>
+                  {d || ""}
+                </span>
+              ))}
+          </div>
+          <span className="t-body-sm muted">{zone ? t("desktop.schedule.in_zone", { zone, offset: zoneOffset(zone, now) }) : ""}</span>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -294,7 +294,11 @@ function StepsTable({ run, titleOf, now, selected, onSelect }: { run: WorkflowRu
 /** The run's events, oldest first, following the newest while it runs. */
 function EventLog({ run, titleOf }: { run: WorkflowRun; titleOf: (id: string) => string }) {
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "nearest" }), [run.events.length]);
+  // Braces: scrollIntoView returns a promise in newer Chromium, and an
+  // effect may return only its clean-up.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [run.events.length]);
   if (!run.events.length) return <p className="t-body-sm muted">{t("desktop.flows.run_no_events")}</p>;
   return (
     <div className="run-events" role="log">
