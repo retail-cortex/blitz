@@ -46,7 +46,8 @@ same commit; targeted tests per item, the full suite with `--config=race`
 and `tools/coverage.sh` only before the push. Done so far: routing to
 global (`~/.blitz/agents`) and workspace (`.agents/agents`) sub-agents
 verified, by transfer and by `invoke_agent` (`f14f2547`); 1, drag and
-drop with the computer (`454a1e73`, to be tried in the app).
+drop with the computer (`454a1e73`, to be tried in the app); 2,
+pictures in Markdown (`e0870d3a`, checked in the browser with `?fake`).
 
 Order: see **Order of work** below the list. 1 → 2 share the drop
 plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
@@ -255,7 +256,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
       (spec_harness_learning_048 or the setup's), the user guide's
       harness page.
 
-**Order of work:** 1 (done) → 2 → 6 and 7 (quick, and 7 feeds the hook)
+**Order of work:** 1 and 2 (done) → 6 and 7 (quick, and 7 feeds the hook)
 → 9–12 together (one spec, the jobs editor) → 8 → 13 and 14 (both in
 the harness setup) → 3 → 5 → 4.
 
