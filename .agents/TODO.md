@@ -65,8 +65,9 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
      (`name 2.ext`) / Skip, once for the batch.
    - *Out:* `webContents.startDrag({files, icon})` from a new bridge
      method, started on a tree row's `dragstart` when the pointer
-     leaves the window (Electron only). Move or copy: open question
-     (a) below.
+     leaves the window (Electron only). Always a copy (owner,
+     2026-10-23): the OS copies a dragged file and Electron can't tell
+     where it landed, so the workspace keeps its file.
    - Check the API's request size limit for large drops (Connect's
      read max); stream or chunk if it's below ~100 MiB.
    - Specs: FIL-30/31 (spec_files_029), EL-12 (spec_electron_038).
@@ -109,8 +110,16 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
    WEB-32's proxy filtering is replaced on that path by the session's
    `webRequest` (deny rules, private addresses) plus the CDP `Fetch`
    interception already used (WEB-34). Without a window, the headless
-   browser as today. A tab shows "Blitz is browsing" with **Take
-   over** / **Stop**. New spec (spec_agent_browser_050), WEB-30.
+   browser as today.
+   **Watch or silent** (owner, 2026-10-23): it offers to browse
+   silently. `browser.show = "ask" | "watch" | "silent"` (default
+   ask): the first browse of a session asks **Watch** / **Run
+   silently** (remembered for the session, or for good). Watch opens a
+   tab marked "Blitz is browsing" with **Take over** / **Stop**;
+   silent runs the view off screen (not attached to the window, or
+   `offscreen` rendering) with a small "Browsing example.com" chip in
+   the conversation that opens it as a tab. New spec
+   (spec_agent_browser_050), WEB-30.
 5. **Browser profiles for sign-ins (M–L).** Research below. Named
    profiles, each an Electron partition `persist:profile-<name>` (the
    in-app browser) and, for the headless browser, a persistent
@@ -153,12 +162,31 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
   global settings and `~/.blitz`, are never chosen by project
   settings, and `redact`/logs never print cookie values.
 
-**Open questions for the owner:** (a) Dragging out to the OS: macOS
-and Windows copy a dragged file by default and Electron can't tell
-where or whether it was dropped, so a true Move needs a guess. Copy
-out, then **Remove from the workspace?** as a toast, or drop Move? (b)
-Is 4 in v0.8.4, or 3 now and 4 next release? (c) Profiles per
-workspace, per agent, or both?
+6. **Option: drive the user's own Chrome (L, not yet decided).** How
+   others do it (2026-10-23):
+   - *Antigravity:* launches Chrome with its own persistent profile
+     (`--user-data-dir=~/.gemini/antigravity-browser-profile`,
+     `--remote-debugging-port=9222`) plus its "Browser Connector"
+     extension (`debugger`, `tabs` permissions), which gives the agent
+     a higher-level API (navigate, DOM, page readiness) over
+     `chrome.debugger`. Sign-ins last because the profile does; a
+     blue border marks the agent's control. That's Blitz's
+     `pkg/engine/browser` with a persistent profile, made visible.
+   - *Extension + native messaging* (Claude in Chrome, Codex's Chrome
+     control, OpenClaw, agent-browser): an MV3 extension in the user's
+     everyday Chrome talks to a local native-messaging host over
+     stdio and drives tabs with `chrome.debugger`. No debugging port
+     (Chrome 136+ ignores it on the default profile anyway), and the
+     user's real sign-ins work, Google's included, since it's real
+     Chrome. Costs: a Web Store extension, a native-host manifest per
+     browser and OS (registry keys on Windows), and an agent holding
+     every sign-in the user has: approvals per site, a tab group of
+     the agent's own.
+   - For Blitz: 4 + 5 cover most of it inside the app; this is the
+     path for sites that refuse embedded browsers.
+
+**Open questions for the owner:** (c) Profiles per workspace, per
+agent, or both? (d) Is 6 wanted, and in v0.8.4 or later?
 
 ### File tree: catching up with VS Code's Explorer
 
