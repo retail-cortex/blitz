@@ -23,8 +23,10 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genai"
 )
 
 // Agent files added, edited and removed in .agents/agents apply without
@@ -73,4 +75,65 @@ func TestAgentFilesReload(t *testing.T) {
 	_, ok = find()
 	assert.False(t, ok, "a removed file's agent is gone")
 	assert.Equal(t, "blitz", w.ActiveAgent().Name, "the active agent falls back to blitz")
+}
+
+// Blitz routes to the user's agents (~/.blitz/agents) and the workspace's
+// (.agents/agents) as it does to the built-in ones: transfer_to_agent hands
+// them the turn, and invoke_agent runs them and returns what they said.
+func TestBlitzRoutesToGlobalAndWorkspaceAgents(t *testing.T) {
+	type place struct {
+		name string
+		dir  func(c *config.Config) string
+	}
+	places := []place{
+		{"global", func(*config.Config) string { return config.ExpandHome(config.UserAgentsDir) }},
+		{"workspace", func(c *config.Config) string { return filepath.Join(c.Tools.WorkspaceDir, config.ProjectAgentsDir) }},
+	}
+	tests := []struct {
+		name    string
+		replies func(agent string) []*genai.Content
+		check   func(t *testing.T, agent string, authors []string, results []map[string]any)
+	}{
+		{"transfer_to_agent", func(agent string) []*genai.Content {
+			return []*genai.Content{toolCall("transfer_to_agent", map[string]any{"agent_name": agent}), text(agent + " here")}
+		}, func(t *testing.T, agent string, authors []string, _ []map[string]any) {
+			require.NotEmpty(t, authors)
+			assert.Equal(t, agent, authors[len(authors)-1], "authors %v", authors)
+		}},
+		{"invoke_agent", func(agent string) []*genai.Content {
+			return []*genai.Content{toolCall("invoke_agent", map[string]any{"agent_name": agent, "prompt": "check it"}), text(agent + " says fine"), text("done")}
+		}, func(t *testing.T, agent string, authors []string, results []map[string]any) {
+			require.Len(t, results, 1)
+			assert.Equal(t, agent+" says fine", results[0]["response"], "result %v", results[0])
+			assert.Empty(t, results[0]["error"], "result %v", results[0])
+			assert.Equal(t, "blitz", authors[len(authors)-1], "blitz answers after the call: %v", authors)
+		}},
+	}
+	for _, p := range places {
+		for _, tt := range tests {
+			t.Run(p.name+"/"+tt.name, func(t *testing.T) {
+				agent := p.name + "-helper"
+				w, _ := openTestWith(t, func(c *config.Config) {
+					dir := p.dir(c)
+					require.NoError(t, os.MkdirAll(dir, 0o755))
+					require.NoError(t, os.WriteFile(filepath.Join(dir, agent+".md"),
+						[]byte("---\nname: "+agent+"\ndescription: Helps\ntools: []\n---\nYou help.\n"), 0o644))
+				}, tt.replies(agent)...)
+				require.True(t, slices.ContainsFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == agent }), "%s is offered", agent)
+				s, _ := w.NewSession()
+				var authors []string
+				var results []map[string]any
+				_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "go"}, func(e api.Event) {
+					if e.Text != nil && e.Author != "" {
+						authors = append(authors, e.Author)
+					}
+					if e.ToolResult != nil && e.ToolResult.Name == "invoke_agent" {
+						results = append(results, e.ToolResult.Result)
+					}
+				})
+				require.NoError(t, err)
+				tt.check(t, agent, authors, results)
+			})
+		}
+	}
 }
