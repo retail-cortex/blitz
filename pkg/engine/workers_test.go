@@ -365,6 +365,19 @@ func TestWorkersOffRefuseEverything(t *testing.T) {
 	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
 	_, err = w.RunWorker(context.Background(), "a", RunOptions{})
 	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+	_, _, _, err = w.DraftWorker(api.WorkerSpec{Name: "a", Schedule: "@daily", Prompt: "x"})
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+}
+
+// A draft with a name that can't be a folder's is a problem to fix, not
+// an error.
+func TestDraftWorkerBadName(t *testing.T) {
+	w := openTest(t)
+	_, data, problems, err := w.DraftWorker(api.WorkerSpec{Name: " Not A Name ", Schedule: "@daily", Prompt: "x"})
+	require.NoError(t, err)
+	assert.Nil(t, data)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], `name "Not A Name"`)
 }
 
 // With no worker folders configured, a new worker has nowhere to go.

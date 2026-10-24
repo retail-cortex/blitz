@@ -67,6 +67,7 @@ func TestSecurityCommand(t *testing.T) {
 // masked and fails; clean files pass; install-hook adds the hook once.
 func TestScanSecretsAndInstallHook(t *testing.T) {
 	dir := t.TempDir()
+	t.Chdir(dir)                       // outside any repository
 	key := "AKIA" + "Q3EXAMPLEZ7Y4WXN" // put together: no key in this file
 	leak := filepath.Join(dir, "leak.go")
 	clean := filepath.Join(dir, "clean.go")
@@ -91,6 +92,8 @@ func TestScanSecretsAndInstallHook(t *testing.T) {
 		{"clean", []string{"scan-secrets", clean}, "", false},
 		{"nothing named", []string{"scan-secrets"}, "name the files", true},
 		{"both", []string{"scan-secrets", "--staged", clean}, "name the files", true},
+		{"a file that isn't there", []string{"scan-secrets", filepath.Join(dir, "gone.go")}, "gone.go", true},
+		{"staged, outside a repository", []string{"scan-secrets", "--staged"}, "not a git repository", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,7 +114,17 @@ func TestScanSecretsAndInstallHook(t *testing.T) {
 	init := exec.Command("git", "init", "-q")
 	init.Dir = repo
 	require.NoError(t, init.Run())
-	out, err := run("install-hook", repo)
+	_, err := run("install-hook", t.TempDir())
+	assert.Error(t, err, "not a repository")
+	add := exec.Command("git", "add", ".")
+	add.Dir = repo
+	t.Chdir(repo)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "leak.go"), []byte("package a\nconst k = \""+key+"\"\n"), 0o644))
+	require.NoError(t, add.Run())
+	out, err := run("scan-secrets", "--staged")
+	require.Error(t, err)
+	assert.Contains(t, out, "leak.go:2: AWS access key", "what the commit adds")
+	out, err = run("install-hook", repo)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Added the pre-commit hook")
 	out, err = run("install-hook", repo)

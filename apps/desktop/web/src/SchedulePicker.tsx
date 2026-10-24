@@ -109,7 +109,7 @@ export function SchedulePicker({ schedule, timezone, onSchedule, onTimezone }: {
         {p.repeat === "custom" ? (
           <label className="field">
             <span className="t-label">{t("desktop.newworker.schedule")}</span>
-            <input className="input mono" value={p.text} spellCheck={false} placeholder="Weekdays at 9:30" onChange={(e) => change({ ...p, text: e.target.value })} />
+            <input className="input mono" value={p.text} spellCheck={false} placeholder={t("desktop.schedule.custom_placeholder")} onChange={(e) => change({ ...p, text: e.target.value })} />
             <span className="t-body-sm muted">{t("desktop.newworker.schedule_hint")}</span>
           </label>
         ) : (

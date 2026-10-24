@@ -177,6 +177,7 @@ export function limitHints(p: { defaultMaxTurns: number; defaultMaxCostUsd: numb
 
 /** A permission kind a job may be given, as the rule builder offers them (WK-71). */
 export const ruleKinds = ["shell", "write", "delete", "web", "mcp"] as const;
+/** One of ruleKinds. */
 export type RuleKind = (typeof ruleKinds)[number];
 
 /** One row of the rule builder: a kind and its pattern; kind "" is a line that isn't kind:pattern, kept as written. */

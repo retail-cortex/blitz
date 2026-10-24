@@ -63,6 +63,16 @@ func TestInitGitRepo(t *testing.T) {
 		assert.Equal(t, "present", h.Msg.Status)
 		assert.FileExists(t, h.Msg.Path)
 	})
+	t.Run("the secrets hook where it can't go", func(t *testing.T) {
+		dir := t.TempDir()
+		init := exec.Command("git", "init", "-q")
+		init.Dir = dir
+		require.NoError(t, init.Run())
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".githooks"), nil, 0o644))
+		_, err := ws.InstallSecretHook(ctx, connect.NewRequest(&pb.InstallSecretHookRequest{Workspace: dir}))
+		assert.Error(t, err)
+		assert.NotEqual(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "a repository, just not writable there")
+	})
 	t.Run("the secrets hook outside a repository", func(t *testing.T) {
 		_, err := ws.InstallSecretHook(ctx, connect.NewRequest(&pb.InstallSecretHookRequest{Workspace: t.TempDir()}))
 		code, info := errorReason(t, err)

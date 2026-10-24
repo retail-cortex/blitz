@@ -188,3 +188,8 @@ func TestBrowserRelayEnds(t *testing.T) {
 	assert.True(t, errors.Is(r.WriteJSON(1), r.why))
 	require.NoError(t, r.Close(), "twice")
 }
+
+// A command that can't be written as JSON never reaches the window.
+func TestBrowserRelayRefusesWhatIsntJSON(t *testing.T) {
+	assert.Error(t, (&browserRelay{}).WriteJSON(make(chan int)))
+}

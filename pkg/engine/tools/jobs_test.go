@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -62,12 +63,28 @@ func TestCreateJobTool(t *testing.T) {
 		approve  bool
 		off      bool
 		problems []string
+		change   func(*Jobs)
 		wantErr  string
 	}{
 		{name: "approved", approve: true},
 		{name: "refused", approve: false, wantErr: "declined"},
 		{name: "not valid yet", approve: true, problems: []string{"schedule: can't read \"someday\""}, wantErr: "isn't valid yet"},
 		{name: "jobs off", approve: true, off: true, wantErr: "jobs are off"},
+		{name: "can't draft it", approve: true, change: func(j *Jobs) {
+			j.Draft = func(api.WorkerSpec) (string, []byte, []string, error) {
+				return "", nil, nil, errors.New("no workers folder")
+			}
+		}, wantErr: "no workers folder"},
+		{name: "can't write it", approve: true, change: func(j *Jobs) {
+			j.Create = func(api.WorkerSpec) (api.WorkerInfo, []string, error) {
+				return api.WorkerInfo{}, nil, errors.New("disk full")
+			}
+		}, wantErr: "disk full"},
+		{name: "not valid once written", approve: true, change: func(j *Jobs) {
+			j.Create = func(api.WorkerSpec) (api.WorkerInfo, []string, error) {
+				return api.WorkerInfo{}, []string{"name: taken"}, nil
+			}
+		}, wantErr: "isn't valid yet"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -76,7 +93,11 @@ func TestCreateJobTool(t *testing.T) {
 			r := &Registry{hooks: hooks, workspace: ws}
 			var created []api.WorkerSpec
 			if !tt.off {
-				r.SetJobs(fakeJobs(dir, tt.problems, &created))
+				j := fakeJobs(dir, tt.problems, &created)
+				if tt.change != nil {
+					tt.change(&j)
+				}
+				r.SetJobs(j)
 			}
 			out := runTool(t, toolOf(t)(NewCreateJobTool(r)), args)
 			if tt.wantErr != "" {
@@ -166,4 +187,15 @@ func TestInstallSecretHookTool(t *testing.T) {
 		assert.Equal(t, "installed", out["status"])
 		assert.FileExists(t, filepath.Join(dir, ".githooks", "pre-commit"))
 	}
+
+	t.Run("where the hook can't go", func(t *testing.T) {
+		ws, dir := newTestWorkspace(t)
+		init := exec.Command("git", "init", "-q")
+		init.Dir = dir
+		require.NoError(t, init.Run())
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".githooks"), nil, 0o644))
+		hooks, _ := approverHooks(true)
+		out := runTool(t, toolOf(t)(NewInstallSecretHookTool(&Registry{hooks: hooks, workspace: ws})), map[string]any{})
+		assert.Contains(t, errOf(out), ".githooks")
+	})
 }

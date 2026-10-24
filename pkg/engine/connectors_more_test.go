@@ -164,7 +164,7 @@ func TestConnectorChoicesUnwritable(t *testing.T) {
 	secrets.SetDefault(&secrets.Memory{})
 	w := openTest(t)
 	ctx := context.Background()
-	g := GlobalConnectors{Config: w.cfg}
+	g := GlobalConnectors{Config: w.settings()}
 	saved, _, err := w.SaveConnector(ctx, kitchen(t), nil, "")
 	require.NoError(t, err)
 	require.NoError(t, w.SetConnectorOn(ctx, "databases", connectors.ScopeWorkspace, "kitchen", false))

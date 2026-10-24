@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -346,4 +347,44 @@ func TestBrowserToolInTheApp(t *testing.T) {
 			assert.Equal(t, asked, tt.asked, "asked once a chat")
 		})
 	}
+}
+
+// web_fetch's fallback reads a page's text through the browser, under the
+// browser's checks (WEB-09).
+func TestBrowserPageText(t *testing.T) {
+	page := browsertest.New(t)
+	hooks, _ := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, nil)
+	bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+		return browser.Attach(ctx, page.URL, o)
+	}
+	ctx := context.Background()
+
+	out, err := bt.pageText(ctx, "https://shop.example/")
+	require.NoError(t, err)
+	assert.Equal(t, browsertest.Title, out.Title)
+	assert.NotEmpty(t, out.Text)
+	_, err = bt.pageText(ctx, "https://a.blocked.example/")
+	assert.ErrorContains(t, err, "web.deny_domains")
+}
+
+// deadTransport is a desktop view that went before it answered.
+type deadTransport struct{}
+
+func (deadTransport) WriteJSON(any) error { return nil }
+func (deadTransport) ReadJSON(any) error  { return io.EOF }
+func (deadTransport) Close() error        { return nil }
+
+// A desktop view that goes before it's set up is an error, not a page.
+func TestBrowserToolViewThatWontConnect(t *testing.T) {
+	hooks, _ := decisionHooks(api.DecisionOnce)
+	bt := testBrowserTool(t, hooks, func(c *config.BrowserConfig, _ *WebFetchConfig) { c.Show = "silent" })
+	bt.timeout = time.Second
+	bt.launch = func(context.Context, browser.Options) (*browser.Browser, error) {
+		t.Fatal("not Chrome: a window is watching")
+		return nil, nil
+	}
+	bt.r.SetAgentBrowserHost(func(context.Context, AgentBrowserOptions) (browser.Transport, error) { return deadTransport{}, nil })
+	out := bt.run(context.Background(), BrowserInput{Action: "navigate", URL: "https://shop.example/"})
+	assert.NotEmpty(t, out.Error)
 }

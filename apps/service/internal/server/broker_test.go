@@ -172,3 +172,41 @@ func TestCloseWaitsForRunningTurns(t *testing.T) {
 	got := s.openDirs()
 	assert.Len(t, got, 0, "still open: %v", got)
 }
+
+// A session's tool calls, each with its turn, prompt and result, for the
+// window's tool list; the suggestions for a workspace without a harness.
+func TestSessionToolsAndSuggestions(t *testing.T) {
+	c, _ := serve(t, nil, call("list_files", map[string]any{"path": "."}), text("done"))
+	dir := t.TempDir()
+	ctx := context.Background()
+	s, err := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
+	require.NoError(t, err)
+	id := s.Msg.Session.Id
+	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: id, Turn: &pb.Turn{Text: "what's here?"}}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+
+	tools, err := c.sessions.ListSessionTools(ctx, connect.NewRequest(&pb.ListSessionToolsRequest{Workspace: dir, SessionId: id}))
+	require.NoError(t, err)
+	require.Len(t, tools.Msg.Tools, 1)
+	got := tools.Msg.Tools[0]
+	assert.Equal(t, "list_files", got.Call.Name)
+	assert.Equal(t, "what's here?", got.Prompt)
+	assert.NotNil(t, got.Result, "with its result")
+
+	none, err := c.sessions.ListSessionTools(ctx, connect.NewRequest(&pb.ListSessionToolsRequest{Workspace: dir, SessionId: "no-such-session"}))
+	require.NoError(t, err)
+	assert.Empty(t, none.Msg.Tools, "a session never run has none")
+
+	sug, err := c.workspaces.GetSuggestions(ctx, connect.NewRequest(&pb.GetSuggestionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, sug.Msg.HarnessMissing, "no .agents/AGENTS.md")
+
+	gone := filepath.Join(t.TempDir(), "gone")
+	_, err = c.sessions.ListSessionTools(ctx, connect.NewRequest(&pb.ListSessionToolsRequest{Workspace: gone, SessionId: id}))
+	assert.Error(t, err)
+	_, err = c.workspaces.GetSuggestions(ctx, connect.NewRequest(&pb.GetSuggestionsRequest{Workspace: gone}))
+	assert.Error(t, err)
+}

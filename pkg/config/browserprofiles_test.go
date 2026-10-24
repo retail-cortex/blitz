@@ -87,3 +87,37 @@ func names(ps []BrowserProfile) []string {
 	}
 	return out
 }
+
+// A store that can't be written, or a workspace that isn't there, is an
+// error, not a choice half made.
+func TestBrowserProfilesFailures(t *testing.T) {
+	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	missing := filepath.Join(t.TempDir(), "gone")
+
+	t.Run("a workspace that isn't there", func(t *testing.T) {
+		s := OpenBrowserProfiles(t.TempDir())
+		_, err := s.Create("work", now)
+		require.NoError(t, err)
+		assert.Error(t, s.SetWorkspace(missing, "work"))
+		assert.Empty(t, s.ForWorkspace(missing))
+	})
+	t.Run("sites for no profile", func(t *testing.T) {
+		assert.ErrorIs(t, OpenBrowserProfiles(t.TempDir()).SetAllowDomains("work", []string{"example.com"}), ErrNoBrowserProfile)
+	})
+	t.Run("no room for its folder", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "browser"), nil, 0o600))
+		_, err := OpenBrowserProfiles(dir).Create("work", now)
+		assert.Error(t, err)
+	})
+	t.Run("a settings folder it can't write", func(t *testing.T) {
+		dir := t.TempDir()
+		s := OpenBrowserProfiles(dir)
+		_, err := s.Create("work", now)
+		require.NoError(t, err)
+		require.NoError(t, os.Chmod(dir, 0o500))
+		t.Cleanup(func() { os.Chmod(dir, 0o700) })
+		assert.Error(t, s.Delete("work"))
+		assert.DirExists(t, s.Dir("work"), "kept when it can't be forgotten")
+	})
+}

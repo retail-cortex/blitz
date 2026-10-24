@@ -133,13 +133,13 @@ func TestUploadFileRefuses(t *testing.T) {
 func TestUnfinishedUploadsAreDropped(t *testing.T) {
 	ctx := context.Background()
 	w := openTest(t)
-	old := uploadIdle
-	uploadIdle = time.Millisecond
-	t.Cleanup(func() { uploadIdle = old })
 	stale, _, err := w.UploadFile(ctx, "stale.bin", "", []byte("x"), false, false)
 	require.NoError(t, err)
 	require.Len(t, hiddenUploads(t, w.Dir()), 1)
-	time.Sleep(5 * time.Millisecond)
+	// Its last chunk long ago, not a sleep: a slow run can't idle the fresh one too.
+	w.uploadMu.Lock()
+	w.uploads[stale].seen = time.Now().Add(-2 * uploadIdle)
+	w.uploadMu.Unlock()
 	_, _, err = w.UploadFile(ctx, "fresh.bin", "", []byte("y"), false, false)
 	require.NoError(t, err)
 	_, _, err = w.UploadFile(ctx, "stale.bin", stale, []byte("x"), true, false)
@@ -148,4 +148,24 @@ func TestUnfinishedUploadsAreDropped(t *testing.T) {
 
 	w.dropUploads(time.Time{}) // as Close does
 	assert.Empty(t, hiddenUploads(t, w.Dir()), "every unfinished upload is dropped")
+}
+
+// An upload that can't start, or whose hidden file goes, fails and is
+// forgotten.
+func TestUploadFailures(t *testing.T) {
+	ctx := context.Background()
+	w := openTest(t)
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "taken"), []byte("x"), 0o644))
+	_, _, err := w.UploadFile(ctx, "taken/inside.bin", "", []byte("x"), false, false)
+	assert.Error(t, err, "under a file")
+
+	id, _, err := w.UploadFile(ctx, "gone.bin", "", []byte("x"), false, false)
+	require.NoError(t, err)
+	left := hiddenUploads(t, w.Dir())
+	require.Len(t, left, 1)
+	require.NoError(t, os.Remove(left[0]))
+	_, _, err = w.UploadFile(ctx, "gone.bin", id, []byte("y"), false, false)
+	assert.Error(t, err, "its hidden file removed")
+	_, _, err = w.UploadFile(ctx, "gone.bin", id, []byte("y"), true, false)
+	assert.ErrorIs(t, err, ErrNoUpload, "a failed chunk ends it")
 }

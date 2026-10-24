@@ -120,6 +120,20 @@ func TestInstall(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, Present, r.Status)
 	})
+	t.Run("where the hook can't go", func(t *testing.T) {
+		for name, block := range map[string]string{
+			"its folder is a file": HooksDir,
+			"the hook is a folder": filepath.Join(HooksDir, "pre-commit", "x"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				dir := repo(t)
+				require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, block)), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, block), nil, 0o644))
+				_, err := Install(ctx, dir)
+				assert.Error(t, err)
+			})
+		}
+	})
 	t.Run("from a folder inside the repository", func(t *testing.T) {
 		dir := repo(t)
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
@@ -250,4 +264,9 @@ func TestStaged(t *testing.T) {
 	assert.Equal(t, map[string][]byte{"a.txt": []byte("staged\n")}, got, "what's staged, as staged")
 	_, err = Staged(context.Background(), t.TempDir())
 	assert.ErrorIs(t, err, ErrNotARepository)
+}
+
+func TestMaskShort(t *testing.T) {
+	assert.Equal(t, "•••", mask("abc"))
+	assert.Equal(t, "abcd••", mask("abcdef"))
 }

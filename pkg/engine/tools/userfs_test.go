@@ -176,5 +176,56 @@ func TestUserFileOperations(t *testing.T) {
 		assert.Error(t, ws.UserWriteFile(cctx, "held", nil, nil))
 		assert.Error(t, ws.UserRename(cctx, "held", "other"))
 		assert.Error(t, ws.UserRemove(cctx, "held"))
+		assert.Error(t, ws.UserFinishUpload(cctx, "held.tmp", "held", false))
+	})
+}
+
+// TestUserUploads refuses what an upload can't be (no name, a file for a
+// folder, a missing hidden file) and puts it in place only where it may.
+func TestUserUploads(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	ctx := context.Background()
+	require.NoError(t, ws.UserWriteFile(ctx, "taken.txt", []byte("old"), nil))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "folder"), 0o755))
+	upload := func(t *testing.T, rel, data string) string {
+		t.Helper()
+		tmp, err := ws.UserCreateUpload(rel)
+		require.NoError(t, err)
+		require.NoError(t, ws.UserAppend(tmp, []byte(data)))
+		return tmp
+	}
+
+	tests := []struct {
+		name string
+		call func(t *testing.T) error
+		want string
+	}{
+		{"no name", func(t *testing.T) error { _, err := ws.UserCreateUpload("."); return err }, "must name a file"},
+		{"under a file", func(t *testing.T) error { _, err := ws.UserCreateUpload(filepath.Join("taken.txt", "x")); return err }, "taken.txt"},
+		{"append to nothing", func(t *testing.T) error { return ws.UserAppend("missing.tmp", []byte("x")) }, "missing.tmp"},
+		{"taken, not replacing", func(t *testing.T) error {
+			return ws.UserFinishUpload(ctx, upload(t, "taken.txt", "new"), "taken.txt", false)
+		}, "file already exists"},
+		{"a folder, even replacing", func(t *testing.T) error {
+			return ws.UserFinishUpload(ctx, upload(t, "folder", "new"), "folder", true)
+		}, "is a folder"},
+		{"finish nothing", func(t *testing.T) error { return ws.UserFinishUpload(ctx, "missing.tmp", "new.txt", false) }, "missing.tmp"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.ErrorContains(t, tt.call(t), tt.want)
+		})
+	}
+
+	t.Run("replacing a file", func(t *testing.T) {
+		require.NoError(t, ws.UserFinishUpload(ctx, upload(t, "taken.txt", "new"), "taken.txt", true))
+		data, err := os.ReadFile(filepath.Join(dir, "taken.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "new", string(data))
+	})
+	t.Run("discarded", func(t *testing.T) {
+		tmp := upload(t, "gone.txt", "x")
+		ws.UserDiscardUpload(tmp)
+		assert.NoFileExists(t, filepath.Join(dir, tmp))
 	})
 }

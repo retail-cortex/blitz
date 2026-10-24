@@ -632,3 +632,29 @@ func TestHarnessFolders(t *testing.T) {
 	assert.Contains(t, got, "`.agents/scripts/` (refresh_data.py, setup.sh)")
 	assert.NotContains(t, got, ".keep")
 }
+
+// The workspace browses with the profile the person chose for it, with
+// its sites, unless its project settings aren't trusted (BP-03).
+func TestWorkspaceBrowserProfile(t *testing.T) {
+	w := openTest(t)
+	store := config.OpenBrowserProfiles(filepath.Join(os.Getenv("HOME"), ".blitz"))
+	assert.Empty(t, w.browserProfile().Name, "none chosen")
+
+	_, err := store.Create("work", time.Now())
+	require.NoError(t, err)
+	require.NoError(t, store.SetAllowDomains("work", []string{"mail.example.com"}))
+	require.NoError(t, store.SetWorkspace(w.Dir(), "work"))
+	got := w.browserProfile()
+	assert.Equal(t, "work", got.Name)
+	assert.Equal(t, store.Dir("work"), got.Dir)
+	assert.Equal(t, []string{"mail.example.com"}, got.Allow)
+
+	for _, state := range []string{"pending", "declined"} {
+		t.Run("project settings "+state, func(t *testing.T) {
+			old := w.project.State
+			w.project.State = state
+			t.Cleanup(func() { w.project.State = old })
+			assert.Empty(t, w.browserProfile().Name, "a project not trusted never reaches the sign-ins")
+		})
+	}
+}

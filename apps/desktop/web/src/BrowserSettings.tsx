@@ -28,6 +28,7 @@ export const validProfileName = (name: string) => /^[a-z0-9][a-z0-9_-]{0,31}$/.t
 
 /** A profile's sites as the field shows them, and back: one a line, or commas. */
 export const domainsText = (d: readonly string[]) => d.join("\n");
+/** The sites typed in the field: lowercased, once each. */
 export const parseDomains = (text: string) => [...new Set(text.split(/[\s,]+/).map((d) => d.trim().toLowerCase()).filter(Boolean))];
 
 /**
@@ -105,7 +106,7 @@ export function BrowserSettings() {
       >
         <label className="field" style={{ flex: 1 }}>
           <span className="t-label">{t("desktop.browser.new")}</span>
-          <input className={`input mono ${problem ? "invalid" : ""}`} value={name} placeholder="work" spellCheck={false} disabled={busy} onChange={(e) => setName(e.target.value.trim())} />
+          <input className={`input mono ${problem ? "invalid" : ""}`} value={name} placeholder={t("desktop.browser.name_placeholder")} spellCheck={false} disabled={busy} onChange={(e) => setName(e.target.value.trim())} />
         </label>
         <Button variant="tonal" icon={mdiPlus} type="submit" disabled={busy || !name || !!problem}>
           {t("desktop.browser.add")}
@@ -149,7 +150,7 @@ function ProfileCard({ profile: p, busy, act, onDelete }: { profile: BrowserProf
       <div className="row wrap" style={{ gap: 8, alignItems: "flex-end" }}>
         <label className="field" style={{ flex: 1, minWidth: 220 }}>
           <span className="t-label">{t("desktop.browser.site")}</span>
-          <input className="input" value={site} placeholder="https://mail.example.com" spellCheck={false} onChange={(e) => setSite(e.target.value.trim())} />
+          <input className="input" value={site} placeholder={t("desktop.browser.site_placeholder")} spellCheck={false} onChange={(e) => setSite(e.target.value.trim())} />
         </label>
         {inApp && (
           <Button icon={mdiLogin} disabled={busy} onClick={() => void signInWindow(p.name, site).catch(() => undefined)}>
@@ -167,7 +168,7 @@ function ProfileCard({ profile: p, busy, act, onDelete }: { profile: BrowserProf
           className="input mono"
           rows={2}
           value={domains}
-          placeholder={"mail.example.com\n*.example.com"}
+          placeholder={t("desktop.browser.allow_placeholder")}
           spellCheck={false}
           onChange={(e) => setDomains(e.target.value)}
           onBlur={() => {

@@ -75,6 +75,8 @@ func TestFileService(t *testing.T) {
 	require.NoError(t, err)
 
 	// A dropped file, in two chunks (FIL-22).
+	_, err = files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: filepath.Join(t.TempDir(), "gone"), Path: "x", Data: []byte("x")}))
+	assert.Error(t, err, "no such workspace")
 	up, err := files.UploadFile(ctx, connect.NewRequest(&pb.UploadFileRequest{Workspace: dir, Path: "drop/pic.png", Data: []byte("\x89PN")}))
 	require.NoError(t, err)
 	require.NotEmpty(t, up.Msg.UploadId)
