@@ -439,6 +439,9 @@ service WorkspaceService {
   // Stops a background process and its descendants (UNKNOWN_PROCESS unless
   // one of the given sessions started it).
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
+  // Returns the agents' background processes still running, in every open
+  // workspace (the tray's Processes menu, spec_electron_038 EL-112).
+  rpc ListRunningProcesses(ListRunningProcessesRequest) returns (ListRunningProcessesResponse);
   // Records in the workspace's audit log a command the user ran directly
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
@@ -1748,12 +1751,29 @@ message KillProcessRequest {
   // The sessions the asking client ran turns in.
   repeated string session_ids = 2;
   int32 id = 3;
+  // Whichever session started it: the user's own stop (the tray's).
+  bool any_session = 4;
 }
 
 // Response message for WorkspaceService.KillProcess.
 message KillProcessResponse {
   // How it is after the kill.
   Process process = 1;
+}
+
+// Request message for WorkspaceService.ListRunningProcesses.
+message ListRunningProcessesRequest {}
+
+// A background process and the workspace it runs in.
+message WorkspaceProcess {
+  string workspace = 1;
+  Process process = 2;
+}
+
+// Response message for WorkspaceService.ListRunningProcesses.
+message ListRunningProcessesResponse {
+  // By workspace, then ID.
+  repeated WorkspaceProcess processes = 1;
 }
 
 // Request message for WorkspaceService.AuditShell.

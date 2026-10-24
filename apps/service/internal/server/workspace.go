@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -612,11 +614,33 @@ func (h workspaceService) KillProcess(ctx context.Context, r req[pb.KillProcessR
 	if err != nil {
 		return nil, err
 	}
-	p, err := w.KillProcess(r.Msg.SessionIds, int(r.Msg.Id))
+	var p api.ProcessInfo
+	if r.Msg.AnySession {
+		p, err = w.StopProcess(int(r.Msg.Id))
+	} else {
+		p, err = w.KillProcess(r.Msg.SessionIds, int(r.Msg.Id))
+	}
 	if err != nil {
 		return nil, toAPI(err)
 	}
 	return ok(&pb.KillProcessResponse{Process: processMsg(p)})
+}
+
+func (h workspaceService) ListRunningProcesses(_ context.Context, _ req[pb.ListRunningProcessesRequest]) (*connect.Response[pb.ListRunningProcessesResponse], error) {
+	h.s.mu.Lock()
+	ws := make([]*workspace, 0, len(h.s.workspaces))
+	for _, w := range h.s.workspaces {
+		ws = append(ws, w)
+	}
+	h.s.mu.Unlock()
+	slices.SortFunc(ws, func(a, b *workspace) int { return strings.Compare(a.Dir(), b.Dir()) })
+	out := &pb.ListRunningProcessesResponse{}
+	for _, w := range ws {
+		for _, p := range w.RunningProcesses() {
+			out.Processes = append(out.Processes, &pb.WorkspaceProcess{Workspace: w.Dir(), Process: processMsg(p)})
+		}
+	}
+	return ok(out)
 }
 
 func (h workspaceService) AuditShell(ctx context.Context, r req[pb.AuditShellRequest]) (*connect.Response[pb.AuditShellResponse], error) {

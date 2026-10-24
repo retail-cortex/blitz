@@ -581,9 +581,21 @@ func TestProcessesOverTheAPI(t *testing.T) {
 			assert.Equal(t, "UNKNOWN_PROCESS", reason(t, call()))
 		})
 	}
-	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, SessionIds: mine, Id: p.Id}))
+	// The tray's view: every open workspace's running ones, and its stop,
+	// whichever session started it (EL-112).
+	all, err := w.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, all.Msg.Processes, 1)
+	assert.Equal(t, p.Id, all.Msg.Processes[0].Process.Id)
+	assert.NotEmpty(t, all.Msg.Processes[0].Workspace)
+	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, Id: p.Id, AnySession: true}))
 	require.NoError(t, err)
 	assert.Equal(t, p.Id, killed.Msg.Process.Id)
+	assert.False(t, killed.Msg.Process.Running)
+	all, err = w.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, all.Msg.Processes, "stopped")
+	assert.Equal(t, "UNKNOWN_PROCESS", reason(t, unary(w.KillProcess, &pb.KillProcessRequest{Workspace: dir, Id: 999, AnySession: true})))
 	_, err = w.TakeProcessNotices(ctx, connect.NewRequest(&pb.TakeProcessNoticesRequest{Workspace: dir, SessionId: id}))
 	assert.NoError(t, err)
 }

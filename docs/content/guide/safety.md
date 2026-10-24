@@ -83,6 +83,8 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 
 Background processes never outlive Blitz. Exiting with processes running asks whether to kill them or wait; a second Ctrl+C force-quits. Each process group is guarded so it's killed if Blitz dies, even by `SIGKILL`.
 
+**From the tray.** The tray's **Processes** menu lists every background process an agent started that's still running, in every open workspace, each with its workspace and **Stop**, so a dev server or a watcher left behind can be found and ended without opening the chat that started it.
+
 ## Secrets
 
 Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). Blitz's sign-ins stay its own: `~/.config/gcloud` is blocked, and so is the `ant` command's directory (`~/.config/anthropic`) unless Claude signs in with it. With `[sandbox] share_adc = true` (your settings only; a project can't set it) and a provider on Google Cloud ADC, the agent's commands get that sign-in: each its own copy of the credentials file, named by `GOOGLE_APPLICATION_CREDENTIALS` and removed when the command ends, so code that calls Google Cloud works from them. The copy holds a refresh token, which a command with the network could send anywhere: turn it on only for workspaces you trust. The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.

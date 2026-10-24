@@ -191,9 +191,16 @@ func TestAgentBrowserOverTheAPI(t *testing.T) {
 		assert.False(t, stream.Receive(), "nothing asked of it")
 		return stream.Err()
 	}
-	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(watch(ws)), "watched until it went")
+	// Opened first, so the watch's short deadline is only the watch's.
+	_, err := c.workspaces.ListProcesses(ctx, connect.NewRequest(&pb.ListProcessesRequest{Workspace: ws}))
+	require.NoError(t, err)
+	// The deadline ends it: the client's error, or the server's clean end
+	// when that comes first.
+	if werr := watch(ws); werr != nil {
+		assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(werr), "watched until it went: %v", werr)
+	}
 
-	_, err := c.workspaces.AgentBrowserReply(ctx, connect.NewRequest(&pb.AgentBrowserReplyRequest{Workspace: ws, BrowserId: "b-1", Closed: true}))
+	_, err = c.workspaces.AgentBrowserReply(ctx, connect.NewRequest(&pb.AgentBrowserReplyRequest{Workspace: ws, BrowserId: "b-1", Closed: true}))
 	_, info := errorReason(t, err)
 	assert.Equal(t, "NO_AGENT_BROWSER", info.Reason)
 

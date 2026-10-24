@@ -38,6 +38,9 @@ type Extras struct {
 	MCP     []*pb.MCPServerConfig
 	Workers []*pb.Worker
 	Runs    []*pb.WorkerRun
+	// Processes are the agents' background processes still running
+	// (EL-112); none from an older service.
+	Processes []*pb.WorkspaceProcess
 }
 
 // FetchExtras asks the service at sock for the submenus' lists, within a
@@ -63,6 +66,10 @@ func FetchExtras(ctx context.Context, sock string) (Extras, error) {
 		return e, err
 	}
 	e.Runs = runs.Msg.Runs
+	// An older service hasn't the call: no Processes, the rest as before.
+	if procs, err := pb.NewWorkspaceServiceClient(hc, socket.BaseURL).ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{})); err == nil {
+		e.Processes = procs.Msg.Processes
+	}
 	return e, nil
 }
 
@@ -82,6 +89,7 @@ const (
 	StopWorkflow             // stop a workflow's run (RunID)
 	ShowWorkflow             // open the app on a workflow's canvas (Name), on a run (RunID)
 	SetConnector             // turn a connection on or off in a workspace (Category, Scope, Name, On)
+	StopProcess              // stop an agent's background process (Workspace, ID)
 )
 
 // Action is an entry's click.
@@ -94,6 +102,7 @@ type Action struct {
 	RunID     string
 	Hash      string
 	On        bool
+	ID        int
 }
 
 // Entry is a menu item: a title, a checkbox (Checked) or not, greyed out
@@ -165,6 +174,8 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 		err = open(WorkflowLink(a.Workspace, a.Name, a.RunID))
 	case SetConnector:
 		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).SetConnectorEnabled(ctx, connect.NewRequest(&pb.SetConnectorEnabledRequest{Workspace: a.Workspace, Category: a.Category, Scope: a.Scope, Name: a.Name, Enabled: a.On}))
+	case StopProcess:
+		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: a.Workspace, Id: int32(a.ID), AnySession: true}))
 	case NoAction:
 	default:
 		err = errors.New("no such action")
