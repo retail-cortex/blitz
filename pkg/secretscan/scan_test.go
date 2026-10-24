@@ -154,6 +154,62 @@ func TestInstall(t *testing.T) {
 	})
 }
 
+// A hook Blitz wrote before (an older version) is brought up to date; a
+// hook of the repository's own in .githooks is left alone.
+func TestInstallUpdatesItsOwnHook(t *testing.T) {
+	needGit(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	git(t, dir, "init", "-q")
+	git(t, dir, "config", "core.hooksPath", HooksDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, HooksDir), 0o755))
+	old := hookHeader + "exec blitz security scan-secrets --staged\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, HooksDir, "pre-commit"), []byte(old), 0o755))
+	r, err := Install(ctx, dir)
+	require.NoError(t, err)
+	assert.Equal(t, Installed, r.Status, "updated")
+	data, _ := os.ReadFile(filepath.Join(dir, HooksDir, "pre-commit"))
+	assert.Equal(t, HookScript, string(data))
+
+	theirs := t.TempDir()
+	git(t, theirs, "init", "-q")
+	require.NoError(t, os.MkdirAll(filepath.Join(theirs, HooksDir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(theirs, HooksDir, "pre-commit"), []byte("#!/bin/sh\nmake lint\n"), 0o755))
+	r, err = Install(ctx, theirs)
+	require.NoError(t, err)
+	assert.Equal(t, OtherHooks, r.Status)
+}
+
+// An older blitz on PATH, without the scan, isn't run: the hook's own
+// search does the work (the owner's report: "unknown flag: --staged").
+func TestHookWithAnOlderBlitz(t *testing.T) {
+	needGit(t)
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	bin := t.TempDir()
+	// An old blitz: `security --help` lists only fix-apparmor, and anything
+	// else fails as it did.
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "blitz"), []byte("#!/bin/sh\nif [ \"$2\" = --help ]; then echo 'Available Commands:'; echo '  fix-apparmor'; exit 0; fi\necho 'Error: unknown flag: --staged' >&2\nexit 1\n"), 0o755))
+	dir := t.TempDir()
+	git(t, dir, "init", "-q")
+	_, err := Install(context.Background(), dir)
+	require.NoError(t, err)
+	commit := func(file, text string) ([]byte, error) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(text), 0o644))
+		git(t, dir, "add", file)
+		cmd := gitCmd(dir, "commit", "-qm", file)
+		cmd.Env = append(cmd.Env, "PATH="+bin+":/usr/bin:/bin")
+		return cmd.CombinedOutput()
+	}
+	out, err := commit("ok.go", "package ok\n")
+	require.NoError(t, err, "a clean commit goes through: %s", out)
+	assert.NotContains(t, string(out), "unknown flag")
+	out, err = commit("leak.go", `const k = "`+awsKey+`"`+"\n")
+	require.Error(t, err)
+	assert.Contains(t, string(out), "looks like an API key")
+}
+
 // The hook, without blitz on PATH, stops a commit that adds a key and lets
 // the rest through.
 func TestHookStopsACommit(t *testing.T) {

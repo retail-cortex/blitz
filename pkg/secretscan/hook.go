@@ -29,6 +29,9 @@ import (
 // versioned, so everyone who clones it gets it (core.hooksPath).
 const HooksDir = ".githooks"
 
+// hookHeader starts every hook Blitz writes, so Install knows its own.
+const hookHeader = "#!/bin/sh\n# Blitz: stops a commit that would add an API key or another secret.\n"
+
 // HookScript is .githooks/pre-commit: Blitz's scan when blitz is on PATH,
 // else a portable search of the lines being added for the same key
 // formats.
@@ -37,7 +40,8 @@ const HookScript = `#!/bin/sh
 # A false alarm: add "blitz:allow-secret" to the line, or commit with
 # git commit --no-verify. (git config core.hooksPath .githooks turns it on
 # in a new clone.)
-if command -v blitz >/dev/null 2>&1; then
+# Only a blitz that has the scan: an older one on PATH would refuse it.
+if command -v blitz >/dev/null 2>&1 && blitz security --help 2>/dev/null | grep -q 'scan-secrets'; then
 	exec blitz security scan-secrets --staged
 fi
 added=$(git diff --cached -U0 --no-color --diff-filter=ACMR | grep '^+' | grep -v '^+++' | grep -v 'blitz:allow-secret')
@@ -95,7 +99,9 @@ func Install(ctx context.Context, dir string) (Result, error) {
 	}
 	hook := filepath.Join(top, HooksDir, "pre-commit")
 	current, _ := gitIn(ctx, top, "config", "--local", "--get", "core.hooksPath")
-	if data, err := os.ReadFile(hook); err == nil && strings.Contains(string(data), "blitz security scan-secrets") && current == HooksDir {
+	data, readErr := os.ReadFile(hook)
+	ours := readErr == nil && strings.HasPrefix(string(data), hookHeader)
+	if ours && string(data) == HookScript && current == HooksDir {
 		return Result{Status: Present, Path: hook}, nil
 	}
 	if current != "" && current != HooksDir {
@@ -106,12 +112,14 @@ func Install(ctx context.Context, dir string) (Result, error) {
 			return Result{Status: OtherHooks, Path: hook, Detail: other}, nil
 		}
 	}
-	if gitDir, err := gitIn(ctx, top, "rev-parse", "--absolute-git-dir"); err == nil {
+	if gitDir, err := gitIn(ctx, top, "rev-parse", "--absolute-git-dir"); err == nil && !ours {
 		if info, err := os.Stat(filepath.Join(gitDir, "hooks", "pre-commit")); err == nil && info.Mode().IsRegular() {
 			return Result{Status: OtherHooks, Path: hook, Detail: filepath.Join(gitDir, "hooks", "pre-commit")}, nil
 		}
 	}
-	if data, err := os.ReadFile(hook); err == nil && !strings.Contains(string(data), "blitz security scan-secrets") {
+	// A hook of the repository's own is left alone; one Blitz wrote
+	// before is brought up to date.
+	if readErr == nil && !ours {
 		return Result{Status: OtherHooks, Path: hook, Detail: filepath.Join(HooksDir, "pre-commit")}, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
