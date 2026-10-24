@@ -43,11 +43,18 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 One branch, one PR. Each item updates its spec and its site pages in the
 same commit; targeted tests per item, the full suite with `--config=race`
-and `tools/coverage.sh` only before the push. Done so far: routing to
-global (`~/.blitz/agents`) and workspace (`.agents/agents`) sub-agents
-verified, by transfer and by `invoke_agent` (`f14f2547`); 1, drag and
-drop with the computer (`454a1e73`, to be tried in the app); 2,
-pictures in Markdown (`e0870d3a`, checked in the browser with `?fake`).
+and `tools/coverage.sh` only before the push. All built on the branch, each committed locally with its spec, docs and
+manual checks; nothing pushed. Routing to global and workspace
+sub-agents verified (`f14f2547`); 1 drag and drop with the computer
+(`454a1e73`); 2 pictures in Markdown (`e0870d3a`); 6 the status bar
+toggles (`2ab883d1`); 7 Include all changes and command-made files to
+git (`a136230e`); 9–12 jobs from the chat, the rule builder, the
+schedule picker, limits as defaults (`f47296fc`); 8 python-uv
+(`5231d53b`); 13 and 14 the secrets hook, scripts and scratch
+(`6fb4152a`); 3 web_fetch through the browser (`38e02a3f`); 5 browser
+profiles (`cd0583e4`); 4 the agent's browser in the app (`da9f64fc`).
+Next: the owner's manual test (`.agents/v0.8.4-test-script.md`), then
+the full suite with `--config=race` and coverage, then one PR.
 
 Order: see **Order of work** below the list. 1 → 2 share the drop
 plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
@@ -256,7 +263,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
       (spec_harness_learning_048 or the setup's), the user guide's
       harness page.
 
-**Order of work:** 1 and 2 (done) → 6 and 7 (quick, and 7 feeds the hook)
+**Order of work (all done 2026-10-23):** 1 and 2 → 6 and 7 (quick, and 7 feeds the hook)
 → 9–12 together (one spec, the jobs editor) → 8 → 13 and 14 (both in
 the harness setup) → 3 → 5 → 4.
 
