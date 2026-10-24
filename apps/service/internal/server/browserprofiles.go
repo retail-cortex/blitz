@@ -56,6 +56,10 @@ func (h configService) ListBrowserProfiles(_ context.Context, r req[pb.ListBrows
 	if r.Msg.Workspace != "" {
 		out.WorkspaceProfile = s.ForWorkspace(r.Msg.Workspace)
 	}
+	out.Show = "ask"
+	if cfg, err := config.Load(h.s.configDir); err == nil && cfg.Browser.Show != "" {
+		out.Show = cfg.Browser.Show
+	}
 	return ok(out)
 }
 

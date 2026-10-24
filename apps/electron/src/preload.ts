@@ -45,8 +45,12 @@ const methods = [
   "DragOut",
   "TrashDropped",
   "SignInWindow",
+  "AgentBrowserOpen",
+  "AgentBrowserSend",
+  "AgentBrowserClose",
+  "AgentBrowserTakeOver",
 ];
-const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"]);
+const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open", "agentbrowser:message", "agentbrowser:closed"]);
 
 contextBridge.exposeInMainWorld("blitzElectron", {
   /** The calls the window answers. */

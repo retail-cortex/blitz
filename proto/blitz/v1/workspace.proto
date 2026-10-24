@@ -455,6 +455,14 @@ service WorkspaceService {
   // turns: first their active tasks and waiting requests, then ready,
   // then each change. Requests are answered with SessionService.Approve and Answer.
   rpc WatchTasks(WatchTasksRequest) returns (stream WatchTasksResponse);
+  // A desktop window hosts the agent's browser views while it watches
+  // (spec_agent_browser_050): each command for them (open a view, a
+  // DevTools message for one, close it), in order; the newest window
+  // hosts new ones. It answers with AgentBrowserReply.
+  rpc WatchAgentBrowser(WatchAgentBrowserRequest) returns (stream WatchAgentBrowserResponse);
+  // What a window says of a view it hosts: its DevTools messages (its
+  // first, {"blitz":"opened"}, says it's ready), or that it closed.
+  rpc AgentBrowserReply(AgentBrowserReplyRequest) returns (AgentBrowserReplyResponse);
   // Returns the given sessions' tasks' approval requests and questions
   // waiting for an answer.
   rpc ListTaskRequests(ListTaskRequestsRequest) returns (ListTaskRequestsResponse);
@@ -3862,3 +3870,45 @@ message DraftConnectorQueryResponse {
   // Why there's no draft ("" when there is).
   string problem = 4;
 }
+
+// Request message for WorkspaceService.WatchAgentBrowser.
+message WatchAgentBrowserRequest {
+  string workspace = 1;
+}
+
+// A command for a view of the agent's browser.
+message AgentBrowserCommand {
+  // The view's ID, the same in every command and reply.
+  string browser_id = 1;
+  // open, message or close.
+  string kind = 2;
+  // A DevTools Protocol command, as JSON (message).
+  string message = 3;
+  // watch (a tab) or silent (off screen), for open.
+  string show = 4;
+  // The browser profile whose sign-ins it uses ("": a throwaway session).
+  string profile = 5;
+  // It may reach loopback and private addresses.
+  bool allow_local = 6;
+  // Never reached (web.deny_domains).
+  repeated string deny_domains = 7;
+}
+
+// Response message for WorkspaceService.WatchAgentBrowser.
+message WatchAgentBrowserResponse {
+  AgentBrowserCommand command = 1;
+}
+
+// Request message for WorkspaceService.AgentBrowserReply.
+message AgentBrowserReplyRequest {
+  string workspace = 1;
+  string browser_id = 2;
+  // DevTools messages from the view, in order.
+  repeated string messages = 3;
+  // The view closed (or couldn't open); reason says why.
+  bool closed = 4;
+  string reason = 5;
+}
+
+// Response message for WorkspaceService.AgentBrowserReply.
+message AgentBrowserReplyResponse {}

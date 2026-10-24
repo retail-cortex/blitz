@@ -887,6 +887,29 @@ func scopedSessions(ids []string) []string {
 	return ids
 }
 
+func (h workspaceService) WatchAgentBrowser(ctx context.Context, r req[pb.WatchAgentBrowserRequest], stream *connect.ServerStream[pb.WatchAgentBrowserResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	return w.WatchAgentBrowser(ctx, func(c api.AgentBrowserCommand) error {
+		return stream.Send(&pb.WatchAgentBrowserResponse{Command: &pb.AgentBrowserCommand{
+			BrowserId: c.BrowserID, Kind: c.Kind, Message: c.Message, Show: c.Show, Profile: c.Profile, AllowLocal: c.AllowLocal, DenyDomains: c.DenyDomains,
+		}})
+	})
+}
+
+func (h workspaceService) AgentBrowserReply(ctx context.Context, r req[pb.AgentBrowserReplyRequest]) (*connect.Response[pb.AgentBrowserReplyResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.AgentBrowserReply(r.Msg.BrowserId, r.Msg.Messages, r.Msg.Closed, r.Msg.Reason); err != nil {
+		return nil, apiError(connect.CodeNotFound, "NO_AGENT_BROWSER", err)
+	}
+	return ok(&pb.AgentBrowserReplyResponse{})
+}
+
 func (h workspaceService) WatchTasks(ctx context.Context, r req[pb.WatchTasksRequest], stream *connect.ServerStream[pb.WatchTasksResponse]) error {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

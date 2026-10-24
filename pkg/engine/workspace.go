@@ -103,6 +103,7 @@ type Workspace struct {
 	goals        map[string]api.Goal // by session
 	uploadMu     sync.Mutex
 	uploads      map[string]*upload // files being uploaded (UploadFile), by id
+	browsers     browserHub         // the desktop windows hosting the agent's browser
 	cfg          *config.Config
 	// cfgMu guards what changes in cfg once it's open (reloads and
 	// setters write it through setSettings), reply and mcpLive; readers
@@ -324,6 +325,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	})
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
 	w.tools.SetBrowserProfile(w.browserProfile)
+	w.tools.SetAgentBrowserHost(w.openAgentBrowser)
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
@@ -592,23 +594,23 @@ func (w *Workspace) instructions() string {
 func FindBrowser(path string) (string, error) { return browser.Find(path) }
 
 // browserProfile is the browser profile the workspace browses with, as the
-// person chose it (spec_browser_profiles_049 BP-03): its folder and the
-// sites it browses without asking. None ("") when none is chosen, or the
+// person chose it (spec_browser_profiles_049 BP-03): its name, its folder
+// and the sites it browses without asking. None ("") when none is chosen, or the
 // project's settings wait for trust or were declined, since a project the
 // person hasn't trusted could steer the agent into their sign-ins.
-func (w *Workspace) browserProfile() (string, []string) {
+func (w *Workspace) browserProfile() tools.BrowserProfile {
 	switch w.project.State {
 	case "", "none", "trusted":
 	default:
-		return "", nil
+		return tools.BrowserProfile{}
 	}
 	store := config.OpenBrowserProfiles(settingsDir(w.cfg))
 	name := store.ForWorkspace(w.Dir())
 	p, ok := store.Get(name)
 	if name == "" || !ok {
-		return "", nil
+		return tools.BrowserProfile{}
 	}
-	return store.Dir(name), p.AllowDomains
+	return tools.BrowserProfile{Name: name, Dir: store.Dir(name), Allow: p.AllowDomains}
 }
 
 // harnessFolders tells the agents about the harness's scratch folder and

@@ -15,8 +15,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiCameraOutline, mdiConsoleLine, mdiContentSaveOutline, mdiMessagePlusOutline, mdiOpenInNew, mdiRefresh, mdiSelectionDrag, mdiWeb } from "@mdi/js";
-import { openURL, previewBounds, previewCapture, previewConsole, previewContent, previewNavigate, previewOpen, previewVisible } from "../desktop";
+import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiCameraOutline, mdiConsoleLine, mdiContentSaveOutline, mdiMessagePlusOutline, mdiOpenInNew, mdiRefresh, mdiRobotOutline, mdiSelectionDrag, mdiWeb } from "@mdi/js";
+import { agentBrowser, openURL, previewBounds, previewCapture, previewConsole, previewContent, previewNavigate, previewOpen, previewVisible } from "../desktop";
 import { message } from "../errors";
 import { addWeb } from "../events";
 import { t } from "../i18n";
@@ -28,6 +28,9 @@ import { consoleBlock, covered, overlays, pageBlock, webId, webTabName } from ".
 // The previews this page has opened in the window (a tab shown again
 // keeps its page).
 const opened = new Set<string>();
+
+/** Takes the window's view id as opened: the agent's (AB-03), which it opened itself. */
+export const adoptPreview = (id: string) => opened.add(id);
 
 /**
  * A web page in the editor (spec_electron_038 EL-100): its toolbar (back,
@@ -177,6 +180,20 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
           ]}
         />
       </div>
+      {web.agent && (
+        // The agent drives this page (spec_agent_browser_050 AB-03): the
+        // user can take it over, or stop the agent's browsing.
+        <div className="card row t-body-sm web-agent-bar" role="status">
+          <Icon path={mdiRobotOutline} size="sm" />
+          <span className="spacer">{t("desktop.web.agent_browsing")}</span>
+          <Button small onClick={() => void agentBrowser.takeOver(id).then(() => model.setWeb(tab.path, { agent: false }))}>
+            {t("desktop.web.take_over")}
+          </Button>
+          <Button small onClick={() => void agentBrowser.close(id).then(() => model.close(tab.path))}>
+            {t("desktop.web.stop_agent")}
+          </Button>
+        </div>
+      )}
       <div className="editor-body">
         {error && (
           <p className="editor-note error-text" role="alert">

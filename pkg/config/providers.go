@@ -467,6 +467,9 @@ var typedValues = map[string]string{
 	// Cost limits of the dashboard's and the reflector's schedules.
 	"health.max_cost_usd":  "usd",
 	"harness.max_cost_usd": "usd",
+	// Settings › Browser (spec_agent_browser_050 AB-02, spec_web_008 WEB-09).
+	"browser.show":         "show",
+	"web.browser_fallback": "bool",
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given
@@ -506,6 +509,11 @@ func typedValue(kind, key, value string) (string, any, error) {
 		d, err := time.ParseDuration(value)
 		if err != nil || d <= 0 {
 			return "", nil, fmt.Errorf("%s is a length of time like 30m or 2h, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "show":
+		if !slices.Contains(BrowserShows, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(BrowserShows, ", "), value)
 		}
 		return strconv.Quote(value), value, nil
 	case "kinds":

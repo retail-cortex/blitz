@@ -39,6 +39,9 @@ import { message } from "./errors";
 import { t } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { includeAll } from "./includeAll";
+import { relayEnds, runRelay } from "./agentBrowserRelay";
+import { agentBrowser } from "./desktop";
+import { adoptPreview } from "./files/WebPreview";
 import { workspaces } from "./api";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
@@ -132,6 +135,21 @@ export function Workspace({
     if (waiting) showView(waiting.view, waiting.source, waiting);
     return () => window.removeEventListener(viewEvent, f);
   }, [dir, showView]);
+
+  // The agent's browser in the app (spec_agent_browser_050): this
+  // workspace's views, relayed while it's open; a watched one is a tab.
+  useEffect(() => {
+    if (!agentBrowser.supported()) return;
+    const ctl = new AbortController();
+    void runRelay(
+      relayEnds(dir, (id) => {
+        adoptPreview(id);
+        editorRef.current?.openAgentWeb(id);
+      }),
+      ctl.signal,
+    );
+    return () => ctl.abort();
+  }, [dir]);
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const snack = useSnackbar();

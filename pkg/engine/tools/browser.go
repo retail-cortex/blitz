@@ -98,10 +98,16 @@ type browserTool struct {
 	host  string          // the current page's
 
 	// profile is the running browser's kept profile ("": a throwaway
-	// one), and allow its sites browsed without asking (BP-04); actMu
-	// guards them, for the page's navigations.
-	profile string
-	allow   []string
+	// one), profileName its name, and allow its sites browsed without
+	// asking (BP-04); actMu guards them, for the page's navigations.
+	profile     string
+	profileName string
+	allow       []string
+	// shows are how each chat chose to see the agent browse in the app
+	// ("watch" or "silent", AB-02), and inApp says the running browser is
+	// the app's view, shown so.
+	shows map[string]string
+	inApp string
 }
 
 func newBrowserTool(r *Registry, cfg config.BrowserConfig, web WebFetchConfig, timeout time.Duration, dir string) *browserTool {
@@ -383,18 +389,48 @@ func (bt *browserTool) webRules() WebFetchConfig {
 // before an action is judged: a change of it closes the browser, so the
 // next one starts with it. bt.mu must be held.
 func (bt *browserTool) syncProfile() {
-	profile, allow := "", []string(nil)
-	if p := bt.r.browserProfile(); p != nil {
-		profile, allow = p()
+	var p BrowserProfile
+	if f := bt.r.browserProfile(); f != nil {
+		p = f()
 	}
 	bt.actMu.Lock()
-	changed := bt.profile != profile
-	bt.profile, bt.allow = profile, allow
+	changed := bt.profile != p.Dir
+	bt.profile, bt.profileName, bt.allow = p.Dir, p.Name, p.Allow
 	bt.actMu.Unlock()
 	if changed && bt.b != nil {
 		bt.b.Close()
 		bt.b = nil
 	}
+}
+
+// showAsk is the question browser.show "ask" puts, and its answers.
+const (
+	showAsk    = "Watch Blitz browse in a tab, or let it run silently?"
+	showWatch  = "Watch it in a tab"
+	showSilent = "Run silently"
+)
+
+// show is how the chat sees the agent browse in the app (AB-02):
+// browser.show, or for "ask" the chat's answer, asked the first time
+// (silent where no one can answer, as a job's run).
+func (bt *browserTool) show(ctx context.Context) string {
+	switch bt.cfg.Show {
+	case "watch", "silent":
+		return bt.cfg.Show
+	}
+	session := sessionOf(ctx)
+	if v, ok := bt.shows[session]; ok {
+		return v
+	}
+	v := "silent"
+	if answer, err := bt.r.hooks.askUser(ctx, showAsk, []string{showWatch, showSilent}); err == nil && answer == showWatch {
+		v = "watch"
+	}
+	if bt.shows == nil {
+		bt.shows = map[string]string{}
+	}
+	bt.shows[session] = v
+	return v
 }
 
 // browser is the running browser, started when needed.
@@ -415,8 +451,22 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 		return bt.b, nil
 	}
 	bt.actMu.Lock()
-	profile := bt.profile
+	profile, profileName := bt.profile, bt.profileName
 	bt.actMu.Unlock()
+	// The desktop app's own view when a window is watching (AB-01),
+	// watched or silent as the chat chose; else Chrome, headless.
+	if host := bt.r.agentBrowserHost(); host != nil {
+		show := bt.show(ctx)
+		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains}); err == nil {
+			b, err := browser.AttachTransport(ctx, t, browser.Options{Width: bt.cfg.Width, Height: bt.cfg.Height, Timeout: bt.timeout, KeepViewport: show == "watch", Navigation: bt.navigation})
+			if err != nil {
+				return nil, err
+			}
+			bt.b, bt.inApp = b, show
+			return b, nil
+		}
+	}
+	bt.inApp = ""
 	b, err := bt.launch(ctx, browser.Options{
 		Path: bt.cfg.Path, Visible: bt.cfg.Visible, Width: bt.cfg.Width, Height: bt.cfg.Height,
 		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout, ProfileDir: profile,

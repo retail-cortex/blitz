@@ -53,6 +53,14 @@ func TestBrowserProfilesOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, l.Msg.Profiles, 1)
 	assert.Equal(t, "work", l.Msg.WorkspaceProfile)
+	assert.Equal(t, "ask", l.Msg.Show, "the default")
+	_, err = c.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "browser.show", Value: "silent"}))
+	require.NoError(t, err)
+	l, err = c.ListBrowserProfiles(ctx, connect.NewRequest(&pb.ListBrowserProfilesRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "silent", l.Msg.Show)
+	_, err = c.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "browser.show", Value: "sometimes"}))
+	assert.Error(t, err)
 
 	// Signing in by hand: the system's browser on the profile's folder.
 	chrome := filepath.Join(t.TempDir(), "chrome")

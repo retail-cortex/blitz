@@ -19,6 +19,7 @@ go_library(
     name = "engine",
     srcs = [
         "added.go",
+        "agentbrowser.go",
         "agentfiles.go",
         "backend.go",
         "changes.go",
@@ -197,6 +198,7 @@ go_test(
     size = "medium",
     srcs = [
         "added_test.go",
+        "agentbrowser_test.go",
         "agentfiles_test.go",
         "backend_test.go",
         "changes_test.go",
@@ -278,6 +280,8 @@ go_test(
         "//pkg/docx",
         "//pkg/engine/agents",
         "//pkg/engine/audit",
+        "//pkg/engine/browser",
+        "//pkg/engine/browser/browsertest",
         "//pkg/engine/compose",
         "//pkg/engine/connectors",
         "//pkg/engine/evals",
@@ -301,6 +305,7 @@ go_test(
         "@com_github_a2aproject_a2a_go_v2//a2a",
         "@com_github_a2aproject_a2a_go_v2//a2asrv",
         "@com_github_go_pdf_fpdf//:fpdf",
+        "@com_github_gorilla_websocket//:websocket",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

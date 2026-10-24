@@ -118,6 +118,10 @@ type AppMethods = {
   DragOut(paths: string[]): Promise<boolean>;
   TrashDropped(paths: string[]): Promise<string[]>;
   SignInWindow(profile: string, url: string): Promise<void>;
+  AgentBrowserOpen(id: string, show: string, profile: string, allowLocal: boolean, deny: string[]): Promise<void>;
+  AgentBrowserSend(id: string, message: string): Promise<void>;
+  AgentBrowserClose(id: string): Promise<void>;
+  AgentBrowserTakeOver(id: string): Promise<void>;
 };
 
 /** Where a web preview goes in the window, in the page's pixels. */
@@ -434,6 +438,20 @@ export const dragOut = (paths: string[]) => app().DragOut(paths);
  * into the workspace; returns those it couldn't.
  */
 export const trashDropped = (paths: string[]) => app().TrashDropped(paths);
+
+/**
+ * The agent's browser in the app (spec_agent_browser_050, EL-17): the
+ * window's views for it, and their events (agentbrowser:message, a
+ * DevTools message from one; agentbrowser:closed). Electron's only.
+ */
+export const agentBrowser = {
+  supported: () => windowHas("AgentBrowserOpen"),
+  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[]) => app().AgentBrowserOpen(id, show, profile, allowLocal, deny),
+  send: (id: string, message: string) => app().AgentBrowserSend(id, message),
+  close: (id: string) => app().AgentBrowserClose(id),
+  takeOver: (id: string) => app().AgentBrowserTakeOver(id),
+  on: (event: "agentbrowser:message" | "agentbrowser:closed", f: (arg: unknown) => void) => windowEvents()?.(event, f) ?? (() => {}),
+};
 
 /** Opens a window of the app's on browser profile's sign-ins, at url (EL-16), to sign in to a site. */
 export const signInWindow = (profile: string, url: string) => app().SignInWindow(profile, url);

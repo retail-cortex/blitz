@@ -57,6 +57,8 @@ export interface WebPage {
   loading: boolean;
   back: boolean;
   forward: boolean;
+  /** The agent's view, which it drives (spec_agent_browser_050); false once the user takes it over. */
+  agent?: boolean;
 }
 
 /** Where to put the cursor when a tab is shown next. */
@@ -96,6 +98,8 @@ export interface EditorModel {
   moved: (from: string, to: string | null) => void;
   /** Opens a web page in a tab of its own (spec_electron_038 EL-100); returns the tab's path. */
   openWeb: (url: string) => string;
+  /** Shows the agent's watched view id as a tab (spec_agent_browser_050 AB-03). */
+  openAgentWeb: (id: string) => void;
   /** What a web tab's preview said of its page. */
   setWeb: (path: string, page: Partial<WebPage>) => void;
   /** Replaces a tab's text (the visual editor's Markdown), as an edit. */
@@ -282,6 +286,13 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     setTarget(null);
     return path;
   }, []);
+  // The agent's watched view (AB-03), shown as a tab it drives.
+  const openAgentWeb = useCallback((id: string) => {
+    const path = webPath(id);
+    setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { path, name: "Blitz", loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url: "about:blank", title: "", loading: true, back: false, forward: false, agent: true } }]));
+    setActive(path);
+    setTarget(null);
+  }, []);
   const setWeb = useCallback(
     (path: string, page: Partial<WebPage>) =>
       setTabs((ts) =>
@@ -342,11 +353,12 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       check,
       moved,
       openWeb,
+      openAgentWeb,
       setWeb,
       setText,
       language: languageHooks,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, openWeb, setWeb, setText, languageHooks],
+    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, openWeb, openAgentWeb, setWeb, setText, languageHooks],
   );
 }

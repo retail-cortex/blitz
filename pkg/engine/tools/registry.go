@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/images"
@@ -93,23 +94,61 @@ type Registry struct {
 	// jobs makes and lists the workspace's jobs (create_job, list_jobs);
 	// nil: off. evidenceMu guards it.
 	jobs Jobs
-	// profile is the browser profile the workspace browses with (its
-	// folder and the sites it may browse without asking; "" for a
-	// throwaway one); nil: none. evidenceMu guards it.
-	profile func() (string, []string)
+	// profile is the browser profile the workspace browses with; nil:
+	// none. agentBrowser opens a view of the desktop app's for the
+	// agent's browser (spec_agent_browser_050); nil: none. evidenceMu
+	// guards them.
+	profile      func() BrowserProfile
+	agentBrowser AgentBrowserHost
+}
+
+// BrowserProfile is the browser profile a workspace browses with (BP-03):
+// its name (the app's partition), its folder (Chrome's), and the sites it
+// browses without asking; the zero value is none, a throwaway profile.
+type BrowserProfile struct {
+	Name, Dir string
+	Allow     []string
 }
 
 // SetBrowserProfile supplies the workspace's browser profile (BP-03).
-func (r *Registry) SetBrowserProfile(p func() (dir string, allow []string)) {
+func (r *Registry) SetBrowserProfile(p func() BrowserProfile) {
 	r.evidenceMu.Lock()
 	defer r.evidenceMu.Unlock()
 	r.profile = p
 }
 
-func (r *Registry) browserProfile() func() (string, []string) {
+func (r *Registry) browserProfile() func() BrowserProfile {
 	r.evidenceMu.Lock()
 	defer r.evidenceMu.Unlock()
 	return r.profile
+}
+
+// AgentBrowserOptions are what a view of the app's for the agent opens
+// with (spec_agent_browser_050).
+type AgentBrowserOptions struct {
+	// Show is "watch" or "silent".
+	Show        string
+	Profile     string
+	AllowLocal  bool
+	DenyDomains []string
+}
+
+// AgentBrowserHost opens a view of the desktop app's for the agent's
+// browser and returns its DevTools connection; an error when no window
+// can (the headless browser is used then).
+type AgentBrowserHost func(ctx context.Context, o AgentBrowserOptions) (browser.Transport, error)
+
+// SetAgentBrowserHost supplies the desktop app's views (AB-01).
+func (r *Registry) SetAgentBrowserHost(h AgentBrowserHost) {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	r.agentBrowser = h
+}
+
+func (r *Registry) agentBrowserHost() AgentBrowserHost {
+	r.evidenceMu.Lock()
+	defer r.evidenceMu.Unlock()
+	return r.agentBrowser
 }
 
 // Rules are the permission rules in force; they can change while a

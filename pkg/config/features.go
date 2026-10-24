@@ -435,7 +435,15 @@ type BrowserConfig struct {
 	// Width and Height are the viewport (1280×800).
 	Width  int `toml:"width"`
 	Height int `toml:"height"`
+	// Show is how the agent browses while the desktop app is open
+	// (spec_agent_browser_050): "watch", in a tab you see; "silent", off
+	// screen; or "ask" (the default), the first time in each chat.
+	// Without the app, the headless browser.
+	Show string `toml:"show"`
 }
+
+// BrowserShows are browser.show's values.
+var BrowserShows = []string{"ask", "watch", "silent"}
 
 // LSPServerConfig is a language server: the command that runs it (over
 // stdio), and the file extensions it's for.
@@ -647,7 +655,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
-	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}
+	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask"}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())

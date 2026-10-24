@@ -46,9 +46,12 @@ export function BrowserSettings() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState("");
+  const [show, setShow] = useState("ask");
   const load = useCallback(async () => {
     try {
-      setProfiles((await config.listBrowserProfiles({})).profiles);
+      const r = await config.listBrowserProfiles({});
+      setProfiles(r.profiles);
+      setShow(r.show || "ask");
       setError("");
     } catch (e) {
       setError(message(e));
@@ -72,6 +75,18 @@ export function BrowserSettings() {
   const problem = name && !validProfileName(name) ? t("desktop.browser.bad_name") : "";
   return (
     <div className="stack browser-settings" style={{ gap: 12 }}>
+      {/* How the agent browses while the app is open (spec_agent_browser_050 AB-02). */}
+      <label className="field">
+        <span className="t-label">{t("desktop.browser.show")}</span>
+        <select className="select" value={show} disabled={busy} onChange={(e) => void act(() => config.setConfigValue({ workspace: "", key: "browser.show", value: e.target.value }), t("desktop.browser.show_saved"))}>
+          {["ask", "watch", "silent"].map((v) => (
+            <option key={v} value={v}>
+              {t(`desktop.browser.show.${v}`)}
+            </option>
+          ))}
+        </select>
+        <span className="t-body-sm muted">{t("desktop.browser.show_hint")}</span>
+      </label>
       <p className="t-body-sm muted">{t("desktop.browser.intro")}</p>
       {error && <p className="error-text">{error}</p>}
       {profiles.length === 0 ? (

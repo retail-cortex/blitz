@@ -503,6 +503,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .rule code { flex: 1; font-size: 12px; }
 .rule-effect { width: 92px; flex: none; }
 /* The job editor's rule builder (WK-62): the kind's names are longer. */
+/* The agent's watched page (AB-03): a bar over it, as the chat's project bar. */
+.web-agent-bar { gap: 8px; margin: 6px 8px 0; padding: 6px 10px; }
 .permission-rules .rule-add-row { align-items: center; }
 .permission-rules .rule-add-row .select.rule-kind { width: 200px; flex: none; }
 .permission-rules .rule-add-row .input { flex: 1; min-width: 0; width: auto; }

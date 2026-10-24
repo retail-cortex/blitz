@@ -1034,6 +1034,8 @@ message ListBrowserProfilesResponse {
   repeated BrowserProfile profiles = 1;
   // The workspace's profile ("": none).
   string workspace_profile = 2;
+  // browser.show: ask, watch or silent (spec_agent_browser_050).
+  string show = 3;
 }
 
 // Request message for ConfigService.CreateBrowserProfile.

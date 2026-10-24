@@ -19,6 +19,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   absolutePaths,
+  agentRequestAllowed,
+  devToolsAllowed,
+  devToolsCommand,
+  matchDomain,
+  stringList,
   profileName,
   profilePartition,
   DroppedPaths,
@@ -447,4 +452,49 @@ describe("browser profiles", () => {
     [7, undefined],
   ])("profileName(%j)", (v, want) => expect(profileName(v)).toBe(want));
   it("keeps each profile in its own partition", () => expect(profilePartition("work")).toBe("persist:profile-work"));
+});
+
+describe("the agent's view", () => {
+  const open = { allowLocal: false, deny: ["*.blocked.example", "evil.example"] };
+  const local = { ...open, allowLocal: true };
+  it.each([
+    ["a web page", "https://shop.example/", open, true],
+    ["a WebSocket", "wss://shop.example/live", open, true],
+    ["data and about:blank", "data:text/plain,hi", open, true],
+    ["a denied domain", "https://evil.example/", open, false],
+    ["a denied domain's subdomain", "https://a.blocked.example/x", open, false],
+    ["cloud metadata, even allowed local", "http://169.254.169.254/latest", local, false],
+    ["link-local IPv6", "http://[fe80::1]/", local, false],
+    ["localhost", "http://localhost:3000/", open, false],
+    ["localhost, allowed", "http://localhost:3000/", local, true],
+    ["a private address", "http://192.168.1.10/", open, false],
+    ["a private address, allowed", "http://10.0.0.2/", local, true],
+    ["loopback IPv6", "http://[::1]:8080/", open, false],
+    ["a file", "file:///etc/passwd", local, false],
+    ["javascript", "javascript:alert(1)", local, false],
+    ["nonsense", "not a url", local, false],
+  ])("%s", (_name, url, reach, want) => expect(agentRequestAllowed(url, reach)).toBe(want));
+
+  it("matches domains as web.deny_domains does", () => {
+    expect(matchDomain("blocked.example", "*.blocked.example")).toBe(true);
+    expect(matchDomain("a.b.blocked.example", "*.blocked.example")).toBe(true);
+    expect(matchDomain("notblocked.example", "*.blocked.example")).toBe(false);
+    expect(matchDomain("Evil.Example.", "evil.example")).toBe(true);
+  });
+
+  it("takes DevTools commands, and refuses the app's own browser and other targets", () => {
+    expect(devToolsCommand('{"id":3,"method":"Page.navigate","params":{"url":"https://a.example"}}')).toEqual({ id: 3, method: "Page.navigate", params: { url: "https://a.example" }, sessionId: undefined });
+    expect(devToolsCommand('{"id":"3","method":"Page.navigate"}')).toBeUndefined();
+    expect(devToolsCommand('{"id":3,"method":"page navigate"}')).toBeUndefined();
+    expect(devToolsCommand('{"id":3,"method":"Page.navigate","params":[1]}')).toBeUndefined();
+    expect(devToolsCommand("nope")).toBeUndefined();
+    expect(devToolsAllowed("Page.navigate")).toBe(true);
+    expect(devToolsAllowed("Runtime.evaluate")).toBe(true);
+    for (const m of ["Browser.close", "Target.createTarget", "Storage.clearDataForOrigin", "SystemInfo.getInfo"]) expect(devToolsAllowed(m)).toBe(false);
+  });
+
+  it("reads a list of strings", () => {
+    expect(stringList(["a", 1, "", null, "b"])).toEqual(["a", "b"]);
+    expect(stringList("a")).toEqual([]);
+  });
 });

@@ -48,6 +48,11 @@ export const windowMethods = [
   "TrashDropped",
   // A browser profile's sign-in window (EL-16).
   "SignInWindow",
+  // The agent's browser in the app (EL-17).
+  "AgentBrowserOpen",
+  "AgentBrowserSend",
+  "AgentBrowserClose",
+  "AgentBrowserTakeOver",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
@@ -55,7 +60,7 @@ export type WindowMethod = (typeof windowMethods)[number];
 export const taskWindowMethods: readonly WindowMethod[] = ["OpenURL", "SetAppearance", "OpenApp"];
 
 /** The events the window sends the page. */
-export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"] as const;
+export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open", "agentbrowser:message", "agentbrowser:closed"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
 /** A link to the page, and the fingerprint of the certificate its server has. */
@@ -583,3 +588,83 @@ export function profileName(v: unknown): string | undefined {
 
 /** The Electron partition of browser profile name (EL-16): its own cookies and storage, kept. */
 export const profilePartition = (name: string) => `persist:profile-${name}`;
+
+/** What the agent's view may reach (EL-17): not denied, and private addresses only when allowed. */
+export interface AgentReach {
+  allowLocal: boolean;
+  deny: string[];
+}
+
+/** The list of strings in v, a list from the page; anything else is left out. */
+export function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
+}
+
+/** Whether host matches pattern, a domain or a glob of one ("*.example.com" is example.com's subdomains and itself). */
+export function matchDomain(host: string, pattern: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  const p = pattern.toLowerCase().trim();
+  if (p.startsWith("*.")) return h === p.slice(2) || h.endsWith(p.slice(1));
+  return h === p;
+}
+
+/**
+ * Whether the agent's view may request url (EL-17), as the headless
+ * browser's proxy decides for its pages (WEB-32): web and data addresses
+ * only, never a denied domain or a link-local address (cloud metadata),
+ * and loopback and private ones only with allowLocal.
+ */
+export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol === "data:" || u.protocol === "blob:" || u.href === "about:blank") return true;
+  if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "ws:" && u.protocol !== "wss:") return false;
+  const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (reach.deny.some((d) => matchDomain(host, d))) return false;
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host)?.slice(1).map(Number);
+  if (v4) {
+    const [a, b] = v4;
+    if (a === 169 && b === 254) return false; // link-local: never
+    if (a === 0) return false;
+    const local = a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    return !local || reach.allowLocal;
+  }
+  if (host.includes(":")) {
+    if (/^fe[89ab]/.test(host)) return false; // link-local
+    const local = host === "::1" || /^f[cd]/.test(host) || host === "::";
+    return !local || reach.allowLocal;
+  }
+  const localName = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal");
+  return !localName || reach.allowLocal;
+}
+
+/** A DevTools command the engine sent for the agent's view, or undefined. */
+export interface DevToolsCommand {
+  id: number;
+  method: string;
+  params?: Record<string, unknown>;
+  sessionId?: string;
+}
+
+export function devToolsCommand(raw: unknown): DevToolsCommand | undefined {
+  if (typeof raw !== "string") return undefined;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  const c = v as Partial<DevToolsCommand> | null;
+  if (!c || typeof c.id !== "number" || typeof c.method !== "string" || !/^[A-Z][A-Za-z]*\.[a-z][A-Za-z]*$/.test(c.method)) return undefined;
+  if (c.params !== undefined && (typeof c.params !== "object" || c.params === null || Array.isArray(c.params))) return undefined;
+  return { id: c.id, method: c.method, params: c.params, sessionId: typeof c.sessionId === "string" ? c.sessionId : undefined };
+}
+
+/** Whether the agent may send method to its view: never the app's own browser, other targets, or its storage (EL-17). */
+export function devToolsAllowed(method: string): boolean {
+  return !/^(Browser|Target|SystemInfo|Storage|Tethering|ServiceWorker)\./.test(method);
+}
