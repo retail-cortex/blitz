@@ -29,6 +29,7 @@ Args `url`. Result `url, final_url, status, content_type, content, truncated, er
 - **WEB-06a** *Since v0.6.3.* The fetcher speaks HTTP/1.1 (its own dialer, for WEB-04), so its TLS offers no protocols (`fetchTLS`): it starts from Go's default TLS settings, which list `h2` once the default transport has spoken HTTP/2, and a server offered h2 (news.google.com) answered in it ("malformed HTTP response").
 - **WEB-07** Content: HTML/XHTML converted to text (scripts, styles, noscript, svg, template, iframe dropped; block elements become line breaks; headings `#`…; list items `- `; absolute link targets appended `(url)`; blank lines collapsed). Text, JSON, XML, JavaScript and missing types pass through. Other types → "unsupported content type". Output capped at 100 KiB chars (UTF-8 safe), invalid UTF-8 replaced. Status ≥ 400 sets `error: "HTTP n"` but still returns content.
 - **WEB-08** User-Agent `blitz/2 (+web_fetch)`.
+- **WEB-09** *v0.8.4 (the owner's request: web_fetch should drive the browser).* With `web.browser_fallback` (on by default) and `[browser] enabled`, an HTML answer that isn't the page loads in the browser instead (`browser.pageText`: navigate, then read): a 403, 429 or 503 with a bot check's or captcha's words (`cf-chl`, "Just a moment", "checking your browser", "captcha", …), or a page whose text is under 200 characters with two or more scripts or a "enable JavaScript" message (a single-page app). The URL approved for the fetch is passed as already approved (`WithFetchGrants`), so the user isn't asked twice; the browser's own checks still apply (WEB-32–34) to anything else it loads. The result is the page's title and text with `via: "browser"` and a note saying why; when the browser can't load it either, the plain answer, its note saying why not. Any agent with web_fetch gets the fallback, whether or not it has the browser tool: the same rules and approvals hold.
 
 ## 3. `web_search`
 
@@ -61,7 +62,7 @@ The agent drives a real browser, for pages that need JavaScript or interaction a
 - **WEB-38** `[browser]` is never taken from project settings ([spec_project_config_031](spec_project_config_031.md)).
 
 ## 6. Known limitations
-- Readability is judged from the URL extension; PDFs without an extension or JS-only pages come back empty or as errors.
+- Readability is judged from the URL extension; PDFs without an extension come back as errors. JS-only pages and bot checks load in the browser since v0.8.4 (WEB-09), when it's on; without it they come back empty or as errors.
 - Search charges (Google grounding) are not included in `/cost`.
 - No Anthropic server-side web search (decision).
 - The browser records screenshot series, not video. One page (tab) only; no file uploads or downloads, and no dialogs (`alert`, `confirm`) handling.

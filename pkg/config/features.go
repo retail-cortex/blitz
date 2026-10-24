@@ -524,6 +524,10 @@ type WebConfig struct {
 	MaxBytes int64 `toml:"max_bytes"`
 	// TimeoutSeconds stops a fetch or search that takes longer.
 	TimeoutSeconds int `toml:"timeout_seconds"`
+	// BrowserFallback has web_fetch load a page in the browser when a
+	// plain request gets a bot check or a page that needs JavaScript (with
+	// [browser] enabled; spec_web_008 WEB-09).
+	BrowserFallback bool `toml:"browser_fallback"`
 	// SearchProvider enables web_search and /search web: "brave",
 	// "tavily", "searxng" (self-hosted, needs SearchURL), or "google"
 	// (Gemini's grounding with Google Search; uses the Gemini API key).
@@ -642,7 +646,7 @@ func applyFeatureDefaults(c *Config) {
 	c.PDF = PDFConfig{PageSize: "auto"}
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
-	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
+	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
 	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.

@@ -292,7 +292,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	}
 	if cfg.Web.Enabled {
 		entries = append(entries, entry{[]string{"web_fetch"}, func() (tool.Tool, error) {
-			return NewWebFetchTool(WebFetchConfig{
+			wc := WebFetchConfig{
 				AllowDomains: cfg.Web.AllowDomains,
 				DenyDomains:  cfg.Web.DenyDomains,
 				AllowPrivate: cfg.Web.AllowPrivate,
@@ -300,7 +300,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 				MaxBytes:     cfg.Web.MaxBytes,
 				Rules:        rules,
 				Timeout:      time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-			}, r.hooks)
+			}
+			// The browser is made below, before this runs.
+			if cfg.Web.BrowserFallback && r.browser != nil {
+				wc.Browser = r.browser.pageText
+			}
+			return NewWebFetchTool(wc, r.hooks)
 		}})
 	}
 	r.fetch = cfg.Web.Enabled

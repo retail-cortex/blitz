@@ -243,6 +243,19 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 	return out
 }
 
+// pageText opens u in the browser and reads its text: web_fetch's
+// fallback (WEB-09), under the browser's own checks and web rules.
+func (bt *browserTool) pageText(ctx context.Context, u string) (BrowserOutput, error) {
+	if out := bt.run(ctx, BrowserInput{Action: "navigate", URL: u}); out.Error != "" {
+		return out, errors.New(out.Error)
+	}
+	out := bt.run(ctx, BrowserInput{Action: "read"})
+	if out.Error != "" {
+		return out, errors.New(out.Error)
+	}
+	return out, nil
+}
+
 var browserActions = map[string]bool{
 	"navigate": true, "click": true, "type": true, "select": true, "read": true, "html": true, "screenshot": true,
 	"console": true, "script": true, "back": true, "record": true, "stop_recording": true, "close": true,

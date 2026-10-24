@@ -68,3 +68,5 @@ allow_local = true     # localhost and private addresses; cloud metadata never
 ```
 
 Running a script the agent wrote in a page asks first unless `allow_scripts` is set. Set `[browser] enabled = false` to turn the tool off.
+
+`web_fetch` uses the browser too, by itself: when a plain request gets a bot check ("Just a moment…", a captcha) or a page that's only scripts, it loads the page in the browser and returns what it shows, saying so (`via: browser`). It doesn't ask again for a site you just approved. `[web] browser_fallback = false` turns that off.
