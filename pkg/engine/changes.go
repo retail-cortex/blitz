@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 )
 
 // Checkpoints of the agent's file changes, and the approvals it was given.
@@ -197,7 +199,22 @@ func (w *Workspace) GitInit(ctx context.Context) (api.GitStatus, error) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return st, fmt.Errorf("git init: %w: %s", err, strings.TrimSpace(string(out)))
 	}
+	// A new repository gets the hook that stops secrets being committed
+	// (spec_secret_hooks_051 SH-02); it isn't worth failing the init over.
+	if r, err := w.InstallSecretHook(ctx); err != nil {
+		slog.Warn("adding the secrets hook to a new repository", "workspace", w.Dir(), "error", err)
+	} else {
+		slog.Info("secrets hook", "workspace", w.Dir(), "status", r.Status, "detail", r.Detail)
+	}
 	return w.GitStatus(ctx)
+}
+
+// InstallSecretHook adds the pre-commit hook that stops commits adding API
+// keys and other secrets to the workspace's repository
+// (spec_secret_hooks_051): .githooks/pre-commit, versioned, and
+// core.hooksPath. A repository with other hooks is left alone.
+func (w *Workspace) InstallSecretHook(ctx context.Context) (secretscan.Result, error) {
+	return secretscan.Install(ctx, w.Dir())
 }
 
 // noFilters returns git options that blank every filter driver configured

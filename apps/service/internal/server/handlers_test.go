@@ -194,6 +194,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"ListTaskRequests":     func() error { return unary(w.ListTaskRequests, &pb.ListTaskRequestsRequest{Workspace: ws}) },
 		"GetGitStatus":         func() error { return unary(w.GetGitStatus, &pb.GetGitStatusRequest{Workspace: ws}) },
 		"InitGitRepo":          func() error { return unary(w.InitGitRepo, &pb.InitGitRepoRequest{Workspace: ws}) },
+		"InstallSecretHook":    func() error { return unary(w.InstallSecretHook, &pb.InstallSecretHookRequest{Workspace: ws}) },
 		"CloseWorkspace":       func() error { return unary(w.CloseWorkspace, &pb.CloseWorkspaceRequest{Workspace: ws}) },
 		"WatchTasks": func() error {
 			return streamErr(w.WatchTasks(ctx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: ws})))

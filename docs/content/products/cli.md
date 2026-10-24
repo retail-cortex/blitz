@@ -63,6 +63,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | Command | |
 |---|---|
 | `blitz security`, `blitz security fix-apparmor` | Whether the OS sandbox for the agent's commands works here; on Linux, where AppArmor stops bubblewrap, install an AppArmor profile that lets bwrap alone through (asks for your password with sudo) |
+| `blitz security scan-secrets --staged`, `blitz security scan-secrets <file>…` | Look for API keys and other secrets in what the commit being made adds, or in the files named; exits 1 naming each file and line (the value masked). The pre-commit hook runs it |
+| `blitz security install-hook [dir]` | Add the pre-commit hook that stops commits adding secrets (`.githooks/pre-commit`, `core.hooksPath`) to the repository, unless it uses other hooks |
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([providers](../guide/providers.md)) |

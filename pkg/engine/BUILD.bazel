@@ -130,6 +130,7 @@ go_library(
         "//pkg/plugins",
         "//pkg/redact",
         "//pkg/secrets",
+        "//pkg/secretscan",
         "//pkg/textutil",
         "@com_github_a2aproject_a2a_go_v2//a2aclient",
         "@com_github_a2aproject_a2a_go_v2//a2aclient/agentcard",

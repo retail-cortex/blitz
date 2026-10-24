@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -138,4 +139,31 @@ func TestListJobsTool(t *testing.T) {
 	r.SetJobs(Jobs{List: func() ([]api.WorkerInfo, error) { return nil, errors.New("workers off") }})
 	out = runTool(t, toolOf(t)(NewListJobsTool(r)), map[string]any{})
 	assert.Contains(t, errOf(out), "workers off")
+}
+
+// install_secret_hook: asked about as a write showing the hook, then the
+// hook is in the workspace's repository.
+func TestInstallSecretHookTool(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	for _, approve := range []bool{true, false} {
+		ws, dir := newTestWorkspace(t)
+		init := exec.Command("git", "init", "-q")
+		init.Dir = dir
+		require.NoError(t, init.Run())
+		hooks, asked := approverHooks(approve)
+		r := &Registry{hooks: hooks, workspace: ws}
+		out := runTool(t, toolOf(t)(NewInstallSecretHookTool(r)), map[string]any{})
+		require.Len(t, *asked, 1)
+		assert.Contains(t, (*asked)[0].Diff, "blitz security scan-secrets --staged")
+		if !approve {
+			assert.Contains(t, errOf(out), "declined")
+			assert.NoFileExists(t, filepath.Join(dir, ".githooks", "pre-commit"))
+			continue
+		}
+		require.Empty(t, errOf(out))
+		assert.Equal(t, "installed", out["status"])
+		assert.FileExists(t, filepath.Join(dir, ".githooks", "pre-commit"))
+	}
 }

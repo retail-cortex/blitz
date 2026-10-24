@@ -2227,6 +2227,7 @@ export function installFake() {
           fakeStaged = false;
           return { hash: "3f2a9c1", subject: message.split("\n")[0] };
         },
+        installSecretHook: ({ workspace }) => ({ status: "installed", path: `${workspace}/.githooks/pre-commit`, detail: "" }),
         initGitRepo: () => {
           fakeRepo = true;
           return { status: { git: true, repo: true, branch: "main", changed: 0 } };

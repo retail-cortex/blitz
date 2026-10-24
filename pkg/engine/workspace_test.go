@@ -615,3 +615,20 @@ func TestSpeechModelReload(t *testing.T) {
 	assert.False(t, hasTool())
 	assert.Contains(t, w.Settings().SpeechError, "can't generate speech")
 }
+
+// The agents hear of the harness's scratch folder and support scripts
+// when the workspace has them, and of nothing when it doesn't.
+func TestHarnessFolders(t *testing.T) {
+	dir := t.TempDir()
+	assert.Empty(t, harnessFolders(dir))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "scratch"), 0o755))
+	assert.Contains(t, harnessFolders(dir), "Put working files")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "scripts"), 0o755))
+	assert.NotContains(t, harnessFolders(dir), "support scripts", "an empty folder")
+	for _, name := range []string{"setup.sh", "refresh_data.py", ".keep"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "scripts", name), []byte("#\n"), 0o755))
+	}
+	got := harnessFolders(dir)
+	assert.Contains(t, got, "`.agents/scripts/` (refresh_data.py, setup.sh)")
+	assert.NotContains(t, got, ".keep")
+}

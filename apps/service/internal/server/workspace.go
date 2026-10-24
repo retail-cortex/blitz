@@ -27,6 +27,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -964,6 +965,21 @@ func (h workspaceService) InitGitRepo(ctx context.Context, r req[pb.InitGitRepoR
 		return nil, apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
 	}
 	return ok(&pb.InitGitRepoResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) InstallSecretHook(ctx context.Context, r req[pb.InstallSecretHookRequest]) (*connect.Response[pb.InstallSecretHookResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.InstallSecretHook(ctx)
+	switch {
+	case errors.Is(err, secretscan.ErrNotARepository):
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
+	case err != nil:
+		return nil, err
+	}
+	return ok(&pb.InstallSecretHookResponse{Status: res.Status, Path: res.Path, Detail: res.Detail})
 }
 
 func (h workspaceService) DraftCommit(ctx context.Context, r req[pb.DraftCommitRequest]) (*connect.Response[pb.DraftCommitResponse], error) {

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -577,10 +578,33 @@ func (w *Workspace) instructions() string {
 		}
 	}
 	s += w.styleText()
+	s += harnessFolders(w.Dir())
 	if p := strings.TrimSpace(w.appendPrompt); p != "" {
 		s += "\n\n" + p
 	}
 	return s + i18n.ReplyInstruction(w.replyIn())
+}
+
+// harnessFolders tells the agents about the harness's scratch folder and
+// support scripts, when the workspace has them (spec_harness_learning_048
+// HE-50): where working files go, and what's there to run.
+func harnessFolders(dir string) string {
+	var b strings.Builder
+	if info, err := os.Stat(filepath.Join(dir, config.ProjectScratchDir)); err == nil && info.IsDir() {
+		fmt.Fprintf(&b, "\n\nPut working files (downloads, drafts, test data, notes) in `%s/`, which git ignores, not in /tmp or the workspace root.", config.ProjectScratchDir)
+	}
+	if entries, err := os.ReadDir(filepath.Join(dir, config.ProjectScriptsDir)); err == nil {
+		var names []string
+		for _, e := range entries {
+			if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				names = append(names, e.Name())
+			}
+		}
+		if len(names) > 0 {
+			fmt.Fprintf(&b, "\n\nThe project's support scripts are in `%s/` (%s): run them rather than repeating their steps; .agents/AGENTS.md says what each does.", config.ProjectScriptsDir, strings.Join(names, ", "))
+		}
+	}
+	return b.String()
 }
 
 // loadMemory reads instruction files and rules; imports of blocked paths

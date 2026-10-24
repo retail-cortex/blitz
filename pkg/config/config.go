@@ -972,6 +972,9 @@ const ProjectAgentsDir = ".agents/agents"
 // working files, relative to it; git ignores it (its own .gitignore).
 const ProjectScratchDir = ".agents/scratch"
 
+// ProjectScriptsDir holds a workspace's support scripts, relative to it.
+const ProjectScriptsDir = ".agents/scripts"
+
 // AgentSearchPaths returns directories to scan for user-defined agents,
 // resolved like SkillSearchPaths: the user's, then the workspace's.
 func (c *Config) AgentSearchPaths(workspace string) []string {

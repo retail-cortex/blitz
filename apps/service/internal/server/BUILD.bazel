@@ -75,6 +75,7 @@ go_library(
         "//pkg/observability",
         "//pkg/redact",
         "//pkg/secrets",
+        "//pkg/secretscan",
         "//pkg/signin",
         "//pkg/skillreg",
         "//proto/blitz/v1:blitzv1_go_proto",

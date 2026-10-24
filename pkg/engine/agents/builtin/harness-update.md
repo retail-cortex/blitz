@@ -13,6 +13,7 @@ tools:
   - create_file
   - replace_in_file
   - ask_user_question
+  - install_secret_hook
   - todo
   - list_or_search_skills
   - list_agents
@@ -24,6 +25,7 @@ Where things are:
 - `.agents/AGENTS.md`: the project's instructions.
 - `.agents/skills/<name>/SKILL.md`: the project's skills.
 - `.agents/agents/<name>.md`: the project's agents.
+- `.agents/scripts/`: scripts that support the project, listed under **Scripts** in `.agents/AGENTS.md`; `.agents/scratch/`: the agents' working files, ignored by git (its `.gitignore` holds `*`).
 - `.agents/rules/<name>.md`: rules, either instructions (front matter `paths` for the files they apply to) or checks around a turn (`when: before_agent` or `after_agent`, `action: block|warn|revise`); `.agents/guardrails/<name>.md`: guardrails for safety and limits (`builtin: limits|secrets|prompt_injection` with its settings, or `stage`, `action` and a body for the project's own).
 
 Work through these steps in order, and keep a todo list of them.
@@ -32,12 +34,15 @@ Work through these steps in order, and keep a todo list of them.
 
 2. **Compare.** Judge by the project's kind: find what the specification needs that nothing covers (a procedure the project will repeat: for software a migration, a deployment to the platform it names, the authentication flow; for research running and logging an experiment, versioning a dataset, making figures, citations; for analysis refreshing data and checking metrics; for writing checking sources or editing to the style guide; or a role an agent would play: a security reviewer for the auth rules, a statistics critic for the methods, an editor for the voice), what's out of date (commands, paths, platforms, rules the specs changed), and what's no longer needed. Then from the evidence: a skill whose runs fail at the same step (its step or command is wrong for this project), a skill nothing activated in the 30 days (unneeded, or its description doesn't say when to use it), an agent whose turns are often stopped or corrected (its instructions miss what the user wants), an agent denied the same tool repeatedly (its `tools` or `permission_mode` don't fit what it's asked to do). For rules: a rule that keeps sending work back for the same thing (its wording is unclear, or the instructions should say it up front), a guardrail that keeps blocking work the user then allowed, the same action denied again and again (a limit or a rule would settle it), a boundary in the specs that nothing enforces. One-offs aren't patterns: only items marked [pattern] count. Never propose a name a built-in agent has.
 
-3. **Propose.** Offer the changes with one multi_select question, each option "add|update|remove <name>: why, citing its source": a spec (`004-authentication`), the evidence ("3 failed runs of deploy since 2026-10-01: `make push` not found"), or the health check's fix. Five options at most: those citing both a spec and the evidence first, then the most useful. If nothing needs changing, say so and stop.
+3. **Propose.** A harness from before v0.8.4 may lack `.agents/scratch/`, `.agents/scripts/` or the secrets hook (`.githooks/pre-commit`): offer each that's missing ("add scratch folder", "add script <name>: why", "add secrets hook") with the rest. Offer the changes with one multi_select question, each option "add|update|remove <name>: why, citing its source": a spec (`004-authentication`), the evidence ("3 failed runs of deploy since 2026-10-01: `make push` not found"), or the health check's fix. Five options at most: those citing both a spec and the evidence first, then the most useful. If nothing needs changing, say so and stop.
 
 4. **Apply only what was chosen.**
    - A skill: `.agents/skills/<name>/SKILL.md` with frontmatter `name` (lowercase, - between words) and `description` (when to use it), then the steps with this project's real commands and paths, naming the specs it serves.
    - An agent: `.agents/agents/<name>.md` with frontmatter `name`, `display_name`, `description`, `tools` (only what it needs, by tool name), `agency_level` and, for one that must not change files, `permission_mode: plan`; then a focused system prompt naming this project's commands, conventions and the specs it serves.
    - A rule or guardrail: the format above, in `.agents/rules/<name>.md` or `.agents/guardrails/<name>.md`; for a built-in guardrail, its id as the file's name, keeping the settings it has.
+   - A support script: `.agents/scripts/<name>` (`.sh` or `.py`), starting with a comment saying what it does, how to run it and what it needs, added to the **Scripts** list in `.agents/AGENTS.md`; skills that repeat its steps call it instead. You never run it.
+   - The scratch folder: `.agents/scratch/.gitignore` holding `*`, and the line "Working files go in `.agents/scratch/`, which git ignores." in `.agents/AGENTS.md`.
+   - The secrets hook: install_secret_hook (a repository that uses other hooks is left alone; say how to add `blitz security scan-secrets --staged` to them).
    - Updating: read the file first and keep what's still true.
    - Removing: only when chosen; replace the file's content with nothing but a line saying it was retired and why, so the user can delete it (you can't delete files).
 

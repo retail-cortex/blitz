@@ -109,6 +109,14 @@ The comparison is from the article, not the paper or its code; check both before
 - **HE-31** `harness-update` gains a third mode, **`/rules update`** (the bundled `/rules-update`; `commands.Alias`, the REPL and the window take the two-word spelling as for skills and agents), comparing rules and guardrails with the specification and the evidence (HE-02's blocks, revisions and denials) as HE-10 does for skills and agents: a rule that keeps sending work back for the same thing, a guardrail blocking what the user then allowed, the same action denied again and again, a boundary in the specs nothing enforces.
 - **HE-32** `/setup` writes `.agents/EXPERIENCE.md` empty (a title and its two headings) and ends `.agents/AGENTS.md` with its import, so the file is there from the start and committed with the rest; an existing one is kept.
 
+## 6a. Scripts and a scratch folder (v0.8.4, the owner's request)
+
+Harness² edits scripts among its eight parts (§1); Blitz's setup wrote none, and nothing said where an agent's working files go.
+
+- **HE-50** project-setup proposes, after the skills, up to five **support scripts** the project needs and doesn't have (setting up the environment, fetching or refreshing data, a check that runs everything, a release), from the files, the specs and the answers, with one `multi_select`. Each chosen one is `.agents/scripts/<name>` (`.sh` or `.py`), versioned, starting with a comment saying what it does, how to run it and what it needs; `.agents/AGENTS.md` lists them under **Scripts**, and a skill that needs one calls it rather than repeating its steps. Setup writes them and never runs them (its only commands stay `git rev-parse` and `git init`); they run later with the usual approvals, and the summary says `chmod +x .agents/scripts/*` makes them runnable.
+- **HE-51** `.agents/scratch/` is where agents put their working files (downloads, drafts, test data, notes) instead of `/tmp` or the workspace root. Setup writes `.agents/scratch/.gitignore` holding `*`, so git ignores the folder whatever the root `.gitignore` says, in a repository made now or long ago. `.agents/AGENTS.md` says so; the engine also tells every agent (`harnessFolders` in `pkg/engine/workspace.go`) when the folder exists, and lists the scripts when `.agents/scripts/` has some. `[git] auto_add` and **Include all changes** never add scratch files (FIL-60).
+- **HE-52** harness-update offers what a harness from before v0.8.4 lacks: the scratch folder, support scripts, and the secrets hook (spec_secret_hooks_051), with its other proposals.
+
 ## 7. Phase E: probing a change against evals (later; needs a decision)
 
 Harness²'s step that Blitz lacks is checking a candidate by running it. Blitz has a verifier where Harness² doesn't: evals ([spec_evals_042](spec_evals_042.md)).

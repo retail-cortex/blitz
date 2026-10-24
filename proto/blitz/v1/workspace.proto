@@ -96,6 +96,11 @@ service WorkspaceService {
   // already, and returns its git status (NO_GIT without git on the
   // service's PATH, GIT_FAILED).
   rpc InitGitRepo(InitGitRepoRequest) returns (InitGitRepoResponse);
+  // Adds the pre-commit hook that stops commits adding API keys or other
+  // secrets to the workspace's repository (.githooks/pre-commit and
+  // core.hooksPath; InitGitRepo adds it too), unless it uses other hooks
+  // (status other_hooks, with which in detail). NOT_A_REPOSITORY outside one.
+  rpc InstallSecretHook(InstallSecretHookRequest) returns (InstallSecretHookResponse);
   // Lists what's staged (everything staged first with stage_all, as git
   // add --all) and has the model draft a commit message from its diff,
   // secrets redacted; nothing is asked with nothing staged, and a model
@@ -2265,6 +2270,21 @@ enum GitOperation {
   GIT_OPERATION_MERGE = 1;
   // A rebase, to continue or abort.
   GIT_OPERATION_REBASE = 2;
+}
+
+// Request message for WorkspaceService.InstallSecretHook.
+message InstallSecretHookRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.InstallSecretHook.
+message InstallSecretHookResponse {
+  // installed, present (it was there) or other_hooks (nothing changed).
+  string status = 1;
+  // The hook, absolute.
+  string path = 2;
+  // For other_hooks: which hooks the repository uses.
+  string detail = 3;
 }
 
 // Request message for WorkspaceService.InitGitRepo.

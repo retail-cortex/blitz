@@ -434,6 +434,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.Close()
 		return nil, fmt.Errorf("failed to create the list_jobs tool: %w", err)
 	}
+	if r.tools["install_secret_hook"], err = NewInstallSecretHookTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the install_secret_hook tool: %w", err)
+	}
 	resourceTools, err := NewMCPResourceTools(r)
 	if err != nil {
 		r.Close()

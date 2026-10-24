@@ -39,6 +39,7 @@ import { message } from "./errors";
 import { t } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { includeAll } from "./includeAll";
+import { workspaces } from "./api";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -134,6 +135,13 @@ export function Workspace({
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const snack = useSnackbar();
+  // Protect against committing keys (spec_secret_hooks_051 SH-03): the
+  // hook goes in the repository, or the snack says why not.
+  const protectRepository = () =>
+    workspaces.installSecretHook({ workspace: dir }).then(
+      (r) => (snack(t(`desktop.secrethook.${r.status}`, { path: r.path, detail: r.detail }), { error: r.status === "other_hooks" }), setTouched((n) => n + 1)),
+      (e: unknown) => snack(message(e), { error: true }),
+    );
   // Include all changes, from the Changes menu: the tree and the Changes
   // view see it.
   const includeAllChanges = () =>
@@ -271,6 +279,7 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onIncludeAll={() => void includeAllChanges()}
+          onProtect={() => void protectRepository()}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
           onStudio={(kind) => (studio ? setStudioAsk((a) => ({ kind, n: a.n + 1 })) : setStudio({ kind }))}
           studioKind={studio ? studioKind : null}
