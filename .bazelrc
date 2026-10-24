@@ -37,7 +37,8 @@ test --test_env=BLITZ_SANDBOX_SHELL=auto
 # Aspect's rulesets report usage unless told not to.
 common --repo_env=ASPECT_TOOLS_TELEMETRY=off
 
-# The Go tests with the race detector (CI runs them this way). Only tests:
+# The Go tests with the race detector (CI runs them this way on Linux; run
+# them before pushing, on the Mac too). Only tests:
 # the release binaries are pure Go, which -race can't build.
 test:race --@rules_go//go/config:race
 test:race --build_tests_only

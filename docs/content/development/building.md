@@ -79,7 +79,7 @@ On Windows, Blitz runs without the OS sandbox and the process guard; skill scrip
 
 ```bash
 bazel test //...                        # every test: Go, the desktop page, the protos
-bazel test --config=race //...          # the Go tests with the race detector, as CI runs them
+bazel test --config=race //...          # the Go tests with the race detector, as CI runs them on Linux: run it before pushing
 tools/check_format.sh                   # formatting, BUILD files and license headers
 bazel run //tools:check_deps            # the dependency rules between apps and packages
 ```

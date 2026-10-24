@@ -27,6 +27,9 @@ on:
 
 permissions:
   contents: read
+  # Main's run looks up its pull request's run and that run's artifacts.
+  actions: read
+  pull-requests: read
 
 # A newer push to a pull request cancels its older run; main's runs all
 # finish (they save the caches release.yml builds from).
@@ -78,6 +81,32 @@ jobs:
           disk-cache: ${{ github.workflow }}-${{ matrix.os }}
           repository-cache: true
           cache-save: ${{ github.ref == 'refs/heads/main' }}
+      # On main: when the pull request's last passing run tested these same
+      # files (main hadn't moved while it was open), the tests aren't run
+      # again; the packages still build, keeping the caches release.yml
+      # builds from warm, and its coverage report is passed on to docs.yml.
+      - name: Already tested on its pull request?
+        id: tested
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pr="$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty' || true)"
+          [ -n "$pr" ] || exit 0
+          branch="$(gh pr view "$pr" --json headRefName --jq .headRefName)"
+          run="$(gh run list --workflow ci.yml --event pull_request --branch "$branch" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          [ -n "$run" ] || exit 0
+          gh run download "$run" --name "tested-tree-$RUNNER_OS" --dir "$RUNNER_TEMP/tested" || exit 0
+          if [ "$(cat "$RUNNER_TEMP/tested/tested-tree.txt")" != "$(git rev-parse 'HEAD^{tree}')" ]; then
+            echo "Pull request #$pr's run $run tested other files: testing"
+            exit 0
+          fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            gh run download "$run" --name coverage --dir docs/data || exit 0
+          fi
+          echo "::notice::Pull request #$pr's run $run tested these same files: the tests aren't run again"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
       # Bazel touches each disk cache entry it reads or writes: what this
       # run didn't touch is removed before the cache is saved (below).
       - name: Mark the build's start
@@ -107,20 +136,21 @@ jobs:
       - name: Formatting and license headers
         if: runner.os == 'Linux'
         run: tools/check_format.sh
-      # Every test, the Go ones with the race detector: Go, the page's
-      # vitest and type check, the proto lint. The packages' tests (tagged
-      # "packaging") wait for Packages below: in this run they'd build every
-      # platform's programs again under the race detector's settings, which
-      # the release builds never use.
+      # Every test: Go, the page's vitest and type check, the proto lint.
+      # Without the race detector on macOS: it runs on the Mac before every
+      # push (tools/coverage.sh --config=race), and here on Linux, where the
+      # Linux-only code (the sandboxes, the tray's D-Bus) runs. The
+      # packages' tests (tagged "packaging") wait for Packages below, which
+      # builds them as the release does.
       - name: Tests
-        if: runner.os != 'Linux'
-        run: bazel test --config=race --test_tag_filters=-packaging //...
+        if: runner.os != 'Linux' && steps.tested.outputs.skip != 'true'
+        run: bazel test --test_tag_filters=-packaging //...
       # On Linux, where the sandbox and gVisor tests also run, the same
       # tests run instrumented: the coverage of apps/ and pkg/ goes into the
       # job summary, and the job fails below tools/coverage/floor.txt.
       # docs.yml publishes the report on the site.
       - name: Tests, with coverage
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         run: tools/coverage.sh --config=race --test_tag_filters=-packaging -- --markdown="$GITHUB_STEP_SUMMARY"
       - name: Upload the coverage report
         if: runner.os == 'Linux'
@@ -128,13 +158,10 @@ jobs:
         with:
           name: coverage
           path: docs/data/coverage.json
-      # On macOS with the race detector, as Tests built it; on Linux as the
-      # steps below build it (the coverage run's build is instrumented).
       - name: Sandbox enforcement must not be skipped
-        env:
-          RACE: ${{ runner.os == 'macOS' && '--config=race' || '' }}
+        if: steps.tested.outputs.skip != 'true'
         run: |
-          bazel test $RACE //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
+          bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_arg=-test.v --test_arg=-test.run=TestOSSandboxEnforcement | tee out.txt
           if grep -q -- '--- SKIP' out.txt; then exit 1; fi
       # Skill scripts' environments for real (BL-SK-06): Python packages
@@ -142,22 +169,22 @@ jobs:
       # system doesn't have. They need the network, so they're opt-in
       # elsewhere; here they must not skip.
       - name: Set up Node
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Set up uv
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Script environments
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         run: |
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_env=PATH="$PATH" --test_env=BLITZ_PYENV_TESTS=1 --test_env=BLITZ_UV_PYTHON=3.13 \
             --test_arg=-test.v --test_arg=-test.run='InstallsPackages|TypeScript|RequiresPython' | tee envs.txt
           if grep -q -- '--- SKIP' envs.txt; then exit 1; fi
       - name: gVisor script sandbox must not be skipped
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         run: |
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_arg=-test.v --test_arg=-test.run=TestGVisor | tee gv.txt
@@ -166,7 +193,7 @@ jobs:
       # scanned a 50,000-entry workspace for blocked paths: at most 20 ms
       # (BL-SH-01).
       - name: Sandbox start-up stays fast
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.tested.outputs.skip != 'true'
         run: |
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_arg=-test.run='^$' --test_arg=-test.bench=BenchmarkBlockedScan \
@@ -241,12 +268,24 @@ jobs:
           for t in "${targets[@]}"; do
             bazel run @org_golang_x_vuln//cmd/govulncheck -- -mode=binary "$PWD/$(bazel cquery --strip=never --output=files "$t")"
           done
+      # What the next run trusts this commit for: these files passed on this
+      # OS. Main's run looks for it (Already tested on its pull request?).
+      - name: Record what was tested
+        if: success() && github.event_name == 'pull_request'
+        run: git rev-parse 'HEAD^{tree}' > tested-tree.txt
+      - name: Upload what was tested
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tested-tree-${{ runner.os }}
+          path: tested-tree.txt
       # Otherwise the disk cache only grows: every entry any earlier run
       # wrote is restored and saved again (it reached 4.6 GB on macOS).
       # Only after a whole run, so that everything the build needs was
-      # touched.
+      # touched; not after a run that skipped the tests, whose builds the
+      # next run still wants.
       - name: Keep only this run's disk cache entries
-        if: success()
+        if: success() && steps.tested.outputs.skip != 'true'
         run: |
           du -sh ~/.cache/bazel-disk
           find ~/.cache/bazel-disk -type f ! -newer "$RUNNER_TEMP/build-start" -delete

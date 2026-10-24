@@ -37,7 +37,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `third_party` | Patches to dependencies |
 | `docs` | This site: Hugo with the Geekdoc theme, built by Bazel (`//docs:site`) and published to GitHub Pages from `main` |
 | `release` | The CLI release archives, every platform ([spec_monorepo_028](../about/specs/spec_monorepo_028.md) MR-22) |
-| `.github/workflows` | `ci.yml` (Bazel: every test with the race detector and the packages' tests, on macOS and Linux; sandbox and gVisor checks, the dependency rules, formatting, govulncheck and protos on Linux; an archive must be identical on both), `release.yml` (Bazel-built archives, SBOMs, cosign, the desktop packages) |
+| `.github/workflows` | `ci.yml` (Bazel: every test and the packages' tests on macOS and Linux, with the race detector on Linux; main's run skips the tests its pull request already passed on the same files; sandbox and gVisor checks, the dependency rules, formatting, govulncheck and protos on Linux; an archive must be identical on both), `release.yml` (Bazel-built archives, SBOMs, cosign, the desktop packages) |
 
 ## Commands
 
@@ -50,7 +50,7 @@ bazel test //...                # every test (cached: only what changed runs aga
 bazel run //:blitz -- doctor --online   # the CLI; //:blitzd the service
 bazel run //tools:check_deps    # apps depend on pkg/ only; front ends never on the engine
 bazel run //:gazelle            # after adding a Go package or an import: update the BUILD files
-bazel test --config=race //...  # the Go tests with the race detector, as CI runs them
+bazel test --config=race //...  # the Go tests with the race detector, as CI runs them on Linux: run it before pushing
 bazel run //tools:tidy          # go mod tidy, bazel mod tidy, Gazelle (after changing dependencies)
 tools/test_one.sh //pkg/engine:engine_test 'TestReflect'   # one target's tests that match, unsharded; fails when none match (a filtered sharded run passes with none)
 tools/check_format.sh           # gofmt, BUILD files as Gazelle writes them, license headers
