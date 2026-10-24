@@ -445,13 +445,16 @@ pkg_tar(
     visibility = ["//visibility:public"],
 )
 
-# The packages carry the programs and the license files.
+# The packages carry the programs and the license files. Tagged
+# "packaging": CI tests them after the race-detector run, not in it, so the
+# programs in them build once, as the release builds them.
 sh_test(
     name = "windows_contents_test",
     size = "small",
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :windows_zip)"],
     data = [":windows_zip"],
+    tags = ["packaging"],
 )
 
 sh_test(
@@ -460,6 +463,7 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :windows_setup)"],
     data = [":windows_setup"],
+    tags = ["packaging"],
 )
 
 sh_test(
@@ -468,6 +472,7 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :Blitz_arm64.app)"],
     data = [":Blitz_arm64.app"],
+    tags = ["packaging"],
     target_compatible_with = _MACOS,
 )
 
@@ -477,6 +482,7 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :deb)"],
     data = [":deb"],
+    tags = ["packaging"],
     target_compatible_with = _LINUX,
 )
 
@@ -486,5 +492,6 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :pacman)"],
     data = [":pacman"],
+    tags = ["packaging"],
     target_compatible_with = _LINUX,
 )

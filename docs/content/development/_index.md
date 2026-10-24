@@ -37,7 +37,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `third_party` | Patches to dependencies |
 | `docs` | This site: Hugo with the Geekdoc theme, built by Bazel (`//docs:site`) and published to GitHub Pages from `main` |
 | `release` | The CLI release archives, every platform ([spec_monorepo_028](../about/specs/spec_monorepo_028.md) MR-22) |
-| `.github/workflows` | `ci.yml` (Bazel: every test with the race detector, sandbox and gVisor checks, the dependency rules, formatting, govulncheck, protos, on macOS and Linux; release archives must be identical on both), `release.yml` (Bazel-built archives, SBOMs, cosign, the desktop packages) |
+| `.github/workflows` | `ci.yml` (Bazel: every test with the race detector and the packages' tests, on macOS and Linux; sandbox and gVisor checks, the dependency rules, formatting, govulncheck and protos on Linux; an archive must be identical on both), `release.yml` (Bazel-built archives, SBOMs, cosign, the desktop packages) |
 
 ## Commands
 

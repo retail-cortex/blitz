@@ -50,7 +50,7 @@ The CLI and the service build with `CGO_ENABLED=0`: static binaries with no runt
 
 ## Reproducible releases
 
-The release archives come out byte for byte the same whether built on macOS or Linux. CI builds them on both and compares the checksums. What makes that work:
+The release archives come out byte for byte the same whether built on macOS or Linux. CI builds one (darwin/arm64) on both and compares the checksums. What makes that work:
 
 - Output directories are named after the target platform, not the host, since generated files' paths end up in the binaries.
 - rules_go links with a fixed build ID, and `--config=release` stamps only the version, from `git describe`.

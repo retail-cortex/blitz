@@ -102,6 +102,7 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(locations :archives)"],
     data = [":archives"],
+    tags = ["packaging"],  # CI tests it with the packages (//apps/electron/packaging)
 )
 
 # The install script (curl … | sh), attached to each release.

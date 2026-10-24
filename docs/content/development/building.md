@@ -94,7 +94,7 @@ Some tests need more than the build: the gVisor tests need `runsc` (`RUNSC_PATH`
 bazel build --config=release //release:archives
 ```
 
-The archives come out byte for byte the same on macOS and Linux; CI builds them on both and compares. The [build architecture](../architecture/build.md) explains how.
+The archives come out byte for byte the same on macOS and Linux; CI builds the darwin/arm64 archive on both and compares (the Linux runner builds them all). The [build architecture](../architecture/build.md) explains how.
 
 ## The docs
 

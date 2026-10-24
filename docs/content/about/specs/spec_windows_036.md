@@ -42,7 +42,7 @@ Until v0.7.0 Windows had no desktop app ([spec_desktop_024](spec_desktop_024.md)
 ## 5. Release
 
 - **WIN-35** *Until v0.7.1* the Windows archive (`blitz_<version>_windows_amd64.zip`, [spec_release_025](spec_release_025.md) REL-12) also held `blitz-tray.exe`, for its page. *Since v0.8.0* it holds the CLI and the service as the other archives do; the tray comes with the desktop app (`Blitz_<version>_windows_x64_setup.exe` or `_x64.zip`). `release/contents_test.sh` checks the zip.
-- **WIN-36** CI builds the zip with the other archives on Linux and macOS, and the reproducible job compares them.
+- **WIN-36** CI builds the zip with the other archives on Linux and macOS, and the reproducible job compares them. *Since 2026-10-24* on Linux only, and the reproducible job compares the darwin/arm64 archive (spec_release_025 REL-06).
 
 ## 6. Not yet
 
