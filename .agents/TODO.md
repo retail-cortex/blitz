@@ -126,10 +126,11 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
    `--user-data-dir` under `~/.blitz/browser/profiles/<name>` (0700).
    The user signs in by hand in a preview tab on that profile; agents
    then browse with its cookies. Settings › Browser: list, new,
-   **Sign in…** (opens a tab), clear data, delete. `browser.profile`
-   per workspace (global settings only, never project settings, like
-   WEB-38); per-agent `browser_profile` in frontmatter; untrusted
-   workspaces get a throwaway profile. Each profile has its own
+   **Sign in…** (opens a tab), clear data, delete. One profile per
+   workspace (owner, 2026-10-23): `browser.profile`, set from the
+   global settings only, never project settings (like WEB-38); every
+   agent in the workspace browses with it. Untrusted workspaces get a
+   throwaway profile. Each profile has its own
    allowed domains; a domain outside them asks. Passkeys: handle
    `select-webauthn-account` (macOS Touch ID). New spec
    (spec_browser_profiles_049), WEB-30.
@@ -185,8 +186,8 @@ Order: 1 → 2 share the drop plumbing and `CopyFile`; 3 is Go only; 4 and
    - For Blitz: 4 + 5 cover most of it inside the app; this is the
      path for sites that refuse embedded browsers.
 
-**Open questions for the owner:** (c) Profiles per workspace, per
-agent, or both? (d) Is 6 wanted, and in v0.8.4 or later?
+**Open question for the owner:** (d) Is 6 wanted, and in v0.8.4 or
+later?
 
 ### File tree: catching up with VS Code's Explorer
 
