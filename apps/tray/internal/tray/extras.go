@@ -55,17 +55,15 @@ func FetchExtras(ctx context.Context, sock string) (Extras, error) {
 		return e, err
 	}
 	e.MCP = mcp.Msg.Servers
+	// The service answers: a list it can't give (a workspace's trouble)
+	// is left empty, and the rest are still shown.
 	wc := pb.NewWorkerServiceClient(hc, socket.BaseURL)
-	ws, err := wc.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{}))
-	if err != nil {
-		return e, err
+	if ws, err := wc.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{})); err == nil {
+		e.Workers = ws.Msg.Workers
 	}
-	e.Workers = ws.Msg.Workers
-	runs, err := wc.ListRunningWorkerRuns(ctx, connect.NewRequest(&pb.ListRunningWorkerRunsRequest{}))
-	if err != nil {
-		return e, err
+	if runs, err := wc.ListRunningWorkerRuns(ctx, connect.NewRequest(&pb.ListRunningWorkerRunsRequest{})); err == nil {
+		e.Runs = runs.Msg.Runs
 	}
-	e.Runs = runs.Msg.Runs
 	// An older service hasn't the call: no Processes, the rest as before.
 	if procs, err := pb.NewWorkspaceServiceClient(hc, socket.BaseURL).ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{})); err == nil {
 		e.Processes = procs.Msg.Processes
@@ -90,6 +88,7 @@ const (
 	ShowWorkflow             // open the app on a workflow's canvas (Name), on a run (RunID)
 	SetConnector             // turn a connection on or off in a workspace (Category, Scope, Name, On)
 	StopProcess              // stop an agent's background process (Workspace, ID)
+	ShowProcess              // open the app's processes view on one (Workspace, ID)
 )
 
 // Action is an entry's click.
@@ -144,8 +143,8 @@ func WorkersLink(workspace, name string) string {
 	return "blitz://workers?" + q.Encode()
 }
 
-// Do does what a click asks of the service at sock; ShowWorkers and
-// ShowWorkflow open their links with open.
+// Do does what a click asks of the service at sock; ShowWorkers,
+// ShowWorkflow and ShowProcess open their links with open.
 func Do(ctx context.Context, sock string, a Action, open func(link string) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -176,6 +175,8 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).SetConnectorEnabled(ctx, connect.NewRequest(&pb.SetConnectorEnabledRequest{Workspace: a.Workspace, Category: a.Category, Scope: a.Scope, Name: a.Name, Enabled: a.On}))
 	case StopProcess:
 		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: a.Workspace, Id: int32(a.ID), AnySession: true}))
+	case ShowProcess:
+		err = open(ProcessesLink(a.Workspace, a.ID))
 	case NoAction:
 	default:
 		err = errors.New("no such action")

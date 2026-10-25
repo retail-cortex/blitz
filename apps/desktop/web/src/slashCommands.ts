@@ -69,7 +69,7 @@ export interface CommandContext {
   usage(): void;
   busy(): boolean;
   settingsChanged(): void;
-  openView(v: "changes" | "workers"): void;
+  openView(v: "changes" | "workers" | "processes"): void;
   openSettings(section: string, scope?: string): void;
   reviewProject?: () => void;
   reload(): Promise<void>;
@@ -540,6 +540,8 @@ export const builtinCommands: Builtin[] = [
     },
   },
   { name: "diff", group: "workspace", run: (c) => c.openView("changes") },
+  // The window's way to the terminal's list, output and stop: the Processes view.
+  { name: "processes", group: "work", run: (c) => c.openView("processes") },
   { name: "init", group: "workspace", describe: "help.init", turn: true, run: (c) => c.run("/setup", { command: true }) },
   {
     name: "reload",

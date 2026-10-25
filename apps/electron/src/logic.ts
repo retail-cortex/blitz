@@ -229,16 +229,18 @@ export function printOptions(pageSize: unknown) {
 /** The longest prompt a blitz:// link may carry (as deeplink.go). */
 export const maxLinkPrompt = 20000;
 
-/** A blitz:// link's folder, and its prompt (open) or view (workers, or a workflow's run). */
+/** A blitz:// link's folder, and its prompt (open) or view (workers, a workflow's run, or the processes). */
 export interface DeepLink {
   dir: string;
   prompt: string;
-  view?: "workers" | "workflows";
+  view?: "workers" | "workflows" | "processes";
   /** For workflows: the workflow, and the run to show on its canvas. */
   workflow?: string;
   run?: string;
   /** For workers: the job to open (its details), else the list. */
   worker?: string;
+  /** For processes: the process to open (its output), else the list. */
+  process?: number;
 }
 
 /**
@@ -246,7 +248,9 @@ export interface DeepLink {
  * blitz://workers?dir=<folder>[&worker=<name>] (the folder's jobs, or
  * one job's details) and
  * blitz://workflow?dir=<folder>&workflow=<name>[&run=<id>] (a workflow's
- * canvas, on a run; EL-111): the folder must be an absolute path (whether
+ * canvas, on a run; EL-111) and
+ * blitz://processes?dir=<folder>[&id=<n>] (the agents' processes, one's
+ * output; spec_processes_052): the folder must be an absolute path (whether
  * it's a folder is the main process's to check), the prompt at most
  * maxLinkPrompt characters, the workflow named. Undefined otherwise.
  */
@@ -259,7 +263,7 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   }
   if (u.protocol !== "blitz:") return undefined;
   const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
-  if (action !== "open" && action !== "workers" && action !== "workflow") return undefined;
+  if (action !== "open" && action !== "workers" && action !== "workflow" && action !== "processes") return undefined;
   let dir = u.searchParams.get("dir") ?? "";
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
@@ -267,6 +271,10 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   if (action === "workers") {
     const worker = [...(u.searchParams.get("worker") ?? "")].slice(0, 200).join("");
     return worker ? { dir, prompt: "", view: "workers", worker } : { dir, prompt: "", view: "workers" };
+  }
+  if (action === "processes") {
+    const id = Number(u.searchParams.get("id") ?? "");
+    return Number.isInteger(id) && id > 0 ? { dir, prompt: "", view: "processes", process: id } : { dir, prompt: "", view: "processes" };
   }
   if (action === "workflow") {
     const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");

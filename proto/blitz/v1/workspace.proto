@@ -442,6 +442,11 @@ service WorkspaceService {
   // Returns the agents' background processes still running, in every open
   // workspace (the tray's Processes menu, spec_electron_038 EL-112).
   rpc ListRunningProcesses(ListRunningProcessesRequest) returns (ListRunningProcessesResponse);
+  // Streams the agents' background processes still running, in every open
+  // workspace (or one): as they are, then again each time one starts,
+  // ends, is flagged or its usage moves (the processes view,
+  // spec_processes_052).
+  rpc WatchProcesses(WatchProcessesRequest) returns (stream WatchProcessesResponse);
   // Records in the workspace's audit log a command the user ran directly
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
@@ -1716,6 +1721,20 @@ message Process {
   int32 exit_code = 4;
   // How long it has run, or ran.
   int64 runtime_ms = 5;
+  // The session whose turn started it ("" outside one).
+  string session_id = 6;
+  // What it and its children use while it runs: percent of one core over
+  // the last sample, and resident memory; set once measured (not on
+  // Windows).
+  double cpu_percent = 7;
+  int64 memory_bytes = 8;
+  bool measured = 9;
+  // Why it looks bad: "cpu" (a core kept busy), "memory" (over the limit,
+  // or growing), "left" (its session ended, or has had no turn for long);
+  // none while it looks fine (spec_processes_052).
+  repeated string flags = 10;
+  // How long its session has gone without a turn (0 while one runs).
+  int64 idle_ms = 11;
 }
 
 // Request message for WorkspaceService.ListProcesses.
@@ -1736,11 +1755,15 @@ message GetProcessOutputRequest {
   // The sessions the asking client ran turns in.
   repeated string session_ids = 2;
   int32 id = 3;
+  // Whichever session started it: the user's own look (the processes
+  // view's, /processes log).
+  bool any_session = 4;
 }
 
 // Response message for WorkspaceService.GetProcessOutput.
 message GetProcessOutputResponse {
-  // Its output and errors as captured (the first part, when long).
+  // Its output and errors as captured (its start and its latest, when
+  // long).
   string output = 1;
   Process process = 2;
 }
@@ -1772,6 +1795,18 @@ message WorkspaceProcess {
 
 // Response message for WorkspaceService.ListRunningProcesses.
 message ListRunningProcessesResponse {
+  // By workspace, then ID.
+  repeated WorkspaceProcess processes = 1;
+}
+
+// Request message for WorkspaceService.WatchProcesses.
+message WatchProcessesRequest {
+  // Empty: every open workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchProcesses.
+message WatchProcessesResponse {
   // By workspace, then ID.
   repeated WorkspaceProcess processes = 1;
 }

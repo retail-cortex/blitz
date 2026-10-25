@@ -29,7 +29,7 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
+import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, WorkspaceProcessSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
@@ -1078,6 +1078,30 @@ const fakeTasks = new URLSearchParams(location.search).has("notasks")
       },
     ];
 let fakeAlerts = "notify";
+// The agents' background processes (?fake&processes, the Processes view):
+// a dev server keeping a core busy, one left running by an idle session,
+// and a fine one in another workspace. Stopping one drops it.
+const fakeProcesses: MessageInitShape<typeof WorkspaceProcessSchema>[] = new URLSearchParams(location.search).has("processes")
+  ? [
+      { workspace: "/home/me/shop", process: { id: 3, command: "pnpm dev --port 5173 --host 127.0.0.1", running: true, runtimeMs: 2_520_000n, sessionId: "s-1", cpuPercent: 97.2, memoryBytes: 431_000_000n, measured: true, flags: ["cpu"] } },
+      { workspace: "/home/me/shop", process: { id: 1, command: "python3 -m http.server 8000 --directory build/site", running: true, runtimeMs: 11_040_000n, sessionId: "s-0", cpuPercent: 0.1, memoryBytes: 19_400_000n, measured: true, flags: ["left"], idleMs: 7_500_000n } },
+      { workspace: "/home/me/notes", process: { id: 2, command: "go test ./... -run TestSoak -count=200", running: true, runtimeMs: 312_000n, sessionId: "s-9", cpuPercent: 38.5, memoryBytes: 96_000_000n, measured: true } },
+    ]
+  : [];
+const fakeProcessOutput = Array.from({ length: 60 }, (_, i) => `[vite] ${String(10 + Math.floor(i / 6)).padStart(2, "0")}:${String((i * 7) % 60).padStart(2, "0")} hmr update /src/cart/${["Totals", "Coupon", "LineItem"][i % 3]}.tsx`).join("\n") + "\n";
+// The process stream: the running ones now, then whenever the list changes.
+async function* watchFakeProcesses(workspace: string) {
+  let last = "";
+  for (;;) {
+    const processes = fakeProcesses.filter((x) => !workspace || x.workspace === workspace);
+    const sig = processes.map((x) => `${x.workspace}#${x.process?.id}`).join("|");
+    if (sig !== last) {
+      last = sig;
+      yield { processes };
+    }
+    await sleep(500);
+  }
+}
 // The task stream: the list now, then whenever it changes (as the service's).
 async function* watchFakeTasks(workspace: string) {
   let last = "";
@@ -1581,6 +1605,14 @@ export function installFake() {
         // Workflows' human tasks, answered by their forms.
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
         watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
+        watchProcesses: ({ workspace }) => watchFakeProcesses(workspace),
+        getProcessOutput: ({ workspace, id }) => ({ output: fakeProcessOutput, process: fakeProcesses.find((x) => x.workspace === workspace && x.process?.id === id)?.process }),
+        killProcess: ({ workspace, id }) => {
+          const i = fakeProcesses.findIndex((x) => x.workspace === workspace && x.process?.id === id);
+          if (i < 0) throw fakeError(`no process ${id}`, "UNKNOWN_PROCESS");
+          const [gone] = fakeProcesses.splice(i, 1);
+          return { process: { ...gone.process, running: false, exitCode: -1 } };
+        },
         listWorkflowRuns: ({ workspace, workflow, limit }) => ({ runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (!workflow || r.workflow === workflow)).slice(0, limit || 50).map(summary) }),
         getWorkflowRun: ({ id }) => {
           const r = fakeReceipts.find((x) => x.id === id);

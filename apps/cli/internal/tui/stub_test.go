@@ -70,6 +70,9 @@ type stubBackend struct {
 	steer            func(text string) error
 	listTasks        func() []api.TaskInfo
 	stopTask         func(id string) (api.TaskInfo, error)
+	runningProcs     func(everywhere bool) ([]api.WorkspaceProcess, error)
+	stopProcIn       func(workspace string, id int) (api.ProcessInfo, error)
+	procOutputIn     func(workspace string, id int) (string, api.ProcessInfo, error)
 	takeNotices      func() []string
 	task             func(id string) (api.TaskInfo, []string, error)
 	pendingRequests  func() []api.TaskRequest
@@ -375,6 +378,28 @@ func (s *stubBackend) StopTask(id string) (api.TaskInfo, error) {
 		return s.stopTask(id)
 	}
 	return s.Backend.StopTask(id)
+}
+
+// The service's processes (/processes): none unless a test says.
+func (s *stubBackend) RunningProcesses(everywhere bool) ([]api.WorkspaceProcess, error) {
+	if s.runningProcs != nil {
+		return s.runningProcs(everywhere)
+	}
+	return nil, nil
+}
+
+func (s *stubBackend) StopProcessIn(workspace string, id int) (api.ProcessInfo, error) {
+	if s.stopProcIn != nil {
+		return s.stopProcIn(workspace, id)
+	}
+	return api.ProcessInfo{}, api.ErrUnknownProcess
+}
+
+func (s *stubBackend) ProcessOutputIn(workspace string, id int) (string, api.ProcessInfo, error) {
+	if s.procOutputIn != nil {
+		return s.procOutputIn(workspace, id)
+	}
+	return "", api.ProcessInfo{}, api.ErrUnknownProcess
 }
 
 func (s *stubBackend) TakeProcessNotices(session string) []string {

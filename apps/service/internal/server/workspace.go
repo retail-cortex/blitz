@@ -602,7 +602,13 @@ func (h workspaceService) GetProcessOutput(ctx context.Context, r req[pb.GetProc
 	if err != nil {
 		return nil, err
 	}
-	text, p, err := w.ProcessOutput(r.Msg.SessionIds, int(r.Msg.Id))
+	var text string
+	var p api.ProcessInfo
+	if r.Msg.AnySession {
+		text, p, err = w.AnyProcessOutput(int(r.Msg.Id))
+	} else {
+		text, p, err = w.ProcessOutput(r.Msg.SessionIds, int(r.Msg.Id))
+	}
 	if err != nil {
 		return nil, toAPI(err)
 	}
@@ -627,20 +633,64 @@ func (h workspaceService) KillProcess(ctx context.Context, r req[pb.KillProcessR
 }
 
 func (h workspaceService) ListRunningProcesses(_ context.Context, _ req[pb.ListRunningProcessesRequest]) (*connect.Response[pb.ListRunningProcessesResponse], error) {
-	h.s.mu.Lock()
-	ws := make([]*workspace, 0, len(h.s.workspaces))
-	for _, w := range h.s.workspaces {
-		ws = append(ws, w)
-	}
-	h.s.mu.Unlock()
-	slices.SortFunc(ws, func(a, b *workspace) int { return strings.Compare(a.Dir(), b.Dir()) })
-	out := &pb.ListRunningProcessesResponse{}
-	for _, w := range ws {
-		for _, p := range w.RunningProcesses() {
-			out.Processes = append(out.Processes, &pb.WorkspaceProcess{Workspace: w.Dir(), Process: processMsg(p)})
+	return ok(&pb.ListRunningProcessesResponse{Processes: h.s.runningProcesses("")})
+}
+
+// runningProcesses are the background processes still running in the
+// open workspaces (dir's alone, unless ""), by workspace then ID.
+func (s *Server) runningProcesses(dir string) []*pb.WorkspaceProcess {
+	if dir != "" {
+		if real, err := canonical(dir); err == nil {
+			dir = real
 		}
 	}
-	return ok(out)
+	s.mu.Lock()
+	ws := make([]*workspace, 0, len(s.workspaces))
+	for key, w := range s.workspaces {
+		if dir == "" || key == dir {
+			ws = append(ws, w)
+		}
+	}
+	s.mu.Unlock()
+	slices.SortFunc(ws, func(a, b *workspace) int { return strings.Compare(a.Dir(), b.Dir()) })
+	var out []*pb.WorkspaceProcess
+	for _, w := range ws {
+		for _, p := range w.RunningProcesses() {
+			out = append(out, &pb.WorkspaceProcess{Workspace: w.Dir(), Process: processMsg(p)})
+		}
+	}
+	return out
+}
+
+// watchProcessesEvery is how often WatchProcesses looks for a change.
+var watchProcessesEvery = 2 * time.Second
+
+func (h workspaceService) WatchProcesses(ctx context.Context, r req[pb.WatchProcessesRequest], stream *connect.ServerStream[pb.WatchProcessesResponse]) error {
+	last := "-" // the first list goes, empty or not
+	tick := time.NewTicker(watchProcessesEvery)
+	defer tick.Stop()
+	for {
+		procs := h.s.runningProcesses(r.Msg.Workspace)
+		// What a client shows changing: which run, their flags, and their
+		// usage to the percent and the megabyte; not their running time,
+		// which a client counts itself.
+		var b strings.Builder
+		for _, wp := range procs {
+			p := wp.Process
+			fmt.Fprintf(&b, "%s:%d:%v:%.0f:%d|", wp.Workspace, p.Id, p.Flags, p.CpuPercent, p.MemoryBytes>>20)
+		}
+		if sig := b.String(); sig != last {
+			last = sig
+			if err := stream.Send(&pb.WatchProcessesResponse{Processes: procs}); err != nil {
+				return err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		}
+	}
 }
 
 func (h workspaceService) AuditShell(ctx context.Context, r req[pb.AuditShellRequest]) (*connect.Response[pb.AuditShellResponse], error) {

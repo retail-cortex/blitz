@@ -58,10 +58,13 @@ type Config struct {
 	// Harness is the scheduled reflection on the workspace's runs.
 	Harness HarnessConfig `toml:"harness"`
 	// Git is what Blitz does with git in a workspace that's a repository.
-	Git     GitConfig     `toml:"git"`
-	Tools   ToolsConfig   `toml:"tools"`
-	Session SessionConfig `toml:"session"`
-	Sandbox SandboxConfig `toml:"sandbox"`
+	Git   GitConfig   `toml:"git"`
+	Tools ToolsConfig `toml:"tools"`
+	// Processes say when an agent's background process looks bad
+	// (spec_processes_052).
+	Processes ProcessesConfig `toml:"processes"`
+	Session   SessionConfig   `toml:"session"`
+	Sandbox   SandboxConfig   `toml:"sandbox"`
 	// Permissions are allow, ask and deny rules for actions, as
 	// "kind(pattern)" (see tools.ParsePermissionRule).
 	Permissions PermissionsConfig `toml:"permissions"`
@@ -593,6 +596,23 @@ type ToolsConfig struct {
 	// BackgroundAgentMaxCostUSD stops a background task that has cost more
 	// (0: no cap).
 	BackgroundAgentMaxCostUSD float64 `toml:"background_agent_max_cost_usd"`
+}
+
+// ProcessesConfig says when an agent's background process looks bad: the
+// processes view, /processes and the tray flag it (spec_processes_052).
+// Durations are Go durations ("2m"); unset or 0 keeps the default.
+type ProcessesConfig struct {
+	// CPUPercent of one core, kept up for BusyFor, flags it as busy
+	// (default 90 for "2m").
+	CPUPercent float64 `toml:"cpu_percent"`
+	BusyFor    string  `toml:"busy_for"`
+	// MemoryMB, or memory up by half within GrowthWindow, flags its memory
+	// (default 2048, "10m").
+	MemoryMB     int    `toml:"memory_mb"`
+	GrowthWindow string `toml:"growth_window"`
+	// LeftAfter without a turn in the session that started it flags it as
+	// left running (default "2h").
+	LeftAfter string `toml:"left_after"`
 }
 
 // PermissionsConfig lists permission rules. Deny wins over ask, ask over

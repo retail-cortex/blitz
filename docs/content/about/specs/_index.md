@@ -61,5 +61,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 049 | [browser profiles](spec_browser_profiles_049.md) | The sign-ins the agents browse with: Blitz's own Chromium profiles, one chosen per workspace from the person's settings, kept between runs; since v0.8.4 |
 | 050 | [the agent's browser in the app](spec_agent_browser_050.md) | With the desktop app open, the agent browses in a view of the app's own, watched in a tab or silent, over a relay of the DevTools Protocol; since v0.8.4 |
 | 051 | [secrets hook](spec_secret_hooks_051.md) | A pre-commit hook that stops commits adding API keys and other secrets (`blitz security scan-secrets`), put in when the harness or the window makes a repository; since v0.8.4 |
+| 052 | [processes](spec_processes_052.md) | The agents' background processes: what each uses, flags for the busy, the growing and the left running, and one place to see and stop them (the window's status bar and view, `/processes`, the tray); since v0.8.5 |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

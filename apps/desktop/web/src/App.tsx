@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
@@ -291,10 +291,20 @@ function Shell() {
   useEffect(() => onNotificationOpen((dir) => (dir ? update((p) => openWorkspace(p, dir)) : showTasks())), [update]);
   // A blitz://open link opens its folder with the prompt filled in, not
   // sent; blitz://workers (the tray's) opens it on its workers, or
-  // Settings › Workers for the global ones.
+  // Settings › Workers for the global ones; blitz://processes (the tray's)
+  // shows the Processes view, in its folder or the one shown.
+  const activeDir = useRef("");
+  activeDir.current = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
   useEffect(
     () =>
       onDeepLink(async (link) => {
+        if (link.view === "processes") {
+          const dir = link.dir || activeDir.current;
+          if (!dir) return;
+          update((p) => openWorkspace(p, dir));
+          showView({ dir, view: "processes", process: link.process });
+          return;
+        }
         // The global workers' (the home workspace's) are in Settings › Workers.
         if (link.view === "workers" && link.dir === (await globalHome())) {
           setSettingsAt({ section: "workers", scope: link.worker });

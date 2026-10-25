@@ -214,6 +214,7 @@ func (w *Workspace) DeleteSession(ctx context.Context, id string) error {
 		return err
 	}
 	w.engine.ForgetSession(ctx, id)
+	w.tools.Processes().SessionGone(id) // what it started was left running
 	return nil
 }
 

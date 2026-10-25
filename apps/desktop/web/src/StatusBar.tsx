@@ -22,6 +22,7 @@ import {
   mdiAlertOutline,
   mdiCircleMedium,
   mdiCloseCircleOutline,
+  mdiConsole,
   mdiCreationOutline,
   mdiInboxOutline,
   mdiLoading,
@@ -42,6 +43,7 @@ import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
+import { countLabel, isFlagged, useProcesses } from "./processes";
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
@@ -82,6 +84,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       {serviceUp && <TasksItem />}
       {serviceUp && <RunsItem />}
       {serviceUp && <FlowRunsItem />}
+      {ws && serviceUp && <ProcessesItem dir={dir} />}
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
     </footer>
@@ -180,6 +183,20 @@ function TasksItem() {
     <button className="sb-item sb-button sb-warn" title={label} aria-label={label} onClick={showTasks}>
       <Icon path={mdiAccountCheckOutline} size="sm" />
       <span>{tasks.length}</span>
+    </button>
+  );
+}
+
+// The agents' background processes running, in any workspace: toggles the
+// Processes view (warned when one is flagged).
+function ProcessesItem({ dir }: { dir: string }) {
+  const { list } = useProcesses();
+  if (list.length === 0) return null;
+  const label = countLabel(list.length);
+  return (
+    <button className={`sb-item sb-button ${list.some(isFlagged) ? "sb-warn" : ""}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
+      <Icon path={mdiConsole} size="sm" />
+      <span>{label}</span>
     </button>
   );
 }

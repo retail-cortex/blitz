@@ -255,4 +255,35 @@ type ProcessInfo struct {
 	Running   bool   `json:"running"`
 	ExitCode  int    `json:"exit_code"`
 	RuntimeMs int64  `json:"runtime_ms"`
+	// Session is the session whose turn started it ("" outside one).
+	Session string `json:"session,omitempty"`
+	// CPUPercent is what it and its children used of one core over the
+	// last sample, and MemoryBytes their resident memory; both 0 until
+	// sampled, and on a system that isn't sampled (Measured false).
+	CPUPercent  float64 `json:"cpu_percent,omitempty"`
+	MemoryBytes int64   `json:"memory_bytes,omitempty"`
+	Measured    bool    `json:"measured,omitempty"`
+	// Flags say why it looks bad (ProcessFlagCPU, ProcessFlagMemory,
+	// ProcessFlagLeft); none while it looks fine.
+	Flags []string `json:"flags,omitempty"`
+	// IdleMs is how long its session has gone without a turn (0 while
+	// one runs).
+	IdleMs int64 `json:"idle_ms,omitempty"`
 }
+
+// WorkspaceProcess is a background process and the workspace it runs in.
+type WorkspaceProcess struct {
+	Workspace string
+	Process   ProcessInfo
+}
+
+// Why a background process looks bad (spec_processes_052).
+const (
+	// ProcessFlagCPU: it has kept a core busy for a while.
+	ProcessFlagCPU = "cpu"
+	// ProcessFlagMemory: its memory is over the limit, or keeps growing.
+	ProcessFlagMemory = "memory"
+	// ProcessFlagLeft: it was left running: its session ended, or has had
+	// no turn for a long time.
+	ProcessFlagLeft = "left"
+)
