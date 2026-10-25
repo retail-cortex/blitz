@@ -70,6 +70,8 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
         <Icon path={mdiCircleMedium} size="sm" />
         <span className="sb-low">{serviceUp ? t("desktop.status.connected") : t("desktop.status.reconnecting")}</span>
       </span>
+      {/* First on the left, clear of the turn's activity on the right. */}
+      {ws && serviceUp && <ProcessesItem dir={dir} />}
       {ws && (
         <>
           <span className="sb-item sb-ws" title={ws.dir}>
@@ -84,7 +86,6 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       {serviceUp && <TasksItem />}
       {serviceUp && <RunsItem />}
       {serviceUp && <FlowRunsItem />}
-      {ws && serviceUp && <ProcessesItem dir={dir} />}
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
     </footer>
@@ -187,16 +188,16 @@ function TasksItem() {
   );
 }
 
-// The agents' background processes running, in any workspace: toggles the
-// Processes view (warned when one is flagged).
+// The agents' background processes running, in any workspace: an icon,
+// green while they run and warned when one is flagged, the count in its
+// hover text; toggles the Processes view.
 function ProcessesItem({ dir }: { dir: string }) {
   const { list } = useProcesses();
   if (list.length === 0) return null;
   const label = countLabel(list.length);
   return (
-    <button className={`sb-item sb-button ${list.some(isFlagged) ? "sb-warn" : ""}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
+    <button className={`sb-item sb-button sb-procs ${list.some(isFlagged) ? "sb-warn" : ""}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
       <Icon path={mdiConsole} size="sm" />
-      <span>{label}</span>
     </button>
   );
 }

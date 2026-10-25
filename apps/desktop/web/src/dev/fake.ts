@@ -1097,7 +1097,7 @@ async function* watchFakeProcesses(workspace: string) {
     const sig = processes.map((x) => `${x.workspace}#${x.process?.id}`).join("|");
     if (sig !== last) {
       last = sig;
-      yield { processes };
+      yield { processes, listed: true };
     }
     await sleep(500);
   }

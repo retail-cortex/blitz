@@ -1809,6 +1809,10 @@ message WatchProcessesRequest {
 message WatchProcessesResponse {
   // By workspace, then ID.
   repeated WorkspaceProcess processes = 1;
+  // Always true: tells the service's list (none running is a list too)
+  // from the empty messages the desktop's page server adds to a quiet
+  // stream as keepalives (pkg/pageserver), which the page skips.
+  bool listed = 2;
 }
 
 // Request message for WorkspaceService.AuditShell.

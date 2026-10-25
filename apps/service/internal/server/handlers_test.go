@@ -607,10 +607,12 @@ func TestProcessesOverTheAPI(t *testing.T) {
 	require.True(t, watch.Receive(), "%v", watch.Err())
 	require.Len(t, watch.Msg().Processes, 1)
 	assert.Equal(t, p.Id, watch.Msg().Processes[0].Process.Id)
+	assert.True(t, watch.Msg().Listed, "told from a keepalive")
 	elsewhere, err := w.WatchProcesses(watchCtx, connect.NewRequest(&pb.WatchProcessesRequest{Workspace: t.TempDir()}))
 	require.NoError(t, err)
 	require.True(t, elsewhere.Receive(), "%v", elsewhere.Err())
 	assert.Empty(t, elsewhere.Msg().Processes, "another workspace's")
+	assert.True(t, elsewhere.Msg().Listed, "an empty list is still a list")
 
 	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, Id: p.Id, AnySession: true}))
 	require.NoError(t, err)

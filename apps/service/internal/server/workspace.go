@@ -681,7 +681,7 @@ func (h workspaceService) WatchProcesses(ctx context.Context, r req[pb.WatchProc
 		}
 		if sig := b.String(); sig != last {
 			last = sig
-			if err := stream.Send(&pb.WatchProcessesResponse{Processes: procs}); err != nil {
+			if err := stream.Send(&pb.WatchProcessesResponse{Processes: procs, Listed: true}); err != nil {
 				return err
 			}
 		}

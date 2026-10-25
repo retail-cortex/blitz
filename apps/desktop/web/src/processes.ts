@@ -55,7 +55,10 @@ function take(list: WorkspaceProcess[]) {
 async function watch(ctl: AbortController) {
   while (!ctl.signal.aborted) {
     try {
-      for await (const r of workspaces.watchProcesses({ workspace: "" }, { signal: ctl.signal })) take(r.processes);
+      for await (const r of workspaces.watchProcesses({ workspace: "" }, { signal: ctl.signal })) {
+        // The page server's keepalives are empty messages: not a list.
+        if (r.listed) take(r.processes);
+      }
     } catch {
       // An older service (unimplemented) or a dropped stream.
     }
