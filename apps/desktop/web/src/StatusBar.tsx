@@ -22,8 +22,8 @@ import {
   mdiAlertOutline,
   mdiCircleMedium,
   mdiCloseCircleOutline,
-  mdiConsole,
   mdiCreationOutline,
+  mdiDeveloperBoard,
   mdiInboxOutline,
   mdiLoading,
   mdiRobotOutline,
@@ -188,16 +188,17 @@ function TasksItem() {
   );
 }
 
-// The agents' background processes running, in any workspace: an icon,
-// green while they run and warned when one is flagged, the count in its
-// hover text; toggles the Processes view.
+// The agents' background processes, in any workspace: a board icon,
+// green while some run (amber when one is flagged) and greyed when none
+// do, the count in its hover text; toggles the Processes view.
 function ProcessesItem({ dir }: { dir: string }) {
   const { list } = useProcesses();
-  if (list.length === 0) return null;
-  const label = countLabel(list.length);
+  const on = list.length > 0;
+  const label = on ? countLabel(list.length) : t("desktop.processes.empty_all");
+  const state = !on ? "off" : list.some(isFlagged) ? "sb-warn" : "on";
   return (
-    <button className={`sb-item sb-button sb-procs ${list.some(isFlagged) ? "sb-warn" : ""}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
-      <Icon path={mdiConsole} size="sm" />
+    <button className={`sb-item sb-button sb-procs ${state}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
+      <Icon path={mdiDeveloperBoard} size="sm" />
     </button>
   );
 }
