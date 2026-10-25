@@ -20,7 +20,6 @@ import {
   mdiAccountCheckOutline,
   mdiAlertCircleOutline,
   mdiAlertOutline,
-  mdiCircleMedium,
   mdiCloseCircleOutline,
   mdiCreationOutline,
   mdiDeveloperBoard,
@@ -30,6 +29,7 @@ import {
   mdiSourceBranch,
   mdiSourceMerge,
   mdiTuneVariant,
+  mdiVectorPolyline,
 } from "@mdi/js";
 import { workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
@@ -66,9 +66,15 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const dir = ws?.dir ?? "";
   return (
     <footer className="status-bar t-label-sm" role="contentinfo" aria-label={t("desktop.status.label")}>
-      <span className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`} title={serviceUp ? t("desktop.status.service_up", { version: shownVersion(version ?? "") }) : t("desktop.app.lost")}>
-        <Icon path={mdiCircleMedium} size="sm" />
-        <span className="sb-low">{serviceUp ? t("desktop.status.connected") : t("desktop.status.reconnecting")}</span>
+      {/* The service: an icon, green while it answers and red while it's
+          reconnected to; what it means in its hover text. */}
+      <span
+        className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`}
+        role="status"
+        title={serviceUp ? t("desktop.status.service_up", { version: shownVersion(version ?? "") }) : t("desktop.app.lost")}
+        aria-label={serviceUp ? t("desktop.status.connected") : t("desktop.status.reconnecting")}
+      >
+        <Icon path={mdiVectorPolyline} size="sm" />
       </span>
       {/* First on the left, clear of the turn's activity on the right. */}
       {ws && serviceUp && <ProcessesItem dir={dir} />}
@@ -194,8 +200,9 @@ function TasksItem() {
 function ProcessesItem({ dir }: { dir: string }) {
   const { list } = useProcesses();
   const on = list.length > 0;
-  const label = on ? countLabel(list.length) : t("desktop.processes.empty_all");
-  const state = !on ? "off" : list.some(isFlagged) ? "sb-warn" : "on";
+  const flagged = list.filter(isFlagged).length;
+  const label = on ? countLabel(list.length, flagged) : t("desktop.processes.empty_all");
+  const state = !on ? "off" : flagged > 0 ? "sb-warn" : "on";
   return (
     <button className={`sb-item sb-button sb-procs ${state}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
       <Icon path={mdiDeveloperBoard} size="sm" />

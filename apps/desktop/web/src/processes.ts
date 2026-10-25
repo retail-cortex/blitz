@@ -164,7 +164,8 @@ export function flagLabel(flag: string, idleMs: bigint | number): string {
 }
 
 /** The status bar's label: how many processes run. */
-export const countLabel = (n: number) => tn("desktop.status.processes", n);
+export const countLabel = (n: number, flagged = 0) =>
+  flagged > 0 ? tn("desktop.status.processes_flagged", n, { flagged }) : tn("desktop.status.processes", n);
 
 /** The last n lines of text (without a final newline's empty line). */
 export function lastLines(text: string, n: number): string {

@@ -107,8 +107,10 @@ describe("flag badges", () => {
   });
 
   it("counts processes in the status bar", () => {
-    expect(countLabel(1)).toBe("1 process");
-    expect(countLabel(2)).toBe("2 processes");
+    expect(countLabel(1)).toBe("1 background process running");
+    expect(countLabel(2)).toBe("2 background processes running");
+    expect(countLabel(1, 1)).toBe("1 background process running, and it looks bad");
+    expect(countLabel(3, 1)).toBe("3 background processes running, 1 flagged");
   });
 });
 
