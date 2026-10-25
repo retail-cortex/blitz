@@ -302,7 +302,7 @@ function Shell() {
           const dir = link.dir || activeDir.current;
           if (!dir) return;
           update((p) => openWorkspace(p, dir));
-          showView({ dir, view: "processes", process: link.process });
+          showView({ dir, view: "processes", process: link.process, processIn: dir });
           return;
         }
         // The global workers' (the home workspace's) are in Settings › Workers.

@@ -85,7 +85,7 @@ export function Workspace({
   // over it (committing). Studio and an agent have their own states: a
   // form with unsaved changes asks before another view takes the drawer
   // (the drawer closes the one it replaces).
-  const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | { kind: "processes"; process?: number } | null>(null);
+  const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | { kind: "processes"; process?: number; processIn?: string } | null>(null);
   const [agent, setAgent] = useState<ItemIntent | null>(null);
   const [studio, setStudio] = useState<StudioOpen | null>(null);
   // The menu's Close Studio closes it as its ✕ does; its kinds, picked
@@ -110,7 +110,7 @@ export function Workspace({
   const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session", d?: ViewDetail) => {
     // A toggle (the status bar's) closes the view when it's the one shown.
     if (v === "changes") setDrawer((cur) => changesAfter(cur, d?.toggle, source));
-    else if (v === "processes") setDrawer((cur) => (d?.toggle && cur?.kind === "processes" ? null : { kind: "processes", process: d?.process }));
+    else if (v === "processes") setDrawer((cur) => (d?.toggle && cur?.kind === "processes" ? null : { kind: "processes", process: d?.process, processIn: d?.processIn }));
     else if (v === "workers") {
       // Studio closes through its own request, which asks about unsaved edits.
       if (d?.toggle && shownKind.current === "workers") setStudioClose((n) => n + 1);
@@ -373,7 +373,7 @@ export function Workspace({
         <HistoryDrawer key={`${drawer.path}#${drawer.folder}`} dir={dir} path={drawer.path} folder={drawer.folder} onClose={() => setDrawer(null)} onRestored={() => setTouched((n) => n + 1)} />
       )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
-      {visible && drawer?.kind === "processes" && <ProcessesDrawer key={drawer.process ?? ""} dir={dir} expand={drawer.process} onClose={() => setDrawer(null)} />}
+      {visible && drawer?.kind === "processes" && <ProcessesDrawer key={`${drawer.processIn ?? ""}#${drawer.process ?? ""}`} dir={dir} expand={drawer.process} expandIn={drawer.processIn} onClose={() => setDrawer(null)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
       {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} ask={studioAsk} onKind={setStudioKind} />}

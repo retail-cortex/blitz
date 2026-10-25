@@ -21,27 +21,28 @@ import { message } from "./errors";
 import type { WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { displayName } from "./prefs";
-import { cpu, duration, flaggedOf, flagLabel, inScope, memory, outputLines, processKey, processOutput, runningFor, startsAll, stopProcess, useProcesses } from "./processes";
+import { byWorkspace, flaggedOf, flagLabel, outputLines, processDetail, processKey, processOutput, stopProcess, useProcesses } from "./processes";
 import { useApp } from "./state";
-import { Button, Dialog, Icon, IconButton, Switch, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 
 /** A row's output, once asked for: the text, or why it couldn't be read. */
 type Output = { text?: string; error?: string; loading: boolean };
 
 /**
- * The agents' background processes still running (spec_processes_052),
- * in the drawer from the status bar: this workspace's, or every open
- * workspace's with the switch; each with its running time, usage and
- * flags, Stop, and its last lines of output when expanded. Stop flagged
- * stops every flagged one shown, after asking. Expand names one of dir's
- * to show its output as soon as it's listed (the tray's Show in Blitz).
+ * The agents' background processes' output and details
+ * (spec_processes_052), in the drawer from the status bar's Processes
+ * menu: every open workspace's, under each workspace (dir's first), each
+ * with its running time, usage and flags, Stop, and its last lines of
+ * output when expanded. Stop flagged stops every flagged one, after
+ * asking. Expand names the process (expandIn's, else dir's) whose output
+ * shows as soon as it's listed: the one picked in the menu, or the tray's
+ * Show in Blitz.
  */
-export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?: number; onClose: () => void }) {
+export function ProcessesDrawer({ dir, expand, expandIn, onClose }: { dir: string; expand?: number; expandIn?: string; onClose: () => void }) {
   const { prefs } = useApp();
   const snack = useSnackbar();
   const { list, receivedAt } = useProcesses();
-  const [all, setAll] = useState(() => startsAll(list, dir));
   const [outputs, setOutputs] = useState<Record<string, Output>>({});
   const [confirm, setConfirm] = useState(false);
   const [stopping, setStopping] = useState<Set<string>>(new Set());
@@ -52,8 +53,8 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
     return () => clearInterval(timer);
   }, []);
 
-  const rows = inScope(list, dir, all);
-  const flagged = flaggedOf(rows);
+  const groups = byWorkspace(list, dir);
+  const flagged = flaggedOf(list);
   const wsName = (d: string) => displayName(prefs.workspaces.find((w) => w.dir === d) ?? { dir: d });
 
   const load = async (p: WorkspaceProcess) => {
@@ -70,12 +71,12 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
   const expanded = useRef(false);
   useEffect(() => {
     if (expand === undefined || expanded.current) return;
-    const p = list.find((x) => x.workspace === dir && x.process?.id === expand);
+    const p = list.find((x) => x.workspace === (expandIn || dir) && x.process?.id === expand);
     if (!p) return;
     expanded.current = true;
     void load(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when it's listed
-  }, [list, dir, expand]);
+  }, [list, dir, expand, expandIn]);
   const toggle = (p: WorkspaceProcess) => {
     const key = processKey(p);
     if (!outputs[key]) return void load(p);
@@ -100,15 +101,9 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
       icon={mdiConsole}
       className="processes-drawer"
       onClose={onClose}
-      headerActions={
-        <label className="row drawer-switch t-label">
-          {t("desktop.processes.all_short")}
-          <Switch label={t("desktop.processes.all")} checked={all} onChange={setAll} />
-        </label>
-      }
     >
-      {rows.length === 0 ? (
-        <p className="muted">{t(all ? "desktop.processes.empty_all" : "desktop.processes.empty")}</p>
+      {list.length === 0 ? (
+        <p className="muted">{t("desktop.processes.empty_all")}</p>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
           <div className="row">
@@ -119,13 +114,19 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
               </Button>
             )}
           </div>
+          {groups.map((g) => (
+          <div key={g.workspace} className="stack" style={{ gap: 4 }}>
+          <h3 className="t-title-sm" title={g.workspace}>
+            {wsName(g.workspace)}
+          </h3>
           <div className="list">
-            {rows.map((p) => {
+            {g.processes.map((p) => {
               const proc = p.process;
               if (!proc) return null;
               const key = processKey(p);
               const out = outputs[key];
-              const detail = [wsName(p.workspace), duration(runningFor(proc.runtimeMs, receivedAt, now)), proc.measured ? t("desktop.processes.cpu", { cpu: cpu(proc.cpuPercent) }) : "", proc.measured ? memory(proc.memoryBytes) : ""];
+              // Its flags have badges of their own: the line has the rest.
+              const detail = processDetail(p, receivedAt, now, false);
               return (
                 <div key={key} className="stack" style={{ gap: 0 }}>
                   <div className="list-item static-item">
@@ -135,7 +136,7 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
                         <span className="mono ellipsis" title={proc.command}>
                           {proc.command}
                         </span>
-                        <small className="ellipsis">{detail.filter(Boolean).join(" · ")}</small>
+                        <small className="ellipsis">{detail}</small>
                       </span>
                     </button>
                     <span className="trailing">
@@ -166,6 +167,8 @@ export function ProcessesDrawer({ dir, expand, onClose }: { dir: string; expand?
               );
             })}
           </div>
+          </div>
+          ))}
         </div>
       )}
       {confirm &&

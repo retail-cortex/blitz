@@ -16,10 +16,12 @@
 
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mdiAccountCheckOutline,
   mdiAlertCircleOutline,
   mdiAlertOutline,
+  mdiCircleMedium,
   mdiCloseCircleOutline,
   mdiCreationOutline,
   mdiDeveloperBoard,
@@ -28,6 +30,8 @@ import {
   mdiRobotOutline,
   mdiSourceBranch,
   mdiSourceMerge,
+  mdiStopCircleOutline,
+  mdiTextBoxOutline,
   mdiTuneVariant,
   mdiVectorPolyline,
 } from "@mdi/js";
@@ -37,18 +41,18 @@ import { FlowRunsItem } from "./FlowRunAlerts";
 import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
 import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
-import type { AgentInfo, GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
+import type { AgentInfo, GetGitStatusResponse, WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
-import { countLabel, isFlagged, useProcesses } from "./processes";
+import { byWorkspace, countLabel, flaggedOf, isFlagged, processDetail, stopProcess, useProcesses } from "./processes";
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
-import { Icon, Menu, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "./ui/controls";
 import { useWorkerFailures } from "./workerFailures";
 
 /** How often the branch and changed files are asked for while shown. */
@@ -194,19 +198,85 @@ function TasksItem() {
   );
 }
 
-// The agents' background processes, in any workspace: a board icon,
-// green while some run (amber when one is flagged) and greyed when none
-// do, the count in its hover text; toggles the Processes view.
+// The agents' background processes, in any workspace
+// (spec_processes_052 PR-50): a board icon, green while some run (amber
+// when one is flagged) and greyed when none do, the count in its hover
+// text. It opens a menu of them by workspace, each with what it uses and
+// Stop; a pick, or Output and details, opens the drawer on its output.
 function ProcessesItem({ dir }: { dir: string }) {
-  const { list } = useProcesses();
+  const { prefs } = useApp();
+  const snack = useSnackbar();
+  const { list, receivedAt } = useProcesses();
+  const [confirm, setConfirm] = useState(false);
   const on = list.length > 0;
-  const flagged = list.filter(isFlagged).length;
-  const label = on ? countLabel(list.length, flagged) : t("desktop.processes.empty_all");
-  const state = !on ? "off" : flagged > 0 ? "sb-warn" : "on";
+  const flagged = flaggedOf(list);
+  const label = on ? countLabel(list.length, flagged.length) : t("desktop.processes.empty_all");
+  const state = !on ? "off" : flagged.length > 0 ? "sb-warn" : "on";
+  const stop = async (ps: WorkspaceProcess[]) => {
+    const failed = (await Promise.allSettled(ps.map(stopProcess))).find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) snack(message(failed.reason), { error: true });
+  };
+  const open = (p?: WorkspaceProcess) => showView({ dir, view: "processes", process: p?.process?.id, processIn: p?.workspace });
+  const now = Date.now();
+  const items: MenuEntry[] = !on
+    ? [{ heading: t("desktop.processes.title") }, { label: t("desktop.processes.empty_all"), disabled: true, onSelect: () => {} }]
+    : [
+        ...byWorkspace(list, dir).flatMap((g): MenuEntry[] => [
+          { heading: displayName(prefs.workspaces.find((w) => w.dir === g.workspace) ?? { dir: g.workspace }) },
+          ...g.processes.map((p) => ({
+            label: p.process?.command ?? "",
+            detail: processDetail(p, receivedAt, now),
+            icon: mdiCircleMedium,
+            iconColor: isFlagged(p) ? "var(--md-warning, #b8860b)" : "var(--md-tertiary)",
+            onSelect: () => open(p),
+            actions: [{ icon: mdiStopCircleOutline, label: t("desktop.processes.stop"), removes: true, onSelect: () => void stop([p]) }],
+          })),
+        ]),
+        "divider",
+        ...(flagged.length > 0
+          ? [{ label: `${t("desktop.processes.stop_flagged")} (${flagged.length})`, icon: mdiStopCircleOutline, danger: true, onSelect: () => setConfirm(true) }]
+          : []),
+        { label: t("desktop.processes.details"), icon: mdiTextBoxOutline, onSelect: () => open() },
+      ];
   return (
-    <button className={`sb-item sb-button sb-procs ${state}`} title={label} aria-label={label} onClick={() => showView({ dir, view: "processes", toggle: true })}>
-      <Icon path={mdiDeveloperBoard} size="sm" />
-    </button>
+    <>
+      <Menu
+        placement="up start"
+        className="wide-menu"
+        trigger={(p) => (
+          <button className={`sb-item sb-button sb-procs ${state}`} title={label} aria-label={label} {...p}>
+            <Icon path={mdiDeveloperBoard} size="sm" />
+          </button>
+        )}
+        items={items}
+      />
+      {confirm &&
+        createPortal(
+          <Dialog
+            title={t("desktop.processes.stop_flagged_title")}
+            icon={mdiStopCircleOutline}
+            onClose={() => setConfirm(false)}
+            footer={
+              <>
+                <Button onClick={() => setConfirm(false)}>{t("desktop.cancel")}</Button>
+                <Button
+                  variant="filled"
+                  danger
+                  onClick={() => {
+                    setConfirm(false);
+                    void stop(flagged);
+                  }}
+                >
+                  {t("desktop.processes.stop")}
+                </Button>
+              </>
+            }
+          >
+            <p>{tn("desktop.processes.stop_flagged_body", flagged.length)}</p>
+          </Dialog>,
+          document.body,
+        )}
+    </>
   );
 }
 

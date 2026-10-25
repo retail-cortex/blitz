@@ -9,11 +9,11 @@ weight: 1
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.8.5).
 2. Ask the agent to "start the dev server". A green processes icon lights up at the left of the status bar.
-3. Click it. You'll see the server, how long it has run and what it uses. Open it to read its output, or **Stop** it.
+3. Click it. You'll see the server, how long it has run and what it uses. Pick it to read its output, or **Stop** it.
 
 ### What's new
 
-**Processes in the app.** While your agents' processes run, a green icon at the left of the status bar says so, and turns amber when one looks bad. Click it for the **Processes** view: each one with its workspace, running time, CPU and memory. Open one to read its last lines of output. Stop one, or every flagged one at once. See this workspace's processes, or every workspace's. [Background processes](../guide/safety.md#background-processes)
+**Processes in the app.** While your agents' processes run, a green icon at the left of the status bar says so, and turns amber when one looks bad. Click it for a menu of them, under each workspace, with running time, CPU and memory. Stop one with a click, or every flagged one at once. Pick one to read its last lines of output. [Background processes](../guide/safety.md#background-processes)
 
 **The bad ones, flagged.** A process that keeps a core busy for two minutes is marked **Busy**. One that's over 2 GB or keeps growing is marked **Memory**. One whose chat was deleted or has gone quiet for two hours is marked **Left running**. Blitz never stops anything without you asking. Change the limits under `[processes]` in your settings.
 

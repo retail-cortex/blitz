@@ -120,8 +120,9 @@ export interface ViewDetail {
   run?: string;
   /** Studio › Jobs: the job whose details to open. */
   worker?: string;
-  /** Processes: the one (by its number in the workspace) whose output to show. */
+  /** Processes: the one (by its number in its workspace) whose output to show, and its workspace (else this one). */
   process?: number;
+  processIn?: string;
   /** Closes the view instead when it's the one shown (the status bar's buttons). */
   toggle?: boolean;
 }

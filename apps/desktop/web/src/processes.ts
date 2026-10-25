@@ -105,9 +105,23 @@ export async function processOutput(p: WorkspaceProcess): Promise<string> {
 /** A process's key in a list: its workspace and its number there. */
 export const processKey = (p: WorkspaceProcess) => `${p.workspace}#${p.process?.id ?? 0}`;
 
-/** The processes the view shows: dir's, or every workspace's with all. */
-export function inScope(list: WorkspaceProcess[], dir: string, all: boolean): WorkspaceProcess[] {
-  return all ? list : list.filter((p) => p.workspace === dir);
+/** The processes by workspace, as the menu and the drawer list them: dir's first, then the others by folder. */
+export function byWorkspace(list: WorkspaceProcess[], dir: string): { workspace: string; processes: WorkspaceProcess[] }[] {
+  const groups = new Map<string, WorkspaceProcess[]>();
+  for (const p of list) groups.set(p.workspace, [...(groups.get(p.workspace) ?? []), p]);
+  return [...groups.keys()]
+    .sort((a, b) => (a === dir ? -1 : b === dir ? 1 : a.localeCompare(b)))
+    .map((workspace) => ({ workspace, processes: groups.get(workspace) ?? [] }));
+}
+
+/** A process on one line, under its workspace: 42m 0s · CPU 97% · 411.0 MB · Busy (its flags unless withFlags is false). */
+export function processDetail(p: WorkspaceProcess, receivedAt: number, now: number, withFlags = true): string {
+  const proc = p.process;
+  if (!proc) return "";
+  const parts = [duration(runningFor(proc.runtimeMs, receivedAt, now))];
+  if (proc.measured) parts.push(t("desktop.processes.cpu", { cpu: cpu(proc.cpuPercent) }), memory(proc.memoryBytes));
+  if (withFlags) parts.push(...proc.flags.map((f) => flagLabel(f, proc.idleMs)));
+  return parts.join(" · ");
 }
 
 /** Whether a process looks bad (busy, memory, left running). */
@@ -115,12 +129,6 @@ export const isFlagged = (p: WorkspaceProcess) => (p.process?.flags.length ?? 0)
 
 /** The processes Stop flagged stops: those with any flag. */
 export const flaggedOf = (list: WorkspaceProcess[]) => list.filter(isFlagged);
-
-/**
- * Whether the view starts with every workspace's processes: when dir has
- * none but another workspace does (the status bar counts them all).
- */
-export const startsAll = (list: WorkspaceProcess[], dir: string) => list.length > 0 && !list.some((p) => p.workspace === dir);
 
 /** How long a process has run now: what it had at receivedAt, plus the time since. */
 export function runningFor(runtimeMs: bigint | number, receivedAt: number, now: number): number {

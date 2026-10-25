@@ -17,24 +17,39 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkspaceProcessSchema } from "./gen/blitz/v1/workspace_pb";
-import { countLabel, cpu, duration, flaggedOf, flagLabel, inScope, isFlagged, lastLines, memory, processKey, runningFor, startsAll } from "./processes";
+import { byWorkspace, countLabel, cpu, duration, flaggedOf, flagLabel, isFlagged, lastLines, memory, processDetail, processKey, runningFor } from "./processes";
 
 const proc = (workspace: string, id: number, flags: string[] = []) => create(WorkspaceProcessSchema, { workspace, process: { id, command: `npm run dev:${id}`, running: true, flags } });
 
 describe("the processes shown", () => {
   const list = [proc("/w/shop", 1, ["cpu"]), proc("/w/shop", 2), proc("/w/notes", 1, ["left", "memory"])];
   it.each([
-    ["this workspace's", "/w/shop", false, ["/w/shop#1", "/w/shop#2"]],
-    ["another workspace's", "/w/notes", false, ["/w/notes#1"]],
-    ["a workspace with none", "/w/empty", false, []],
-    ["every workspace's", "/w/shop", true, ["/w/shop#1", "/w/shop#2", "/w/notes#1"]],
-  ])("%s", (_, dir, all, want) => {
-    expect(inScope(list, dir, all).map(processKey)).toEqual(want);
+    ["this workspace first", "/w/shop", [["/w/shop", ["/w/shop#1", "/w/shop#2"]], ["/w/notes", ["/w/notes#1"]]]],
+    ["another workspace first", "/w/notes", [["/w/notes", ["/w/notes#1"]], ["/w/shop", ["/w/shop#1", "/w/shop#2"]]]],
+    ["a workspace with none: by folder", "/w/empty", [["/w/notes", ["/w/notes#1"]], ["/w/shop", ["/w/shop#1", "/w/shop#2"]]]],
+  ])("by workspace: %s", (_, dir, want) => {
+    expect(byWorkspace(list, dir).map((g) => [g.workspace, g.processes.map(processKey)])).toEqual(want);
   });
 
   it("stop flagged takes those with any flag", () => {
     expect(flaggedOf(list).map(processKey)).toEqual(["/w/shop#1", "/w/notes#1"]);
-    expect(flaggedOf(inScope(list, "/w/shop", false)).map(processKey)).toEqual(["/w/shop#1"]);
+  });
+
+  it.each([
+    ["not measured", create(WorkspaceProcessSchema, { workspace: "/w", process: { id: 1, runtimeMs: 65_000n } }), "1m 5s"],
+    [
+      "measured and flagged",
+      create(WorkspaceProcessSchema, { workspace: "/w", process: { id: 1, runtimeMs: 5_000n, measured: true, cpuPercent: 97.2, memoryBytes: 411n << 20n, flags: ["cpu", "left"], idleMs: 7_500_000n } }),
+      "5s · CPU 97% · 411.0 MB · Busy · Left running · idle 2h 5m",
+    ],
+    ["no process", create(WorkspaceProcessSchema, { workspace: "/w" }), ""],
+  ])("a process's line: %s", (_, p, want) => {
+    expect(processDetail(p, 1000, 1000)).toBe(want);
+  });
+
+  it("a process's line without its flags (the drawer badges them)", () => {
+    const p = create(WorkspaceProcessSchema, { workspace: "/w", process: { id: 1, runtimeMs: 5_000n, flags: ["cpu"] } });
+    expect(processDetail(p, 1000, 1000, false)).toBe("5s");
   });
 
   it.each([
@@ -43,14 +58,6 @@ describe("the processes shown", () => {
     ["no process", create(WorkspaceProcessSchema, { workspace: "/w" }), false],
   ])("%s: isFlagged", (_, p, want) => {
     expect(isFlagged(p)).toBe(want);
-  });
-
-  it.each([
-    ["this workspace has some", [proc("/w/shop", 1)], "/w/shop", false],
-    ["only another has some", [proc("/w/notes", 1)], "/w/shop", true],
-    ["none anywhere", [], "/w/shop", false],
-  ])("starts with every workspace's: %s", (_, l, dir, want) => {
-    expect(startsAll(l, dir)).toBe(want);
   });
 });
 
