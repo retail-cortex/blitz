@@ -282,7 +282,9 @@ describe("commands", () => {
     expect(r.calls).toEqual(wantCalls);
     expect(r.did).toEqual(wantDid);
     expect(r.ran).toEqual(wantRan);
-  });
+    // /docs searches the whole user guide: under a busy machine's load (a
+    // CI runner, every test at once) it takes several seconds.
+  }, 20_000);
 
   it("/trust opens the review when settings wait for it", async () => {
     const review = vi.fn();
