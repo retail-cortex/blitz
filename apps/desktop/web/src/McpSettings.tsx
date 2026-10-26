@@ -26,7 +26,7 @@ import { SuggestTextarea } from "./SecretSuggest";
 import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 
 /**
- * Settings › MCP servers (spec_mcp_009 MCP-46): the global settings' MCP
+ * Settings › Connectors › MCP servers (spec_mcp_009 MCP-46): the global settings' MCP
  * servers, each on or off; added and edited in a dialog, removed after
  * asking. Settings are global: how each does in a workspace is that
  * workspace's. Embedded, it's a section of Settings › Connectors, headed

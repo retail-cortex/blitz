@@ -22,14 +22,21 @@ Keys go into your system keychain (the macOS Keychain, the Secret Service on Lin
 
 ## Set up in the desktop app
 
-Open **Settings › Providers & keys**:
+Until a provider is ready, the welcome page says so with **Set up a provider**. That opens **Settings › Providers & keys**, which lists every provider with where it stands:
 
-1. Choose the **Provider**.
-2. Paste its API key, or choose how it signs in under **Sign in with** and press **Sign in**.
+- **Key in the keychain**, **Key found in the environment** or **Signed in**: it's ready. **Use** makes it the one Blitz uses, on its own default model.
+- **Google Cloud sign-in found** or **Anthropic Console sign-in found**: you're signed in on this machine (with `gcloud` or `ant`) but Blitz doesn't use it yet. **Set up** opens its form on that sign-in.
+- **Running on this machine** (Ollama): it answered on its usual address, with the models it has. **Use** switches to it.
+- **Not set up**: pick the row to fill in its form. **Get a key** opens the provider's page for API keys (for Ollama, **Get Ollama**).
+
+To set one up by hand:
+
+1. Pick the provider in the list.
+2. Paste its API key. Blitz tries it as you paste, before anything is saved, and says whether it works and how many models it reaches. Or, with advanced settings, choose another way under **Sign in with** and press **Sign in**.
 3. Optionally, set the **Default model** (empty: the provider's own default).
-4. Press **Save**. If the model still isn't available, the form says why.
+4. Press **Save and use** (**Save** for the one already in use). If the model still isn't available, the form says why.
 
-The form edits the settings every workspace shares. A workspace can use its own provider or key: open its workspace settings and set them there (empty fields use the global ones).
+The form edits the settings every workspace shares. A workspace can use its own provider or key: open its workspace settings and set them there (its **Use the global setting** row follows the global ones).
 
 ## Set up on the command line
 
@@ -231,7 +238,7 @@ X-Team        = "platform"
 
 The script runs when a session first needs the token, with the service's environment and outside the sandbox, and must finish within 30 seconds. Each session keeps its token in memory; a `401` or `403` runs the script once more and retries, and a second one fails with the message to check the script. No `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` from the environment reaches the gateway. Responses API requests are never stored (`store: false`) or streamed. Requests follow the model: `temperature` and `top_p` aren't sent to models that refuse them (current Claude models, OpenAI's reasoning models), and a setting the gateway refuses for a model is left out of that model's requests from then on. Errors start `[llm.api]` and quote the gateway's reason. A project's settings can't set `[llm.api]`.
 
-In the desktop app, choose **API** in **Settings › Providers & keys**: the endpoint, a row per header (**Use the token** puts `{{TOKEN_SCRIPT}}` in it) and the script. Header values you've saved aren't shown again; leave one empty to keep it. `blitz doctor` shows the endpoint and the header names, and `blitz doctor --online` runs the script and sends a request.
+In the desktop app, pick **Custom gateway** in **Settings › Providers & keys**: the endpoint, a row per header (**Use the token** puts `{{TOKEN_SCRIPT}}` in it) and the script. Header values you've saved aren't shown again; leave one empty to keep it. `blitz doctor` shows the endpoint and the header names, and `blitz doctor --online` runs the script and sends a request.
 
 ## Behind a proxy
 
@@ -247,4 +254,4 @@ ca_file = "~/certs/company-root.pem"
 - `blitz doctor` checks the provider, its credentials and the model; `blitz doctor --online` also sends a request.
 - `blitz config keys` shows where each provider's key comes from and how it signs in.
 - `blitz models` lists the models each provider you've set up offers, with the price Blitz knows for each.
-- In the desktop app, a model that isn't available says why, with a **Check again** button.
+- In the desktop app, a model that isn't available says why, with **Check again** and **Set up provider** (which opens Providers & keys).

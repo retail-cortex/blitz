@@ -89,7 +89,7 @@ blitz skills update                                 # every skill whose registry
 blitz skills uninstall lit-review
 ```
 
-In a session, `/skills search` also lists what your registries offer, and `/skills install <registry>/<name>` installs one. In the desktop app it's **Settings › Skills** (with the advanced settings shown): add a registry, find skills, install them for you or the open workspace, update and uninstall. Open conversations can use a new skill at once, with no restart.
+In a session, `/skills search` also lists what your registries offer, and `/skills install <registry>/<name>` installs one. In the desktop app it's **Settings › Library › Skills** (with the advanced settings shown): add a registry, find skills, install them for you or the open workspace, update and uninstall. Open conversations can use a new skill at once, with no restart.
 
 | Command | Does |
 |---|---|

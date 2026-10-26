@@ -911,7 +911,7 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 // The user's secrets' names, by scope ("" global).
 const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
 
-// Settings › MCP servers: the global servers, edited in place.
+// Settings › Connectors › MCP servers: the global servers, edited in place.
 const fakeMCP: MCPServerConfig[] = [
   create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
   create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),

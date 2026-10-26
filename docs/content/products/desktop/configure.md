@@ -5,27 +5,29 @@ weight: 10
 
 Everything the desktop app can change is in **Settings**: the gear at the top right, or ⌘, (Ctrl+, on Windows and Linux). On macOS it's also **Blitz › Settings…** in the menu bar.
 
-Start with **Providers & keys**: until a provider has a key or a sign-in, no chat, job or eval can run. The rest has sensible defaults you can come back to.
+Start with **Providers & keys**: until a provider has a key or a sign-in, no chat, job or eval can run, and the welcome page says so with **Set up a provider**. The rest has sensible defaults you can come back to.
 
 ## Show advanced
 
-Settings opens with the few panes most people need: **Providers & keys**, **Appearance**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (custom agents and jobs, MCP servers, connectors, secrets, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
+Settings opens with the few panes most people need: **Providers & keys**, **Appearance**, **Connectors**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (the **Library** of your own agents, skills, jobs and secrets, MCP servers under Connectors, the browser, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
 
-![Settings with Show advanced on: Getting started, Global setup, Workspaces and access, and System](../../../images/desktop/settings-providers-signin.png)
+![Settings with Show advanced on: Getting started, Global setup (Library, Connectors, Browser), Workspaces and access, and System; Gemini signing in with Google Cloud](../../../images/desktop/settings-providers-signin.png)
 
 ## Providers & keys
 
 Where Blitz's models come from: the provider, its key or sign-in, and the default model. These are the global settings every workspace uses unless it sets its own.
 
-![Providers & keys with Gemini chosen and its key in the keychain](../../../images/desktop/settings-providers.png)
+![Providers & keys: Gemini in use with its key in the keychain, Anthropic's key in the settings file, the others not set up](../../../images/desktop/settings-providers.png)
 
-1. Choose the **Provider**: Gemini, Anthropic, OpenAI, Ollama, or API for your company's gateway.
-2. Paste its API key. It goes into the macOS Keychain (the Secret Service on Linux); the settings file only refers to it. The box under the key says where the key comes from now: **Keychain**, **Environment**, **Plain text** in the settings file (with **Move to keychain**), or **Not set**.
+The list shows every provider at once, each with where it stands: a key **in the keychain** or **found in the environment**, **Signed in**, a Google Cloud or Anthropic Console sign-in **found on this machine**, Ollama **running on this machine**, or **Not set up**. The one Blitz uses says **In use**; **Use** switches to one that's ready, and **Set up** opens one found on this machine on its sign-in.
+
+1. Pick a provider: Gemini, Anthropic, OpenAI, Ollama, or **Custom gateway** for your company's gateway. Its form opens below the list.
+2. Paste its API key (**Get a key** opens the provider's page for one). Blitz tries it as you paste and says whether it works and how many models it reaches, before anything is saved. Keys go into the macOS Keychain (the Secret Service on Linux); the settings file only refers to them. A key written in the settings file has **Secure** to move it to the keychain.
 3. Or, with **Show advanced** on, choose how it signs in under **Sign in with**: an **API key**, **Google Cloud (ADC)**, or an account (**Google account (OAuth)**, **Anthropic account (OAuth)**), then press **Sign in**.
 4. Optionally, set the **Default model**. Empty, Blitz uses the provider's own default.
-5. Press **Save**. If the model still isn't available, the form says why.
+5. Press **Save and use** (**Save** for the one in use). If the model still isn't available, the form says why.
 
-**Your company's gateway.** Choose **API** and fill in the **Endpoint**, a row per header (**Use the token** puts the script's token in that header) and the **Token script**, which runs on the service's machine at the start of each session and prints the token. Header values you've saved aren't shown again; leave one empty to keep it.
+**Your company's gateway.** Pick **Custom gateway** and fill in the **Endpoint**, a row per header (**Use the token** puts the script's token in that header) and the **Token script**, which runs on the service's machine at the start of each session and prints the token. Header values you've saved aren't shown again; leave one empty to keep it.
 
 ![The API provider: endpoint, two headers, one using the token, and a shell token script](../../../images/desktop/settings-providers-api.png)
 
@@ -58,21 +60,20 @@ How the window looks and behaves, for every workspace.
 
 ## Global setup
 
-With **Show advanced** on, these panes hold what every workspace shares. A workspace's own agents, skills, jobs, connectors and secrets are in [Studio](studio/_index.md), which never changes the global ones.
+These panes hold what every workspace shares; **Library** and **Browser** show with **Show advanced** on. A workspace's own agents, skills, jobs, connectors and secrets are in [Studio](studio/_index.md), which never changes the global ones.
 
 | Pane | What it holds |
 |---|---|
-| **Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one. [Agents](../../guide/agents.md) |
-| **Skills** | Skill registries (such as your organization's Castor registry) to install skills from, and the built-in skills. [Skills](../../guide/skills.md) |
-| **Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
-| **MCP servers** | Servers that give the agent more tools, each switched on or off. **Add server** for a new one. [MCP servers](../../guide/mcp.md) |
-| **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. [Connectors](studio/connectors.md) |
+| **Library › Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one. [Agents](../../guide/agents.md) |
+| **Library › Skills** | Skill registries (such as your organization's Castor registry) to install skills from, and the built-in skills. [Skills](../../guide/skills.md) |
+| **Library › Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
+| **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. **+** starts with the kind, takes a pasted connection URL, and tests before it saves (shown without advanced settings too; `/connect` and the composer's database button open it). With **Show advanced** on, also your **MCP servers**: servers that give the agent more tools, each switched on or off, **+** for a new one. [Connectors](studio/connectors.md), [MCP servers](../../guide/mcp.md) |
 | **Browser** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in that workspace's settings (**Browser profile**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
-| **Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
+| **Library › Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
 
-![Settings › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
+![Settings › Library › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
 
-![Settings › MCP servers: three servers, two on](../../../images/desktop/settings-mcp.png)
+![Settings › Connectors › MCP servers: three servers, two on](../../../images/desktop/settings-mcp.png)
 
 ## Workspaces and access
 

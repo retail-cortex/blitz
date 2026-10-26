@@ -171,7 +171,7 @@ export function AgentEditor({
     });
 
   // The workspace's agents are listed in the top bar's Agents menu, which
-  // opens one in the drawer (intent); the user's (Settings › Agents) keep
+  // opens one in the drawer (intent); the user's (Settings › Library › Agents) keep
   // their list beside the form.
   const listed = slide || (list ?? scope === AgentScope.USER);
   // Back to the list (slide), asking first when there are unsaved edits.

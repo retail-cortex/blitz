@@ -748,7 +748,7 @@ export const builtinCommands: Builtin[] = [
       const [sub = "list", ...rest] = words(c.args);
       const arg = rest.join(" ");
       if (sub === "update") return c.run(c.line.trim(), { command: true });
-      // Registries (SK-96): managed in Settings › Skills, installed from here too.
+      // Registries (SK-96): managed in Settings › Library › Skills, installed from here too.
       if (sub === "registry" || sub === "registries") return c.openSettings("skills");
       if (sub === "install") {
         const ref = rest.find((w) => w !== "--project");

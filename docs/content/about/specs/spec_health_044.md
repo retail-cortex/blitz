@@ -7,7 +7,7 @@ weight: 44
 
 | | |
 |---|---|
-| Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17. |
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17; HL-18 in the usability pass (2026-10-26). |
 | Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `apps/service/internal/server/health.go`, `apps/service/internal/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
 | Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `apps/service/internal/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
 | Depends on | [spec_studio_040](spec_studio_040.md) (the kinds), [spec_evals_042](spec_evals_042.md) (pass rates), [spec_workflows_043](spec_workflows_043.md) (receipts, schedules), [spec_gates_041](spec_gates_041.md) (the judge, rules, guardrails), [spec_background_agents_032](spec_background_agents_032.md) (jobs) |
@@ -59,6 +59,7 @@ The dashboard answers both. **Facts** come from what the workspace already recor
 - **HL-15** **Studio's grades:** each item in Studio's lists shows its grade as a small badge (A–D, coloured; a dot while it's being judged; nothing when not judged), and its editor shows the verdict: scores per rubric line with reasons, the fixes, when it was judged and by which model.
 - **HL-16** **Improve:** a fix becomes a request in the chat's composer ("Improve the workflow research-brief (…): <the fix>") and Studio closes: sent, the agent makes the change as any edit, reviewed as a diff with approvals, checkpoints and undo (*as built: one path for every kind instead of a draft dialog per editor*).
 - **HL-17** **Trends:** each grade and score ring shows its change since the last check, and the expanded cards a sparkline of the item's score over the kept history.
+- **HL-18** *2026-10-26 (the owner's usability pass).* A kind's card (its items, verdicts and Re-check) shows once its ring in the score card opens it, and goes when its head closes it: closed, the ring above says what the card's head did, so the Overview starts with the score, the runs, eval coverage and what needs attention. Which are open is still kept per workspace.
 
 ## 3. Order and checkpoints
 

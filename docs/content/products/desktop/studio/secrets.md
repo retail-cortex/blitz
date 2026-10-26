@@ -23,6 +23,6 @@ The list shows each secret's name and when it was set, never its value. Replace 
 
 Write `{secrets:name}` in an agent's instructions, a workflow, or an MCP server's settings. This workspace's secret is used first, then a global one of the same name. The value goes in only when it's used: the transcript, the audit log and the file keep the placeholder, and a value a model echoes back is shown masked.
 
-Global secrets, for every workspace, are in **Settings › Secrets**.
+Global secrets, for every workspace, are in **Settings › Library › Secrets**.
 
 More: [Workflows](../../../guide/workflows.md) (secrets in API calls) and [Safety](../../../guide/safety.md#secrets).
