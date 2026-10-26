@@ -1142,8 +1142,9 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 @media (max-width: 900px) { .db-param { grid-template-columns: 1fr 1fr; } }
 .connectors-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
 .db-result { max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; font-family: var(--md-mono); font-size: 12px; }
-/* A slide pane in a settings section: a box of its own height. */
-.slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
+/* A slide pane in a settings section: a box as tall as the drawer leaves
+   it, so a long form scrolls once, inside it. */
+.slide-box { height: calc(100vh - 210px); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane
    fills the drawer's height (and scrolls itself). */
 .studio-drawer > .body { overflow: hidden; }

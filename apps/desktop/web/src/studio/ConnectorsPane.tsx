@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
@@ -39,10 +39,11 @@ import { openSettings } from "../events";
 import { message } from "../errors";
 import { language, t, tn, useLanguage } from "../i18n";
 import type { Connector, ConnectorCategory, ConnectorKind, ConnectorTable, ConnectorTool } from "../gen/blitz/v1/workspace_pb";
+import { useAdvanced } from "../state";
 import { Button, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
 import { agentTool, globalApi, workspaceApi } from "./connectorApi";
 import { ConnectorFields } from "./ConnectorFields";
-import { can, connectionFromForm, formFromConnection, newConnectorForm, sameConnectorForm, textIn, type ConnectorForm, type ConnectorScope } from "./connectorForm";
+import { can, connectionFromForm, formForTarget, formFromConnection, newConnectorForm, sameConnectorForm, textIn, type ConnectorForm, type ConnectorScope } from "./connectorForm";
 import { ConfirmDialog, ProblemList, useDiscardGuard, useFormRequest, useFormStamp } from "./paneParts";
 import { QueryBuilder } from "./QueryBuilder";
 
@@ -66,16 +67,20 @@ type DialogOpen = "delete" | "promote" | "build" | null;
  * with a switch turning each on or off here (CON-17). Without one it's
  * Settings › Connectors: the global connections, changed there alone
  * (CON-18). A connection's form (ConnectorFields) slides in over the
- * list, with Test and Read the tables as its kind can. A reply that
- * lands after the form it was asked for closed is dropped.
+ * list, with Test and Read the tables as its kind can. A new one is
+ * tested as it's saved (Save anyway when it fails) and stays open, for
+ * its tools. A reply that lands after the form it was asked for closed
+ * is dropped. extra goes under the categories (Settings' MCP servers);
+ * connect opens a new connection for a URL or a file (/connect).
  */
-export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onDirty?: (dirty: boolean) => void }) {
+export function ConnectorsPane({ workspace, onDirty, extra, connect }: { workspace?: string; onDirty?: (dirty: boolean) => void; extra?: ReactNode; connect?: string }) {
   useLanguage();
   const api = useMemo(() => (workspace ? workspaceApi(workspace) : globalApi), [workspace]);
   const studio = !api.global;
   const scope: ConnectorScope = studio ? "workspace" : "global";
   const lang = language();
   const snack = useSnackbar();
+  const advanced = useAdvanced();
   const [categories, setCategories] = useState<ConnectorCategory[]>([]);
   const [kinds, setKinds] = useState<ConnectorKind[]>([]);
   const [connections, setConnections] = useState<Connector[]>([]);
@@ -86,6 +91,8 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<DialogOpen>(null);
+  // Why the test before saving a new one failed (Save anyway saves it still).
+  const [untested, setUntested] = useState("");
   const stamps = useFormStamp();
   const tested = useFormRequest<{ tools: ConnectorTool[]; problem: string }>(stamps, (e) => ({ tools: [], problem: message(e) }));
   const schema = useFormRequest<{ tables: ConnectorTable[]; problem: string }>(stamps, (e) => ({ tables: [], problem: message(e) }));
@@ -102,6 +109,17 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
     }
   }, [api]);
   useEffect(() => void refresh(), [refresh]);
+  // /connect: a new connection for the URL or file, once the kinds are known.
+  const [connected, setConnected] = useState("");
+  useEffect(() => {
+    if (!connect || connect === connected || kinds.length === 0) return;
+    setConnected(connect);
+    for (const c of categories.filter((x) => !x.problem)) {
+      const f = formForTarget(connect, c.id, kinds.filter((k) => k.category === c.id && !k.problem), studio ? "workspace" : "global");
+      if (f) return void switchTo({ category: c.id, scope: f.scope, name: "" }, f);
+    }
+    snack(t("desktop.connectors.connect_unknown", { target: connect }), { error: true });
+  }, [connect, connected, kinds, categories]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const usable = categories.filter((c) => !c.problem);
   const kindsOf = (category: string) => kinds.filter((k) => k.category === category && !k.problem);
@@ -126,6 +144,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
     setBase(f);
     setOpen(o);
     setProblems([]);
+    setUntested("");
     setBusy(false);
     setDialog(null);
   };
@@ -143,16 +162,31 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
     void refresh();
   };
 
-  const save = async () => {
+  // A new one saved: open as saved, for its tools and queries.
+  const opened = async (s: number, c: Connector) => {
+    if (!stamps.current(s)) return;
+    snack(t("desktop.connectors.saved_new", { name: c.name }));
+    await refresh();
+    switchTo({ category: c.category, scope: c.scope === "global" ? "global" : "workspace", name: c.name }, formFromConnection(c, kindOf(c.kind)));
+  };
+  // Saves the form; a new connection is tested first, unless anyway.
+  const save = async (anyway = false) => {
     if (busy) return;
     const s = stamps.stamp();
     setBusy(true);
     setProblems([]);
     try {
+      if (isNew && !anyway && can(kind, "test")) {
+        const tr = await api.test(connectionFromForm(form));
+        if (!stamps.current(s)) return;
+        if (tr.problem) return setUntested(tr.problem);
+      }
+      setUntested("");
       const { connection, secretValues } = connectionFromForm(form);
       const r = await api.save({ previousName: file?.name ?? "", connection, secretValues });
       if (!stamps.current(s)) return void refresh();
       if (r.problems.length || !r.connection) return setProblems(r.problems);
+      if (isNew) return void (await opened(s, r.connection));
       done(s, t("desktop.connectors.saved", { name: r.connection.name }));
     } catch (e) {
       if (stamps.current(s)) setProblems([message(e)]);
@@ -207,7 +241,8 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
   const folder = (sc: ConnectorScope) => (sc === "global" ? category?.globalDir : category?.workspaceDir) ?? "";
   const title = form.name || t("desktop.connectors.new");
   const where = file?.path ?? `${folder(form.scope)}/${form.name.trim() || "…"}.yaml`;
-  const testable = !shown && (form.custom || can(kind, "test"));
+  // A saved one's Test and Read the tables; a new one is tested as it's saved.
+  const testable = !shown && !!file && (form.custom || can(kind, "test"));
   return (
     <div className={`slide-pane connectors-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
@@ -216,7 +251,10 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
             <span className="t-title-sm spacer">{t("desktop.studio.connectors")}</span>
           </div>
         )}
-        <p className="t-body-sm muted">{studio ? t("desktop.connectors.intro", { path: ".agents/connectors/kinds" }) : t("desktop.connectors.global_intro", { path: "~/.blitz/connectors/kinds" })}</p>
+        <p className="t-body-sm muted">
+          {t(studio ? "desktop.connectors.intro" : "desktop.connectors.global_intro")}
+          {advanced && ` ${t("desktop.connectors.kinds_hint", { path: studio ? ".agents/connectors/kinds" : "~/.blitz/connectors/kinds" })}`}
+        </p>
         {error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
@@ -230,10 +268,10 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
               <div className="row" style={{ gap: 6 }}>
                 <Icon path={iconOf(cat)} size="sm" />
                 <span className="t-title-sm spacer">{textIn(cat.name, lang)}</span>
-                <IconButton icon={mdiPlus} label={t("desktop.connectors.add_to", { category: textIn(cat.name, lang) })} small disabled={!first} onClick={() => showForm({ category: cat.id, scope, name: "" }, newConnectorForm(cat.id, first, scope))} />
+                <IconButton icon={mdiPlus} label={t("desktop.connectors.add_to", { category: textIn(cat.name, lang) })} small disabled={!first} onClick={() => showForm({ category: cat.id, scope, name: "" }, newConnectorForm(cat.id, kindsOf(cat.id).length === 1 ? first : undefined, scope))} />
               </div>
               <span className="t-body-sm muted">{textIn(cat.hint, lang)}</span>
-              {cat.state && (
+              {cat.state && (advanced || cat.state === "failed") && (
                 <div className={`row small-card t-body-sm ${cat.state === "failed" ? "error-text" : "muted"}`} style={{ gap: 6 }}>
                   <Icon path={cat.state === "failed" ? mdiAlertCircleOutline : cat.state === "connected" ? mdiCheckCircleOutline : mdiConnection} size="sm" />
                   <span className="spacer">{cat.state === "failed" ? t("desktop.connectors.server_failed", { error: cat.error }) : cat.state === "connected" ? tn("desktop.connectors.server_connected", cat.toolCount) : t("desktop.connectors.server_idle")}</span>
@@ -248,18 +286,25 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
             </section>
           );
         })}
-        {broken.length > 0 && (
-          <div className="card error stack small-card" role="alert" style={{ gap: 4 }}>
-            <span className="t-label">{t("desktop.connectors.problems")}</span>
-            {broken.map((d) => (
-              <span key={`${d.origin}:${d.id}:${d.path}`} className="row t-body-sm" style={{ gap: 6 }} title={d.path}>
-                <Icon path={mdiAlertCircleOutline} size="sm" />
-                <span className="mono">{d.id}</span>
-                <span className="spacer">{d.problem}</span>
-              </span>
-            ))}
-          </div>
-        )}
+        {broken.length > 0 &&
+          (advanced ? (
+            <div className="card error stack small-card" role="alert" style={{ gap: 4 }}>
+              <span className="t-label">{t("desktop.connectors.problems")}</span>
+              {broken.map((d) => (
+                <span key={`${d.origin}:${d.id}:${d.path}`} className="row t-body-sm" style={{ gap: 6 }} title={d.path}>
+                  <Icon path={mdiAlertCircleOutline} size="sm" />
+                  <span className="mono">{d.id}</span>
+                  <span className="spacer">{d.problem}</span>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="row t-body-sm warn-text small-card" style={{ gap: 6 }} title={broken.map((d) => `${d.id}: ${d.problem}`).join("\n")}>
+              <Icon path={mdiAlertCircleOutline} size="sm" />
+              {tn("desktop.connectors.problems_short", broken.length)}
+            </span>
+          ))}
+        {extra}
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (
@@ -282,7 +327,7 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
               </div>
             )}
             <fieldset className="worker agent-form rule-form" disabled={shown}>
-              <ConnectorFields api={api} form={form} setForm={setForm} kind={kind} kinds={kindsOf(form.category)} prefix={prefix} folder={folder(form.scope)} onBuild={() => setDialog("build")} />
+              <ConnectorFields api={api} form={form} setForm={setForm} kind={kind} kinds={kindsOf(form.category)} prefix={prefix} folder={folder(form.scope)} saved={!!file} onBuild={() => setDialog("build")} />
             </fieldset>
             {testable && (
               <div className="card outlined stack rule-try" style={{ gap: 8 }}>
@@ -320,8 +365,17 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
             )}
             <ProblemList problems={problems} />
             <div className="row wrap agent-actions slide-actions">
+            {untested && (
+              <div className="card warn row t-body-sm" role="alert" style={{ gap: 8, flexBasis: "100%" }}>
+                <Icon path={mdiAlertCircleOutline} size="sm" />
+                <span className="spacer">{t("desktop.connectors.test_failed", { problem: untested })}</span>
+                <Button small disabled={busy} onClick={() => void save(true)}>
+                  {t("desktop.connectors.save_anyway")}
+                </Button>
+              </div>
+            )}
               <span className="t-body-sm muted spacer ellipsis" title={where}>
-                {t("desktop.agents.where", { path: where })}
+                {advanced && kind && t("desktop.agents.where", { path: where })}
               </span>
               {shown ? (
                 <>
@@ -355,9 +409,11 @@ export function ConnectorsPane({ workspace, onDirty }: { workspace?: string; onD
                   <Button disabled={busy} onClick={close}>
                     {t("desktop.cancel")}
                   </Button>
-                  <Button variant="filled" icon={busy ? mdiLoading : mdiContentSaveOutline} iconSpin={busy} disabled={busy || !form.name.trim() || (!!file && !dirty && !isNew && !untrusted)} onClick={() => void save()}>
-                    {untrusted && !dirty ? t("desktop.connectors.trust_save") : t("desktop.connectors.save")}
+                  {(kind || form.custom) && (
+                  <Button variant="filled" icon={busy ? mdiLoading : mdiContentSaveOutline} iconSpin={busy} disabled={busy || !form.name.trim() || (!kind && !form.custom) || (!!file && !dirty && !isNew && !untrusted)} onClick={() => void save()}>
+                    {untrusted && !dirty ? t("desktop.connectors.trust_save") : isNew && can(kind, "test") ? (busy ? t("desktop.connectors.testing") : t("desktop.connectors.test_save")) : t("desktop.connectors.save")}
                   </Button>
+                  )}
                 </>
               )}
             </div>

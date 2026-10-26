@@ -70,7 +70,8 @@ export interface CommandContext {
   busy(): boolean;
   settingsChanged(): void;
   openView(v: "changes" | "workers" | "processes"): void;
-  openSettings(section: string, scope?: string): void;
+  /** Opens Settings on a section; connect, a URL or file for a new connection there (Connectors). */
+  openSettings(section: string, scope?: string, connect?: string): void;
   reviewProject?: () => void;
   reload(): Promise<void>;
   refreshTotal(): void;
@@ -717,6 +718,15 @@ export const builtinCommands: Builtin[] = [
         return c.say(t("envs.removed", { key }));
       }
       c.say(t("envs.usage"), "error");
+    },
+  },
+  {
+    name: "connect",
+    args: "[postgres://…|file.sqlite]",
+    group: "extensions",
+    describe: "help.connect",
+    run(c) {
+      c.openSettings("connectors", undefined, c.args.trim() || undefined);
     },
   },
   {

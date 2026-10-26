@@ -16,8 +16,10 @@ package connectors
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -163,7 +165,16 @@ func load(prefixDir, workspace string) Catalog {
 		}
 	}
 	cat.check()
+	slices.SortStableFunc(cat.Kinds, func(a, b Kind) int { return cmp.Compare(orderOf(a), orderOf(b)) })
 	return cat
+}
+
+// orderOf is where a kind is listed: its order, or after every kind with one.
+func orderOf(k Kind) int {
+	if k.Order > 0 {
+		return k.Order
+	}
+	return math.MaxInt
 }
 
 // pathOf is a descriptor's path as listed: "" for a built-in one.

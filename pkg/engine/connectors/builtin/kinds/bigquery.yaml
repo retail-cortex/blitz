@@ -24,6 +24,8 @@ hint:
   fr-CA: "BigQuery sur Google Cloud. Se connecte avec vos identifiants Google (gcloud auth application-default login)."
 backend: toolbox
 source: bigquery
+# Listed simplest first: SQLite, PostgreSQL, BigQuery, AlloyDB.
+order: 3
 capabilities: [test, try, queries, schema, query-builder]
 fields:
   - key: project

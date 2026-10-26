@@ -24,6 +24,8 @@ hint:
   fr-CA: "N'importe quel serveur PostgreSQL, local ou hébergé."
 backend: toolbox
 source: postgres
+# Listed simplest first: SQLite, PostgreSQL, BigQuery, AlloyDB.
+order: 2
 capabilities: [test, try, queries, schema, query-builder]
 fields:
   - key: host

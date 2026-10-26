@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  mdiBookshelf,
   mdiBrain,
   mdiCheckCircleOutline,
   mdiXml,
@@ -72,10 +73,10 @@ import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
 import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
-import { sectionShown, shownGroups, type SectionId } from "./simpleMode";
+import { homeOf, libraryTabs, sectionShown, shownGroups, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
-import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
+import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
@@ -90,7 +91,7 @@ const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
   secrets: mdiKeyVariant,
   appearance: mdiPaletteOutline,
-  agents: mdiRobotOutline,
+  agents: mdiBookshelf, // the Library's entry
   skills: mdiPuzzleOutline,
   workers: mdiCalendarClock,
   mcp: mdiPowerPlugOutline,
@@ -111,7 +112,7 @@ const sectionIcons: Record<SectionId, string> = {
  * advanced settings and, with them, the settings file (</>): Settings turns
  * over to show it, as a page's source, and back.
  */
-export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
+export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "", connect }: { onClose: () => void; initial?: Section; scope?: string; connect?: string }) {
   const advanced = useAdvanced();
   const { update } = useApp();
   const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
@@ -160,30 +161,32 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
               <button
                 key={id}
                 role="tab"
-                aria-selected={id === section}
-                data-autofocus={id === section && !showFile ? "" : undefined}
-                className={`list-item ${id === section ? "active" : ""}`}
-                title={t(`desktop.settings.${id}`)}
-                onClick={() => (id === section ? undefined : pick(id))}
+                aria-selected={id === homeOf(section)}
+                data-autofocus={id === homeOf(section) && !showFile ? "" : undefined}
+                className={`list-item ${id === homeOf(section) ? "active" : ""}`}
+                title={t(entryLabel(id))}
+                onClick={() => (id === homeOf(section) ? undefined : pick(id))}
               >
                 <Icon path={sectionIcons[id]} />
-                <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
+                <span className="settings-nav-label">{t(entryLabel(id))}</span>
               </button>
             )),
             ])}
           </div>
           <div className="settings-pane">
+            {homeOf(section) === "agents" && (
+              <Tabs label={t("desktop.settings.library")} value={section} tabs={libraryTabs.map((id) => ({ value: id, label: t(`desktop.settings.${id}`), icon: libraryIcons[id] }))} onChange={(id) => pick(id)} />
+            )}
             {section === "providers" && <ProviderSettings workspace="" />}
             {section === "secrets" && <SecretsEditor />}
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
-            {section === "mcp" && <McpSettings />}
             {section === "browser" && <BrowserSettings />}
-            {section === "connectors" && (
+            {homeOf(section) === "connectors" && (
               <div className="slide-box">
-                <ConnectorsPane onDirty={setDirty} />
+                <ConnectorsPane onDirty={setDirty} connect={connect} extra={advanced && <McpSettings embedded />} />
               </div>
             )}
             {section === "workspaces" && (
@@ -208,10 +211,16 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
           </div>
         )}
       </div>
-      {discard(t(`desktop.settings.${section}`))}
+      {discard(t(entryLabel(homeOf(section))))}
     </Drawer>
   );
 }
+
+/** The Library's tabs' icons. */
+const libraryIcons: Record<(typeof libraryTabs)[number], string> = { agents: mdiRobotOutline, skills: mdiPuzzleOutline, workers: mdiCalendarClock, secrets: mdiKeyVariant };
+
+/** A side list entry's name: its section's, but the Library's for agents (its first tab). */
+const entryLabel = (id: SectionId) => (id === "agents" ? "desktop.settings.library" : `desktop.settings.${id}`);
 
 /**
  * Settings' two sides: the sections and the settings file. Turning goes

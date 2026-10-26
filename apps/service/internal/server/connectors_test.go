@@ -60,8 +60,8 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 		assert.True(t, k.CanReadOnly)
 		assert.NotEmpty(t, k.ReadOnlyHint["fr-CA"])
 	}
-	assert.Equal(t, []string{"alloydb-postgres", "bigquery", "postgres", "sqlite"}, kinds)
-	pg := list.Msg.Kinds[2]
+	assert.Equal(t, []string{"sqlite", "postgres", "bigquery", "alloydb-postgres"}, kinds)
+	pg := list.Msg.Kinds[1]
 	assert.Equal(t, "password", pg.Fields[4].Key)
 	assert.Equal(t, "secret", pg.Fields[4].Type)
 	assert.Equal(t, "$1", pg.Placeholders)

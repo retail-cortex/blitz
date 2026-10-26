@@ -15,12 +15,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allSections, menuIds, sectionGroups, sectionShown, settingsSections, showsSignIn, shownGroups } from "./simpleMode";
+import { allSections, homeOf, libraryTabs, menuIds, sectionGroups, sectionShown, settingsSections, showsSignIn, shownGroups } from "./simpleMode";
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
-    expect(settingsSections(false)).toEqual(["providers", "appearance", "workspaces", "about"]);
-    expect(settingsSections(true)).toEqual([...allSections]);
+    expect(settingsSections(false)).toEqual(["providers", "appearance", "connectors", "workspaces", "about"]);
+    expect(settingsSections(true)).toEqual(["providers", "appearance", "agents", "connectors", "browser", "workspaces", "permissions", "service", "logs", "about"]);
   });
 
   it.each([
@@ -29,6 +29,10 @@ describe("simple mode", () => {
     { asked: "workspaces" as const, advanced: false, want: "workspaces" },
     { asked: "skills" as const, advanced: false, want: "providers" },
     { asked: "appearance" as const, advanced: false, want: "appearance" },
+    { asked: "connectors" as const, advanced: false, want: "connectors" },
+    { asked: "workers" as const, advanced: true, want: "workers" },
+    { asked: "mcp" as const, advanced: true, want: "mcp" },
+    { asked: "mcp" as const, advanced: false, want: "connectors" },
   ])("opens $asked as $want (advanced: $advanced)", ({ asked, advanced, want }) => {
     expect(sectionShown(asked, advanced)).toBe(want);
   });
@@ -47,13 +51,19 @@ describe("simple mode", () => {
   ])("shows sign-in for $method: $want (advanced: $advanced)", ({ advanced, method, want }) => {
     expect(showsSignIn(advanced, method)).toBe(want);
   });
-  it("groups every section once, in order", () => {
-    expect(sectionGroups.flatMap((g) => g.sections)).toEqual([...allSections]);
+  it("shows every section once: an entry of its own, or inside one", () => {
+    const entries = sectionGroups.flatMap((g) => g.sections);
+    expect(new Set(entries).size).toBe(entries.length);
+    expect(allSections.filter((s) => homeOf(s) === s)).toEqual(allSections.filter((s) => entries.includes(s)));
+    for (const s of allSections) expect(entries).toContain(homeOf(s));
+    expect(libraryTabs.map(homeOf)).toEqual(["agents", "agents", "agents", "agents"]);
+    expect(homeOf("mcp")).toBe("connectors");
   });
 
   it("shows only the groups with a section shown", () => {
     expect(shownGroups(false).map((g) => [g.id, g.sections])).toEqual([
       ["start", ["providers", "appearance"]],
+      ["setup", ["connectors"]],
       ["access", ["workspaces"]],
       ["system", ["about"]],
     ]);

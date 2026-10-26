@@ -46,6 +46,7 @@ import {
   mdiFileVideoOutline,
   mdiImageOutline,
   mdiVolumeHigh,
+  mdiDatabasePlusOutline,
   mdiImagePlusOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
@@ -729,7 +730,7 @@ export function Conversation({
       busy: () => latestRunning.current,
       settingsChanged: onSettingsChanged,
       openView: onOpenView,
-      openSettings: (section, scope) => openSettings({ section, scope }),
+      openSettings: (section, scope, connect) => openSettings({ section, scope, connect }),
       reviewProject: onReviewProject,
       reload,
       refreshTotal,
@@ -2093,6 +2094,7 @@ function Composer({
             />
           </>
         )}
+        {!running && <IconButton icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
         <span className="spacer" />
         <KeyHint />
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}

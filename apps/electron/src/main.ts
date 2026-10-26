@@ -505,6 +505,10 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       const r = await dialog.showOpenDialog(win, { title: text(a, 0), properties: ["openDirectory", "createDirectory"] });
       return r.canceled ? "" : (r.filePaths[0] ?? "");
     }
+    case "ChooseFile": {
+      const r = await dialog.showOpenDialog(win, { title: text(a, 0), properties: ["openFile"] });
+      return r.canceled ? "" : (r.filePaths[0] ?? "");
+    }
     case "Notify": {
       if (!Notification.isSupported()) return;
       const n = new Notification({ title: text(a, 0), body: text(a, 1) });

@@ -24,6 +24,8 @@ hint:
   fr-CA: "Un fichier SQLite. sqlite-vec est inclus : les tables vec0 et les recherches de plus proches voisins fonctionnent."
 backend: toolbox
 source: sqlite
+# Listed simplest first: SQLite, PostgreSQL, BigQuery, AlloyDB.
+order: 1
 capabilities: [test, try, queries, schema, query-builder]
 fields:
   - key: database

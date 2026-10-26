@@ -215,6 +215,10 @@ type Kind struct {
 	Queries      *QuerySpec   `yaml:"queries"`
 	Schema       *SchemaSpec  `yaml:"schema"`
 	Capabilities []Capability `yaml:"capabilities"`
+	// Order places it among its category's kinds, lower first (the
+	// simplest to set up first); kinds without one come after, in the
+	// order they're read.
+	Order int `yaml:"order"`
 
 	// Origin is builtin, global or workspace; Path its file ("" built in).
 	Origin  string `yaml:"-"`

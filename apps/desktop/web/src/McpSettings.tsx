@@ -29,9 +29,10 @@ import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from
  * Settings › MCP servers (spec_mcp_009 MCP-46): the global settings' MCP
  * servers, each on or off; added and edited in a dialog, removed after
  * asking. Settings are global: how each does in a workspace is that
- * workspace's.
+ * workspace's. Embedded, it's a section of Settings › Connectors, headed
+ * as its categories are.
  */
-export function McpSettings() {
+export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
   const snack = useSnackbar();
   const [configs, setConfigs] = useState<MCPServerConfig[]>([]);
   const [path, setPath] = useState("");
@@ -69,24 +70,41 @@ export function McpSettings() {
     }
   };
 
+  const intro = (
+    <>
+      {t("desktop.mcp.intro")}
+      {path && (
+        <>
+          {" "}
+          {t("desktop.mcp.file")} <code>{path}</code>.
+        </>
+      )}
+    </>
+  );
+  const add = () => setEditing({ name: "", form: emptyForm });
   return (
-    <div className="stack mcp-settings" style={{ gap: 16 }}>
-      <p className="t-body-sm muted">
-        {t("desktop.mcp.intro")}
-        {path && (
-          <>
-            {" "}
-            {t("desktop.mcp.file")} <code>{path}</code>.
-          </>
-        )}
-      </p>
+    <div className={`stack mcp-settings ${embedded ? "rule-section" : ""}`} style={{ gap: embedded ? 4 : 16 }}>
+      {embedded ? (
+        <>
+          <div className="row" style={{ gap: 6 }}>
+            <Icon path={mdiPowerPlugOutline} size="sm" />
+            <span className="t-title-sm spacer">{t("desktop.settings.mcp")}</span>
+            <IconButton icon={mdiPlus} label={t("desktop.mcp.add")} small disabled={busy} onClick={add} />
+          </div>
+          <span className="t-body-sm muted">{intro}</span>
+        </>
+      ) : (
+        <p className="t-body-sm muted">{intro}</p>
+      )}
       {error && <p className="error-text">{error}</p>}
-      <div className="row">
-        <span className="t-title-sm spacer">{t("desktop.mcp.servers")}</span>
-        <Button variant="tonal" icon={mdiPlus} disabled={busy} onClick={() => setEditing({ name: "", form: emptyForm })}>
-          {t("desktop.mcp.add")}
-        </Button>
-      </div>
+      {!embedded && (
+        <div className="row">
+          <span className="t-title-sm spacer">{t("desktop.mcp.servers")}</span>
+          <Button variant="tonal" icon={mdiPlus} disabled={busy} onClick={add}>
+            {t("desktop.mcp.add")}
+          </Button>
+        </div>
+      )}
       {configs.length === 0 ? (
         <p className="t-body-sm muted">{t("desktop.mcp.none")}</p>
       ) : (

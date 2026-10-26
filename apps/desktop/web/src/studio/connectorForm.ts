@@ -102,7 +102,9 @@ export function newConnectorForm(category: string, kind: ConnectorKind | undefin
 export function withKind(f: ConnectorForm, kind: ConnectorKind): ConnectorForm {
   const keys = new Set(kind.fields.filter((x) => x.type !== "secret").map((x) => x.key));
   const settings = Object.fromEntries(Object.entries(f.settings).filter(([k]) => keys.has(k)));
-  return { ...f, kind: kind.id, settings, secretValues: {}, readOnly: kind.canReadOnly && f.readOnly, tools: kind.tools.filter((t) => t.on).map((t) => t.id), queries: can(kind, "queries") ? f.queries : [] };
+  // A kind picked for a new form (none before) starts read-only, as newConnectorForm does.
+  const readOnly = kind.canReadOnly && (f.kind === "" || f.readOnly);
+  return { ...f, kind: kind.id, settings, secretValues: {}, readOnly, tools: kind.tools.filter((t) => t.on).map((t) => t.id), queries: can(kind, "queries") ? f.queries : [] };
 }
 
 let lastQueryKey = 0;
@@ -194,4 +196,123 @@ export function statementParams(statement: string): string[] {
     if (!out.includes(name)) out.push(name);
   }
   return out;
+}
+
+/**
+ * A connection's name as the service takes it (lower case, digits and
+ * _, starting with a letter, at most 40), from whatever was typed: other
+ * characters become _, and runs of them one.
+ */
+export function slugName(typed: string): string {
+  return typed
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[_0-9]+/, "")
+    .slice(0, 40)
+    .replace(/_+$/, "");
+}
+
+/**
+ * A name as it's being typed: as slugName, but a _ typed last stays (the
+ * next character may follow it).
+ */
+export function typedName(typed: string): string {
+  const slug = slugName(typed);
+  return slug && /[^a-z0-9]$/i.test(typed) && slug.length < 40 ? `${slug}_` : slug;
+}
+
+/**
+ * The name a new connection gets until one is typed: its database's (a
+ * file's without its folders and extension), else its project's.
+ */
+export function suggestName(settings: Record<string, string>): string {
+  const from = settings.database || settings.project || "";
+  const base = from.split(/[\\/]/).pop() ?? "";
+  return slugName(base.replace(/\.(sqlite3?|db3?|duckdb)$/i, ""));
+}
+
+/**
+ * The form with a setting changed; a name that was still the suggested
+ * one (or none) follows the new suggestion.
+ */
+export function withSetting(f: ConnectorForm, key: string, value: string): ConnectorForm {
+  const settings = { ...f.settings, [key]: value };
+  const named = f.name !== "" && f.name !== suggestName(f.settings);
+  return { ...f, settings, name: named ? f.name : suggestName(settings) };
+}
+
+/** A connection URL's parts, as a kind's fields name them. */
+export interface URLParts {
+  settings: Record<string, string>;
+  secrets: Record<string, string>;
+}
+
+/**
+ * The fields a pasted connection URL (postgres://user:pass@host:5432/db)
+ * fills, those the kind has; undefined when it isn't one.
+ */
+export function parseConnectionURL(text: string, kind: ConnectorKind): URLParts | undefined {
+  const m = /^\s*([a-z][a-z0-9+.-]*):\/\/(\S+)\s*$/i.exec(text);
+  if (!m) return undefined;
+  let u: URL;
+  try {
+    // Parsed as http: the browser reads hosts and ports only for the schemes it knows.
+    u = new URL(`http://${m[2]}`);
+  } catch {
+    return undefined;
+  }
+  const has = new Set(kind.fields.map((f) => f.key));
+  const secret = new Set(kind.fields.filter((f) => f.type === "secret").map((f) => f.key));
+  const found: Record<string, string> = {
+    host: u.hostname,
+    port: u.port,
+    database: decodeURIComponent(u.pathname.replace(/^\//, "")),
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+  };
+  const out: URLParts = { settings: {}, secrets: {} };
+  for (const [k, v] of Object.entries(found)) {
+    if (!v || !has.has(k)) continue;
+    if (secret.has(k)) out.secrets[k] = v;
+    else out.settings[k] = v;
+  }
+  return Object.keys(out.settings).length ? out : undefined;
+}
+
+/** Whether a kind's fields take a host (a server the URL names). */
+export const takesURL = (kind: ConnectorKind | undefined) => !!kind?.fields.some((f) => f.key === "host");
+
+/**
+ * The kind a connection URL or a file is for, by its scheme or its
+ * extension, among the category's kinds ("" when it can't be told).
+ */
+export function kindForTarget(target: string, kinds: ConnectorKind[]): string {
+  const t = target.trim().toLowerCase();
+  const ids = new Set(kinds.map((k) => k.id));
+  const pick = (id: string) => (ids.has(id) ? id : "");
+  if (/^postgres(ql)?:\/\//.test(t)) return pick("postgres");
+  if (/^sqlite:/.test(t) || /\.(sqlite3?|db3?)$/.test(t)) return pick("sqlite");
+  if (/^bigquery:\/\//.test(t)) return pick("bigquery");
+  return "";
+}
+
+/**
+ * A new connection's form for a URL or a file (/connect): its kind told
+ * from it, the URL's parts or the file's path filled in, and its name
+ * suggested. Undefined when the kind can't be told.
+ */
+export function formForTarget(target: string, category: string, kinds: ConnectorKind[], scope: ConnectorScope): ConnectorForm | undefined {
+  const kind = kinds.find((k) => k.id === kindForTarget(target, kinds));
+  if (!kind) return undefined;
+  let f = newConnectorForm(category, kind, scope);
+  if (takesURL(kind)) {
+    const parts = parseConnectionURL(target, kind);
+    if (parts) f = { ...f, settings: parts.settings, secretValues: parts.secrets };
+  } else if (kind.fields.some((x) => x.key === "database")) {
+    f = { ...f, settings: { database: target.trim().replace(/^sqlite:(\/\/)?/i, "") } };
+  }
+  return { ...f, name: suggestName(f.settings) };
 }

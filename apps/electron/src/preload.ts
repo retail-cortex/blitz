@@ -22,6 +22,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "ele
 
 const methods = [
   "ChooseWorkspace",
+  "ChooseFile",
   "Notify",
   "OpenURL",
   "PrintPDF",
