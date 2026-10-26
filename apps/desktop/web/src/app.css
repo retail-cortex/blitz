@@ -711,7 +711,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .provider-choice .single { max-width: 640px; }
 .provider-choice .field .select, .provider-choice .field .input { width: 100%; }
 .provider-choice .seg { align-self: flex-start; }
-.key-status { display: flex; flex-direction: column; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: var(--md-shape-sm, 8px); background: color-mix(in srgb, var(--md-on-surface) 4%, transparent); }
+.key-status { max-width: 640px; }
+/* Providers & keys: every provider's state at once, its form below. */
+.provider-list .list-item { min-height: 52px; }
+.provider-list .trailing { gap: 8px; }
 .settings-edit { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
 .settings-editor { height: max(300px, calc(85vh - 420px)); border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
 .settings-help {
@@ -1046,7 +1049,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-stream { height: 100%; }
 .run-stream > .select { align-self: flex-start; max-width: 320px; }
 .run-stream-text { flex: 1; max-height: none; min-height: 80px; }
-.ok-text { color: var(--md-success, #2e7d32); }
+.ok-text, .field .supporting.ok-text { color: var(--md-success, #2e7d32); }
 /* Several chosen in the room of one field: a button, then a list of check boxes. */
 .multi-select { display: block; }
 .multi-select-button { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; cursor: pointer; }

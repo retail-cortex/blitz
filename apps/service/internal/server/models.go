@@ -16,6 +16,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -107,4 +109,50 @@ func (c *modelLists) forget() {
 	c.mu.Lock()
 	c.byID = nil
 	c.mu.Unlock()
+}
+
+// CheckApiKey lists the provider's models with a key that isn't saved:
+// the scope's settings with the key in place of the provider's own
+// (and its key command and sign-in set aside), so the answer is about
+// the key alone.
+func (h configService) CheckApiKey(ctx context.Context, r req[pb.CheckApiKeyRequest]) (*connect.Response[pb.CheckApiKeyResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(r.Msg.Key)
+	if key == "" {
+		return nil, invalid(errors.New("no key to check"))
+	}
+	var cfg *config.Config
+	if dir == "" {
+		cfg, err = config.Load(h.s.configDir)
+	} else {
+		cfg, err = config.LoadWorkspace(h.s.configDir, dir)
+	}
+	if err != nil {
+		return nil, invalid(err)
+	}
+	switch r.Msg.Provider {
+	case "gemini":
+		g := &cfg.LLM.Gemini
+		g.APIKey, g.APIKeyCommand, g.Auth = key, "", ""
+	case "anthropic":
+		a := &cfg.LLM.Anthropic
+		a.APIKey, a.APIKeyCommand, a.Auth = key, "", ""
+	case "openai":
+		o := &cfg.LLM.OpenAI
+		o.APIKey, o.APIKeyCommand = key, ""
+	default:
+		return nil, invalid(fmt.Errorf("provider %q takes no API key to check (gemini, anthropic or openai)", r.Msg.Provider))
+	}
+	pm := listModels(ctx, cfg, r.Msg.Provider)[0]
+	res := &pb.CheckApiKeyResponse{Works: pm.Err == nil}
+	if pm.Err != nil {
+		res.Error = pm.Err.Error()
+	}
+	for _, m := range pm.Models {
+		res.Models = append(res.Models, m.ID)
+	}
+	return ok(res)
 }

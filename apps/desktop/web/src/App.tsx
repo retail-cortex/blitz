@@ -39,6 +39,7 @@ import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDrawer, type Section } from "./SettingsDrawer";
+import { ConnectModelCard } from "./ProviderSettings";
 import { StatusBar } from "./StatusBar";
 import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
@@ -510,6 +511,7 @@ function Welcome({ onOpen, onClose, onSettings, onSearch }: { onOpen: () => void
       <div className="welcome-body">
         <h1 className="t-display">{t("desktop.welcome.title")}</h1>
         <p className="t-title muted">{t("desktop.welcome.body")}</p>
+        <ConnectModelCard onSetUp={() => onSettings("providers")} />
         <Button variant="filled" icon={mdiFolderOpenOutline} onClick={onOpen}>
           {t("desktop.workspace.open_one")}
         </Button>

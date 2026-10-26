@@ -104,6 +104,7 @@ import {
 import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
 import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
+import { plainReason } from "./providerStatus";
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
@@ -914,9 +915,12 @@ export function Conversation({
           {modelProblem && (
             <div className="card warn row">
               <Icon path={mdiAlertCircleOutline} />
-              <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: modelProblem })}</span>
+              <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: plainReason(modelProblem) })}</span>
               <Button small onClick={onSettingsChanged}>
                 {t("desktop.model_check_again")}
+              </Button>
+              <Button small variant="tonal" onClick={() => openSettings({ section: "providers" })}>
+                {t("desktop.model_set_up")}
               </Button>
             </div>
           )}

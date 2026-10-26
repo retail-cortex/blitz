@@ -35,6 +35,8 @@ import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOpera
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
 const fakeSignedIn = new Set<string>();
+/** Whether the page's address has ?name (the fake's switches). */
+const fakeParam = (name: string) => new URLSearchParams(location.search).has(name);
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };
 function fakeSignIn(provider: string) {
   const found = provider === "google" || provider === "aws";
@@ -501,7 +503,10 @@ function scopeConfig(workspace: string) {
           text: '[llm]\nprovider = "gemini"\n\n[llm.gemini]\napi_key = "keychain:global/llm.gemini.api_key"\n\n[llm.anthropic]\napi_key = "sk-ant-plain"\n',
           provider: "gemini",
           model: "",
-          keys: { gemini: KeySource.KEYCHAIN, anthropic: KeySource.PLAIN, openai: KeySource.NONE },
+          // ?newuser: nothing set up yet; ?envkey: Anthropic's key in the service's environment.
+          keys: fakeParam("newuser")
+            ? { gemini: KeySource.NONE, anthropic: fakeParam("envkey") ? KeySource.ENVIRONMENT : KeySource.NONE, openai: KeySource.NONE }
+            : { gemini: KeySource.KEYCHAIN, anthropic: fakeParam("envkey") ? KeySource.ENVIRONMENT : KeySource.PLAIN, openai: KeySource.NONE },
           auth: {},
         };
     configs.set(workspace, c);
@@ -1974,7 +1979,7 @@ export function installFake() {
         getModel: ({ workspace }) => ({
           name: state(workspace).settings.model,
           provider: state(workspace).settings.provider,
-          unavailable: new URLSearchParams(location.search).has("nomodel") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
+          unavailable: fakeParam("nomodel") || fakeParam("newuser") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
         }),
         setModel: ({ workspace, ref }) => {
           const [provider, name] = ref.includes("/") ? ref.split("/", 2) : [state(workspace).settings.provider, ref];
@@ -2424,13 +2429,23 @@ export function installFake() {
           fakeSignedIn.delete(provider);
           return { status: fakeSignIn(provider) };
         },
-        listModels: () => ({
-          defaultProvider: "gemini",
-          providers: [
-            { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro", "gemini-4-argon"] },
-            { provider: "anthropic", error: "no API key" },
-          ],
-        }),
+        listModels: ({ providers }) =>
+          // Ollama answers with ?ollama (it runs on the machine), else it isn't there.
+          providers.length === 1 && providers[0] === "ollama"
+            ? { defaultProvider: "gemini", providers: [fakeParam("ollama") ? { provider: "ollama", ids: ["llama4:8b", "qwen3:14b"] } : { provider: "ollama", error: "connection refused" }] }
+            : {
+                defaultProvider: "gemini",
+                providers: [
+                  { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro", "gemini-4-argon"] },
+                  { provider: "anthropic", error: "no API key" },
+                ],
+              },
+        // A key starting "bad" is refused; others list a few models.
+        checkApiKey: async ({ provider, key }) => {
+          await sleep(400);
+          if (!["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`provider "${provider}" takes no API key to check`, Code.InvalidArgument);
+          return key.trim().startsWith("bad") ? { works: false, error: "401 Unauthorized: invalid API key" } : { works: true, models: [`${provider}-a`, `${provider}-b`, `${provider}-c`] };
+        },
         describeConfig: ({ workspace }) => {
           const c = scopeConfig(workspace);
           return {

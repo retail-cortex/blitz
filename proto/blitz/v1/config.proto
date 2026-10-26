@@ -53,6 +53,10 @@ service ConfigService {
   // The models each configured provider offers, from its API (kept for a
   // few minutes), so forms can suggest and check model names.
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  // Tries an API key before it's saved: lists the provider's models with
+  // it, so a form can say the key works (or why not) as it's pasted.
+  // Nothing is written and the key isn't kept.
+  rpc CheckApiKey(CheckApiKeyRequest) returns (CheckApiKeyResponse);
   // Returns the providers' sign-ins (one provider's, or all four:
   // google, anthropic, aws, azure): whether the vendor's tool is installed
   // and whether its credentials work now. Signing in adds to API keys.
@@ -435,6 +439,27 @@ message ListModelsRequest {
   // Only these providers (gemini, anthropic, openai, …), configured or
   // not; none for every configured one.
   repeated string providers = 2;
+}
+
+// Request message for ConfigService.CheckApiKey.
+message CheckApiKeyRequest {
+  // The workspace whose other settings (base URL, retries) apply; "" for
+  // the user's.
+  string workspace = 1;
+  // gemini, anthropic or openai.
+  string provider = 2;
+  // The key to try.
+  string key = 3;
+}
+
+// Response message for ConfigService.CheckApiKey.
+message CheckApiKeyResponse {
+  // The provider took the key.
+  bool works = 1;
+  // Why not, when it didn't ("" when it did).
+  string error = 2;
+  // The models the key reaches, sorted.
+  repeated string models = 3;
 }
 
 // A listed model with the price Blitz knows for it.
