@@ -163,16 +163,18 @@ export interface UpdateStatus {
   notes?: string; // the release's page
 }
 
-/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers, or a workflow's run). */
+/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers, a workflow's run, or the processes: dir may be empty, for the one shown). */
 export interface DeepLink {
   dir: string;
   prompt: string;
-  view?: "workers" | "workflows";
+  view?: "workers" | "workflows" | "processes";
   /** For workflows: the workflow, and the run to show on its canvas. */
   workflow?: string;
   run?: string;
   /** For workers: the job whose details to open. */
   worker?: string;
+  /** For processes: the one whose output to show (the tray's Show in Blitz). */
+  process?: number;
 }
 
 /** The methods the program serving the page answers (the tray's), once asked. */

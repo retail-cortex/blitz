@@ -128,6 +128,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz --worktree[=name] [--ref r]` (the name after `=`: a word after a space is the prompt), `blitz worktrees list\|remove <name>\|prune` | Work in a new git worktree and branch (`.blitz/worktrees/<name>`, `blitz/<name>`), with `.worktreeinclude`'s files copied in; list and remove them |
 | `/cd [path]` | Move the session to another workspace: it opens from scratch (its settings, trust question, sandbox, MCP servers), background work is dealt with as at exit, and `--continue` there finds the session; earlier prompts can't be rewound or undone from the new one |
 | `/tasks [show\|stop <id>]` | Background tasks (`invoke_agent` in the background) |
+| `/processes [all\|log <id>\|stop <id>…\|stop flagged\|stop all]` | The agents' background processes, what they use and the ones that look bad ([Safety](../guide/safety.md#background-processes)) |
 | `/trust` | The workspace's project settings (`.blitz/settings.toml`), and trusting them |
 | `/agents`, `/agent <name>`, `/model <name>` | Agents and models; `/model anthropic/claude-sonnet-5` can switch provider |
 | `/pin_model`, `/unpin`, `/model_settings`, `/effort` | Per-agent models, per-model settings, reasoning effort ([models](../guide/models.md)) |

@@ -52,6 +52,7 @@ type BackgroundProcess struct {
 	StartTime time.Time
 
 	cmd    *guardedCmd
+	pid    int // its process group's, on Unix (sampled)
 	out    *cappedBuffer
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -60,6 +61,7 @@ type BackgroundProcess struct {
 	finished bool
 	exitCode int
 	endTime  time.Time
+	health   procHealth
 }
 
 // ProcessManager owns background processes: it caps how many run at once,
@@ -77,6 +79,15 @@ type ProcessManager struct {
 	maxLifetime time.Duration
 	closed      bool
 	exec        *ExecEnv
+
+	// The processes' health (processhealth.go).
+	limits     ProcessLimits
+	sessions   map[string]*sessionActivity
+	monitoring bool
+	monitor    sync.WaitGroup // the monitor's goroutine
+	quit       chan struct{}  // closed by Shutdown
+	sample     func() (map[int]groupUsage, error)
+	now        func() time.Time
 }
 
 // NewProcessManager creates a manager; zero values select defaults.
@@ -87,7 +98,10 @@ func NewProcessManager(maxRunning int, maxLifetime time.Duration) *ProcessManage
 	if maxLifetime <= 0 {
 		maxLifetime = defaultBackgroundLife
 	}
-	return &ProcessManager{procs: make(map[int]*BackgroundProcess), maxRunning: maxRunning, maxLifetime: maxLifetime}
+	return &ProcessManager{
+		procs: make(map[int]*BackgroundProcess), maxRunning: maxRunning, maxLifetime: maxLifetime,
+		limits: DefaultProcessLimits(), sessions: map[string]*sessionActivity{}, sample: sampleGroups, now: time.Now, quit: make(chan struct{}),
+	}
 }
 
 // Watch is what a background process reports as it runs.
@@ -132,7 +146,7 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 		return nil, err
 	}
 	cmd.Dir = cwd
-	out := newCappedBuffer(backgroundOutputLimit)
+	out := newHeadTailBuffer(backgroundOutputLimit)
 	var sink io.Writer = out
 	id := m.next + 1
 	var lines *lineWatcher
@@ -156,13 +170,20 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 		ID:        m.next,
 		Command:   command,
 		Session:   session,
-		StartTime: time.Now(),
+		StartTime: m.now(),
 		cmd:       cmd,
 		out:       out,
 		cancel:    cancel,
 		done:      make(chan struct{}),
 	}
+	if cmd.Process != nil {
+		bp.pid = cmd.Process.Pid
+	}
 	m.procs[bp.ID] = bp
+	if session != "" {
+		m.activityLocked(session)
+	}
+	m.startMonitorLocked()
 
 	go func() {
 		_ = cmd.Wait()
@@ -205,6 +226,7 @@ func (m *ProcessManager) pruneLocked() {
 	for _, p := range finished[:len(finished)-maxFinishedProcsRetained] {
 		delete(m.procs, p.ID)
 	}
+	m.pruneSessionsLocked()
 }
 
 func (m *ProcessManager) get(id int) (*BackgroundProcess, error) {
@@ -220,17 +242,26 @@ func (m *ProcessManager) get(id int) (*BackgroundProcess, error) {
 func (m *ProcessManager) info(bp *BackgroundProcess) api.ProcessInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	end := time.Now()
+	now := m.now()
+	end := now
 	if bp.finished {
 		end = bp.endTime
 	}
-	return api.ProcessInfo{
+	flags, idle := m.flagsLocked(bp, now)
+	info := api.ProcessInfo{
 		ID:        bp.ID,
 		Command:   bp.Command,
 		Running:   !bp.finished,
 		ExitCode:  bp.exitCode,
 		RuntimeMs: end.Sub(bp.StartTime).Milliseconds(),
+		Session:   bp.Session,
+		Flags:     flags,
+		IdleMs:    idle.Milliseconds(),
 	}
+	if h := bp.health; h.measured && !bp.finished {
+		info.CPUPercent, info.MemoryBytes, info.Measured = h.cpu, h.memory, true
+	}
+	return info
 }
 
 // Output returns captured output and status for a process.
@@ -324,8 +355,12 @@ func (m *ProcessManager) snapshot() []*BackgroundProcess {
 // Shutdown kills every running process and refuses new ones.
 func (m *ProcessManager) Shutdown() {
 	m.mu.Lock()
+	if !m.closed {
+		close(m.quit)
+	}
 	m.closed = true
 	m.mu.Unlock()
+	m.monitor.Wait()
 
 	procs := m.snapshot()
 	for _, p := range procs {

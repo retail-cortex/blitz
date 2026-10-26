@@ -225,7 +225,10 @@ func decision(d pb.Decision) api.Decision {
 }
 
 func processMsg(p api.ProcessInfo) *pb.Process {
-	return &pb.Process{Id: int32(p.ID), Command: p.Command, Running: p.Running, ExitCode: int32(p.ExitCode), RuntimeMs: p.RuntimeMs}
+	return &pb.Process{
+		Id: int32(p.ID), Command: p.Command, Running: p.Running, ExitCode: int32(p.ExitCode), RuntimeMs: p.RuntimeMs,
+		SessionId: p.Session, CpuPercent: p.CPUPercent, MemoryBytes: p.MemoryBytes, Measured: p.Measured, Flags: p.Flags, IdleMs: p.IdleMs,
+	}
 }
 
 func projectMsg(p api.ProjectSettings) *pb.ProjectSettings {

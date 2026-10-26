@@ -120,6 +120,11 @@ func (h workerService) ListWorkers(ctx context.Context, r req[pb.ListWorkersRequ
 	out := &pb.ListWorkersResponse{}
 	for _, dir := range dirs {
 		w, err := h.s.workspace(ctx, dir)
+		// A folder deleted since its workers were enabled doesn't hide the
+		// other workspaces' workers (ListAllWorkers reports it as missing).
+		if err != nil && r.Msg.Workspace == "" && errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

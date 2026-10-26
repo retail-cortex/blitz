@@ -190,6 +190,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// What's audited in the turn, its rules and guardrails as much as its
 	// tools, records its session.
 	ctx = audit.WithSession(ctx, sessionID)
+	// Its background processes are left running once its turns stop for
+	// long (spec_processes_052 PR-21).
+	defer w.tools.Processes().TurnStarted(sessionID)()
 	// A model that couldn't be built may work now (a sign-in since), and
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)

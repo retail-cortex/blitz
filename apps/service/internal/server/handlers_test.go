@@ -588,10 +588,39 @@ func TestProcessesOverTheAPI(t *testing.T) {
 	require.Len(t, all.Msg.Processes, 1)
 	assert.Equal(t, p.Id, all.Msg.Processes[0].Process.Id)
 	assert.NotEmpty(t, all.Msg.Processes[0].Workspace)
+	assert.Equal(t, id, all.Msg.Processes[0].Process.SessionId, "who started it")
+	// The processes view's look at its output, whichever session started
+	// it (spec_processes_052).
+	anyOut, err := w.GetProcessOutput(ctx, connect.NewRequest(&pb.GetProcessOutputRequest{Workspace: dir, Id: p.Id, AnySession: true}))
+	require.NoError(t, err)
+	assert.Contains(t, anyOut.Msg.Output, "started")
+	assert.Equal(t, "UNKNOWN_PROCESS", reason(t, unary(w.GetProcessOutput, &pb.GetProcessOutputRequest{Workspace: dir, Id: 999, AnySession: true})))
+
+	// The view's stream: the list as it is, then again as it changes (here,
+	// the stop); another workspace's has none.
+	defer func(every time.Duration) { watchProcessesEvery = every }(watchProcessesEvery)
+	watchProcessesEvery = 10 * time.Millisecond
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	watch, err := w.WatchProcesses(watchCtx, connect.NewRequest(&pb.WatchProcessesRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.True(t, watch.Receive(), "%v", watch.Err())
+	require.Len(t, watch.Msg().Processes, 1)
+	assert.Equal(t, p.Id, watch.Msg().Processes[0].Process.Id)
+	assert.True(t, watch.Msg().Listed, "told from a keepalive")
+	elsewhere, err := w.WatchProcesses(watchCtx, connect.NewRequest(&pb.WatchProcessesRequest{Workspace: t.TempDir()}))
+	require.NoError(t, err)
+	require.True(t, elsewhere.Receive(), "%v", elsewhere.Err())
+	assert.Empty(t, elsewhere.Msg().Processes, "another workspace's")
+	assert.True(t, elsewhere.Msg().Listed, "an empty list is still a list")
+
 	killed, err := w.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: dir, Id: p.Id, AnySession: true}))
 	require.NoError(t, err)
 	assert.Equal(t, p.Id, killed.Msg.Process.Id)
 	assert.False(t, killed.Msg.Process.Running)
+	require.True(t, watch.Receive(), "%v", watch.Err())
+	assert.Empty(t, watch.Msg().Processes, "the stop is streamed")
+	stopWatch()
 	all, err = w.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, all.Msg.Processes, "stopped")

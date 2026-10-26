@@ -260,6 +260,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		exec:      env,
 	}
 	r.processes.exec = env
+	r.processes.SetLimits(ProcessLimitsFrom(cfg.Processes))
 	r.hooks.SetRules(rules)
 	policy.SetRules(rules)
 

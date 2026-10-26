@@ -318,7 +318,7 @@ func onReady() {
 	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
 	// The agents' background processes still running, each with Stop
 	// (spec_electron_038 EL-112).
-	procMenu := &submenu{parent: systray.AddMenuItem(tray.ProcessesTitle(0), "")}
+	procMenu := &submenu{parent: systray.AddMenuItem(tray.ProcessesTitle(nil), "")}
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
@@ -439,7 +439,7 @@ func onReady() {
 			live := tray.Live{Runs: runs.get(), JobRuns: extras.Runs}
 			spaces := tray.Spaces(openSpaces(), extras.Workers)
 			procMenu.parent.Show()
-			if title := tray.ProcessesTitle(len(extras.Processes)); procMenu.title != title {
+			if title := tray.ProcessesTitle(extras.Processes); procMenu.title != title {
 				procMenu.title = title
 				procMenu.parent.SetTitle(title)
 			}

@@ -16,6 +16,7 @@ package client
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -139,7 +140,58 @@ func (p remoteProcesses) Shutdown() {
 }
 
 func processInfo(m *pb.Process) api.ProcessInfo {
-	return api.ProcessInfo{ID: int(m.Id), Command: m.Command, Running: m.Running, ExitCode: int(m.ExitCode), RuntimeMs: m.RuntimeMs}
+	return api.ProcessInfo{
+		ID: int(m.Id), Command: m.Command, Running: m.Running, ExitCode: int(m.ExitCode), RuntimeMs: m.RuntimeMs,
+		Session: m.SessionId, CPUPercent: m.CpuPercent, MemoryBytes: m.MemoryBytes, Measured: m.Measured, Flags: m.Flags, IdleMs: m.IdleMs,
+	}
+}
+
+// RunningProcesses are the agents' background processes still running,
+// whichever session started them (/processes, spec_processes_052): this
+// workspace's, or every open workspace's when everywhere.
+func (r *Remote) RunningProcesses(everywhere bool) ([]api.WorkspaceProcess, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.ListRunningProcesses(ctx, connect.NewRequest(&pb.ListRunningProcessesRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	// The service names a workspace by its real directory.
+	here := r.dir
+	if real, err := filepath.EvalSymlinks(here); err == nil {
+		here = real
+	}
+	var out []api.WorkspaceProcess
+	for _, wp := range res.Msg.Processes {
+		if everywhere || wp.Workspace == here {
+			out = append(out, api.WorkspaceProcess{Workspace: wp.Workspace, Process: processInfo(wp.Process)})
+		}
+	}
+	return out, nil
+}
+
+// StopProcessIn stops background process id in workspace, whichever
+// session started it: the user's own stop.
+func (r *Remote) StopProcessIn(workspace string, id int) (api.ProcessInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: workspace, Id: int32(id), AnySession: true}))
+	if err != nil {
+		return api.ProcessInfo{}, fromAPI(err)
+	}
+	return processInfo(res.Msg.Process), nil
+}
+
+// ProcessOutputIn is background process id's captured output in
+// workspace, whichever session started it.
+func (r *Remote) ProcessOutputIn(workspace string, id int) (string, api.ProcessInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.GetProcessOutput(ctx, connect.NewRequest(&pb.GetProcessOutputRequest{Workspace: workspace, Id: int32(id), AnySession: true}))
+	if err != nil {
+		return "", api.ProcessInfo{}, fromAPI(err)
+	}
+	return res.Msg.Output, processInfo(res.Msg.Process), nil
 }
 
 // ListTasks are the service's background tasks started in this client's

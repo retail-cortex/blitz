@@ -69,6 +69,15 @@ func (w *Workspace) RunningProcesses() []api.ProcessInfo {
 	return w.tools.Processes().Running()
 }
 
+// AnyProcessOutput is background process id's captured output and status,
+// whichever session started it: the user's own look (spec_processes_052).
+func (w *Workspace) AnyProcessOutput(id int) (string, api.ProcessInfo, error) {
+	if _, err := w.tools.Processes().SessionOf(id); err != nil {
+		return "", api.ProcessInfo{}, fmt.Errorf("%w: %d", api.ErrUnknownProcess, id)
+	}
+	return w.tools.Processes().Output(id)
+}
+
 // StopProcess stops background process id and its descendants, whichever
 // session started it: the user's own stop.
 func (w *Workspace) StopProcess(id int) (api.ProcessInfo, error) {

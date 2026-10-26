@@ -33,20 +33,37 @@ func TestProcessEntries(t *testing.T) {
 	assert.True(t, none[0].Disabled)
 
 	long := "python -m http.server " + strings.Repeat("x", 80)
-	got := ProcessEntries([]*pb.WorkspaceProcess{
+	procs := []*pb.WorkspaceProcess{
 		{Workspace: "/w/shop", Process: &pb.Process{Id: 3, Command: "npm run dev"}},
-		{Workspace: "/w/blog", Process: &pb.Process{Id: 1, Command: long}},
+		{Workspace: "/w/blog", Process: &pb.Process{Id: 1, Command: long, Measured: true, CpuPercent: 4.2, MemoryBytes: 120 << 20}},
+		{Workspace: "/w/shop", Process: &pb.Process{Id: 4, Command: "node spin.js", Measured: true, CpuPercent: 99.5, MemoryBytes: 3 << 30, Flags: []string{"cpu", "left"}}},
 		{Workspace: "/w/gone"},
-	}, []Space{{Dir: "/w/shop", Name: "My shop"}})
-	require.Len(t, got, 2, "one without a process is skipped")
+	}
+	got := ProcessEntries(procs, []Space{{Dir: "/w/shop", Name: "My shop"}})
+	require.Len(t, got, 3, "one without a process is skipped")
 	assert.Equal(t, Entry{Title: "npm run dev", Icon: DotRunning, Children: []Entry{
 		{Title: "In My shop (#3)", Icon: IconFolder, Disabled: true},
+		{Title: "Show in Blitz", Icon: IconEye, Action: Action{Kind: ShowProcess, Workspace: "/w/shop", ID: 3}},
 		{Title: "Stop", Icon: IconStop, Action: Action{Kind: StopProcess, Workspace: "/w/shop", ID: 3}},
-	}}, got[0])
+	}}, got[0], "not measured: nothing to say of its use")
 	assert.LessOrEqual(t, len([]rune(got[1].Title)), processTitle, "cut to fit")
 	assert.Equal(t, "In blog (#1)", got[1].Children[0].Title, "a workspace the app hasn't open: its folder's name")
+	assert.Equal(t, Entry{Title: "4% CPU · 120 MB", Disabled: true}, got[1].Children[1], "what it uses")
+	assert.Equal(t, DotFailed, got[2].Icon, "flagged")
+	assert.Equal(t, "Busy, Left running · 100% CPU · 3.0 GB", got[2].Children[1].Title, "why")
 
-	assert.Equal(t, "Processes", ProcessesTitle(0))
-	assert.Equal(t, "Processes (1 running)", ProcessesTitle(1))
-	assert.Equal(t, "Processes (2 running)", ProcessesTitle(2))
+	tests := map[string]struct {
+		procs []*pb.WorkspaceProcess
+		want  string
+	}{
+		"none":         {want: "Processes"},
+		"one":          {procs: procs[:1], want: "Processes (1 running)"},
+		"two":          {procs: procs[:2], want: "Processes (2 running)"},
+		"some flagged": {procs: procs[:3], want: "Processes (3 running, 1 flagged)"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) { assert.Equal(t, tt.want, ProcessesTitle(tt.procs)) })
+	}
+	assert.Equal(t, "blitz://processes?dir=%2Fw%2Fshop&id=3", ProcessesLink("/w/shop", 3))
+	assert.Equal(t, "blitz://processes?dir=%2Fw%2Fshop", ProcessesLink("/w/shop", 0))
 }

@@ -16,6 +16,7 @@ package tray
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -58,6 +59,8 @@ type fakeExtras struct {
 	pb.UnimplementedWorkspaceServiceHandler
 	mu    sync.Mutex
 	asked []string
+	// noWorkers fails ListWorkers, as a workspace's trouble can.
+	noWorkers bool
 }
 
 func (f *fakeExtras) StartBackground(_ context.Context, r *connect.Request[pb.StartBackgroundRequest]) (*connect.Response[pb.StartBackgroundResponse], error) {
@@ -106,6 +109,11 @@ func (f *fakeExtras) SetMCPServerEnabled(_ context.Context, r *connect.Request[p
 }
 
 func (f *fakeExtras) ListWorkers(context.Context, *connect.Request[pb.ListWorkersRequest]) (*connect.Response[pb.ListWorkersResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.noWorkers {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("lstat /gone: no such file or directory"))
+	}
 	return connect.NewResponse(&pb.ListWorkersResponse{Workers: []*pb.Worker{{Workspace: "/w", Name: "nightly"}}}), nil
 }
 
@@ -157,6 +165,20 @@ func TestFetchExtrasAndDo(t *testing.T) {
 	assert.Equal(t, "r1", e.Runs[0].Id)
 	assert.Equal(t, "npm run dev", e.Processes[0].Process.Command)
 
+	// A list the service can't give is left empty; the rest still come.
+	f.mu.Lock()
+	f.noWorkers = true
+	f.mu.Unlock()
+	e, err = FetchExtras(ctx, sock)
+	require.NoError(t, err, "one list's trouble doesn't hide the menu")
+	assert.Empty(t, e.Workers)
+	assert.Equal(t, "github", e.MCP[0].Name)
+	assert.Equal(t, "r1", e.Runs[0].Id)
+	assert.Equal(t, "npm run dev", e.Processes[0].Process.Command)
+	f.mu.Lock()
+	f.noWorkers = false
+	f.mu.Unlock()
+
 	var opened string
 	open := func(link string) error { opened = link; return nil }
 	for _, a := range []Action{
@@ -178,6 +200,8 @@ func TestFetchExtrasAndDo(t *testing.T) {
 	assert.Equal(t, "blitz://workers?dir=%2Fw", opened)
 	require.NoError(t, Do(ctx, sock, Action{Kind: ShowWorkflow, Workspace: "/w", Name: "brief", RunID: "f1"}, open))
 	assert.Equal(t, "blitz://workflow?dir=%2Fw&run=f1&workflow=brief", opened)
+	require.NoError(t, Do(ctx, sock, Action{Kind: ShowProcess, Workspace: "/w", ID: 3}, open))
+	assert.Equal(t, "blitz://processes?dir=%2Fw&id=3", opened)
 
 	// The runs are followed as they change; the stream's end says none, and it's asked again.
 	seen := make(chan []*pb.WorkflowRun, 8)

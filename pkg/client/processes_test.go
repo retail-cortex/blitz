@@ -63,13 +63,38 @@ func TestRemoteBackgroundProcesses(t *testing.T) {
 	_, err = other.workspaces.KillProcess(context.Background(), killRequest(other, running[0].ID))
 	assert.ErrorIs(t, fromAPI(err), api.ErrUnknownProcess, "another client's process killed: %v", err)
 
+	// The user's own view (/processes): every session's, here or
+	// everywhere, its output and its stop.
+	for _, everywhere := range []bool{false, true} {
+		all, err := other.RunningProcesses(everywhere)
+		require.NoError(t, err)
+		require.Len(t, all, 1, "everywhere=%v", everywhere)
+		assert.Equal(t, sess.ID, all[0].Process.Session)
+	}
+	mine, err := r.RunningProcesses(false)
+	require.NoError(t, err)
+	_, info, err := other.ProcessOutputIn(mine[0].Workspace, running[0].ID)
+	require.NoError(t, err)
+	assert.True(t, info.Running)
+	_, _, err = other.ProcessOutputIn(mine[0].Workspace, 99)
+	assert.ErrorIs(t, err, api.ErrUnknownProcess)
+	_, err = other.StopProcessIn(mine[0].Workspace, 99)
+	assert.ErrorIs(t, err, api.ErrUnknownProcess)
+	away := &Remote{dir: t.TempDir(), sessions: r.sessions, workspaces: r.workspaces, warn: func(string) {}}
+	none, err := away.RunningProcesses(false)
+	require.NoError(t, err)
+	assert.Empty(t, none, "another workspace's")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	assert.ErrorIs(t, pm.WaitAll(ctx), context.Canceled, "waiting stops with the context")
 
-	pm.Shutdown()
-	assert.Empty(t, pm.Running(), "still running after Shutdown")
+	stopped, err := other.StopProcessIn(mine[0].Workspace, running[0].ID)
+	require.NoError(t, err)
+	assert.False(t, stopped.Running, "another client's stop, as the user's")
+	assert.Empty(t, pm.Running())
 	assert.NoError(t, pm.WaitAll(context.Background()))
+	pm.Shutdown()
 }
 
 // !cmd run by an attached CLI lands in the service workspace's audit log.

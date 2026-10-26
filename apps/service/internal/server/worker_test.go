@@ -501,6 +501,14 @@ func TestAllWorkersOverTheAPI(t *testing.T) {
 	s.sched.rescan(ctx) // a gone folder is skipped, said once
 	s.sched.rescan(ctx)
 	assert.True(t, s.sched.missing[gone], "the gone folder is noted")
+	// Every workspace's workers (the tray's list): the gone folder is left out.
+	enabled, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{}))
+	require.NoError(t, err, "a gone folder doesn't fail the list")
+	require.Len(t, enabled.Msg.Workers, 1)
+	assert.Equal(t, "deps", enabled.Msg.Workers[0].Name)
+	_, err = c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: gone}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, code, "asked for by name, it still fails: %v", info)
 
 	all, err := c.ListAllWorkers(ctx, connect.NewRequest(&pb.ListAllWorkersRequest{}))
 	require.NoError(t, err)
@@ -553,7 +561,7 @@ func TestAllWorkersOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, all.Msg.Workspaces, 2, "the gone folder is forgotten: %v", all.Msg.Workspaces)
 	_, err = c.ForgetWorkspaceWorkers(ctx, connect.NewRequest(&pb.ForgetWorkspaceWorkersRequest{Workspace: "relative"}))
-	code, info := errorReason(t, err)
+	code, info = errorReason(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, code, "%v", info)
 }
 

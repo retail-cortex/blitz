@@ -83,7 +83,13 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 
 Background processes never outlive Blitz. Exiting with processes running asks whether to kill them or wait; a second Ctrl+C force-quits. Each process group is guarded so it's killed if Blitz dies, even by `SIGKILL`.
 
-**From the tray.** The tray's **Processes** menu lists every background process an agent started that's still running, in every open workspace, each with its workspace and **Stop**, so a dev server or a watcher left behind can be found and ended without opening the chat that started it.
+**Ones that look bad.** Blitz watches what each process and its children use, and flags one that has kept a core busy for 2 minutes (**Busy**), that's over 2 GB or keeps growing (**Memory**), or whose chat was deleted or has been quiet for 2 hours (**Left running**). A flag only tells you; nothing is stopped for you. Change the limits under `[processes]` (`cpu_percent`, `busy_for`, `memory_mb`, `growth_window`, `left_after`). CPU and memory aren't measured on Windows.
+
+**In the app.** The board icon at the far left of the status bar turns green while processes run (amber when one is flagged, grey when none do); hover over it for how many. Click it for the **Processes** menu: each process under its workspace, with how long it has run, its CPU and memory and its flags. Hover over one for **Stop**, or choose **Stop flagged** to end every flagged one. Pick one, or **Output and details…**, to read its last lines of output.
+
+**In the CLI.** `/processes` lists this workspace's (`/processes all` every workspace's), `/processes log <id>` shows one's output, and `/processes stop <id>`, `/processes stop flagged` or `/processes stop all` stops them.
+
+**From the tray.** The tray's **Processes** menu lists every background process an agent started that's still running, in every open workspace, each with its workspace, what it uses, **Show in Blitz** and **Stop**, so a dev server or a watcher left behind can be found and ended without opening the chat that started it. Its title counts the flagged ones.
 
 ## Secrets
 
