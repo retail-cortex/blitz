@@ -1049,7 +1049,9 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-stream { height: 100%; }
 .run-stream > .select { align-self: flex-start; max-width: 320px; }
 .run-stream-text { flex: 1; max-height: none; min-height: 80px; }
-.ok-text, .field .supporting.ok-text { color: var(--md-success, #2e7d32); }
+.ok-text { color: var(--md-success, #2e7d32); }
+/* A field's "it works" line: the theme's green, readable in dark themes too. */
+.field .supporting.ok-text { color: var(--hl-string); }
 /* Several chosen in the room of one field: a button, then a list of check boxes. */
 .multi-select { display: block; }
 .multi-select-button { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; cursor: pointer; }
@@ -1057,10 +1059,17 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .multi-select-menu { max-width: min(360px, calc(100vw - 32px)); }
 .multi-select-menu .multi-select-on { color: var(--md-primary); }
 .multi-select-filter { margin: 4px 8px 6px; width: calc(100% - 16px); }
-/* Studio's kinds are icons only (their names on hover): the menu bar's Studio menu names them. */
+/* Studio's kinds are icons (their names on hover) unless there's room for
+   their names: a wide drawer names them, and a workflow's canvas folds
+   them back to icons. */
 .settings-drawer.studio-drawer .settings-nav { width: 48px; }
 .studio-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
 .studio-drawer .settings-nav-label { display: none; }
+@container drawer (min-width: 1200px) {
+  .settings-drawer.studio-drawer:not(.is-compact) .settings-nav { width: 184px; }
+  .studio-drawer:not(.is-compact) .settings-nav .list-item { justify-content: flex-start; padding-inline: 12px; }
+  .studio-drawer:not(.is-compact) .settings-nav-label { display: inline; }
+}
 .studio-nav-line { height: 1px; margin: 6px 10px; background: var(--md-outline-variant); flex: none; }
 .studio-drawer.is-compact .settings { gap: 12px; }
 /* Studio's panes fill the drawer (Settings keeps its measure). */

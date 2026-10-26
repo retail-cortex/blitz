@@ -45,7 +45,8 @@ const when = (t?: { seconds: bigint; nanos: number }) => (t ? new Date(ms(t)).to
 
 /**
  * The Overview: the workspace's score and each kind's, its runs, its eval
- * coverage, what needs attention, and each kind's items; Re-check judges
+ * coverage, what needs attention, and a kind's items once its ring is
+ * picked (its card, closed again from its head); Re-check judges
  * what changed (Re-check all, everything), after saying what it costs.
  */
 export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: { workspace: string; health?: WorkspaceHealth; onOpen: (kind: HealthKind, name: string, path: string) => void; onClose: () => void; onStarted: () => void }) {
@@ -248,7 +249,8 @@ export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: 
           )}
         </Card>
 
-        {healthKinds.map((k) => (
+        {/* A kind's card shows once its ring opens it: closed, the ring above says it all. */}
+        {healthKinds.filter((k) => open.includes(k)).map((k) => (
           <KindCard key={k} kind={k} items={items.filter((it) => it.kind === k)} score={health.byKind[k] ?? 0} open={open.includes(k)} onToggle={toggle} shown={shown} onShow={setShown} onOpen={onOpen}
             onRejudge={(key) => void ask({ items: [key], force: true })}
             onRecheck={() => void ask({ kinds: [k], force: false })}
