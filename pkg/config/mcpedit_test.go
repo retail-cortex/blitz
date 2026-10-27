@@ -212,3 +212,63 @@ func TestWorkspaceMCPServers(t *testing.T) {
 	assert.False(t, got["fs"].Disabled, "on again")
 	assert.NotContains(t, got, "jira")
 }
+
+// SetMCPServerEnabled sets a workspace's own server's disabled, or a
+// global one's off entry there; MakeMCPServerGlobal moves one, refusing a
+// name the global settings have.
+func TestMCPServerEnabledAndMakeGlobal(t *testing.T) {
+	home := isolateConfigEnv(t)
+	path := filepath.Join(home, ".blitz", ".env.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(mcpDoc), 0o600))
+	ws := t.TempDir()
+	_, err := AddMCPServer("", ws, MCPServerConfig{Name: "jira", URL: "https://mcp.example/jira"})
+	require.NoError(t, err)
+	_, err = AddMCPServer("", ws, MCPServerConfig{Name: "fs", Command: "local-fs"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name, server string
+		on           bool
+		wantOff      []string
+		wantOwnOff   bool
+	}{
+		{name: "a global one, off here", server: "db", wantOff: []string{"db"}},
+		{name: "its own, disabled in its file", server: "jira", wantOff: []string{"db"}, wantOwnOff: true},
+		{name: "the global one on again", server: "db", on: true, wantOff: []string{}, wantOwnOff: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := SetMCPServerEnabled("", ws, tc.server, tc.on)
+			require.NoError(t, err)
+			own, off, _, err := ScopeMCP("", ws)
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tc.wantOff, off)
+			for _, s := range own {
+				if s.Name == "jira" {
+					assert.Equal(t, tc.wantOwnOff, s.Disabled)
+				}
+			}
+		})
+	}
+
+	_, err = MakeMCPServerGlobal("", ws, "fs")
+	assert.ErrorIs(t, err, ErrMCPServerExists, "the global settings have an fs")
+	_, err = MakeMCPServerGlobal("", ws, "nope")
+	assert.ErrorIs(t, err, ErrNoMCPServer)
+	_, err = MakeMCPServerGlobal("", "", "jira")
+	assert.Error(t, err)
+	gpath, err := MakeMCPServerGlobal("", ws, "jira")
+	require.NoError(t, err)
+	assert.Equal(t, path, gpath)
+	own, _, _, err := ScopeMCP("", ws)
+	require.NoError(t, err)
+	assert.Len(t, own, 1, "moved out of the workspace")
+	assert.Contains(t, func() []string {
+		var n []string
+		for _, s := range servers(t) {
+			n = append(n, s.Name)
+		}
+		return n
+	}(), "jira")
+}

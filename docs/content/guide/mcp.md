@@ -34,6 +34,8 @@ blitz mcp login docs
 | `blitz mcp remove <name>` | Remove it |
 | `blitz mcp login <name>`, `logout <name>` | Sign in to an HTTP server in the browser (OAuth), or forget the sign-in |
 | `blitz doctor --online` | Connects to each server and counts its tools |
+| `blitz mcp … --workspace` (`-w`) | Any of the above for this workspace's own servers (`--dir`, else the current directory): `list -w` shows every server it runs with its scope, `disable -w` on a global one turns it off here alone |
+| `blitz mcp make-global <name>` | Moves one of this workspace's servers to the global settings, for every workspace |
 
 In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Connectors › MCP servers**, and a workspace's own in **Studio › Connectors** ([one workspace's servers](#one-workspaces-servers)).
 
@@ -82,7 +84,15 @@ url = "https://mcp.figma.example/mcp"
 off = ["github"]   # global servers this workspace doesn't run
 ```
 
-They add to the global ones; one with a global server's name stands in for it in that workspace.
+They add to the global ones; one with a global server's name stands in for it in that workspace. From the terminal, add `--workspace` (`-w`) to any `blitz mcp` command:
+
+```bash
+cd ~/code/shop
+blitz mcp add -w figma https://mcp.figma.example/mcp   # this workspace only
+blitz mcp disable -w github                            # a global server, off here alone
+blitz mcp list -w                                      # every server it runs, with its scope
+blitz mcp make-global figma                            # now every workspace has it
+```
 
 ## Servers a project brings
 

@@ -192,6 +192,58 @@ func SetMCPServerOff(prefixDir, workspace, name string, off bool) (string, error
 	return editConfigFile(dir, func(doc string) string { return setTOMLKey(doc, "mcp", "off", tomlList(list)) }, func(map[string]any) error { return nil })
 }
 
+// SetMCPServerEnabled turns a server on or off where it's configured:
+// in the global settings (workspace ""), or a workspace's own; with a
+// workspace, a global server (not one of its own) is turned off or on in
+// that workspace alone (SetMCPServerOff).
+func SetMCPServerEnabled(prefixDir, workspace, name string, on bool) (string, error) {
+	if workspace != "" {
+		own, _, _, err := ScopeMCP(prefixDir, workspace)
+		if err != nil {
+			return "", err
+		}
+		if !slices.ContainsFunc(own, func(s MCPServerConfig) bool { return s.Name == name }) {
+			return SetMCPServerOff(prefixDir, workspace, name, !on)
+		}
+	}
+	return SetMCPServerDisabled(prefixDir, workspace, name, !on)
+}
+
+// ErrMCPServerExists means the global settings have a server by that name.
+var ErrMCPServerExists = errors.New("an MCP server by that name is already configured")
+
+// MakeMCPServerGlobal moves a workspace's own server to the global
+// settings, for every workspace: added there first, so a failure leaves
+// it where it was. It returns the global settings file.
+func MakeMCPServerGlobal(prefixDir, workspace, name string) (string, error) {
+	if workspace == "" {
+		return "", errors.New("make global moves a workspace's server: none given")
+	}
+	own, _, _, err := ScopeMCP(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
+	i := slices.IndexFunc(own, func(s MCPServerConfig) bool { return s.Name == name })
+	if i < 0 {
+		return "", fmt.Errorf("%w in the workspace: %s", ErrNoMCPServer, name)
+	}
+	global, _, _, err := ScopeMCP(prefixDir, "")
+	if err != nil {
+		return "", err
+	}
+	if slices.ContainsFunc(global, func(s MCPServerConfig) bool { return s.Name == name }) {
+		return "", fmt.Errorf("%w: %s", ErrMCPServerExists, name)
+	}
+	path, err := AddMCPServer(prefixDir, "", own[i])
+	if err != nil {
+		return "", err
+	}
+	if _, err := RemoveMCPServer(prefixDir, workspace, name); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // ScopeMCP reads one scope's file alone (the global settings, or a
 // workspace's own): its servers as written, its off list (a workspace's)
 // and its path. A file that isn't there has none.
