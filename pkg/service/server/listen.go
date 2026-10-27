@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -36,8 +37,24 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Durat
 	srv.Protocols = new(http.Protocols)
 	srv.Protocols.SetHTTP1(true)
 	srv.Protocols.SetUnencryptedHTTP2(true)
+	return serveUntil(ctx, srv, func() error { return srv.Serve(l) }, grace)
+}
+
+// ServeTLS serves h on l over TLS with cfg (HTTP/2, and HTTP/1.1 for
+// clients without it), as Serve does: the network listener of a service
+// others reach (spec_enterprise_053 EN-03).
+func ServeTLS(ctx context.Context, l net.Listener, h http.Handler, cfg *tls.Config, grace time.Duration) error {
+	srv := &http.Server{Handler: h, TLSConfig: cfg.Clone(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: idleTimeout}
+	srv.Protocols = new(http.Protocols)
+	srv.Protocols.SetHTTP1(true)
+	srv.Protocols.SetHTTP2(true)
+	return serveUntil(ctx, srv, func() error { return srv.ServeTLS(l, "", "") }, grace)
+}
+
+// serveUntil runs start until it fails or ctx is done, then shuts srv down.
+func serveUntil(ctx context.Context, srv *http.Server, start func() error, grace time.Duration) error {
 	done := make(chan error, 1)
-	go func() { done <- srv.Serve(l) }()
+	go func() { done <- start() }()
 	select {
 	case err := <-done:
 		return err

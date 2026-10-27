@@ -8,8 +8,8 @@ weight: 53
 | | |
 |---|---|
 | Status | **Draft** (the owner's request, 2026-10-27: "licensable closed source features that would include a configurable oAuth provider interface, … the ability for users to create and share workspaces, run jobs on schedules in the cloud and still access all of the current features") |
-| Source | `pkg/service` (the assembly: `service.go`), `pkg/service/server`, `tools/check_deps.sh` (EN-04); to come: `pkg/config` (`EnterpriseConfig`), pkg/enterprise (discovery, sign-in, the catalog cache), `pkg/engine/workers.go` (`runs_on`), `pkg/engine/gates` (checks on model messages), the desktop's Settings and model menu, `apps/cli` (`blitz enterprise`) |
-| Tests | `pkg/service/service_test.go`, `pkg/service/server` (its tests, moved with it); to come |
+| Source | `pkg/service` (the assembly: `service.go`; `network.go`: the network listener, `Authenticator`, `Authorizer`), `pkg/service/server` (`listen.go`: `ServeTLS`), `tools/check_deps.sh` (EN-04); to come: `pkg/config` (`EnterpriseConfig`), pkg/enterprise (discovery, sign-in, the catalog cache), `pkg/engine/workers.go` (`runs_on`), `pkg/engine/gates` (checks on model messages), the desktop's Settings and model menu, `apps/cli` (`blitz enterprise`) |
+| Tests | `pkg/service/service_test.go`, `pkg/service/network_test.go` (`TestRunNetwork`, `TestNetworkCheck`, `TestGuard`), `pkg/service/server` (its tests, moved with it); to come |
 | Depends on | [spec_service_021](spec_service_021.md) (one service, many clients), [spec_workers_023](spec_workers_023.md) (jobs and their schedules), [spec_secrets_039](spec_secrets_039.md) (the keychain), [spec_gates_041](spec_gates_041.md) (rules and guardrails), [spec_studio_040](spec_studio_040.md) (what a workspace's `.agents` folder holds) |
 
 ## 1. Purpose
@@ -21,7 +21,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 ## 2. The service, assembled from `pkg/`
 
 - **EN-01** *Built.* The service's assembly is in `pkg/service` (moved from apps/service/internal/daemon and apps/service/internal/server): `service.Run(ctx, service.Options)` opens each workspace a client names and serves it; `pkg/service/server` has the Connect handlers; `pkg/service/servicetest` runs it in other packages' tests. `apps/service/main.go` is the flags and that call. Another Go module can't import internal/, so this is what lets the enterprise service reuse the whole service rather than copy it.
-- **EN-02** `service.Options` takes the extension points, each an interface in `pkg/` with an open-source default that keeps today's behaviour:
+- **EN-02** `service.Options` takes the extension points, each an interface in `pkg/` with an open-source default that keeps today's behaviour. `Authenticator` and `Authorizer` are built (`pkg/service/network.go`, with EN-03); each of the others is added with the feature that first uses it, so none is an interface nothing calls:
 
   | Point | What it decides | Open-source default |
   |---|---|---|
@@ -33,7 +33,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
   | `Telemetry` | usage counts sent elsewhere | none |
   | `WorkspaceStore` | where a workspace's files come from and go back to | the local folder |
 
-- **EN-03** A TCP listener with TLS (the page server's HTTP/2 stack), beside the Unix socket, used only when an `Authenticator` other than the default is given: every request then needs a bearer token the `Authenticator` accepts. The open-source build never listens on TCP for the API.
+- **EN-03** *Built.* `service.Options.Network` serves the API on a second listener, beside the Unix socket, over TLS (HTTP/2, and HTTP/1.1; `server.ServeTLS`). It's used only when the program running the service sets it (blitzd never does), and it needs a listener, a certificate and an `Authenticator`. Every request on it needs credentials the `Authenticator` accepts, else `401` with `{"code": "unauthenticated", …}`, and the `Authorizer` (when given) must allow its procedure, else `403` with `forbidden`. The caller is in the request's context (`service.CallerFrom`). The socket serves its owner as before.
 - **EN-04** *Built.* `//tools:check_deps` checks that nothing in this repository imports `github.com/retail-cortex/blitz-enterprise`, and that the CLI, the tray and the Electron app's tools don't reach `pkg/service`.
 
 ## 3. Connecting to an organization's service

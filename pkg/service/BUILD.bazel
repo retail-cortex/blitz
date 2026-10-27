@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "service",
-    srcs = ["service.go"],
+    srcs = [
+        "network.go",
+        "service.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/service",
     visibility = ["//visibility:public"],
     deps = [
@@ -33,7 +36,10 @@ go_library(
 go_test(
     name = "service_test",
     size = "small",
-    srcs = ["service_test.go"],
+    srcs = [
+        "network_test.go",
+        "service_test.go",
+    ],
     embed = [":service"],
     deps = [
         "//pkg/config",

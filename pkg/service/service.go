@@ -18,9 +18,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -66,6 +68,10 @@ type Options struct {
 	// bare one (spec_service_021 SVC-57). A private service has its
 	// terminal's already, and tests' services keep theirs.
 	AdoptPath bool
+	// Network serves the API to other machines too, beside the socket:
+	// for a program that runs the service for many people. Nil for
+	// blitzd, which never listens on the network.
+	Network *Network
 }
 
 // schedules reports whether the service runs the workers' schedules.
@@ -114,6 +120,11 @@ var adoptUserPath = shellpath.AdoptUserPath
 func Run(ctx context.Context, o Options) error {
 	if o.Socket == "" {
 		o.Socket = socket.DefaultSocket()
+	}
+	if o.Network != nil {
+		if err := o.Network.check(); err != nil {
+			return err
+		}
 	}
 	cfg, err := config.Load(o.Config)
 	if err != nil {
@@ -179,7 +190,25 @@ func Run(ctx context.Context, o Options) error {
 	}
 	fmt.Fprintf(os.Stderr, "Blitz service listening on %s\n", o.Socket)
 	slog.Info("serve", "socket", o.Socket)
-	return server.Serve(ctx, l, s.Handler(), grace)
+	netDone := make(chan error, 1)
+	if n := o.Network; n != nil {
+		slog.Info("serve", "network", n.Listener.Addr().String())
+		go func() {
+			err := server.ServeTLS(ctx, n.Listener, n.guard(s.Handler()), n.TLS, grace)
+			if err != nil && ctx.Err() == nil {
+				stop() // the socket's service stops with it
+			}
+			netDone <- err
+		}()
+	} else {
+		netDone <- nil
+	}
+	err = server.Serve(ctx, l, s.Handler(), grace)
+	stop()
+	if nerr := <-netDone; nerr != nil && !errors.Is(nerr, http.ErrServerClosed) {
+		return errors.Join(err, fmt.Errorf("network listener: %w", nerr))
+	}
+	return err
 }
 
 // watchEvery is how often watch looks at the service's idle time.
