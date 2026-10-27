@@ -141,8 +141,16 @@ func BuiltinDefault(b Builtin) Guardrail {
 }
 
 // DefaultCommands are the commands the limits guardrail refuses without a
-// file: force pushes, and deleting the whole disk or home folder.
-var DefaultCommands = []string{"git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"}
+// file: a force push (--force, -f or a +refspec; --force-with-lease, which
+// won't overwrite commits it hasn't seen, is allowed), deleting the whole
+// disk or the home folder (rm's flags in any order, each path on its own,
+// $HOME as ~, a folder's /* as the folder: CommandDenied), formatting a
+// disk, and writing over one.
+var DefaultCommands = []string{
+	"git push* --force", "git push* --force *", "git push* -f", "git push* -f *", "git push* +*",
+	"rm -rf /", "rm -rf ~", "rm -rf ~/", "rm -r /", "rm -r ~", "rm -r ~/",
+	"mkfs*", "dd *of=/dev/sd*", "dd *of=/dev/disk*", "dd *of=/dev/nvme*",
+}
 
 // guardMeta is a guardrail file's front matter.
 type guardMeta struct {
@@ -326,20 +334,106 @@ func DomainAllowed(raw string, domains []string) bool {
 	return false
 }
 
-// CommandDenied is the glob in denied that the shell command matches
-// ("" for none), matched against the whole command with its spaces
-// collapsed.
+// CommandDenied is the first of denied (globs: * is anything, slashes
+// too; ? one character) that a shell line matches, "" when none does. A
+// glob is matched against the whole line, its spaces made single, and
+// against each command it runs: split at ;, &&, ||, | and new lines,
+// with sudo, env and VAR=value before it dropped. An rm is matched as
+// "rm -rf <path>" (or -r, -f) once per path, whatever order or spelling
+// its flags have (-fr, -R -f, --recursive --force), $HOME and ${HOME}
+// read as ~ and a trailing /* as the folder itself; so "rm -rf ~/"
+// refuses "sudo rm -fr $HOME/*" too.
 func CommandDenied(command string, denied []string) string {
-	c := strings.Join(strings.Fields(command), " ")
+	line := strings.Join(strings.Fields(command), " ")
+	candidates := append([]string{line}, commandParts(command)...)
 	for _, g := range denied {
 		g = strings.Join(strings.Fields(g), " ")
-		// A command isn't a path: * is anything, slashes too.
 		pattern := strings.NewReplacer(`\*`, ".*", `\?`, ".").Replace(regexp.QuoteMeta(g))
-		if re, err := regexp.Compile("^" + pattern + "$"); err == nil && re.MatchString(c) {
-			return g
+		re, err := regexp.Compile("^" + pattern + "$")
+		if err != nil {
+			continue
+		}
+		for _, c := range candidates {
+			if re.MatchString(c) {
+				return g
+			}
 		}
 	}
 	return ""
+}
+
+// commandSep splits a shell line into the commands it runs.
+var commandSep = regexp.MustCompile(`\s*(?:&&|\|\||;|\||\n)\s*`)
+
+// envAssign is a VAR=value before a command.
+var envAssign = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+
+// commandParts are the commands a shell line runs, as CommandDenied
+// matches them.
+func commandParts(line string) []string {
+	var out []string
+	for _, part := range commandSep.Split(line, -1) {
+		f := strings.Fields(part)
+		for len(f) > 0 && (f[0] == "sudo" || f[0] == "env" || f[0] == "command" || f[0] == "exec" || envAssign.MatchString(f[0])) {
+			f = f[1:]
+		}
+		if len(f) == 0 {
+			continue
+		}
+		if f[0] == "rm" || strings.HasSuffix(f[0], "/rm") {
+			out = append(out, rmParts(f[1:])...)
+			continue
+		}
+		out = append(out, strings.Join(f, " "))
+	}
+	return out
+}
+
+// rmParts is an rm's arguments as one "rm -rf <path>" (-r, -f, or no
+// flags) per path: the recursive and force flags in one spelling, the
+// others dropped, quotes taken off, $HOME read as ~ and a trailing /* as
+// the folder.
+func rmParts(args []string) []string {
+	var recursive, force, ended bool
+	var paths []string
+	for _, a := range args {
+		switch {
+		case ended || !strings.HasPrefix(a, "-") || a == "-":
+			paths = append(paths, a)
+		case a == "--":
+			ended = true
+		case a == "--recursive":
+			recursive = true
+		case a == "--force":
+			force = true
+		case strings.HasPrefix(a, "--"):
+			// --no-preserve-root, --verbose…: not part of what's matched
+		default:
+			recursive = recursive || strings.ContainsAny(a, "rR")
+			force = force || strings.Contains(a, "f")
+		}
+	}
+	flags := ""
+	if recursive {
+		flags += "r"
+	}
+	if force {
+		flags += "f"
+	}
+	prefix := "rm "
+	if flags != "" {
+		prefix += "-" + flags + " "
+	}
+	home := strings.NewReplacer(`"`, "", "'", "", "${HOME}", "~", "$HOME", "~")
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = home.Replace(p)
+		if strings.HasSuffix(p, "/*") {
+			p = strings.TrimSuffix(p, "*")
+		}
+		out = append(out, prefix+p)
+	}
+	return out
 }
 
 // guardInstruction is the judge's brief for a custom guardrail.
@@ -502,3 +596,91 @@ func limitsFields(spec GuardrailSpec) map[string]any {
 // DeleteGuardrail removes guardrail name from dir (a built-in's file: it
 // runs with its defaults again).
 func DeleteGuardrail(dir, name string) error { return Delete(dir, name) }
+
+// actionMeaning says what each action does, for Describe.
+var actionMeaning = map[string]string{
+	Warn:   "warn: lets it through, telling the user (and, on a tool result, the agent) what was found",
+	Block:  "block: stops it (withholds the result or answer, or refuses the call)",
+	Redact: "redact: masks what was found and lets the rest through",
+}
+
+// Describe is a built-in guardrail as it runs, in words: where it runs,
+// what it checks (its patterns or limits, with this file's changes),
+// its action and what that does, and the actions it could take instead.
+// It's what the dashboard's judge reads of a built-in (a file holds
+// only what it changes), so it says everything the defaults leave out.
+// A custom guardrail's file says it all: "" for one.
+func Describe(g Guardrail) string {
+	b, ok := BuiltinOf(g.Builtin)
+	if !ok {
+		return ""
+	}
+	var w strings.Builder
+	line := func(format string, args ...any) { fmt.Fprintf(&w, format+"\n", args...) }
+	line("builtin: %s", b.ID)
+	agents := "every agent"
+	if len(g.Agents) > 0 {
+		agents = strings.Join(g.Agents, ", ")
+	}
+	switch b.ID {
+	case BuiltinInjection:
+		tools := "the tools that bring in outside content: web_fetch, web_search, the browser and MCP servers' tools"
+		if len(g.Tools) > 0 {
+			tools = strings.Join(g.Tools, ", ")
+		}
+		line("runs: on what %s bring back, before the model reads it (stage %s), for %s", tools, StageToolResult, agents)
+		line("checks: text aimed at the agent as instructions (prompt injection), by these case-insensitive patterns:")
+		for _, re := range injectionRE {
+			line("  - %s", strings.TrimPrefix(re.String(), "(?i)"))
+		}
+		if g.Judge {
+			line("  a match is confirmed by the judge model first: quoted or discussed injection passes")
+		} else {
+			line("  a match acts at once (judge: false; true has the judge model confirm it first)")
+		}
+	case BuiltinSecrets:
+		line("runs: on every piece of the agent's answer as it streams, before the user sees it (stage %s), for %s", StageOutput, agents)
+		line("checks: credentials in the answer: private keys (PEM), AWS access key ids, OpenAI and Anthropic keys, Google API keys, GitHub tokens, Slack tokens, JWTs, password/secret/token/api_key assignments, and the values of the workspace's own secrets")
+		if g.PII {
+			line("  and personal data: email addresses, phone numbers, card numbers and US social security numbers (pii: true)")
+		} else {
+			line("  personal data isn't masked (pii: false; true masks emails, phone, card and social security numbers too)")
+		}
+	case BuiltinLimits:
+		line("runs: before every tool call (stage %s), and on each turn's model calls and cost, for %s", StageAction, agents)
+		l := g.Limits
+		line("checks:")
+		if len(l.Commands) > 0 {
+			line("  - shell commands refused (globs on the whole line and on each command in it, sudo and env dropped, rm's flags in any order and each path on its own):")
+			for _, c := range l.Commands {
+				line("      %s", c)
+			}
+		} else {
+			line("  - shell commands: none refused")
+		}
+		limit := func(name string, set bool, value string) {
+			if set {
+				line("  - %s: %s", name, value)
+			} else {
+				line("  - %s: no limit", name)
+			}
+		}
+		limit("cost per turn", l.MaxCostUSD > 0, fmt.Sprintf("$%.2f", l.MaxCostUSD))
+		limit("model calls per turn", l.MaxTurns > 0, fmt.Sprint(l.MaxTurns))
+		limit("files changed per turn", l.MaxFilesChanged > 0, fmt.Sprint(l.MaxFilesChanged))
+		limit("domains web_fetch and the browser may reach", len(l.AllowedDomains) > 0, strings.Join(l.AllowedDomains, ", "))
+	}
+	line("action: %s", actionMeaning[cmp.Or(g.Action, b.Action)])
+	others := slices.DeleteFunc(slices.Clone(b.Actions), func(a string) bool { return a == cmp.Or(g.Action, b.Action) })
+	if len(others) > 0 {
+		var alt []string
+		for _, a := range others {
+			alt = append(alt, actionMeaning[a])
+		}
+		line("other actions it can take: %s", strings.Join(alt, "; "))
+	}
+	if g.Off {
+		line("enabled: false (switched off: it checks nothing)")
+	}
+	return w.String()
+}

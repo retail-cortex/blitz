@@ -7,7 +7,7 @@ weight: 44
 
 | | |
 |---|---|
-| Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17; HL-18 in the usability pass (2026-10-26). |
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17; HL-18 in the usability pass and HL-19 (2026-10-26). |
 | Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `apps/service/internal/server/health.go`, `apps/service/internal/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
 | Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `apps/service/internal/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
 | Depends on | [spec_studio_040](spec_studio_040.md) (the kinds), [spec_evals_042](spec_evals_042.md) (pass rates), [spec_workflows_043](spec_workflows_043.md) (receipts, schedules), [spec_gates_041](spec_gates_041.md) (the judge, rules, guardrails), [spec_background_agents_032](spec_background_agents_032.md) (jobs) |
@@ -60,6 +60,7 @@ The dashboard answers both. **Facts** come from what the workspace already recor
 - **HL-16** **Improve:** a fix becomes a request in the chat's composer ("Improve the workflow research-brief (…): <the fix>") and Studio closes: sent, the agent makes the change as any edit, reviewed as a diff with approvals, checkpoints and undo (*as built: one path for every kind instead of a draft dialog per editor*).
 - **HL-17** **Trends:** each grade and score ring shows its change since the last check, and the expanded cards a sparkline of the item's score over the kept history.
 - **HL-18** *2026-10-26 (the owner's usability pass).* A kind's card (its items, verdicts and Re-check) shows once its ring in the score card opens it, and goes when its head closes it: closed, the ring above says what the card's head did, so the Overview starts with the score, the runs, eval coverage and what needs attention. Which are open is still kept per workspace.
+- **HL-19** *2026-10-26 (the owner: built-in guardrails were graded D for want of their settings).* The judge reads a built-in guardrail as it runs (`gates.Describe`: where it runs, its patterns or limits, its action and the actions it has), after its file when it has one, since a file holds only what it changes; its hash includes that, so new defaults are judged again. A rule or guardrail with no decisions yet is said to have had nothing come its way, to be judged from what it checks, not marked down for it; a built-in records its checks once a turn (spec_gates_041 GT-30).
 
 ## 3. Order and checkpoints
 

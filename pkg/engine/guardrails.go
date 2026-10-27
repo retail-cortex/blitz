@@ -113,6 +113,16 @@ func (st *guardState) once(key string) bool {
 	return !said
 }
 
+// checked records, once per turn, that a built-in guardrail checked
+// something and let it through: its catches are recorded each time, so
+// without this a quiet one would look as if it never ran (the
+// dashboard's "decided n times").
+func (w *Workspace) checked(ctx context.Context, st *guardState, g gates.Guardrail) {
+	if st.once("checked:" + g.Name) {
+		w.auditGuardrail(ctx, g, "pass", "checked: nothing found")
+	}
+}
+
 // auditGuardrail records a guardrail's decision in the audit log.
 func (w *Workspace) auditGuardrail(ctx context.Context, g gates.Guardrail, decision, detail string) {
 	w.tools.Hooks().Audit().LogContext(ctx, audit.Entry{Kind: audit.KindGuardrail, Tool: "guardrail:" + g.Name, Detail: detail, Decision: decision})
@@ -185,6 +195,7 @@ func (g guard) ToolCall(ctx context.Context, c runtime.GuardCall) runtime.GuardV
 				v.Notices = append(v.Notices, v.Refusal)
 				return v
 			}
+			g.w.checked(ctx, st, gr)
 			continue
 		}
 		args, _ := json.Marshal(c.Args)
@@ -261,6 +272,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		if gr.Builtin == gates.BuiltinInjection {
 			phrase := gates.Injection(text)
 			if phrase == "" {
+				g.w.checked(ctx, st, gr)
 				continue
 			}
 			caught, reason = true, i18n.T("guardrail.injection_found", "phrase", phrase)
@@ -318,6 +330,7 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 		if gr.Builtin == gates.BuiltinSecrets {
 			masked, found := g.w.maskOutput(gr, cur)
 			if !found {
+				g.w.checked(ctx, st, gr)
 				continue
 			}
 			switch gr.Action {

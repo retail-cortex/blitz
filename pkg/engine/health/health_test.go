@@ -242,6 +242,7 @@ func TestPromptAndParse(t *testing.T) {
 	assert.Contains(t, long, "[…cut]")
 	assert.Equal(t, "- nothing recorded\n", Evidence(Item{Kind: KindAgent}))
 	assert.Contains(t, Evidence(Item{Kind: KindRule, Uses: 4, Fired: 1}), "decided 4 times")
+	assert.Contains(t, Evidence(Item{Kind: KindGuardrail}), "nothing has come its way", "no decisions isn't a fault")
 
 	v, err := Parse(it, "Here:\n```json\n{\"scores\": [{\"line\": \"a\", \"score\": 9, \"reason\": \" ok \"}, {\"line\": \"b\", \"score\": 0}], \"summary\": \"Fine.\", \"fixes\": [\"one\", \"\", \"two\", \"three\", \"four\"]}\n```")
 	require.NoError(t, err)

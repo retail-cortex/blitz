@@ -15,11 +15,11 @@
 package server
 
 import (
-	"os"
-	"path/filepath"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -185,12 +185,30 @@ func TestWorkspaceMCPServersOverTheAPI(t *testing.T) {
 	// A scope that isn't an absolute folder is refused by every call.
 	bad := "not/absolute"
 	for name, call := range map[string]func() error{
-		"list":        func() error { _, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{Workspace: bad})); return err },
-		"save":        func() error { _, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Workspace: bad, Server: &pb.MCPServerConfig{Name: "x", Command: "x"}})); return err },
-		"remove":      func() error { _, err := cfg.RemoveMCPServer(ctx, connect.NewRequest(&pb.RemoveMCPServerRequest{Workspace: bad, Name: "x"})); return err },
-		"enable":      func() error { _, err := cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Workspace: bad, Name: "x"})); return err },
-		"make global": func() error { _, err := cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: bad, Name: "x"})); return err },
-		"check key":   func() error { _, err := cfg.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Workspace: bad, Provider: "gemini", Key: "x"})); return err },
+		"list": func() error {
+			_, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{Workspace: bad}))
+			return err
+		},
+		"save": func() error {
+			_, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Workspace: bad, Server: &pb.MCPServerConfig{Name: "x", Command: "x"}}))
+			return err
+		},
+		"remove": func() error {
+			_, err := cfg.RemoveMCPServer(ctx, connect.NewRequest(&pb.RemoveMCPServerRequest{Workspace: bad, Name: "x"}))
+			return err
+		},
+		"enable": func() error {
+			_, err := cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Workspace: bad, Name: "x"}))
+			return err
+		},
+		"make global": func() error {
+			_, err := cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: bad, Name: "x"}))
+			return err
+		},
+		"check key": func() error {
+			_, err := cfg.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Workspace: bad, Provider: "gemini", Key: "x"}))
+			return err
+		},
 	} {
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()), name)
 	}

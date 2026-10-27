@@ -23,6 +23,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
+	"github.com/retail-cortex/blitz/pkg/engine/health"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -224,4 +225,61 @@ func TestGuardsForIsTheSessionsOwn(t *testing.T) {
 	assert.Len(t, b.all, len(a.all), "the same guardrails, read afresh")
 	a.once("notice")
 	assert.True(t, b.once("notice"), "its notices are its own")
+}
+
+// A built-in guardrail that checks something and lets it through says so
+// once a turn ("pass"), so the dashboard sees it running; a catch is
+// recorded as before.
+func TestBuiltinGuardrailsRecordTheirChecks(t *testing.T) {
+	w := openTest(t)
+	turn := api.Turn{}
+	w.startGuardrails("s", &turn)
+	g := guard{w}
+	ctx := context.Background()
+	call := runtime.GuardCall{Session: "s", Tool: "run_shell_command", Args: map[string]any{"command": "ls"}}
+	g.ToolCall(ctx, call)
+	g.ToolCall(ctx, call) // the same turn: one record
+	g.ToolResult(ctx, runtime.GuardCall{Session: "s", Tool: "web_fetch"}, map[string]any{"content": "a recipe for bread"})
+	g.Output(ctx, runtime.GuardCall{Session: "s"}, "Here's the plan.", true)
+	assert.NotEmpty(t, g.ToolCall(ctx, runtime.GuardCall{Session: "s", Tool: "run_shell_command", Args: map[string]any{"command": "rm -fr $HOME"}}).Refusal)
+
+	decisions := map[string][]string{}
+	for _, e := range auditSince(w) {
+		if e.Kind == "guardrail" {
+			decisions[strings.TrimPrefix(e.Tool, "guardrail:")] = append(decisions[strings.TrimPrefix(e.Tool, "guardrail:")], e.Decision)
+		}
+	}
+	assert.Equal(t, []string{"pass", "block"}, decisions[gates.BuiltinLimits], "one pass a turn, then the catch")
+	assert.Equal(t, []string{"pass"}, decisions[gates.BuiltinInjection])
+	assert.Equal(t, []string{"pass"}, decisions[gates.BuiltinSecrets])
+}
+
+// The dashboard's judge reads how a built-in guardrail runs (its checks,
+// action and the other actions it has), after its file when it has one;
+// a change to how it runs makes it due again.
+func TestBuiltinGuardrailHealthFile(t *testing.T) {
+	w := openTest(t)
+	file := w.healthFile(health.Item{Kind: health.KindGuardrail, Name: gates.BuiltinSecrets})
+	assert.Contains(t, file, "with no file")
+	assert.Contains(t, file, "action: redact")
+	assert.Contains(t, file, "GitHub tokens")
+
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_files_changed: 3\n---\n")
+	limits := filepath.Join(w.ProjectGuardrailsDir(), "limits.md")
+	file = w.healthFile(health.Item{Kind: health.KindGuardrail, Name: gates.BuiltinLimits, Path: limits})
+	assert.Contains(t, file, "max_files_changed: 3", "the file first")
+	assert.Contains(t, file, "files changed per turn: 3")
+	assert.Contains(t, file, "action: block")
+
+	hashOf := func() string {
+		for _, s := range w.healthInputs(context.Background()).Guardrails {
+			if s.Name == gates.BuiltinLimits {
+				return s.Hash
+			}
+		}
+		return ""
+	}
+	before := hashOf()
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_files_changed: 4\n---\n")
+	assert.NotEqual(t, before, hashOf())
 }

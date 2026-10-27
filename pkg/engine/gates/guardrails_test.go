@@ -117,10 +117,22 @@ func TestDomainsAndCommands(t *testing.T) {
 	assert.Empty(t, CommandDenied("git push origin main", denied))
 	assert.Empty(t, CommandDenied("echo rm -rf /", denied), "matched against the whole command")
 	assert.Equal(t, "git push --force*", CommandDenied("git push --force origin feature/x", denied), "* takes slashes too")
-	for _, c := range []string{"git push --force", "git push origin main --force-with-lease", "git push -f", "git push origin feature/x -f", "rm -rf /", "rm  -rf ~/"} {
+	refused := []string{
+		"git push --force", "git push origin main --force", "git push --force origin main", "git push -f", "git push origin feature/x -f", "git push origin +main",
+		"rm -rf /", "rm  -rf ~/", "rm -fr /", "rm -r -f /", "rm -Rf ~", "rm --recursive --force ~", "rm -rf --no-preserve-root /",
+		"sudo rm -rf /", "rm -rf $HOME", `rm -rf "$HOME"`, "rm -rf ${HOME}/", "rm -rf ~/*", "rm -rf /*", "rm -rf build ~", "rm -r ~", "rm -R /",
+		"cd /tmp && rm -rf ~", "make clean; rm -rf /", "FOO=1 rm -rf /", "/bin/rm -rf /",
+		"mkfs.ext4 /dev/sda1", "dd if=image.iso of=/dev/disk4 bs=4m", "sudo dd of=/dev/sdb if=x.img",
+	}
+	for _, c := range refused {
 		assert.NotEmpty(t, CommandDenied(c, DefaultCommands), c)
 	}
-	for _, c := range []string{"git push", "git push --follow-tags origin main", "rm -rf /tmp/build", "rm -rf ./dist"} {
+	allowed := []string{
+		"git push", "git push --follow-tags origin main", "git push --force-with-lease", "git push origin main --force-with-lease", "git push origin fix-login", "git push -u origin feature",
+		"rm -rf /tmp/build", "rm -rf ./dist", "rm -rf ~/project/node_modules", "rm -rf /tmp/*", "rm -f ~/.cache/x", "rm -r ~/old",
+		"echo rm -rf /", "grep -rf patterns /", "dd if=/dev/zero of=/dev/null count=1",
+	}
+	for _, c := range allowed {
 		assert.Empty(t, CommandDenied(c, DefaultCommands), c)
 	}
 	assert.Equal(t, DefaultCommands, BuiltinDefault(Builtins[2]).Limits.Commands, "limits refuses them without a file")
@@ -186,4 +198,31 @@ func TestSaveGuardrail(t *testing.T) {
 
 	require.NoError(t, DeleteGuardrail(dir, "limits"))
 	assert.NoFileExists(t, filepath.Join(dir, "limits.md"))
+}
+
+// Describe says how each built-in runs: where, what it checks, its
+// action and the others it has; a custom guardrail's file says it all.
+func TestDescribe(t *testing.T) {
+	tests := []struct {
+		name string
+		g    Guardrail
+		want []string
+	}{
+		{"injection", BuiltinDefault(Builtins[0]), []string{"builtin: prompt_injection", "web_fetch, web_search, the browser and MCP servers", "ignore|disregard", "judge: false", "action: warn", "block: stops it"}},
+		{"injection judged, some tools", Guardrail{Builtin: BuiltinInjection, Action: Block, Tools: []string{"read_file"}, Judge: true}, []string{"what read_file bring back", "confirmed by the judge", "action: block", "warn: lets it through"}},
+		{"secrets", BuiltinDefault(Builtins[1]), []string{"stage output", "private keys", "pii: false", "action: redact", "block: stops it"}},
+		{"secrets with personal data", Guardrail{Builtin: BuiltinSecrets, PII: true, Agents: []string{"qa"}}, []string{"for qa", "email addresses"}},
+		{"limits", BuiltinDefault(Builtins[2]), []string{"git push* --force", "rm -rf ~", "cost per turn: no limit", "action: block"}},
+		{"limits set", Guardrail{Builtin: BuiltinLimits, Limits: Limits{MaxCostUSD: 2, MaxTurns: 9, MaxFilesChanged: 4, AllowedDomains: []string{"go.dev"}}, Off: true}, []string{"$2.00", "model calls per turn: 9", "files changed per turn: 4", "go.dev", "commands: none refused", "enabled: false"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Describe(tc.g)
+			for _, w := range tc.want {
+				assert.Contains(t, d, w)
+			}
+		})
+	}
+	assert.NotContains(t, Describe(BuiltinDefault(Builtins[2])), "other actions", "limits only blocks")
+	assert.Empty(t, Describe(Guardrail{Name: "tone", Text: "Be kind."}))
 }
