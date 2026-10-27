@@ -3,12 +3,12 @@ title: Blitz 0.8.6
 weight: 1
 ---
 
-**Set up in a minute, not an afternoon.** This release makes the first ten minutes with Blitz much shorter. Providers & keys shows every model provider at once and spots the ones you already have, a key is checked the moment you paste it, and connecting a database is pick a kind, paste a URL, done.
+**Set up in a minute, not an afternoon.** This release makes the first ten minutes with Blitz much shorter. Providers & keys shows every model provider at once and spots the ones you already have, a key is checked the moment you paste it, and connecting a database is pick a kind, paste a URL, done. And when the agent suggests a command, one click puts it in the chat box, ready to run.
 
 ### Get started in three steps
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.8.6).
-2. Open **Settings › Providers & keys**. If a key is in your environment, you're signed in with `gcloud` or `ant`, or Ollama is running, it's already listed: press **Use**.
+2. Open **Settings › Providers & keys**. If a key is in your environment, you're signed in with `gcloud` or `ant`, or Ollama is running, it's already listed: press **Use**. No key yet? Run `ollama pull qwen3:1.7b` for a small model that works offline.
 3. Type `/connect postgres://you@your-host/your-db` (or `/connect ~/data/notes.sqlite`) in the chat, press **Test and save**, and ask your agent about your data.
 
 ### What's new
@@ -19,7 +19,7 @@ weight: 1
 
 **No more silent first message.** Until a model is ready, the welcome page says so with **Set up a provider**, and the "model isn't available" bar in a chat now has a button that takes you straight to the fix.
 
-**Databases in four steps.** A new connection starts with its kind: SQLite, PostgreSQL, BigQuery or AlloyDB, simplest first. Paste a connection URL and the fields fill themselves (the URL, with its password, is cleared). Pick a SQLite file with **Choose…**. The name follows the database. **Test and save** connects before saving, and the connection then stays open so you can choose its tools. [Connectors](../guide/connectors.md)
+**Databases in four steps.** A new connection starts with its kind: SQLite, PostgreSQL, BigQuery or AlloyDB, simplest first. Paste a connection URL and the fields fill themselves (the URL, with its password, is cleared). Pick a SQLite file with **Choose…**: it opens in your workspace, and a file inside it is saved as `./data/notes.db`, so the connection still works when the project is cloned or moved. The name follows the database. **Test and save** connects before saving, and the connection then stays open so you can choose its tools. [Connectors](../guide/connectors.md)
 
 **Connect from the chat.** `/connect` with a URL or a file, or the new database button beside the composer, opens a new connection ready to save. Connectors is in Settings without advanced settings now.
 
@@ -36,6 +36,7 @@ weight: 1
 ### Good to know
 
 - Bedrock, Azure and Claude on Vertex AI are still set in the settings file.
-- Ollama is found on its usual address on the machine running the Blitz service.
+- Ollama is found on its usual address on the machine running the Blitz service. Pick a model that supports tool calls (Qwen 3 and Llama 3.2 do): the agent can't work without them.
+- A `!` command runs with your own permissions, like one typed in a terminal: no sandbox and no approval, so read it before you press Enter. Its card lives in the window only: reopen the chat and it's gone (the audit log keeps the command).
 - Connection URLs are read for PostgreSQL-style servers; BigQuery and AlloyDB still take their fields.
 - A guardrail file you saved before keeps what it says: to get the new limits patterns, put `defaults` in its `commands` (or delete the file); for prompt injection's new redact, take `action: warn` out.
