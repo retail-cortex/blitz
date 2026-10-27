@@ -3,7 +3,7 @@ title: "053 · Enterprise foundations"
 weight: 53
 ---
 
-*What the open-source Blitz gives a licensed enterprise service to build on: the service assembled from `pkg/` with extension points, and clients that connect to an organization's service, sign in through it, use its models and its catalog, and run jobs on it* (`spec_enterprise_053`)
+*What the open-source Blitz gives a licensed enterprise service to build on: the service assembled from `pkg/` with extension points, and clients that connect to an organization's service, sign in through it, use its models and its catalog, run jobs on it, and wear its branding* (`spec_enterprise_053`)
 
 | | |
 |---|---|
@@ -39,7 +39,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 ## 3. Connecting to an organization's service
 
 - **EN-10** `[enterprise]` in the settings: `url` (the service's address). Set by the person (Settings › **Organization**, `blitz enterprise connect <url>`) or by the company's device management in the machine-wide settings; a workspace's settings can't set it.
-- **EN-11** Discovery: `GET <url>/api/v1/info` gives the service's name, version, its OIDC issuer and client ID, the token lifetime, and its capabilities (`models`, `catalog`, `jobs`, `sharing`, `workspaces`). Clients show only what's listed.
+- **EN-11** Discovery: `GET <url>/api/v1/info` gives the service's name, version, its OIDC issuer and client ID, the token lifetime, and its capabilities (`models`, `catalog`, `jobs`, `sharing`, `workspaces`, `branding`). Clients show only what's listed.
 - **EN-12** Sign-in goes straight to the company's identity provider: the desktop app and the tray with authorization code and PKCE on a loopback redirect, the CLI with the device-code flow (`blitz enterprise login`). The refresh token is kept in the keychain (spec_secrets_039); the access token in memory. A token is renewed before it expires (the service sets how often, in hours); a refused renewal signs the person out and says so.
 - **EN-13** Signed out, or the service unreachable: the window says which, with **Sign in** or **Retry**. Work that needs the service (its models, cloud jobs, shared workspaces) waits; local workspaces work as before, under the last catalog (EN-33).
 - **EN-14** `blitz doctor` shows the service, whether it's reached, who is signed in and when the token renews.
@@ -66,7 +66,30 @@ The line: open source holds the interfaces, their open-source defaults and the c
 - **EN-41** Before a job moves, Blitz checks it can run there and says what can't: an MCP server that runs only on this computer (stdio), a file outside the workspace, a `localhost` address, a connector the service doesn't have.
 - **EN-42** A service job's runs show beside local ones in Studio › Jobs and the Processes view, with their output, from the service (`JobRunner`); the person's computer doesn't need to be on for them to run.
 
-## 7. Not in scope
+- **EN-43** A job's `on_request` says what a run does when it needs something its permissions don't allow: `refuse` (today's, WK-42; the default for jobs here) or `pause` (the default on the service). A paused run is saved, not kept running: its session with the waiting request, and its changes on its branch. Its process ends. The owner sees the request (a notification, the Jobs view, the tray's Jobs menu, `blitz jobs pending`) with **Approve** or **Deny**, whenever they get to it. The answer resumes the run from where it stopped, with the decision as the tool's result. Background processes the run had started don't come back. A run waiting longer than `approval_wait` (7 days by default) stops. While a run waits, the job's next times are skipped, as `overlap: skip` skips them while a run goes on.
+
+## 7. Branding and terms
+
+- **EN-50** With `branding` listed, `GET <url>/api/v1/branding` (with `If-None-Match`) gives:
+  - the app's name and short name;
+  - a logo and an icon, each for light and dark;
+  - an accent colour;
+  - a support link and an about text;
+  - the terms of service and privacy notice, each as text or a link, with a version.
+
+  It's cached with the catalog (EN-33), so the window is branded before it reaches the service.
+- **EN-51** The name replaces "Blitz" wherever the app says it at run time:
+  - the window's title;
+  - the page's menus, the welcome page and dialogs;
+  - notifications;
+  - the tray's tooltip and menu titles;
+  - the CLI's banner and help.
+
+  The logo replaces the mark in the title bar and on the welcome page. The accent replaces the theme's accent tokens, and is refused, keeping Blitz's, when it doesn't meet contrast against the light and dark backgrounds. What the system names from the app's bundle can't change at run time: the macOS Dock and menu bar, the installer, the Start menu and file names. Those need a rebranded build, which is out of scope here.
+- **EN-52** **About** shows the organization's name, logo, about text, terms of service, privacy notice and support link. It always ends with "Built on Blitz <version>", plus Blitz's license and notices (the Apache License's NOTICE must stay with the program).
+- **EN-53** **The user agreement:** after sign-in, and whenever the terms' version changes, the window shows the terms with **Accept** and **Decline** before anything else. The CLI shows them, or their link, and asks `[y/N]`. Accept is recorded on the service with the version and the time. Decline signs out. Until the current version is accepted, the service answers every other request with `403 terms_required`, so no client can skip it.
+
+## 8. Not in scope
 
 - The enterprise service itself: OIDC, roles and SCIM, licensing and the heartbeat, the gateway, the catalog's authoring (policy as code), Git sync, sharing, cloud jobs, the database and Terraform. Those are specified in `blitz-enterprise`.
 - Making the person's own computer enforce the organization's rules against the person: a local agent runs under rules it fetched (EN-33), which is best effort; what a company must be sure of goes through the service (its models, its data, its jobs).
