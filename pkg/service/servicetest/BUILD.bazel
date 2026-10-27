@@ -18,11 +18,11 @@ go_library(
     name = "servicetest",
     testonly = True,
     srcs = ["servicetest.go"],
-    importpath = "github.com/retail-cortex/blitz/apps/service/servicetest",
+    importpath = "github.com/retail-cortex/blitz/pkg/service/servicetest",
     visibility = ["//visibility:public"],
     deps = [
-        "//apps/service/internal/daemon",
-        "//apps/service/internal/server",
         "//pkg/engine",
+        "//pkg/service",
+        "//pkg/service/server",
     ],
 )

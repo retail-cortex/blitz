@@ -44,16 +44,25 @@ libs='kind("go_library", %s)'
 	empty "the CLI doesn't reach the engine (every workspace runs in blitzd)" \
 		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect //pkg/engine/..."
 	empty "the CLI doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/tray/... + //apps/electron/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //pkg/service/... + //apps/tray/... + //apps/electron/...)"
 	empty "the service doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/service/...) except //apps/service/servicetest/...)') intersect (//apps/cli/... + //apps/tray/... + //apps/electron/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/service/... + //pkg/service/...) except //pkg/service/servicetest/...)') intersect (//apps/cli/... + //apps/tray/... + //apps/electron/...)"
 	empty "the Electron app's build tools don't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/electron/...))') intersect (//apps/cli/... + //apps/service/... + //apps/tray/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/electron/...))') intersect (//apps/cli/... + //apps/service/... + //pkg/service/... + //apps/tray/...)"
 	empty "the tray doesn't reach the other apps or the engine" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //apps/electron/... + //pkg/engine/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //pkg/service/... + //apps/electron/... + //pkg/engine/...)"
 	empty "the page's host doesn't reach the engine (it runs in the tray, the desktop app's host)" \
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/pagehost/...))') intersect //pkg/engine/..."
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'
+	# The enterprise service builds on this repository, never the other
+	# way (spec_enterprise_053 EN-04).
+	if enterprise="$(grep -rl --include='*.go' 'github.com/retail-cortex/blitz-enterprise' apps pkg tools build 2>/dev/null)"; then
+		echo "✗ nothing here imports blitz-enterprise:" >&2
+		sed 's/^/    /' <<<"$enterprise" >&2
+		failed=1
+	else
+		echo "✓ nothing here imports blitz-enterprise"
+	fi
 }
 exit $failed

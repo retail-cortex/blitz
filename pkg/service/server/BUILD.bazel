@@ -52,8 +52,11 @@ go_library(
         "workflows.go",
         "workspace.go",
     ],
-    importpath = "github.com/retail-cortex/blitz/apps/service/internal/server",
-    visibility = ["//apps/service:__subpackages__"],
+    importpath = "github.com/retail-cortex/blitz/pkg/service/server",
+    visibility = [
+        "//apps/service:__subpackages__",
+        "//pkg/service:__subpackages__",
+    ],
     deps = [
         "//pkg/api",
         "//pkg/config",

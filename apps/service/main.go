@@ -26,10 +26,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/retail-cortex/blitz/apps/service/internal/daemon"
 	"github.com/retail-cortex/blitz/apps/service/internal/doctor"
 	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/pdftext"
+	"github.com/retail-cortex/blitz/pkg/service"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/spf13/cobra"
 )
@@ -52,7 +52,7 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) int {
-	var o daemon.Options
+	var o service.Options
 	var license string
 	cmd := &cobra.Command{
 		Use:   "blitzd",
@@ -78,7 +78,7 @@ every login.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			o.Version = version
-			return daemon.Run(ctx, o)
+			return service.Run(ctx, o)
 		},
 	}
 	cmd.Flags().StringVar(&o.Socket, "socket", "", "Unix socket to listen on (default ~/.blitz/run/blitz.sock, or $BLITZ_SOCKET)")

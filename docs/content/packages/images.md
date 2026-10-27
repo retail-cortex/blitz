@@ -19,6 +19,6 @@ Preparing pictures for vision models. Source: [`pkg/images`](https://github.com/
 
 ## Used by
 
-apps/cli, apps/cli/internal/tui, apps/service/internal/server, pkg/api, pkg/client, pkg/engine, pkg/engine/runtime, pkg/engine/tools.
+apps/cli, apps/cli/internal/tui, pkg/service/server, pkg/api, pkg/client, pkg/engine, pkg/engine/runtime, pkg/engine/tools.
 
 Spec: [images](../about/specs/spec_images_011.md).

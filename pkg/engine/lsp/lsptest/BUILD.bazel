@@ -22,6 +22,7 @@ go_library(
     visibility = [
         # The engine's tests, and the service's (LanguageService).
         "//apps/service:__subpackages__",
+        "//pkg/service:__subpackages__",
         "//pkg/engine:__subpackages__",
     ],
     deps = ["//pkg/engine/lsp"],

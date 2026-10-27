@@ -62,12 +62,12 @@ go_test(
     # macOS.
     tags = ["no-sandbox"],
     deps = [
-        "//apps/service/servicetest",
         "//pkg/api",
         "//pkg/config",
         "//pkg/config/configtest",
         "//pkg/engine",
         "//pkg/engine/runtime",
+        "//pkg/service/servicetest",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",

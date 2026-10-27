@@ -8,7 +8,7 @@ weight: 32
 | | |
 |---|---|
 | Status | **Implemented** (2026-09-29), in the three phases of §8; §9 records the decisions taken. It details [spec_parity_027](spec_parity_027.md) §8.1 (PAR-PAR-01–03); §12.5 defers agent teams until this exists. |
-| Source | `pkg/engine/runtime/{tasks,agentrun}.go`; `pkg/engine/tools/{tasks,agent_tools,hooks}.go`; `pkg/engine/tasks.go`; `apps/service/internal/server/{workspace,session}.go`; `pkg/client/processes.go`; `apps/cli/internal/tui/{tasks,exit}.go`; `apps/desktop/web/src/Conversation.tsx` (`TaskCard`, the watch) |
+| Source | `pkg/engine/runtime/{tasks,agentrun}.go`; `pkg/engine/tools/{tasks,agent_tools,hooks}.go`; `pkg/engine/tasks.go`; `pkg/service/server/{workspace,session}.go`; `pkg/client/processes.go`; `apps/cli/internal/tui/{tasks,exit}.go`; `apps/desktop/web/src/Conversation.tsx` (`TaskCard`, the watch) |
 | Tests | `pkg/engine/runtime/tasks_test.go`, `pkg/engine/tools/permrules_test.go`, `pkg/engine/agents/frontmatter_test.go`, `pkg/client/processes_test.go`, `apps/cli/internal/tui/tasks_test.go`, `apps/desktop/web/src/turns.test.ts` |
 | Depends on | [spec_agents_014](spec_agents_014.md) (`invoke_agent`), [spec_approvals_005](spec_approvals_005.md), [spec_workspace_018](spec_workspace_018.md) (steering), [spec_service_021](spec_service_021.md), [spec_client_022](spec_client_022.md) |
 | Size | L, built in three phases (§8) |

@@ -140,7 +140,6 @@ go_test(
     # macOS.
     tags = ["no-sandbox"],
     deps = [
-        "//apps/service/servicetest",
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",
@@ -156,6 +155,7 @@ go_test(
         "//pkg/sandboxsetup",
         "//pkg/secrets",
         "//pkg/selfupdate",
+        "//pkg/service/servicetest",
         "//pkg/skillreg",
         "//pkg/socket",
         "@com_github_modelcontextprotocol_go_sdk//mcp",

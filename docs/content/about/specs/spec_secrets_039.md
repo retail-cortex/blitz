@@ -8,8 +8,8 @@ weight: 39
 | | |
 |---|---|
 | Status | **Implemented** since v0.7.1 (the owner's request, 2026-10-17). |
-| Source | `pkg/secrets` (`vault.go`, `wincred_windows.go`, `secrets.go`), `pkg/config/providers.go` (`Vault`, `SecretScope`), `pkg/redact` (`Remember`, `Mask`), `pkg/engine/runtime/engine.go` (`WithSecrets`, `beforeModel`, `afterModel`), `pkg/engine/workspace.go` (`expandSecrets`, `mcpWithSecrets`), `apps/service/internal/server/secrets.go`, `apps/desktop/web/src/SecretsEditor.tsx` |
-| Tests | `pkg/secrets/vault_test.go`, `pkg/redact/remember_test.go`, `pkg/engine/runtime/secrets_test.go`, `pkg/engine/secrets_test.go`, `apps/service/internal/server/secrets_test.go`, `apps/desktop/web/src/SecretsEditor.test.ts` |
+| Source | `pkg/secrets` (`vault.go`, `wincred_windows.go`, `secrets.go`), `pkg/config/providers.go` (`Vault`, `SecretScope`), `pkg/redact` (`Remember`, `Mask`), `pkg/engine/runtime/engine.go` (`WithSecrets`, `beforeModel`, `afterModel`), `pkg/engine/workspace.go` (`expandSecrets`, `mcpWithSecrets`), `pkg/service/server/secrets.go`, `apps/desktop/web/src/SecretsEditor.tsx` |
+| Tests | `pkg/secrets/vault_test.go`, `pkg/redact/remember_test.go`, `pkg/engine/runtime/secrets_test.go`, `pkg/engine/secrets_test.go`, `pkg/service/server/secrets_test.go`, `apps/desktop/web/src/SecretsEditor.test.ts` |
 
 ## 1. Purpose
 

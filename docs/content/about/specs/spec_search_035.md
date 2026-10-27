@@ -9,7 +9,7 @@ weight: 35
 |---|---|
 | Status | **Implemented** (2026-10-03): keyword search (the index, its sources, the API, the CLI, the agent's tool, the desktop dialog), semantic search (opt-in embeddings) and LLM metadata (opt-in summaries and tags). |
 | Source | `pkg/engine/search` (`index.go`, `scan.go`, `query.go`, `vectors.go`, `enrich.go`), `pkg/engine/search.go` (sources, lifecycle, the describer), `pkg/engine/runtime/embed.go`, `pkg/api/search.go`, `pkg/engine/tools/search.go`, `WorkspaceService.SearchWorkspace`/`GetSearchStatus`/`Reindex` in `proto/blitz/v1/workspace.proto`, `apps/cli/search.go`, `apps/cli/internal/tui/searchws.go`, `apps/desktop/web/src/{SearchDialog.tsx,search.ts}` |
-| Tests | `pkg/engine/search/{search,vectors,enrich}_test.go`, `pkg/engine/runtime/embed_test.go`, `pkg/engine/search_test.go`, `apps/service/internal/server/handlers_test.go` (`TestSearch*`), `pkg/client/remote_test.go`, `apps/cli/search_test.go`, `apps/cli/internal/tui/searchws_test.go`, `apps/desktop/web/src/search.test.ts` |
+| Tests | `pkg/engine/search/{search,vectors,enrich}_test.go`, `pkg/engine/runtime/embed_test.go`, `pkg/engine/search_test.go`, `pkg/service/server/handlers_test.go` (`TestSearch*`), `pkg/client/remote_test.go`, `apps/cli/search_test.go`, `apps/cli/internal/tui/searchws_test.go`, `apps/desktop/web/src/search.test.ts` |
 
 ## 1. Purpose
 

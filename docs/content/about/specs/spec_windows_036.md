@@ -9,7 +9,7 @@ weight: 36
 |---|---|
 | Status | **Implemented** (2026-10-07); checked on macOS and Linux and cross-built for Windows. Running it on Windows is still to do (WIN-40, [BL-VER-03](spec_backlog_026.md)). *Since v0.8.0 (the owner's decision, 2026-10-19)* the tray's page in Edge is removed: the Electron app is the desktop app on Windows ([spec_electron_038](spec_electron_038.md)), and the page server (WIN-11–WIN-14) serves only its window. |
 | Source | `apps/tray` (`main.go`, `icons_windows.go`, `lock_windows.go`), `apps/tray/internal/tray` (`ico.go`, `serve.go`, `detach_windows.go`), `pkg/pagehost` (`host.go`), `pkg/pageserver`, `pkg/fileview`, `pkg/loginitem/run_windows.go`, the service's `Shutdown` (`proto/blitz/v1/workspace.proto`), the page's `apps/desktop/web/src/desktop.ts`, `release/BUILD.bazel` |
-| Tests | `pkg/pageserver/*_test.go`, `pkg/fileview`, `pkg/pagehost/host_test.go`, `apps/tray/internal/tray/{ico,serve,service}_test.go`, `apps/service/internal/{server/info,daemon/daemon}_test.go` (`Shutdown`), `apps/desktop/web/src/desktop.test.ts`, `release/contents_test.sh` |
+| Tests | `pkg/pageserver/*_test.go`, `pkg/fileview`, `pkg/pagehost/host_test.go`, `apps/tray/internal/tray/{ico,serve,service}_test.go`, `pkg/service/server/info_test.go`, `pkg/service/service_test.go` (`Shutdown`), `apps/desktop/web/src/desktop.test.ts`, `release/contents_test.sh` |
 
 ## 1. Purpose
 

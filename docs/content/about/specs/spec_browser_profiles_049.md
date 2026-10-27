@@ -8,8 +8,8 @@ weight: 49
 | | |
 |---|---|
 | Status | **Built** (v0.8.4, the owner's request: "research if we can expose the profile features of Chromium, since we want to take advantage of OAuth and other web protocols and authentications"; one profile per workspace, the owner's choice 2026-10-23) |
-| Source | `pkg/config/browserprofiles.go`, `pkg/engine/browser/browser.go` (`Options.ProfileDir`), `pkg/engine/tools/browser.go` (`syncProfile`, `webRules`), `browserProfile` in `pkg/engine/workspace.go`, `apps/service/internal/server/browserprofiles.go`, `ConfigService.*BrowserProfile*` in `proto/blitz/v1/config.proto`; the page's `BrowserSettings.tsx` and `WorkspaceSettingsForm.tsx`; the Electron app's `SignInWindow` (`apps/electron/src/main.ts`) |
-| Tests | `pkg/config/browserprofiles_test.go`, `pkg/engine/browser/launch_test.go` (`TestLaunchWithAKeptProfile`), `pkg/engine/tools/browser_test.go` (`TestBrowserToolUsesTheWorkspacesProfile`), `apps/service/internal/server/browserprofiles_test.go`, `apps/desktop/web/src/BrowserSettings.test.ts`, `apps/electron/src/logic.test.ts` |
+| Source | `pkg/config/browserprofiles.go`, `pkg/engine/browser/browser.go` (`Options.ProfileDir`), `pkg/engine/tools/browser.go` (`syncProfile`, `webRules`), `browserProfile` in `pkg/engine/workspace.go`, `pkg/service/server/browserprofiles.go`, `ConfigService.*BrowserProfile*` in `proto/blitz/v1/config.proto`; the page's `BrowserSettings.tsx` and `WorkspaceSettingsForm.tsx`; the Electron app's `SignInWindow` (`apps/electron/src/main.ts`) |
+| Tests | `pkg/config/browserprofiles_test.go`, `pkg/engine/browser/launch_test.go` (`TestLaunchWithAKeptProfile`), `pkg/engine/tools/browser_test.go` (`TestBrowserToolUsesTheWorkspacesProfile`), `pkg/service/server/browserprofiles_test.go`, `apps/desktop/web/src/BrowserSettings.test.ts`, `apps/electron/src/logic.test.ts` |
 | Depends on | [spec_web_008](spec_web_008.md) (the browser, WEB-30–38), [spec_electron_038](spec_electron_038.md) (the window), [spec_project_config_031](spec_project_config_031.md) (trust) |
 
 ## 1. Purpose and what the research found

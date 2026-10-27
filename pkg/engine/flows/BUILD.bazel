@@ -24,6 +24,7 @@ go_library(
     visibility = [
         # The engine and the service (//tools:check_deps checks libraries).
         "//apps/service:__subpackages__",
+        "//pkg/service:__subpackages__",
         "//pkg/engine:__subpackages__",
     ],
     deps = [

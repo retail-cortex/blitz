@@ -7,13 +7,13 @@ Blitz is an AI coding agent in Go, built on the Google Agent Development Kit (`g
 
 ## Layout
 
-A monorepo of independent apps over shared packages, one Go module. The rule: **apps depend on `pkg/`, never on each other** (tests may run the service through `apps/service/servicetest`); front ends (the CLI's REPL, the desktop app) depend on the contract (`pkg/api`) and the client (`pkg/client`), never on the engine; only the service and the CLI's `--local` mode link `pkg/engine`. Code private to one app lives under `apps/<app>/internal/`.
+A monorepo of independent apps over shared packages, one Go module. The rule: **apps depend on `pkg/`, never on each other** (tests may run the service through `pkg/service/servicetest`); front ends (the CLI's REPL, the desktop app) depend on the contract (`pkg/api`) and the client (`pkg/client`), never on the engine; only the service and the CLI's `--local` mode link `pkg/engine`. Code private to one app lives under `apps/<app>/internal/`.
 
 | Path | What |
 |---|---|
 | `apps/cli` | `blitz`, the CLI: flags, `--dir`, output modes, one-shot runs, `doctor`, `config`, `workers`, `service install`. Links no engine: attaches to the service (starting it when it isn't running), or to a private `blitzd` for a run of its own (`--local`); `doctor` runs in `blitzd` |
 | `apps/cli/internal/tui` | The REPL: commands, rendering, input, steering keys. Drives an `api.Backend` |
-| `apps/service` | `blitzd`, the per-user service: `internal/daemon` runs it, `internal/server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker. `servicetest` runs it inside other packages' tests |
+| `apps/service` | `blitzd`, the per-user service's command: its flags, `--license` and `blitzd doctor` (`internal/doctor`), over `pkg/service` |
 | `apps/vscode` | The VS Code extension (TypeScript): the desktop app's page in a view, a local proxy to the service, packed by `tools/vsix` |
 | `apps/desktop/web` | The desktop page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), shown by the Electron app, the tray's page on Windows and the VS Code extension |
 | `apps/electron` | The desktop app ([spec_electron_038](../about/specs/spec_electron_038.md)): its main process and preload (TypeScript), with the page and `blitz-tray --serve` as its host (`pkg/pagehost`); the Electron runtime comes from `MODULE.bazel`; `appicon.png` its icon; `winexe` (Go, run at build time) gives the Windows program that icon and its details; `packaging/` its macOS app, Windows zip and Linux packages (the Arch one made by `tools/pacman`) and the macOS signing script |
@@ -25,6 +25,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `pkg/pageserver` | The desktop page in front of the service: the proxy to its socket (the tray uses it, for the Electron app), and the loopback server, HTTP/2 over TLS with a certificate of its own, behind a one-time link and a cookie, that serves the page to a browser on Windows |
 | `pkg/fileview` | Showing files and folders in the system's programs (file manager, viewer), never running one: for the desktop app and the tray |
 | `pkg/socket` | Where the service listens (the per-user Unix socket), and how to reach it |
+| `pkg/service` | The service itself, so another program can run it ([spec_enterprise_053](../about/specs/spec_enterprise_053.md) EN-01): `service.Run` opens each workspace a client names and serves it; `server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker; `servicetest` runs it inside other packages' tests |
 | `pkg/engine` | The program without a UI: `engine.Open` builds a `Workspace` (registries, tools, sessions, model, engine) implementing `api.Backend` with typed operations that return data and never print |
 | `pkg/engine/runtime` | The engine over the ADK runner: models and providers, fallback, per-model settings, compaction, steering, side questions, usage and cost |
 | `pkg/engine/tools` | Tools and their guardrails: workspace roots, approvals, command policy, OS sandbox, script sandbox (gVisor), skill scripts and their environments, web, MCP, hooks, checkpoints |

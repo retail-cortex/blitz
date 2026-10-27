@@ -8,8 +8,8 @@ weight: 45
 | | |
 |---|---|
 | Status | **Done for workflows** in v0.7.1 (the owner's request, 2026-10-18): CMP-01–CMP-06. Next, for v0.8.0: the other kinds' recipes (CMP-07) and the Overview's Improve through the composer (CMP-08). |
-| Source | `pkg/engine/compose/` (sessions, recipes), `pkg/engine/compose.go` (the workspace's context and model), `apps/service/internal/server/compose.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/ComposeDialog.tsx`, `apps/desktop/web/src/studio/compose.ts` |
-| Tests | `pkg/engine/compose/compose_test.go`, `pkg/engine/compose_test.go`, `apps/service/internal/server/compose_test.go`, `apps/desktop/web/src/studio/compose.test.ts`; manual checks in MANUAL_VERIFICATION §54 |
+| Source | `pkg/engine/compose/` (sessions, recipes), `pkg/engine/compose.go` (the workspace's context and model), `pkg/service/server/compose.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/ComposeDialog.tsx`, `apps/desktop/web/src/studio/compose.ts` |
+| Tests | `pkg/engine/compose/compose_test.go`, `pkg/engine/compose_test.go`, `pkg/service/server/compose_test.go`, `apps/desktop/web/src/studio/compose.test.ts`; manual checks in MANUAL_VERIFICATION §54 |
 | Depends on | [spec_workflows_043](spec_workflows_043.md) (the workflow file and its checks), [spec_studio_040](spec_studio_040.md) (the editors), [spec_health_044](spec_health_044.md) (a later caller: Improve) |
 
 ## 1. Purpose

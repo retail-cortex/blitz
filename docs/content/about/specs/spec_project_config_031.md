@@ -8,7 +8,7 @@ weight: 31
 | | |
 |---|---|
 | Status | **Implemented** (2026-09-29), from the design reviewed that day; §10 records the decisions taken. It details [spec_parity_027](spec_parity_027.md) §2.4 (PAR-CFG-01–06) under decision §12.3. |
-| Source | `pkg/config/{project,trust}.go`; `pkg/engine/project.go`; `pkg/engine/skills/policy.go` (untrusted roots); `pkg/engine/tools/permrules.go` (`SourceProject`); `apps/service/internal/server/workspace.go`; `pkg/client/project.go`; `apps/cli/{setup,trust,doctor}.go`; `apps/cli/internal/tui/project.go`; `apps/desktop/web/src/{ProjectDialog.tsx,project.ts}` |
+| Source | `pkg/config/{project,trust}.go`; `pkg/engine/project.go`; `pkg/engine/skills/policy.go` (untrusted roots); `pkg/engine/tools/permrules.go` (`SourceProject`); `pkg/service/server/workspace.go`; `pkg/client/project.go`; `apps/cli/{setup,trust,doctor}.go`; `apps/cli/internal/tui/project.go`; `apps/desktop/web/src/{ProjectDialog.tsx,project.ts}` |
 | Tests | `pkg/config/project_test.go`, `pkg/engine/project_test.go`, `pkg/client/project_test.go`, `apps/cli/trust_test.go`, `apps/cli/internal/tui/project_test.go`, `apps/desktop/web/src/project.test.ts` |
 | Depends on | [spec_config_002](spec_config_002.md) (CFG-01, the workspace overlay CFG-40/41), [spec_approvals_005](spec_approvals_005.md) (permission rules and scopes), [spec_workers_023](spec_workers_023.md) (hash-pinned review, WK-30), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md) |
 | Size | L, built in the phases of §9 |

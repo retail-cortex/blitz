@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-cortex/blitz/apps/service/internal/daemon"
-	"github.com/retail-cortex/blitz/apps/service/internal/server"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/service"
+	"github.com/retail-cortex/blitz/pkg/service/server"
 )
 
 // Server is the service's API over workspaces the test opens.
@@ -47,18 +47,18 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Durat
 // Run runs the whole service, as blitzd does, on socket with the default
 // configuration, until ctx is done.
 func Run(ctx context.Context, socket string) error {
-	return daemon.Run(ctx, daemon.Options{Socket: socket, Version: "test"})
+	return service.Run(ctx, service.Options{Socket: socket, Version: "test"})
 }
 
 // RunOverrides are a private service's run settings (blitzd's hidden
 // flags, which the CLI sets for a run of its own).
-type RunOverrides = daemon.RunOverrides
+type RunOverrides = service.RunOverrides
 
 // RunWith runs a private service, as a client starts for a run of its own,
 // on socket, with the configuration file config ("" for the usual search)
 // and the run's settings, until ctx is done.
 func RunWith(ctx context.Context, socket, config string, run RunOverrides) error {
-	return daemon.Run(ctx, daemon.Options{Socket: socket, Config: config, Version: "test", Run: run, Private: true})
+	return service.Run(ctx, service.Options{Socket: socket, Config: config, Version: "test", Run: run, Private: true})
 }
 
 // Stopped waits for done (a service's Run returning) for up to limit, and

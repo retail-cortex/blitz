@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

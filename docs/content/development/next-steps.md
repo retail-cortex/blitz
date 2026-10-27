@@ -87,7 +87,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 | `42aaf41b` | Phase 5b: per-workspace state, no dependence on the working directory |
 | `f9a6e7bf` | ROADMAP item 24 planned: jobs |
 | `d8c08d91` | Phase 6: the service API as protos, buf, generated Go and Connect code |
-| `2e4cb2c0`, `a6ed23d6`, `a926faa6` | Phase 7: `apps/service/internal/server`, approvals over the stream, `blitz serve`, the workspace lock |
+| `2e4cb2c0`, `a6ed23d6`, `a926faa6` | Phase 7: `pkg/service/server`, approvals over the stream, `blitz serve`, the workspace lock |
 | `26e261cd`, `d969c75f`, `d5562753` | Phase 8: `api.Backend`, `pkg/client`, the CLI attaching to the service, `--local` |
 | `31531764`, (the commit adding `pkg/engine/workers.go`) | Item 24a–b: job definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
 | (the commit adding `pkg/engine/session/title_test.go`) | Session names from the first prompt, `/rename`, terminal title, resume hint on exit |

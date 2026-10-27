@@ -19,7 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/retail-cortex/blitz/apps/service/servicetest"
+	"github.com/retail-cortex/blitz/pkg/service/servicetest"
 	"io/fs"
 	"os"
 	"path/filepath"

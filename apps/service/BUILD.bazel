@@ -21,10 +21,10 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/apps/service",
     visibility = ["//visibility:private"],
     deps = [
-        "//apps/service/internal/daemon",
         "//apps/service/internal/doctor",
         "//pkg/legal",
         "//pkg/pdftext",
+        "//pkg/service",
         "//pkg/socket",
         "@com_github_spf13_cobra//:cobra",
     ],

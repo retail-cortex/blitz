@@ -33,6 +33,6 @@ Blitz without a user interface. Source: [`pkg/engine`](https://github.com/retail
 
 ## Used by
 
-apps/cli (`--local`), apps/service (its daemon and server), and apps/service/servicetest.
+apps/cli (`--local`), apps/service (its daemon and server), and pkg/service/servicetest.
 
 Spec: [workspace](../about/specs/spec_workspace_018.md).

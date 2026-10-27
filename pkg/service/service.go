@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package daemon runs the Blitz service: every workspace a client opens,
+// Package service runs the Blitz service: every workspace a client opens,
 // served over the per-user socket, and the workers' schedules.
-package daemon
+package service
 
 import (
 	"context"
@@ -25,11 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-cortex/blitz/apps/service/internal/server"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/service/server"
 	"github.com/retail-cortex/blitz/pkg/shellpath"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )

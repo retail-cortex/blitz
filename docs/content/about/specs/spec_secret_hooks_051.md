@@ -8,8 +8,8 @@ weight: 51
 | | |
 |---|---|
 | Status | **Built** (v0.8.4, the owner's request: "when the harness is created, and a git repository is created, we should also add githooks to ensure API keys are not committed") |
-| Source | `pkg/secretscan` (`scan.go`: the scan; `hook.go`: the hook, `Install`, `Staged`), `apps/cli/security.go` (`blitz security scan-secrets`, `blitz security install-hook`), `pkg/engine/changes.go` (`GitInit`, `InstallSecretHook`), `pkg/engine/tools/secrethook.go` (`install_secret_hook`), `WorkspaceService.InstallSecretHook` (`apps/service/internal/server/workspace.go`), the Changes menu (`apps/desktop/web/src/MenuBar.tsx`, `Workspace.tsx`), `pkg/engine/agents/builtin/project-setup.md`, `harness-update.md` |
-| Tests | `pkg/secretscan/scan_test.go` (`TestScan`, `TestInstall`, `TestHookStopsACommit`, `TestStaged`), `apps/cli/security_test.go` (`TestScanSecretsAndInstallHook`), `pkg/engine/changes_test.go` (`TestGitInit`), `pkg/engine/tools/jobs_test.go` (`TestInstallSecretHookTool`), `apps/service/internal/server/git_test.go` (`TestInitGitRepo`) |
+| Source | `pkg/secretscan` (`scan.go`: the scan; `hook.go`: the hook, `Install`, `Staged`), `apps/cli/security.go` (`blitz security scan-secrets`, `blitz security install-hook`), `pkg/engine/changes.go` (`GitInit`, `InstallSecretHook`), `pkg/engine/tools/secrethook.go` (`install_secret_hook`), `WorkspaceService.InstallSecretHook` (`pkg/service/server/workspace.go`), the Changes menu (`apps/desktop/web/src/MenuBar.tsx`, `Workspace.tsx`), `pkg/engine/agents/builtin/project-setup.md`, `harness-update.md` |
+| Tests | `pkg/secretscan/scan_test.go` (`TestScan`, `TestInstall`, `TestHookStopsACommit`, `TestStaged`), `apps/cli/security_test.go` (`TestScanSecretsAndInstallHook`), `pkg/engine/changes_test.go` (`TestGitInit`), `pkg/engine/tools/jobs_test.go` (`TestInstallSecretHookTool`), `pkg/service/server/git_test.go` (`TestInitGitRepo`) |
 | Depends on | [spec_harness_learning_048](spec_harness_learning_048.md) (the setup), [spec_files_029](spec_files_029.md) (FIL-59, git in the window), [spec_secrets_039](spec_secrets_039.md) (where keys belong: the keychain) |
 
 ## 1. Purpose

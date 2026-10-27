@@ -8,8 +8,8 @@ weight: 44
 | | |
 |---|---|
 | Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17; HL-18 in the usability pass and HL-19 (2026-10-26). |
-| Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `apps/service/internal/server/health.go`, `apps/service/internal/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
-| Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `apps/service/internal/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
+| Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `pkg/service/server/health.go`, `pkg/service/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
+| Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `pkg/service/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
 | Depends on | [spec_studio_040](spec_studio_040.md) (the kinds), [spec_evals_042](spec_evals_042.md) (pass rates), [spec_workflows_043](spec_workflows_043.md) (receipts, schedules), [spec_gates_041](spec_gates_041.md) (the judge, rules, guardrails), [spec_background_agents_032](spec_background_agents_032.md) (jobs) |
 
 ## 1. Purpose

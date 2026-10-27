@@ -8,7 +8,7 @@ weight: 29
 | | |
 |---|---|
 | Status | Phase 1 implemented (2026-09-27, on `main`); phase 2 largely done; phase 3 detailed in [spec_visual_editor_037](spec_visual_editor_037.md) (draft) |
-| Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/electron/src/main.ts` (the close prompt; unsaved.go in the Wails app until v0.6.5); the page's `src/files/` |
+| Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `pkg/service/server/files.go`, `apps/electron/src/main.ts` (the close prompt; unsaved.go in the Wails app until v0.6.5); the page's `src/files/` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md), [spec_filetools_006](spec_filetools_006.md) |
 
 ## 1. Purpose

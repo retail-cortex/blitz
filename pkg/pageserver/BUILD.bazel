@@ -35,10 +35,10 @@ go_test(
     ],
     embed = [":pageserver"],
     deps = [
-        "//apps/service/servicetest",
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/runtime",
+        "//pkg/service/servicetest",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",

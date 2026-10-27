@@ -8,8 +8,8 @@ weight: 42
 | | |
 |---|---|
 | Status | **Done** in v0.7.1 (the owner's request, 2026-10-17): EV-01–EV-12. |
-| Source | `pkg/engine/evals/evals.go`, `pkg/engine/evals/runs.go`, `pkg/engine/evals.go`, `pkg/engine/evaldraft.go`, `pkg/api/evals.go`, `apps/service/internal/server/evals.go`, `apps/service/internal/server/evalruns.go`, `pkg/client/client.go` (`RunEval`), `apps/cli/eval.go`, `apps/desktop/web/src/studio/EvalsPane.tsx`, `apps/desktop/web/src/studio/evalForm.ts`, `apps/desktop/web/src/studio/evalCoverage.ts`, `apps/desktop/web/src/AgentEditor.tsx` (its evals) |
-| Tests | `pkg/engine/evals/evals_test.go`, `pkg/engine/evals_test.go`, `apps/service/internal/server/evals_test.go`, `apps/service/internal/server/evalruns_test.go`, `pkg/engine/evalscore_test.go` (`TestRunEvalCaseTimeouts`), `pkg/client/remote_test.go` (`TestRemoteRunEval`), `apps/cli/eval_test.go`, `apps/desktop/web/src/studio/evalForm.test.ts`, `apps/desktop/web/src/studio/evalCoverage.test.ts` |
+| Source | `pkg/engine/evals/evals.go`, `pkg/engine/evals/runs.go`, `pkg/engine/evals.go`, `pkg/engine/evaldraft.go`, `pkg/api/evals.go`, `pkg/service/server/evals.go`, `pkg/service/server/evalruns.go`, `pkg/client/client.go` (`RunEval`), `apps/cli/eval.go`, `apps/desktop/web/src/studio/EvalsPane.tsx`, `apps/desktop/web/src/studio/evalForm.ts`, `apps/desktop/web/src/studio/evalCoverage.ts`, `apps/desktop/web/src/AgentEditor.tsx` (its evals) |
+| Tests | `pkg/engine/evals/evals_test.go`, `pkg/engine/evals_test.go`, `pkg/service/server/evals_test.go`, `pkg/service/server/evalruns_test.go`, `pkg/engine/evalscore_test.go` (`TestRunEvalCaseTimeouts`), `pkg/client/remote_test.go` (`TestRemoteRunEval`), `apps/cli/eval_test.go`, `apps/desktop/web/src/studio/evalForm.test.ts`, `apps/desktop/web/src/studio/evalCoverage.test.ts` |
 | Depends on | [spec_gates_041](spec_gates_041.md) (the judge), [spec_studio_040](spec_studio_040.md), [spec_search_035](spec_search_035.md) (embeddings) |
 
 ## 1. Purpose

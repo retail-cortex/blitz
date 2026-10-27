@@ -21,7 +21,7 @@ Blitz is independent apps (the CLI, the service, the desktop app; since, also th
 | Path | What |
 |---|---|
 | `apps/cli` | `blitz`; `apps/cli/internal/tui` is the REPL |
-| `apps/service` | `blitzd`; `apps/service/internal/daemon` runs it, `apps/service/internal/server` has the Connect handlers; `apps/service/servicetest` runs it in other packages' tests (`testonly`) |
+| `apps/service` | `blitzd`; `pkg/service` runs it, `pkg/service/server` has the Connect handlers; `pkg/service/servicetest` runs it in other packages' tests (`testonly`) |
 | `apps/desktop/web` | The desktop page (until v0.6.5 inside the Wails app, `apps/desktop`) |
 | `apps/electron` | The desktop app (Electron, since v0.7.0: [spec_electron_038](spec_electron_038.md)); `apps/electron/packaging` its packages |
 | `apps/tray` | `blitz-tray`, the service in the system tray, and the Electron app's host (`--serve`) |
@@ -36,7 +36,7 @@ Blitz is independent apps (the CLI, the service, the desktop app; since, also th
 | `third_party/` | Changes to outside code (until v0.6.5 also the Wails patch for Linux) |
 | `release/` | The CLI release archives |
 
-- **MR-01** Apps depend on `pkg/` only, never on each other; tests may run the service through `apps/service/servicetest`. Front ends (the CLI, the REPL, the desktop app), `pkg/api`, `pkg/client` and `pkg/socket` never reach the engine; only the service links it (*since 2026-10-04*: the CLI's `--local` runs in a private `blitzd`). One Go module (`github.com/retail-cortex/blitz`).
+- **MR-01** Apps depend on `pkg/` only, never on each other; tests may run the service through `pkg/service/servicetest`. Front ends (the CLI, the REPL, the desktop app), `pkg/api`, `pkg/client` and `pkg/socket` never reach the engine; only the service links it (*since 2026-10-04*: the CLI's `--local` runs in a private `blitzd`). One Go module (`github.com/retail-cortex/blitz`).
 - **MR-02** Enforced twice: engine libraries' `visibility` lists only the engine, the service, the CLI's `main` package (for its tests) and the three packages whose tests use the engine; and `bazel run //tools:check_deps` (CI) queries the build graph — libraries only — and fails when a front end's (the CLI's included, *since 2026-10-04*: every workspace runs in `blitzd`, [spec_cli_020](spec_cli_020.md) CLI-14), the contract's or a shared package's library reaches the engine, when an app's library reaches another app, or when an engine library is public. Gazelle keeps an existing `visibility`, so new engine packages start public and fail the check until given one.
 
 ## 3. Build
