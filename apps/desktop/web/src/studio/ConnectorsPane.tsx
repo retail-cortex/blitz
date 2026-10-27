@@ -327,7 +327,7 @@ export function ConnectorsPane({ workspace, onDirty, extra, connect }: { workspa
               </div>
             )}
             <fieldset className="worker agent-form rule-form" disabled={shown}>
-              <ConnectorFields api={api} form={form} setForm={setForm} kind={kind} kinds={kindsOf(form.category)} prefix={prefix} folder={folder(form.scope)} saved={!!file} onBuild={() => setDialog("build")} />
+              <ConnectorFields api={api} form={form} setForm={setForm} kind={kind} kinds={kindsOf(form.category)} prefix={prefix} folder={folder(form.scope)} saved={!!file} base={workspace ?? ""} onBuild={() => setDialog("build")} />
             </fieldset>
             {testable && (
               <div className="card outlined stack rule-try" style={{ gap: 8 }}>

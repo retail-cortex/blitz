@@ -22,14 +22,15 @@ import type { ConnectorKind } from "../gen/blitz/v1/workspace_pb";
 import { useAdvanced } from "../state";
 import { Button, Field, Switch } from "../ui/controls";
 import type { ConnectorApi } from "./connectorApi";
-import { can, newQueryForm, parseConnectionURL, takesURL, typedName, textIn, withKind, withSetting, type ConnectorForm, type QueryForm } from "./connectorForm";
+import { can, newQueryForm, parseConnectionURL, relativeTo, startFolder, takesURL, typedName, textIn, withKind, withSetting, type ConnectorForm, type QueryForm } from "./connectorForm";
 import { QueryCard } from "./QueryCard";
 
 /**
  * A connection's form, drawn from its kind's descriptor, in the order
  * it's filled: the kind (tiles, simplest first, until one is picked), a
  * connection URL to paste where the kind has a server, its fields (a
- * file's with Choose…), the name (its database's until one is typed) and
+ * file's with Choose…, opening in the workspace and kept relative to it
+ * when it's inside), the name (its database's until one is typed) and
  * description, and Read-only. Its ready-made tools and own queries, with
  * Try it and Write a query (onBuild), come once it's saved (saved); a new
  * one is connected first. A file the form can't describe is edited as it
@@ -45,6 +46,7 @@ export function ConnectorFields({
   prefix,
   folder,
   saved,
+  base = "",
   onBuild,
 }: {
   api: ConnectorApi;
@@ -58,6 +60,8 @@ export function ConnectorFields({
   folder: string;
   /** It has a file: its tools and queries can be chosen. */
   saved: boolean;
+  /** The workspace a file path is chosen from and kept relative to ("" for a global connection). */
+  base?: string;
   onBuild: () => void;
 }) {
   const lang = language();
@@ -83,8 +87,8 @@ export function ConnectorFields({
     });
   };
   const choose = async (key: string, label: string) => {
-    const path = await chooseFile(label);
-    if (path) setForm((f) => withSetting(f, key, path));
+    const path = await chooseFile(label, startFolder(base, form.settings[key] ?? ""));
+    if (path) setForm((f) => withSetting(f, key, relativeTo(base, path)));
   };
   if (!form.custom && !kind)
     return (

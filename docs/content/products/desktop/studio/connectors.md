@@ -29,7 +29,7 @@ A connection that came with the project, one you didn't save yourself, is marked
 
 | Kind | You fill in | Signs in with |
 |---|---|---|
-| SQLite | the file (**Choose…**; `./data/kitchen.db` starts at the workspace's folder) | nothing: it's a file |
+| SQLite | the file (**Choose…** opens in the workspace, and a file inside it is kept as `./data/kitchen.db`, so the connection still works when the project is cloned) | nothing: it's a file |
 | PostgreSQL | a connection URL, or host, port, database, user, password | the user and password |
 | BigQuery | project, location, which datasets, the most bytes a query may bill | your Google credentials |
 | AlloyDB | project, region, cluster, instance, IP type, database | a user and password, or your Google credentials |

@@ -316,3 +316,28 @@ export function formForTarget(target: string, category: string, kinds: Connector
   }
   return { ...f, name: suggestName(f.settings) };
 }
+
+/**
+ * Where a path field's file dialog opens: the folder of the path it holds
+ * (a relative one from base), else base (a workspace; "" the system's
+ * choice).
+ */
+export function startFolder(base: string, value: string): string {
+  const v = value.trim();
+  if (!v) return base;
+  const abs = v.startsWith("/") || v.startsWith("~") || /^[A-Za-z]:[\\/]/.test(v) ? v : base ? `${base.replace(/\/+$/, "")}/${v.replace(/^\.\//, "")}` : "";
+  const i = Math.max(abs.lastIndexOf("/"), abs.lastIndexOf("\\"));
+  return i > 0 ? abs.slice(0, i) : base;
+}
+
+/**
+ * A chosen file as a path field holds it: relative to base ("./data/x.db")
+ * when it's inside it, so the workspace's connection still works when the
+ * project is cloned or moved; else as chosen.
+ */
+export function relativeTo(base: string, path: string): string {
+  const b = base.replace(/[\\/]+$/, "");
+  if (!b || !path.startsWith(b)) return path;
+  const rest = path.slice(b.length);
+  return /^[\\/]./.test(rest) ? `./${rest.slice(1).replace(/\\/g, "/")}` : path;
+}

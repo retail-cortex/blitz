@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { ConnectorKindSchema, ConnectorSchema } from "../gen/blitz/v1/workspace_pb";
-import { can, connectionFromForm, formForTarget, formFromConnection, kindForTarget, newConnectorForm, parseConnectionURL, queryForm, readsOnly, sameConnectorForm, slugName, statementParams, typedName, suggestName, textIn, withKind, withSetting } from "./connectorForm";
+import { can, connectionFromForm, formForTarget, formFromConnection, kindForTarget, newConnectorForm, parseConnectionURL, queryForm, relativeTo, startFolder, readsOnly, sameConnectorForm, slugName, statementParams, typedName, suggestName, textIn, withKind, withSetting } from "./connectorForm";
 
 const postgres = create(ConnectorKindSchema, {
   id: "postgres",
@@ -182,4 +182,22 @@ describe("withKind from no kind", () => {
   it("starts read-only, as a new form with a kind does", () => {
     expect(withKind(newConnectorForm("databases", undefined), postgres)).toMatchObject({ kind: "postgres", readOnly: true, tools: ["execute_sql", "list_tables"] });
   });
+});
+
+describe("startFolder and relativeTo", () => {
+  it.each([
+    ["/w/shop", "", "/w/shop"],
+    ["/w/shop", "./data/notes.db", "/w/shop/data"],
+    ["/w/shop", "data/notes.db", "/w/shop/data"],
+    ["/w/shop", "/srv/db/x.sqlite", "/srv/db"],
+    ["", "~/data/x.db", "~/data"],
+    ["", "notes.db", ""],
+  ])("opens %s with %j in %s", (base, value, want) => expect(startFolder(base, value)).toBe(want));
+  it.each([
+    ["/w/shop", "/w/shop/data/notes.db", "./data/notes.db"],
+    ["/w/shop/", "/w/shop/notes.db", "./notes.db"],
+    ["/w/shop", "/w/shopping/x.db", "/w/shopping/x.db"],
+    ["/w/shop", "/srv/x.db", "/srv/x.db"],
+    ["", "/srv/x.db", "/srv/x.db"],
+  ])("keeps %s, %s as %s", (base, path, want) => expect(relativeTo(base, path)).toBe(want));
 });

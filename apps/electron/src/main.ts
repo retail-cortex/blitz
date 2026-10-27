@@ -506,7 +506,8 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return r.canceled ? "" : (r.filePaths[0] ?? "");
     }
     case "ChooseFile": {
-      const r = await dialog.showOpenDialog(win, { title: text(a, 0), properties: ["openFile"] });
+      // Opens where the form says (a workspace, or the folder of the path it holds).
+      const r = await dialog.showOpenDialog(win, { title: text(a, 0), defaultPath: text(a, 1) || undefined, properties: ["openFile"] });
       return r.canceled ? "" : (r.filePaths[0] ?? "");
     }
     case "Notify": {
