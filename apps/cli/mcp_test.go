@@ -169,3 +169,30 @@ func TestMCPCommandWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// --workspace without --dir is the current directory; a workspace's list
+// shows its project's servers; get names an unknown one as unknown.
+func TestMCPCommandWorkspaceHere(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, ".blitz"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, ".blitz", "settings.toml"), []byte("[[mcp.servers]]\nname = \"issues\"\ncommand = \"node\"\nargs = [\"issues.js\"]\n\n[[mcp.servers]]\nname = \"wiki\"\nurl = \"https://mcp.example/wiki\"\n"), 0o644))
+	t.Chdir(ws)
+	_, err := runCLI(t, "mcp", "add", "-w", "figma", "https://mcp.example/figma")
+	require.NoError(t, err)
+	out, err := runCLI(t, "mcp", "list", "-w")
+	require.NoError(t, err)
+	assert.Contains(t, out, "figma\thttps://mcp.example/figma\tworkspace")
+	assert.Contains(t, out, "issues\tnode issues.js\tproject")
+	assert.Contains(t, out, "wiki\thttps://mcp.example/wiki\tproject")
+	out, err = runCLI(t, "mcp", "get", "-w", "figma")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope:    workspace")
+	_, err = runCLI(t, "mcp", "get", "-w", "ghost")
+	assert.ErrorContains(t, err, "no MCP server")
+	_, err = runCLIWithInput(t, "", "mcp", "login", "-w", "issues")
+	assert.ErrorContains(t, err, "only http servers sign in")
+	out, err = runCLI(t, "mcp", "list")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "figma", "the global settings are unchanged")
+}

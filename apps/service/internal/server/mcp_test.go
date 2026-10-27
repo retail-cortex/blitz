@@ -15,6 +15,8 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -163,6 +165,35 @@ func TestWorkspaceMCPServersOverTheAPI(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "moved already")
 	_, err = cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Name: "jira"}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "needs a workspace")
+
+	// A workspace server named as a global one stands in for it; it can't
+	// be made global while the global one is there.
+	_, err = cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Workspace: dir, Server: &pb.MCPServerConfig{Name: "docs", Command: "local-docs"}}))
+	require.NoError(t, err)
+	assert.Equal(t, "workspace", listed(dir)["docs"].Scope)
+	_, err = cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: dir, Name: "docs"}))
+	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+
+	// The project's servers are listed by scope, as they are.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".blitz"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".blitz", "settings.toml"), []byte("[[mcp.servers]]\nname = \"issues\"\ncommand = \"node\"\nargs = [\"tools/issues.js\"]\n\n[[mcp.servers]]\nname = \"wiki\"\nurl = \"https://mcp.example/wiki\"\n"), 0o644))
+	l = listed(dir)
+	assert.Equal(t, "project", l["issues"].Scope)
+	assert.Equal(t, "node tools/issues.js", l["issues"].Command)
+	assert.Equal(t, "https://mcp.example/wiki", l["wiki"].Url)
+
+	// A scope that isn't an absolute folder is refused by every call.
+	bad := "not/absolute"
+	for name, call := range map[string]func() error{
+		"list":        func() error { _, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{Workspace: bad})); return err },
+		"save":        func() error { _, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Workspace: bad, Server: &pb.MCPServerConfig{Name: "x", Command: "x"}})); return err },
+		"remove":      func() error { _, err := cfg.RemoveMCPServer(ctx, connect.NewRequest(&pb.RemoveMCPServerRequest{Workspace: bad, Name: "x"})); return err },
+		"enable":      func() error { _, err := cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Workspace: bad, Name: "x"})); return err },
+		"make global": func() error { _, err := cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: bad, Name: "x"})); return err },
+		"check key":   func() error { _, err := cfg.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Workspace: bad, Provider: "gemini", Key: "x"})); return err },
+	} {
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()), name)
+	}
 }
 
 // DraftManifest refuses a kind it has no brief for, and answers a problem
