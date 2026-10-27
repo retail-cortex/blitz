@@ -912,6 +912,18 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
 
 // Settings › Connectors › MCP servers: the global servers, edited in place.
+// Each workspace's own MCP servers, and the global ones it turned off.
+const fakeWorkspaceMCP = new Map<string, MCPServerConfig[]>();
+const fakeMCPOff = new Map<string, Set<string>>();
+function workspaceMCP(workspace: string): MCPServerConfig[] {
+  let list = fakeWorkspaceMCP.get(workspace);
+  if (!list) {
+    list = [create(MCPServerConfigSchema, { name: "figma", url: "https://mcp.figma.example/mcp", autoApprove: false })];
+    fakeWorkspaceMCP.set(workspace, list);
+  }
+  return list;
+}
+const mcpPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b3c4d/.env.toml` : "~/.blitz/.env.toml");
 const fakeMCP: MCPServerConfig[] = [
   create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
   create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),
@@ -2348,7 +2360,17 @@ export function installFake() {
             { name: "testing-tdd", description: "Write the failing test first, then the code", version: "1.0.0" },
           ],
         }),
-        listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
+        listMCPServerConfigs: ({ workspace }) =>
+          workspace
+            ? {
+                servers: [
+                  ...fakeMCP.map((m) => ({ ...m, scope: "global", offHere: !!fakeMCPOff.get(workspace)?.has(m.name) })),
+                  ...workspaceMCP(workspace).map((m) => ({ ...m, scope: "workspace" })),
+                  { name: "db", command: "npx @acme/db-mcp", scope: "project" },
+                ],
+                path: mcpPath(workspace),
+              }
+            : { servers: fakeMCP.map((m) => ({ ...m, scope: "global" })), path: mcpPath("") },
         // Settings › Connectors: the global connections.
         listGlobalConnectors: () => ({
           categories: [{ ...fakeConnectorCategory, workspaceDir: "", state: "", toolCount: 0 }],
@@ -2367,22 +2389,43 @@ export function installFake() {
         tryGlobalConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readGlobalConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftGlobalConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
-        saveMCPServer: ({ name, server }) => {
-          const i = fakeMCP.findIndex((m) => m.name === name);
-          if (!name && fakeMCP.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
-          if (name && i < 0) throw new Error(`no MCP server by that name: ${name}`);
-          if (i >= 0) fakeMCP[i] = server!;
-          else fakeMCP.push(server!);
-          return { change: { path: "~/.blitz/.env.toml" } };
+        // A workspace's own servers (fakeWorkspaceMCP) and the global ones it turned off (fakeMCPOff).
+        saveMCPServer: ({ workspace, name, server }) => {
+          const list = workspace ? workspaceMCP(workspace) : fakeMCP;
+          const i = list.findIndex((m) => m.name === name);
+          if (!name && list.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
+          if (name && i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          if (i >= 0) list[i] = server!;
+          else list.push(server!);
+          return { change: { path: mcpPath(workspace) } };
         },
-        removeMCPServer: ({ name }) => {
-          fakeMCP.splice(fakeMCP.findIndex((m) => m.name === name), 1);
-          return { change: { path: "~/.blitz/.env.toml" } };
+        removeMCPServer: ({ workspace, name }) => {
+          const list = workspace ? workspaceMCP(workspace) : fakeMCP;
+          const i = list.findIndex((m) => m.name === name);
+          if (i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          list.splice(i, 1);
+          return { change: { path: mcpPath(workspace) } };
         },
-        setMCPServerEnabled: ({ name, enabled }) => {
-          const m = fakeMCP.find((x) => x.name === name);
-          if (m) m.disabled = !enabled;
-          return { change: { path: "~/.blitz/.env.toml" } };
+        setMCPServerEnabled: ({ workspace, name, enabled }) => {
+          const own = workspace ? workspaceMCP(workspace).find((x) => x.name === name) : undefined;
+          if (workspace && !own) {
+            const off = fakeMCPOff.get(workspace) ?? new Set<string>();
+            if (enabled) off.delete(name);
+            else off.add(name);
+            fakeMCPOff.set(workspace, off);
+          } else {
+            const m = own ?? fakeMCP.find((x) => x.name === name);
+            if (m) m.disabled = !enabled;
+          }
+          return { change: { path: mcpPath(workspace) } };
+        },
+        makeMCPServerGlobal: ({ workspace, name }) => {
+          const list = workspaceMCP(workspace);
+          const i = list.findIndex((m) => m.name === name);
+          if (i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          if (fakeMCP.some((m) => m.name === name)) throw new ConnectError(`an MCP server named "${name}" is already configured`, Code.AlreadyExists);
+          fakeMCP.push(list.splice(i, 1)[0]);
+          return { change: { path: mcpPath("") } };
         },
         addSkillRegistry: ({ url, name, token }) => {
           if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);

@@ -93,4 +93,4 @@ A kind lists the ones it has, and its backend must be able to: the **toolbox** b
 
 ## MCP servers
 
-**Settings › Connectors** also holds your global [MCP servers](../about/specs/spec_mcp_009.md) (with advanced settings): any MCP server's tools, for every workspace. A workspace's own servers come from its project settings.
+**Settings › Connectors** also holds your global [MCP servers](mcp.md) (with advanced settings): any MCP server's tools, for every workspace. **Studio › Connectors** holds a workspace's own, beside your global ones (each can be switched off there) and the project's ([one workspace's servers](mcp.md#one-workspaces-servers)).

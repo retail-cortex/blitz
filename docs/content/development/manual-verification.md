@@ -772,3 +772,5 @@ Trying a key lists models (no model call, no cost). Use a throwaway `HOME` for t
   **Expected:** no kind cards at first; clicking a kind's ring opens its card below, and its head closes it again.
 - [ ] Open a workspace whose project settings wait for trust.
   **Expected:** the dialog opens without the "Project settings not loaded" bar behind it; **Don't trust** brings the bar back.
+- [ ] Studio › Connectors › MCP servers: **+** a server (a URL); switch a global one off; open another workspace's Studio.
+  **Expected:** the new one says **This workspace** and runs here (`/mcp`), not in the other workspace; the global one is **Off in this workspace** here and on there; `~/.blitz/.env.toml` is unchanged, and the workspace's `~/.blitz/workspaces/<name>-<id>/.env.toml` has the server and `[mcp] off`. **Make global** moves it: both workspaces list it under **Every workspace**.

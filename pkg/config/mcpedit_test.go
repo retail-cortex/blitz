@@ -56,9 +56,9 @@ func TestEditMCPServers(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, []byte(mcpDoc), 0o600))
 
-	_, err := AddMCPServer("", MCPServerConfig{Name: "docs", URL: "https://mcp.example/docs", Headers: map[string]string{"X-Team": "core"}, Agents: []string{"qa"}})
+	_, err := AddMCPServer("", "", MCPServerConfig{Name: "docs", URL: "https://mcp.example/docs", Headers: map[string]string{"X-Team": "core"}, Agents: []string{"qa"}})
 	require.NoError(t, err)
-	_, err = AddMCPServer("", MCPServerConfig{Name: "fs", Command: "other"})
+	_, err = AddMCPServer("", "", MCPServerConfig{Name: "fs", Command: "other"})
 	assert.ErrorContains(t, err, "already configured")
 
 	got := servers(t)
@@ -68,14 +68,14 @@ func TestEditMCPServers(t *testing.T) {
 	assert.Equal(t, map[string]string{"X-Team": "core"}, got[2].Headers)
 	assert.Equal(t, []string{"qa"}, got[2].Agents)
 
-	_, err = SetMCPServerDisabled("", "db", true)
+	_, err = SetMCPServerDisabled("", "", "db", true)
 	require.NoError(t, err)
 	assert.True(t, servers(t)[1].Disabled)
-	_, err = SetMCPServerDisabled("", "db", false)
+	_, err = SetMCPServerDisabled("", "", "db", false)
 	require.NoError(t, err)
 	assert.False(t, servers(t)[1].Disabled)
 
-	_, err = RemoveMCPServer("", "fs")
+	_, err = RemoveMCPServer("", "", "fs")
 	require.NoError(t, err)
 	got = servers(t)
 	require.Len(t, got, 2)
@@ -87,9 +87,9 @@ func TestEditMCPServers(t *testing.T) {
 	assert.Contains(t, string(data), "# my settings")
 	assert.Contains(t, string(data), "[web]")
 
-	_, err = RemoveMCPServer("", "nope")
+	_, err = RemoveMCPServer("", "", "nope")
 	assert.ErrorIs(t, err, ErrNoMCPServer)
-	_, err = SetMCPServerDisabled("", "nope", true)
+	_, err = SetMCPServerDisabled("", "", "nope", true)
 	assert.ErrorIs(t, err, ErrNoMCPServer)
 }
 
@@ -102,7 +102,7 @@ func TestReplaceMCPServer(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(mcpDoc), 0o600))
 
 	off := false
-	_, err := ReplaceMCPServer("", "fs", MCPServerConfig{
+	_, err := ReplaceMCPServer("", "", "fs", MCPServerConfig{
 		Name: "files", Command: "npx", Args: []string{"@acme/fs", "--ro"}, Env: map[string]string{"ROOT": "/srv"},
 		Tools: []string{"read"}, AutoApprove: true, Sandbox: &off, TimeoutSeconds: 60, Disabled: true,
 	})
@@ -120,16 +120,95 @@ func TestReplaceMCPServer(t *testing.T) {
 	assert.True(t, got[0].Disabled)
 	assert.Equal(t, "db", got[1].Name)
 
-	_, err = ReplaceMCPServer("", "db", MCPServerConfig{Name: "files", Command: "x"})
+	_, err = ReplaceMCPServer("", "", "db", MCPServerConfig{Name: "files", Command: "x"})
 	assert.ErrorContains(t, err, "already configured")
 	assert.Equal(t, "db", servers(t)[1].Name, "nothing written")
-	_, err = ReplaceMCPServer("", "nope", MCPServerConfig{Name: "nope", Command: "x"})
+	_, err = ReplaceMCPServer("", "", "nope", MCPServerConfig{Name: "nope", Command: "x"})
 	assert.ErrorIs(t, err, ErrNoMCPServer)
-	_, err = ReplaceMCPServer("", "db", MCPServerConfig{Name: "db"})
+	_, err = ReplaceMCPServer("", "", "db", MCPServerConfig{Name: "db"})
 	assert.ErrorContains(t, err, "needs a name and either")
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "# my settings")
 	assert.Contains(t, string(data), "[web]\nenabled = true")
+}
+
+// A workspace's own servers add to the global ones (one with a global
+// one's name stands in for it there), a global one turned off there is
+// disabled there alone, and every edit lands in the workspace's file.
+func TestWorkspaceMCPServers(t *testing.T) {
+	home := isolateConfigEnv(t)
+	path := filepath.Join(home, ".blitz", ".env.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(mcpDoc), 0o600))
+	ws := t.TempDir()
+	other := t.TempDir()
+
+	wpath, err := AddMCPServer("", ws, MCPServerConfig{Name: "jira", URL: "https://mcp.example/jira"})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(WorkspaceSettingsDir("", ws), ".env.toml"), wpath)
+	_, err = AddMCPServer("", ws, MCPServerConfig{Name: "db", Command: "local-db-mcp"})
+	require.NoError(t, err, "a workspace may stand in for a global server")
+	_, err = SetMCPServerOff("", ws, "fs", true)
+	require.NoError(t, err)
+
+	load := func(dir string) map[string]MCPServerConfig {
+		cfg, err := LoadWorkspace("", dir)
+		require.NoError(t, err)
+		out := map[string]MCPServerConfig{}
+		for _, s := range cfg.MCP.Servers {
+			out[s.Name] = s
+		}
+		return out
+	}
+	got := load(ws)
+	require.Len(t, got, 3)
+	assert.Equal(t, MCPScopeGlobal, got["fs"].Scope)
+	assert.True(t, got["fs"].Disabled && got["fs"].OffHere, "off in this workspace")
+	assert.Equal(t, MCPScopeWorkspace, got["db"].Scope)
+	assert.Equal(t, "local-db-mcp", got["db"].Command, "the workspace's stands in")
+	assert.Equal(t, MCPScopeWorkspace, got["jira"].Scope)
+
+	theirs := load(other)
+	require.Len(t, theirs, 2, "other workspaces see the global ones alone")
+	assert.False(t, theirs["fs"].Disabled)
+	assert.Equal(t, "db-mcp", theirs["db"].Command)
+	for _, s := range servers(t) {
+		assert.Equal(t, MCPScopeGlobal, s.Scope)
+		assert.False(t, s.Disabled, "the global settings are unchanged: %s", s.Name)
+	}
+
+	own, off, _, err := ScopeMCP("", ws)
+	require.NoError(t, err)
+	assert.Len(t, own, 2)
+	assert.Equal(t, []string{"fs"}, off)
+
+	tests := []struct {
+		name string
+		run  func() error
+		want error
+	}{
+		{"on again", func() error { _, err := SetMCPServerOff("", ws, "fs", false); return err }, nil},
+		{"off for a name the global settings lack", func() error { _, err := SetMCPServerOff("", ws, "jira", true); return err }, ErrNoMCPServer},
+		{"off needs a workspace", func() error { _, err := SetMCPServerOff("", "", "fs", true); return err }, nil},
+		{"remove the workspace's own", func() error { _, err := RemoveMCPServer("", ws, "jira"); return err }, nil},
+		{"remove a global one from a workspace", func() error { _, err := RemoveMCPServer("", ws, "fs"); return err }, ErrNoMCPServer},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.run()
+			switch {
+			case tc.name == "off needs a workspace":
+				assert.Error(t, err)
+			case tc.want != nil:
+				assert.ErrorIs(t, err, tc.want)
+			default:
+				assert.NoError(t, err)
+			}
+		})
+	}
+	got = load(ws)
+	assert.False(t, got["fs"].Disabled, "on again")
+	assert.NotContains(t, got, "jira")
 }

@@ -80,13 +80,13 @@ func TestAgentModelNeedsName(t *testing.T) {
 // server whole, and refuses a name configured twice already.
 func TestAddMCPServerEdges(t *testing.T) {
 	keysEnv(t)
-	_, err := AddMCPServer("", MCPServerConfig{Name: "x"})
+	_, err := AddMCPServer("", "", MCPServerConfig{Name: "x"})
 	assert.ErrorContains(t, err, "needs a name")
 
 	dir := ConfigDir("")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[ui]\ntheme = \"dark\""), 0o600))
-	path, err := AddMCPServer("", MCPServerConfig{Name: "db", Command: "npx", Args: []string{"db-mcp"}, Env: map[string]string{"A": "1"}, Prefix: "db_", Agents: []string{"qa"}})
+	path, err := AddMCPServer("", "", MCPServerConfig{Name: "db", Command: "npx", Args: []string{"db-mcp"}, Env: map[string]string{"A": "1"}, Prefix: "db_", Agents: []string{"qa"}})
 	require.NoError(t, err)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestAddMCPServerEdges(t *testing.T) {
 	assert.Equal(t, []string{"qa"}, s.Agents)
 
 	require.NoError(t, os.WriteFile(path, append(data, []byte("\n[[mcp.servers]]\nname = \"db\"\nurl = \"https://x\"\n")...), 0o600))
-	_, err = AddMCPServer("", MCPServerConfig{Name: "db", URL: "https://y"})
+	_, err = AddMCPServer("", "", MCPServerConfig{Name: "db", URL: "https://y"})
 	assert.Error(t, err, "two named db already")
 }
 

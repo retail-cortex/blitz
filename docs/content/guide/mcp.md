@@ -35,7 +35,7 @@ blitz mcp login docs
 | `blitz mcp login <name>`, `logout <name>` | Sign in to an HTTP server in the browser (OAuth), or forget the sign-in |
 | `blitz doctor --online` | Connects to each server and counts its tools |
 
-In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`; servers are added from the terminal or in the settings file.
+In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Connectors › MCP servers**, and a workspace's own in **Studio › Connectors** ([one workspace's servers](#one-workspaces-servers)).
 
 ## In the settings file
 
@@ -61,6 +61,28 @@ env = { GITHUB_TOKEN = "ghp_…" }
 Each server needs a unique `name` and exactly one of `command` or `url`; otherwise the workspace won't open, saying why.
 
 **Keep the file private.** `env` and `headers` values are stored as written, in plain text (Blitz masks them in its logs and in `blitz config show`). Only OAuth sign-ins (`blitz mcp login`) go to the system keychain. Prefer a server that reads its token from its own config, or OAuth, when you can.
+
+## One workspace's servers
+
+A server only one project needs (its staging database, its design files) belongs to that workspace, not to every one. In the desktop app, open **Studio › Connectors**: under **MCP servers** you'll find every server the workspace runs, each saying whose it is.
+
+- **This workspace**: its own. **+** adds one; edit, remove it, or **Make global** to move it to your global settings for every workspace.
+- **Every workspace**: your global servers, shown as they are. The switch turns one off **in this workspace only**; the gear edits it in Settings. Studio never changes what other workspaces run.
+- **From the project's settings**: what the repository brings (below), shown as it is.
+
+A workspace's own servers are kept in its settings in your settings folder (`~/.blitz/workspaces/<name>-<id>/.env.toml`), never in the project, so they aren't committed and a clone can't add them. The same file lists the global servers turned off there:
+
+```toml
+# ~/.blitz/workspaces/shop-1a2b3c4d/.env.toml
+[[mcp.servers]]
+name = "figma"
+url = "https://mcp.figma.example/mcp"
+
+[mcp]
+off = ["github"]   # global servers this workspace doesn't run
+```
+
+They add to the global ones; one with a global server's name stands in for it in that workspace.
 
 ## Servers a project brings
 

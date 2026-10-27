@@ -17,6 +17,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -27,19 +29,39 @@ import (
 
 // blitz mcp add, remove, enable and disable edit the [[mcp.servers]]
 // entries of the global settings file in place, keeping everything else as
-// written, comments included (spec_parity_027 PAR-MCP-01).
+// written, comments included (spec_parity_027 PAR-MCP-01). With a
+// workspace they edit that workspace's own settings file instead (in
+// ~/.blitz, never the project), whose servers add to the global ones
+// (mergeMCP); SetMCPServerOff turns a global one off there.
 
 // ErrNoMCPServer means no [[mcp.servers]] entry has that name.
 var ErrNoMCPServer = errors.New("no MCP server by that name")
 
+// mcpDir is the folder whose .env.toml holds a scope's servers: the
+// global settings' (workspace "") or the workspace's own.
+func mcpDir(prefixDir, workspace string) (string, error) {
+	if workspace == "" {
+		return ConfigDir(prefixDir), nil
+	}
+	if dir := WorkspaceSettingsDir(prefixDir, workspace); dir != "" {
+		return dir, nil
+	}
+	return "", fmt.Errorf("no settings folder for the workspace %s", workspace)
+}
+
 // AddMCPServer appends s as a [[mcp.servers]] entry of the global settings
-// (prefixDir as for Load). A server of the same name is refused.
-func AddMCPServer(prefixDir string, s MCPServerConfig) (string, error) {
+// (prefixDir as for Load), or of a workspace's own. A server of the same
+// name in that file is refused.
+func AddMCPServer(prefixDir, workspace string, s MCPServerConfig) (string, error) {
 	if s.Name == "" || (s.Command == "") == (s.URL == "") {
 		return "", errors.New("an MCP server needs a name and either a command or a URL")
 	}
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
 	exists := false
-	path, err := editConfigFile(ConfigDir(prefixDir), func(doc string) string {
+	path, err := editConfigFile(dir, func(doc string) string {
 		if _, _, ok := mcpBlock(doc, s.Name); ok {
 			exists = true
 			return doc
@@ -58,12 +80,16 @@ func AddMCPServer(prefixDir string, s MCPServerConfig) (string, error) {
 // ReplaceMCPServer puts s in place of the entry named name (which s may
 // rename), keeping its place in the file. The entry is written afresh, so
 // comments inside it are lost; the rest of the file is kept as it was.
-func ReplaceMCPServer(prefixDir, name string, s MCPServerConfig) (string, error) {
+func ReplaceMCPServer(prefixDir, workspace, name string, s MCPServerConfig) (string, error) {
 	if s.Name == "" || (s.Command == "") == (s.URL == "") {
 		return "", errors.New("an MCP server needs a name and either a command or a URL")
 	}
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
 	var found bool
-	path, err := editConfigFile(ConfigDir(prefixDir), func(doc string) string {
+	path, err := editConfigFile(dir, func(doc string) string {
 		start, end, ok := mcpBlock(doc, name)
 		if !ok {
 			return doc
@@ -85,9 +111,13 @@ func ReplaceMCPServer(prefixDir, name string, s MCPServerConfig) (string, error)
 }
 
 // RemoveMCPServer deletes the entry named name.
-func RemoveMCPServer(prefixDir, name string) (string, error) {
+func RemoveMCPServer(prefixDir, workspace, name string) (string, error) {
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
 	var found bool
-	path, err := editConfigFile(ConfigDir(prefixDir), func(doc string) string {
+	path, err := editConfigFile(dir, func(doc string) string {
 		start, end, ok := mcpBlock(doc, name)
 		if !ok {
 			return doc
@@ -104,9 +134,13 @@ func RemoveMCPServer(prefixDir, name string) (string, error) {
 
 // SetMCPServerDisabled turns the entry named name off (disabled = true) or
 // on again.
-func SetMCPServerDisabled(prefixDir, name string, disabled bool) (string, error) {
+func SetMCPServerDisabled(prefixDir, workspace, name string, disabled bool) (string, error) {
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
 	var found bool
-	path, err := editConfigFile(ConfigDir(prefixDir), func(doc string) string {
+	path, err := editConfigFile(dir, func(doc string) string {
 		start, end, ok := mcpBlock(doc, name)
 		if !ok {
 			return doc
@@ -126,6 +160,57 @@ func SetMCPServerDisabled(prefixDir, name string, disabled bool) (string, error)
 		return "", fmt.Errorf("%w: %s", ErrNoMCPServer, name)
 	}
 	return path, err
+}
+
+// SetMCPServerOff turns a global server off in one workspace (its own
+// settings' [mcp] off list), or on again there; the global settings are
+// left alone. A name the global settings don't have is refused.
+func SetMCPServerOff(prefixDir, workspace, name string, off bool) (string, error) {
+	if workspace == "" {
+		return "", errors.New("a server is turned off in a workspace: none given")
+	}
+	global, _, _, err := ScopeMCP(prefixDir, "")
+	if err != nil {
+		return "", err
+	}
+	if !slices.ContainsFunc(global, func(s MCPServerConfig) bool { return s.Name == name }) {
+		return "", fmt.Errorf("%w: %s", ErrNoMCPServer, name)
+	}
+	_, list, _, err := ScopeMCP(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
+	list = slices.DeleteFunc(slices.Clone(list), func(n string) bool { return n == name })
+	if off {
+		list = append(list, name)
+	}
+	sort.Strings(list)
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return "", err
+	}
+	return editConfigFile(dir, func(doc string) string { return setTOMLKey(doc, "mcp", "off", tomlList(list)) }, func(map[string]any) error { return nil })
+}
+
+// ScopeMCP reads one scope's file alone (the global settings, or a
+// workspace's own): its servers as written, its off list (a workspace's)
+// and its path. A file that isn't there has none.
+func ScopeMCP(prefixDir, workspace string) (servers []MCPServerConfig, off []string, path string, err error) {
+	dir, err := mcpDir(prefixDir, workspace)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	path = filepath.Join(dir, ".env.toml")
+	var f struct {
+		MCP MCPConfig `toml:"mcp"`
+	}
+	if _, err := toml.DecodeFile(path, &f); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, path, err
+	}
+	if workspace == "" {
+		f.MCP.Off = nil
+	}
+	return f.MCP.Servers, f.MCP.Off, path, nil
 }
 
 // mcpBlock finds the [[mcp.servers]] entry named name: its header's line,

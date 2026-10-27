@@ -15,10 +15,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiDeleteOutline, mdiPencilOutline, mdiPlus, mdiPowerPlugOutline, mdiPowerPlugOffOutline } from "@mdi/js";
+import { mdiCogOutline, mdiDeleteOutline, mdiEarth, mdiPencilOutline, mdiPlus, mdiPowerPlugOutline, mdiPowerPlugOffOutline } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
-import { configChanged } from "./events";
+import { configChanged, openSettings } from "./events";
 import type { MCPServerConfig } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { emptyForm, formProblems, fromForm, targetOf, toForm, type McpForm } from "./mcpForm";
@@ -30,9 +30,14 @@ import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from
  * servers, each on or off; added and edited in a dialog, removed after
  * asking. Settings are global: how each does in a workspace is that
  * workspace's. Embedded, it's a section of Settings › Connectors, headed
- * as its categories are.
+ * as its categories are. With a workspace it's Studio › Connectors'
+ * (spec_mcp_009 MCP-50): the servers that workspace runs, by scope. Its
+ * own are added, edited, removed and made global there; a global one is
+ * shown as it is, with a switch turning it off or on in this workspace
+ * alone and Edit in Settings (Studio never changes what other workspaces
+ * use); a trusted project's are shown as they are.
  */
-export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
+export function McpSettings({ embedded, workspace = "" }: { embedded?: boolean; workspace?: string } = {}) {
   const snack = useSnackbar();
   const [configs, setConfigs] = useState<MCPServerConfig[]>([]);
   const [path, setPath] = useState("");
@@ -41,17 +46,18 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
   // The server being edited ("" a new one), and the one to remove.
   const [editing, setEditing] = useState<{ name: string; form: McpForm } | null>(null);
   const [removing, setRemoving] = useState("");
+  const [promoting, setPromoting] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const r = await config.listMCPServerConfigs({});
+      const r = await config.listMCPServerConfigs({ workspace });
       setConfigs(r.servers);
       setPath(r.path);
       setError("");
     } catch (e) {
       setError(message(e));
     }
-  }, []);
+  }, [workspace]);
   useEffect(() => void load(), [load]);
 
   // Runs a change, says how it went, tells the window and reloads.
@@ -59,7 +65,7 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
     setBusy(true);
     try {
       snack(await run());
-      configChanged({ dir: "" });
+      configChanged({ dir: workspace });
       await load();
       return true;
     } catch (e) {
@@ -72,7 +78,7 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
 
   const intro = (
     <>
-      {t("desktop.mcp.intro")}
+      {t(workspace ? "desktop.mcp.intro_workspace" : "desktop.mcp.intro")}
       {path && (
         <>
           {" "}
@@ -114,9 +120,13 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
               key={c.name}
               server={c}
               busy={busy}
-              onEnable={(on) => act(async () => (await config.setMCPServerEnabled({ name: c.name, enabled: on }), t(on ? "desktop.mcp.enabled" : "desktop.mcp.disabled", { name: c.name })))}
+              studio={!!workspace}
+              onEnable={(on) =>
+                act(async () => (await config.setMCPServerEnabled({ workspace, name: c.name, enabled: on }), t(on ? (workspace && c.scope === "global" ? "desktop.mcp.enabled_here" : "desktop.mcp.enabled") : workspace && c.scope === "global" ? "desktop.mcp.disabled_here" : "desktop.mcp.disabled", { name: c.name })))
+              }
               onEdit={() => setEditing({ name: c.name, form: toForm(c) })}
               onRemove={() => setRemoving(c.name)}
+              onPromote={() => setPromoting(c.name)}
             />
           ))}
         </div>
@@ -130,7 +140,7 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
           onClose={() => setEditing(null)}
           onSave={async (f) => {
             const saved = await act(async () => {
-              await config.saveMCPServer({ name: editing.name, server: fromForm(f) });
+              await config.saveMCPServer({ workspace, name: editing.name, server: fromForm(f) });
               return t(editing.name ? "desktop.mcp.saved" : "desktop.mcp.added", { name: f.name.trim() });
             });
             if (saved) setEditing(null);
@@ -151,7 +161,7 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
                 onClick={() => {
                   const name = removing;
                   setRemoving("");
-                  void act(async () => (await config.removeMCPServer({ name }), t("desktop.mcp.removed", { name })));
+                  void act(async () => (await config.removeMCPServer({ workspace, name }), t("desktop.mcp.removed", { name })));
                 }}
               >
                 {t("desktop.mcp.remove")}
@@ -162,14 +172,61 @@ export function McpSettings({ embedded }: { embedded?: boolean } = {}) {
           <p>{t("desktop.mcp.remove_body", { name: removing })}</p>
         </Dialog>
       )}
+      {promoting && (
+        <Dialog
+          title={t("desktop.mcp.make_global_title", { name: promoting })}
+          icon={mdiEarth}
+          onClose={() => setPromoting("")}
+          footer={
+            <>
+              <Button onClick={() => setPromoting("")}>{t("desktop.cancel")}</Button>
+              <Button
+                variant="filled"
+                onClick={() => {
+                  const name = promoting;
+                  setPromoting("");
+                  void act(async () => (await config.makeMCPServerGlobal({ workspace, name }), t("desktop.mcp.made_global", { name })));
+                }}
+              >
+                {t("desktop.mcp.make_global")}
+              </Button>
+            </>
+          }
+        >
+          <p>{t("desktop.mcp.make_global_body", { name: promoting })}</p>
+        </Dialog>
+      )}
     </div>
   );
 }
 
-// One server: its name, what it runs, and what can be done with it.
-function ServerRow({ server, busy, onEnable, onEdit, onRemove }: { server: MCPServerConfig; busy: boolean; onEnable: (on: boolean) => void; onEdit: () => void; onRemove: () => void }) {
-  const enabled = !server.disabled;
+// One server: its name, what it runs, and what can be done with it. In
+// Studio (studio) it says whose it is; a global one has its switch (on
+// or off here) and Edit in Settings, a project's nothing to change.
+function ServerRow({
+  server,
+  busy,
+  studio,
+  onEnable,
+  onEdit,
+  onRemove,
+  onPromote,
+}: {
+  server: MCPServerConfig;
+  busy: boolean;
+  studio: boolean;
+  onEnable: (on: boolean) => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  onPromote: () => void;
+}) {
+  const enabled = !server.disabled && !server.offHere;
   const target = targetOf(server);
+  const global = studio && server.scope === "global";
+  const project = studio && server.scope === "project";
+  const own = !global && !project;
+  const whose = studio ? t(`desktop.mcp.scope.${server.scope || "workspace"}`) : "";
+  const note = [whose, server.offHere ? t("desktop.mcp.off_here") : global && server.disabled ? t("desktop.mcp.off_everywhere") : ""].filter(Boolean).join(" · ");
   return (
     <div className="rule mcp-row">
       <Icon path={enabled ? mdiPowerPlugOutline : mdiPowerPlugOffOutline} className="muted" />
@@ -178,10 +235,20 @@ function ServerRow({ server, busy, onEnable, onEdit, onRemove }: { server: MCPSe
         <code className="t-body-sm ellipsis" title={target}>
           {target}
         </code>
+        {note && <span className="t-body-sm muted">{note}</span>}
       </div>
-      <IconButton icon={mdiPencilOutline} label={t("desktop.mcp.edit", { name: server.name })} small disabled={busy} onClick={onEdit} />
-      <IconButton icon={mdiDeleteOutline} label={t("desktop.mcp.remove_named", { name: server.name })} small disabled={busy} onClick={onRemove} />
-      <Switch label={t("desktop.mcp.enable", { name: server.name })} checked={enabled} disabled={busy} onChange={onEnable} />
+      {own && <IconButton icon={mdiPencilOutline} label={t("desktop.mcp.edit", { name: server.name })} small disabled={busy} onClick={onEdit} />}
+      {own && <IconButton icon={mdiDeleteOutline} label={t("desktop.mcp.remove_named", { name: server.name })} small disabled={busy} onClick={onRemove} />}
+      {own && studio && <IconButton icon={mdiEarth} label={t("desktop.mcp.make_global_named", { name: server.name })} small disabled={busy} onClick={onPromote} />}
+      {global && <IconButton icon={mdiCogOutline} label={t("desktop.mcp.edit_in_settings", { name: server.name })} small onClick={() => openSettings({ section: "mcp" })} />}
+      {!project && (
+        <Switch
+          label={t(global ? "desktop.mcp.enable_here" : "desktop.mcp.enable", { name: server.name })}
+          checked={enabled}
+          disabled={busy || (global && server.disabled)}
+          onChange={onEnable}
+        />
+      )}
     </div>
   );
 }

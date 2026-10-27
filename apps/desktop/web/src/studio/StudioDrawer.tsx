@@ -23,6 +23,7 @@ import { intent as newIntent, type ItemIntent } from "../intent";
 import { reloadSummary } from "../reload";
 import { AgentScope } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
+import { McpSettings } from "../McpSettings";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
@@ -223,7 +224,7 @@ export function StudioDrawer({
               </div>
             </div>
           )}
-          {kind === "connectors" && <ConnectorsPane workspace={dir} onDirty={setDirty} />}
+          {kind === "connectors" && <ConnectorsPane workspace={dir} onDirty={setDirty} extra={<McpSettings embedded workspace={dir} />} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
           {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={intentFor("workflows")} run={initial.run} />}

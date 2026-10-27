@@ -80,6 +80,10 @@ Who were our best customers last month, and what did each spend?
 
 The agent picks the tool whose description fits, here `db__shop_top_customers_last_month` with `limit: 10`, and answers from the result. On a read-only connection it doesn't need to ask you first.
 
+## MCP servers for this workspace
+
+Below the databases, **MCP servers** lists every server this workspace's agents use: your global ones (**Every workspace**), the workspace's own (**This workspace**) and the project's. Press **+** to add one just for this workspace: a command to run or a web address, as in Settings. It's kept in your settings folder, not the project. Switch a global one off to keep it out of this workspace alone, or **Make global** to share one of the workspace's with every workspace. [MCP servers](../../../guide/mcp.md#one-workspaces-servers)
+
 ## For every workspace
 
 To connect a database once for all your workspaces, add it in **Settings › Connectors** instead, the same way. It's saved in `~/.blitz/connectors/databases`, and each workspace can still switch it off here. Studio never changes a global connection.

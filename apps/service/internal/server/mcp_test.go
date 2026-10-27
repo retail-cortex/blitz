@@ -98,6 +98,73 @@ func TestMCPServersOverTheAPI(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, code(err))
 }
 
+// A workspace's own MCP servers: added, listed with the global ones by
+// scope, run by that workspace alone; a global one turned off there
+// stays on elsewhere; Make global moves one to every workspace.
+func TestWorkspaceMCPServersOverTheAPI(t *testing.T) {
+	c, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir, other := t.TempDir(), t.TempDir()
+	running := func(ws string) map[string]*pb.MCPServer {
+		res, err := c.workspaces.ListMCPServers(ctx, connect.NewRequest(&pb.ListMCPServersRequest{Workspace: ws}))
+		require.NoError(t, err)
+		out := map[string]*pb.MCPServer{}
+		for _, m := range res.Msg.Servers {
+			out[m.Name] = m
+		}
+		return out
+	}
+	listed := func(ws string) map[string]*pb.MCPServerConfig {
+		res, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{Workspace: ws}))
+		require.NoError(t, err)
+		out := map[string]*pb.MCPServerConfig{}
+		for _, m := range res.Msg.Servers {
+			out[m.Name] = m
+		}
+		return out
+	}
+	running(dir) // open both: changes reach open workspaces
+	running(other)
+	_, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Server: &pb.MCPServerConfig{Name: "docs", Url: "http://127.0.0.1:1/docs"}}))
+	require.NoError(t, err)
+	_, err = cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Workspace: dir, Server: &pb.MCPServerConfig{Name: "jira", Url: "http://127.0.0.1:1/jira"}}))
+	require.NoError(t, err)
+
+	l := listed(dir)
+	require.Len(t, l, 2)
+	assert.Equal(t, "global", l["docs"].Scope)
+	assert.Equal(t, "workspace", l["jira"].Scope)
+	assert.Contains(t, running(dir), "jira")
+	assert.NotContains(t, running(other), "jira", "a workspace's own stays there")
+	assert.NotContains(t, listed(""), "jira")
+
+	_, err = cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Workspace: dir, Name: "docs", Enabled: false}))
+	require.NoError(t, err)
+	assert.True(t, listed(dir)["docs"].OffHere)
+	assert.False(t, listed(dir)["docs"].Disabled, "its own file's setting is unchanged")
+	assert.Equal(t, "disabled", running(dir)["docs"].State)
+	assert.Equal(t, "idle", running(other)["docs"].State, "on in the other workspace")
+
+	_, err = cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Workspace: dir, Name: "jira", Enabled: false}))
+	require.NoError(t, err)
+	assert.True(t, listed(dir)["jira"].Disabled, "its own is disabled in its file")
+
+	_, err = cfg.RemoveMCPServer(ctx, connect.NewRequest(&pb.RemoveMCPServerRequest{Workspace: dir, Name: "docs"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "a workspace never removes a global one")
+
+	_, err = cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: dir, Name: "jira"}))
+	require.NoError(t, err)
+	assert.Equal(t, "global", listed(dir)["jira"].Scope)
+	assert.Contains(t, running(other), "jira", "every workspace has it now")
+	_, err = cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Workspace: dir, Name: "jira"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "moved already")
+	_, err = cfg.MakeMCPServerGlobal(ctx, connect.NewRequest(&pb.MakeMCPServerGlobalRequest{Name: "jira"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "needs a workspace")
+}
+
 // DraftManifest refuses a kind it has no brief for, and answers a problem
 // (not an error) when the model can't be had.
 func TestDraftManifestOverTheAPI(t *testing.T) {

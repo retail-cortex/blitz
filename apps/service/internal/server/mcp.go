@@ -17,21 +17,25 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// MCP servers for the desktop app's Settings › MCP servers and the tray
-// (spec_mcp_009 MCP-45..MCP-48): the global settings' [[mcp.servers]],
-// edited as `blitz mcp` does, and applied to open workspaces at once.
+// MCP servers for the desktop app's Settings › Connectors › MCP servers,
+// Studio › Connectors and the tray (spec_mcp_009 MCP-45..MCP-50): the
+// global settings' [[mcp.servers]] and a workspace's own, edited as
+// `blitz mcp` does, and applied to open workspaces at once.
 
 func mcpConfigMsg(s config.MCPServerConfig) *pb.MCPServerConfig {
 	return &pb.MCPServerConfig{
 		Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, Url: s.URL, Headers: s.Headers,
-		Disabled: s.Disabled, Tools: s.Tools, AutoApprove: s.AutoApprove, Sandbox: s.Sandbox,
-		Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: int32(s.TimeoutSeconds),
+		Disabled: s.Disabled && !s.OffHere, Tools: s.Tools, AutoApprove: s.AutoApprove, Sandbox: s.Sandbox,
+		Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: int32(s.TimeoutSeconds), Scope: s.Scope, OffHere: s.OffHere,
 	}
 }
 
@@ -52,51 +56,139 @@ func mcpEditError(err error, name string) error {
 	return invalid(err)
 }
 
-func (h configService) ListMCPServerConfigs(context.Context, req[pb.ListMCPServerConfigsRequest]) (*connect.Response[pb.ListMCPServerConfigsResponse], error) {
-	cfg, err := config.Load(h.s.configDir)
+func (h configService) ListMCPServerConfigs(_ context.Context, r req[pb.ListMCPServerConfigsRequest]) (*connect.Response[pb.ListMCPServerConfigsResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
 	if err != nil {
-		return nil, invalid(err)
+		return nil, err
 	}
-	path, _, err := config.ReadSettingsFile(h.s.configDir, "")
+	global, _, path, err := config.ScopeMCP(h.s.configDir, "")
 	if err != nil {
 		return nil, invalid(err)
 	}
 	out := &pb.ListMCPServerConfigsResponse{Path: path}
+	if dir == "" {
+		for _, s := range global {
+			s.Scope = config.MCPScopeGlobal
+			out.Servers = append(out.Servers, mcpConfigMsg(s))
+		}
+		return ok(out)
+	}
+	// A workspace's: every server it runs, as the merge has them (the
+	// global ones it turned off marked so, those its own stand in for
+	// left out), then its project's, which run once the project's
+	// settings are trusted.
+	cfg, err := config.LoadWorkspace(h.s.configDir, dir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if _, _, out.Path, err = config.ScopeMCP(h.s.configDir, dir); err != nil {
+		return nil, invalid(err)
+	}
 	for _, s := range cfg.MCP.Servers {
-		out.Servers = append(out.Servers, mcpConfigMsg(s))
+		if s.Scope == config.MCPScopeGlobal || s.Scope == config.MCPScopeWorkspace {
+			out.Servers = append(out.Servers, mcpConfigMsg(s))
+		}
+	}
+	if cfg.Project != nil {
+		for _, it := range cfg.Project.Pending {
+			if it.Kind != config.ProjectMCP {
+				continue
+			}
+			m := &pb.MCPServerConfig{Name: it.Key, Scope: config.MCPScopeProject}
+			if strings.HasPrefix(it.Value, "http://") || strings.HasPrefix(it.Value, "https://") {
+				m.Url = it.Value
+			} else {
+				m.Command = it.Value
+			}
+			out.Servers = append(out.Servers, m)
+		}
 	}
 	return ok(out)
 }
 
 func (h configService) SaveMCPServer(ctx context.Context, r req[pb.SaveMCPServerRequest]) (*connect.Response[pb.SaveMCPServerResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
 	s := mcpConfig(r.Msg.GetServer())
 	var path string
-	var err error
 	if r.Msg.Name == "" {
-		path, err = config.AddMCPServer(h.s.configDir, s)
+		path, err = config.AddMCPServer(h.s.configDir, dir, s)
 	} else {
-		path, err = config.ReplaceMCPServer(h.s.configDir, r.Msg.Name, s)
+		path, err = config.ReplaceMCPServer(h.s.configDir, dir, r.Msg.Name, s)
 	}
 	if err != nil {
 		return nil, mcpEditError(err, r.Msg.Name)
 	}
-	return ok(&pb.SaveMCPServerResponse{Change: h.changed(ctx, "", path)})
+	return ok(&pb.SaveMCPServerResponse{Change: h.changed(ctx, dir, path)})
 }
 
 func (h configService) RemoveMCPServer(ctx context.Context, r req[pb.RemoveMCPServerRequest]) (*connect.Response[pb.RemoveMCPServerResponse], error) {
-	path, err := config.RemoveMCPServer(h.s.configDir, r.Msg.Name)
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	path, err := config.RemoveMCPServer(h.s.configDir, dir, r.Msg.Name)
 	if err != nil {
 		return nil, mcpEditError(err, r.Msg.Name)
 	}
-	return ok(&pb.RemoveMCPServerResponse{Change: h.changed(ctx, "", path)})
+	return ok(&pb.RemoveMCPServerResponse{Change: h.changed(ctx, dir, path)})
 }
 
+// SetMCPServerEnabled turns a server on or off where it's configured: in
+// the global settings, or in a workspace's own; a global server asked
+// about with a workspace is turned off or on in that workspace alone.
 func (h configService) SetMCPServerEnabled(ctx context.Context, r req[pb.SetMCPServerEnabledRequest]) (*connect.Response[pb.SetMCPServerEnabledResponse], error) {
-	path, err := config.SetMCPServerDisabled(h.s.configDir, r.Msg.Name, !r.Msg.Enabled)
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	var path string
+	if dir != "" && !h.ownMCP(dir, r.Msg.Name) {
+		path, err = config.SetMCPServerOff(h.s.configDir, dir, r.Msg.Name, !r.Msg.Enabled)
+	} else {
+		path, err = config.SetMCPServerDisabled(h.s.configDir, dir, r.Msg.Name, !r.Msg.Enabled)
+	}
 	if err != nil {
 		return nil, mcpEditError(err, r.Msg.Name)
 	}
-	return ok(&pb.SetMCPServerEnabledResponse{Change: h.changed(ctx, "", path)})
+	return ok(&pb.SetMCPServerEnabledResponse{Change: h.changed(ctx, dir, path)})
+}
+
+// MakeMCPServerGlobal moves a workspace's own server to the global
+// settings: added there first, so a failure leaves it where it was.
+func (h configService) MakeMCPServerGlobal(ctx context.Context, r req[pb.MakeMCPServerGlobalRequest]) (*connect.Response[pb.MakeMCPServerGlobalResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if dir == "" {
+		return nil, invalid(errors.New("make global moves a workspace's server: none given"))
+	}
+	own, _, _, err := config.ScopeMCP(h.s.configDir, dir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	i := slices.IndexFunc(own, func(s config.MCPServerConfig) bool { return s.Name == r.Msg.Name })
+	if i < 0 {
+		return nil, mcpEditError(fmt.Errorf("%w: %s", config.ErrNoMCPServer, r.Msg.Name), r.Msg.Name)
+	}
+	gpath, err := config.AddMCPServer(h.s.configDir, "", own[i])
+	if err != nil {
+		return nil, apiError(connect.CodeAlreadyExists, "MCP_SERVER_EXISTS", err, "name", r.Msg.Name)
+	}
+	if _, err := config.RemoveMCPServer(h.s.configDir, dir, r.Msg.Name); err != nil {
+		return nil, mcpEditError(err, r.Msg.Name)
+	}
+	return ok(&pb.MakeMCPServerGlobalResponse{Change: h.changed(ctx, "", gpath)})
+}
+
+// ownMCP says whether a workspace's own settings configure a server by
+// that name.
+func (h configService) ownMCP(dir, name string) bool {
+	own, _, _, err := config.ScopeMCP(h.s.configDir, dir)
+	return err == nil && slices.ContainsFunc(own, func(s config.MCPServerConfig) bool { return s.Name == name })
 }
 
 func (h workspaceService) RestartMCPServer(ctx context.Context, r req[pb.RestartMCPServerRequest]) (*connect.Response[pb.RestartMCPServerResponse], error) {

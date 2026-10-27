@@ -63,7 +63,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			if s.URL == "" && len(s.Headers) > 0 {
 				return withCode(exitUsage, errors.New("--header is for http servers"))
 			}
-			path, err := config.AddMCPServer(g.config, s)
+			path, err := config.AddMCPServer(g.config, "", s)
 			if err != nil {
 				return err
 			}
@@ -156,10 +156,10 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			},
 		}
 	}
-	remove := edit("remove", "Remove an MCP server", "Removed", func(n string) (string, error) { return config.RemoveMCPServer(g.config, n) })
-	enable := edit("enable", "Start an MCP server again", "Enabled", func(n string) (string, error) { return config.SetMCPServerDisabled(g.config, n, false) })
+	remove := edit("remove", "Remove an MCP server", "Removed", func(n string) (string, error) { return config.RemoveMCPServer(g.config, "", n) })
+	enable := edit("enable", "Start an MCP server again", "Enabled", func(n string) (string, error) { return config.SetMCPServerDisabled(g.config, "", n, false) })
 	disable := edit("disable", "Keep an MCP server configured without starting it", "Disabled", func(n string) (string, error) {
-		return config.SetMCPServerDisabled(g.config, n, true)
+		return config.SetMCPServerDisabled(g.config, "", n, true)
 	})
 
 	login := &cobra.Command{
