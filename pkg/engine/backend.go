@@ -15,13 +15,18 @@
 package engine
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
 var _ api.Backend = (*Workspace)(nil)
@@ -103,6 +108,64 @@ func (w *Workspace) AuditShell(command string, exitCode int, startErr error) {
 		entry.Error = startErr.Error()
 	}
 	w.tools.Hooks().Audit().Log(entry)
+}
+
+// MaxUserShellOutput bounds what RunUserShell passes on of a command's
+// output; the rest is dropped, and said to be.
+const MaxUserShellOutput = 1 << 20
+
+// RunUserShell runs a command the user typed after "!" in a client that
+// has no terminal of its own (the desktop app's chat), in the workspace:
+// as the user, outside the agent's sandbox and approvals, unseen by the
+// agent. Its output (stdout and stderr together, at most
+// MaxUserShellOutput) goes to out as it comes; the audit log records it
+// as the terminal's ! is (AuditShell). It returns the exit code (-1 when
+// stopped: ctx's end kills its process group), whether output was cut,
+// and why it didn't start.
+func (w *Workspace) RunUserShell(ctx context.Context, command string, out func([]byte)) (exitCode int, truncated bool, startErr error) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return 0, false, errors.New("no command after the exclamation mark")
+	}
+	cmd := tools.UserCommand(ctx, w.Dir(), command)
+	sink := &cappedWriter{out: out, left: MaxUserShellOutput}
+	cmd.Stdout, cmd.Stderr = sink, sink
+	err := cmd.Run()
+	code := 0
+	switch {
+	case cmd.ProcessState == nil:
+		startErr = err
+	case ctx.Err() != nil:
+		code = -1
+	default:
+		code = cmd.ProcessState.ExitCode()
+	}
+	w.AuditShell(command, code, startErr)
+	return code, sink.cut, startErr
+}
+
+// cappedWriter passes writes on until left runs out, then drops them.
+type cappedWriter struct {
+	mu   sync.Mutex
+	out  func([]byte)
+	left int
+	cut  bool
+}
+
+func (c *cappedWriter) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := len(p)
+	if c.left <= 0 {
+		c.cut = c.cut || n > 0
+		return n, nil
+	}
+	if len(p) > c.left {
+		p, c.cut = p[:c.left], true
+	}
+	c.left -= len(p)
+	c.out(slices.Clone(p))
+	return n, nil
 }
 
 // ImagesEnabled reports whether images can be attached.

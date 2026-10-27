@@ -1550,3 +1550,14 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .compose-turn.composer { align-self: flex-start; background: var(--md-surface-container-high); }
 .compose-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
 .compose-entry .icon { color: var(--md-primary); }
+
+/* ! commands (shellRun.ts): the composer's line and the command's card in
+   marigold, so a line that runs in the shell can't pass for a message. */
+:root { --shell-ink: #9a6500; }
+:root[data-theme="dark"] { --shell-ink: #f4b73f; }
+.shell-text { color: var(--shell-ink); }
+.composer textarea.shell-mode { color: var(--shell-ink); font-family: var(--md-mono); caret-color: var(--shell-ink); }
+.shell-card .code-head { gap: 8px; }
+.shell-card .code-head code { font-family: var(--md-mono); font-size: 13px; min-width: 0; }
+.shell-card .shell-output { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
+.shell-card .shell-note { margin: 0 12px 8px; }

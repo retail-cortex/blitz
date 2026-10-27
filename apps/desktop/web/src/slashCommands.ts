@@ -36,7 +36,10 @@ export const commandGroups = ["session", "agents", "work", "workspace", "safety"
 export type CommandGroup = (typeof commandGroups)[number];
 
 /** The terminal's commands a window has no use for, and the window's way instead (desktop.help.instead.<name>). */
-export const terminalOnly = ["clear", "exit", "quit", "paste", "cd", "!"] as const;
+export const terminalOnly = ["clear", "exit", "quit", "paste", "cd"] as const;
+
+/** The terminal's line syntax the composer has too, not as a command: ! runs a shell command (shellRun.ts). */
+export const composerSyntax = ["!"] as const;
 
 /** How a command's turn is sent (a subset of Conversation's options). */
 export interface CommandTurn {

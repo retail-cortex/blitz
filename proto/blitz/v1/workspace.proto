@@ -450,6 +450,13 @@ service WorkspaceService {
   // Records in the workspace's audit log a command the user ran directly
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
+  // Runs a command the user typed after ! in a client without a terminal
+  // of its own (the desktop app's chat), as the terminal's ! does: in the
+  // workspace, as the user, outside the agent's sandbox and approvals,
+  // unseen by the agent, recorded in the audit log (user_shell). Streams
+  // its output as it comes, then how it ended; cancelling the call stops
+  // it (its whole process group).
+  rpc RunShell(RunShellRequest) returns (stream RunShellResponse);
 
   // Returns the background tasks (invoke_agent with background: true)
   // started in the given sessions' turns, oldest first.
@@ -1826,6 +1833,28 @@ message AuditShellRequest {
 
 // Response message for WorkspaceService.AuditShell.
 message AuditShellResponse {}
+
+// Request message for WorkspaceService.RunShell.
+message RunShellRequest {
+  string workspace = 1;
+  // What followed the !.
+  string command = 2;
+}
+
+// Response message for WorkspaceService.RunShell: some of its output, or
+// how it ended (done).
+message RunShellResponse {
+  // Output, stdout and stderr together, as it came.
+  string output = 1;
+  bool done = 2;
+  // With done: its exit code (-1 when it was stopped), why it didn't
+  // start ("" when it ran), how long it took, and whether output past
+  // the first MiB was dropped.
+  int32 exit_code = 3;
+  string error = 4;
+  int64 elapsed_ms = 5;
+  bool truncated = 6;
+}
 
 // BackgroundTask is a sub-agent running beside the turn that started it.
 message BackgroundTask {

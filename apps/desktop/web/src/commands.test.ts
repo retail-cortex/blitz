@@ -142,7 +142,7 @@ describe("help", () => {
     expect(at("**Built into Blitz**")).toBeLessThan(at("**This project's**"));
     expect(at("`/alpha`")).toBeLessThan(at("`/zeta`"));
     expect(text).toContain("`/clear`");
-    expect(text).toContain("`!<command>`");
+    expect(text).toContain("!<command>"); // the composer runs it: said, not listed as terminal-only
   });
 });
 

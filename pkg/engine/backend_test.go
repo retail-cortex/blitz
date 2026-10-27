@@ -20,6 +20,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -162,4 +164,52 @@ func TestStartObservability(t *testing.T) {
 	stop := StartObservability(context.Background(), cfg, "test", func(s string) { warnings = append(warnings, s) })
 	stop()
 	assert.NotEmpty(t, warnings, "the log couldn't be opened")
+}
+
+// RunUserShell runs a ! command in the workspace, passing its output on
+// as it comes (cut at the cap), with its exit code; stopping it kills it;
+// each run is audited.
+func TestRunUserShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the commands are POSIX shell")
+	}
+	w := openTest(t)
+	run := func(ctx context.Context, cmd string) (string, int, bool, error) {
+		var out strings.Builder
+		code, cut, err := w.RunUserShell(ctx, cmd, func(p []byte) { out.Write(p) })
+		return out.String(), code, cut, err
+	}
+	tests := []struct {
+		name, cmd, want string
+		code            int
+	}{
+		{"in the workspace", "pwd", w.Dir(), 0},
+		{"stderr too", "echo oops >&2; exit 3", "oops", 3},
+		{"a pipeline", "printf 'b\\na\\n' | sort | head -1", "a", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code, cut, err := run(context.Background(), tc.cmd)
+			require.NoError(t, err)
+			assert.Contains(t, out, filepath.Base(tc.want))
+			assert.Equal(t, tc.code, code)
+			assert.False(t, cut)
+		})
+	}
+
+	out, _, cut, err := run(context.Background(), "head -c 1100000 /dev/zero | tr '\\0' x")
+	require.NoError(t, err)
+	assert.True(t, cut, "past the cap")
+	assert.Len(t, out, MaxUserShellOutput)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, code, _, err := run(ctx, "sleep 30 & sleep 30")
+	require.NoError(t, err)
+	assert.Equal(t, -1, code, "stopped")
+	assert.Less(t, time.Since(start), 5*time.Second, "its group killed")
+
+	_, _, _, err = run(context.Background(), "   ")
+	assert.Error(t, err)
 }

@@ -106,6 +106,8 @@ import { appendMention, insertMention, isAttachablePath, mentionAt } from "./men
 import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
 import { plainReason } from "./providerStatus";
+import { ShellRunContext, shellLine } from "./shellRun";
+import { ShellCard } from "./ShellCard";
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
@@ -504,7 +506,37 @@ export function Conversation({
       return list.filter((a) => a.key !== key);
     });
 
+  // ! commands run as the user's own (WorkspaceService.RunShell), each a
+  // card in the chat with Stop while it runs; the agent never sees them.
+  const shellRuns = useRef(new Map<string, AbortController>());
+  useEffect(() => () => shellRuns.current.forEach((c) => c.abort()), []);
+  const runShell = async (command: string) => {
+    if (!command) return say(t("desktop.shell.usage"), "error");
+    const id = `sh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const ctl = new AbortController();
+    shellRuns.current.set(id, ctl);
+    const patch = (f: (e: Extract<Entry, { kind: "shell" }>) => Extract<Entry, { kind: "shell" }>) =>
+      setEntries((all) => all.map((e) => (e.kind === "shell" && e.id === id ? f(e) : e)));
+    setEntries((all) => [...all, { kind: "shell", id, command, output: "", running: true }]);
+    try {
+      for await (const m of workspaces.runShell({ workspace: dir, command }, { signal: ctl.signal })) {
+        if (m.done) patch((e) => ({ ...e, running: false, code: m.exitCode, error: m.error, elapsedMs: Number(m.elapsedMs), truncated: m.truncated }));
+        else if (m.output) patch((e) => ({ ...e, output: e.output + m.output }));
+      }
+    } catch (err) {
+      patch((e) => ({ ...e, running: false, code: ctl.signal.aborted ? -1 : e.code, error: ctl.signal.aborted ? "" : message(err) }));
+    } finally {
+      shellRuns.current.delete(id);
+      patch((e) => (e.running ? { ...e, running: false, code: -1 } : e));
+    }
+  };
+  const stopShell = (id: string) => shellRuns.current.get(id)?.abort();
+  // A code block's Run: its command in the composer, as !command, to check and send.
+  const putShell = useCallback((command: string) => setDraft(`!${command}`), []);
+
   const submit = async (text: string) => {
+    const sh = shellLine(text);
+    if (sh.shell) return void runShell(sh.command);
     if (parseCommand(text) && (await execute(text))) return;
     if (!running) {
       const images = attachments.filter((a) => a.id && !a.error);
@@ -912,6 +944,7 @@ export function Conversation({
       )}
       <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} expand={expand} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
+        <ShellRunContext.Provider value={putShell}>
         <div className="chat-column">
           {modelProblem && (
             <div className="card warn row">
@@ -950,6 +983,8 @@ export function Conversation({
             ) : (
               g.entry.kind === "reflect" ? (
                 <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
+              ) : g.entry.kind === "shell" ? (
+                <ShellCard key={g.entry.id} entry={g.entry} onStop={stopShell} />
               ) : (
                 <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
               )
@@ -980,6 +1015,7 @@ export function Conversation({
             </div>
           )}
         </div>
+        </ShellRunContext.Provider>
       </div>
       {dockEl && visible ? createPortal(dock, dockEl) : dock}
       {deleting && (
@@ -1192,7 +1228,8 @@ const EntryView = memo(function EntryView({
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
     case "reflect":
-      return null; // a ReflectCard, drawn with the workspace
+    case "shell":
+      return null; // a ReflectCard or a ShellCard, drawn with the workspace
     case "notice":
       return entry.markdown ? (
         <div className={`notice card ${entry.tone}`}>
@@ -2000,6 +2037,7 @@ function Composer({
         ref={ref}
         value={draft}
         rows={1}
+        className={shellLine(draft).shell ? "shell-mode" : undefined}
         onChange={(e) => {
           setDraft(e.target.value);
           trackCaret(e);
@@ -2095,6 +2133,7 @@ function Composer({
           </>
         )}
         {!running && <IconButton icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
+        {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}

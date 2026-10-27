@@ -1624,6 +1624,17 @@ export function installFake() {
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
         watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
         watchProcesses: ({ workspace }) => watchFakeProcesses(workspace),
+        // A ! command: a few lines of output, then how it ended ("fail" in it exits 1; "sleep" runs until stopped).
+        runShell: async function* ({ command }, ctx) {
+          const start = Date.now();
+          const lines = command.includes("sleep") ? [] : [`$ ${command}`, "total 24", "drwxr-xr-x  5 you  staff  160 Oct 26 09:12 cmd", "drwxr-xr-x  7 you  staff  224 Oct 26 09:12 internal", "-rw-r--r--  1 you  staff  512 Oct 26 09:12 go.mod"];
+          for (const l of lines) {
+            await sleep(150);
+            yield { output: l + "\n" };
+          }
+          if (command.includes("sleep")) await new Promise((_, reject) => ctx.signal.addEventListener("abort", () => reject(new ConnectError("canceled", Code.Canceled))));
+          yield { done: true, exitCode: command.includes("fail") ? 1 : 0, elapsedMs: BigInt(Date.now() - start) };
+        },
         getProcessOutput: ({ workspace, id }) => ({ output: fakeProcessOutput, process: fakeProcesses.find((x) => x.workspace === workspace && x.process?.id === id)?.process }),
         killProcess: ({ workspace, id }) => {
           const i = fakeProcesses.findIndex((x) => x.workspace === workspace && x.process?.id === id);
