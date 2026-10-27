@@ -17,6 +17,10 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # A tag push is skipped when the tagged commit's message says [skip ci]
+  # (a squash merge carries it over from the branch's commits): run it by
+  # hand then, on the tag (gh workflow run release.yml --ref v0.8.6).
+  workflow_dispatch:
 
 permissions:
   contents: write # create the GitHub release
@@ -27,6 +31,8 @@ jobs:
   # one machine by Bazel, stamped with the tag), their SBOMs, a signed
   # checksum file, and the draft release that the desktop jobs add to.
   release:
+    # By hand on a branch would name the release after the branch.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       # GitHub's Ubuntu runners start with about 14 GB free, too little for
