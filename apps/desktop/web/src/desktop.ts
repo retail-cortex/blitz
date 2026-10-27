@@ -85,6 +85,7 @@ type AppMethods = {
   StopService(pid: number): Promise<void>;
   RestartService(pid: number): Promise<void>;
   ChooseWorkspace(title: string): Promise<string>;
+  ChooseFile(title: string, defaultPath: string): Promise<string>;
   GetPrefs(): Promise<Prefs>;
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
@@ -335,6 +336,12 @@ export const appVersion = async () => (canCall("Version") ? app().Version() : "d
 export async function chooseWorkspace(): Promise<string> {
   if (!canCall("ChooseWorkspace")) return window.prompt(t("desktop.choose.prompt")) ?? "";
   return app().ChooseWorkspace(t("desktop.choose.title"));
+}
+
+/** A file the user picks ("" when they don't), for a form's path field, the dialog opening in start ("" the system's choice); in a browser, typed. */
+export async function chooseFile(title: string, start = ""): Promise<string> {
+  if (!canCall("ChooseFile")) return window.prompt(title, start) ?? "";
+  return app().ChooseFile(title, start);
 }
 
 /** The window's saved preferences, normalized (in a browser, from localStorage). */

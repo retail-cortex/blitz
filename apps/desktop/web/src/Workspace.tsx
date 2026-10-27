@@ -360,7 +360,7 @@ export function Workspace({
               visible={visible}
               settings={settings}
               modelProblem={modelProblem}
-              projectWaiting={waiting(project)}
+              projectWaiting={reviewing ? 0 : waiting(project)} // the dialog says it while it's open
               onReviewProject={() => setReviewing(true)}
               onSettingsChanged={refreshSettings}
               onOpenView={showView}

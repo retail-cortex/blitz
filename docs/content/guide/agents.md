@@ -59,7 +59,7 @@ An agent is a Markdown file: front matter, then the system prompt.
 
 | Where | Who gets it |
 |---|---|
-| `~/.blitz/agents/*.md` | You, in every workspace (desktop: **Settings › Agents**) |
+| `~/.blitz/agents/*.md` | You, in every workspace (desktop: **Settings › Library › Agents**) |
 | `.agents/agents/*.md` in the project | Everyone who works in it (desktop: **Studio › Agents, skills and rules…** › Agents) |
 | A plugin's `agents/` folder | Whoever enables the plugin |
 

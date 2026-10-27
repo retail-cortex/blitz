@@ -41,7 +41,10 @@ export type Entry =
   | { kind: "tool"; id: string; name: string; args?: JsonObject; result?: JsonObject }
   | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean }
   // Time to /reflect, said at a chat turn's end (spec_harness_learning_048 HE-63).
-  | { kind: "reflect"; patterns: number };
+  | { kind: "reflect"; patterns: number }
+  // A ! command the user ran from the composer (WorkspaceService.RunShell):
+  // its output as it comes, then how it ended. The agent never sees it.
+  | { kind: "shell"; id: string; command: string; output: string; running: boolean; code?: number; error?: string; elapsedMs?: number; truncated?: boolean };
 
 const subKinds: Record<string, UserEntry["sub"]> = { steer: "steer", hook: "hook", plan: "plan" };
 

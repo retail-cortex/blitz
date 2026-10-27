@@ -43,14 +43,14 @@ describe("commands", () => {
 
   it("offers matches while the name is typed", () => {
     const all = allCommands(custom);
-    expect(matchCommands("/co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "config"]);
+    expect(matchCommands("/co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "connect", "config"]);
     expect(matchCommands("/snap", all).map((c) => c.name)).toEqual(["session"]); // by its description
     expect(matchCommands("/mode", allCommands([])).map((c) => c.name)[0]).toBe("mode"); // typed in full, ahead of /model
     expect(matchCommands("/migr", all).map((c) => c.name)).toEqual(["db:migrate"]);
     expect(matchCommands("/cost now", all)).toEqual([]); // past the name
     expect(matchCommands("hello", all)).toEqual([]);
     expect(matchCommands("/", all)).toHaveLength(12);
-    expect(matchCommands("  /co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "config"]); // a stray space
+    expect(matchCommands("  /co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "connect", "config"]); // a stray space
     expect(matchCommands("\n/", all)).toHaveLength(12); // a stray new line
     expect(matchCommands("text\n/", all)).toEqual([]); // not the whole message
   });
@@ -142,7 +142,7 @@ describe("help", () => {
     expect(at("**Built into Blitz**")).toBeLessThan(at("**This project's**"));
     expect(at("`/alpha`")).toBeLessThan(at("`/zeta`"));
     expect(text).toContain("`/clear`");
-    expect(text).toContain("`!<command>`");
+    expect(text).toContain("!<command>"); // the composer runs it: said, not listed as terminal-only
   });
 });
 

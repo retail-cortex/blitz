@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	goruntime "runtime"
@@ -36,9 +37,22 @@ import (
 
 // newMCPCommand is `blitz mcp`: the MCP servers of the global settings,
 // added, listed, shown, removed, enabled and disabled in place, and
-// signed in to (spec_parity_027 PAR-MCP-01, -04).
+// signed in to (spec_parity_027 PAR-MCP-01, -04). With --workspace, the
+// workspace's own instead (--dir's, else the current directory's: its
+// settings in ~/.blitz, never the project), as Studio › Connectors edits
+// them (spec_mcp_009 MCP-50): list shows every server it runs with its
+// scope, disable and enable turn a global one off or on there alone, and
+// make-global moves one of its own to every workspace.
 func newMCPCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "mcp", Short: "Add, list and manage MCP servers"}
+	var inWorkspace bool
+	cmd.PersistentFlags().BoolVarP(&inWorkspace, "workspace", "w", false, "This workspace's own servers (--dir, else the current directory), not the global ones")
+	ws := func() (string, error) {
+		if !inWorkspace {
+			return "", nil
+		}
+		return mcpWorkspace(g)
+	}
 
 	var env, headers, agents []string
 	var prefix string
@@ -63,7 +77,11 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			if s.URL == "" && len(s.Headers) > 0 {
 				return withCode(exitUsage, errors.New("--header is for http servers"))
 			}
-			path, err := config.AddMCPServer(g.config, s)
+			dir, err := ws()
+			if err != nil {
+				return err
+			}
+			path, err := config.AddMCPServer(g.config, dir, s)
 			if err != nil {
 				return err
 			}
@@ -82,23 +100,36 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 		Short: "List the MCP servers",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := config.Load(g.config)
+			dir, err := ws()
+			if err != nil {
+				return err
+			}
+			list, err := mcpServers(g, dir)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if len(cfg.MCP.Servers) == 0 {
+			if len(list) == 0 {
 				fmt.Fprintln(out, "No MCP servers. Add one with: blitz mcp add <name> <command|url>")
 				return nil
 			}
-			for _, s := range cfg.MCP.Servers {
+			for _, s := range list {
 				state := ""
-				if s.Disabled {
+				switch {
+				case s.OffHere:
+					state = " (off here)"
+				case s.Disabled:
 					state = " (disabled)"
-				} else if _, err := mcpauth.Load(secrets.Default(config.ConfigDir(g.config)), s.Name); err == nil {
-					state = " (signed in)"
+				default:
+					if _, err := mcpauth.Load(secrets.Default(config.ConfigDir(g.config)), s.Name); err == nil {
+						state = " (signed in)"
+					}
 				}
-				fmt.Fprintf(out, "%s%s\t%s\n", s.Name, state, target(s))
+				if dir == "" {
+					fmt.Fprintf(out, "%s%s\t%s\n", s.Name, state, target(s))
+				} else {
+					fmt.Fprintf(out, "%s%s\t%s\t%s\n", s.Name, state, target(s), s.Scope)
+				}
 			}
 			return nil
 		},
@@ -109,18 +140,28 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 		Short: "Show an MCP server's settings (environment values masked)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := findMCPServer(g, args[0])
+			dir, err := ws()
+			if err != nil {
+				return err
+			}
+			s, err := findMCPServer(g, dir, args[0])
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "name:     %s\n", s.Name)
+			if dir != "" {
+				fmt.Fprintf(out, "scope:    %s\n", s.Scope)
+			}
 			if s.Command != "" {
 				fmt.Fprintf(out, "command:  %s\n", target(s))
 			} else {
 				fmt.Fprintf(out, "url:      %s\n", s.URL)
 			}
 			fmt.Fprintf(out, "enabled:  %v\n", !s.Disabled)
+			if s.OffHere {
+				fmt.Fprintln(out, "          (off in this workspace; on elsewhere)")
+			}
 			for _, k := range sortedKeys(s.Env) {
 				fmt.Fprintf(out, "env:      %s=%s\n", k, mask(s.Env[k]))
 			}
@@ -137,13 +178,17 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 
-	edit := func(use, short, done string, f func(name string) (string, error)) *cobra.Command {
+	edit := func(use, short, done string, f func(dir, name string) (string, error)) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <name>",
 			Short: short,
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				path, err := f(args[0])
+				dir, err := ws()
+				if err != nil {
+					return err
+				}
+				path, err := f(dir, args[0])
 				if errors.Is(err, config.ErrNoMCPServer) {
 					return withCode(exitUsage, err)
 				}
@@ -156,18 +201,43 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			},
 		}
 	}
-	remove := edit("remove", "Remove an MCP server", "Removed", func(n string) (string, error) { return config.RemoveMCPServer(g.config, n) })
-	enable := edit("enable", "Start an MCP server again", "Enabled", func(n string) (string, error) { return config.SetMCPServerDisabled(g.config, n, false) })
-	disable := edit("disable", "Keep an MCP server configured without starting it", "Disabled", func(n string) (string, error) {
-		return config.SetMCPServerDisabled(g.config, n, true)
+	remove := edit("remove", "Remove an MCP server", "Removed", func(dir, n string) (string, error) { return config.RemoveMCPServer(g.config, dir, n) })
+	enable := edit("enable", "Start an MCP server again (with --workspace, a global one there)", "Enabled", func(dir, n string) (string, error) { return config.SetMCPServerEnabled(g.config, dir, n, true) })
+	disable := edit("disable", "Keep an MCP server configured without starting it (with --workspace, a global one off there alone)", "Disabled", func(dir, n string) (string, error) {
+		return config.SetMCPServerEnabled(g.config, dir, n, false)
 	})
+	makeGlobal := &cobra.Command{
+		Use:   "make-global <name>",
+		Short: "Move one of this workspace's servers to the global settings, for every workspace",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := mcpWorkspace(g) // always a workspace's
+			if err != nil {
+				return err
+			}
+			path, err := config.MakeMCPServerGlobal(g.config, dir, args[0])
+			if errors.Is(err, config.ErrNoMCPServer) {
+				return withCode(exitUsage, err)
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Moved MCP server %q to %s: every workspace has it now.\n", args[0], path)
+			restartHint(cmd.OutOrStdout())
+			return nil
+		},
+	}
 
 	login := &cobra.Command{
 		Use:   "login <name>",
 		Short: "Sign in to an MCP server over HTTP (OAuth), in a browser",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := findMCPServer(g, args[0])
+			dir, err := ws()
+			if err != nil {
+				return err
+			}
+			s, err := findMCPServer(g, dir, args[0])
 			if err != nil {
 				return err
 			}
@@ -219,7 +289,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(add, list, get, remove, enable, disable, login, logout)
+	cmd.AddCommand(add, list, get, remove, enable, disable, makeGlobal, login, logout)
 	return cmd
 }
 
@@ -232,12 +302,61 @@ func openBrowser(u string) {
 	_ = exec.Command(name, u).Start() // no browser: the address is printed
 }
 
-func findMCPServer(g *globalFlags, name string) (config.MCPServerConfig, error) {
-	cfg, err := config.Load(g.config)
+// mcpWorkspace is the workspace --workspace means: --dir's, else the
+// current directory, canonical.
+func mcpWorkspace(g *globalFlags) (string, error) {
+	dir := g.dir
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		dir = wd
+	}
+	return config.CanonicalWorkspace(config.ExpandHome(dir))
+}
+
+// mcpServers are the global settings' servers (workspace ""), or every
+// server a workspace runs, with its scope: the global ones (those it
+// turned off marked so), its own, then its project's.
+func mcpServers(g *globalFlags, workspace string) ([]config.MCPServerConfig, error) {
+	if workspace == "" {
+		cfg, err := config.Load(g.config)
+		if err != nil {
+			return nil, err
+		}
+		return cfg.MCP.Servers, nil
+	}
+	cfg, err := config.LoadWorkspace(g.config, workspace)
+	if err != nil {
+		return nil, err
+	}
+	var out []config.MCPServerConfig
+	for _, s := range cfg.MCP.Servers {
+		if s.Scope == config.MCPScopeGlobal || s.Scope == config.MCPScopeWorkspace {
+			out = append(out, s)
+		}
+	}
+	if cfg.Project != nil {
+		for _, it := range cfg.Project.Pending {
+			if it.Kind == config.ProjectMCP {
+				s := config.MCPServerConfig{Name: it.Key, Command: it.Value, Scope: config.MCPScopeProject}
+				if strings.HasPrefix(it.Value, "http://") || strings.HasPrefix(it.Value, "https://") {
+					s.Command, s.URL = "", it.Value
+				}
+				out = append(out, s)
+			}
+		}
+	}
+	return out, nil
+}
+
+func findMCPServer(g *globalFlags, workspace, name string) (config.MCPServerConfig, error) {
+	list, err := mcpServers(g, workspace)
 	if err != nil {
 		return config.MCPServerConfig{}, err
 	}
-	for _, s := range cfg.MCP.Servers {
+	for _, s := range list {
 		if s.Name == name {
 			return s, nil
 		}

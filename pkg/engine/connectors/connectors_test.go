@@ -72,7 +72,7 @@ func TestBuiltinCatalog(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{"alloydb-postgres", "bigquery", "postgres", "sqlite"}, ids)
+	assert.Equal(t, []string{"sqlite", "postgres", "bigquery", "alloydb-postgres"}, ids, "simplest to set up first (order)")
 	pg, ok := cat.Kind("postgres")
 	require.True(t, ok)
 	pw, ok := pg.Field("password")
@@ -146,6 +146,13 @@ func TestUserDescriptors(t *testing.T) {
 	pg, ok := cat.Kind("postgres")
 	require.True(t, ok)
 	assert.Equal(t, connectors.OriginBuiltin, pg.Origin, "the built-in one stays")
+	ids := map[string]int{}
+	for i, k := range cat.Kinds {
+		if _, seen := ids[k.ID]; !seen {
+			ids[k.ID] = i
+		}
+	}
+	assert.Greater(t, ids["supabase"], ids["alloydb-postgres"], "a kind without an order comes after the ordered ones")
 
 	problems := map[string]string{}
 	for _, k := range cat.Kinds {
@@ -268,7 +275,7 @@ func TestSaveAndDelete(t *testing.T) {
 	}{
 		{"no workspace", connectors.Connection{Name: "x", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": "x"}}, "", "no workspace"},
 		{"no category", connectors.Connection{Name: "x", Category: "email"}, ws, "category"},
-		{"no kind", connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"}, ws, "one of alloydb-postgres"},
+		{"no kind", connectors.Connection{Name: "x", Category: "databases", Kind: "mysql"}, ws, "one of sqlite, postgres"},
 		{"a bad scope", connectors.Connection{Name: "x", Category: "databases", Scope: "team", Kind: "sqlite", Settings: map[string]string{"database": "x"}}, ws, "scope"},
 		{"broken YAML", connectors.Connection{Name: "raw", Category: "databases", Custom: true, Text: "kind: ["}, ws, "YAML"},
 	} {

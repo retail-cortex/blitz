@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { GuardrailFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools, defaultCommands } from "./guardrailForm";
+import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools, defaultsEntry, defaultLimits } from "./guardrailForm";
 
 describe("the guardrail form", () => {
   it("reads the limits guardrail and writes its limits back", () => {
@@ -45,12 +45,13 @@ describe("the guardrail form", () => {
     expect(f).toMatchObject({ off: true, action: "warn", pii: true });
     expect(specFromForm({ ...f, off: false })).toMatchObject({ off: false, action: "warn", pii: true });
     expect(formForBuiltin("limits").off).toBe(false);
-    expect(specFromForm(formForBuiltin("limits")).limits?.commands).toEqual(defaultCommands);
+    expect(specFromForm(formForBuiltin("limits")).limits).toMatchObject({ commands: [defaultsEntry], maxTurns: Number(defaultLimits.maxTurns), maxCostUsd: Number(defaultLimits.maxCostUsd) });
+    expect(formForBuiltin("prompt_injection")).toMatchObject({ action: "redact", judge: true });
   });
 
   it("keeps each built-in's own settings only", () => {
     expect(specFromForm({ ...formForBuiltin("secrets"), pii: true, judge: true, tools: "x" })).toMatchObject({ builtin: "secrets", action: "redact", pii: true, judge: false, tools: [] });
-    expect(specFromForm({ ...formForBuiltin("prompt_injection"), judge: true, pii: true, tools: "read_file, web_fetch" })).toMatchObject({ action: "warn", judge: true, pii: false, tools: ["read_file", "web_fetch"] });
+    expect(specFromForm({ ...formForBuiltin("prompt_injection"), judge: true, pii: true, tools: "read_file, web_fetch" })).toMatchObject({ action: "redact", judge: true, pii: false, tools: ["read_file", "web_fetch"] });
   });
 
   it("writes a custom guardrail, tools only for stages that check them", () => {

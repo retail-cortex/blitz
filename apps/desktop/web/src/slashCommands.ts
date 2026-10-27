@@ -36,7 +36,10 @@ export const commandGroups = ["session", "agents", "work", "workspace", "safety"
 export type CommandGroup = (typeof commandGroups)[number];
 
 /** The terminal's commands a window has no use for, and the window's way instead (desktop.help.instead.<name>). */
-export const terminalOnly = ["clear", "exit", "quit", "paste", "cd", "!"] as const;
+export const terminalOnly = ["clear", "exit", "quit", "paste", "cd"] as const;
+
+/** The terminal's line syntax the composer has too, not as a command: ! runs a shell command (shellRun.ts). */
+export const composerSyntax = ["!"] as const;
 
 /** How a command's turn is sent (a subset of Conversation's options). */
 export interface CommandTurn {
@@ -70,7 +73,8 @@ export interface CommandContext {
   busy(): boolean;
   settingsChanged(): void;
   openView(v: "changes" | "workers" | "processes"): void;
-  openSettings(section: string, scope?: string): void;
+  /** Opens Settings on a section; connect, a URL or file for a new connection there (Connectors). */
+  openSettings(section: string, scope?: string, connect?: string): void;
   reviewProject?: () => void;
   reload(): Promise<void>;
   refreshTotal(): void;
@@ -720,6 +724,15 @@ export const builtinCommands: Builtin[] = [
     },
   },
   {
+    name: "connect",
+    args: "[postgres://…|file.sqlite]",
+    group: "extensions",
+    describe: "help.connect",
+    run(c) {
+      c.openSettings("connectors", undefined, c.args.trim() || undefined);
+    },
+  },
+  {
     name: "mcp",
     group: "extensions",
     describe: "help.mcp",
@@ -738,7 +751,7 @@ export const builtinCommands: Builtin[] = [
       const [sub = "list", ...rest] = words(c.args);
       const arg = rest.join(" ");
       if (sub === "update") return c.run(c.line.trim(), { command: true });
-      // Registries (SK-96): managed in Settings › Skills, installed from here too.
+      // Registries (SK-96): managed in Settings › Library › Skills, installed from here too.
       if (sub === "registry" || sub === "registries") return c.openSettings("skills");
       if (sub === "install") {
         const ref = rest.find((w) => w !== "--project");

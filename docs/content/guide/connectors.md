@@ -7,11 +7,24 @@ weight: 45
 
 Spec: [connectors](../about/specs/spec_connectors_047.md).
 
+## Add a connection
+
+Press **+** beside a category (in the desktop app, also the database button in the composer, or type `/connect`):
+
+1. **Pick what to connect.** The kinds show as tiles, simplest to set up first: SQLite, PostgreSQL, BigQuery, AlloyDB.
+2. **Fill in where it is.** For a server, paste a connection URL (`postgres://user:password@host:5432/database`) and the fields fill themselves; the URL is cleared from the box, since it holds the password. For a file, press **Choose…**. The name follows the database's (`orders`, `notes`) until you type one.
+3. **Test and save.** Blitz connects first and saves only if that works; if it doesn't, it says why, and **Save anyway** keeps it as it is.
+4. **Choose its tools.** Once it's saved the connection stays open with its ready-made tools and **Your queries**, so you can pick what the agents get.
+
+`/connect postgres://ann@db.example.com/shop` or `/connect ~/data/notes.sqlite` does steps 1 and 2 for you: the kind comes from the URL's scheme or the file's extension.
+
+New connections are read-only where the kind can be. Tool names (`db__orders_execute_sql`), file paths and descriptor details show with **Show advanced settings**.
+
 ## Where connections live
 
 | | This workspace | Every workspace |
 |---|---|---|
-| Set up in | **Studio › Connectors** | **Settings › Connectors** |
+| Set up in | **Studio › Connectors** | **Settings › Connectors** (shown without advanced settings too) |
 | Connections | `.agents/connectors/<category>/<name>.yaml` | `~/.blitz/connectors/<category>/<name>.yaml` |
 | Your own kinds | `.agents/connectors/kinds/<id>.yaml` | `~/.blitz/connectors/kinds/<id>.yaml` |
 
@@ -62,18 +75,22 @@ schema:
     GROUP BY table_schema, table_name
 ```
 
-It appears under **Databases** at once. Text can be one string, or a map of languages (`{en: Host, es: Servidor, fr-CA: Hôte}`). The built-in kinds, in [`pkg/engine/connectors/builtin`](https://github.com/retail-cortex/blitz/tree/main/pkg/engine/connectors/builtin), show every field.
+It appears under **Databases** at once. `order: 5` places it among the kind tiles (the built-in ones are 1 to 4); a kind without one comes after those that have one. Text can be one string, or a map of languages (`{en: Host, es: Servidor, fr-CA: Hôte}`). The built-in kinds, in [`pkg/engine/connectors/builtin`](https://github.com/retail-cortex/blitz/tree/main/pkg/engine/connectors/builtin), show every field.
 
-A descriptor that can't be used (an unknown backend, a capability the backend lacks, a misspelt field) is listed under **Descriptors that can't be used** with why. Yours can add kinds but never change a built-in one: a kind whose ID is taken is ignored.
+A descriptor that can't be used (an unknown backend, a capability the backend lacks, a misspelt field) is listed under **Descriptors that can't be used** with why (without advanced settings, a single line says how many, with why on hover). Yours can add kinds but never change a built-in one: a kind whose ID is taken is ignored.
 
 ## Capabilities
 
 | Capability | What Studio offers |
 |---|---|
-| `test` | **Test**: connect as the form is and list the tools the agents would get |
+| `test` | **Test and save** for a new connection; **Test** for a saved one: connect as the form is and list the tools the agents would get |
 | `try` | **Try it** on a query |
 | `queries` | **Your queries**: SQL with parameters, each a tool of its own |
 | `schema` | **Read the tables**: the tables and their columns |
 | `query-builder` | **Write a query**: describe it, and the sql-query skill writes it from the schema (needs `schema` and `queries`) |
 
 A kind lists the ones it has, and its backend must be able to: the **toolbox** backend (MCP Toolbox for Databases, inside Blitz) can do them all.
+
+## MCP servers
+
+**Settings › Connectors** also holds your global [MCP servers](mcp.md) (with advanced settings): any MCP server's tools, for every workspace. **Studio › Connectors** holds a workspace's own, beside your global ones (each can be switched off there) and the project's ([one workspace's servers](mcp.md#one-workspaces-servers)).

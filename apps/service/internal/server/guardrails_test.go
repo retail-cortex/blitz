@@ -40,7 +40,8 @@ func TestGuardrailsOverTheAPI(t *testing.T) {
 	injection := list.Msg.Builtins[0].File
 	require.NotNil(t, injection, "on by default")
 	assert.Empty(t, injection.Path, "its defaults, no file")
-	assert.Equal(t, "warn", injection.Action)
+	assert.Equal(t, "redact", injection.Action)
+	assert.True(t, injection.Judge, "a match is confirmed by default")
 	assert.True(t, injection.Editable)
 	assert.False(t, injection.Off)
 	assert.Equal(t, filepath.Join(dir, ".agents", "guardrails"), list.Msg.Dir)

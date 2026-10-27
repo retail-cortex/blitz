@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.7.1
-weight: 6
+weight: 7
 ---
 
 **Studio: build your agents, test them, give them rules and guardrails, join them into workflows, and see how good all of it is, in one place.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.7.1).

@@ -187,7 +187,7 @@ The workflow in step 9 calls the staging server, which needs a token. A token pa
 
 **Studio › Secrets** › add one: name `staging_token`, then the value. The list shows each secret's name (as you'd write it) and when it was set, never the value. **Replace** sets a new value without showing the old one.
 
-`{secrets:staging_token}` now works in prompts, agent instructions, MCP server settings and workflow steps. The value goes in only as the model or the service is called. The transcript, the audit log and the workflow file keep the placeholder, and if a model ever echoes the value back, it's shown masked. A workspace's secrets are its own. **Settings › Secrets** holds global ones for every workspace, and the workspace's own wins a name clash.
+`{secrets:staging_token}` now works in prompts, agent instructions, MCP server settings and workflow steps. The value goes in only as the model or the service is called. The transcript, the audit log and the workflow file keep the placeholder, and if a model ever echoes the value back, it's shown masked. A workspace's secrets are its own. **Settings › Library › Secrets** holds global ones for every workspace, and the workspace's own wins a name clash.
 
 ## 7. Rules: the work's quality
 
@@ -217,7 +217,7 @@ Before you rely on it, use **Try it**. Paste an answer like "Added the `/api/v1/
 
 Rules are about quality. **Guardrails** are about what must never happen, and they watch every step: your prompt, each tool call before it runs, what each tool brings back, and the answer. **Studio › Guardrails** shows the three built-ins, on by default:
 
-- **limits** refuses force pushes and `rm -rf` of `/` or `~`, and can cap cost, model calls and files changed per turn;
+- **limits** refuses force pushes and deleting `/` or your home folder, and can cap cost, model calls and files changed per turn;
 - **prompt_injection** watches what web pages, the browser and MCP servers return for text aimed at the agent;
 - **secrets** masks credentials in answers.
 
@@ -227,7 +227,7 @@ Tune two of them for this project. The app holds people's names and email addres
 ---
 builtin: limits
 max_cost_usd: 2
-commands: ["git push*--force*", "git push* -f*", "gcloud run deploy*"]
+commands: ["git push* --force", "git push* --force *", "git push* -f", "git push* -f *", "gcloud run deploy*"]
 ---
 ```
 

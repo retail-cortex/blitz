@@ -176,26 +176,29 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"GetProcessOutput":     func() error { return unary(w.GetProcessOutput, &pb.GetProcessOutputRequest{Workspace: ws}) },
 		"KillProcess":          func() error { return unary(w.KillProcess, &pb.KillProcessRequest{Workspace: ws}) },
 		"AuditShell":           func() error { return unary(w.AuditShell, &pb.AuditShellRequest{Workspace: ws}) },
-		"LoadImage":            func() error { return unary(w.LoadImage, &pb.LoadImageRequest{Workspace: ws}) },
-		"AddImage":             func() error { return unary(w.AddImage, &pb.AddImageRequest{Workspace: ws}) },
-		"GetSearchProvider":    func() error { return unary(w.GetSearchProvider, &pb.GetSearchProviderRequest{Workspace: ws}) },
-		"SearchWeb":            func() error { return unary(w.SearchWeb, &pb.SearchWebRequest{Workspace: ws}) },
-		"GetProjectSettings":   func() error { return unary(w.GetProjectSettings, &pb.GetProjectSettingsRequest{Workspace: ws}) },
-		"TrustProject":         func() error { return unary(w.TrustProject, &pb.TrustProjectRequest{Workspace: ws}) },
-		"TakeProcessNotices":   func() error { return unary(w.TakeProcessNotices, &pb.TakeProcessNoticesRequest{Workspace: ws}) },
-		"ListStyles":           func() error { return unary(w.ListStyles, &pb.ListStylesRequest{Workspace: ws}) },
-		"ListHooks":            func() error { return unary(w.ListHooks, &pb.ListHooksRequest{Workspace: ws}) },
-		"ListNotes":            func() error { return unary(w.ListNotes, &pb.ListNotesRequest{Workspace: ws}) },
-		"ForgetNote":           func() error { return unary(w.ForgetNote, &pb.ForgetNoteRequest{Workspace: ws}) },
-		"GetReflection":        func() error { return unary(w.GetReflection, &pb.GetReflectionRequest{Workspace: ws}) },
-		"ListTasks":            func() error { return unary(w.ListTasks, &pb.ListTasksRequest{Workspace: ws}) },
-		"GetTask":              func() error { return unary(w.GetTask, &pb.GetTaskRequest{Workspace: ws}) },
-		"StopTask":             func() error { return unary(w.StopTask, &pb.StopTaskRequest{Workspace: ws}) },
-		"ListTaskRequests":     func() error { return unary(w.ListTaskRequests, &pb.ListTaskRequestsRequest{Workspace: ws}) },
-		"GetGitStatus":         func() error { return unary(w.GetGitStatus, &pb.GetGitStatusRequest{Workspace: ws}) },
-		"InitGitRepo":          func() error { return unary(w.InitGitRepo, &pb.InitGitRepoRequest{Workspace: ws}) },
-		"InstallSecretHook":    func() error { return unary(w.InstallSecretHook, &pb.InstallSecretHookRequest{Workspace: ws}) },
-		"CloseWorkspace":       func() error { return unary(w.CloseWorkspace, &pb.CloseWorkspaceRequest{Workspace: ws}) },
+		"RunShell": func() error {
+			return streamErr(w.RunShell(ctx, connect.NewRequest(&pb.RunShellRequest{Workspace: ws, Command: "true"})))
+		},
+		"LoadImage":          func() error { return unary(w.LoadImage, &pb.LoadImageRequest{Workspace: ws}) },
+		"AddImage":           func() error { return unary(w.AddImage, &pb.AddImageRequest{Workspace: ws}) },
+		"GetSearchProvider":  func() error { return unary(w.GetSearchProvider, &pb.GetSearchProviderRequest{Workspace: ws}) },
+		"SearchWeb":          func() error { return unary(w.SearchWeb, &pb.SearchWebRequest{Workspace: ws}) },
+		"GetProjectSettings": func() error { return unary(w.GetProjectSettings, &pb.GetProjectSettingsRequest{Workspace: ws}) },
+		"TrustProject":       func() error { return unary(w.TrustProject, &pb.TrustProjectRequest{Workspace: ws}) },
+		"TakeProcessNotices": func() error { return unary(w.TakeProcessNotices, &pb.TakeProcessNoticesRequest{Workspace: ws}) },
+		"ListStyles":         func() error { return unary(w.ListStyles, &pb.ListStylesRequest{Workspace: ws}) },
+		"ListHooks":          func() error { return unary(w.ListHooks, &pb.ListHooksRequest{Workspace: ws}) },
+		"ListNotes":          func() error { return unary(w.ListNotes, &pb.ListNotesRequest{Workspace: ws}) },
+		"ForgetNote":         func() error { return unary(w.ForgetNote, &pb.ForgetNoteRequest{Workspace: ws}) },
+		"GetReflection":      func() error { return unary(w.GetReflection, &pb.GetReflectionRequest{Workspace: ws}) },
+		"ListTasks":          func() error { return unary(w.ListTasks, &pb.ListTasksRequest{Workspace: ws}) },
+		"GetTask":            func() error { return unary(w.GetTask, &pb.GetTaskRequest{Workspace: ws}) },
+		"StopTask":           func() error { return unary(w.StopTask, &pb.StopTaskRequest{Workspace: ws}) },
+		"ListTaskRequests":   func() error { return unary(w.ListTaskRequests, &pb.ListTaskRequestsRequest{Workspace: ws}) },
+		"GetGitStatus":       func() error { return unary(w.GetGitStatus, &pb.GetGitStatusRequest{Workspace: ws}) },
+		"InitGitRepo":        func() error { return unary(w.InitGitRepo, &pb.InitGitRepoRequest{Workspace: ws}) },
+		"InstallSecretHook":  func() error { return unary(w.InstallSecretHook, &pb.InstallSecretHookRequest{Workspace: ws}) },
+		"CloseWorkspace":     func() error { return unary(w.CloseWorkspace, &pb.CloseWorkspaceRequest{Workspace: ws}) },
 		"WatchTasks": func() error {
 			return streamErr(w.WatchTasks(ctx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: ws})))
 		},
@@ -896,6 +899,25 @@ func TestWorkspaceHandlers(t *testing.T) {
 		assert.Equal(t, "UNKNOWN_TASK", reason(t, unary(w.StopTask, &pb.StopTaskRequest{Workspace: dir, Id: "task-9"})))
 		_, err = w.AuditShell(ctx, connect.NewRequest(&pb.AuditShellRequest{Workspace: dir, Command: "nosuch", ExitCode: -1, StartError: "not found"}))
 		assert.NoError(t, err)
+
+		// A ! command from the chat: its output as it comes, then how it ended.
+		run, err := w.RunShell(ctx, connect.NewRequest(&pb.RunShellRequest{Workspace: dir, Command: "echo hello; exit 4"}))
+		require.NoError(t, err)
+		var out string
+		var end *pb.RunShellResponse
+		for run.Receive() {
+			if m := run.Msg(); m.Done {
+				end = m
+			} else {
+				out += m.Output
+			}
+		}
+		require.NoError(t, run.Err())
+		run.Close()
+		assert.Equal(t, "hello\n", out)
+		require.NotNil(t, end)
+		assert.EqualValues(t, 4, end.ExitCode)
+		assert.Empty(t, end.Error)
 	})
 
 	t.Run("git", func(t *testing.T) {

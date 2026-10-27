@@ -124,3 +124,75 @@ func TestMCPBrokenSettings(t *testing.T) {
 		assert.NotEqual(t, exitUsage, exitCodeFor(err), "%v: not a usage error", args)
 	}
 }
+
+// blitz mcp --workspace: a workspace's own servers, beside the global
+// ones; a global one turned off there alone; make-global moves one.
+func TestMCPCommandWorkspace(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	steps := []struct {
+		args []string
+		says []string
+		not  []string
+		err  string
+	}{
+		{args: []string{"mcp", "add", "github", "npx", "@acme/github"}, says: []string{`Added MCP server "github"`}},
+		{args: []string{"--dir", ws, "mcp", "add", "-w", "figma", "https://mcp.example/figma"}, says: []string{`Added MCP server "figma"`, "workspaces"}},
+		{args: []string{"--dir", ws, "mcp", "list", "--workspace"}, says: []string{"github\tnpx @acme/github\tglobal", "figma\thttps://mcp.example/figma\tworkspace"}},
+		{args: []string{"mcp", "list"}, says: []string{"github\tnpx @acme/github"}, not: []string{"figma"}},
+		{args: []string{"--dir", ws, "mcp", "disable", "-w", "github"}, says: []string{`Disabled MCP server "github"`}},
+		{args: []string{"--dir", ws, "mcp", "list", "-w"}, says: []string{"github (off here)"}},
+		{args: []string{"--dir", ws, "mcp", "get", "-w", "github"}, says: []string{"scope:    global", "off in this workspace"}},
+		{args: []string{"mcp", "list"}, says: []string{"github\tnpx"}, not: []string{"disabled", "off here"}},
+		{args: []string{"--dir", ws, "mcp", "enable", "-w", "github"}, says: []string{`Enabled MCP server "github"`}},
+		{args: []string{"--dir", ws, "mcp", "disable", "-w", "figma"}, says: []string{`Disabled MCP server "figma"`}},
+		{args: []string{"--dir", ws, "mcp", "list", "-w"}, says: []string{"figma (disabled)", "github\tnpx"}},
+		{args: []string{"--dir", ws, "mcp", "remove", "-w", "github"}, err: "no MCP server"},
+		{args: []string{"--dir", ws, "mcp", "make-global", "github"}, err: "no MCP server"},
+		{args: []string{"--dir", ws, "mcp", "make-global", "figma"}, says: []string{`Moved MCP server "figma"`, "every workspace"}},
+		{args: []string{"mcp", "list"}, says: []string{"figma (disabled)\thttps://mcp.example/figma"}},
+		{args: []string{"--dir", ws, "mcp", "list", "-w"}, says: []string{"figma (disabled)\thttps://mcp.example/figma\tglobal"}},
+	}
+	for _, s := range steps {
+		out, err := runCLI(t, s.args...)
+		if s.err != "" {
+			require.Error(t, err, "%v: %s", s.args, out)
+			assert.Contains(t, err.Error()+out, s.err, "%v", s.args)
+			continue
+		}
+		require.NoError(t, err, "%v: %s", s.args, out)
+		for _, want := range s.says {
+			assert.Contains(t, out, want, "%v", s.args)
+		}
+		for _, no := range s.not {
+			assert.NotContains(t, out, no, "%v", s.args)
+		}
+	}
+}
+
+// --workspace without --dir is the current directory; a workspace's list
+// shows its project's servers; get names an unknown one as unknown.
+func TestMCPCommandWorkspaceHere(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, ".blitz"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, ".blitz", "settings.toml"), []byte("[[mcp.servers]]\nname = \"issues\"\ncommand = \"node\"\nargs = [\"issues.js\"]\n\n[[mcp.servers]]\nname = \"wiki\"\nurl = \"https://mcp.example/wiki\"\n"), 0o644))
+	t.Chdir(ws)
+	_, err := runCLI(t, "mcp", "add", "-w", "figma", "https://mcp.example/figma")
+	require.NoError(t, err)
+	out, err := runCLI(t, "mcp", "list", "-w")
+	require.NoError(t, err)
+	assert.Contains(t, out, "figma\thttps://mcp.example/figma\tworkspace")
+	assert.Contains(t, out, "issues\tnode issues.js\tproject")
+	assert.Contains(t, out, "wiki\thttps://mcp.example/wiki\tproject")
+	out, err = runCLI(t, "mcp", "get", "-w", "figma")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope:    workspace")
+	_, err = runCLI(t, "mcp", "get", "-w", "ghost")
+	assert.ErrorContains(t, err, "no MCP server")
+	_, err = runCLIWithInput(t, "", "mcp", "login", "-w", "issues")
+	assert.ErrorContains(t, err, "only http servers sign in")
+	out, err = runCLI(t, "mcp", "list")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "figma", "the global settings are unchanged")
+}

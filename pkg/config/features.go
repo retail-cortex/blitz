@@ -399,6 +399,13 @@ type MCPServerConfig struct {
 	// TimeoutSeconds bounds one tool call (default 300). A server that fails
 	// or times out twice in a row is paused, with growing back-off.
 	TimeoutSeconds int `toml:"timeout_seconds"`
+	// Scope is where it's configured: global (the settings every workspace
+	// shares), workspace (one workspace's own, in ~/.blitz) or project (a
+	// trusted .blitz/settings.toml); "" for one Blitz adds itself.
+	Scope string `toml:"-"`
+	// OffHere: a global server this workspace turned off (MCPConfig.Off);
+	// Disabled is set too.
+	OffHere bool `toml:"-"`
 	// InProcess names a server Blitz runs inside its own process, in place
 	// of a command or URL ("databases", spec_databases_046). Blitz sets it;
 	// settings files can't.
@@ -526,7 +533,18 @@ type PluginDir struct {
 // MCPConfig lists MCP servers.
 type MCPConfig struct {
 	Servers []MCPServerConfig `toml:"servers"`
+	// Off names global servers turned off in one workspace: read from the
+	// workspace's own settings file only (the global file's is ignored),
+	// so a workspace never changes what the others run.
+	Off []string `toml:"off"`
 }
+
+// Where an MCP server is configured (MCPServerConfig.Scope).
+const (
+	MCPScopeGlobal    = "global"
+	MCPScopeWorkspace = "workspace"
+	MCPScopeProject   = "project"
+)
 
 // WebConfig controls the web_fetch tool.
 type WebConfig struct {

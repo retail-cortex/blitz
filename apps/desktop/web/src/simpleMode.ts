@@ -26,22 +26,38 @@ export const allSections = ["providers", "appearance", "agents", "skills", "work
 export type SectionId = (typeof allSections)[number];
 
 /**
- * The sections in groups, each under a heading (desktop.settings.group.<id>):
- * getting started; the global setup, in Studio's order; where Blitz works
- * and what it may do; the system. Together they're allSections, in order.
+ * The Library's tabs (its entry in the side list is agents'): the global
+ * agents, skills, jobs and secrets, each a section of its own to open on.
+ */
+export const libraryTabs = ["agents", "skills", "workers", "secrets"] as const;
+
+/**
+ * Sections shown inside another's entry: the Library's tabs, and MCP
+ * servers under Connectors (the systems the agents reach, together).
+ */
+const homes: Partial<Record<SectionId, SectionId>> = { skills: "agents", workers: "agents", secrets: "agents", mcp: "connectors" };
+
+/** The side list's entry a section is shown under (itself, mostly). */
+export const homeOf = (s: SectionId): SectionId => homes[s] ?? s;
+
+/**
+ * The side list's entries in groups, each under a heading
+ * (desktop.settings.group.<id>): getting started; the global setup;
+ * where Blitz works and what it may do; the system. With the sections
+ * shown inside them (homeOf), they're allSections.
  */
 export const sectionGroups: readonly { id: string; sections: readonly SectionId[] }[] = [
   { id: "start", sections: ["providers", "appearance"] },
-  { id: "setup", sections: ["agents", "skills", "workers", "mcp", "connectors", "browser", "secrets"] },
+  { id: "setup", sections: ["agents", "connectors", "browser"] },
   { id: "access", sections: ["workspaces", "permissions"] },
   { id: "system", sections: ["service", "logs", "about"] },
 ];
 
-const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "appearance", "workspaces", "about"]);
+const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "appearance", "connectors", "workspaces", "about"]);
 
-/** The Settings dialog's sections shown: everything, or what a newcomer needs. */
+/** The side list's entries shown: everything, or what a newcomer needs. */
 export function settingsSections(advanced: boolean): SectionId[] {
-  return allSections.filter((s) => advanced || simpleSections.has(s));
+  return sectionGroups.flatMap((g) => g.sections).filter((s) => advanced || simpleSections.has(s));
 }
 
 /** The groups shown, each with its sections shown (none left: the group isn't). */
@@ -50,9 +66,13 @@ export function shownGroups(advanced: boolean): { id: string; sections: SectionI
   return sectionGroups.map((g) => ({ id: g.id, sections: g.sections.filter((s) => shown.includes(s)) })).filter((g) => g.sections.length > 0);
 }
 
-/** The section to open on: the one asked for, unless it's hidden (then the first). */
+/**
+ * The section to open on: the one asked for, unless its entry is hidden
+ * (then the first). MCP servers show with advanced settings only.
+ */
 export function sectionShown(asked: SectionId, advanced: boolean): SectionId {
-  return settingsSections(advanced).includes(asked) ? asked : allSections[0];
+  if (asked === "mcp" && !advanced) return "connectors";
+  return settingsSections(advanced).includes(homeOf(asked)) ? asked : allSections[0];
 }
 
 /** The top bar's menus, in order. */

@@ -21,7 +21,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { builtinCommands, terminalOnly } from "./slashCommands";
+import { builtinCommands, composerSyntax, terminalOnly } from "./slashCommands";
 import { terminalCommands } from "./terminalCommands";
 
 // The terminal's other names for a command the window has.
@@ -40,7 +40,7 @@ describe("parity with the terminal", () => {
   });
   const ours = new Set(builtinCommands.map((b) => b.name));
   it.each(terminal.map((n) => [n]))("/%s is here, or terminal-only", (name) => {
-    const here = ours.has(aliases[name] ?? name) || (terminalOnly as readonly string[]).includes(name);
+    const here = ours.has(aliases[name] ?? name) || (terminalOnly as readonly string[]).includes(name) || (composerSyntax as readonly string[]).includes(name);
     expect(here, `the terminal's /${name} has no desktop command: add it to slashCommands.ts, or to terminalOnly with the window's way in desktop.help.terminal_only`).toBe(true);
   });
 });

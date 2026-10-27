@@ -55,7 +55,7 @@ export const emptyGuardrailForm: GuardrailForm = { name: "", builtin: "", stage:
 
 /** Each built-in's stage and default action. */
 export const builtinDefaults: Record<BuiltinId, { stage: GuardStage; action: string; actions: string[] }> = {
-  prompt_injection: { stage: "tool_result", action: "warn", actions: ["warn", "block"] },
+  prompt_injection: { stage: "tool_result", action: "redact", actions: ["redact", "warn", "block"] },
   secrets: { stage: "output", action: "redact", actions: ["redact", "warn", "block"] },
   limits: { stage: "action", action: "block", actions: ["block"] },
 };
@@ -86,12 +86,22 @@ export function formFromGuardrail(g: GuardrailFile): GuardrailForm {
   };
 }
 
-/** The commands the limits guardrail refuses by default (gates.DefaultCommands). */
-export const defaultCommands = ["git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"];
+/**
+ * The limits guardrail's commands line for Blitz's own list
+ * (gates.DefaultsEntry): kept as the word, so a file follows the
+ * defaults as they change instead of keeping a copy.
+ */
+export const defaultsEntry = "defaults";
 
-/** A built-in's form with its defaults (on). */
+/** The limits guardrail's ceilings without a file (gates.DefaultMaxTurns, DefaultMaxCostUSD). */
+export const defaultLimits = { maxTurns: "200", maxCostUsd: "10" };
+
+/** A built-in's form with its defaults (on): the injection judge on; limits' defaults and ceilings. */
 export function formForBuiltin(id: BuiltinId): GuardrailForm {
-  return { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action, commands: id === "limits" ? defaultCommands.join("\n") : "" };
+  const base = { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action };
+  if (id === "prompt_injection") return { ...base, judge: true };
+  if (id === "limits") return { ...base, commands: defaultsEntry, ...defaultLimits };
+  return base;
 }
 
 const split = (s: string, by: RegExp) =>

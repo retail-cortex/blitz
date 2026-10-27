@@ -14,20 +14,26 @@
  * limitations under the License.
  */
 
-// A fenced code block: highlighted, with its language and a copy button.
-import { useState } from "react";
-import { mdiCheck, mdiContentCopy } from "@mdi/js";
+// A fenced code block: highlighted, with its language and a copy button;
+// in a conversation, a shell block also has Run, which puts its command
+// in the composer as !command (shellRun.ts).
+import { useContext, useState } from "react";
+import { mdiCheck, mdiContentCopy, mdiPlay } from "@mdi/js";
 import { highlight, languageFor } from "./highlight";
 import { t } from "./i18n";
+import { ShellRunContext, shellCommandOf } from "./shellRun";
 import { IconButton } from "./ui/controls";
 
 /** A code block in Markdown, highlighted for lang. */
 export function CodeBlock({ children, lang }: { children: string; lang: string }) {
   const [copied, setCopied] = useState(false);
+  const runShell = useContext(ShellRunContext);
+  const command = runShell ? shellCommandOf(lang, children) : "";
   return (
     <div className="code-block">
       <div className="code-head">
-        <span className="t-label muted">{lang || "text"}</span>
+        <span className="t-label muted spacer">{lang || "text"}</span>
+        {command && <IconButton icon={mdiPlay} label={t("desktop.code.run")} small onClick={() => runShell?.(command)} />}
         <IconButton
           icon={copied ? mdiCheck : mdiContentCopy}
           label={copied ? t("desktop.code.copied") : t("desktop.code.copy")}

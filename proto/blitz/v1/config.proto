@@ -53,6 +53,10 @@ service ConfigService {
   // The models each configured provider offers, from its API (kept for a
   // few minutes), so forms can suggest and check model names.
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  // Tries an API key before it's saved: lists the provider's models with
+  // it, so a form can say the key works (or why not) as it's pasted.
+  // Nothing is written and the key isn't kept.
+  rpc CheckApiKey(CheckApiKeyRequest) returns (CheckApiKeyResponse);
   // Returns the providers' sign-ins (one provider's, or all four:
   // google, anthropic, aws, azure): whether the vendor's tool is installed
   // and whether its credentials work now. Signing in adds to API keys.
@@ -144,15 +148,22 @@ service ConfigService {
   // Returns what a skill's scripts are, for review, when they need it
   // (nothing when they don't).
   rpc GetSkillReview(GetSkillReviewRequest) returns (GetSkillReviewResponse);
-  // Returns the MCP servers of the global settings, with the file they're in.
+  // Returns the MCP servers of the global settings, with the file they're
+  // in; with a workspace, every server it runs, each with its scope (the
+  // global ones, its own, its trusted project's).
   rpc ListMCPServerConfigs(ListMCPServerConfigsRequest) returns (ListMCPServerConfigsResponse);
-  // Adds an MCP server to the global settings, or replaces one (name):
-  // open workspaces apply it at once.
+  // Adds an MCP server to the global settings, or to a workspace's own,
+  // or replaces one (name) there: open workspaces apply it at once.
   rpc SaveMCPServer(SaveMCPServerRequest) returns (SaveMCPServerResponse);
-  // Removes an MCP server from the global settings (NOT_FOUND).
+  // Removes an MCP server from the global settings, or a workspace's own
+  // (NOT_FOUND: a workspace never removes a global one).
   rpc RemoveMCPServer(RemoveMCPServerRequest) returns (RemoveMCPServerResponse);
-  // Turns an MCP server of the global settings on or off (NOT_FOUND).
+  // Turns an MCP server on or off: in its scope's file, or, for a global
+  // one asked about with a workspace, in that workspace alone (NOT_FOUND).
   rpc SetMCPServerEnabled(SetMCPServerEnabledRequest) returns (SetMCPServerEnabledResponse);
+  // Moves a workspace's own MCP server to the global settings, for every
+  // workspace (NOT_FOUND; ALREADY_EXISTS when a global one has its name).
+  rpc MakeMCPServerGlobal(MakeMCPServerGlobalRequest) returns (MakeMCPServerGlobalResponse);
 
   // Returns the global connectors (spec_connectors_047 CON-18): the
   // categories and kinds of the built-in and global descriptors, and the
@@ -435,6 +446,27 @@ message ListModelsRequest {
   // Only these providers (gemini, anthropic, openai, …), configured or
   // not; none for every configured one.
   repeated string providers = 2;
+}
+
+// Request message for ConfigService.CheckApiKey.
+message CheckApiKeyRequest {
+  // The workspace whose other settings (base URL, retries) apply; "" for
+  // the user's.
+  string workspace = 1;
+  // gemini, anthropic or openai.
+  string provider = 2;
+  // The key to try.
+  string key = 3;
+}
+
+// Response message for ConfigService.CheckApiKey.
+message CheckApiKeyResponse {
+  // The provider took the key.
+  bool works = 1;
+  // Why not, when it didn't ("" when it did).
+  string error = 2;
+  // The models the key reaches, sorted.
+  repeated string models = 3;
 }
 
 // A listed model with the price Blitz knows for it.
@@ -786,15 +818,23 @@ message MCPServerConfig {
   repeated string agents = 12;
   // Bounds one tool call; 0 for the default (300).
   int32 timeout_seconds = 13;
+  // In a listing: where it's configured (global, workspace or project).
+  string scope = 14;
+  // In a workspace's listing: a global server turned off in that
+  // workspace alone (disabled is its own file's setting).
+  bool off_here = 15;
 }
 
 // Request message for ConfigService.ListMCPServerConfigs.
-message ListMCPServerConfigsRequest {}
+message ListMCPServerConfigsRequest {
+  // "" for the global settings' servers alone.
+  string workspace = 1;
+}
 
 // Response message for ConfigService.ListMCPServerConfigs.
 message ListMCPServerConfigsResponse {
   repeated MCPServerConfig servers = 1;
-  // The global settings file.
+  // The scope's settings file: the global one, or the workspace's own.
   string path = 2;
 }
 
@@ -803,6 +843,9 @@ message SaveMCPServerRequest {
   // The server replaced; empty to add one.
   string name = 1;
   MCPServerConfig server = 2;
+  // "" for the global settings; else the workspace whose own settings
+  // hold it.
+  string workspace = 3;
 }
 
 // Response message for ConfigService.SaveMCPServer.
@@ -813,6 +856,8 @@ message SaveMCPServerResponse {
 // Request message for ConfigService.RemoveMCPServer.
 message RemoveMCPServerRequest {
   string name = 1;
+  // "" for the global settings; else the workspace's own.
+  string workspace = 2;
 }
 
 // Response message for ConfigService.RemoveMCPServer.
@@ -824,10 +869,24 @@ message RemoveMCPServerResponse {
 message SetMCPServerEnabledRequest {
   string name = 1;
   bool enabled = 2;
+  // "" for the global settings; else the workspace (its own server's
+  // setting, or a global one's in that workspace alone).
+  string workspace = 3;
 }
 
 // Response message for ConfigService.SetMCPServerEnabled.
 message SetMCPServerEnabledResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.MakeMCPServerGlobal.
+message MakeMCPServerGlobalRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for ConfigService.MakeMCPServerGlobal.
+message MakeMCPServerGlobalResponse {
   ConfigChange change = 1;
 }
 

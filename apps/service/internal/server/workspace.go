@@ -22,6 +22,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -691,6 +692,32 @@ func (h workspaceService) WatchProcesses(ctx context.Context, r req[pb.WatchProc
 		case <-tick.C:
 		}
 	}
+}
+
+// RunShell runs a ! command for a client without a terminal, streaming
+// its output (Workspace.RunUserShell); the call ending stops it.
+func (h workspaceService) RunShell(ctx context.Context, r req[pb.RunShellRequest], stream *connect.ServerStream[pb.RunShellResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	var mu sync.Mutex
+	var sendErr error
+	send := func(m *pb.RunShellResponse) {
+		mu.Lock()
+		defer mu.Unlock()
+		if sendErr == nil {
+			sendErr = stream.Send(m)
+		}
+	}
+	start := time.Now()
+	code, truncated, startErr := w.RunUserShell(ctx, r.Msg.Command, func(p []byte) { send(&pb.RunShellResponse{Output: strings.ToValidUTF8(string(p), "\uFFFD")}) })
+	end := &pb.RunShellResponse{Done: true, ExitCode: int32(code), ElapsedMs: time.Since(start).Milliseconds(), Truncated: truncated}
+	if startErr != nil {
+		end.Error = startErr.Error()
+	}
+	send(end)
+	return sendErr
 }
 
 func (h workspaceService) AuditShell(ctx context.Context, r req[pb.AuditShellRequest]) (*connect.Response[pb.AuditShellResponse], error) {

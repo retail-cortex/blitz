@@ -297,8 +297,8 @@ export function openDocs(detail: { page?: string; anchor?: string }) {
 /** The event that opens the Settings dialog on a section (and scope). */
 export const openSettingsEvent = "blitz:open-settings";
 
-/** Opens Settings on a section; for the settings file or a workspace's, scope is its directory. */
-export function openSettings(detail: { section: string; scope?: string }) {
+/** Opens Settings on a section; for the settings file or a workspace's, scope is its directory; connect, a URL or file to connect (Connectors). */
+export function openSettings(detail: { section: string; scope?: string; connect?: string }) {
   window.dispatchEvent(new CustomEvent(openSettingsEvent, { detail }));
 }
 

@@ -24,6 +24,8 @@ hint:
   fr-CA: "AlloyDB pour PostgreSQL sur Google Cloud, par son connecteur. Se connecte avec vos identifiants Google (gcloud auth application-default login) à moins de donner un utilisateur et un mot de passe."
 backend: toolbox
 source: alloydb-postgres
+# Listed simplest first: SQLite, PostgreSQL, BigQuery, AlloyDB.
+order: 4
 capabilities: [test, try, queries, schema, query-builder]
 fields:
   - key: project

@@ -99,14 +99,37 @@ func overlay(cfg *Config, prefixDir, workspace string) error {
 	path := filepath.Join(dir, ".env.toml")
 	// A list the workspace sets would replace the global one: its
 	// permission rules add to the global rules instead.
-	global := cfg.Permissions
-	cfg.Permissions = PermissionsConfig{}
+	// Its MCP servers add to the global ones in the same way.
+	global, globalMCP := cfg.Permissions, cfg.MCP
+	cfg.Permissions, cfg.MCP = PermissionsConfig{}, MCPConfig{}
 	if _, err := toml.DecodeFile(path, cfg); err != nil && !errors.Is(err, os.ErrNotExist) {
-		cfg.Permissions = global
+		cfg.Permissions, cfg.MCP = global, globalMCP
 		return fmt.Errorf("the workspace's settings (%s): %w", path, err)
 	}
 	cfg.Permissions = global.Merge(cfg.Permissions)
+	cfg.MCP.Servers = mergeMCP(globalMCP.Servers, cfg.MCP.Servers, cfg.MCP.Off)
 	return nil
+}
+
+// mergeMCP is the servers a workspace runs: the global ones (those it
+// turned off disabled, OffHere), then its own; one of its own with a
+// global one's name stands in for it there.
+func mergeMCP(global, own []MCPServerConfig, off []string) []MCPServerConfig {
+	out := make([]MCPServerConfig, 0, len(global)+len(own))
+	for _, g := range global {
+		if slices.ContainsFunc(own, func(s MCPServerConfig) bool { return s.Name == g.Name }) {
+			continue
+		}
+		if slices.Contains(off, g.Name) {
+			g.Disabled, g.OffHere = true, true
+		}
+		out = append(out, g)
+	}
+	for _, s := range own {
+		s.Scope = MCPScopeWorkspace
+		out = append(out, s)
+	}
+	return out
 }
 
 // resolveSecrets replaces keychain references (and modenv's xor: values,

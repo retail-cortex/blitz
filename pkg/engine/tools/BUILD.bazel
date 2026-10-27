@@ -88,6 +88,7 @@ go_library(
         "universal_constructor.go",
         "userfs.go",
         "usersearch.go",
+        "usershell.go",
         "web.go",
         "websearch.go",
         "workspace.go",

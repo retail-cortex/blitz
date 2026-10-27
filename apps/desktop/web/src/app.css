@@ -711,7 +711,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .provider-choice .single { max-width: 640px; }
 .provider-choice .field .select, .provider-choice .field .input { width: 100%; }
 .provider-choice .seg { align-self: flex-start; }
-.key-status { display: flex; flex-direction: column; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: var(--md-shape-sm, 8px); background: color-mix(in srgb, var(--md-on-surface) 4%, transparent); }
+.key-status { max-width: 640px; }
+/* Providers & keys: every provider's state at once, its form below. */
+.provider-list .list-item { min-height: 52px; }
+.provider-list .trailing { gap: 8px; }
 .settings-edit { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
 .settings-editor { height: max(300px, calc(85vh - 420px)); border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
 .settings-help {
@@ -1047,6 +1050,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-stream > .select { align-self: flex-start; max-width: 320px; }
 .run-stream-text { flex: 1; max-height: none; min-height: 80px; }
 .ok-text { color: var(--md-success, #2e7d32); }
+/* A field's "it works" line: the theme's green, readable in dark themes too. */
+.field .supporting.ok-text { color: var(--hl-string); }
 /* Several chosen in the room of one field: a button, then a list of check boxes. */
 .multi-select { display: block; }
 .multi-select-button { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; cursor: pointer; }
@@ -1054,10 +1059,17 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .multi-select-menu { max-width: min(360px, calc(100vw - 32px)); }
 .multi-select-menu .multi-select-on { color: var(--md-primary); }
 .multi-select-filter { margin: 4px 8px 6px; width: calc(100% - 16px); }
-/* Studio's kinds are icons only (their names on hover): the menu bar's Studio menu names them. */
+/* Studio's kinds are icons (their names on hover) unless there's room for
+   their names: a wide drawer names them, and a workflow's canvas folds
+   them back to icons. */
 .settings-drawer.studio-drawer .settings-nav { width: 48px; }
 .studio-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
 .studio-drawer .settings-nav-label { display: none; }
+@container drawer (min-width: 1200px) {
+  .settings-drawer.studio-drawer:not(.is-compact) .settings-nav { width: 184px; }
+  .studio-drawer:not(.is-compact) .settings-nav .list-item { justify-content: flex-start; padding-inline: 12px; }
+  .studio-drawer:not(.is-compact) .settings-nav-label { display: inline; }
+}
 .studio-nav-line { height: 1px; margin: 6px 10px; background: var(--md-outline-variant); flex: none; }
 .studio-drawer.is-compact .settings { gap: 12px; }
 /* Studio's panes fill the drawer (Settings keeps its measure). */
@@ -1139,8 +1151,9 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 @media (max-width: 900px) { .db-param { grid-template-columns: 1fr 1fr; } }
 .connectors-pane textarea.mono { font-family: var(--md-mono); font-size: 13px; }
 .db-result { max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; font-family: var(--md-mono); font-size: 12px; }
-/* A slide pane in a settings section: a box of its own height. */
-.slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
+/* A slide pane in a settings section: a box as tall as the drawer leaves
+   it, so a long form scrolls once, inside it. */
+.slide-box { height: calc(100vh - 210px); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane
    fills the drawer's height (and scrolls itself). */
 .studio-drawer > .body { overflow: hidden; }
@@ -1537,3 +1550,14 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .compose-turn.composer { align-self: flex-start; background: var(--md-surface-container-high); }
 .compose-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
 .compose-entry .icon { color: var(--md-primary); }
+
+/* ! commands (shellRun.ts): the composer's line and the command's card in
+   marigold, so a line that runs in the shell can't pass for a message. */
+:root { --shell-ink: #9a6500; }
+:root[data-theme="dark"] { --shell-ink: #f4b73f; }
+.shell-text { color: var(--shell-ink); }
+.composer textarea.shell-mode { color: var(--shell-ink); font-family: var(--md-mono); caret-color: var(--shell-ink); }
+.shell-card .code-head { gap: 8px; }
+.shell-card .code-head code { font-family: var(--md-mono); font-size: 13px; min-width: 0; }
+.shell-card .shell-output { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
+.shell-card .shell-note { margin: 0 12px 8px; }

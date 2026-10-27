@@ -21,6 +21,8 @@
 /** The calls the page makes to the window (the rest go to the host, /host/). */
 export const windowMethods = [
   "ChooseWorkspace",
+  // A file for a form's path field (a SQLite database).
+  "ChooseFile",
   "Notify",
   "OpenURL",
   "PrintPDF",

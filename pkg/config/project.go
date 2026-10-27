@@ -578,7 +578,7 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 			}
 			cfg.MCP.Servers = append(cfg.MCP.Servers, MCPServerConfig{
 				Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, URL: s.URL, Headers: s.Headers, Tools: s.Tools,
-				Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: s.TimeoutSeconds,
+				Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: s.TimeoutSeconds, Scope: MCPScopeProject,
 			})
 		}
 		for _, r := range pf.Permissions.Allow {

@@ -39,6 +39,7 @@ import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDrawer, type Section } from "./SettingsDrawer";
+import { ConnectModelCard } from "./ProviderSettings";
 import { StatusBar } from "./StatusBar";
 import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
@@ -189,7 +190,7 @@ function Shell() {
   );
   // The Settings dialog, open on a section, and for the settings file a
   // workspace's (null: closed).
-  const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
+  const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string; connect?: string } | null>(null);
   const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
   // The user docs (Help, the palette, /docs), open on a page.
   const [docsAt, setDocsAt] = useState<DocsAt | null>(null);
@@ -201,8 +202,8 @@ function Shell() {
   // A slash command (/config) asks for a section.
   useEffect(() => {
     const f = (e: Event) => {
-      const d = (e as CustomEvent<{ section: Section; scope?: string }>).detail;
-      setSettingsAt({ section: d.section, scope: d.scope });
+      const d = (e as CustomEvent<{ section: Section; scope?: string; connect?: string }>).detail;
+      setSettingsAt({ section: d.section, scope: d.scope, connect: d.connect });
     };
     window.addEventListener(openSettingsEvent, f);
     return () => window.removeEventListener(openSettingsEvent, f);
@@ -411,7 +412,7 @@ function Shell() {
           />
         )}
         {docsAt && <DocsDrawer key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
-        {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
+        {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} connect={settingsAt.connect} onClose={() => setSettingsAt(null)} />}
         {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
         <TasksDialog />
         <TaskAlerts />
@@ -510,6 +511,7 @@ function Welcome({ onOpen, onClose, onSettings, onSearch }: { onOpen: () => void
       <div className="welcome-body">
         <h1 className="t-display">{t("desktop.welcome.title")}</h1>
         <p className="t-title muted">{t("desktop.welcome.body")}</p>
+        <ConnectModelCard onSetUp={() => onSettings("providers")} />
         <Button variant="filled" icon={mdiFolderOpenOutline} onClick={onOpen}>
           {t("desktop.workspace.open_one")}
         </Button>

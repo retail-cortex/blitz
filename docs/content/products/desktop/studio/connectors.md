@@ -9,7 +9,7 @@ This page walks through connecting a PostgreSQL database called `shop`, then giv
 
 ## Open it
 
-Choose **Studio › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar.
+Choose **Studio › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar. Without it, add connections for every workspace in **Settings › Connectors**, the same way; the composer's database button and `/connect` open it too.
 
 ![Studio › Connectors: two of this workspace's databases, and a global one switched off here](../../../../images/desktop/connectors-list.png)
 
@@ -20,18 +20,19 @@ A connection that came with the project, one you didn't save yourself, is marked
 ## 1. Add a connection
 
 1. Press **+** beside **Databases** (**Add a connection to Databases**).
-2. Give it a **Name**, lower case: `shop`. Its tools are named after it, `db__shop_…`.
-3. Say **What it holds**: "The shop's orders and customers". The agents read that to know when to use it, so be specific.
-4. Choose the **Kind** and fill in its settings. For PostgreSQL: **Host**, **Port**, **Database**, **User** and **Password**.
+2. Pick the kind from the tiles: **PostgreSQL**.
+3. Paste a **Connection URL**, `postgres://shop_reader:secret@db.example.com:5432/shop`, and the fields fill themselves (the URL is then cleared: it holds the password). Or fill in **Host**, **Port**, **Database**, **User** and **Password** yourself.
+4. The **Name** follows the database: `shop`. Type another if you like; it's kept lower case, and the tools are named after it.
+5. Say **What it holds**: "The shop's orders and customers". The agents read that to know when to use it, so be specific.
 
-![A new PostgreSQL connection: name, what it holds, host, port, database, user and password, Read-only on](../../../../images/desktop/connectors-postgres.png)
+![A new PostgreSQL connection: the URL read into host, port, database, user and password, the name shop, Read-only on](../../../../images/desktop/connectors-postgres.png)
 
 | Kind | You fill in | Signs in with |
 |---|---|---|
-| PostgreSQL | host, port, database, user, password | the user and password |
-| AlloyDB | project, region, cluster, instance, IP type, database | a user and password, or your Google credentials |
-| SQLite | the file's path (`./data/kitchen.db` starts at the workspace's folder) | nothing: it's a file |
+| SQLite | the file (**Choose…** opens in the workspace, and a file inside it is kept as `./data/kitchen.db`, so the connection still works when the project is cloned) | nothing: it's a file |
+| PostgreSQL | a connection URL, or host, port, database, user, password | the user and password |
 | BigQuery | project, location, which datasets, the most bytes a query may bill | your Google credentials |
+| AlloyDB | project, region, cluster, instance, IP type, database | a user and password, or your Google credentials |
 
 For AlloyDB and BigQuery, sign in to Google Cloud once with `gcloud auth application-default login`. The password is kept as a Blitz secret in your keychain, never in the file, so the connection's file is safe to commit for your team.
 
@@ -39,15 +40,13 @@ For AlloyDB and BigQuery, sign in to Google Cloud once with `gcloud auth applica
 
 **Read-only** is on for a new connection, and the database itself enforces it: every PostgreSQL session is read-only, whatever the SQL. Tools that write aren't offered, and the rest run without asking, since they can't change anything. Turn it off only when the agents should change data; then every tool asks first. Safest of all is a database **User** that can only read, with a read-only connection on top.
 
-**Ready-made tools** lists what the agents get: `execute_sql` runs any SQL the agent writes, `list_tables` lists the tables and their columns, and more. Switch off the ones you don't want.
+## 3. Test and save
 
-## 3. Test it
+Press **Test and save**. Blitz connects with the form as it is and saves the connection only if that works. If it can't connect, it says why (a wrong host or password, a firewall, or Google credentials that need signing in again), and **Save anyway** keeps it as it is.
 
-Under **Test the connection**, press **Test**. Blitz connects with the form as it is, saved or not, and lists the tools the agents would get. **Read the tables** shows the tables and columns it can see.
+Once it's saved the connection stays open, now with its tools: **Ready-made tools** lists what the agents get (`execute_sql` runs any SQL the agent writes, `list_tables` lists the tables and their columns, and more; switch off the ones you don't want), and **Test the connection** has **Test** and **Read the tables** for later checks.
 
 ![Test the connection: connected, with the tools the agents would get](../../../../images/desktop/connectors-tested.png)
-
-If it can't connect, it says why: a wrong host or password, a firewall, or Google credentials that need signing in again.
 
 ## 4. Write a query from a description
 
@@ -63,7 +62,7 @@ A query of your own is better than letting the agent write SQL each time: it's c
 
 **Add a query** writes one by hand instead: a **Tool name**, **What it's for**, the **SQL** with `$1`, `$2` (or `@name` for BigQuery), and a row per parameter.
 
-## 5. Try it, then save
+## 5. Try it, then save again
 
 Fill in a value for each parameter (`10` for `limit`) and press **Try it**: the query runs on the spot and shows what it returns.
 
@@ -80,6 +79,10 @@ Who were our best customers last month, and what did each spend?
 ```
 
 The agent picks the tool whose description fits, here `db__shop_top_customers_last_month` with `limit: 10`, and answers from the result. On a read-only connection it doesn't need to ask you first.
+
+## MCP servers for this workspace
+
+Below the databases, **MCP servers** lists every server this workspace's agents use: your global ones (**Every workspace**), the workspace's own (**This workspace**) and the project's. Press **+** to add one just for this workspace: a command to run or a web address, as in Settings. It's kept in your settings folder, not the project. Switch a global one off to keep it out of this workspace alone, or **Make global** to share one of the workspace's with every workspace. [MCP servers](../../../guide/mcp.md#one-workspaces-servers)
 
 ## For every workspace
 

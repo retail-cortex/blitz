@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Settings › MCP servers (spec_mcp_009 MCP-46): the form for one server,
+// Settings › Connectors › MCP servers (spec_mcp_009 MCP-46): the form for one server,
 // to and from MCPServerConfig, and the list as the page shows it.
 import { create } from "@bufbuild/protobuf";
 import { MCPServerConfigSchema, type MCPServerConfig } from "./gen/blitz/v1/config_pb";

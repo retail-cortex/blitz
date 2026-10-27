@@ -134,7 +134,13 @@ func Evidence(it Item) string {
 	case KindSkill:
 		line("activated %d times", it.Uses)
 	case KindRule, KindGuardrail:
-		line("decided %d times; stopped, warned or revised %d of them", it.Uses, it.Fired)
+		if it.Uses == 0 {
+			// Not a fault in itself: a guardrail on outside content has nothing
+			// to check until a turn brings some in.
+			line("no decisions recorded yet: nothing has come its way; judge whether it fires when it should, and only then, from what it checks")
+		} else {
+			line("decided %d times; stopped, warned or revised %d of them", it.Uses, it.Fired)
+		}
 	}
 	if b.Len() == 0 {
 		return "- nothing recorded\n"

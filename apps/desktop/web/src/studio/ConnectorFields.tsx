@@ -14,20 +14,28 @@
  * limitations under the License.
  */
 
-import { mdiCreationOutline, mdiPlus } from "@mdi/js";
+import { mdiCreationOutline, mdiFileOutline, mdiPlus, mdiSwapHorizontal } from "@mdi/js";
+import { useState } from "react";
+import { chooseFile } from "../desktop";
 import { language, t } from "../i18n";
 import type { ConnectorKind } from "../gen/blitz/v1/workspace_pb";
-import { Button, Field, Segmented, Switch } from "../ui/controls";
+import { useAdvanced } from "../state";
+import { Button, Field, Switch } from "../ui/controls";
 import type { ConnectorApi } from "./connectorApi";
-import { can, newQueryForm, textIn, withKind, type ConnectorForm, type QueryForm } from "./connectorForm";
+import { can, newQueryForm, parseConnectionURL, relativeTo, startFolder, takesURL, typedName, textIn, withKind, withSetting, type ConnectorForm, type QueryForm } from "./connectorForm";
 import { QueryCard } from "./QueryCard";
 
 /**
- * A connection's form, drawn from its kind's descriptor: name and
- * description, the folder it's kept in, the category's kinds, the
- * fields, Read-only (when it can be), the ready-made tools and, as the
- * kind can, its own queries with Try it and Write a query (onBuild). A
- * file the form can't describe is edited as it is.
+ * A connection's form, drawn from its kind's descriptor, in the order
+ * it's filled: the kind (tiles, simplest first, until one is picked), a
+ * connection URL to paste where the kind has a server, its fields (a
+ * file's with Choose…, opening in the workspace and kept relative to it
+ * when it's inside), the name (its database's until one is typed) and
+ * description, and Read-only. Its ready-made tools and own queries, with
+ * Try it and Write a query (onBuild), come once it's saved (saved); a new
+ * one is connected first. A file the form can't describe is edited as it
+ * is. The tool names and where the file is kept show with advanced
+ * settings.
  */
 export function ConnectorFields({
   api,
@@ -37,6 +45,8 @@ export function ConnectorFields({
   kinds,
   prefix,
   folder,
+  saved,
+  base = "",
   onBuild,
 }: {
   api: ConnectorApi;
@@ -48,42 +58,78 @@ export function ConnectorFields({
   prefix: string;
   /** Where its file is kept. */
   folder: string;
+  /** It has a file: its tools and queries can be chosen. */
+  saved: boolean;
+  /** The workspace a file path is chosen from and kept relative to ("" for a global connection). */
+  base?: string;
   onBuild: () => void;
 }) {
   const lang = language();
+  const advanced = useAdvanced();
+  const [pasted, setPasted] = useState("");
+  // A URL read into the fields is cleared (it holds the password): what it filled is said instead.
+  const [filled, setFilled] = useState(false);
   const set = <K extends keyof ConnectorForm>(k: K, v: ConnectorForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const setQuery = (key: string, q: Partial<QueryForm>) => setForm((f) => ({ ...f, queries: f.queries.map((x) => (x.key === key ? { ...x, ...q } : x)) }));
   const example = form.name.trim() || t("desktop.connectors.example_name");
+  const parsed = kind && pasted.trim() ? parseConnectionURL(pasted, kind) : undefined;
+  const paste = (text: string) => {
+    setPasted(text);
+    setFilled(false);
+    const parts = kind && parseConnectionURL(text, kind);
+    if (!parts) return;
+    setPasted("");
+    setFilled(true);
+    setForm((f) => {
+      let next = f;
+      for (const [k, v] of Object.entries(parts.settings)) next = withSetting(next, k, v);
+      return { ...next, secretValues: { ...next.secretValues, ...parts.secrets } };
+    });
+  };
+  const choose = async (key: string, label: string) => {
+    const path = await chooseFile(label, startFolder(base, form.settings[key] ?? ""));
+    if (path) setForm((f) => withSetting(f, key, relativeTo(base, path)));
+  };
+  if (!form.custom && !kind)
+    return (
+      <div className="stack" style={{ gap: 8 }}>
+        <span className="t-label">{t("desktop.connectors.pick_kind")}</span>
+        <div className="recent-grid kind-tiles">
+          {kinds.map((k) => (
+            <button key={k.id} type="button" className="recent-card" onClick={() => setForm((f) => withKind(f, k))}>
+              <span className="t-title-sm">{textIn(k.name, lang)}</span>
+              <span className="t-body-sm muted">{textIn(k.hint, lang)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   return (
     <>
-      <div className="pair">
-        <Field label={t("desktop.connectors.name")} supporting={t("desktop.connectors.name_hint", { prefix, name: example })}>
-          {(id) => <input id={id} className="input mono" value={form.name} onChange={(e) => set("name", e.target.value)} />}
-        </Field>
-        <Field label={t("desktop.connectors.description")} supporting={t("desktop.connectors.description_hint")}>
-          {(id) => <input id={id} className="input" value={form.description} disabled={form.custom} onChange={(e) => set("description", e.target.value)} />}
-        </Field>
-      </div>
-      <span className="t-body-sm muted">{t(`desktop.connectors.scope_hint.${form.scope}`, { path: folder })}</span>
       {form.custom ? (
         <Field label={t("desktop.connectors.yaml")} supporting={t("desktop.connectors.custom_hint")}>
           {(id) => <textarea id={id} className="input mono" rows={16} value={form.text} onChange={(e) => set("text", e.target.value)} />}
         </Field>
       ) : (
         <>
-          <div className="stack" style={{ gap: 6 }}>
-            <span className="t-label">{t("desktop.connectors.kind")}</span>
-            <Segmented
-              value={form.kind}
-              label={t("desktop.connectors.kind")}
-              options={kinds.map((k) => ({ value: k.id, label: textIn(k.name, lang) }))}
-              onChange={(v) => {
-                const next = kinds.find((k) => k.id === v);
-                if (next) setForm((f) => withKind(f, next));
-              }}
-            />
-            {kind && <span className="t-body-sm muted">{textIn(kind.hint, lang)}</span>}
-          </div>
+          {kind && (
+            <div className="row wrap" style={{ gap: 8 }}>
+              <span className="stack spacer" style={{ gap: 2 }}>
+                <span className="t-label">{textIn(kind.name, lang)}</span>
+                <span className="t-body-sm muted">{textIn(kind.hint, lang)}</span>
+              </span>
+              {kinds.length > 1 && (
+                <Button small icon={mdiSwapHorizontal} onClick={() => set("kind", "")}>
+                  {t("desktop.connectors.change_kind")}
+                </Button>
+              )}
+            </div>
+          )}
+          {takesURL(kind) && (
+            <Field label={t("desktop.connectors.paste_url")} supporting={pasted.trim() && !parsed ? t("desktop.connectors.paste_url_bad") : filled ? t("desktop.connectors.paste_url_filled") : t("desktop.connectors.paste_url_hint")}>
+              {(id) => <input id={id} className="input mono" value={pasted} placeholder={t("desktop.connectors.paste_url_placeholder")} spellCheck={false} autoComplete="off" onChange={(e) => paste(e.target.value)} />}
+            </Field>
+          )}
           {kind && (
             <div className="db-fields">
               {kind.fields.map((fl) =>
@@ -103,21 +149,43 @@ export function ConnectorFields({
                   </Field>
                 ) : (
                   <Field key={fl.key} label={textIn(fl.label, lang) + (fl.required && !fl.defaultValue ? " *" : "")} supporting={textIn(fl.help, lang)}>
-                    {(id) => (
-                      <input
-                        id={id}
-                        className={`input ${fl.type === "path" ? "mono" : ""}`}
-                        inputMode={fl.type === "number" ? "numeric" : undefined}
-                        value={form.settings[fl.key] ?? ""}
-                        placeholder={fl.defaultValue}
-                        onChange={(e) => set("settings", { ...form.settings, [fl.key]: e.target.value })}
-                      />
-                    )}
+                    {(id) =>
+                      fl.type === "path" ? (
+                        <span className="row" style={{ gap: 8 }}>
+                          <input id={id} className="input mono spacer" value={form.settings[fl.key] ?? ""} placeholder={fl.defaultValue} onChange={(e) => setForm((f) => withSetting(f, fl.key, e.target.value))} />
+                          <Button icon={mdiFileOutline} onClick={() => void choose(fl.key, textIn(fl.label, lang))}>
+                            {t("desktop.connectors.choose_file")}
+                          </Button>
+                        </span>
+                      ) : (
+                        <input
+                          id={id}
+                          className="input"
+                          inputMode={fl.type === "number" ? "numeric" : undefined}
+                          value={form.settings[fl.key] ?? ""}
+                          placeholder={fl.defaultValue}
+                          onChange={(e) => setForm((f) => withSetting(f, fl.key, e.target.value))}
+                        />
+                      )
+                    }
                   </Field>
                 ),
               )}
             </div>
           )}
+        </>
+      )}
+      <div className="pair">
+        <Field label={t("desktop.connectors.name")} supporting={advanced ? t("desktop.connectors.name_hint", { prefix, name: example }) : t("desktop.connectors.name_simple_hint")}>
+          {(id) => <input id={id} className="input mono" value={form.name} onChange={(e) => set("name", typedName(e.target.value))} />}
+        </Field>
+        <Field label={t("desktop.connectors.description")} supporting={t("desktop.connectors.description_hint")}>
+          {(id) => <input id={id} className="input" value={form.description} disabled={form.custom} onChange={(e) => set("description", e.target.value)} />}
+        </Field>
+      </div>
+      {advanced && <span className="t-body-sm muted">{t(`desktop.connectors.scope_hint.${form.scope}`, { path: folder })}</span>}
+      {!form.custom && (
+        <>
           {kind?.canReadOnly && (
             <label className="row agent-switch">
               <Switch label={t("desktop.connectors.read_only")} checked={form.readOnly} onChange={(v) => set("readOnly", v)} />
@@ -127,10 +195,11 @@ export function ConnectorFields({
               </span>
             </label>
           )}
-          {kind && kind.tools.length > 0 && (
+          {!saved && kind && (kind.tools.length > 0 || can(kind, "queries")) && <p className="t-body-sm muted">{t("desktop.connectors.tools_after_save")}</p>}
+          {saved && kind && kind.tools.length > 0 && (
             <div className="stack" style={{ gap: 6 }}>
               <span className="t-label">{t("desktop.connectors.tools")}</span>
-              <span className="t-body-sm muted">{t("desktop.connectors.tools_hint", { prefix, name: example })}</span>
+              {advanced && <span className="t-body-sm muted">{t("desktop.connectors.tools_hint", { prefix, name: example })}</span>}
               <div className="list">
                 {kind.tools.map((rt) => (
                   <label key={rt.id} className="list-item row agent-switch">
@@ -144,7 +213,7 @@ export function ConnectorFields({
               </div>
             </div>
           )}
-          {kind && can(kind, "queries") && (
+          {saved && kind && can(kind, "queries") && (
             <div className="stack" style={{ gap: 6 }}>
               <div className="row wrap" style={{ gap: 8 }}>
                 <span className="t-label spacer">{t("desktop.connectors.queries")}</span>

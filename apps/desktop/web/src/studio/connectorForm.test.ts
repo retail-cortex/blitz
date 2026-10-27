@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { ConnectorKindSchema, ConnectorSchema } from "../gen/blitz/v1/workspace_pb";
-import { can, connectionFromForm, formFromConnection, newConnectorForm, queryForm, readsOnly, sameConnectorForm, statementParams, textIn, withKind } from "./connectorForm";
+import { can, connectionFromForm, formForTarget, formFromConnection, kindForTarget, newConnectorForm, parseConnectionURL, queryForm, relativeTo, startFolder, readsOnly, sameConnectorForm, slugName, statementParams, typedName, suggestName, textIn, withKind, withSetting } from "./connectorForm";
 
 const postgres = create(ConnectorKindSchema, {
   id: "postgres",
@@ -111,4 +111,93 @@ describe("the connector form", () => {
     expect(statementParams("SELECT * FROM t WHERE a = $1 AND b = $2 OR c = $1")).toEqual(["p1", "p2"]);
     expect(statementParams("SELECT * FROM t WHERE day = @day AND n < @limit")).toEqual(["day", "limit"]);
   });
+});
+
+describe("slugName", () => {
+  it.each([
+    ["Shop DB", "shop_db"],
+    ["café-orders", "cafe_orders"],
+    ["2024 sales", "sales"],
+    ["__x__", "x"],
+    ["a".repeat(50), "a".repeat(40)],
+    ["", ""],
+  ])("%s", (typed, want) => expect(slugName(typed)).toBe(want));
+});
+
+describe("suggestName", () => {
+  it.each([
+    [{ database: "/Users/me/data/Notes.sqlite" }, "notes"],
+    [{ database: "C:\\data\\shop.db" }, "shop"],
+    [{ database: "orders" }, "orders"],
+    [{ project: "acme-analytics" }, "acme_analytics"],
+    [{}, ""],
+  ])("%j", (settings, want) => expect(suggestName(settings)).toBe(want));
+});
+
+describe("withSetting", () => {
+  it("names the connection after its database until a name is typed", () => {
+    let f = newConnectorForm("databases", sqlite);
+    f = withSetting(f, "database", "notes.db");
+    expect(f.name).toBe("notes");
+    f = withSetting(f, "database", "meetings.db");
+    expect(f.name).toBe("meetings");
+    f = withSetting({ ...f, name: "mine" }, "database", "other.db");
+    expect(f.name).toBe("mine");
+  });
+});
+
+describe("parseConnectionURL", () => {
+  it("fills the fields the kind has, the password as a secret", () => {
+    expect(parseConnectionURL("postgres://ann:p%40ss@db.example.com:6543/shop?sslmode=require", postgres)).toEqual({ settings: { host: "db.example.com", database: "shop" }, secrets: { password: "p@ss" } });
+  });
+  it.each([["not a url"], ["postgres://"], [""]])("%j isn't one", (text) => expect(parseConnectionURL(text, postgres)).toBeUndefined());
+});
+
+describe("kindForTarget and formForTarget", () => {
+  const kinds = [sqlite, postgres];
+  it.each([
+    ["postgresql://u@h/db", "postgres"],
+    ["/data/notes.sqlite3", "sqlite"],
+    ["sqlite:///data/x.db", "sqlite"],
+    ["mysql://h/db", ""],
+  ])("%s", (target, want) => expect(kindForTarget(target, kinds)).toBe(want));
+
+  it("makes the form for a URL or a file", () => {
+    expect(formForTarget("postgres://ann:pw@h:5432/shop", "databases", kinds, "global")).toMatchObject({ kind: "postgres", scope: "global", name: "shop", settings: { host: "h", database: "shop" }, secretValues: { password: "pw" } });
+    expect(formForTarget("sqlite:///data/notes.db", "databases", kinds, "workspace")).toMatchObject({ kind: "sqlite", name: "notes", settings: { database: "/data/notes.db" } });
+    expect(formForTarget("mysql://h/db", "databases", kinds, "workspace")).toBeUndefined();
+  });
+});
+
+describe("typedName", () => {
+  it.each([
+    ["shop_", "shop_"],
+    ["shop ", "shop_"],
+    ["Shop DB", "shop_db"],
+    ["_", ""],
+  ])("%j", (typed, want) => expect(typedName(typed)).toBe(want));
+});
+
+describe("withKind from no kind", () => {
+  it("starts read-only, as a new form with a kind does", () => {
+    expect(withKind(newConnectorForm("databases", undefined), postgres)).toMatchObject({ kind: "postgres", readOnly: true, tools: ["execute_sql", "list_tables"] });
+  });
+});
+
+describe("startFolder and relativeTo", () => {
+  it.each([
+    ["/w/shop", "", "/w/shop"],
+    ["/w/shop", "./data/notes.db", "/w/shop/data"],
+    ["/w/shop", "data/notes.db", "/w/shop/data"],
+    ["/w/shop", "/srv/db/x.sqlite", "/srv/db"],
+    ["", "~/data/x.db", "~/data"],
+    ["", "notes.db", ""],
+  ])("opens %s with %j in %s", (base, value, want) => expect(startFolder(base, value)).toBe(want));
+  it.each([
+    ["/w/shop", "/w/shop/data/notes.db", "./data/notes.db"],
+    ["/w/shop/", "/w/shop/notes.db", "./notes.db"],
+    ["/w/shop", "/w/shopping/x.db", "/w/shopping/x.db"],
+    ["/w/shop", "/srv/x.db", "/srv/x.db"],
+    ["", "/srv/x.db", "/srv/x.db"],
+  ])("keeps %s, %s as %s", (base, path, want) => expect(relativeTo(base, path)).toBe(want));
 });

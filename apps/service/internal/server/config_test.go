@@ -388,6 +388,63 @@ func TestListModelsOverTheAPI(t *testing.T) {
 	assert.Error(t, err, "a workspace must be absolute")
 }
 
+// CheckApiKey tries a key in place of the provider's own, saving nothing:
+// it works when the provider lists models with it, and says why not when
+// it doesn't; a provider without keys, or no key, is refused.
+func TestCheckApiKeyOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	cc := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	was := listModels
+	t.Cleanup(func() { listModels = was })
+	var seen *config.Config
+	listModels = func(_ context.Context, cfg *config.Config, providers ...string) []runtime.ProviderModels {
+		seen = cfg
+		if cfg.LLM.Anthropic.APIKey == "bad" {
+			return []runtime.ProviderModels{{Provider: providers[0], Err: errors.New("401 invalid x-api-key")}}
+		}
+		return []runtime.ProviderModels{{Provider: providers[0], Models: []runtime.ListedModel{{ID: "m-1"}, {ID: "m-2"}}}}
+	}
+
+	tests := []struct {
+		name     string
+		provider string
+		key      string
+		works    bool
+		error    string
+		models   []string
+	}{
+		{name: "gemini", provider: "gemini", key: " AIza-x ", works: true, models: []string{"m-1", "m-2"}},
+		{name: "openai", provider: "openai", key: "sk-x", works: true, models: []string{"m-1", "m-2"}},
+		{name: "a refused key", provider: "anthropic", key: "bad", error: "401 invalid x-api-key"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := cc.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Provider: tc.provider, Key: tc.key}))
+			require.NoError(t, err)
+			assert.Equal(t, tc.works, res.Msg.Works)
+			assert.Equal(t, tc.error, res.Msg.Error)
+			assert.Equal(t, tc.models, res.Msg.Models)
+		})
+	}
+	assert.Equal(t, "bad", seen.LLM.Anthropic.APIKey, "the key tried is the one given")
+	assert.Empty(t, seen.LLM.Anthropic.Auth, "the sign-in is set aside")
+
+	desc, err := cc.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{}))
+	require.NoError(t, err)
+	for _, p := range desc.Msg.Providers {
+		assert.NotEqual(t, pb.KeySource_KEY_SOURCE_KEYCHAIN, p.KeySource, "nothing saved for %s", p.Name)
+	}
+
+	for _, bad := range []*pb.CheckApiKeyRequest{{Provider: "ollama", Key: "x"}, {Provider: "gemini", Key: "  "}} {
+		_, err := cc.CheckApiKey(ctx, connect.NewRequest(bad))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "%v", bad)
+	}
+}
+
 // A workspace's search settings, set through the config service, apply at
 // once: search off, then back on with other default sources; the status
 // shows the settings either way.

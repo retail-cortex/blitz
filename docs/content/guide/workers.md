@@ -94,7 +94,7 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz jobs run <name>`, runs an enabled job at once and shows what it does.
 - **Two at once?** The same job never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** **Studio › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
+- **Stop a run:** **Studio › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Library › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
@@ -111,11 +111,11 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 Some work belongs to no project: a morning news digest, tidying your downloads. A **global job** is saved in `~/.blitz/workers/<name>/WORKER.md` and runs in a folder of its own, `~/.blitz/home`, made the first time it's needed. Everything else is the same: review and enable, schedules, permissions, runs.
 
-**Desktop:** **Settings › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
+**Desktop:** **Settings › Library › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
 
 ## Limits for every job
 
-**Settings › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
+**Settings › Library › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
 
 | Setting | What it does |
 |---|---|
@@ -127,7 +127,7 @@ A change applies from each job's next run.
 
 ## Every workspace's jobs
 
-The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Jobs** lists every workspace with jobs on record, so none runs unseen:
+The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Library › Jobs** lists every workspace with jobs on record, so none runs unseen:
 
 - **Not in your workspaces:** **Add and open** brings it back into the app, on its jobs.
 - **Folder missing:** the folder was moved or deleted, so its jobs don't run. **Forget** disables them and stops the service looking for the folder; nothing on disk is touched.

@@ -18,9 +18,9 @@ name:
   es: "Bases de datos"
   fr-CA: "Bases de données"
 hint:
-  en: "Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."
-  es: "Bases de datos que tus agentes pueden consultar, servidas dentro de Blitz por MCP Toolbox for Databases. De solo lectura salvo que digas lo contrario."
-  fr-CA: "Les bases de données que vos agents peuvent interroger, servies dans Blitz par MCP Toolbox for Databases. En lecture seule sauf avis contraire."
+  en: "Databases your agents can query: read-only unless you say otherwise."
+  es: "Bases de datos que tus agentes pueden consultar: de solo lectura salvo que digas lo contrario."
+  fr-CA: "Les bases de données que vos agents peuvent interroger : en lecture seule sauf avis contraire."
 icon: database
 server: databases
 prefix: db

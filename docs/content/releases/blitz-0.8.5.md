@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.5
-weight: 1
+weight: 2
 ---
 
 **Know what your agents left running.** Agents start dev servers, watchers and test runs, then move on. In Blitz 0.8.5 you can see every one of them from wherever you work: the app's status bar, the CLI and the tray. Blitz also points out the ones that look bad, whether they're spinning a core, eating memory, or still running hours after anyone used them, so you can stop them in a click.

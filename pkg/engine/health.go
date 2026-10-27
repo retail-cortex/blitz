@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/health"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
@@ -195,12 +196,39 @@ func (w *Workspace) due(ctx context.Context, c HealthCheck) []health.Item {
 }
 
 // healthFile is what the judge reads of an item: its file, secrets
-// redacted (a built-in guardrail without one, its description).
+// redacted. A built-in guardrail's is how it runs (gates.Describe),
+// after its file when it has one, since a file holds only what it
+// changes.
 func (w *Workspace) healthFile(it health.Item) string {
+	if it.Kind == health.KindGuardrail {
+		if g, ok := w.guardrailNamed(it.Name); ok && g.Builtin != "" {
+			how := gates.Describe(g)
+			if it.Path == "" {
+				return "(a built-in guardrail, with no file: it runs as below)\n" + how
+			}
+			return w.fileText(it.Path) + "\n\nAs it runs (the built-in's defaults with this file's changes):\n" + how
+		}
+	}
 	if it.Path == "" {
 		return fmt.Sprintf("(a built-in %s with its default settings: %s)", it.Kind, it.Detail)
 	}
-	p := it.Path
+	return w.fileText(it.Path)
+}
+
+// guardrailNamed is the workspace's guardrail by that name.
+func (w *Workspace) guardrailNamed(name string) (gates.Guardrail, bool) {
+	all := w.Guardrails()
+	i := slices.IndexFunc(all, func(g gates.Guardrail) bool { return g.Name == name })
+	if i < 0 {
+		return gates.Guardrail{}, false
+	}
+	return all[i], true
+}
+
+// fileText is an item's file for the judge, secrets redacted (a skill's
+// SKILL.md).
+func (w *Workspace) fileText(path string) string {
+	p := path
 	if fi, err := os.Stat(p); err == nil && fi.IsDir() {
 		p = filepath.Join(p, "SKILL.md")
 	}
@@ -354,8 +382,10 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 	for _, g := range w.Guardrails() {
 		detail := cmp.Or(g.Builtin, "custom") + " · " + g.Stage
 		hash := fileHash(g.Path)
-		if g.Path == "" {
-			hash = "builtin:" + g.Name
+		if g.Builtin != "" {
+			// How a built-in runs is part of it: new defaults are judged again.
+			sum := sha256.Sum256([]byte(gates.Describe(g)))
+			hash = "builtin:" + g.Name + ":" + hex.EncodeToString(sum[:6]) + ":" + hash
 		}
 		in.Guardrails = append(in.Guardrails, health.Source{Name: g.Name, Path: g.Path, Detail: detail, Problem: g.Problem, Hash: hash, Agents: g.Agents, Off: g.Off})
 	}

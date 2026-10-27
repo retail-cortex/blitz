@@ -113,6 +113,16 @@ func (st *guardState) once(key string) bool {
 	return !said
 }
 
+// checked records, once per turn, that a built-in guardrail checked
+// something and let it through: its catches are recorded each time, so
+// without this a quiet one would look as if it never ran (the
+// dashboard's "decided n times").
+func (w *Workspace) checked(ctx context.Context, st *guardState, g gates.Guardrail) {
+	if st.once("checked:" + g.Name) {
+		w.auditGuardrail(ctx, g, "pass", "checked: nothing found")
+	}
+}
+
 // auditGuardrail records a guardrail's decision in the audit log.
 func (w *Workspace) auditGuardrail(ctx context.Context, g gates.Guardrail, decision, detail string) {
 	w.tools.Hooks().Audit().LogContext(ctx, audit.Entry{Kind: audit.KindGuardrail, Tool: "guardrail:" + g.Name, Detail: detail, Decision: decision})
@@ -185,6 +195,7 @@ func (g guard) ToolCall(ctx context.Context, c runtime.GuardCall) runtime.GuardV
 				v.Notices = append(v.Notices, v.Refusal)
 				return v
 			}
+			g.w.checked(ctx, st, gr)
 			continue
 		}
 		args, _ := json.Marshal(c.Args)
@@ -223,7 +234,7 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 			return i18n.T("guardrail.domain", "url", u, "domains", strings.Join(l.AllowedDomains, ", "))
 		}
 	case c.Tool == "run_shell_command":
-		if glob := gates.CommandDenied(str("command"), l.Commands); glob != "" {
+		if glob := gates.CommandDenied(str("command"), gates.ExpandCommands(l.Commands)); glob != "" {
 			return i18n.T("guardrail.command", "glob", glob)
 		}
 	case slices.Contains(writeTools, c.Tool) && l.MaxFilesChanged > 0:
@@ -261,6 +272,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		if gr.Builtin == gates.BuiltinInjection {
 			phrase := gates.Injection(text)
 			if phrase == "" {
+				g.w.checked(ctx, st, gr)
 				continue
 			}
 			caught, reason = true, i18n.T("guardrail.injection_found", "phrase", phrase)
@@ -289,6 +301,15 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		if !caught {
 			continue
 		}
+		if gr.Action == gates.Redact && gr.Builtin == gates.BuiltinInjection {
+			// The instructions out, the rest kept: the agent still has the page.
+			g.w.auditGuardrail(ctx, gr, "redact", reason)
+			out = redactInjection(out)
+			out["guardrail"] = i18n.T("guardrail.agent_redacted", "name", gr.Name, "tool", c.Tool)
+			v.Result = out
+			v.Notices = append(v.Notices, i18n.T("guardrail.redacted", "name", gr.Name, "reason", reason))
+			continue
+		}
 		if gr.Action == gates.Block {
 			g.w.auditGuardrail(ctx, gr, "block", reason)
 			v.Result = map[string]any{"error": i18n.T("guardrail.withheld", "name", gr.Name, "tool", c.Tool, "reason", reason)}
@@ -307,6 +328,38 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 	return v
 }
 
+// redactInjection is a tool result with the injection guardrail's
+// phrases taken out of every string in it (a copy: the original is the
+// tool's).
+func redactInjection(result map[string]any) map[string]any {
+	var clean func(v any) any
+	clean = func(v any) any {
+		switch x := v.(type) {
+		case string:
+			s, _ := gates.RedactInjection(x)
+			return s
+		case map[string]any:
+			out := make(map[string]any, len(x))
+			for k, e := range x {
+				out[k] = clean(e)
+			}
+			return out
+		case []any:
+			out := make([]any, len(x))
+			for i, e := range x {
+				out[i] = clean(e)
+			}
+			return out
+		}
+		return v
+	}
+	out, _ := clean(result).(map[string]any)
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out
+}
+
 // Output applies the output guardrails to a piece of the answer: the
 // secrets guardrail masks (or withholds) on every piece; custom checks
 // judge the whole answer.
@@ -318,6 +371,7 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 		if gr.Builtin == gates.BuiltinSecrets {
 			masked, found := g.w.maskOutput(gr, cur)
 			if !found {
+				g.w.checked(ctx, st, gr)
 				continue
 			}
 			switch gr.Action {

@@ -35,6 +35,8 @@ import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOpera
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
 const fakeSignedIn = new Set<string>();
+/** Whether the page's address has ?name (the fake's switches). */
+const fakeParam = (name: string) => new URLSearchParams(location.search).has(name);
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };
 function fakeSignIn(provider: string) {
   const found = provider === "google" || provider === "aws";
@@ -501,7 +503,10 @@ function scopeConfig(workspace: string) {
           text: '[llm]\nprovider = "gemini"\n\n[llm.gemini]\napi_key = "keychain:global/llm.gemini.api_key"\n\n[llm.anthropic]\napi_key = "sk-ant-plain"\n',
           provider: "gemini",
           model: "",
-          keys: { gemini: KeySource.KEYCHAIN, anthropic: KeySource.PLAIN, openai: KeySource.NONE },
+          // ?newuser: nothing set up yet; ?envkey: Anthropic's key in the service's environment.
+          keys: fakeParam("newuser")
+            ? { gemini: KeySource.NONE, anthropic: fakeParam("envkey") ? KeySource.ENVIRONMENT : KeySource.NONE, openai: KeySource.NONE }
+            : { gemini: KeySource.KEYCHAIN, anthropic: fakeParam("envkey") ? KeySource.ENVIRONMENT : KeySource.PLAIN, openai: KeySource.NONE },
           auth: {},
         };
     configs.set(workspace, c);
@@ -690,7 +695,7 @@ async function* followFakeEval(live: FakeLiveEval, signal: AbortSignal) {
 // limits switched off, and one of the workspace's own.
 type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
 const fakeBuiltinGuards = [
-  { id: "prompt_injection", stage: "tool_result", defaultAction: "warn", actions: ["warn", "block"] },
+  { id: "prompt_injection", stage: "tool_result", defaultAction: "redact", actions: ["redact", "warn", "block"] },
   { id: "secrets", stage: "output", defaultAction: "redact", actions: ["redact", "warn", "block"] },
   { id: "limits", stage: "action", defaultAction: "block", actions: ["block"] },
 ];
@@ -717,16 +722,17 @@ const pgTools = [
   { id: "database_overview", about: en("Its version, size and connections") },
 ];
 const field = (key: string, label: string, help: string, more: Record<string, unknown> = {}) => ({ key, label: en(label), help: en(help), type: "text", ...more });
+// Simplest first, as the service lists them (a descriptor's order).
 const fakeConnectorKinds = [
-  { id: "alloydb-postgres", category: "databases", name: en("AlloyDB"), hint: en("AlloyDB for PostgreSQL on Google Cloud, through its connector. Signs in with your Google credentials (gcloud auth application-default login) unless you give a user and password."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: AlloyDB refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
-    fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("region", "Region", "us-central1, for example", { required: true }), field("cluster", "Cluster", "The AlloyDB cluster", { required: true }), field("instance", "Instance", "The instance in it", { required: true }), field("ipType", "IP type", "public or private", { defaultValue: "public" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest"), field("password", "Password", "", { type: "secret" })], tools: pgTools },
+  { id: "sqlite", category: "databases", name: en("SQLite"), hint: en("A SQLite file. sqlite-vec is built in: vec0 tables and nearest-neighbour queries work."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("The file is opened read-only: SQLite refuses any write. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (? or $1…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name FROM recipes WHERE cuisine = ?", placeholders: "$1", origin: "builtin",
+    fields: [field("database", "Database", "The file's path", { type: "path", required: true })], tools: [{ id: "execute_sql", writes: true, on: true, about: en("Runs any SQL the agent writes") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }] },
+  { id: "postgres", category: "databases", name: en("PostgreSQL"), hint: en("Any PostgreSQL server, local or hosted."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: PostgreSQL refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
+    fields: [field("host", "Host", "localhost, or the server's address", { required: true, defaultValue: "localhost" }), field("port", "Port", "5432 unless it's another", { required: true, defaultValue: "5432" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest", { required: true }), field("password", "Password", "", { type: "secret", required: true })], tools: pgTools },
   { id: "bigquery", category: "databases", name: en("BigQuery"), hint: en("BigQuery on Google Cloud. Signs in with your Google credentials (gcloud auth application-default login)."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Writes are blocked: only queries that read run. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (@name), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT sku, SUM(qty) AS sold FROM sales.orders WHERE day = @day GROUP BY sku", placeholders: "@name", origin: "builtin",
     fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("location", "Location", "US, EU, or a region (optional)"), field("allowedDatasets", "Datasets", "Only these, comma-separated (empty: every one)", { type: "list" }), field("maximumBytesBilled", "Most bytes billed", "A query that would bill more fails (empty: no limit)", { type: "number" })],
     tools: [{ id: "execute_sql", on: true, about: en("Runs any SQL the agent writes") }, { id: "list_datasets", on: true, about: en("Lists the datasets") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }, { id: "table_info", on: true, about: en("A table's schema and details") }, { id: "dataset_info", about: en("A dataset's details") }] },
-  { id: "postgres", category: "databases", name: en("PostgreSQL"), hint: en("Any PostgreSQL server, local or hosted."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: PostgreSQL refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
-    fields: [field("host", "Host", "localhost, or the server's address", { required: true, defaultValue: "localhost" }), field("port", "Port", "5432 unless it's another", { required: true, defaultValue: "5432" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest", { required: true }), field("password", "Password", "", { type: "secret", required: true })], tools: pgTools },
-  { id: "sqlite", category: "databases", name: en("SQLite"), hint: en("A SQLite file. sqlite-vec is built in: vec0 tables and nearest-neighbour queries work."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("The file is opened read-only: SQLite refuses any write. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (? or $1…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name FROM recipes WHERE cuisine = ?", placeholders: "$1", origin: "builtin",
-    fields: [field("database", "Database", "The file's path", { type: "path", required: true })], tools: [{ id: "execute_sql", writes: true, on: true, about: en("Runs any SQL the agent writes") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }] },
+  { id: "alloydb-postgres", category: "databases", name: en("AlloyDB"), hint: en("AlloyDB for PostgreSQL on Google Cloud, through its connector. Signs in with your Google credentials (gcloud auth application-default login) unless you give a user and password."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: AlloyDB refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", placeholders: "$1", origin: "builtin",
+    fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("region", "Region", "us-central1, for example", { required: true }), field("cluster", "Cluster", "The AlloyDB cluster", { required: true }), field("instance", "Instance", "The instance in it", { required: true }), field("ipType", "IP type", "public or private", { defaultValue: "public" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest"), field("password", "Password", "", { type: "secret" })], tools: pgTools },
 ];
 const fakeConnectors: FakeConnector[] = [
   { name: "shop", category: "databases", scope: "workspace", kind: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }], custom: false, text: "", trusted: true },
@@ -742,7 +748,7 @@ const fakeTables = [
 const fakeConnectorCategory = {
   id: "databases",
   name: { en: "Databases", es: "Bases de datos", "fr-CA": "Bases de données" },
-  hint: en("Databases your agents can query, served inside Blitz by MCP Toolbox for Databases. Read-only unless you say otherwise."),
+  hint: en("Databases your agents can query: read-only unless you say otherwise."),
   icon: "database",
   server: "databases",
   prefix: "db",
@@ -905,7 +911,19 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 // The user's secrets' names, by scope ("" global).
 const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
 
-// Settings › MCP servers: the global servers, edited in place.
+// Settings › Connectors › MCP servers: the global servers, edited in place.
+// Each workspace's own MCP servers, and the global ones it turned off.
+const fakeWorkspaceMCP = new Map<string, MCPServerConfig[]>();
+const fakeMCPOff = new Map<string, Set<string>>();
+function workspaceMCP(workspace: string): MCPServerConfig[] {
+  let list = fakeWorkspaceMCP.get(workspace);
+  if (!list) {
+    list = [create(MCPServerConfigSchema, { name: "figma", url: "https://mcp.figma.example/mcp", autoApprove: false })];
+    fakeWorkspaceMCP.set(workspace, list);
+  }
+  return list;
+}
+const mcpPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b3c4d/.env.toml` : "~/.blitz/.env.toml");
 const fakeMCP: MCPServerConfig[] = [
   create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
   create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),
@@ -1606,6 +1624,17 @@ export function installFake() {
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
         watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
         watchProcesses: ({ workspace }) => watchFakeProcesses(workspace),
+        // A ! command: a few lines of output, then how it ended ("fail" in it exits 1; "sleep" runs until stopped).
+        runShell: async function* ({ command }, ctx) {
+          const start = Date.now();
+          const lines = command.includes("sleep") ? [] : [`$ ${command}`, "total 24", "drwxr-xr-x  5 you  staff  160 Oct 26 09:12 cmd", "drwxr-xr-x  7 you  staff  224 Oct 26 09:12 internal", "-rw-r--r--  1 you  staff  512 Oct 26 09:12 go.mod"];
+          for (const l of lines) {
+            await sleep(150);
+            yield { output: l + "\n" };
+          }
+          if (command.includes("sleep")) await new Promise((_, reject) => ctx.signal.addEventListener("abort", () => reject(new ConnectError("canceled", Code.Canceled))));
+          yield { done: true, exitCode: command.includes("fail") ? 1 : 0, elapsedMs: BigInt(Date.now() - start) };
+        },
         getProcessOutput: ({ workspace, id }) => ({ output: fakeProcessOutput, process: fakeProcesses.find((x) => x.workspace === workspace && x.process?.id === id)?.process }),
         killProcess: ({ workspace, id }) => {
           const i = fakeProcesses.findIndex((x) => x.workspace === workspace && x.process?.id === id);
@@ -1974,7 +2003,7 @@ export function installFake() {
         getModel: ({ workspace }) => ({
           name: state(workspace).settings.model,
           provider: state(workspace).settings.provider,
-          unavailable: new URLSearchParams(location.search).has("nomodel") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
+          unavailable: fakeParam("nomodel") || fakeParam("newuser") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
         }),
         setModel: ({ workspace, ref }) => {
           const [provider, name] = ref.includes("/") ? ref.split("/", 2) : [state(workspace).settings.provider, ref];
@@ -2342,7 +2371,17 @@ export function installFake() {
             { name: "testing-tdd", description: "Write the failing test first, then the code", version: "1.0.0" },
           ],
         }),
-        listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
+        listMCPServerConfigs: ({ workspace }) =>
+          workspace
+            ? {
+                servers: [
+                  ...fakeMCP.map((m) => ({ ...m, scope: "global", offHere: !!fakeMCPOff.get(workspace)?.has(m.name) })),
+                  ...workspaceMCP(workspace).map((m) => ({ ...m, scope: "workspace" })),
+                  { name: "db", command: "npx @acme/db-mcp", scope: "project" },
+                ],
+                path: mcpPath(workspace),
+              }
+            : { servers: fakeMCP.map((m) => ({ ...m, scope: "global" })), path: mcpPath("") },
         // Settings › Connectors: the global connections.
         listGlobalConnectors: () => ({
           categories: [{ ...fakeConnectorCategory, workspaceDir: "", state: "", toolCount: 0 }],
@@ -2361,22 +2400,43 @@ export function installFake() {
         tryGlobalConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readGlobalConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftGlobalConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
-        saveMCPServer: ({ name, server }) => {
-          const i = fakeMCP.findIndex((m) => m.name === name);
-          if (!name && fakeMCP.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
-          if (name && i < 0) throw new Error(`no MCP server by that name: ${name}`);
-          if (i >= 0) fakeMCP[i] = server!;
-          else fakeMCP.push(server!);
-          return { change: { path: "~/.blitz/.env.toml" } };
+        // A workspace's own servers (fakeWorkspaceMCP) and the global ones it turned off (fakeMCPOff).
+        saveMCPServer: ({ workspace, name, server }) => {
+          const list = workspace ? workspaceMCP(workspace) : fakeMCP;
+          const i = list.findIndex((m) => m.name === name);
+          if (!name && list.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
+          if (name && i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          if (i >= 0) list[i] = server!;
+          else list.push(server!);
+          return { change: { path: mcpPath(workspace) } };
         },
-        removeMCPServer: ({ name }) => {
-          fakeMCP.splice(fakeMCP.findIndex((m) => m.name === name), 1);
-          return { change: { path: "~/.blitz/.env.toml" } };
+        removeMCPServer: ({ workspace, name }) => {
+          const list = workspace ? workspaceMCP(workspace) : fakeMCP;
+          const i = list.findIndex((m) => m.name === name);
+          if (i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          list.splice(i, 1);
+          return { change: { path: mcpPath(workspace) } };
         },
-        setMCPServerEnabled: ({ name, enabled }) => {
-          const m = fakeMCP.find((x) => x.name === name);
-          if (m) m.disabled = !enabled;
-          return { change: { path: "~/.blitz/.env.toml" } };
+        setMCPServerEnabled: ({ workspace, name, enabled }) => {
+          const own = workspace ? workspaceMCP(workspace).find((x) => x.name === name) : undefined;
+          if (workspace && !own) {
+            const off = fakeMCPOff.get(workspace) ?? new Set<string>();
+            if (enabled) off.delete(name);
+            else off.add(name);
+            fakeMCPOff.set(workspace, off);
+          } else {
+            const m = own ?? fakeMCP.find((x) => x.name === name);
+            if (m) m.disabled = !enabled;
+          }
+          return { change: { path: mcpPath(workspace) } };
+        },
+        makeMCPServerGlobal: ({ workspace, name }) => {
+          const list = workspaceMCP(workspace);
+          const i = list.findIndex((m) => m.name === name);
+          if (i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          if (fakeMCP.some((m) => m.name === name)) throw new ConnectError(`an MCP server named "${name}" is already configured`, Code.AlreadyExists);
+          fakeMCP.push(list.splice(i, 1)[0]);
+          return { change: { path: mcpPath("") } };
         },
         addSkillRegistry: ({ url, name, token }) => {
           if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);
@@ -2424,13 +2484,23 @@ export function installFake() {
           fakeSignedIn.delete(provider);
           return { status: fakeSignIn(provider) };
         },
-        listModels: () => ({
-          defaultProvider: "gemini",
-          providers: [
-            { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro", "gemini-4-argon"] },
-            { provider: "anthropic", error: "no API key" },
-          ],
-        }),
+        listModels: ({ providers }) =>
+          // Ollama answers with ?ollama (it runs on the machine), else it isn't there.
+          providers.length === 1 && providers[0] === "ollama"
+            ? { defaultProvider: "gemini", providers: [fakeParam("ollama") ? { provider: "ollama", ids: ["llama4:8b", "qwen3:14b"] } : { provider: "ollama", error: "connection refused" }] }
+            : {
+                defaultProvider: "gemini",
+                providers: [
+                  { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro", "gemini-4-argon"] },
+                  { provider: "anthropic", error: "no API key" },
+                ],
+              },
+        // A key starting "bad" is refused; others list a few models.
+        checkApiKey: async ({ provider, key }) => {
+          await sleep(400);
+          if (!["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`provider "${provider}" takes no API key to check`, Code.InvalidArgument);
+          return key.trim().startsWith("bad") ? { works: false, error: "401 Unauthorized: invalid API key" } : { works: true, models: [`${provider}-a`, `${provider}-b`, `${provider}-c`] };
+        },
         describeConfig: ({ workspace }) => {
           const c = scopeConfig(workspace);
           return {

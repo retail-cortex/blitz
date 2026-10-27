@@ -923,6 +923,10 @@ func load(prefixDir, workspace string) (*Config, error) {
 			return nil, fmt.Errorf("failed to load configuration via modenv: %w", loadErr)
 		}
 	}
+	for i := range cfg.MCP.Servers {
+		cfg.MCP.Servers[i].Scope = MCPScopeGlobal
+	}
+	cfg.MCP.Off = nil // only a workspace turns servers off
 	if err := overlay(cfg, prefixDir, workspace); err != nil {
 		return nil, err
 	}

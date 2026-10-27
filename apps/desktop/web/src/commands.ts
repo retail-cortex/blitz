@@ -109,7 +109,7 @@ export function helpText(all: CommandSpec[]): string {
       s += `\n\n**${title === key ? src : title}**\n\n${head}` + custom.filter((c) => c.source === src).sort(byName).map(row).join("\n");
     }
   }
-  s += `\n\n${t("desktop.help.terminal_only", { commands: terminalOnly.map((c) => (c === "!" ? "`!<command>`" : `\`/${c}\``)).join(", ") })}`;
+  s += `\n\n${t("desktop.help.terminal_only", { commands: terminalOnly.map((c) => `\`/${c}\``).join(", ") })}`;
   s += `\n\n${t("desktop.help.palette")}`;
   return s;
 }
