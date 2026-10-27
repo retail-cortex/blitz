@@ -101,6 +101,6 @@ func TestGuardrailErrors(t *testing.T) {
 	require.Empty(t, probs)
 	data, _ := os.ReadFile(p)
 	g := ParseGuardrail("limits", p, data)
-	assert.Equal(t, Limits{MaxCostUSD: 2.5, MaxFilesChanged: 12, AllowedDomains: []string{"go.dev"}}, g.Limits)
+	assert.Equal(t, Limits{MaxCostUSD: 2.5, MaxFilesChanged: 12, AllowedDomains: []string{"go.dev"}, Commands: []string{DefaultsEntry}}, g.Limits, "0 model calls written (no ceiling); commands left to the defaults")
 	assert.Nil(t, limitsFields(GuardrailSpec{Builtin: BuiltinSecrets}), "only the limits guardrail has limits")
 }

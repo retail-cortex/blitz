@@ -234,7 +234,7 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 			return i18n.T("guardrail.domain", "url", u, "domains", strings.Join(l.AllowedDomains, ", "))
 		}
 	case c.Tool == "run_shell_command":
-		if glob := gates.CommandDenied(str("command"), l.Commands); glob != "" {
+		if glob := gates.CommandDenied(str("command"), gates.ExpandCommands(l.Commands)); glob != "" {
 			return i18n.T("guardrail.command", "glob", glob)
 		}
 	case slices.Contains(writeTools, c.Tool) && l.MaxFilesChanged > 0:
@@ -301,6 +301,15 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		if !caught {
 			continue
 		}
+		if gr.Action == gates.Redact && gr.Builtin == gates.BuiltinInjection {
+			// The instructions out, the rest kept: the agent still has the page.
+			g.w.auditGuardrail(ctx, gr, "redact", reason)
+			out = redactInjection(out)
+			out["guardrail"] = i18n.T("guardrail.agent_redacted", "name", gr.Name, "tool", c.Tool)
+			v.Result = out
+			v.Notices = append(v.Notices, i18n.T("guardrail.redacted", "name", gr.Name, "reason", reason))
+			continue
+		}
 		if gr.Action == gates.Block {
 			g.w.auditGuardrail(ctx, gr, "block", reason)
 			v.Result = map[string]any{"error": i18n.T("guardrail.withheld", "name", gr.Name, "tool", c.Tool, "reason", reason)}
@@ -317,6 +326,38 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		v.Notices = append(v.Notices, i18n.T("guardrail.warned", "name", gr.Name, "reason", reason))
 	}
 	return v
+}
+
+// redactInjection is a tool result with the injection guardrail's
+// phrases taken out of every string in it (a copy: the original is the
+// tool's).
+func redactInjection(result map[string]any) map[string]any {
+	var clean func(v any) any
+	clean = func(v any) any {
+		switch x := v.(type) {
+		case string:
+			s, _ := gates.RedactInjection(x)
+			return s
+		case map[string]any:
+			out := make(map[string]any, len(x))
+			for k, e := range x {
+				out[k] = clean(e)
+			}
+			return out
+		case []any:
+			out := make([]any, len(x))
+			for i, e := range x {
+				out[i] = clean(e)
+			}
+			return out
+		}
+		return v
+	}
+	out, _ := clean(result).(map[string]any)
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out
 }
 
 // Output applies the output guardrails to a piece of the answer: the

@@ -76,7 +76,7 @@ type Builtin struct {
 
 // Builtins are the built-in guardrails, in the order Studio lists them.
 var Builtins = []Builtin{
-	{ID: BuiltinInjection, Stage: StageToolResult, Action: Warn, Actions: []string{Warn, Block}},
+	{ID: BuiltinInjection, Stage: StageToolResult, Action: Redact, Actions: []string{Redact, Warn, Block}},
 	{ID: BuiltinSecrets, Stage: StageOutput, Action: Redact, Actions: []string{Redact, Warn, Block}},
 	{ID: BuiltinLimits, Stage: StageAction, Action: Block, Actions: []string{Block}},
 }
@@ -131,13 +131,44 @@ type Guardrail struct {
 }
 
 // BuiltinDefault is a built-in guardrail as it runs without a file: on,
-// with its default action.
+// with its default action; the injection one confirming a match with the
+// judge, limits refusing the default commands within its default
+// ceilings.
 func BuiltinDefault(b Builtin) Guardrail {
 	g := Guardrail{Name: b.ID, Builtin: b.ID, Stage: b.Stage, Action: b.Action}
-	if b.ID == BuiltinLimits {
-		g.Limits.Commands = slices.Clone(DefaultCommands)
+	switch b.ID {
+	case BuiltinInjection:
+		g.Judge = true
+	case BuiltinLimits:
+		g.Limits = Limits{MaxTurns: DefaultMaxTurns, MaxCostUSD: DefaultMaxCostUSD, Commands: []string{DefaultsEntry}}
 	}
 	return g
+}
+
+// The limits guardrail's ceilings without a file (or a file that doesn't
+// set them): high enough for real work, low enough to stop a runaway
+// loop. A file's 0 means no ceiling.
+const (
+	DefaultMaxTurns   = 200
+	DefaultMaxCostUSD = 10
+)
+
+// DefaultsEntry, in a limits file's commands, stands for DefaultCommands
+// as this version of Blitz has them, so a file that adds its own
+// commands keeps getting the defaults' updates instead of a copy.
+const DefaultsEntry = "defaults"
+
+// ExpandCommands is commands with DefaultsEntry replaced by the defaults.
+func ExpandCommands(commands []string) []string {
+	var out []string
+	for _, c := range commands {
+		if strings.EqualFold(strings.TrimSpace(c), DefaultsEntry) {
+			out = append(out, DefaultCommands...)
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // DefaultCommands are the commands the limits guardrail refuses without a
@@ -161,9 +192,15 @@ type guardMeta struct {
 	Tools       []string `yaml:"tools"`
 	Description string   `yaml:"description"`
 	PII         bool     `yaml:"pii"`
-	Judge       bool     `yaml:"judge"`
-	Limits      Limits   `yaml:"limits"`
-	Enabled     *bool    `yaml:"enabled"`
+	Judge       *bool    `yaml:"judge"`
+	Limits      struct {
+		MaxCostUSD      *float64 `yaml:"max_cost_usd"`
+		MaxTurns        *int     `yaml:"max_turns"`
+		MaxFilesChanged int      `yaml:"max_files_changed"`
+		AllowedDomains  []string `yaml:"allowed_domains"`
+		Commands        []string `yaml:"commands"`
+	} `yaml:"limits"`
+	Enabled *bool `yaml:"enabled"`
 }
 
 // ParseGuardrail reads a guardrail file; what doesn't hold is its
@@ -180,7 +217,33 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 		}
 	}
 	g.Builtin, g.Stage, g.Action = strings.TrimSpace(m.Builtin), strings.TrimSpace(m.Stage), strings.TrimSpace(m.Action)
-	g.Agents, g.Tools, g.Description, g.PII, g.Judge, g.Limits = m.Agents, m.Tools, m.Description, m.PII, m.Judge, m.Limits
+	g.Agents, g.Tools, g.Description, g.PII = m.Agents, m.Tools, m.Description, m.PII
+	g.Judge = m.Judge != nil && *m.Judge
+	l := m.Limits
+	g.Limits = Limits{MaxFilesChanged: l.MaxFilesChanged, AllowedDomains: l.AllowedDomains, Commands: l.Commands}
+	if l.MaxCostUSD != nil {
+		g.Limits.MaxCostUSD = *l.MaxCostUSD
+	}
+	if l.MaxTurns != nil {
+		g.Limits.MaxTurns = *l.MaxTurns
+	}
+	// What a built-in's file leaves out runs as it would without one: the
+	// injection judge on; limits' ceilings and commands (commands: [] is
+	// none).
+	switch strings.TrimSpace(m.Builtin) {
+	case BuiltinInjection:
+		g.Judge = m.Judge == nil || *m.Judge
+	case BuiltinLimits:
+		if l.MaxCostUSD == nil {
+			g.Limits.MaxCostUSD = DefaultMaxCostUSD
+		}
+		if l.MaxTurns == nil {
+			g.Limits.MaxTurns = DefaultMaxTurns
+		}
+		if l.Commands == nil {
+			g.Limits.Commands = []string{DefaultsEntry}
+		}
+	}
 	g.Off = m.Enabled != nil && !*m.Enabled
 	g.Problem = checkGuardrail(&g)
 	return g
@@ -296,12 +359,39 @@ func Active(all []Guardrail, stage, agent string) []Guardrail {
 // format markers smuggled into content.
 var injectionRE = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|your|system)\b[^.\n]{0,30}\b(instructions?|prompts?|rules|directions|guidelines|messages?)\b`),
-	regexp.MustCompile(`(?i)\byou are now\b[^.\n]{0,60}`),
+	// A new role or mode for it, not any sentence with "you are now" in it.
+	regexp.MustCompile(`(?i)\b(you are now|from now on,? you are|act as if you (are|were))\s+(an?\s+|my\s+|the\s+|in\s+)?(no longer\b|unrestricted|unfiltered|unlocked|uncensored|jailbroken|free of|dan\b|developer mode|god mode|admin(istrator)?\b|root\b|evil|a different|an? (ai|assistant|model) (without|with no))[^.\n]{0,40}`),
+	regexp.MustCompile(`(?i)\bfrom now on,? you (will|must|should)\b[^.\n]{0,60}`),
+	// A role for it ("you are now a pirate"), not a state ("you are now ready").
+	regexp.MustCompile(`(?i)\byou are now (an?|the) [a-z]+\b[^.\n]{0,40}`),
+	// Keeping the user out of it.
+	regexp.MustCompile(`(?i)\b(do not|don't|never)\s+(tell|inform|alert|mention (this|it) to|show (this|it) to)\s+the user\b`),
+	// Sending secrets somewhere.
+	regexp.MustCompile(`(?i)\b(send|forward|upload|post|email|exfiltrate|paste)\b[^.\n]{0,40}\b(api[ _-]?keys?|credentials|passwords?|secrets|tokens|ssh keys?|\.env|environment variables)\b[^\n]{0,40}?\b(to|at)\s+(https?://|[\w.+-]+@|this|the following|my)`),
+	// Instructions hidden in an HTML comment.
+	regexp.MustCompile(`(?is)<!--[^>]{0,300}\b(ignore|instructions?|assistant|ai agent|you must|system prompt)\b[^>]{0,300}-->`),
 	regexp.MustCompile(`(?i)\b(new|updated|real)\s+(system\s+)?(instructions?|prompt)\s*:`),
 	regexp.MustCompile(`(?i)\b(reveal|print|show|repeat|output)\b[^.\n]{0,30}\b(system prompt|your instructions|hidden instructions)\b`),
 	regexp.MustCompile(`(?i)<\|?(im_start|im_end|system|endoftext)\|?>|\[/?INST\]|<<SYS>>`),
 	regexp.MustCompile(`(?i)\b(as an ai|assistant)\s*,?\s*(you must|you should|please)\s+(now\s+)?(run|execute|send|delete|upload|curl)\b`),
 }
+
+// RedactInjection is text with each phrase that looks like instructions
+// aimed at the agent replaced by a note saying so, and whether there
+// was one: the rest of the content stays for the agent to use.
+func RedactInjection(text string) (string, bool) {
+	found := false
+	for _, re := range injectionRE {
+		text = re.ReplaceAllStringFunc(text, func(string) string {
+			found = true
+			return InjectionNote
+		})
+	}
+	return text, found
+}
+
+// InjectionNote stands in for a phrase RedactInjection took out.
+const InjectionNote = "[removed by the prompt_injection guardrail: instructions aimed at the agent]"
 
 // Injection reports the first phrase in text that looks like instructions
 // aimed at the agent ("" when none does).
@@ -547,7 +637,8 @@ func SaveGuardrail(dir string, spec GuardrailSpec, previous string) (string, []s
 		f.List("agents", spec.Agents)
 		f.List("tools", spec.Tools)
 		f.Bool("pii", spec.Builtin == BuiltinSecrets && spec.PII)
-		f.Bool("judge", spec.Builtin == BuiltinInjection && spec.Judge)
+		// Injection's judge is on unless its file says judge: false.
+		f.Flag("judge", spec.Builtin == BuiltinInjection && spec.Judge, spec.Builtin == BuiltinInjection)
 		f.Map("limits", limitsFields(spec))
 		f.Flag("enabled", !spec.Off, true)
 	})
@@ -569,16 +660,18 @@ func SaveGuardrail(dir string, spec GuardrailSpec, previous string) (string, []s
 }
 
 // limitsFields are the limits guardrail's limits as front matter (nil for
-// another guardrail, or none set).
+// another guardrail, or none set): the ceilings and commands only where
+// they differ from the defaults (0 written: no ceiling; commands: [] none),
+// so a file keeps following what it doesn't change.
 func limitsFields(spec GuardrailSpec) map[string]any {
 	if spec.Builtin != BuiltinLimits {
 		return nil
 	}
 	l, out := spec.Limits, map[string]any{}
-	if l.MaxCostUSD > 0 {
+	if l.MaxCostUSD != DefaultMaxCostUSD {
 		out["max_cost_usd"] = l.MaxCostUSD
 	}
-	if l.MaxTurns > 0 {
+	if l.MaxTurns != DefaultMaxTurns {
 		out["max_turns"] = l.MaxTurns
 	}
 	if l.MaxFilesChanged > 0 {
@@ -587,7 +680,11 @@ func limitsFields(spec GuardrailSpec) map[string]any {
 	if len(l.AllowedDomains) > 0 {
 		out["allowed_domains"] = l.AllowedDomains
 	}
-	if len(l.Commands) > 0 {
+	switch {
+	case l.Commands == nil || slices.Equal(l.Commands, []string{DefaultsEntry}):
+	case len(l.Commands) == 0:
+		out["commands"] = []string{}
+	default:
 		out["commands"] = l.Commands
 	}
 	return out
@@ -634,10 +731,11 @@ func Describe(g Guardrail) string {
 			line("  - %s", strings.TrimPrefix(re.String(), "(?i)"))
 		}
 		if g.Judge {
-			line("  a match is confirmed by the judge model first: quoted or discussed injection passes")
+			line("  a match is confirmed by the judge model first: quoted or discussed injection passes (judge: true); if the judge can't answer, the match acts")
 		} else {
 			line("  a match acts at once (judge: false; true has the judge model confirm it first)")
 		}
+		line("  redact takes each matching phrase out of the result, leaving %q in its place, and passes the rest", InjectionNote)
 	case BuiltinSecrets:
 		line("runs: on every piece of the agent's answer as it streams, before the user sees it (stage %s), for %s", StageOutput, agents)
 		line("checks: credentials in the answer: private keys (PEM), AWS access key ids, OpenAI and Anthropic keys, Google API keys, GitHub tokens, Slack tokens, JWTs, password/secret/token/api_key assignments, and the values of the workspace's own secrets")
@@ -650,9 +748,12 @@ func Describe(g Guardrail) string {
 		line("runs: before every tool call (stage %s), and on each turn's model calls and cost, for %s", StageAction, agents)
 		l := g.Limits
 		line("checks:")
-		if len(l.Commands) > 0 {
-			line("  - shell commands refused (globs on the whole line and on each command in it, sudo and env dropped, rm's flags in any order and each path on its own):")
-			for _, c := range l.Commands {
+		if cmds := ExpandCommands(l.Commands); len(cmds) > 0 {
+			line("  - shell commands refused (globs on the whole line and on each command in it, sudo and env dropped, rm's flags in any order and each path on its own, $HOME as ~, a folder's /* as the folder):")
+			if slices.ContainsFunc(l.Commands, func(c string) bool { return strings.EqualFold(strings.TrimSpace(c), DefaultsEntry) }) {
+				line("      (%q: Blitz's defaults, as they are in this version, below)", DefaultsEntry)
+			}
+			for _, c := range cmds {
 				line("      %s", c)
 			}
 		} else {
@@ -665,8 +766,8 @@ func Describe(g Guardrail) string {
 				line("  - %s: no limit", name)
 			}
 		}
-		limit("cost per turn", l.MaxCostUSD > 0, fmt.Sprintf("$%.2f", l.MaxCostUSD))
-		limit("model calls per turn", l.MaxTurns > 0, fmt.Sprint(l.MaxTurns))
+		limit("cost per turn (the turn stops there)", l.MaxCostUSD > 0, fmt.Sprintf("$%.2f", l.MaxCostUSD))
+		limit("model calls per turn (the turn stops there)", l.MaxTurns > 0, fmt.Sprint(l.MaxTurns))
 		limit("files changed per turn", l.MaxFilesChanged > 0, fmt.Sprint(l.MaxFilesChanged))
 		limit("domains web_fetch and the browser may reach", len(l.AllowedDomains) > 0, strings.Join(l.AllowedDomains, ", "))
 	}

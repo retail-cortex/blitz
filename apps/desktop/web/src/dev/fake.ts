@@ -695,7 +695,7 @@ async function* followFakeEval(live: FakeLiveEval, signal: AbortSignal) {
 // limits switched off, and one of the workspace's own.
 type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
 const fakeBuiltinGuards = [
-  { id: "prompt_injection", stage: "tool_result", defaultAction: "warn", actions: ["warn", "block"] },
+  { id: "prompt_injection", stage: "tool_result", defaultAction: "redact", actions: ["redact", "warn", "block"] },
   { id: "secrets", stage: "output", defaultAction: "redact", actions: ["redact", "warn", "block"] },
   { id: "limits", stage: "action", defaultAction: "block", actions: ["block"] },
 ];
