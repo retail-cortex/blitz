@@ -73,7 +73,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 - **EN-50** With `branding` listed, `GET <url>/api/v1/branding` (with `If-None-Match`) gives:
   - the app's name and short name;
   - a logo and an icon, each for light and dark;
-  - an accent colour;
+  - two accent colours, one for the light theme and one for the dark (no one colour reads well on both);
   - a support link and an about text;
   - the terms of service and privacy notice, each as text or a link, with a version.
 
@@ -85,7 +85,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
   - the tray's tooltip and menu titles;
   - the CLI's banner and help.
 
-  The logo replaces the mark in the title bar and on the welcome page. The accent replaces the theme's accent tokens, and is refused, keeping Blitz's, when it doesn't meet contrast against the light and dark backgrounds. What the system names from the app's bundle can't change at run time: the macOS Dock and menu bar, the installer, the Start menu and file names. Those need a rebranded build, which is out of scope here.
+  The logo replaces the mark in the title bar and on the welcome page. Each accent replaces its theme's accent tokens, and is refused, keeping Blitz's, when it doesn't meet WCAG AA contrast (4.5:1) against that theme's background. What the system names from the app's bundle can't change at run time: the macOS Dock and menu bar, the installer, the Start menu and file names. Those need a rebranded build, which is out of scope here.
 - **EN-52** **About** shows the organization's name, logo, about text, terms of service, privacy notice and support link. It always ends with "Built on Blitz <version>", plus Blitz's license and notices (the Apache License's NOTICE must stay with the program).
 - **EN-53** **The user agreement:** after sign-in, and whenever the terms' version changes, the window shows the terms with **Accept** and **Decline** before anything else. The CLI shows them, or their link, and asks `[y/N]`. Accept is recorded on the service with the version and the time. Decline signs out. Until the current version is accepted, the service answers every other request with `403 terms_required`, so no client can skip it.
 
