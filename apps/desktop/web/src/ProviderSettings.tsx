@@ -392,6 +392,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <p className="t-body-sm muted">{t(choice.method === "oauth" && choice.provider === "gemini" ? "desktop.keys.google_oauth_hint" : `desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>
         )}
         {choice.provider === "openai" && <p className="t-body-sm muted">{t("desktop.keys.openai_key_only")}</p>}
+        {choice.provider === "ollama" && <p className="t-body-sm muted">{t("desktop.keys.ollama_limits")}</p>}
         {isAPI && <ApiProviderForm form={choice.api} onChange={(api) => setChoice((c) => ({ ...c, api }))} problems={apiTouched ? apiProblems : []} busy={busy} onEnter={onEnter} />}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
         {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}

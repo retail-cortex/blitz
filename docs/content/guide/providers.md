@@ -186,6 +186,8 @@ base_url = "http://localhost:11434/v1"   # the default; change it for Ollama on 
 
 Ollama has its own section, so its model and OpenAI's don't overwrite each other. Ollama loads a model on the first request after it starts, so there's nothing to start by hand. If a request names a model Ollama doesn't have, Blitz says which one and suggests `ollama pull`; if Ollama isn't running, it says to open the Ollama app or run `ollama serve`.
 
+**What to expect from local models.** A model on your machine is much smaller than Gemini, Claude or GPT, and as an agent that shows. Agent work means choosing the right tool, calling it correctly, reading the result and going on, and small models often fail at it. They describe the steps ("run `git status`") instead of running them, write a tool call as text instead of making it, or make up an answer instead of looking it up. Blitz helps where it can: it runs tool calls a model writes as text, and starts each conversation with the workspace's git state and where the last conversation left off. But it can't make a small model reliable. For agent work, choose a model with strong tool calling, such as `qwen3:8b` or larger (`ollama show <model>` lists `tools` among its capabilities). Models made for code completion, such as `qwen2.5-coder`, are weaker at it. Small models are fine for chat, quick questions and private drafts. The desktop app says this under Ollama in Settings › Providers.
+
 ## Amazon Bedrock
 
 Claude in your AWS account, with AWS's own credentials: the environment, the shared config and credentials files, an SSO sign-in or the machine's role, or a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`.
