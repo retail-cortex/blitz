@@ -68,7 +68,8 @@ func NewAskUserQuestionTool(hooks *Hooks) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "ask_user_question",
-			Description: "Ask the user a question or clarification to resolve ambiguity or solicit guidance. Offer options when you can; multi_select lets the user choose several. Several related questions can go in one call (questions).",
+			Description: "Ask the user a question or clarification to resolve ambiguity or solicit guidance, when you can't go on without their answer. Offer options when you can; multi_select lets the user choose several. Several related questions can go in one call (questions). " +
+				"Not for conversation: reply to a greeting, small talk or a thank-you, and ask what they'd like to do, in plain text, without this tool.",
 		},
 		func(ctx agent.Context, input AskUserQuestionInput) (AskUserQuestionOutput, error) {
 			items := input.Questions
