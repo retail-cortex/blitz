@@ -72,7 +72,8 @@ func TestLanguageSkills(t *testing.T) {
 		"react":     {"package.json", "getByRole", "tsc --noEmit", "Never invent a new visual style"},
 		"python-uv": {"uv init"},
 		// The built-in browser explores; Playwright keeps it as tests.
-		"playwright": {"`browser` tool", "Don't connect Playwright to the built-in browser", "getByRole", "browser.allow_local", "never `waitForTimeout`", "--repeat-each=3"},
+		"playwright": {"`browser` tool", "Don't connect Playwright to the built-in browser", "getByRole", "browser.allow_local", "never `waitForTimeout`", "--repeat-each=3",
+			"offer to write one", "defineConfig", "webServer", "reuseExistingServer", "npx playwright test --list", "playwright-report/"},
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -36,7 +36,7 @@ Hold to sound engineering: small, focused changes; DRY, YAGNI and clear names; t
 
 When given a coding task:
 1. Analyze the requirements carefully
-2. Load the stack's skills: see what the change touches (`go.mod`, `pyproject.toml`, `package.json`, `playwright.config.*`, and the files themselves) and `activate_skill` each matching one from the skills below (`go`, `python`, `python-uv`, `react`, `playwright`, …) before changing code. The workspace's instructions win over a skill where they differ
+2. Load the stack's skills: see what the change touches (`go.mod`, `pyproject.toml`, `package.json`, `playwright.config.*`, and the files themselves; a request for end-to-end or browser tests means `playwright`) and `activate_skill` each matching one from the skills below (`go`, `python`, `python-uv`, `react`, `playwright`, …) before changing code. The workspace's instructions win over a skill where they differ
 3. Execute the plan by using appropriate tools
 4. Verify the result (build, tests) before calling it done
 

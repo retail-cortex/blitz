@@ -21,12 +21,57 @@ Don't connect Playwright to the built-in browser (its debugging port is Blitz's,
 
 ## 1. Look first
 
-- Is Playwright set up? `playwright.config.*` and `@playwright/test` in `package.json`. Follow its `testDir`, `baseURL`, projects and `webServer`. Without it, ask before adding it (`npm init playwright@latest`, or the project's package manager), and say it downloads browsers.
+- Is Playwright set up? `playwright.config.*` and `@playwright/test` in `package.json`. Follow its `testDir`, `baseURL`, projects and `webServer`. Without a config, offer to write one (next section) before any test.
 - Read two or three existing specs and copy their style: fixtures, page objects, how they sign in, test ids.
 - Start the app the way the config's `webServer` does (or the project's dev command) with `manage_background_process`, and wait for its ready line.
 - A local app needs `browser.allow_local = true`; if the browser refuses `localhost`, tell the user to set it rather than working around it.
 
-## 2. Walk the flow in the built-in browser
+## 2. No config yet: offer to write it
+
+Find what the config needs before asking: the dev command and its port (`package.json` scripts, the framework's default: Vite 5173, Next.js 3000), the package manager (from the lock file), TypeScript or not (`tsconfig.json`), where tests live (an `e2e/` or `tests/` folder, and the unit tests' folder to stay clear of), and whether CI exists (`.github/workflows/`).
+
+Then offer it with **one** `ask_user_question`, the recommended option first:
+
+- **Write a config for this project (recommended)**: `playwright.config.ts` from what you found
+- **Run Playwright's setup** (`npm init playwright@latest`, or `pnpm create playwright`): its own questions and example files
+- **Not now**: walk the flow in the built-in browser and report it, without tests
+
+In the same question, ask which browsers: Chromium only (fastest, recommended to start), or Chromium, Firefox and WebKit. Unattended, write the config with Chromium only and say so.
+
+The config you write, adapted to what you found:
+
+```ts
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  reporter: process.env.CI ? "github" : "list",
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "on-first-retry",
+    screenshot: "only-on-failure",
+  },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  webServer: {
+    command: "pnpm dev",
+    url: "http://localhost:5173",
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+- `testDir` is a folder the unit-test runner doesn't read (exclude it there if it would: Vitest's `exclude`, Jest's `testPathIgnorePatterns`).
+- `webServer` runs the project's own dev command and port; `reuseExistingServer` lets a server you already started be used.
+- Add `@playwright/test` as a dev dependency with the project's package manager, and a `"test:e2e": "playwright test"` script; install the chosen browsers with `npx playwright install chromium` (it downloads them: say so).
+- Add `test-results/`, `playwright-report/`, `blob-report/` and `playwright/.cache/` to `.gitignore`.
+- With CI, offer (don't add unasked) a job that runs `npx playwright install --with-deps chromium` and the `test:e2e` script.
+
+Check it before writing tests: `npx playwright test --list` loads the config without errors.
+
+## 3. Walk the flow in the built-in browser
 
 Go through what the test will do, one action per step, and look as you go:
 
@@ -40,7 +85,7 @@ Go through what the test will do, one action per step, and look as you go:
 
 Note for each step what identifies the element to a person (its role and accessible name, its label, its visible text), whether the page waited on something (a request, an animation), and anything that failed or logged an error. A flow that's broken in the browser is a bug to report or fix first, not a test to write around.
 
-## 3. Write the test
+## 4. Write the test
 
 Turn each step into Playwright, preferring what a user perceives:
 
@@ -59,12 +104,12 @@ Turn each step into Playwright, preferring what a user perceives:
 - Each test sets up its own state (an API call or a fixture, not the previous test) and runs alone and in parallel; sign in once with `storageState` if the project does.
 - One flow per test, named for what the user does: `test("saves a new address", …)`.
 
-## 4. Run and fix it
+## 5. Run and fix it
 
 - Run just the new spec: `npx playwright test path/to/spec.ts --project=chromium` (or the project's script), then the whole suite.
 - When it fails, read the error and the trace (`--trace on`, then `npx playwright show-trace`), and replay the failing step in the built-in browser (`navigate`, then the same actions) with `screenshot` and `console` to see the page as it was. Fix the cause (a wrong locator, a missing wait on a response, a real bug), not the symptom: no retries or timeouts added to make it pass.
 - A test that passes alone but fails in the suite shares state: find it.
 
-## 5. Check it
+## 6. Check it
 
 Before saying it's done: the new specs pass three runs in a row (`--repeat-each=3`), the whole suite passes, and the app's process is stopped. Say which flows the tests cover, what you saw in the browser that they don't (and why), and any bug you found.
