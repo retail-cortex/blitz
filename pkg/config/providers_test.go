@@ -188,20 +188,23 @@ func TestSetProvider(t *testing.T) {
 	cfg, err := LoadWorkspace("", ws)
 	require.NoError(t, err)
 	assert.Equal(t, "anthropic", cfg.LLM.Provider)
-	assert.Equal(t, "claude-sonnet-5", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "claude-sonnet-5", cfg.LLM.Anthropic.Model, "the provider's own model")
+	assert.Empty(t, cfg.Blitz.DefaultModel)
+	assert.Equal(t, "claude-sonnet-5", cfg.ModelName())
 	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey)
 
 	// No key keeps the one stored; "" removes the provider and model.
 	_, err = SetProvider("", ws, ProviderChoice{Provider: "anthropic", Model: "claude-opus-5-5"})
 	require.NoError(t, err)
 	cfg, _ = LoadWorkspace("", ws)
-	assert.Equal(t, "claude-opus-5-5", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "claude-opus-5-5", cfg.ModelName())
 	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey, "the key was kept")
 	_, err = SetProvider("", ws, ProviderChoice{})
 	require.NoError(t, err)
 	info, _ := Describe("", ws)
 	assert.Equal(t, "", info.Provider, "provider removed")
 	assert.Equal(t, "", info.DefaultModel, "model removed")
+	assert.Equal(t, map[string]string{"anthropic": "claude-opus-5-5", "vertex-anthropic": "claude-opus-5-5"}, info.Models, "the provider keeps its own (Claude on Vertex AI shares it)")
 	assert.Equal(t, KeyKeychain, source(t, ws, "anthropic").KeySource, "removing the provider keeps its key")
 
 	// Refused before anything is written.
@@ -222,6 +225,43 @@ func TestSetProvider(t *testing.T) {
 			assert.ErrorIs(t, err, secrets.ErrNotFound, "a key was stored")
 		})
 	}
+}
+
+// Each provider keeps its own model, so switching away and back finds it,
+// and Ollama never gets OpenAI's (the 404 for "gpt-4o" after a switch).
+func TestSetProviderKeepsEachModel(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	set := func(c ProviderChoice) *Config {
+		t.Helper()
+		_, err := SetProvider("", ws, c)
+		require.NoError(t, err)
+		cfg, err := LoadWorkspace("", ws)
+		require.NoError(t, err)
+		return cfg
+	}
+	cfg := set(ProviderChoice{Provider: "ollama", Model: "qwen2.5-coder:7b"})
+	assert.Equal(t, "qwen2.5-coder:7b", cfg.LLM.Ollama.Model)
+	assert.Equal(t, "qwen2.5-coder:7b", cfg.ModelName())
+	cfg = set(ProviderChoice{Provider: "gemini", Model: "gemini-3.8-flash"})
+	assert.Equal(t, "gemini-3.8-flash", cfg.ModelName())
+	assert.Equal(t, "qwen2.5-coder:7b", cfg.LLM.Ollama.Model, "Ollama's kept")
+	info, _ := Describe("", ws)
+	cfg = set(ProviderChoice{Provider: "ollama", Model: info.Models["ollama"]}) // Use
+	assert.Equal(t, "qwen2.5-coder:7b", cfg.ModelName(), "back on Ollama, its model")
+	cfg = set(ProviderChoice{Provider: "ollama", Model: "ollama/llama3.2"})
+	assert.Equal(t, "llama3.2", cfg.LLM.Ollama.Model, "its own prefix is dropped")
+
+	// Another provider's model is the scope's, over the provider's own.
+	cfg = set(ProviderChoice{Provider: "ollama", Model: "gemini/gemini-3.8-pro"})
+	assert.Equal(t, "gemini/gemini-3.8-pro", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "llama3.2", cfg.LLM.Ollama.Model)
+
+	// No model for Ollama is never OpenAI's default: one it has is picked.
+	cfg = set(ProviderChoice{Provider: "ollama"})
+	assert.Empty(t, cfg.ModelName())
+	cfg.LLM.Provider = "openai"
+	assert.Equal(t, DefaultOpenAIModel, cfg.ModelName())
 }
 
 // How a provider signs in: an API key, Google Cloud's ADC or an ant profile.
@@ -322,7 +362,7 @@ func TestSetProviderWithAuth(t *testing.T) {
 	_, err = SetProvider("", "", ProviderChoice{Provider: "gemini", Model: "m2", Key: "AIza", Auth: &ProviderAuth{Method: AuthADC}})
 	assert.ErrorContains(t, err, "an API key is for signing in with api_key")
 	info, _ := Describe("", "")
-	assert.Equal(t, "gemini-3.8-flash", info.DefaultModel, "a refused change was written")
+	assert.Equal(t, "gemini-3.8-flash", info.Models["gemini"], "a refused change was written")
 	_, err = store.Get("global/llm.gemini.api_key")
 	assert.ErrorIs(t, err, secrets.ErrNotFound, "a refused change stored its key")
 }

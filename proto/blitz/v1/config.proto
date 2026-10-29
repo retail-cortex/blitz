@@ -293,6 +293,10 @@ message DescribeConfigResponse {
   // The api provider's settings as this scope sets them, header values
   // withheld (ApiHeader.value).
   ApiProviderSettings api = 6;
+  // Each provider's own model (llm.<provider>.model; Claude on Vertex AI
+  // is anthropic's) as this scope sets it, by provider: what the form shows
+  // for a provider, and what Use keeps.
+  map<string, string> models = 7;
 }
 
 // After a change: the file written, and why the scope's workspace (for a

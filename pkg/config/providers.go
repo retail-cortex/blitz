@@ -191,6 +191,30 @@ type ScopeInfo struct {
 	SecretStore  string // where keys go
 	// API is the api provider's settings, header values withheld.
 	API APIProviderInfo
+	// Models are each provider's own model as this scope sets it
+	// (ModelSection's model), by provider.
+	Models map[string]string
+}
+
+// ModelSection is the settings table holding provider's own model:
+// llm.<provider>, Claude on Vertex AI using anthropic's.
+func ModelSection(provider string) string {
+	if provider == "vertex-anthropic" {
+		provider = "anthropic"
+	}
+	return "llm." + provider
+}
+
+// modelProviders are the providers with a model of their own.
+var modelProviders = []string{"gemini", "anthropic", "vertex-anthropic", "openai", "ollama", "bedrock", "azure", "api"}
+
+// splitModelRef splits "provider/model" as the runtime does
+// (runtime.ParseModelRef): a prefix counts only when it's a provider.
+func splitModelRef(ref string) (provider, name string, prefixed bool) {
+	if p, rest, ok := strings.Cut(ref, "/"); ok && rest != "" && slices.Contains(modelProviders, strings.ToLower(p)) {
+		return strings.ToLower(p), rest, true
+	}
+	return "", ref, false
 }
 
 // Describe reports the settings of a scope: what the file sets, and for
@@ -239,6 +263,14 @@ func Describe(prefixDir, workspace string) (ScopeInfo, error) {
 		info.Providers = append(info.Providers, pi)
 	}
 	info.API = describeAPI(raw)
+	for _, p := range modelProviders {
+		if m, _ := lookup(raw, append(strings.Split(ModelSection(p), "."), "model")...).(string); m != "" {
+			if info.Models == nil {
+				info.Models = map[string]string{}
+			}
+			info.Models[p] = m
+		}
+	}
 	return info, nil
 }
 
@@ -742,8 +774,11 @@ func (a *ProviderAuth) trim() {
 }
 
 // ProviderChoice is what the provider form saves as one change: a scope's
-// llm.provider and blitz.default_model ("" removes either, so a workspace
-// follows the global setting again), how Provider signs in (Auth; nil
+// llm.provider ("" removes it, so a workspace follows the global setting
+// again) and Provider's own model (ModelSection's model: each provider
+// keeps its own, so switching back finds it; "" removes it, for the
+// provider's default; with no provider, or naming another provider's
+// model, it's blitz.default_model), how Provider signs in (Auth; nil
 // leaves it as it is), unless Key is "", a new API key for Provider and,
 // for the api provider, its settings (API; nil leaves them as they are).
 type ProviderChoice struct {
@@ -765,7 +800,13 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 	if (c.Key != "" || c.Auth != nil) && !knownProvider(c.Provider) {
 		return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key or sign-in", strings.Join(KeyedProviders, ", "))
 	}
-	edits := []settingEdit{{"llm", "provider", c.Provider}, {"blitz", "default_model", c.Model}}
+	edits := []settingEdit{{"llm", "provider", c.Provider}}
+	if p, name, prefixed := splitModelRef(c.Model); c.Provider == "" || (prefixed && p != c.Provider) {
+		edits = append(edits, settingEdit{"blitz", "default_model", c.Model})
+	} else {
+		// The provider's own model, and no scope-wide one over it.
+		edits = append(edits, settingEdit{ModelSection(c.Provider), "model", name}, settingEdit{"blitz", "default_model", ""})
+	}
 	if c.Auth != nil {
 		c.Auth.trim()
 		if err := c.Auth.check(c.Provider); err != nil {

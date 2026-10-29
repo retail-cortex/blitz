@@ -38,6 +38,7 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 *Since 2026-10-04* Blitz also signs in for the account methods above, as an addition to API keys: the desktop app's **Sign in** and `blitz auth login` run the vendor's own tool on the service's machine (`gcloud`, `ant`, `aws`, `az`; [spec_service_021](spec_service_021.md) SVC-56), then the service builds the failed models again.
 
 - **MDL-10** Empty provider: pick Gemini if a Gemini key exists, else Anthropic if its key exists (its configured model unless `default_model` is set), else OpenAI-compatible if key or base URL set, else local Ollama. Unknown provider: Gemini if a Gemini key exists, else error "unsupported or unconfigured LLM provider".
+- **MDL-12** *2026-10-29.* Ollama with no model (`[llm.ollama] model` empty) uses the first model Ollama lists, found on the first call (a stopped Ollama doesn't stop Blitz starting) and kept (`ollamaAuto`, `pkg/engine/runtime/ollama.go`); none pulled, or Ollama not answering, fails the call with what to do (`ollama pull …`; open the Ollama app or `ollama serve`). An OpenAI-compatible call that fails carries what the provider said (`providerError`: the SDK's `OpenAI API error: 404 Not Found` leaves the message out), the key and remembered secrets masked; Ollama's 404 names the model it doesn't have and suggests choosing one or `ollama pull`.
 
 ### 3.1 Anthropic adapter
 - **MDL-20** Default model `claude-opus-5`; default `max_tokens` 16000 unless the request sets one.

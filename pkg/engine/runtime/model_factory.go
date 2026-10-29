@@ -128,8 +128,12 @@ func openAICompatEndpoint(c config.OpenAIConfig, provider string) (apiKey, baseU
 
 // openAIKey is the openai or ollama provider's key, address and client
 // options: with api_key_command, each request carries the command's
-// current key.
-func openAIKey(ctx context.Context, c config.OpenAIConfig, provider string, pol retryPolicy) (string, string, []option.RequestOption, error) {
+// current key. Ollama's own base_url wins over [llm.openai]'s.
+func openAIKey(ctx context.Context, llm config.LLMConfig, provider string, pol retryPolicy) (string, string, []option.RequestOption, error) {
+	c := llm.OpenAI
+	if provider == "ollama" && llm.Ollama.BaseURL != "" {
+		c.BaseURL = llm.Ollama.BaseURL
+	}
 	apiKey, baseURL := openAICompatEndpoint(c, provider)
 	opts := pol.openAIOptions()
 	if provider != "openai" || c.APIKey != "" || c.APIKeyCommand == "" {
@@ -174,7 +178,7 @@ func providerOf(m model.LLM) string {
 			return "anthropic"
 		}
 		return "openai"
-	case *toolCallParsingModel:
+	case *toolCallParsingModel, *ollamaAuto:
 		return "openai"
 	}
 	return "gemini"
@@ -191,11 +195,18 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return gemini.NewModel(ctx, modelName, clientCfg)
 
 	case "openai", "ollama":
-		apiKey, baseURL, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
+		apiKey, baseURL, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)
 		if err != nil {
 			return nil, err
 		}
-		return newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
+		if provider == "ollama" && modelName == "" {
+			return newOllamaAuto(apiKey, baseURL, opts), nil
+		}
+		m, err := newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
+		if t, ok := m.(*toolCallParsingModel); ok {
+			t.provider, t.key = provider, apiKey
+		}
+		return m, err
 
 	case "anthropic":
 		return newAnthropicModel(ctx, cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
@@ -431,6 +442,9 @@ func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...o
 
 type toolCallParsingModel struct {
 	inner model.LLM
+	// provider and key, when set, let a failed call say what the provider
+	// said (providerError), with the key masked.
+	provider, key string
 }
 
 func (m *toolCallParsingModel) Name() string {
@@ -444,7 +458,7 @@ func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.L
 		ctx, req := replaceImagesWithMarkers(ctx, req)
 		for resp, err := range m.inner.GenerateContent(ctx, req, false) {
 			if err != nil {
-				if !yield(nil, err) {
+				if !yield(nil, providerError(err, m.provider, m.inner.Name(), m.key)) {
 					return
 				}
 				continue
