@@ -42,7 +42,7 @@ type CompactResult struct {
 	SummaryChars    int
 }
 
-const compactPromptTemplate = "Summarize the conversation below between a user and an AI coding agent so the agent " +
+const compactPromptTemplate = "Summarize the conversation below between a user and an AI agent so the agent " +
 	"can continue the work without the original transcript. Keep: the user's goals and constraints, decisions made " +
 	"and why, files read or changed (with paths), commands run and their outcomes, errors still unresolved, and the " +
 	"agreed next steps. Be specific and concise; omit pleasantries.%s\n\n" + compaction.ConversationHistoryPlaceholder

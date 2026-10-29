@@ -37,7 +37,8 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 
 | Built-in | Role | Agency |
 |---|---|---|
-| `blitz` | Primary coding agent: reads, changes, runs and verifies code (default) | high |
+| `blitz` | Primary agent (default): code, documents, research and data; makes small changes itself and hands substantial code changes to `coder` (AG-14a) | high |
+| `coder` | Coding specialist: reads, changes, runs and verifies code, loading the language skills for the workspace's stack | high |
 | `helios` | Universal Constructor: forges and runs tools | high |
 | `qa` | Tests, TDD, regression suites, edge cases | high |
 | `web-retriever` | Documentation and web research | high |
@@ -49,6 +50,7 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 | `harness-update` | Revisits the skills or agents against the specification (`/skills update`, `/agents update`, MEM-44) | medium |
 
 - **AG-12** Built-in prompts are persona-free and terse (no mascot, plain status marks).
+- **AG-14a** *2026-10-28 (the owner's request).* `blitz` is a generalist, not a coding agent: it works out what a task needs, does small things itself (a line or two, a setting, a document) and hands a substantial code change to `coder` with `invoke_agent`, giving the goal, the files involved, what it found and what done looks like. `coder` carries Blitz's working rules word for word (terse; small focused changes, DRY, YAGNI, tests with behaviour changes; files under about 600 lines; read before editing; targeted diffs; `command -v`, never `find`), which `blitz` keeps too, so the code is as good whoever writes it (`TestEmbeddedRegistry` holds them in both). Before changing code, `coder` loads the skills for the stack it sees (`go.mod`, `pyproject.toml`, `package.json`): the built-in `go`, `python`, `python-uv` and `react` (spec_skills_013 SK-01). Languages are skills, not agents: a task crosses languages, and one more agent is one more routing choice. A sub-agent with `activate_skill` gets the skill index offered to it in its instruction, as the primary agent does (`skillIndex`, `subInstruction` in `pkg/engine/runtime/engine.go`). The engine's own prompts (compaction, the reviewer, hooks, goals, the agent drafter, next-step ideas) say "an AI agent", not "a coding agent".
 
 ## 4. Models per agent
 

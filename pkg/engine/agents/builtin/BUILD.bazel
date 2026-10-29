@@ -21,6 +21,7 @@ go_library(
     embedsrcs = [
         "agent-creator.md",
         "blitz.md",
+        "coder.md",
         "helios.md",
         "model-judge.md",
         "planning-agent.md",

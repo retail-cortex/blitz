@@ -125,6 +125,33 @@ func TestEmbeddedRegistry(t *testing.T) {
 	update, _ := reg.Get("harness-update")
 	assert.Contains(t, update.Tools, "harness_evidence")
 	assert.Contains(t, update.SystemPrompt, "citing both a spec and the evidence first")
+
+	// Blitz is the generalist; the coder is its coding specialist. Both
+	// keep the working rules word for word: they're what makes the code
+	// good, whoever writes it.
+	coder, ok := reg.Get("coder")
+	require.True(t, ok)
+	assert.True(t, reg.IsBuiltin("coder"))
+	assert.NotContains(t, puppy.SystemPrompt, "a coding agent")
+	assert.Contains(t, puppy.Tools, "invoke_agent")
+	assert.Contains(t, puppy.SystemPrompt, "goes to `coder`")
+	assert.Contains(t, puppy.SystemPrompt, "Make a small change yourself")
+	for _, tool := range []string{"activate_skill", "list_or_search_skills", "run_shell_command", "edit", "lsp"} {
+		assert.Contains(t, coder.Tools, tool)
+	}
+	assert.NotContains(t, coder.Tools, "invoke_agent", "a specialist doesn't hand on")
+	assert.Contains(t, coder.SystemPrompt, "Load the stack's skills")
+	for _, rule := range []string{
+		"Be terse. No greetings, filler, jokes or commentary on yourself",
+		"Hold to sound engineering: small, focused changes; DRY, YAGNI and clear names; tests alongside behaviour changes.",
+		"Keep files under about 600 lines",
+		"Read existing files with `read_file` before modifying them",
+		"Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted",
+		"never with `find`",
+	} {
+		assert.Contains(t, puppy.SystemPrompt, rule)
+		assert.Contains(t, coder.SystemPrompt, rule)
+	}
 }
 
 func contains(s, substr string) bool {

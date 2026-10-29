@@ -268,7 +268,7 @@ func (w *Workspace) writeIdeas(recent []*session.SessionRecord, stamp string) bo
 }
 
 // ideasInstruction asks for the ideas, as JSON.
-const ideasInstruction = `You suggest what a developer will most likely want to ask their coding agent next in this workspace, from their recent conversations with it. Prefer continuing unfinished work, follow-ups the agent's replies proposed or left open, and checking recent changes; never suggest what was already done.
+const ideasInstruction = `You suggest what the user will most likely want to ask their agent next in this workspace, from their recent conversations with it. Prefer continuing unfinished work, follow-ups the agent's replies proposed or left open, and checking recent changes; never suggest what was already done.
 
 Reply with JSON only: an array of at most 3 objects {"title": "...", "prompt": "..."}.
 - title: what the tile shows, imperative and specific, at most 70 characters.

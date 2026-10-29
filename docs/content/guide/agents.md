@@ -3,7 +3,7 @@ title: Agents and tools
 weight: 40
 ---
 
-An **agent** is a system prompt, the tools it may use, and optionally its own model and settings. Blitz comes with a general coding agent and a few specialists; you can add your own for yourself or for a project, and the main agent hands work to the others when it helps.
+An **agent** is a system prompt, the tools it may use, and optionally its own model and settings. Blitz comes with a general agent, a coding specialist and a few others; you can add your own for yourself or for a project, and the main agent hands work to the others when it helps.
 
 Spec: [agents](../about/specs/spec_agents_014.md).
 
@@ -39,7 +39,8 @@ Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_leve
 
 | Agent | For |
 |---|---|
-| `blitz` | General coding: reads, changes, runs and verifies code; delegates to the others |
+| `blitz` | Everything to start with: code, documents, research and data; makes small changes itself and hands larger ones to the specialists |
+| `coder` | Code changes: reads, changes, runs and verifies code, with the skills for the workspace's languages (`go`, `python`, `python-uv`, `react`) |
 | `qa` | Tests: test-driven development, regression suites, edge cases |
 | `web-retriever` | Documentation and web research, extracting structured data |
 | `planning-agent` | Breaking a large task into steps, roadmaps and checks; can delegate |
