@@ -3,7 +3,7 @@ title: "Development"
 weight: 50
 ---
 
-Blitz is an AI coding agent in Go, built on the Google Agent Development Kit (`google.golang.org/adk/v2`). This section is for people and agents changing the code ([contributing](contributing.md) is the short version); the [architecture](../architecture/_index.md) and [shared packages](../packages/_index.md) explain how the pieces fit. Start with [Where to pick up](next-steps.md) (where work stands and what's next); [the roadmap](../about/roadmap.md) explains what was built and why, and [Manual verification](manual-verification.md) holds the checks that need a person.
+Blitz is an AI agent in Go, built on the Google Agent Development Kit (`google.golang.org/adk/v2`). This section is for people and agents changing the code ([contributing](contributing.md) is the short version); the [architecture](../architecture/_index.md) and [shared packages](../packages/_index.md) explain how the pieces fit. Start with [Where to pick up](next-steps.md) (where work stands and what's next); [the roadmap](../about/roadmap.md) explains what was built and why, and [Manual verification](manual-verification.md) holds the checks that need a person.
 
 ## Layout
 

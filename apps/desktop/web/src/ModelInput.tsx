@@ -20,36 +20,47 @@ import { t } from "./i18n";
 import { catalogFrom, checkModelRef, emptyCatalog, modelOptions, type ModelCatalog } from "./models";
 
 // The models each workspace's providers list, asked once per window (by
-// workspace, "" for the user's settings) and kept until refreshed.
+// workspace, "" for the user's settings, and the one provider asked for,
+// "" for all) and kept until refreshed.
 const catalogs = new Map<string, Promise<ModelCatalog>>();
+const catalogKey = (workspace: string, provider: string) => `${workspace}\n${provider}`;
 
 /** Asks for the workspace's models again (after a provider or key changes). */
 export function refreshModelCatalog(workspace: string) {
-  catalogs.delete(workspace);
+  for (const k of [...catalogs.keys()]) if (k.startsWith(catalogKey(workspace, ""))) catalogs.delete(k);
 }
 
-function loadCatalog(workspace: string): Promise<ModelCatalog> {
-  let p = catalogs.get(workspace);
+function loadCatalog(workspace: string, provider: string): Promise<ModelCatalog> {
+  const key = catalogKey(workspace, provider);
+  let p = catalogs.get(key);
   if (!p) {
-    p = config.listModels({ workspace }).then(catalogFrom, () => {
-      catalogs.delete(workspace); // asked again next time
-      return emptyCatalog;
-    });
-    catalogs.set(workspace, p);
+    p = config.listModels({ workspace, providers: provider ? [provider] : [] }).then(
+      (r) => catalogFrom(provider ? { ...r, defaultProvider: provider } : r),
+      () => {
+        catalogs.delete(key); // asked again next time
+        return emptyCatalog;
+      },
+    );
+    catalogs.set(key, p);
   }
   return p;
 }
 
-/** The models the workspace's providers list; empty until (or unless) they answer. */
-export function useModelCatalog(workspace: string): ModelCatalog {
+/**
+ * The models the workspace's providers list, or with provider only that
+ * one's (whether or not it's the one in use); empty until (or unless)
+ * they answer.
+ */
+export function useModelCatalog(workspace: string, provider = ""): ModelCatalog {
   const [catalog, setCatalog] = useState<ModelCatalog>(emptyCatalog);
   useEffect(() => {
     let live = true;
-    void loadCatalog(workspace).then((c) => live && setCatalog(c));
+    setCatalog(emptyCatalog);
+    void loadCatalog(workspace, provider).then((c) => live && setCatalog(c));
     return () => {
       live = false;
     };
-  }, [workspace]);
+  }, [workspace, provider]);
   return catalog;
 }
 
@@ -79,7 +90,10 @@ export function ModelInput({
   /** Called when the field is left, with the value as it will be saved. */
   onCommit?: (v: string) => void;
   catalog: ModelCatalog;
-  /** The provider a bare name belongs to, when not the catalog's default. */
+  /**
+   * The provider a bare name belongs to, when not the catalog's default;
+   * the suggestions are then its models only, by their bare names.
+   */
   provider?: string;
   /** More suggestions: pinned models, models with settings. */
   extras?: string[];
@@ -114,7 +128,7 @@ export function ModelInput({
         }}
       />
       <datalist id={`${inputId}-models`}>
-        {modelOptions(catalog, [value, ...(extras ?? [])]).map((m) => (
+        {modelOptions(catalog, [value, ...(extras ?? [])], provider).map((m) => (
           <option key={m} value={m} />
         ))}
       </datalist>

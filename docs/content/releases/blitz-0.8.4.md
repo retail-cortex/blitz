@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.4
-weight: 3
+weight: 4
 ---
 
 **Your agents browse with you.** In Blitz 0.8.4, the agent's web browsing happens in the app. You can watch it in a tab and take over when you want, or let it run out of sight. It can use the sites you've signed in to, one browser profile per workspace. Ask it to open a page and it opens one for you. Files and pictures drag in and out of the file tree. Jobs can be made just by asking in the chat. And when your agents keep hitting the same problems, Blitz tells you it's time to reflect.

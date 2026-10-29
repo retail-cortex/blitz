@@ -24,7 +24,7 @@ Keys go into your system keychain (the macOS Keychain, the Secret Service on Lin
 
 Until a provider is ready, the welcome page says so with **Set up a provider**. That opens **Settings › Providers & keys**, which lists every provider with where it stands:
 
-- **Key in the keychain**, **Key found in the environment** or **Signed in**: it's ready. **Use** makes it the one Blitz uses, on its own default model.
+- **Key in the keychain**, **Key found in the environment** or **Signed in**: it's ready. **Use** makes it the one Blitz uses, on the model you last chose for it (each provider keeps its own), else its default.
 - **Google Cloud sign-in found** or **Anthropic Console sign-in found**: you're signed in on this machine (with `gcloud` or `ant`) but Blitz doesn't use it yet. **Set up** opens its form on that sign-in.
 - **Running on this machine** (Ollama): it answered on its usual address, with the models it has. **Use** switches to it.
 - **Not set up**: pick the row to fill in its form. **Get a key** opens the provider's page for API keys (for Ollama, **Get Ollama**).
@@ -33,7 +33,7 @@ To set one up by hand:
 
 1. Pick the provider in the list.
 2. Paste its API key. Blitz tries it as you paste, before anything is saved, and says whether it works and how many models it reaches. Or, with advanced settings, choose another way under **Sign in with** and press **Sign in**.
-3. Optionally, set the **Default model** (empty: the provider's own default).
+3. Optionally, set the **Default model** (empty: the provider's own default). The list offers this provider's models only, and the choice is kept for it: switch to another provider and back, and it's still there.
 4. Press **Save and use** (**Save** for the one already in use). If the model still isn't available, the form says why.
 
 The form edits the settings every workspace shares. A workspace can use its own provider or key: open its workspace settings and set them there (its **Use the global setting** row follows the global ones).
@@ -179,10 +179,14 @@ Models running on your own machine, with no key and nothing leaving it. Start [O
 [llm]
 provider = "ollama"
 
-[llm.openai]
-model    = "qwen3-coder"
+[llm.ollama]
+model    = "qwen3-coder"                 # empty: the first model Ollama has
 base_url = "http://localhost:11434/v1"   # the default; change it for Ollama on another machine
 ```
+
+Ollama has its own section, so its model and OpenAI's don't overwrite each other. Ollama loads a model on the first request after it starts, so there's nothing to start by hand. If a request names a model Ollama doesn't have, Blitz says which one and suggests `ollama pull`; if Ollama isn't running, it says to open the Ollama app or run `ollama serve`.
+
+**What to expect from local models.** A model on your machine is much smaller than Gemini, Claude or GPT, and as an agent that shows. Agent work means choosing the right tool, calling it correctly, reading the result and going on, and small models often fail at it. They describe the steps ("run `git status`") instead of running them, write a tool call as text instead of making it, or make up an answer instead of looking it up. Blitz helps where it can: it runs tool calls a model writes as text, and starts each conversation with the workspace's git state and where the last conversation left off. But it can't make a small model reliable. For agent work, choose a model with strong tool calling, such as `qwen3:8b` or larger (`ollama show <model>` lists `tools` among its capabilities). Models made for code completion, such as `qwen2.5-coder`, are weaker at it. Small models are fine for chat, quick questions and private drafts. The desktop app says this under Ollama in Settings › Providers.
 
 ## Amazon Bedrock
 

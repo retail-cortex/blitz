@@ -179,6 +179,7 @@ type LLMConfig struct {
 
 	Gemini    GeminiConfig    `toml:"gemini"`
 	OpenAI    OpenAIConfig    `toml:"openai"`
+	Ollama    OllamaConfig    `toml:"ollama"`
 	Anthropic AnthropicConfig `toml:"anthropic"`
 	Bedrock   BedrockConfig   `toml:"bedrock"`
 	Azure     AzureConfig     `toml:"azure"`
@@ -317,6 +318,21 @@ type OpenAIConfig struct {
 	Model string `toml:"model"`
 }
 
+// DefaultOpenAIModel is the openai provider's model when none is set.
+const DefaultOpenAIModel = "gpt-4o"
+
+// OllamaConfig holds the ollama provider's own settings, so choosing a
+// model for it doesn't change OpenAI's (and back). It talks to Ollama's
+// OpenAI-compatible API. Settings left empty fall back to [llm.openai]'s,
+// where older settings files keep them: its model when one is set there
+// (OpenAI's default never applies), its base_url when it isn't OpenAI's.
+type OllamaConfig struct {
+	// BaseURL is Ollama's address (default http://localhost:11434/v1).
+	BaseURL string `toml:"base_url"`
+	// Model is the model to use; empty: the first one Ollama has.
+	Model string `toml:"model"`
+}
+
 // AnthropicConfig holds settings for Anthropic Claude.
 type AnthropicConfig struct {
 	// APIKey is optional: without it the SDK also accepts ANTHROPIC_AUTH_TOKEN
@@ -375,8 +391,12 @@ func (c *Config) ModelName() string {
 		return c.Blitz.DefaultModel
 	}
 	switch strings.ToLower(c.LLM.Provider) {
-	case "openai", "ollama":
-		return c.LLM.OpenAI.Model
+	case "openai":
+		return cmp.Or(c.LLM.OpenAI.Model, DefaultOpenAIModel)
+	case "ollama":
+		// Its own, else one older settings set in [llm.openai] (never
+		// OpenAI's default); empty picks one Ollama has.
+		return cmp.Or(c.LLM.Ollama.Model, c.LLM.OpenAI.Model)
 	case "anthropic", "vertex-anthropic":
 		return c.LLM.Anthropic.Model
 	case "bedrock":
@@ -820,7 +840,6 @@ func DefaultConfig() *Config {
 			OpenAI: OpenAIConfig{
 				APIKey:  os.Getenv("OPENAI_API_KEY"),
 				BaseURL: "https://api.openai.com/v1", // runtime.defaultOpenAIBaseURL
-				Model:   "gpt-4o",
 			},
 			Anthropic: AnthropicConfig{
 				APIKey:    os.Getenv("ANTHROPIC_API_KEY"),

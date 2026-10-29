@@ -3,7 +3,7 @@ title: Agents and tools
 weight: 40
 ---
 
-An **agent** is a system prompt, the tools it may use, and optionally its own model and settings. Blitz comes with a general coding agent and a few specialists; you can add your own for yourself or for a project, and the main agent hands work to the others when it helps.
+An **agent** is a system prompt, the tools it may use, and optionally its own model and settings. Blitz comes with a general agent, a coding specialist and a few others; you can add your own for yourself or for a project, and the main agent hands work to the others when it helps.
 
 Spec: [agents](../about/specs/spec_agents_014.md).
 
@@ -39,7 +39,8 @@ Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_leve
 
 | Agent | For |
 |---|---|
-| `blitz` | General coding: reads, changes, runs and verifies code; delegates to the others |
+| `blitz` | Everything to start with: code, documents, research and data; makes small changes itself and hands larger ones to the specialists |
+| `coder` | Code changes: reads, changes, runs and verifies code, with the skills for the workspace's languages (`go`, `python`, `python-uv`, `react`, `playwright`) |
 | `qa` | Tests: test-driven development, regression suites, edge cases |
 | `web-retriever` | Documentation and web research, extracting structured data |
 | `planning-agent` | Breaking a large task into steps, roadmaps and checks; can delegate |
@@ -132,6 +133,7 @@ These are the names to list in an agent's `tools`. Some exist only when their fe
 | `export_pdf`, `export_docx`, `generate_audio` | A Markdown file as a PDF or a Word document; text read aloud, with a speech model set ([attachments](images.md)) |
 | `ask_user_question` | Asking you, with options |
 | `remember` | Notes the agent keeps for later sessions ([extending](extending.md#notes-the-agent-keeps)) |
+| `recall_session` | Where an earlier conversation in the workspace left off ([extending](extending.md#picking-up-where-you-left-off)) |
 | `list_or_search_skills`, `activate_skill`, `run_skill_script` | [Skills](skills.md) |
 | `list_agents`, `invoke_agent`, `list_tasks`, `task_output`, `stop_task` | Delegation and background tasks |
 | `list_mcp_resources`, `read_mcp_resource` | An MCP server's resources |

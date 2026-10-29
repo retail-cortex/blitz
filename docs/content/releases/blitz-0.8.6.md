@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.6
-weight: 1
+weight: 2
 ---
 
 **Set up in a minute, not an afternoon.** This release makes the first ten minutes with Blitz much shorter. Providers & keys shows every model provider at once and spots the ones you already have, a key is checked the moment you paste it, and connecting a database is pick a kind, paste a URL, done. And when the agent suggests a command, one click puts it in the chat box, ready to run.

@@ -120,9 +120,13 @@ func (w *Workspace) sessionStarted(id, reason string) {
 	w.sessionContext[id] = out.Context
 }
 
-// sessionEnded runs session_end hooks, in the background.
+// sessionEnded runs session_end hooks, in the background, and (unless the
+// workspace is closing) brings the session's summary up to date.
 func (w *Workspace) sessionEnded(id, reason string) {
 	w.tools.ScriptHooks().Async(context.Background(), "session_end", "", tools.HookEvent{SessionID: id, Reason: reason})
+	if reason != "exit" {
+		w.summaryLeft(id)
+	}
 }
 
 // takeSessionContext returns and forgets a session_start hook's context.

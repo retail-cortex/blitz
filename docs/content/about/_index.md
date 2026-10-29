@@ -3,7 +3,7 @@ title: About
 weight: 60
 ---
 
-Blitz is a coding agent built for speed and focus: terse output, plain status marks, and a short summary when it's done. Like a good working bird dog, it moves without waste, holds its position quietly, and stays on the task.
+Blitz is an AI agent built for speed and focus, for code and everything around it: terse output, plain status marks, and a short summary when it's done. Like a good working bird dog, it moves without waste, holds its position quietly, and stays on the task.
 
 | | |
 |---|---|

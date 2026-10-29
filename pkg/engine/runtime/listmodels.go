@@ -155,7 +155,7 @@ func listProvider(ctx context.Context, cfg *config.Config, provider string) ([]s
 	case "api":
 		return nonEmpty(cfg.LLM.API.Model), nil
 	case "openai", "ollama":
-		key, base, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
+		key, base, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)
 		if err != nil {
 			return nil, err
 		}

@@ -65,6 +65,52 @@ func TestParseTextToolCallsOnlyOfferedTools(t *testing.T) {
 	assert.Nil(t, c.Parts[0].FunctionCall, "converted prose")
 }
 
+// A reply that says what it's about to do with the calls among its prose
+// (fenced, or in Qwen's <tool_call> tags) keeps the prose and makes the
+// calls; one that also quotes code, or names a tool not offered, stays text.
+func TestParseTrailingTextToolCalls(t *testing.T) {
+	allowed := map[string]bool{"recall_session": true, "read_file": true}
+	for _, tt := range []struct {
+		name, text, prose string
+		calls             []string
+	}{
+		{"fenced after prose", "I'll recall the last session. Please wait.\n\n```json\n{\"name\": \"recall_session\", \"arguments\": {}}\n```", "I'll recall the last session. Please wait.", []string{"recall_session"}},
+		{"tool_call tags", "Checking.\n<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"a\"}}\n</tool_call>", "Checking.", []string{"read_file"}},
+		{"two in a row", "Both:\n```\n{\"name\":\"recall_session\",\"arguments\":{}}\n```\n```json\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"b\"}}\n```", "Both:", []string{"recall_session", "read_file"}},
+		{"calls among the prose", "First the summary.\n```json\n{\"name\":\"recall_session\",\"arguments\":{}}\n```\nThen the files.\n```json\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"a\"}}\n```\nThen I'll sum up.", "", []string{"", "recall_session", "", "read_file", ""}},
+		{"beside quoted code", "The config:\n```toml\nname = \"x\"\n```\n```json\n{\"name\":\"read_file\",\"arguments\":{}}\n```", "", nil},
+		{"not offered", "Running it.\n```json\n{\"name\":\"run_shell_command\",\"arguments\":{\"command\":\"rm -rf /\"}}\n```", "", nil},
+		{"a fence that isn't a call", "Here:\n```go\nfunc main() {}\n```", "", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := textContent(tt.text)
+			parseTextToolCalls(c, allowed)
+			if tt.calls == nil {
+				require.Len(t, c.Parts, 1)
+				assert.Equal(t, tt.text, c.Parts[0].Text, "left as it was")
+				assert.Nil(t, c.Parts[0].FunctionCall)
+				return
+			}
+			if tt.prose != "" {
+				tt.calls = append([]string{""}, tt.calls...)
+			}
+			require.Len(t, c.Parts, len(tt.calls))
+			if tt.prose != "" {
+				assert.Equal(t, tt.prose, c.Parts[0].Text)
+			}
+			for i, name := range tt.calls {
+				if name == "" {
+					assert.NotEmpty(t, c.Parts[i].Text, "prose at %d", i)
+					assert.Nil(t, c.Parts[i].FunctionCall)
+					continue
+				}
+				require.NotNil(t, c.Parts[i].FunctionCall, "a call at %d", i)
+				assert.Equal(t, name, c.Parts[i].FunctionCall.Name)
+			}
+		})
+	}
+}
+
 func TestOfferedTools(t *testing.T) {
 	assert.Len(t, offeredTools(nil), 0, "nil request should offer nothing, got")
 	req := &model.LLMRequest{

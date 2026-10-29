@@ -70,6 +70,7 @@ go_library(
         "procusage_unix.go",
         "pyenv.go",
         "pyversion.go",
+        "recall.go",
         "registry.go",
         "remember.go",
         "scriptbox.go",

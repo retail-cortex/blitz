@@ -156,6 +156,11 @@ type Workspace struct {
 	bgCtx  context.Context
 	bgStop context.CancelFunc
 	bg     sync.WaitGroup
+	// summaryMu lets one session summary be written at a time;
+	// summaryQueued are the sessions waiting for one (guarded by
+	// hookCtxMu).
+	summaryMu     sync.Mutex
+	summaryQueued map[string]bool
 	// search is the workspace's open index (nil: off); searchSettings are
 	// the [search] settings it follows, searchProblem why they don't apply
 	// in full. searchMu guards the three.
@@ -314,6 +319,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			n, err := memory.SaveNote(memory.NotesDir(w.Dir()), kind, redactor.String(text))
 			return n.Name, err
 		})
+	}
+	if cfg.Memory.SummariesOn() { // recall_session (spec_memory_012 MEM-36)
+		w.tools.SetSessionRecaller(w.recallSession)
 	}
 	// What went wrong in the sessions, for the agents that improve the
 	// harness (spec_harness_learning_048).

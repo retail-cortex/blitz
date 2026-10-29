@@ -73,3 +73,31 @@ func TestEngineExecution(t *testing.T) {
 	require.NoError(t, err, "failed to switch agent to helios")
 	assert.Equal(t, "helios", eng.ActiveAgent(), "expected active agent 'helios', got '%s'", eng.ActiveAgent())
 }
+
+// A specialist that loads skills sees the skills offered to it; one that
+// can't, sees none (and the primary agent's index is the same list).
+func TestSkillIndex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Skills.Enabled = true
+	agentReg, err := agents.NewRegistry()
+	require.NoError(t, err)
+	skillProv, err := skills.NewProvider()
+	require.NoError(t, err)
+	toolReg, err := tools.NewRegistry(cfg, agentReg, skillProv)
+	require.NoError(t, err)
+	eng, err := NewEngine(context.Background(), cfg, agentReg, skillProv, toolReg, NewMockLLM("mock-model"))
+	require.NoError(t, err)
+
+	coder, _ := agentReg.Get("coder")
+	text := eng.subInstruction(coder)
+	assert.Contains(t, text, "## Available Agent Skills:")
+	for _, name := range []string{"**go**", "**python**", "**react**", "**playwright**", "**python-uv**"} {
+		assert.Contains(t, text, name)
+	}
+	qa, _ := agentReg.Get("qa")
+	assert.NotContains(t, eng.subInstruction(qa), "## Available Agent Skills:", "qa can't activate skills")
+	assert.Contains(t, eng.skillIndex("blitz"), "**go**")
+
+	cfg.Skills.Enabled = false
+	assert.Empty(t, eng.skillIndex("blitz"))
+}

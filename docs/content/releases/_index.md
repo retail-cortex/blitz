@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.8.8](blitz-0.8.8.md): pick up where you left off: each conversation's handoff and the repository's state at the start of the next, Blitz the generalist with a coder and skills for Go, Python, React and Playwright in the built-in browser, each provider keeping its own model, clearer provider errors, and honest advice on local models.
 - [Blitz 0.8.6](blitz-0.8.6.md): set up in a minute: every provider at a glance with keys checked as you paste, databases from a pasted URL or `/connect`, a tidier Settings with one Library, `!` commands and a Run button in the chat, MCP servers for one workspace, and built-in guardrails that redact injected instructions and stop runaway turns.
 - [Blitz 0.8.5](blitz-0.8.5.md): know what your agents left running: the processes in the status bar, a view with their output, CPU and memory, flags for the busy, the growing and the forgotten, `/processes` in the CLI, and a richer tray menu.
 - [Blitz 0.8.4](blitz-0.8.4.md): your agents browse with you: in a tab you can watch or out of sight, signed in to your sites with a profile per workspace; pages opened on request; drag and drop with the file tree; jobs made from a sentence; a tray menu of running processes; no keys in commits; `/reflect` that learns from what went well.

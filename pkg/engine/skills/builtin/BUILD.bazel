@@ -24,6 +24,10 @@ go_library(
         "testing-tdd/SKILL.md",
         "sql-query/SKILL.md",
         "python-uv/SKILL.md",
+        "go/SKILL.md",
+        "python/SKILL.md",
+        "react/SKILL.md",
+        "playwright/SKILL.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/skills/builtin",
     visibility = [
