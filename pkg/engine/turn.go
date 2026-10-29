@@ -240,17 +240,16 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	// \skill-name in the prompt: those skills' instructions go with it.
 	prompt += w.skillMentionNote(t.Text)
-	// A conversation's first prompt lists the earlier sessions (MEM-37).
-	var earlier string
+	// A conversation's first prompt says where the workspace stands and
+	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
+	first := false
 	if !t.Aside {
 		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
 		if a := st.Active(); a != nil {
 			prompt = a.MessageCount
 		}
-		if prompt == 0 && !t.Accepted && t.run == "" {
-			earlier = w.earlierSessions(sessionID)
-		}
+		first = prompt == 0 && !t.Accepted && t.run == ""
 		label := textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60)
 		if t.run != "" {
 			w.tools.Checkpoints().BeginWorkerTurn(sessionID, t.run, label)
@@ -322,7 +321,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = withHookContext(prompt, "background-processes", strings.Join(w.TakeProcessNotices(sessionID), "\n\n"))
 		prompt = withHookContext(prompt, "workspace-changed", w.takeMoveNote(sessionID))
 		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
-		prompt = withHookContext(prompt, "earlier-sessions", earlier)
+		if first {
+			prompt = withHookContext(prompt, "workspace-state", w.workspaceState(ctx))
+			prompt = withHookContext(prompt, "earlier-sessions", w.earlierSessions(sessionID))
+		}
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)

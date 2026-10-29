@@ -53,8 +53,12 @@ type RecallSessionOutput struct {
 	Title   string `json:"title,omitempty"`
 	Updated string `json:"updated,omitempty"`
 	Summary string `json:"summary,omitempty"`
+	Next    string `json:"next,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
+
+// recallNext is what recall_session tells the agent to do with a summary.
+const recallNext = "Check what has changed since (git log and git status, the files it names), then tell the user where the work stands and the next step."
 
 // errSummariesOff means session summaries are turned off.
 var errSummariesOff = errors.New("session summaries are turned off in this workspace (memory.auto or memory.summaries = false); search earlier chats with search_workspace instead")
@@ -73,6 +77,7 @@ func NewRecallSessionTool(r *Registry) (tool.Tool, error) {
 			if err != nil {
 				return RecallSessionOutput{Error: err.Error()}, nil
 			}
+			out.Next = recallNext
 			return out, nil
 		})
 }

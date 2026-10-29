@@ -168,18 +168,23 @@ type RecentSession struct {
 	Summary *Summary
 }
 
-// maxStandsChars bounds each session's line in RenderRecent.
-const maxStandsChars = 300
+// maxStandsChars bounds each session's line in RenderRecent, and
+// maxLatestChars the latest session's summary given in full.
+const (
+	maxStandsChars = 300
+	maxLatestChars = 4000
+)
 
 // RenderRecent is the earlier sessions as a new session's first prompt
-// carries them: when each was, what it was, and where it stood, with how to
-// read the rest. Empty when there are none.
+// carries them: when each was, what it was, and where it stood, the latest
+// one's summary in full, and how to read the others. Empty when there are
+// none.
 func RenderRecent(recent []RecentSession) string {
 	if len(recent) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Earlier sessions in this workspace, the latest first. When the user asks to pick up where they left off, or about earlier work, read one's summary with recall_session before answering:\n")
+	b.WriteString("Earlier sessions in this workspace, the latest first. Asked to pick up where the user left off, or about earlier work, answer from these (and what the workspace shows now); read another one's summary with recall_session:\n")
 	for _, r := range recent {
 		fmt.Fprintf(&b, "- %s · %q (%s)", r.Updated.Local().Format("2006-01-02 15:04"), r.Title, r.ID)
 		if r.Summary != nil {
@@ -188,6 +193,9 @@ func RenderRecent(recent []RecentSession) string {
 			}
 		}
 		b.WriteString("\n")
+	}
+	if s := recent[0].Summary; s != nil {
+		fmt.Fprintf(&b, "\nWhere the latest one left off:\n%s\n", textutil.Ellipsize(s.Text, maxLatestChars))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

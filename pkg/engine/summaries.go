@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -64,7 +65,7 @@ When given the summary so far and the conversation since, write the whole note a
 
 // errNoEarlierSession means the workspace has no earlier session worth
 // recalling.
-var errNoEarlierSession = errors.New("no earlier session in this workspace to pick up from")
+var errNoEarlierSession = errors.New("no earlier session in this workspace to pick up from: find out from the workspace instead. Read the specs (.agents/specs/, docs) and the project's instructions, see the git state in your first prompt (or run git log and git status), and look at the code the user named; then say where the work stands")
 
 // summariesDir is where the workspace's session summaries are kept.
 func (w *Workspace) summariesDir() string {
@@ -223,6 +224,53 @@ func (w *Workspace) earlierSessions(current string) string {
 	}
 	w.summarizeLater(stale...)
 	return memory.RenderRecent(recent)
+}
+
+// maxBriefFiles is how many uncommitted files the workspace's state names,
+// and briefCommits how many of the latest commits it lists.
+const (
+	maxBriefFiles = 10
+	briefCommits  = 5
+)
+
+// workspaceState is where the workspace's repository stands, for a
+// conversation's first prompt (MEM-38): its branch and upstream, the
+// uncommitted files and the latest commits, so even a model that won't run
+// git itself knows. Empty outside a repository.
+func (w *Workspace) workspaceState(ctx context.Context) string {
+	st, err := w.GitStatus(ctx)
+	if err != nil || !st.Repo {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var b strings.Builder
+	b.WriteString("Background, not news: where the workspace stands as this conversation started (git). Don't bring it up unprompted; when asked where things stand, answer from it and the earlier sessions, run the tools for more, and never ask the user to run them.\n")
+	fmt.Fprintf(&b, "- Branch %s", cmp.Or(st.Branch, "(none)"))
+	if st.Upstream != "" {
+		fmt.Fprintf(&b, ", %d ahead and %d behind %s", st.Ahead, st.Behind, st.Upstream)
+	}
+	b.WriteString("\n")
+	if st.Changed == 0 {
+		b.WriteString("- No uncommitted changes\n")
+	} else if out, err := w.git(ctx, nil, "status", "--short", "--untracked-files=normal"); err == nil {
+		lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+		fmt.Fprintf(&b, "- %d uncommitted:\n", st.Changed)
+		for i, l := range lines {
+			if i == maxBriefFiles {
+				fmt.Fprintf(&b, "  … and %d more\n", len(lines)-i)
+				break
+			}
+			fmt.Fprintf(&b, "  %s\n", l)
+		}
+	}
+	if out, err := w.git(ctx, nil, "log", fmt.Sprintf("-%d", briefCommits), "--format=%h %s (%cr)"); err == nil && len(strings.TrimSpace(string(out))) > 0 {
+		b.WriteString("- Latest commits:\n")
+		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+			fmt.Fprintf(&b, "  %s\n", textutil.Ellipsize(l, 160))
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // recallSession is recall_session's answer (MEM-36): session's summary, or

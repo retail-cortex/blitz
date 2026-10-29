@@ -16,6 +16,8 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -160,4 +162,31 @@ func TestSessionSummariesOff(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, latestPrompt(llm.Requests[len(llm.Requests)-2]), "earlier-sessions")
 	assert.Contains(t, requestText(llm.Requests[len(llm.Requests)-1]), "session summaries are turned off")
+}
+
+// A conversation's first prompt says where the repository stands: the
+// branch, the uncommitted files and the latest commits; later prompts don't.
+func TestWorkspaceStateInFirstPrompt(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("a"), text("b"))
+	ctx := context.Background()
+	gitIn(t, w.Dir(), "init", "-q")
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "app.tsx"), []byte("x"), 0o644))
+	gitIn(t, w.Dir(), "add", "-A")
+	gitIn(t, w.Dir(), "commit", "-qm", "Recipe list: cards with photos")
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "app.tsx"), []byte("y"), 0o644))
+
+	s, err := w.NewSession()
+	require.NoError(t, err)
+	_, err = w.Run(ctx, s.ID, api.Turn{Text: "where did we leave off?"}, func(api.Event) {})
+	require.NoError(t, err)
+	got := latestPrompt(llm.Requests[len(llm.Requests)-1])
+	assert.Contains(t, got, "<workspace-state-hook-context>")
+	assert.Contains(t, got, "- Branch main\n")
+	assert.Contains(t, got, "- 1 uncommitted:\n   M app.tsx")
+	assert.Contains(t, got, "Recipe list: cards with photos (")
+	assert.Contains(t, got, "never ask the user to run them")
+
+	_, err = w.Run(ctx, s.ID, api.Turn{Text: "go on"}, func(api.Event) {})
+	require.NoError(t, err)
+	assert.NotContains(t, latestPrompt(llm.Requests[len(llm.Requests)-1]), "workspace-state")
 }

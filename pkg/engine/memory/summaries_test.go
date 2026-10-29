@@ -89,6 +89,7 @@ func TestRenderRecent(t *testing.T) {
 		{ID: "session-0", Title: "Long", Updated: day, Summary: &Summary{Text: strings.Repeat("word ", 200)}},
 	})
 	assert.Contains(t, got, "recall_session")
+	assert.Contains(t, got, "Where the latest one left off:\nDone, not pushed.\n\n## Next\nPush.", "the latest in full")
 	assert.Contains(t, got, `- 2026-10-29 09:30 · "Provider fix" (session-2): Done, not pushed.`)
 	assert.Contains(t, got, `- 2026-10-29 08:30 · "Greeting" (session-1)`+"\n")
 	assert.Less(t, len(strings.Split(got, "\n")[3]), maxStandsChars+60, "a long summary is cut short")

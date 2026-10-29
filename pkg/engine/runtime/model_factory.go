@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -503,49 +504,105 @@ func parseTextToolCalls(content *genai.Content, allowed map[string]bool) {
 	if len(allowed) == 0 {
 		return
 	}
+	var parts []*genai.Part
 	for _, part := range content.Parts {
 		if part.FunctionCall != nil || part.Text == "" {
+			parts = append(parts, part)
 			continue
 		}
 		trimmed := strings.TrimSpace(part.Text)
-
-		// Strip markdown code fences if wrapped
-		if strings.HasPrefix(trimmed, "```") {
-			lines := strings.Split(trimmed, "\n")
-			if len(lines) >= 3 && strings.HasPrefix(lines[0], "```") && strings.HasPrefix(strings.TrimSpace(lines[len(lines)-1]), "```") {
-				trimmed = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
-			}
+		if fc, ok := parseTextCall(unfence(trimmed), allowed); ok {
+			part.Text = ""
+			part.FunctionCall = fc
+			parts = append(parts, part)
+			continue
 		}
+		// Small models often say what they're about to do and write the
+		// calls among the prose, fenced or in <tool_call> tags.
+		pieces, ok := textCalls(trimmed, allowed)
+		if !ok {
+			parts = append(parts, part)
+			continue
+		}
+		parts = append(parts, pieces...)
+	}
+	content.Parts = parts
+}
 
-		if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") {
-			var call struct {
-				Name       string         `json:"name"`
-				Arguments  map[string]any `json:"arguments"`
-				Args       map[string]any `json:"args"`
-				Parameters map[string]any `json:"parameters"`
-			}
-			if err := json.Unmarshal([]byte(trimmed), &call); err == nil && allowed[call.Name] {
-				args := call.Arguments
-				if len(args) == 0 {
-					args = call.Args
-				}
-				if len(args) == 0 {
-					args = call.Parameters
-				}
-				if args == nil {
-					args = make(map[string]any)
-				}
-				// Normalize aliases: "file_path" -> "path"
-				if fp, ok := args["file_path"]; ok && args["path"] == nil {
-					args["path"] = fp
-				}
-
-				part.Text = ""
-				part.FunctionCall = &genai.FunctionCall{
-					Name: call.Name,
-					Args: args,
-				}
-			}
+// unfence is s without the Markdown code fence around all of it.
+func unfence(s string) string {
+	if strings.HasPrefix(s, "```") {
+		lines := strings.Split(s, "\n")
+		if len(lines) >= 3 && strings.HasPrefix(strings.TrimSpace(lines[len(lines)-1]), "```") {
+			return strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
 		}
 	}
+	return s
+}
+
+// callBlockRE finds the blocks a model writes tool calls in: a Markdown
+// code fence (with or without a language tag) or <tool_call> tags.
+var callBlockRE = regexp.MustCompile("(?s)```[A-Za-z]*[ \\t]*\\n?(.*?)```|<tool_call>(.*?)</tool_call>")
+
+// textCalls splits text into its prose and its tool calls, when every
+// block in it (a code fence or <tool_call> tags) is a call of an offered
+// tool; a reply that also quotes code or a file, or names a tool that
+// wasn't offered, is left as it is (ok false).
+func textCalls(text string, allowed map[string]bool) (_ []*genai.Part, ok bool) {
+	var out []*genai.Part
+	prose := func(s string) {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, &genai.Part{Text: s})
+		}
+	}
+	at := 0
+	for _, m := range callBlockRE.FindAllStringSubmatchIndex(text, -1) {
+		body := ""
+		if m[2] >= 0 {
+			body = text[m[2]:m[3]]
+		} else {
+			body = text[m[4]:m[5]]
+		}
+		fc, isCall := parseTextCall(strings.TrimSpace(body), allowed)
+		if !isCall {
+			return nil, false
+		}
+		prose(text[at:m[0]])
+		out = append(out, &genai.Part{FunctionCall: fc})
+		ok, at = true, m[1]
+	}
+	prose(text[at:])
+	return out, ok
+}
+
+// parseTextCall reads s as a JSON tool call {"name", "arguments"} of an
+// offered tool ("args" and "parameters" do too).
+func parseTextCall(s string, allowed map[string]bool) (*genai.FunctionCall, bool) {
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
+		return nil, false
+	}
+	var call struct {
+		Name       string         `json:"name"`
+		Arguments  map[string]any `json:"arguments"`
+		Args       map[string]any `json:"args"`
+		Parameters map[string]any `json:"parameters"`
+	}
+	if err := json.Unmarshal([]byte(s), &call); err != nil || !allowed[call.Name] {
+		return nil, false
+	}
+	args := call.Arguments
+	if len(args) == 0 {
+		args = call.Args
+	}
+	if len(args) == 0 {
+		args = call.Parameters
+	}
+	if args == nil {
+		args = make(map[string]any)
+	}
+	// Normalize aliases: "file_path" -> "path"
+	if fp, ok := args["file_path"]; ok && args["path"] == nil {
+		args["path"] = fp
+	}
+	return &genai.FunctionCall{Name: call.Name, Args: args}, true
 }
