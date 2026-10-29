@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.5.4
-weight: 14
+weight: 15
 ---
 
 **Spec-driven, for every kind of project.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.5.4).
