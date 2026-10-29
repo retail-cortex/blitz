@@ -52,7 +52,9 @@ sign() { # [codesign options] <path>: hardened runtime, and a timestamp with a r
 # apps, the Go programs (with their own identifiers: Bazel's links are all
 # "a.out"), then the bundle; the entitlements on what runs Electron.
 fw="$app/Contents/Frameworks"
-find "$fw" -type f \( -name '*.dylib' -o -name '*.so' -o -name chrome_crashpad_handler \) -print0 | while IFS= read -r -d '' f; do sign "$f"; done
+# ShipIt (Squirrel's updater) is under Resources, so signing its framework
+# would seal it as a file, not sign it as code; notarisation refuses that.
+find "$fw" -type f \( -name '*.dylib' -o -name '*.so' -o -name chrome_crashpad_handler -o -name ShipIt \) -print0 | while IFS= read -r -d '' f; do sign "$f"; done
 for f in "$fw"/*.framework; do sign "$f"; done
 for f in "$fw"/*Helper*.app; do sign --entitlements "$entitlements" "$f"; done
 bin="$app/Contents/Resources/app/bin"
