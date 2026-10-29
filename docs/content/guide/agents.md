@@ -40,7 +40,7 @@ Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_leve
 | Agent | For |
 |---|---|
 | `blitz` | Everything to start with: code, documents, research and data; makes small changes itself and hands larger ones to the specialists |
-| `coder` | Code changes: reads, changes, runs and verifies code, with the skills for the workspace's languages (`go`, `python`, `python-uv`, `react`) |
+| `coder` | Code changes: reads, changes, runs and verifies code, with the skills for the workspace's languages (`go`, `python`, `python-uv`, `react`, `playwright`) |
 | `qa` | Tests: test-driven development, regression suites, edge cases |
 | `web-retriever` | Documentation and web research, extracting structured data |
 | `planning-agent` | Breaking a large task into steps, roadmaps and checks; can delegate |

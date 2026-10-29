@@ -91,7 +91,7 @@ func TestSkillIndex(t *testing.T) {
 	coder, _ := agentReg.Get("coder")
 	text := eng.subInstruction(coder)
 	assert.Contains(t, text, "## Available Agent Skills:")
-	for _, name := range []string{"**go**", "**python**", "**react**", "**python-uv**"} {
+	for _, name := range []string{"**go**", "**python**", "**react**", "**playwright**", "**python-uv**"} {
 		assert.Contains(t, text, name)
 	}
 	qa, _ := agentReg.Get("qa")

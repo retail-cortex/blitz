@@ -61,7 +61,7 @@ func TestPythonUVSkill(t *testing.T) {
 	}
 }
 
-// The language skills are the coder's (and Blitz's, for a small change),
+// The stack's skills are the coder's (and Blitz's, for a small change),
 // each with its checks; python-uv is shared with the coder too.
 func TestLanguageSkills(t *testing.T) {
 	p, err := NewProvider()
@@ -71,6 +71,8 @@ func TestLanguageSkills(t *testing.T) {
 		"python":    {"pyproject.toml", "python-uv", "pytest", "ruff"},
 		"react":     {"package.json", "getByRole", "tsc --noEmit", "Never invent a new visual style"},
 		"python-uv": {"uv init"},
+		// The built-in browser explores; Playwright keeps it as tests.
+		"playwright": {"`browser` tool", "Don't connect Playwright to the built-in browser", "getByRole", "browser.allow_local", "never `waitForTimeout`", "--repeat-each=3"},
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
