@@ -56,7 +56,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 - **EN-30** With `catalog` listed, the organization's agents, rules, skills, guardrails, MCP server and connector definitions (never their secrets), slash commands and policies come from the service, as a signed bundle with a version.
 - **EN-31** A layer above the workspace's and the person's: an organization item is **locked** (it applies and can't be changed or switched off) or a **default** (a workspace or the person may override it). The policy may switch off Blitz's built-in items.
 - **EN-32** Delivery: a stream from the service sends a new bundle as soon as it's published; when the stream isn't up (at start, after a reconnect), the bundle is fetched with `If-None-Match`, and again after its `Cache-Control: max-age`. A bundle whose signature doesn't check against the service's key is refused and the last one kept.
-- **EN-33** The last good bundle is kept on disk with its expiry. Out of date past the expiry, organization workspaces stop until the bundle is fetched again; Blitz never falls back to working without the organization's rules.
+- **EN-33** The last good bundle is kept on disk (EN-54) with its expiry. Out of date past the expiry, organization workspaces stop until the bundle is fetched again; Blitz never falls back to working without the organization's rules. The branding doesn't expire with it (EN-54).
 - **EN-34** Studio and Settings show organization items with a badge and their lock; locked ones can't be edited, only copied into the workspace when they're defaults.
 - **EN-35** The policy may also: allow or forbid the person's own providers, MCP servers and connectors; switch off `!` commands or named tools; set guardrails no workspace can loosen.
 
@@ -77,7 +77,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
   - a support link and an about text;
   - the terms of service and privacy notice, each as text or a link, with a version.
 
-  It's cached with the catalog (EN-33), so the window is branded before it reaches the service.
+  It needs no sign-in, so the sign-in screen is branded too. It comes signed with the catalog bundle's key (EN-32), the images inside it rather than linked, so one signature covers everything the window shows and an offline start has all of it. A copy whose signature doesn't check is refused and the last one kept. It's kept on disk (EN-54), so the window is branded before it reaches the service.
 - **EN-51** The name replaces "Blitz" wherever the app says it at run time:
   - the window's title;
   - the page's menus, the welcome page and dialogs;
@@ -88,6 +88,12 @@ The line: open source holds the interfaces, their open-source defaults and the c
   The logo replaces the mark in the title bar and on the welcome page. Each accent replaces its theme's accent tokens, and is refused, keeping Blitz's, when it doesn't meet WCAG AA contrast (4.5:1) against that theme's background. What the system names from the app's bundle can't change at run time: the macOS Dock and menu bar, the installer, the Start menu and file names. Those need a rebranded build, which is out of scope here.
 - **EN-52** **About** shows the organization's name, logo, about text, terms of service, privacy notice and support link. It always ends with "Built on Blitz <version>", plus Blitz's license and notices (the Apache License's NOTICE must stay with the program).
 - **EN-53** **The user agreement:** after sign-in, and whenever the terms' version changes, the window shows the terms with **Accept** and **Decline** before anything else. The CLI shows them, or their link, and asks `[y/N]`. Accept is recorded on the service with the version and the time. Decline signs out. Until the current version is accepted, the service answers every other request with `403 terms_required`, so no client can skip it.
+- **EN-54** **Offline** *(the owner's question, 2026-10-29: "how it will be persisted when the user is offline")*:
+  - **Where.** The last good bundle and branding, each as the signed copy the service sent, are kept in the service's own folder, `~/.blitz/enterprise/<the service's host>/` (0700, files 0600, each written to a temporary file and renamed into place), so another service's never mixes in. At start the window reads the branding from there and checks its signature again before it shows it; a copy that doesn't check is ignored (Blitz's own look until the service answers).
+  - **No expiry.** The branding is how the app looks, not a rule, so it stays until a newer one replaces it. Past the bundle's expiry (EN-33) the organization's workspaces stop, but the window keeps the organization's name and logo. A service that stops listing `branding` returns the app to Blitz's.
+  - **Signed out.** Signing out, or a token that can't be renewed, keeps the branding and the terms: it's still the organization's computer, and the sign-in screen (EN-13) wears its name.
+  - **Disconnected.** Removing `[enterprise] url` (Settings › **Organization**, `blitz enterprise disconnect`, or device management) deletes the folder, and the app is Blitz again.
+  - **The terms.** Their text and version are kept with the branding, so About shows them offline. Acceptance is recorded only on the service (EN-53). Offline, the version last accepted on this computer stands, and a newer one is asked for, before anything else, when the service answers again.
 
 ## 8. Not in scope
 
