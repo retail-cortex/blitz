@@ -16,6 +16,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,4 +191,92 @@ func TestWorkspaceStateInFirstPrompt(t *testing.T) {
 	_, err = w.Run(ctx, s.ID, api.Turn{Text: "go on"}, func(api.Event) {})
 	require.NoError(t, err)
 	assert.NotContains(t, latestPrompt(llm.Requests[len(llm.Requests)-1]), "workspace-state")
+}
+
+// A summary that can't be written is tried again at the next first prompt,
+// which lists the session without one; one that's behind is brought up to
+// date from itself and what came since, the transcript cut to its latest.
+func TestSessionSummaryRetriesAndCatchesUp(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("a"), text("b"), text("c"), text("d"))
+	ctx := context.Background()
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return nil, errors.New("no key") }
+	long := strings.Repeat("the recipe cards need photos ", 2000) // over maxSummaryInput
+	first, err := w.NewSession()
+	require.NoError(t, err)
+	for _, p := range []string{"fix the cards", long} {
+		_, err = w.Run(ctx, first.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
+	}
+	second, err := w.NewSession()
+	require.NoError(t, err)
+	waitSummaries(t, w)
+	_, err = memory.FindSummary(w.summariesDir(), first.ID)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the model failed: none written")
+
+	_, err = w.Run(ctx, second.ID, api.Turn{Text: "hi"}, func(api.Event) {})
+	require.NoError(t, err)
+	got := latestPrompt(llm.Requests[len(llm.Requests)-1])
+	assert.Contains(t, got, "("+first.ID+")\n", "listed without a summary")
+	waitSummaries(t, w)
+
+	// Written for its first two messages only: behind.
+	_, err = memory.SaveSummary(w.summariesDir(), memory.Summary{Session: first.ID, Title: first.Title, Messages: 2, Updated: time.Now(), Text: "Cards half done."})
+	require.NoError(t, err)
+	small := runtime.NewMockLLM("small", text("Cards done.\n\n## Next\nPhotos."))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return small, nil }
+	third, err := w.NewSession()
+	require.NoError(t, err)
+	_, err = w.Run(ctx, third.ID, api.Turn{Text: "where were we?"}, func(api.Event) {})
+	require.NoError(t, err)
+	waitSummaries(t, w)
+	require.Equal(t, 1, small.Calls())
+	in := requestText(small.Requests[0])
+	assert.Contains(t, in, "The summary so far:\nCards half done.")
+	assert.Contains(t, in, "The conversation since:\n…\n", "cut to the latest")
+	assert.Less(t, len(in), maxSummaryInput+1000)
+	s, err := memory.FindSummary(w.summariesDir(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 4, s.Messages)
+	assert.Equal(t, "Cards done.\n\n## Next\nPhotos.", s.Text)
+}
+
+// The state names the upstream, and only the first ten changed files.
+func TestWorkspaceStateUpstreamAndManyFiles(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	ctx := context.Background()
+	remote := t.TempDir()
+	gitIn(t, remote, "init", "-q", "--bare")
+	gitIn(t, w.Dir(), "init", "-q")
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "a.txt"), []byte("a"), 0o644))
+	gitIn(t, w.Dir(), "add", "-A")
+	gitIn(t, w.Dir(), "commit", "-qm", "first")
+	gitIn(t, w.Dir(), "remote", "add", "origin", remote)
+	gitIn(t, w.Dir(), "push", "-q", "-u", "origin", "main")
+	for i := range 12 {
+		require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), fmt.Sprintf("new%02d.txt", i)), []byte("x"), 0o644))
+	}
+	got := w.workspaceState(ctx)
+	assert.Contains(t, got, "- Branch main, 0 ahead and 0 behind origin/main\n")
+	assert.Contains(t, got, "- 12 uncommitted:\n")
+	assert.Contains(t, got, "  … and 2 more\n")
+	assert.NotContains(t, got, "new11.txt")
+}
+
+// A summary recall_session can't write comes back as the tool's error.
+func TestRecallSessionError(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("a"), text("b"), toolCall("recall_session", map[string]any{}), text("c"))
+	ctx := context.Background()
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return nil, errors.New("no key for the small model") }
+	first, err := w.NewSession()
+	require.NoError(t, err)
+	for _, p := range []string{"one", "two"} {
+		_, err = w.Run(ctx, first.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
+	}
+	second, err := w.NewSession()
+	require.NoError(t, err)
+	waitSummaries(t, w)
+	_, err = w.Run(ctx, second.ID, api.Turn{Text: "pick up where we left off"}, func(api.Event) {})
+	require.NoError(t, err)
+	assert.Contains(t, requestText(llm.Requests[len(llm.Requests)-1]), "no key for the small model")
 }

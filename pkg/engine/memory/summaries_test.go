@@ -94,3 +94,22 @@ func TestRenderRecent(t *testing.T) {
 	assert.Contains(t, got, `- 2026-10-29 08:30 · "Greeting" (session-1)`+"\n")
 	assert.Less(t, len(strings.Split(got, "\n")[3]), maxStandsChars+60, "a long summary is cut short")
 }
+
+// Other files and folders beside the summaries are skipped; a summaries
+// "folder" that's a file is an error, not an empty list.
+func TestSummariesSkipOthers(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub.md"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "by-hand.md"), []byte("Written by hand."), 0o600))
+	all, err := Summaries(dir)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, "by-hand", all[0].Session)
+	assert.Equal(t, "Written by hand.", all[0].Text, "no frontmatter: all text")
+
+	_, err = Summaries(filepath.Join(dir, "notes.txt"))
+	assert.Error(t, err)
+	_, err = SaveSummary(filepath.Join(dir, "notes.txt"), Summary{Session: "s", Text: "x"})
+	assert.Error(t, err, "can't make the folder")
+}

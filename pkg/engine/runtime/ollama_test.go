@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -130,4 +131,38 @@ func TestOllamaModelName(t *testing.T) {
 	assert.Equal(t, "qwen3-coder", cfg.ModelName(), "older settings")
 	cfg.LLM.Ollama.Model = "qwen3:1.7b"
 	assert.Equal(t, "qwen3:1.7b", cfg.ModelName())
+}
+
+// Against a server speaking Ollama's API: the model list picks the model,
+// and the call goes to it, through the text tool-call parsing.
+func TestOllamaAutoServer(t *testing.T) {
+	var asked string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			fmt.Fprint(w, `{"object":"list","data":[{"id":"qwen3:8b","object":"model"},{"id":"gemma3:12b","object":"model"}]}`)
+		case "/v1/responses":
+			var body struct{ Model string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			asked = body.Model
+			fmt.Fprint(w, `{"id":"resp_1","model":"qwen3:8b","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newOllamaAuto("ollama", srv.URL+"/v1", []option.RequestOption{option.WithMaxRetries(0)})
+	var text string
+	for resp, err := range a.GenerateContent(context.Background(), hiRequest(), false) {
+		require.NoError(t, err)
+		if resp != nil && resp.Content != nil {
+			for _, p := range resp.Content.Parts {
+				text += p.Text
+			}
+		}
+	}
+	assert.Equal(t, "qwen3:8b", asked, "the first model it lists")
+	assert.Equal(t, "hello", text)
+	assert.Equal(t, "qwen3:8b", a.Name())
 }
