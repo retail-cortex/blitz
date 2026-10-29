@@ -72,8 +72,9 @@ hdiutil create -volname "Blitz $version" -srcfolder "$stage" -fs HFS+ -format UD
 if [ "$identity" != - ]; then
 	codesign --force --timestamp --sign "$identity" "$dmg"
 	# Notarising the image covers the app inside it; the ticket is stapled
-	# to the image, so it opens offline too.
-	xcrun notarytool submit "$dmg" --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 30m
+	# to the image, so it opens offline too. Apple can take over an hour
+	# (the team's first submission took 70 minutes).
+	xcrun notarytool submit "$dmg" --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 90m
 	xcrun stapler staple "$dmg"
 	xcrun stapler validate "$dmg"
 	spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
