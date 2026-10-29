@@ -133,6 +133,7 @@ These are the names to list in an agent's `tools`. Some exist only when their fe
 | `export_pdf`, `export_docx`, `generate_audio` | A Markdown file as a PDF or a Word document; text read aloud, with a speech model set ([attachments](images.md)) |
 | `ask_user_question` | Asking you, with options |
 | `remember` | Notes the agent keeps for later sessions ([extending](extending.md#notes-the-agent-keeps)) |
+| `recall_session` | Where an earlier conversation in the workspace left off ([extending](extending.md#picking-up-where-you-left-off)) |
 | `list_or_search_skills`, `activate_skill`, `run_skill_script` | [Skills](skills.md) |
 | `list_agents`, `invoke_agent`, `list_tasks`, `task_output`, `stop_task` | Delegation and background tasks |
 | `list_mcp_resources`, `read_mcp_resource` | An MCP server's resources |

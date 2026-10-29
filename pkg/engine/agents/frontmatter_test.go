@@ -137,6 +137,8 @@ func TestEmbeddedRegistry(t *testing.T) {
 	assert.Contains(t, puppy.SystemPrompt, "goes to `coder`")
 	assert.Contains(t, puppy.SystemPrompt, "Make a small change yourself")
 	assert.Contains(t, puppy.SystemPrompt, "Never answer that you have no access, no history or no context: look.")
+	assert.Contains(t, puppy.Tools, "recall_session")
+	assert.Contains(t, puppy.SystemPrompt, "read that session's summary with `recall_session`")
 	assert.Contains(t, puppy.SystemPrompt, "When the user just talks (a greeting, small talk, a thank-you), answer in a sentence of plain text, with no tools.")
 	for _, tool := range []string{"activate_skill", "list_or_search_skills", "run_shell_command", "edit", "lsp"} {
 		assert.Contains(t, coder.Tools, tool)
