@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -472,6 +473,16 @@ func sseReply(events ...string) func(http.ResponseWriter) {
 	}
 }
 
+// streamedReply is a whole message as a stream: message_start carrying it
+// (on one line, as an event's data is), then message_stop.
+func streamedReply(msg string) func(http.ResponseWriter) {
+	var b bytes.Buffer
+	if err := json.Compact(&b, []byte(msg)); err != nil {
+		panic(err)
+	}
+	return sseReply(`{"type":"message_start","message":`+b.String()+`}`, `{"type":"message_stop"}`)
+}
+
 func TestAnthropicStreaming(t *testing.T) {
 	_, opts := newFake(t, sseReply(
 		`{"type":"message_start","message":{"id":"msg_s","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
@@ -502,6 +513,32 @@ func TestAnthropicStreaming(t *testing.T) {
 	assert.Equal(t, "TODO", fc.Args["query"], "streamed tool call %+v", fc)
 	assert.Equal(t, int32(42), final.UsageMetadata.CandidatesTokenCount, "streamed usage %+v", final.UsageMetadata)
 	assert.Equal(t, int32(10), final.UsageMetadata.PromptTokenCount, "streamed usage %+v", final.UsageMetadata)
+}
+
+// A request the SDK won't send unstreamed (here a thinking budget that
+// raises max_tokens past ten minutes' worth) is streamed, and the caller who
+// didn't ask for a stream gets only the complete response.
+func TestAnthropicLongRequestStreams(t *testing.T) {
+	f, opts := newFake(t, sseReply(
+		`{"type":"message_start","message":{"id":"msg_l","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Do"}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ne"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":7}}`,
+		`{"type":"message_stop"}`,
+	))
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-haiku-4-5", opts...)
+	req := &model.LLMRequest{Contents: []*genai.Content{userText("go")}, Config: &genai.GenerateContentConfig{
+		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](30000)},
+	}}
+	out, err := collectResponses(t, m, req, false)
+	require.NoError(t, err)
+	require.Len(t, out, 1, "only the complete response: %+v", out)
+	assert.False(t, out[0].Partial, "only the complete response: %+v", out)
+	assert.Equal(t, "Done", out[0].Content.Parts[0].Text, "text %+v", out[0].Content.Parts)
+	assert.Equal(t, true, f.requests[0]["stream"], "sent streamed: %v", f.requests[0])
+	assert.Equal(t, float64(30000+anthropicDefaultMaxTokens), f.requests[0]["max_tokens"], "max_tokens %v", f.requests[0]["max_tokens"])
 }
 
 func TestAnthropicErrors(t *testing.T) {
@@ -551,10 +588,12 @@ func TestModelNameResolution(t *testing.T) {
 // TestAnthropicEngineToolLoop drives a full tool round trip through the ADK
 // engine: the second request must carry the assistant's thinking block with
 // its signature and the tool_result for the same tool_use ID.
+// An engine turn asks for Claude's full max_tokens, more than the SDK sends
+// unstreamed, so its requests are streamed.
 func TestAnthropicEngineToolLoop(t *testing.T) {
 	f, opts := newFake(t,
-		jsonReply(message("tool_use", `{"type":"thinking","thinking":"need files","signature":"sig-loop"},{"type":"tool_use","id":"toolu_loop","name":"list_files","input":{}}`)),
-		jsonReply(message("end_turn", `{"type":"text","text":"Found them."}`)),
+		streamedReply(message("tool_use", `{"type":"thinking","thinking":"need files","signature":"sig-loop"},{"type":"tool_use","id":"toolu_loop","name":"list_files","input":{}}`)),
+		streamedReply(message("end_turn", `{"type":"text","text":"Found them."}`)),
 	)
 	cfg := config.DefaultConfig()
 	cfg.LLM.Provider = "anthropic"
