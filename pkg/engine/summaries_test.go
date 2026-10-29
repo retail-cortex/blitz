@@ -266,7 +266,9 @@ func TestWorkspaceStateUpstreamAndManyFiles(t *testing.T) {
 func TestRecallSessionError(t *testing.T) {
 	w, llm := openTestWith(t, nil, text("a"), text("b"), toolCall("recall_session", map[string]any{}), text("c"))
 	ctx := context.Background()
-	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return nil, errors.New("no key for the small model") }
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) {
+		return nil, errors.New("no key for the small model")
+	}
 	first, err := w.NewSession()
 	require.NoError(t, err)
 	for _, p := range []string{"one", "two"} {
