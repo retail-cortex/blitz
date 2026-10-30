@@ -23,6 +23,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -74,6 +75,9 @@ func (k tokens) Authenticate(r *http.Request) (Caller, error) {
 type readers struct{}
 
 func (readers) Authorize(_ context.Context, c Caller, procedure string) error {
+	if strings.HasSuffix(procedure, "/Terms") {
+		return fmt.Errorf("refused: %w", &Refusal{Status: 451, Code: "terms_required", Message: "accept the terms"})
+	}
 	if strings.HasSuffix(procedure, "/ListAgents") || c.Roles[0] == "admin" {
 		return nil
 	}
@@ -210,10 +214,11 @@ func TestGuard(t *testing.T) {
 		status      int
 		body        string
 	}{
-		"allowed":    {"ana", "/blitz.v1.WorkspaceService/ListAgents", http.StatusOK, ""},
-		"refused":    {"ana", "/blitz.v1.WorkspaceService/RunTurn", http.StatusForbidden, `{"code":"forbidden","message":"not allowed for member"}`},
-		"no caller":  {"", "/blitz.v1.WorkspaceService/ListAgents", http.StatusUnauthorized, `{"code":"unauthenticated","message":"sign in first"}`},
-		"bad caller": {"eve", "/", http.StatusUnauthorized, `"unauthenticated"`},
+		"allowed":         {"ana", "/blitz.v1.WorkspaceService/ListAgents", http.StatusOK, ""},
+		"refused":         {"ana", "/blitz.v1.WorkspaceService/RunTurn", http.StatusForbidden, `{"code":"forbidden","message":"not allowed for member"}`},
+		"no caller":       {"", "/blitz.v1.WorkspaceService/ListAgents", http.StatusUnauthorized, `{"code":"unauthenticated","message":"sign in first"}`},
+		"bad caller":      {"eve", "/", http.StatusUnauthorized, `"unauthenticated"`},
+		"its own refusal": {"ana", "/blitz.v1.WorkspaceService/Terms", 451, `{"code":"terms_required","message":"accept the terms"}`},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

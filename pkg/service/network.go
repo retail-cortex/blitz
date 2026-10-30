@@ -62,6 +62,19 @@ type Authorizer interface {
 	Authorize(ctx context.Context, c Caller, procedure string) error
 }
 
+// Refusal is an error an Authenticator or Authorizer returns to answer
+// with a status and code of its own rather than 401 unauthenticated or
+// 403 forbidden: 403 terms_required until the person accepts the
+// organization's terms, say.
+type Refusal struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+// Error is the message, for the person.
+func (r *Refusal) Error() string { return r.Message }
+
 type callerKey struct{}
 
 // CallerFrom is the caller of a request that came in on the network
@@ -122,7 +135,11 @@ func (n *Network) handler(blitz http.Handler) http.Handler {
 }
 
 func refuse(w http.ResponseWriter, status int, code string, err error) {
+	msg := err.Error()
+	if r, ok := errors.AsType[*Refusal](err); ok {
+		status, code, msg = r.Status, r.Code, r.Message
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": err.Error()})
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
 }
