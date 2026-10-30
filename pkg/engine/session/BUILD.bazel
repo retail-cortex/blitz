@@ -21,6 +21,7 @@ go_library(
         "search.go",
         "session.go",
         "snapshot.go",
+        "subagents.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/session",
     visibility = [
@@ -51,6 +52,7 @@ go_test(
         "session_test.go",
         "snapshot_test.go",
         "storage_errors_test.go",
+        "subagents_test.go",
         "title_test.go",
     ],
     embed = [":session"],
