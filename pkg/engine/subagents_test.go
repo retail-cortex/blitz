@@ -110,3 +110,35 @@ func TestForegroundSubagentShowsItsWork(t *testing.T) {
 	assert.Contains(t, log, `"author":"project-spec"`, "events name the sub-agent")
 	assert.Contains(t, log, "Wrote 3 specs.", "its words are in its log")
 }
+
+// The handoff to the coder, as the window sees it: the coder's tool calls
+// show under its name while it works, its answer goes to blitz as the tool's
+// result, and the turn's text is blitz's alone.
+func TestHandoffToCoderShowsItsWork(t *testing.T) {
+	w, _ := openTestWith(t, nil,
+		modelCall("invoke_agent", map[string]any{"agent_name": "coder", "prompt": "fix the typo"}),
+		modelCall("list_files", map[string]any{"directory": "."}),
+		text("Fixed the typo in README.md."),
+		text("Done: the coder fixed it."),
+	)
+	s, err := w.NewSession()
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var coderTools []string
+	var handoff *api.ToolResult
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "fix the typo"}, func(e api.Event) {
+		mu.Lock()
+		defer mu.Unlock()
+		if e.Author == "coder" && e.ToolCall != nil {
+			coderTools = append(coderTools, e.ToolCall.Name)
+		}
+		if e.ToolResult != nil && e.ToolResult.Name == "invoke_agent" {
+			handoff = e.ToolResult
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"list_files"}, coderTools, "the coder's work shows")
+	require.NotNil(t, handoff, "the handoff's result")
+	assert.Equal(t, "Fixed the typo in README.md.", handoff.Result["response"], "the coder's answer goes to blitz")
+	assert.Equal(t, "Done: the coder fixed it.", res.Output, "the turn's text is blitz's")
+}
