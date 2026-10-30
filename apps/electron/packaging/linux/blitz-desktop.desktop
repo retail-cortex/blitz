@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Blitz
-Comment=A coding agent for your projects
+Comment=An AI agent for your projects
 Exec=blitz-desktop %u
 MimeType=x-scheme-handler/blitz;
 Icon=blitz-desktop

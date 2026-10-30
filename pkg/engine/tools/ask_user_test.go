@@ -23,6 +23,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Small models took "ask the user" for a greeting's reply (a form for "Hi,
+// how are you?"): the description says conversation is plain text.
+func TestAskIsNotForConversation(t *testing.T) {
+	ask, err := NewAskUserQuestionTool(NewHooks(Policy{}))
+	require.NoError(t, err)
+	assert.Contains(t, ask.Description(), "can't go on without their answer")
+	assert.Contains(t, ask.Description(), "Not for conversation: reply to a greeting")
+}
+
 // Several questions in one call, and multi-select ones.
 func TestAskSeveralQuestions(t *testing.T) {
 	type asked struct {

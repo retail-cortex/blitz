@@ -197,7 +197,10 @@ func (m *anthropicModel) Name() string { return m.name }
 
 // GenerateContent sends one request. When streaming, text arrives as partial
 // responses followed by one complete, non-partial response (the same shape
-// the Gemini model produces), which is what the engine persists.
+// the Gemini model produces), which is what the engine persists. A request
+// the SDK won't send unstreamed (max_tokens a reply could take more than ten
+// minutes to fill, as with a large thinking budget) is streamed anyway, with
+// only the complete response given back.
 func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		params, err := m.buildParams(req, effortFrom(ctx))
@@ -205,8 +208,9 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 			yield(nil, err)
 			return
 		}
-		if !stream {
-			msg, err := m.client.Beta.Messages.New(ctx, params, m.requestOptions(ctx)...)
+		opts := m.requestOptions(ctx)
+		if _, long := anthropic.CalculateNonStreamingTimeout(int(params.MaxTokens), params.Model, opts); !stream && long == nil {
+			msg, err := m.client.Beta.Messages.New(ctx, params, opts...)
 			if err != nil {
 				yield(nil, anthropicError(err))
 				return
@@ -215,7 +219,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 			return
 		}
 
-		s := m.client.Beta.Messages.NewStreaming(ctx, params, m.requestOptions(ctx)...)
+		s := m.client.Beta.Messages.NewStreaming(ctx, params, opts...)
 		defer s.Close()
 		var msg anthropic.BetaMessage
 		for s.Next() {
@@ -224,7 +228,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 				yield(nil, fmt.Errorf("anthropic stream: %w", err))
 				return
 			}
-			if delta, ok := ev.AsAny().(anthropic.BetaRawContentBlockDeltaEvent); ok {
+			if delta, ok := ev.AsAny().(anthropic.BetaRawContentBlockDeltaEvent); ok && stream {
 				if td, ok := delta.Delta.AsAny().(anthropic.BetaTextDelta); ok && td.Text != "" {
 					partial := &model.LLMResponse{Content: genai.NewContentFromText(td.Text, genai.RoleModel), Partial: true}
 					if !yield(partial, nil) {

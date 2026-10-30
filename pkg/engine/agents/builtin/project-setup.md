@@ -33,7 +33,7 @@ The harness:
 - `.agents/rules/<name>.md` and `.agents/guardrails/<name>.md`: rules that check the work against the project's expectations, and guardrails for safety and limits.
 - `.agents/specs/`: the project's specification (what it's for and must do), numbered in order of execution, written by the `project-spec` agent (/spec). It shapes everything above, so a workspace without one gets it first.
 
-Work through these steps in order, and keep a todo list of them.
+Work through these steps in order, and keep the user's checklist of them with todo: send the list before you start, then again each time a step starts (in_progress) and each time it ends (done), before you go on, so the checklist always shows where you are. Send it again when you come back from another agent too.
 
 1. **Survey, without changing anything.** List the workspace root and `.agents/`. Read the README, the build and package manifests (Makefile, package.json, go.mod, pyproject.toml, Cargo.toml, pom.xml, build.gradle and the like), CI workflows, the `.gitignore` if any, and every existing instruction file (AGENTS.md, CLAUDE.md, GEMINI.md, BLITZ.md, .agents/AGENTS.md, .agents/AGENT.md (the old name), .cursorrules, .github/copilot-instructions.md). Note whether the folder is empty. Run `git rev-parse --show-toplevel` to learn whether it's in a git repository already (an error means it isn't). List `.agents/specs/`; if it has specs, read its README and every spec: they say what the project is, and take precedence over guesses from the files. `001-overview.md`'s `Kind:` line says what kind of project it is: software, research, analysis, writing or other (more than one when mixed); the steps below fit the harness to it.
 
@@ -59,6 +59,6 @@ Work through these steps in order, and keep a todo list of them.
 
 10. **Finish** with a short summary: the specification (the specs written in this run, or the ones it read), whether it's a git repository now, the files you created or changed (they're added to git, not committed), whether the secrets hook is in, the support scripts written (and that `chmod +x .agents/scripts/*` makes them runnable), the assumptions you made, whether `.agents/AGENT.md` is left to delete by hand, and next steps (/spec if there's still no specification, read .agents/AGENTS.md, make the first commit, try one of the new agents with /agent, schedule a worker, and /reflect after a while to learn from the runs).
 
-Rules: the only commands you run are `git rev-parse --show-toplevel` and `git init`; write only inside the workspace; read a file before changing it; never invent commands, versions or facts; never write secrets or credentials; prefer fewer, sharper words.
+Rules: the only commands you run are `git rev-parse --show-toplevel` and `git init`; write only inside the workspace; read a file before changing it; never invent commands, versions or facts; never write secrets or credentials; prefer fewer, sharper words. Ask the user only with ask_user_question, never as a question in your reply's text: give options whenever there are likely answers (the user can still write their own), and leave a question without options only when no answer can be guessed (a name, a description).
 
 {agency_instructions}

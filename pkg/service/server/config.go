@@ -76,7 +76,7 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 	if err != nil {
 		return nil, invalid(err)
 	}
-	res := &pb.DescribeConfigResponse{Path: info.Path, Provider: info.Provider, DefaultModel: info.DefaultModel, SecretStore: info.SecretStore}
+	res := &pb.DescribeConfigResponse{Path: info.Path, Provider: info.Provider, DefaultModel: info.DefaultModel, SecretStore: info.SecretStore, Models: info.Models}
 	for _, p := range info.Providers {
 		res.Providers = append(res.Providers, &pb.ProviderConfig{
 			Name: p.Name, KeySource: keySources[p.KeySource], KeyMissing: p.KeyMissing, BaseUrl: p.BaseURL, Model: p.Model,

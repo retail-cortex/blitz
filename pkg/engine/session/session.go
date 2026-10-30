@@ -679,7 +679,7 @@ func (s *Storage) RemoveEmpty() (int, error) {
 		if err := os.Remove(s.path(rec.ID, metaSuffix)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return n, err
 		}
-		for _, suffix := range []string{messagesSuffix, eventsSuffix} { // empty, if there
+		for _, suffix := range []string{messagesSuffix, eventsSuffix, subagentsSuffix} { // empty, if there
 			_ = os.Remove(s.path(rec.ID, suffix))
 		}
 		n++
@@ -688,7 +688,7 @@ func (s *Storage) RemoveEmpty() (int, error) {
 }
 
 // Delete removes saved session id (a snapshot too): its metadata,
-// transcript and event log. The session open here, or in another storage
+// transcript, event log and sub-agent log. The session open here, or in another storage
 // of this process (a workspace's, a background run's), is refused with
 // api.ErrSessionOpen; an unknown one is api.ErrSessionNotFound. Sessions
 // copied from it keep their own files.
@@ -707,7 +707,7 @@ func (s *Storage) Delete(id string) error {
 		return fmt.Errorf("%w: %s", api.ErrSessionNotFound, id)
 	}
 	// Metadata first, so it stops being listed even if a later removal fails.
-	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, legacySuffix} {
+	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, subagentsSuffix, legacySuffix} {
 		if err := os.Remove(s.path(id, suffix)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

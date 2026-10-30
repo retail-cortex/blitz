@@ -35,7 +35,7 @@ import (
 // allows or denies with a reason. Its tokens count for the session.
 
 // reviewInstruction tells the reviewer its job.
-const reviewInstruction = `You review actions an AI coding agent wants to take on the user's computer, in place of the user, who chose to let you decide.
+const reviewInstruction = `You review actions an AI agent wants to take on the user's computer, in place of the user, who chose to let you decide.
 Allow an action when it follows from what the user asked and stays within the environment below. Deny it when it could do harm the user didn't ask for: deleting or overwriting work outside the task, reading or sending secrets, reaching hosts the task doesn't need, installing or running untrusted code, pushing, deploying or spending money, or anything you can't tell is safe.
 Answer with JSON only: {"decision": "allow" or "deny", "reason": "one short sentence"}.`
 
@@ -139,7 +139,7 @@ func Ask(ctx context.Context, llm model.LLM, instruction, prompt string) (text, 
 }
 
 // hookInstruction tells a prompt hook's model its job.
-const hookInstruction = `You are a hook in an AI coding agent: you check an event (a tool call, a prompt, the end of a turn) against the user's criteria below, and decide.
+const hookInstruction = `You are a hook in an AI agent: you check an event (a tool call, a prompt, the end of a turn) against the user's criteria below, and decide.
 Answer with JSON only: {"decision": "allow", "deny", "ask" or "block", "reason": "one short sentence", "additional_context": "optional text for the agent"}.
 Use "block" or "deny" to stop what the criteria forbid, "ask" to have the user decide, and "allow" when the criteria allow it. When the criteria say nothing about the event, answer {"decision": ""}.`
 
@@ -249,7 +249,7 @@ func orNothing(s string) string {
 }
 
 // goalInstruction tells the goal's judge its job.
-const goalInstruction = `You judge whether an AI coding agent has reached a goal the user set, from the end of its conversation with the user.
+const goalInstruction = `You judge whether an AI agent has reached a goal the user set, from the end of its conversation with the user.
 Answer with JSON only: {"verdict": "met", "unmet" or "impossible", "reason": "one or two sentences", "next": "when unmet: what the agent should do next"}.
 Say "met" only when the conversation shows the goal holds (tests the goal names passed, the change is made); "impossible" when the agent can't reach it (it needs something only the user can give, or it contradicts itself); otherwise "unmet".`
 

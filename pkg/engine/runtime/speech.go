@@ -79,7 +79,7 @@ func NewSpeaker(ctx context.Context, cfg *config.Config) (tools.Speaker, error) 
 		}
 		return &geminiSpeaker{models: client.Models, model: name, host: host}, nil
 	case "openai":
-		key, base, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
+		key, base, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)
 		if err != nil {
 			return nil, err
 		}

@@ -1052,7 +1052,30 @@ func (e *Engine) imageInstruction(spec *agents.AgentSpec) string {
 const diagramInstruction = "\n\n## Diagrams\nWhen Markdown you write (files, plans, docs, replies) needs a diagram, draw it as a fenced ```mermaid block in valid Mermaid syntax (flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt). Never draw boxes and arrows in ASCII. Quote node labels that hold punctuation, such as A[\"parse (v2)\"]. Directory trees and tables stay as plain text and Markdown tables."
 
 func (e *Engine) subInstruction(spec *agents.AgentSpec) string {
-	return spec.InterpolatePrompt(spec.AgencyLevel)
+	text := spec.InterpolatePrompt(spec.AgencyLevel)
+	if slices.Contains(spec.Tools, "activate_skill") { // a specialist that loads skills sees them
+		text += e.skillIndex(spec.Name)
+	}
+	return text
+}
+
+// skillIndex lists the skills offered to the named agent, for its
+// instruction; empty with skills off or none offered.
+func (e *Engine) skillIndex(agent string) string {
+	if !e.cfg.Skills.Enabled || e.skillProv == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, s := range e.skillProv.List() {
+		if s.OfferedTo(agent) { // agents: offers it to others only
+			fmt.Fprintf(&sb, "- **%s**: %s%s\n", s.Name, s.Description, skills.TriggerHint(s.TriggerPhrases))
+		}
+	}
+	if sb.Len() == 0 {
+		return ""
+	}
+	return "\n\n## Available Agent Skills:\n" + sb.String() +
+		"\nUse `activate_skill` to load full skill instructions whenever relevant. A skill's \"for requests like\" are examples of what it's for: match a request to them by meaning, not by wording.\n"
 }
 
 // rebuildLocked requires e.mu held for writing.
@@ -1117,20 +1140,7 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		subAgents = append(subAgents, sub)
 	}
 
-	rootInstruction := rootSpec.InterpolatePrompt(e.agencyLevel())
-	if e.cfg.Skills.Enabled && e.skillProv != nil {
-		if allSkills := e.skillProv.List(); len(allSkills) > 0 {
-			var sb strings.Builder
-			sb.WriteString("\n\n## Available Agent Skills:\n")
-			for _, s := range allSkills {
-				if s.OfferedTo(rootSpec.Name) { // agents: offers it to others only
-					fmt.Fprintf(&sb, "- **%s**: %s%s\n", s.Name, s.Description, skills.TriggerHint(s.TriggerPhrases))
-				}
-			}
-			sb.WriteString("\nUse `activate_skill` to load full skill instructions whenever relevant. A skill's \"for requests like\" are examples of what it's for: match a request to them by meaning, not by wording.\n")
-			rootInstruction += sb.String()
-		}
-	}
+	rootInstruction := rootSpec.InterpolatePrompt(e.agencyLevel()) + e.skillIndex(rootSpec.Name)
 
 	// MCP servers choose their agents; by default only the primary agent.
 	llm := e.modelInTreeLocked(active, active, override)

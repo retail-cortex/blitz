@@ -61,6 +61,34 @@ func TestPythonUVSkill(t *testing.T) {
 	}
 }
 
+// The stack's skills are the coder's (and Blitz's, for a small change),
+// each with its checks; python-uv is shared with the coder too.
+func TestLanguageSkills(t *testing.T) {
+	p, err := NewProvider()
+	require.NoError(t, err)
+	tests := map[string][]string{
+		"go":        {"go.mod", "%w", "go test -race", "gofmt", "go vet"},
+		"python":    {"pyproject.toml", "python-uv", "pytest", "ruff"},
+		"react":     {"package.json", "getByRole", "tsc --noEmit", "Never invent a new visual style"},
+		"python-uv": {"uv init"},
+		// The built-in browser explores; Playwright keeps it as tests.
+		"playwright": {"`browser` tool", "Don't connect Playwright to the built-in browser", "getByRole", "browser.allow_local", "never `waitForTimeout`", "--repeat-each=3",
+			"offer to write one", "defineConfig", "webServer", "reuseExistingServer", "npx playwright test --list", "playwright-report/"},
+	}
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			s, ok := p.Get(name)
+			require.True(t, ok, "built in")
+			assert.True(t, s.OfferedTo("coder"))
+			assert.True(t, s.OfferedTo("blitz"))
+			assert.False(t, s.OfferedTo("qa"))
+			for _, w := range want {
+				assert.Contains(t, s.Content, w)
+			}
+		})
+	}
+}
+
 func TestExternalSkillDiscovery(t *testing.T) {
 	p, err := NewProvider()
 	require.NoError(t, err, "failed to create skill provider")

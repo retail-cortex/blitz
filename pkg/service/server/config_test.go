@@ -80,7 +80,8 @@ func TestConfigService(t *testing.T) {
 	assert.Contains(t, set.Msg.Change.Path, "/.blitz/workspaces/", "set provider: %v", set)
 	wdesc, _ = cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{Workspace: dir}))
 	assert.Equal(t, "openai", wdesc.Msg.Provider, "workspace: %v", wdesc.Msg)
-	assert.Equal(t, "gpt-5", wdesc.Msg.DefaultModel, "workspace: %v", wdesc.Msg)
+	assert.Equal(t, "gpt-5", wdesc.Msg.Models["openai"], "the provider's own model: %v", wdesc.Msg)
+	assert.Empty(t, wdesc.Msg.DefaultModel, "workspace: %v", wdesc.Msg)
 	assert.NotContains(t, wdesc.Msg.String(), "sk-project", "the description shows the key")
 
 	// Signing in with an ant profile instead: reported, and no key needed.

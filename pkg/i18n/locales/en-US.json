@@ -1594,6 +1594,7 @@
     "desktop.keys.auth.oauth.anthropic": "Anthropic account (OAuth)",
     "desktop.keys.google_oauth_hint": "Gemini runs on Vertex AI with your Google account, signed in on the machine running the Blitz service (Sign in above, or gcloud auth application-default login), billed to the project.",
     "desktop.keys.openai_key_only": "OpenAI signs in with an API key: it has no account sign-in for other apps.",
+    "desktop.keys.ollama_limits": "Models on your machine are less reliable as agents: smaller ones often describe the steps instead of running them, or write tool calls as text. For agent work, choose one with strong tool calling (such as qwen3:8b or larger); small ones suit chat and quick questions.",
     "desktop.keys.api.endpoint": "Endpoint",
     "desktop.keys.api.endpoint_placeholder": "https://gateway.example.com",
     "desktop.keys.api.endpoint_hint": "Requests go to this address with /responses added. {placeholder} in its path or query is replaced by the token.",

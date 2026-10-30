@@ -102,9 +102,10 @@ func newRootCommand() *cobra.Command {
 	o := &rootOptions{}
 	root := &cobra.Command{
 		Use:   "blitz [flags] [prompt...]",
-		Short: "Blitz - autonomous AI coding agent built on Google ADK",
-		Long: `Blitz is an AI coding agent. Run it with no arguments for an interactive
-session, or pass a prompt to run once and exit.
+		Short: "Blitz - an autonomous AI agent for your workspace, built on Google ADK",
+		Long: `Blitz is an AI agent for your workspace: code, documents, research and
+data. Run it with no arguments for an interactive session, or pass a
+prompt to run once and exit.
 
 Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 4 prompt blocked by a hook, 130 interrupted.`,
