@@ -27,6 +27,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
+	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -141,4 +143,19 @@ func TestHandoffToCoderShowsItsWork(t *testing.T) {
 	require.NotNil(t, handoff, "the handoff's result")
 	assert.Equal(t, "Fixed the typo in README.md.", handoff.Result["response"], "the coder's answer goes to blitz")
 	assert.Equal(t, "Done: the coder fixed it.", res.Output, "the turn's text is blitz's")
+}
+
+// Partial events (the stream's pieces) are skipped; one that can't be saved
+// still shows, and the turn goes on.
+func TestSubagentEventsSkipsPartialsAndOutlivesASaveFailure(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	var got []api.Event
+	observe := w.subagentEvents(w.storage, "../not-a-session", func(e api.Event) { got = append(got, e) })
+	call := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files"}}}}
+	observe(nil)
+	observe(&adksession.Event{LLMResponse: model.LLMResponse{Content: call, Partial: true}, Author: "coder"})
+	assert.Empty(t, got, "nothing for a missing or partial event")
+	observe(&adksession.Event{LLMResponse: model.LLMResponse{Content: call}, Author: "coder"})
+	require.Len(t, got, 1, "shown although it couldn't be saved")
+	assert.Equal(t, "coder", got[0].Author)
 }
