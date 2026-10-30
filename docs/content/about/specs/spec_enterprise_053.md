@@ -28,7 +28,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
   | `Authenticator` | who a request is from, from its credentials | the Unix socket's owner (only they can open it) |
   | `Authorizer` | whether that caller may do an action on a workspace or item | allow (one user) |
   | `Catalog` | the organization's agents, rules, skills, guardrails, MCP servers, connectors and policies (§5) | none |
-  | `ModelRouter` | where a model's requests go and which models a caller may use | the person's own settings (`[llm.*]`) |
+  | `ModelRouter` | where a model's requests go and which models a caller may use, for the engine when it runs in the service (jobs, §6); clients reach the organization's models through its gateway (§4) | the person's own settings (`[llm.*]`) |
   | `JobRunner` | where a job runs (§6) | this service |
   | `Telemetry` | usage counts sent elsewhere | none |
   | `WorkspaceStore` | where a workspace's files come from and go back to | the local folder |
@@ -54,7 +54,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 - **EN-20** With `models` listed, the service is the model provider: the `api` provider (`[llm.api]`) is filled from the service (its base URL), with the access token in place of a token script, and the person's own providers are off unless the catalog's policy allows them.
 - **EN-21** The model menu lists `GET <url>/api/v1/models` (sent with `If-None-Match`): each model's ID, display name, vendor, the API it speaks (Anthropic's Messages or OpenAI's Responses; the service translates for the models that speak neither), capabilities (tools, images, thinking, context size), price per million tokens and whether it's the default. The list is the caller's: the service filters it by role.
 - **EN-22** Every model request carries `Blitz-Workspace`, `Blitz-Session` and `Blitz-Agent`, so the service applies the workspace's and the agent's guardrails to it.
-- **EN-23** The guardrail checks the service runs on model traffic are the ones this repository runs (`pkg/engine/gates`: `RedactInjection`, `ConfirmInjection`, `CommandDenied`, `DomainAllowed`, the secret scan, the limits), exported for a caller that has a model's request and reply rather than an engine turn, so a rule means the same at the service as on the desktop.
+- **EN-23** *Built* (`pkg/guardrails`, a public package over the engine's private `pkg/engine/gates`). The guardrail checks the service runs on model traffic are the ones this repository runs (`pkg/engine/gates`: `RedactInjection`, `ConfirmInjection`, `CommandDenied`, `DomainAllowed`, the secret scan, the limits), exported for a caller that has a model's request and reply rather than an engine turn, so a rule means the same at the service as on the desktop.
 
 ## 5. The organization's catalog
 

@@ -22,8 +22,11 @@ go_library(
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/gates",
     visibility = [
-        # The engine and the service (//tools:check_deps checks libraries).
+        # The engine and the service (//tools:check_deps checks libraries),
+        # and pkg/guardrails, which runs them on a model's request and reply
+        # for other programs (spec_enterprise_053 EN-23).
         "//apps/service:__subpackages__",
+        "//pkg/guardrails:__pkg__",
         "//pkg/service:__subpackages__",
         "//pkg/engine:__subpackages__",
     ],

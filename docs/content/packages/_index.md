@@ -18,6 +18,7 @@ The packages under `pkg/` are shared by the apps. Each is a Go package in the on
 | [`images`](images.md) | Shared | Preparing pictures for vision models |
 | [`observability`](observability.md) | Shared | The diagnostic log and OpenTelemetry |
 | [`redact`](redact.md) | Shared | Masking secrets before they're written |
+| [`guardrails`](guardrails.md) | Shared | Blitz's guardrails on a model's request and reply, for a gateway |
 | [`legal`](legal.md) | Shared | The license texts every program shows |
 | [`sandboxsetup`](sandboxsetup.md) | Shared | Whether Linux's sandbox runs, and an AppArmor profile that lets it |
 | [`loginitem`](loginitem.md) | Shared | Starting the service at login |
