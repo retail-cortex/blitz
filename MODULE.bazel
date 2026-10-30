@@ -51,15 +51,20 @@ go_sdk.nogo(
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
 
+# The overrides below apply only when this is the root module: Gazelle
+# forbids them in one another module uses. A module that builds Blitz's
+# packages (blitz-enterprise) repeats the ones its build needs.
+go_deps_root = use_extension("@gazelle//:extensions.bzl", "go_deps", dev_dependency = True)
+
 # modenv ships BUILD files written for its own workspace; generate ours.
-go_deps.gazelle_override(
+go_deps_root.gazelle_override(
     build_file_generation = "clean",
     path = "github.com/rrmcguinness/modenv",
 )
 
 # proto-gen-md-diagrams (the API diagrams on the docs site) ships BUILD
 # files for its own workspace too.
-go_deps.gazelle_override(
+go_deps_root.gazelle_override(
     build_file_generation = "clean",
     path = "github.com/GoogleCloudPlatform/proto-gen-md-diagrams",
 )
@@ -69,7 +74,7 @@ go_deps.gazelle_override(
 # databases' third_party/mcp-toolbox), ship their protos' Go code: use it,
 # rather than rules for .proto files whose imports aren't there.
 [
-    go_deps.gazelle_override(
+    go_deps_root.gazelle_override(
         directives = ["gazelle:proto disable"],
         path = path,
     )
@@ -87,7 +92,7 @@ go_deps.gazelle_override(
 # The PDF reader decodes a ToUnicode range wider than 256 codes wrongly
 # (only the last byte is offset), which garbles the text of PDFs written
 # with an identity map (fpdf's, TCPDF's).
-go_deps.module_override(
+go_deps_root.module_override(
     patch_strip = 1,
     patches = ["//third_party/ledongthuc_pdf:bfrange.patch"],
     path = "github.com/ledongthuc/pdf",
@@ -127,8 +132,10 @@ pnpm.pnpm(
 use_repo(pnpm, "pnpm")
 
 # The documentation site (docs/): Hugo and its Geekdoc theme. rules_hugo
-# isn't in the Bazel Central Registry; this is Retail Cortex's fork.
-bazel_dep(name = "rules_hugo", version = "0.3.0")
+# isn't in the Bazel Central Registry; this is Retail Cortex's fork. Only
+# this repository builds the site, so a module that uses Blitz's packages
+# (blitz-enterprise) doesn't need it.
+bazel_dep(name = "rules_hugo", version = "0.3.0", dev_dependency = True)
 archive_override(
     module_name = "rules_hugo",
     integrity = "sha256-YN2Pwayr5D/3tH2GHKrJL8H4pSPagsAaNhFeW0lJ76Q=",
@@ -137,7 +144,7 @@ archive_override(
 )
 
 # rules_hugo's own module registers @hugo (extended Hugo 0.162.0).
-hugo_deps = use_extension("@rules_hugo//hugo:extensions.bzl", "hugo_deps")
+hugo_deps = use_extension("@rules_hugo//hugo:extensions.bzl", "hugo_deps", dev_dependency = True)
 hugo_deps.http_archive(
     name = "geekdoc",
     build_file_content = """filegroup(

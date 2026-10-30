@@ -35,6 +35,11 @@ type Network struct {
 	// (nil: anyone Auth accepts may).
 	Auth  Authenticator
 	Authz Authorizer
+	// Routes are the program's own paths on the listener (discovery,
+	// health checks, its own sign-in): a request a pattern in Routes
+	// matches goes there without Auth, the program checking its callers
+	// itself; every other request goes to Blitz's services, guarded.
+	Routes *http.ServeMux
 }
 
 // Caller is who a request on the network listener is from.
@@ -97,6 +102,22 @@ func (n *Network) guard(h http.Handler) http.Handler {
 			}
 		}
 		h.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// handler is what the listener serves: n.Routes' paths, and blitz's
+// behind guard.
+func (n *Network) handler(blitz http.Handler) http.Handler {
+	guarded := n.guard(blitz)
+	if n.Routes == nil {
+		return guarded
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, pattern := n.Routes.Handler(r); pattern != "" {
+			n.Routes.ServeHTTP(w, r)
+			return
+		}
+		guarded.ServeHTTP(w, r)
 	})
 }
 

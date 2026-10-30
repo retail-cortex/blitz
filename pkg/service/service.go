@@ -194,7 +194,7 @@ func Run(ctx context.Context, o Options) error {
 	if n := o.Network; n != nil {
 		slog.Info("serve", "network", n.Listener.Addr().String())
 		go func() {
-			err := server.ServeTLS(ctx, n.Listener, n.guard(s.Handler()), n.TLS, grace)
+			err := server.ServeTLS(ctx, n.Listener, n.handler(s.Handler()), n.TLS, grace)
 			if err != nil && ctx.Err() == nil {
 				stop() // the socket's service stops with it
 			}

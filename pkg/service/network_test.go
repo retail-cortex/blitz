@@ -237,3 +237,40 @@ func TestGuard(t *testing.T) {
 	_, ok := CallerFrom(context.Background())
 	assert.False(t, ok)
 }
+
+// The program's own routes answer without sign-in; every other path is
+// Blitz's, guarded.
+func TestNetworkRoutes(t *testing.T) {
+	routes := http.NewServeMux()
+	routes.HandleFunc("GET /api/v1/info", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("info")) })
+	n := &Network{Auth: tokens{"ana": {ID: "u1", Roles: []string{"member"}}}, Routes: routes}
+	h := n.handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("blitz")) }))
+	cases := map[string]struct {
+		method, path, token string
+		status              int
+		body                string
+	}{
+		"its route, no sign-in":    {http.MethodGet, "/api/v1/info", "", http.StatusOK, "info"},
+		"Blitz's, signed in":       {http.MethodPost, "/blitz.v1.WorkspaceService/ListAgents", "ana", http.StatusOK, "blitz"},
+		"Blitz's, no sign-in":      {http.MethodPost, "/blitz.v1.WorkspaceService/ListAgents", "", http.StatusUnauthorized, `"unauthenticated"`},
+		"a path neither has":       {http.MethodGet, "/nothing", "", http.StatusUnauthorized, `"unauthenticated"`},
+		"its path, another method": {http.MethodPost, "/api/v1/info", "", http.StatusUnauthorized, `"unauthenticated"`},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(c.method, c.path, nil)
+			if c.token != "" {
+				req.Header.Set("Authorization", "Bearer "+c.token)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			assert.Equal(t, c.status, rec.Code)
+			assert.Contains(t, rec.Body.String(), c.body)
+		})
+	}
+	t.Run("no routes", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		(&Network{Auth: tokens{}}).handler(http.NotFoundHandler()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/info", nil))
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+}

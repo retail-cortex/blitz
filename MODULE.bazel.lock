@@ -429,7 +429,7 @@
     "@@rules_hugo+//hugo:extensions.bzl%hugo_deps": {
       "general": {
         "bzlTransitiveDigest": "9Ylq7z2wjNCGe2yaBe1WI2oidZRbdsuLuU8xx164AUs=",
-        "usagesDigest": "0Bm5GC1QhCnyyl176z5iNQgXTr/ZmqHdqpjY++QRaFE=",
+        "usagesDigest": "nQXKkvTPTTJJLHIBKS/Xe+EfFTjR7fFmWwmqhZZKDn8=",
         "recordedInputs": [
           "REPO_MAPPING:rules_hugo+,bazel_tools bazel_tools"
         ],
