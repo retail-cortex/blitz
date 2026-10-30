@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.8
-weight: 1
+weight: 2
 ---
 
 **Pick up right where you left off.** Blitz now remembers where each conversation stood: what you were doing, what got done and decided, and what's next. Start a new conversation tomorrow, say "where were we?", and your agent answers from that, plus the state of your repository. Blitz is also no longer just a coding agent. It's an agent for all the work in your workspace (code, documents, research, data) that hands real code changes to a specialist with the right skills loaded for your stack.

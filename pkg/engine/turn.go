@@ -302,8 +302,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	ctx = limited
 
+	on = serialized(on)
 	r := &relay{on: on}
 	handler := r.handle
+	ctx = runtime.WithSubagentEvents(ctx, w.subagentEvents(st, sessionID, on))
 	// Notices the engine raises during the turn (a fallback model taking
 	// over) are part of the conversation.
 	ctx = runtime.WithTurnNotices(ctx, func(msg string) { on(api.Event{Notice: &api.Notice{Text: msg}}) })
@@ -547,6 +549,7 @@ type relay struct {
 	on       func(api.Event)
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
+	tasks    []api.Task // the agent's own task list, shown again after a sub-agent's
 }
 
 // paragraph separates the output of a run that follows another in the same
@@ -571,7 +574,13 @@ func (r *relay) handle(ev *adksession.Event) error {
 				r.output.WriteString(t.Text)
 			}
 		}
+		if e.Tasks != nil {
+			r.tasks = e.Tasks
+		}
 		r.on(e)
+		if res := e.ToolResult; res != nil && res.Name == "invoke_agent" && r.tasks != nil {
+			r.on(api.Event{Author: e.Author, Tasks: r.tasks})
+		}
 	}
 	if !ev.Partial {
 		r.streamed = false

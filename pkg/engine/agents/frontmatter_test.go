@@ -122,6 +122,14 @@ func TestEmbeddedRegistry(t *testing.T) {
 	for _, want := range []string{"`@EXPERIENCE.md`", "`## How to work` and `## This project`", `"How to work here"`, "**Rules and guardrails.**", "`builtin: limits`", "`paths:", "skip this step unattended"} {
 		assert.Contains(t, setup.SystemPrompt, want)
 	}
+	// The setup and the spec keep the checklist current (a model that
+	// only makes the list leaves it stuck on the first step) and ask with
+	// forms, not in prose.
+	for _, a := range []*AgentSpec{setup, spec} {
+		assert.Contains(t, a.SystemPrompt, "each time a step starts (in_progress) and each time it ends (done)", a.Name)
+		assert.Contains(t, a.SystemPrompt, "Send it again when you come back from another agent too.", a.Name)
+		assert.Contains(t, a.SystemPrompt, "Ask the user only with ask_user_question, never as a question in your reply's text", a.Name)
+	}
 	update, _ := reg.Get("harness-update")
 	assert.Contains(t, update.Tools, "harness_evidence")
 	assert.Contains(t, update.SystemPrompt, "citing both a spec and the evidence first")

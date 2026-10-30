@@ -105,7 +105,7 @@ and report problems with file and line. {agency_instructions}
 
 ## Delegation and background tasks
 
-The main agent hands work to another with `invoke_agent`: the other agent starts in a fresh conversation (it doesn't see yours), does the work, and returns its final answer. Agents can delegate up to three levels deep. `blitz` and `planning-agent` delegate; the others don't.
+The main agent hands work to another with `invoke_agent`: the other agent starts in a fresh conversation (it doesn't see yours), does the work, and returns its final answer. While it works, your conversation shows what it does: its tool calls under its name, and its task list in the checklist (yours comes back when it returns). What it said and did is kept with your session, in `~/.blitz/sessions/<session>.subagents.jsonl`. Agents can delegate up to three levels deep. `blitz` and `planning-agent` delegate; the others don't.
 
 A delegated agent can also run **in the background**: `invoke_agent` with `background: true` (or an agent whose file says so) starts it as a task (`task-1`, `task-2`, …) and returns at once, so the main agent keeps working with you. When the task ends, the main agent hears about it with its next step, or before your next message, and can read the whole result with `task_output`; `list_tasks` and `stop_task` do the rest.
 
