@@ -1,0 +1,61 @@
+---
+title: "054 · Update checks"
+weight: 54
+---
+
+*Blitz asks Retail Cortex, not GitHub, whether there's a newer release, and those checks count how many installs are in use, by version and platform, without knowing who anyone is* (`spec_update_checks_054`)
+
+| | |
+|---|---|
+| Status | **Draft** (2026-10-30, the owner's request: "I'd like to roll this in next to determine adoption") |
+| Source | To come: `pkg/selfupdate` (`Latest` through the check, the install's ID, the switches), `pkg/pagehost/update.go` (the desktop app's checks), `apps/cli/update.go` (`blitz update`), `apps/desktop/web/src/updates.ts` and Settings › About (the switch and the notice); the license server's `GET /v1/latest` (blitz-license-server `spec_server_001` LS-24–LS-27) |
+| Tests | To come |
+| Depends on | [spec_electron_038](spec_electron_038.md) EL-90–EL-93 (the app's updates), [spec_release_025](spec_release_025.md) (releases and their signatures), [spec_config_002](spec_config_002.md) (settings) |
+
+## 1. Purpose
+
+Blitz sends nothing to Retail Cortex today: the app asks GitHub's API for the latest release, and nobody can tell how many people use Blitz, which versions they run or on what. Release downloads count downloads, not use. The app already checks for updates (EL-90, EL-93), so the check itself is where adoption is counted: Blitz gets an answer it needs, Retail Cortex learns that one more install is in use, and nothing else is sent.
+
+What it must never become: a way to know who someone is, what they work on, or anything about their machine beyond the operating system and processor.
+
+## 2. The check
+
+- **UC-01** `selfupdate.Latest` asks `https://license.retailcortex.com/v1/latest` with these parameters, and nothing else:
+  - `install`: the install's ID (UC-10);
+  - `version`: Blitz's version (`v0.8.11`, or `dev`);
+  - `os` and `arch`: Go's `GOOS` and `GOARCH`;
+  - `app`: what asks: `desktop` (the app, EL-93), `cli` (`blitz update`) or `tray`.
+  
+  The answer is `{"tag": "v0.8.11", "notes": "<the release's page>"}`. No cookies, no other headers than Go's own, no file names, paths, account, provider, model or workspace.
+- **UC-02** If it doesn't answer in 5 seconds, or answers with anything but the latest tag, the check asks GitHub's API as before (`releases/latest`), without the parameters. An update never waits on Retail Cortex being up.
+- **UC-03** What's downloaded doesn't change: the release's files still come from GitHub and are checked against their Sigstore bundle (EL-90, REL-13). The answer only names a tag; it can't make Blitz install anything it wouldn't from GitHub, and a tag that isn't a published release fails the download as it would now.
+- **UC-04** How often doesn't change: the desktop app when it opens and its last check is five days old (`CheckEvery`, EL-90), **Check now**, and `blitz update`. Nothing checks in the background, and the service (`blitzd`) never checks. So an install that's in use is counted about once in five days; one that's never opened isn't counted.
+- **UC-05** `BLITZ_UPDATE_URL` (a local release, EL-90) replaces both, as now.
+
+## 3. The install's ID
+
+- **UC-10** The install's ID is 16 random bytes in hex, made the first time it's needed and kept in `~/.blitz/install-id` (mode 0600). It's made from nothing: not the machine, the user, a network address or an account. Deleting the file makes a new one.
+- **UC-11** It's what lets a count be of installs, not of checks: one person's desktop app, tray and CLI share `~/.blitz`, so they're one install, and an install checking twice in five days is counted once.
+- **UC-12** The ID isn't sent anywhere else, and nothing else Blitz sends (to a model provider, an MCP server, a Blitz Enterprise service) carries it.
+
+## 4. Switching it off
+
+- **UC-20** Two switches, both in **Settings › About** and both on by default:
+  - **Update automatically** (the `updates` preference, EL-93): off, the app never checks by itself; **Check now** and `blitz update` still do.
+  - **Count this install** (the `count` preference; `[updates] count = false` in `~/.blitz/.env.toml` for the CLI): off, every check goes straight to GitHub (UC-02's way), and the ID file isn't made or read.
+- **UC-21** `DO_NOT_TRACK=1` in the environment, or `BLITZ_NO_COUNT=1`, is the same as **Count this install** off, wherever Blitz runs.
+- **UC-22** A Blitz Enterprise service may switch counting off for its organization's people (its policy, spec_enterprise_053); their apps still check for updates.
+- **UC-23** The first time the app opens with this version, it says so once, in the snackbar: "Blitz checks for updates with Retail Cortex, which counts installs without knowing who you are." with **Settings** (to About). It isn't repeated.
+
+## 5. What Retail Cortex keeps
+
+The license server's side is in blitz-license-server's `spec_server_001` (LS-24–LS-27). In short, so this repository's promise is checkable:
+
+- **UC-30** Each check is kept as the install's ID, version, `os`, `arch`, `app` and when. Not the network address, the user agent or the request's other headers: Cloud Run's own request log, which has them, isn't kept for this route.
+- **UC-31** What's used from it is counts only: installs in use in the last 7 and 30 days, by version, platform and app, and new installs by week.
+- **UC-32** It's kept for 13 months, then deleted.
+- **UC-33** The counts are indicative: anyone can send checks with made-up IDs. They show adoption's trend, not an audited number.
+
+## 6. Documentation
+
+- **UC-40** The site's **Privacy** page (new, under Guide) says what Blitz sends and to whom: the update check (this spec), the model providers you choose, web search and MCP servers you add, OpenTelemetry if you turn it on, and nothing else. The release notes of the version that brings it say so in plain words, with the switch.
