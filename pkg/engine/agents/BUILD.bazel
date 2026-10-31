@@ -24,10 +24,13 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/engine/agents",
     visibility = [
         # The engine, the service, and the CLI's --local mode; the other
-        # three only in tests (//tools:check_deps checks libraries).
+        # three only in tests (//tools:check_deps checks libraries); and
+        # pkg/catalog, which checks an organization's files as the engine
+        # reads them (spec_enterprise_053 EN-30).
         "//apps/cli:__pkg__",
         "//apps/cli/internal/tui:__pkg__",
         "//apps/service:__subpackages__",
+        "//pkg/catalog:__pkg__",
         "//pkg/service:__subpackages__",
         "//pkg/client:__pkg__",
         "//pkg/engine:__subpackages__",
