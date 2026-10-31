@@ -8,7 +8,7 @@ weight: 54
 | | |
 |---|---|
 | Status | **Built** (2026-10-30, for the next release; the owner's request: "I'd like to roll this in next to determine adoption"; on by default, a random install ID) |
-| Source | `pkg/selfupdate/count.go` (`Count`, `Source.Counting`, `InstallID`, `CheckURL`, `CheckWait`), `selfupdate.go` (`Latest` asks the count first), `pkg/config/features.go` (`UpdatesConfig`, `CountsUpdateChecks`), `apps/tray/main.go` (the desktop app's host counts as `desktop`), `apps/cli/update.go` (`blitz update` as `cli`), `docs/content/guide/privacy.md`; the license server's `GET /v1/latest` (blitz-license-server `spec_server_001` LS-24–LS-27) |
+| Source | `pkg/selfupdate/count.go` (`Count`, `Source.Counting`, `InstallID`, `CheckURL`, `CheckWait`), `selfupdate.go` (`Latest` asks the count first), `pkg/config/features.go` (`UpdatesConfig`, `CountsUpdateChecks`), `apps/tray/main.go` (the desktop app's host counts as `desktop`), `apps/cli/update.go` (`blitz update` as `cli`), `docs/content/guide/privacy.md`; the license server's `GET /v1/latest` (license-server `spec_server_001` LS-24–LS-27) |
 | Tests | `pkg/selfupdate/count_test.go` (`TestCountedLatest`: the five parameters, GitHub when the check is down, wrong or slow; `TestCounting`; `TestInstallID`), `pkg/config/config_test.go` (`TestCountsUpdateChecks`) |
 | Depends on | [spec_electron_038](spec_electron_038.md) EL-90–EL-93 (the app's updates), [spec_release_025](spec_release_025.md) (releases and their signatures), [spec_config_002](spec_config_002.md) (settings) |
 
@@ -53,7 +53,7 @@ What it must never become: a way to know who someone is, what they work on, or a
 
 ## 5. What Retail Cortex keeps
 
-The license server's side is in blitz-license-server's `spec_server_001` (LS-24–LS-27). In short, so this repository's promise is checkable:
+The license server's side is in license-server's `spec_server_001` (LS-24–LS-27). In short, so this repository's promise is checkable:
 
 - **UC-30** Each check is kept as the install's ID, version, `os`, `arch`, `app` and when. Not the network address, the user agent or the request's other headers: Cloud Run's own request log, which has them, isn't kept for this route.
 - **UC-31** What's used from it is counts only: installs in use in the last 7 and 30 days, by version, platform and app, and new installs by week.
