@@ -44,6 +44,10 @@ import (
 type Source struct {
 	API      string // …/repos/<owner>/<repo>
 	Download string // …/releases/download
+	// Count, when set, asks Retail Cortex for the latest release first,
+	// which counts the install (Counting); GitHub answers if it doesn't
+	// (spec_update_checks_054 UC-02).
+	Count *Count
 }
 
 // GitHub is Blitz's releases. BLITZ_UPDATE_URL (a folder served with
@@ -60,8 +64,13 @@ func GitHub() Source {
 func (s Source) File(tag, name string) string { return s.Download + "/" + tag + "/" + name }
 
 // Latest is the latest release's tag (GitHub's latest: no drafts or
-// pre-releases).
+// pre-releases), through the counted check first when s counts.
 func (s Source) Latest(ctx context.Context) (string, error) {
+	if s.Count != nil {
+		if tag, err := s.Count.latest(ctx); err == nil {
+			return tag, nil
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.API+"/releases/latest", nil)
 	if err != nil {
 		return "", err

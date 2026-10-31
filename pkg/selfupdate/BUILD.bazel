@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "selfupdate",
     srcs = [
+        "count.go",
         "desktop.go",
         "selfupdate.go",
         "verify.go",
@@ -34,6 +35,7 @@ go_library(
 go_test(
     name = "selfupdate_test",
     srcs = [
+        "count_test.go",
         "desktop_test.go",
         "selfupdate_test.go",
         "verify_test.go",

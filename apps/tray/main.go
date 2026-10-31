@@ -186,7 +186,11 @@ func serveWindow(dir string) error {
 	host.Updates = &pagehost.Updater{
 		Version: version, HostExe: host.Tray,
 		Dir: config.ExpandHome("~/.blitz/updates"), CacheDir: config.ExpandHome("~/.blitz"),
-		Source: selfupdate.GitHub, Spawn: tray.Detached, GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH,
+		Source: func() selfupdate.Source {
+			// Counted as the desktop app's checks (spec_update_checks_054).
+			return selfupdate.GitHub().Counting(config.CountsUpdateChecks(), config.ExpandHome("~/.blitz"), "desktop", version)
+		},
+		Spawn: tray.Detached, GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH,
 	}
 	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: host.Handler()}, os.Stdin, os.Stdout)
 }

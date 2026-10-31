@@ -34,7 +34,9 @@ import (
 
 // What `blitz update` uses; variables for tests.
 var (
-	releases        = selfupdate.GitHub
+	releases = func() selfupdate.Source {
+		return selfupdate.GitHub().Counting(config.CountsUpdateChecks(), config.ExpandHome("~/.blitz"), "cli", version)
+	}
 	executable      = os.Executable
 	verifySignature = selfupdate.VerifySignature
 	lookCosign      = func() (string, error) { return exec.LookPath("cosign") }

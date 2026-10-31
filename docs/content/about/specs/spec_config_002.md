@@ -65,6 +65,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[audit]` | `enabled` true, `dir` `~/.blitz/audit` | | |
 | `[log]` | `level` `info`, `dir` `~/.blitz/logs`, `retain_days` 14 | | |
 | `[telemetry]` | `enabled` false, `endpoint`, `capture_content` false | | |
+| `[updates]` | `count` true (update checks through Retail Cortex count the install, [spec_update_checks_054](spec_update_checks_054.md); global settings only) | | |
 | `[checkpoints]` | `enabled` true, `max_bytes` 64 MiB | | |
 | `[web]` | `enabled` true, `allow_domains`, `deny_domains`, `allow_private` false, `max_bytes` 2 MiB, `timeout_seconds` 20, `search_provider`, `search_api_key`, `search_url`, `search_model`, `search_max_results` | | |
 | `[browser]` | `enabled` true, `path` (found), `visible` false, `allow_local` false, `allow_scripts` false, `width` 1280, `height` 800 | | never from a project; see [spec_web_008](spec_web_008.md) §5 |
