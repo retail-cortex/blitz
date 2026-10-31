@@ -7,8 +7,8 @@ weight: 54
 
 | | |
 |---|---|
-| Status | **Draft** (2026-10-30, the owner's request: "I'd like to roll this in next to determine adoption") |
-| Source | To come: `pkg/selfupdate` (`Latest` through the check, the install's ID, the switches), `pkg/pagehost/update.go` (the desktop app's checks), `apps/cli/update.go` (`blitz update`), `apps/desktop/web/src/updates.ts` and Settings › About (the switch and the notice); the license server's `GET /v1/latest` (blitz-license-server `spec_server_001` LS-24–LS-27) |
+| Status | **Draft** (2026-10-30, the owner's request: "I'd like to roll this in next to determine adoption"; on by default, a random install ID) |
+| Source | To come: `pkg/selfupdate` (`Latest` through the check, the install's ID, the switches), `pkg/pagehost/update.go` (the desktop app's checks), `apps/cli/update.go` (`blitz update`), `pkg/config` (`[updates] count`); the license server's `GET /v1/latest` (blitz-license-server `spec_server_001` LS-24–LS-27) |
 | Tests | To come |
 | Depends on | [spec_electron_038](spec_electron_038.md) EL-90–EL-93 (the app's updates), [spec_release_025](spec_release_025.md) (releases and their signatures), [spec_config_002](spec_config_002.md) (settings) |
 
@@ -40,12 +40,16 @@ What it must never become: a way to know who someone is, what they work on, or a
 
 ## 4. Switching it off
 
-- **UC-20** Two switches, both in **Settings › About** and both on by default:
-  - **Update automatically** (the `updates` preference, EL-93): off, the app never checks by itself; **Check now** and `blitz update` still do.
-  - **Count this install** (the `count` preference; `[updates] count = false` in `~/.blitz/.env.toml` for the CLI): off, every check goes straight to GitHub (UC-02's way), and the ID file isn't made or read.
-- **UC-21** `DO_NOT_TRACK=1` in the environment, or `BLITZ_NO_COUNT=1`, is the same as **Count this install** off, wherever Blitz runs.
+- **UC-20** Counting is on by default (the owner's choice, 2026-10-30: "On by default, off by opting out only with a manual switch in the config"). The one switch is in the settings file, `~/.blitz/.env.toml`:
+
+  ```toml
+  [updates]
+  count = false
+  ```
+
+  Every Blitz program on the machine reads it (the app's host, the tray, the CLI). Off, every check goes straight to GitHub (UC-02's way) and the ID file isn't made or read. There's no switch in the window and no environment variable; the Privacy page (UC-40) and `blitz config` show it.
+- **UC-21** **Update automatically** (the `updates` preference, EL-93) is unchanged: off, the app never checks by itself, so nothing is counted unless someone checks.
 - **UC-22** A Blitz Enterprise service may switch counting off for its organization's people (its policy, spec_enterprise_053); their apps still check for updates.
-- **UC-23** The first time the app opens with this version, it says so once, in the snackbar: "Blitz checks for updates with Retail Cortex, which counts installs without knowing who you are." with **Settings** (to About). It isn't repeated.
 
 ## 5. What Retail Cortex keeps
 
@@ -58,4 +62,4 @@ The license server's side is in blitz-license-server's `spec_server_001` (LS-24�
 
 ## 6. Documentation
 
-- **UC-40** The site's **Privacy** page (new, under Guide) says what Blitz sends and to whom: the update check (this spec), the model providers you choose, web search and MCP servers you add, OpenTelemetry if you turn it on, and nothing else. The release notes of the version that brings it say so in plain words, with the switch.
+- **UC-40** The site's **Privacy** page (new, under Guide) says what Blitz sends and to whom: the update check (this spec), the model providers you choose, web search and MCP servers you add, OpenTelemetry if you turn it on, and nothing else, with UC-20's switch. The release notes of the version that brings it say so in plain words.
