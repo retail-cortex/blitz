@@ -32,7 +32,7 @@ import (
 
 // CheckURL is Retail Cortex's update check, which counts installs in use
 // (spec_update_checks_054 UC-01).
-const CheckURL = "https://license.retailcortex.com/v1/latest"
+const CheckURL = "https://license.retailcortex.com/v1/blitz/latest"
 
 // CheckWait is how long the counted check has before GitHub answers
 // instead (UC-02).

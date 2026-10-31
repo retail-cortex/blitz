@@ -20,7 +20,7 @@ What it must never become: a way to know who someone is, what they work on, or a
 
 ## 2. The check
 
-- **UC-01** `selfupdate.Latest` asks `https://license.retailcortex.com/v1/latest` with these parameters, and nothing else:
+- **UC-01** `selfupdate.Latest` asks `https://license.retailcortex.com/v1/blitz/latest` (Retail Cortex's license server, which answers every product's update check at `/v1/<product>/latest`) with these parameters, and nothing else:
   - `install`: the install's ID (UC-10);
   - `version`: Blitz's version (`v0.8.11`, or `dev`);
   - `os` and `arch`: Go's `GOOS` and `GOARCH`;
