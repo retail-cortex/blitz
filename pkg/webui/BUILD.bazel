@@ -24,12 +24,10 @@ load("@npm//pkg/webui:vitest/package_json.bzl", vitest_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
-_srcs = glob(
-    ["src/**"],
-    exclude = ["src/**/*.test.*"],
-) + [
+_srcs = [
     "package.json",
     "tsconfig.json",
+    "//pkg/webui/src",
 ]
 
 # The package as pages link it (pnpm's workspace:*), its sources as they
@@ -45,11 +43,13 @@ vitest_bin.vitest_test(
     name = "test",
     args = ["run"],
     chdir = package_name(),
-    data = glob(["src/**"]) + [
+    data = [
         "package.json",
         "tsconfig.json",
         "vite.config.ts",
         ":node_modules",
+        "//pkg/webui/src",
+        "//pkg/webui/src:tests",
     ],
 )
 
@@ -57,9 +57,11 @@ tsc_bin.tsc_test(
     name = "typecheck",
     args = ["--noEmit"],
     chdir = package_name(),
-    data = glob(["src/**"]) + [
+    data = [
         "package.json",
         "tsconfig.json",
         ":node_modules",
+        "//pkg/webui/src",
+        "//pkg/webui/src:tests",
     ],
 )

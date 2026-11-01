@@ -1,0 +1,42 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Charts (charts.tsx): the Studio's, and the console's. */
+.score-ring { flex: none; }
+.score-ring-track { fill: none; stroke: var(--md-surface-container-highest); stroke-width: 6; }
+.score-ring-value { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; }
+.score-ring-grade { fill: currentColor; font-weight: 600; font-family: var(--md-font-display, var(--md-font)); }
+.score-ring-sub { fill: var(--md-on-surface-variant); }
+.chart-bars { display: flex; flex-direction: column; gap: 6px; }
+.chart-bar { display: grid; grid-template-columns: minmax(80px, 30%) 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.chart-bar-track { height: 8px; border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); overflow: hidden; }
+.chart-bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--md-primary); transition: width 0.4s ease; }
+.chart-bar-fill.good { background: var(--md-tertiary); }
+.chart-bar-fill.warn { background: var(--md-warning); }
+.chart-bar-fill.bad { background: var(--md-error); }
+.chart-bar-text { color: var(--md-on-surface-variant); min-width: 48px; text-align: right; }
+.chart-columns { width: 100%; height: 120px; display: block; }
+.chart-axis { stroke: var(--md-outline-variant); }
+.chart-part.done { fill: var(--md-tertiary); }
+.chart-part.failed { fill: var(--md-error); }
+.chart-part.stopped { fill: var(--md-outline); }
+.chart-line { fill: none; stroke: var(--md-primary); stroke-width: 2; }
+.chart-legend { gap: 14px; flex-wrap: wrap; }
+.chart-legend .legend::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.chart-legend .legend.done::before { background: var(--md-tertiary); }
+.chart-legend .legend.failed::before { background: var(--md-error); }
+.chart-legend .legend.stopped::before { background: var(--md-outline); }
+.chart-legend .legend.line::before { height: 2px; vertical-align: 3px; background: var(--md-primary); }

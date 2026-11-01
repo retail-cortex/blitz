@@ -49,3 +49,11 @@ copy_to_bin(
     srcs = glob(["locales/*.json"]),
     visibility = ["//apps/desktop/web:__pkg__"],
 )
+
+# The catalogs as files, for another Bazel module's page (the enterprise
+# admin console), whose controls say Blitz's words.
+filegroup(
+    name = "catalogs",
+    srcs = glob(["locales/*.json"]),
+    visibility = ["//visibility:public"],
+)

@@ -109,7 +109,9 @@ use_repo(buf, "rules_buf_toolchains")
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
 node.toolchain(node_version = "22.16.0")
 
-npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+# Blitz's own pages' packages: a module that builds on Blitz (the
+# enterprise service) has its own lockfile, so these are Blitz's alone.
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm", dev_dependency = True)
 npm.npm_translate_lock(
     name = "npm",
     data = [
@@ -124,7 +126,7 @@ use_repo(npm, "npm")
 # pnpm itself, for upkeep of the page's packages without a host pnpm:
 #   bazel run -- @pnpm//:pnpm --dir "$PWD/apps/desktop/web" add <package>
 #   bazel run -- @pnpm//:pnpm --dir "$PWD" install --lockfile-only
-pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm")
+pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
 pnpm.pnpm(
     name = "pnpm",
     pnpm_version = "10.24.0",

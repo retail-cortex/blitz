@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./m3.css": "./src/m3.css",
     "./glass.css": "./src/glass.css",
-    "./themes.css": "./src/themes.css"
+    "./themes.css": "./src/themes.css",
+    "./charts.css": "./src/charts.css"
   },
   "dependencies": {
     "@mdi/js": "7.4.47",

@@ -26,6 +26,7 @@ import "@blitz/webui/m3.css";
 import "./app.css";
 import "@blitz/webui/glass.css";
 import "@blitz/webui/themes.css";
+import "@blitz/webui/charts.css";
 import "./files/document.css";
 
 async function start() {

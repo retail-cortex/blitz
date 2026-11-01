@@ -278,4 +278,22 @@ func TestNetworkRoutes(t *testing.T) {
 		(&Network{Auth: tokens{}}).handler(http.NotFoundHandler()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/info", nil))
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
+	t.Run("a program's session stands in for credentials", func(t *testing.T) {
+		n.Wrap = func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if c, err := r.Cookie("session"); err == nil && c.Value == "ana's" {
+					r.Header.Set("Authorization", "Bearer ana")
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
+		defer func() { n.Wrap = nil }()
+		h := n.handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("blitz")) }))
+		req := httptest.NewRequest(http.MethodPost, "/blitz.v1.WorkspaceService/ListAgents", nil)
+		req.AddCookie(&http.Cookie{Name: "session", Value: "ana's"})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "blitz", rec.Body.String())
+	})
 }

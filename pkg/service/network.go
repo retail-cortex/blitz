@@ -40,6 +40,10 @@ type Network struct {
 	// matches goes there without Auth, the program checking its callers
 	// itself; every other request goes to Blitz's services, guarded.
 	Routes *http.ServeMux
+	// Wrap, when set, sees every request on the listener first, Routes'
+	// and Blitz's alike: a program's own session standing in for the
+	// credentials Auth reads (the enterprise admin console's cookie, say).
+	Wrap func(http.Handler) http.Handler
 }
 
 // Caller is who a request on the network listener is from.
@@ -121,17 +125,21 @@ func (n *Network) guard(h http.Handler) http.Handler {
 // handler is what the listener serves: n.Routes' paths, and blitz's
 // behind guard.
 func (n *Network) handler(blitz http.Handler) http.Handler {
-	guarded := n.guard(blitz)
-	if n.Routes == nil {
-		return guarded
+	h := n.guard(blitz)
+	if n.Routes != nil {
+		guarded := h
+		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, pattern := n.Routes.Handler(r); pattern != "" {
+				n.Routes.ServeHTTP(w, r)
+				return
+			}
+			guarded.ServeHTTP(w, r)
+		})
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, pattern := n.Routes.Handler(r); pattern != "" {
-			n.Routes.ServeHTTP(w, r)
-			return
-		}
-		guarded.ServeHTTP(w, r)
-	})
+	if n.Wrap != nil {
+		h = n.Wrap(h)
+	}
+	return h
 }
 
 func refuse(w http.ResponseWriter, status int, code string, err error) {
