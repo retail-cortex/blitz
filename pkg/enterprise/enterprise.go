@@ -226,6 +226,7 @@ type Client struct {
 	expires time.Time
 	life    time.Duration // the access token's whole lifetime
 	terms   string        // a version to accept, from the last session's answer
+	info    Info          // what the service last said about itself, kept past a sign-out
 
 	models models
 }
@@ -274,7 +275,7 @@ func (c *Client) load() *record {
 	if json.Unmarshal([]byte(v), &r) != nil || r.RefreshToken == "" || r.URL != c.url {
 		return nil
 	}
-	c.rec = &r
+	c.rec, c.info = &r, r.Info
 	return c.rec
 }
 
@@ -287,7 +288,7 @@ func (c *Client) keep(r *record, s session) error {
 	if err := c.store.Set(secretName, string(data)); err != nil {
 		return fmt.Errorf("keeping the sign-in in the %s: %w", c.store.Kind(), err)
 	}
-	c.rec, c.loaded = r, true
+	c.rec, c.loaded, c.info = r, true, r.Info
 	c.life = time.Duration(s.ExpiresIn) * time.Second
 	c.access, c.expires = s.AccessToken, c.now().Add(c.life)
 	c.terms = ""
@@ -325,8 +326,10 @@ func (c *Client) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	st := Status{URL: c.url, Terms: c.terms}
-	if r := c.load(); r != nil {
-		st.SignedIn, st.Person, st.Info = true, r.Person, r.Info
+	r := c.load()
+	st.Info = c.info
+	if r != nil {
+		st.SignedIn, st.Person = true, r.Person
 		if c.access != "" {
 			st.Renews = c.renewAt()
 		}

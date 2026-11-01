@@ -229,6 +229,7 @@ func TestSignOut(t *testing.T) {
 		require.NoError(t, c.SignOut(ctx))
 		assert.True(t, s.Ended["s1"])
 		assert.False(t, c.Status().SignedIn)
+		assert.Equal(t, "Acme Assist", c.Status().Info.Name, "what the service said, kept")
 		_, err := store.Get(secretName)
 		assert.ErrorIs(t, err, secrets.ErrNotFound)
 		assert.NoError(t, c.SignOut(ctx), "signed out already")

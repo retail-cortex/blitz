@@ -32,7 +32,7 @@ var commandGroups = []struct {
 }{
 	{"run", "Runs and sessions:", []string{"agents", "attach", "exec", "logs", "sessions", "stop"}},
 	{"workspace", "The workspace:", []string{"eval", "init", "jobs", "memory", "search", "trust", "worktrees"}},
-	{"models", "Models and extensions:", []string{"auth", "mcp", "models", "plugin", "skills"}},
+	{"models", "Models and extensions:", []string{"auth", "enterprise", "mcp", "models", "plugin", "skills"}},
 	{"setup", "Setup and maintenance:", []string{"completion", "config", "doctor", "help", "license", "security", "service", "update"}},
 }
 

@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "doctor",
-    srcs = ["doctor.go"],
+    srcs = [
+        "doctor.go",
+        "enterprise.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/apps/service/internal/doctor",
     visibility = ["//apps/service:__subpackages__"],
     deps = [
@@ -28,9 +31,11 @@ go_library(
         "//pkg/engine/runtime",
         "//pkg/engine/skills",
         "//pkg/engine/tools",
+        "//pkg/enterprise",
         "//pkg/i18n",
         "//pkg/observability",
         "//pkg/plugins",
+        "//pkg/secrets",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",
         "@org_golang_google_genai//:genai",
@@ -39,12 +44,17 @@ go_library(
 
 go_test(
     name = "doctor_test",
-    srcs = ["doctor_test.go"],
+    srcs = [
+        "doctor_test.go",
+        "enterprise_test.go",
+    ],
     embed = [":doctor"],
     deps = [
         "//pkg/config",
         "//pkg/engine",
+        "//pkg/enterprise/enterprisetest",
         "//pkg/plugins",
+        "//pkg/secrets",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

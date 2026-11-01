@@ -41,6 +41,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/plugins"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/model"
 	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -99,6 +100,10 @@ func Run(ctx context.Context, o Options) []Check {
 		confirm = ""
 	}
 	switch key := apiKeyFor(cfg); {
+	case cfg.Enterprise.URL != "":
+		// The organization's models stand in for the person's own.
+		st, detail := checkEnterprise(ctx, cfg.Enterprise.URL, secrets.Default(cfgDir), online)
+		add("organization", st, "%s", detail)
 	case cfg.LLM.Provider == "gemini" && cfg.LLM.Gemini.UsesADC():
 		st, detail := checkADC("gemini", cfg.LLM.Gemini.ProjectID, cfg.LLM.Gemini.Location, confirm)
 		add("credentials", st, "%s", detail)
