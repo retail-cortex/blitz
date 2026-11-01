@@ -101,7 +101,12 @@ export function checkModelRef(ref: string, catalog: ModelCatalog, defaultProvide
   return { value };
 }
 
-/** The suggestions for a model field: the catalog's, then extras, without repeats. */
-export function modelOptions(catalog: ModelCatalog, extras: string[] = []): string[] {
-  return [...new Set([...extras.filter(Boolean), ...catalog.all])];
+/**
+ * The suggestions for a model field: extras, then the catalog's, without
+ * repeats. With provider, only that provider's models, by their bare
+ * names: a field for one provider never offers another's.
+ */
+export function modelOptions(catalog: ModelCatalog, extras: string[] = [], provider = ""): string[] {
+  const listed = provider ? catalog.all.filter((m) => m.startsWith(`${provider}/`)).map((m) => m.slice(provider.length + 1)) : catalog.all;
+  return [...new Set([...extras.filter(Boolean), ...listed])];
 }

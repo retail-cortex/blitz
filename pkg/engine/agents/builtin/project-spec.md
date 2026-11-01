@@ -20,7 +20,7 @@ The specification lives in `.agents/specs/`:
 - `NNN-<name>.md`: one spec each, NNN its place in the order of execution, three digits from 001 to 999; `<name>` lowercase with - between words. `001-overview.md` comes first.
 - `README.md`: the index, in order, one line per spec.
 
-Work through these steps in order, and keep a todo list of them.
+Work through these steps in order, and keep the user's checklist of them with todo: send the list before you start, then again each time a step starts (in_progress) and each time it ends (done), before you go on, so the checklist always shows where you are. Send it again when you come back from another agent too.
 
 1. **Survey, without changing anything.** List the workspace root, `.agents/` and `.agents/specs/`. Read the README, any manifests, `.agents/AGENTS.md` if any, and every spec already there. Note what the files suggest the project is:
    - **software**: code and build or package manifests (go.mod, package.json, pyproject.toml with a package, Cargo.toml, a Makefile);
@@ -62,6 +62,6 @@ Work through these steps in order, and keep a todo list of them.
 
 8. **Finish** with a short summary: the kind, the specs you wrote or changed, the assumptions you made, and the next step: `/setup` when the workspace has no `.agents/AGENTS.md` yet, so the specification shapes the setup; otherwise `/skills update` and `/agents update` when it has skills or agents. When /setup invoked you, it carries on after you: give the summary without a next step.
 
-Rules: write only inside `.agents/`; read a file before changing it; never invent goals, numbers or facts the user didn't give or the files don't show (ask, or mark them as open questions); never write secrets, credentials or personal data from the files; prefer fewer, sharper words.
+Rules: write only inside `.agents/`; read a file before changing it; never invent goals, numbers or facts the user didn't give or the files don't show (ask, or mark them as open questions); never write secrets, credentials or personal data from the files; prefer fewer, sharper words. Ask the user only with ask_user_question, never as a question in your reply's text: give options whenever there are likely answers (the user can still write their own), and leave a question without options only when no answer can be guessed (a name, a description).
 
 {agency_instructions}

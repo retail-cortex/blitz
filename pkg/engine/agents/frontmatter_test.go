@@ -122,9 +122,48 @@ func TestEmbeddedRegistry(t *testing.T) {
 	for _, want := range []string{"`@EXPERIENCE.md`", "`## How to work` and `## This project`", `"How to work here"`, "**Rules and guardrails.**", "`builtin: limits`", "`paths:", "skip this step unattended"} {
 		assert.Contains(t, setup.SystemPrompt, want)
 	}
+	// The setup and the spec keep the checklist current (a model that
+	// only makes the list leaves it stuck on the first step) and ask with
+	// forms, not in prose.
+	for _, a := range []*AgentSpec{setup, spec} {
+		assert.Contains(t, a.SystemPrompt, "each time a step starts (in_progress) and each time it ends (done)", a.Name)
+		assert.Contains(t, a.SystemPrompt, "Send it again when you come back from another agent too.", a.Name)
+		assert.Contains(t, a.SystemPrompt, "Ask the user only with ask_user_question, never as a question in your reply's text", a.Name)
+	}
 	update, _ := reg.Get("harness-update")
 	assert.Contains(t, update.Tools, "harness_evidence")
 	assert.Contains(t, update.SystemPrompt, "citing both a spec and the evidence first")
+
+	// Blitz is the generalist; the coder is its coding specialist. Both
+	// keep the working rules word for word: they're what makes the code
+	// good, whoever writes it.
+	coder, ok := reg.Get("coder")
+	require.True(t, ok)
+	assert.True(t, reg.IsBuiltin("coder"))
+	assert.NotContains(t, puppy.SystemPrompt, "a coding agent")
+	assert.Contains(t, puppy.Tools, "invoke_agent")
+	assert.Contains(t, puppy.SystemPrompt, "goes to `coder`")
+	assert.Contains(t, puppy.SystemPrompt, "Make a small change yourself")
+	assert.Contains(t, puppy.SystemPrompt, "Never answer that you have no access, no history or no context: look.")
+	assert.Contains(t, puppy.Tools, "recall_session")
+	assert.Contains(t, puppy.SystemPrompt, "read that session's summary with `recall_session`")
+	assert.Contains(t, puppy.SystemPrompt, "When the user just talks (a greeting, small talk, a thank-you), answer in a sentence of plain text, with no tools.")
+	for _, tool := range []string{"activate_skill", "list_or_search_skills", "run_shell_command", "edit", "lsp"} {
+		assert.Contains(t, coder.Tools, tool)
+	}
+	assert.NotContains(t, coder.Tools, "invoke_agent", "a specialist doesn't hand on")
+	assert.Contains(t, coder.SystemPrompt, "Load the stack's skills")
+	for _, rule := range []string{
+		"Be terse. No greetings, filler, jokes or commentary on yourself",
+		"Hold to sound engineering: small, focused changes; DRY, YAGNI and clear names; tests alongside behaviour changes.",
+		"Keep files under about 600 lines",
+		"Read existing files with `read_file` before modifying them",
+		"Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted",
+		"never with `find`",
+	} {
+		assert.Contains(t, puppy.SystemPrompt, rule)
+		assert.Contains(t, coder.SystemPrompt, rule)
+	}
 }
 
 func contains(s, substr string) bool {

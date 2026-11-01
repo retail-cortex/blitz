@@ -86,6 +86,14 @@ blitz memory list             # the same from the shell, plus show and edit ($ED
 
 Set `[memory] auto = false` to turn them off.
 
+### Picking up where you left off
+
+When you move to another conversation, Blitz writes down where the one you left stands: what it was for, what got done and decided, what's still open and the next step. It goes in the same folder, as `sessions/<session id>.md`. A conversation is yours, so this stays on your machine and never goes in the project. Credentials are masked, and very short conversations (one question and its answer) get no summary.
+
+A new conversation's first message tells the agent about the five latest earlier ones in the workspace (when each was, its title and where it stood), gives it the latest one's summary in full, and says where the repository stands: the branch, the uncommitted files and the latest commits. Ask it to pick up where you left off, or what you did yesterday, and it answers from these, reading another conversation's summary with its `recall_session` tool when you mean an older one, and checking what changed since. The summary is written with the small model, the same one the welcome suggestions use: `[suggestions] model`, else the reviewer's, else the main one.
+
+Set `[memory] summaries = false` to turn summaries off (`auto = false` turns them off too). You can still search earlier chats with `search_workspace`.
+
 ### Output styles
 
 A style changes how the agent writes its answers, not what it may do: `concise` keeps them short, `explanatory` explains its choices and the codebase as it works. `/style` lists them and `/style concise` switches (the desktop app has it in a workspace's settings); `[ui] style = "concise"` makes it the default. Add your own as Markdown in `~/.blitz/styles/<name>.md`, with an optional `description` in frontmatter.

@@ -5,7 +5,7 @@ tags: [python, uv, packaging, project-setup]
 version: "1.0.0"
 author: "Blitz"
 category: development
-agents: [blitz]
+agents: [blitz, coder]
 trigger_phrases:
   - new python project
   - start a uv project

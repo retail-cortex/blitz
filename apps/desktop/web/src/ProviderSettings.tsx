@@ -93,8 +93,11 @@ interface Choice {
  */
 export const effectiveProvider = (provider: string, workspace: string) => provider || (workspace ? "" : "gemini");
 
-/** The choice as saved in the scope, for provider. */
-function savedChoice(d: DescribeConfigResponse, provider: string, model = d.defaultModel): Choice {
+/** The model saved for provider: its own, or, for the one in use, a scope-wide one over it. */
+const savedModel = (d: DescribeConfigResponse, provider: string, inUse: boolean) => (inUse && d.defaultModel) || d.models[provider] || "";
+
+/** The choice as saved in the scope, for provider (the one in use unless model is given). */
+function savedChoice(d: DescribeConfigResponse, provider: string, model = savedModel(d, provider, true)): Choice {
   const p = d.providers.find((x) => x.name === provider);
   return { provider, model, method: p?.auth || "api_key", key: "", projectId: p?.projectId ?? "", location: p?.location ?? "", profile: p?.profile ?? "", api: toApiForm(d.api) };
 }
@@ -192,7 +195,8 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const [modelError, setModelError] = useState("");
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState<Choice>({ provider: "", model: "", method: "api_key", key: "", projectId: "", location: "", profile: "", api: toApiForm() });
-  const catalog = useModelCatalog(workspace);
+  // The chosen provider's own models: the field never offers another's.
+  const catalog = useModelCatalog(workspace, choice.provider);
   const [facts, refreshFacts] = useProviderFacts(workspace, desc);
   const keyCheck = useKeyCheck(workspace, choice.provider, choice.method, choice.key);
 
@@ -264,12 +268,12 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       t("desktop.keys.provider_saved"),
       true,
     );
-  // A row picked: its form, as saved (the model kept only for the provider it's for).
-  const pick = (p: string, method?: string) => !busy && setChoice({ ...savedChoice(desc, p, p === saved.provider ? saved.model : ""), ...(method ? { method } : {}) });
-  // Use: a provider ready as it is becomes the scope's, on the provider's
-  // own default model (the one saved may be another provider's).
+  // A row picked: its form, as saved, with its own model.
+  const pick = (p: string, method?: string) => !busy && setChoice({ ...savedChoice(desc, p, savedModel(desc, p, p === saved.provider)), ...(method ? { method } : {}) });
+  // Use: a provider ready as it is becomes the scope's, on the model saved
+  // for it (each provider keeps its own), else its default.
   const use = (p: string) =>
-    act(() => config.setProvider({ workspace, provider: p, defaultModel: "" }), p ? t("desktop.keys.now_using", { provider: nameOf(p) }) : t("desktop.keys.now_global"), true);
+    act(() => config.setProvider({ workspace, provider: p, defaultModel: desc.models[p] ?? "" }), p ? t("desktop.keys.now_using", { provider: nameOf(p) }) : t("desktop.keys.now_global"), true);
   const onEnter = (e: KeyboardEvent) => e.key === "Enter" && save();
   const set = (field: keyof Choice) => (e: { target: { value: string } }) => setChoice({ ...choice, [field]: e.target.value });
   const text = (field: "projectId" | "location" | "profile", label: string, placeholder: string) => (
@@ -388,6 +392,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <p className="t-body-sm muted">{t(choice.method === "oauth" && choice.provider === "gemini" ? "desktop.keys.google_oauth_hint" : `desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>
         )}
         {choice.provider === "openai" && <p className="t-body-sm muted">{t("desktop.keys.openai_key_only")}</p>}
+        {choice.provider === "ollama" && <p className="t-body-sm muted">{t("desktop.keys.ollama_limits")}</p>}
         {isAPI && <ApiProviderForm form={choice.api} onChange={(api) => setChoice((c) => ({ ...c, api }))} problems={apiTouched ? apiProblems : []} busy={busy} onEnter={onEnter} />}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
         {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}

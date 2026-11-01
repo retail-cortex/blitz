@@ -80,7 +80,8 @@ type Registry struct {
 	lsp        *lsp.Manager // language servers (nil: none configured)
 
 	notesMu sync.Mutex
-	notes   NoteSaver // nil: notes off
+	notes   NoteSaver       // nil: notes off
+	recall  SessionRecaller // nil: session summaries off
 	// evidence reads what went wrong in the workspace's sessions
 	// (harness_evidence), propose keeps a scheduled reflection's
 	// proposals (harness_propose), global adds an entry to the global
@@ -477,6 +478,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the remember tool: %w", err)
+	}
+	if r.tools["recall_session"], err = NewRecallSessionTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the recall_session tool: %w", err)
 	}
 	if r.tools["harness_evidence"], err = NewHarnessEvidenceTool(r); err != nil {
 		r.Close()

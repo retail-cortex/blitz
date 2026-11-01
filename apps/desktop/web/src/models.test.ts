@@ -67,4 +67,8 @@ describe("checkModelRef", () => {
   it("offers extras first, then every listed model, once", () => {
     expect(modelOptions(catalog, ["gemini/gemini-3.8-pro", "", "mine"])).toEqual(["gemini/gemini-3.8-pro", "mine", "gemini/gemini-3.8-flash", "bedrock/anthropic.claude-x"]);
   });
+  it("offers a provider's field only that provider's models, by bare name", () => {
+    expect(modelOptions(catalog, ["mine"], "bedrock")).toEqual(["mine", "anthropic.claude-x"]);
+    expect(modelOptions(catalog, [], "ollama")).toEqual([]);
+  });
 });

@@ -61,6 +61,15 @@ type (
 	isolatedToolsKey struct{}
 )
 
+// WithSubagentEvents passes fn the events of the sub-agents a turn runs in
+// the foreground (invoke_agent without background), as they happen, so the
+// conversation can show their work; a background task's go to the task
+// instead. fn may be called from several goroutines at once, as sub-agents
+// run in parallel.
+func WithSubagentEvents(ctx context.Context, fn func(*session.Event)) context.Context {
+	return context.WithValue(ctx, subagentEventKey{}, fn)
+}
+
 // task is one background task.
 type task struct {
 	info   api.TaskInfo // guarded by taskManager.mu

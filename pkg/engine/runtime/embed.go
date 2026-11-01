@@ -105,7 +105,7 @@ func NewEmbedder(ctx context.Context, cfg *config.Config, ref string) (*Embedder
 		}
 		return geminiEmbedder(full, name, client.Models), nil
 	case "openai", "ollama":
-		key, base, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
+		key, base, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)
 		if err != nil {
 			return nil, err
 		}

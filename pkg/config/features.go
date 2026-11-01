@@ -154,10 +154,17 @@ type MemoryConfig struct {
 	// Auto lets the agent save notes across sessions with its remember
 	// tool, loaded into its instructions (nil: on).
 	Auto *bool `toml:"auto"`
+	// Summaries keeps where each session left off, for later sessions to
+	// pick up (nil: on; off when Auto is).
+	Summaries *bool `toml:"summaries"`
 }
 
 // AutoOn reports whether the agent keeps notes (memory.auto).
 func (m MemoryConfig) AutoOn() bool { return m.Auto == nil || *m.Auto }
+
+// SummariesOn reports whether session summaries are kept
+// (memory.summaries, and memory.auto).
+func (m MemoryConfig) SummariesOn() bool { return m.AutoOn() && (m.Summaries == nil || *m.Summaries) }
 
 // ContextConfig controls conversation compaction.
 type ContextConfig struct {

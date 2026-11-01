@@ -15,11 +15,13 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -42,7 +44,9 @@ import (
 )
 
 // fakeAnthropic is a minimal Messages API: it records request bodies and
-// headers and replies with the queued responses in order.
+// headers and replies with the queued responses in order. A whole message
+// queued for a streamed request goes out as a stream, as the API sends it,
+// so a test passes whichever way the adapter asks.
 type fakeAnthropic struct {
 	mu        sync.Mutex
 	requests  []map[string]any
@@ -66,7 +70,15 @@ func (f *fakeAnthropic) handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"type":"error","error":{"type":"invalid_request_error","message":"no more responses"}}`, 400)
 		return
 	}
-	respond(w)
+	rec := httptest.NewRecorder()
+	respond(rec)
+	if req["stream"] == true && rec.Code == http.StatusOK && strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") && strings.Contains(rec.Body.String(), `"type":"message"`) {
+		streamedReply(rec.Body.String())(w)
+		return
+	}
+	maps.Copy(w.Header(), rec.Header())
+	w.WriteHeader(rec.Code)
+	w.Write(rec.Body.Bytes())
 }
 
 func jsonReply(body string) func(http.ResponseWriter) {
@@ -88,7 +100,10 @@ func newFakeWithoutKey(t *testing.T, responses ...func(http.ResponseWriter)) (*f
 	f := &fakeAnthropic{responses: responses}
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	t.Cleanup(srv.Close)
-	return f, []option.RequestOption{option.WithBaseURL(srv.URL), option.WithMaxRetries(0), option.WithRequestTimeout(10 * time.Second)}
+	// No request timeout: it would skip the SDK's check that refuses an
+	// unstreamed request too long to wait for, which the adapter must
+	// meet as it does in use.
+	return f, []option.RequestOption{option.WithBaseURL(srv.URL), option.WithMaxRetries(0)}
 }
 
 func message(stop string, content string) string {
@@ -472,6 +487,16 @@ func sseReply(events ...string) func(http.ResponseWriter) {
 	}
 }
 
+// streamedReply is a whole message as a stream: message_start carrying it
+// (on one line, as an event's data is), then message_stop.
+func streamedReply(msg string) func(http.ResponseWriter) {
+	var b bytes.Buffer
+	if err := json.Compact(&b, []byte(msg)); err != nil {
+		panic(err)
+	}
+	return sseReply(`{"type":"message_start","message":`+b.String()+`}`, `{"type":"message_stop"}`)
+}
+
 func TestAnthropicStreaming(t *testing.T) {
 	_, opts := newFake(t, sseReply(
 		`{"type":"message_start","message":{"id":"msg_s","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
@@ -504,6 +529,32 @@ func TestAnthropicStreaming(t *testing.T) {
 	assert.Equal(t, int32(10), final.UsageMetadata.PromptTokenCount, "streamed usage %+v", final.UsageMetadata)
 }
 
+// A request the SDK won't send unstreamed (here a thinking budget that
+// raises max_tokens past ten minutes' worth) is streamed, and the caller who
+// didn't ask for a stream gets only the complete response.
+func TestAnthropicLongRequestStreams(t *testing.T) {
+	f, opts := newFake(t, sseReply(
+		`{"type":"message_start","message":{"id":"msg_l","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Do"}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ne"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":7}}`,
+		`{"type":"message_stop"}`,
+	))
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-haiku-4-5", opts...)
+	req := &model.LLMRequest{Contents: []*genai.Content{userText("go")}, Config: &genai.GenerateContentConfig{
+		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](30000)},
+	}}
+	out, err := collectResponses(t, m, req, false)
+	require.NoError(t, err)
+	require.Len(t, out, 1, "only the complete response: %+v", out)
+	assert.False(t, out[0].Partial, "only the complete response: %+v", out)
+	assert.Equal(t, "Done", out[0].Content.Parts[0].Text, "text %+v", out[0].Content.Parts)
+	assert.Equal(t, true, f.requests[0]["stream"], "sent streamed: %v", f.requests[0])
+	assert.Equal(t, float64(30000+anthropicDefaultMaxTokens), f.requests[0]["max_tokens"], "max_tokens %v", f.requests[0]["max_tokens"])
+}
+
 func TestAnthropicErrors(t *testing.T) {
 	status := func(code int) func(http.ResponseWriter) {
 		return func(w http.ResponseWriter) {
@@ -529,7 +580,7 @@ func TestAnthropicErrors(t *testing.T) {
 
 func TestModelNameResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
-	for provider, want := range map[string]string{"gemini": "gemini-4-argon", "anthropic": "claude-opus-5", "openai": "gpt-4o", "ollama": "gpt-4o"} {
+	for provider, want := range map[string]string{"gemini": "gemini-4-argon", "anthropic": "claude-opus-5", "openai": "gpt-4o", "ollama": ""} {
 		t.Run(provider, func(t *testing.T) {
 			cfg.LLM.Provider = provider
 			got := cfg.ModelName()
@@ -551,10 +602,12 @@ func TestModelNameResolution(t *testing.T) {
 // TestAnthropicEngineToolLoop drives a full tool round trip through the ADK
 // engine: the second request must carry the assistant's thinking block with
 // its signature and the tool_result for the same tool_use ID.
+// An engine turn asks for Claude's full max_tokens, more than the SDK sends
+// unstreamed, so its requests are streamed.
 func TestAnthropicEngineToolLoop(t *testing.T) {
 	f, opts := newFake(t,
-		jsonReply(message("tool_use", `{"type":"thinking","thinking":"need files","signature":"sig-loop"},{"type":"tool_use","id":"toolu_loop","name":"list_files","input":{}}`)),
-		jsonReply(message("end_turn", `{"type":"text","text":"Found them."}`)),
+		streamedReply(message("tool_use", `{"type":"thinking","thinking":"need files","signature":"sig-loop"},{"type":"tool_use","id":"toolu_loop","name":"list_files","input":{}}`)),
+		streamedReply(message("end_turn", `{"type":"text","text":"Found them."}`)),
 	)
 	cfg := config.DefaultConfig()
 	cfg.LLM.Provider = "anthropic"
@@ -597,6 +650,47 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 	assert.Equal(t, int64(800), u.Cached, "usage not recorded/priced: %+v", u)
 	assert.Equal(t, int64(100), u.CacheWrite, "usage not recorded/priced: %+v", u)
 	assert.True(t, u.Priced, "usage not recorded/priced: %+v", u)
+}
+
+// The handoff to the coder on Claude (0.8.9): the sub-agent's turn asks for
+// its reply unstreamed with an engine turn's max_tokens, more than the SDK
+// sends that way, so it must stream and still hand its answer back.
+func TestAnthropicHandoffToCoder(t *testing.T) {
+	f, opts := newFake(t,
+		jsonReply(message("tool_use", `{"type":"tool_use","id":"toolu_h","name":"invoke_agent","input":{"agent_name":"coder","prompt":"fix the typo"}}`)),
+		jsonReply(message("end_turn", `{"type":"text","text":"Fixed the typo in README.md."}`)),
+		jsonReply(message("end_turn", `{"type":"text","text":"Done: the coder fixed it."}`)),
+	)
+	cfg := config.DefaultConfig()
+	cfg.LLM.Provider = "anthropic"
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	agentReg, _ := agents.NewRegistry()
+	skillProv, _ := skills.NewProvider()
+	reg, err := tools.NewRegistry(cfg, agentReg, skillProv)
+	require.NoError(t, err)
+	defer reg.Close()
+	llm := mustAnthropicModel(t, cfg.LLM.Anthropic, "claude-opus-5", opts...)
+	eng, err := NewEngine(context.Background(), cfg, agentReg, skillProv, reg, llm)
+	require.NoError(t, err)
+
+	var text strings.Builder
+	err = eng.Execute(context.Background(), "s", "fix the typo", func(ev *session.Event) error {
+		if ev.Content != nil && !ev.Partial && ev.Author == "blitz" {
+			for _, p := range ev.Content.Parts {
+				if !p.Thought {
+					text.WriteString(p.Text)
+				}
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Contains(t, text.String(), "Done: the coder fixed it.", "final text %q", text.String())
+	require.Len(t, f.requests, 3, "the handoff, the coder's reply, the answer")
+	assert.Equal(t, true, f.requests[1]["stream"], "the coder's request is streamed: %v", f.requests[1]["max_tokens"])
+	third, _ := json.Marshal(f.requests[2]["messages"])
+	assert.Contains(t, string(third), "Fixed the typo in README.md.", "the coder's answer went back to blitz")
 }
 
 // Effort goes to output_config.effort on models that take it; a thinking

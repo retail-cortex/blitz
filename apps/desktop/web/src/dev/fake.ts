@@ -2012,7 +2012,7 @@ export function installFake() {
         },
         listAgents: ({ workspace }) => ({
           agents: [
-            { name: "blitz", displayName: "Blitz", description: "General coding agent", active: state(workspace).settings.agent === "blitz" },
+            { name: "blitz", displayName: "Blitz", description: "General agent: does the work and hands code changes to the coder", active: state(workspace).settings.agent === "blitz" },
             { name: "qa", displayName: "QA", description: "Testing specialist", active: state(workspace).settings.agent === "qa", pinnedModel: "anthropic/claude-sonnet-5" },
             { name: "planning-agent", displayName: "Planner", description: "Plans before changing", active: false },
           ],

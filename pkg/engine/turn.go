@@ -240,12 +240,16 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	// \skill-name in the prompt: those skills' instructions go with it.
 	prompt += w.skillMentionNote(t.Text)
+	// A conversation's first prompt says where the workspace stands and
+	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
+	first := false
 	if !t.Aside {
 		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
 		if a := st.Active(); a != nil {
 			prompt = a.MessageCount
 		}
+		first = prompt == 0 && !t.Accepted && t.run == ""
 		label := textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60)
 		if t.run != "" {
 			w.tools.Checkpoints().BeginWorkerTurn(sessionID, t.run, label)
@@ -298,8 +302,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	ctx = limited
 
+	on = serialized(on)
 	r := &relay{on: on}
 	handler := r.handle
+	ctx = runtime.WithSubagentEvents(ctx, w.subagentEvents(st, sessionID, on))
 	// Notices the engine raises during the turn (a fallback model taking
 	// over) are part of the conversation.
 	ctx = runtime.WithTurnNotices(ctx, func(msg string) { on(api.Event{Notice: &api.Notice{Text: msg}}) })
@@ -317,6 +323,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = withHookContext(prompt, "background-processes", strings.Join(w.TakeProcessNotices(sessionID), "\n\n"))
 		prompt = withHookContext(prompt, "workspace-changed", w.takeMoveNote(sessionID))
 		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
+		if first {
+			prompt = withHookContext(prompt, "workspace-state", w.workspaceState(ctx))
+			prompt = withHookContext(prompt, "earlier-sessions", w.earlierSessions(sessionID))
+		}
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
@@ -539,6 +549,7 @@ type relay struct {
 	on       func(api.Event)
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
+	tasks    []api.Task // the agent's own task list, shown again after a sub-agent's
 }
 
 // paragraph separates the output of a run that follows another in the same
@@ -563,7 +574,13 @@ func (r *relay) handle(ev *adksession.Event) error {
 				r.output.WriteString(t.Text)
 			}
 		}
+		if e.Tasks != nil {
+			r.tasks = e.Tasks
+		}
 		r.on(e)
+		if res := e.ToolResult; res != nil && res.Name == "invoke_agent" && r.tasks != nil {
+			r.on(api.Event{Author: e.Author, Tasks: r.tasks})
+		}
 	}
 	if !ev.Partial {
 		r.streamed = false
