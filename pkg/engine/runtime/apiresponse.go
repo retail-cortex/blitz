@@ -15,8 +15,11 @@
 package runtime
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -90,15 +93,15 @@ func hasField(body []byte, field string) bool {
 	return ok
 }
 
-// requestBodyFor is a /responses request body with "store" and "stream"
-// false and the fields in drop left out; a body that isn't a JSON object
-// is left as it is.
-func requestBodyFor(body []byte, drop []string) []byte {
+// requestBodyFor is a /responses request body with "store" false,
+// "stream" as stream says, and the fields in drop left out; a body that
+// isn't a JSON object is left as it is.
+func requestBodyFor(body []byte, drop []string, stream bool) []byte {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(body, &m) != nil || m == nil {
 		return body
 	}
-	m["store"], m["stream"] = json.RawMessage("false"), json.RawMessage("false")
+	m["store"], m["stream"] = json.RawMessage("false"), json.RawMessage(strconv.FormatBool(stream))
 	for k := range m {
 		if slices.Contains(drop, k) {
 			delete(m, k)
@@ -109,6 +112,64 @@ func requestBodyFor(body []byte, drop []string) []byte {
 		return body
 	}
 	return out
+}
+
+// foldStream makes a streamed /responses answer (server-sent events) the
+// one response the adapter reads: the response its last event carries
+// (response.completed, response.incomplete or response.failed), or a
+// failed one from an error event (MDL-100c). The stream is what keeps a
+// long reply from being cut by a timeout between Blitz and the model; the
+// adapter itself reads replies whole. An answer that isn't a stream is
+// left as it is.
+func foldStream(res *http.Response) error {
+	if res.Body == nil || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
+		return nil
+	}
+	defer res.Body.Close()
+	var final json.RawMessage
+	sc := bufio.NewScanner(res.Body)
+	sc.Buffer(make([]byte, 64<<10), 64<<20)
+	var data bytes.Buffer
+	end := func() {
+		var e struct {
+			Type     string          `json:"type"`
+			Response json.RawMessage `json:"response"`
+			Message  string          `json:"message"`
+		}
+		if json.Unmarshal(data.Bytes(), &e) == nil {
+			switch e.Type {
+			case "response.completed", "response.incomplete", "response.failed":
+				final = e.Response
+			case "error":
+				final, _ = json.Marshal(map[string]any{"status": "failed", "output": []any{}, "error": map[string]string{"message": e.Message}})
+			}
+		}
+		data.Reset()
+	}
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case line == "":
+			end()
+		case strings.HasPrefix(line, "data:"):
+			if data.Len() > 0 {
+				data.WriteByte('\n')
+			}
+			data.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+		}
+	}
+	end()
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("the model's reply broke off: %w", err)
+	}
+	if final == nil {
+		return errors.New("the model's reply ended before it was complete")
+	}
+	res.Body = io.NopCloser(bytes.NewReader(final))
+	res.ContentLength = int64(len(final))
+	res.Header.Set("Content-Type", "application/json")
+	res.Header.Set("Content-Length", strconv.Itoa(len(final)))
+	return nil
 }
 
 // fixResponse makes a successful /responses answer what the adapter

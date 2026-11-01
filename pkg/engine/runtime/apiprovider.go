@@ -93,6 +93,9 @@ type apiProvider struct {
 
 	mu   sync.Mutex
 	drop []string // request fields the model refuses (MDL-104b)
+	// unstreamed is set once the gateway refuses to stream the Responses
+	// API (MDL-100c): its requests are then sent whole.
+	unstreamed bool
 }
 
 // newAPIModel builds the api provider's model from its settings. The token
@@ -188,12 +191,18 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 	}
 	// Each pass drops a new field, so this ends.
 	responses := p.format == formatResponses && p.isModelCall(req)
+	if err == nil && res.StatusCode == http.StatusBadRequest && responses && p.refusedStream(res) {
+		discardResponse(res)
+		res, err = next(p.sign(req, body, token))
+	}
 	for err == nil && res.StatusCode == http.StatusBadRequest && responses && p.refused(res, body) {
 		discardResponse(res)
 		res, err = next(p.sign(req, body, token))
 	}
 	if err == nil && responses && res.StatusCode/100 == 2 {
-		err = fixResponse(res)
+		if err = foldStream(res); err == nil {
+			err = fixResponse(res)
+		}
 	}
 	keepErrorBody(ctx, res, err)
 	return res, err
@@ -214,6 +223,29 @@ func (p *apiProvider) refused(res *http.Response, body []byte) bool {
 	}
 	p.drop = append(p.drop, param)
 	return true
+}
+
+// refusedStream reports whether res refuses streaming (a gateway that
+// doesn't stream the Responses API, as OpenAI refuses a parameter), which
+// is then not asked for again (MDL-100c); res's body is left whole.
+func (p *apiProvider) refusedStream(res *http.Response) bool {
+	if unsupportedParam(peekBody(res)) != "stream" {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.unstreamed {
+		return false
+	}
+	p.unstreamed = true
+	return true
+}
+
+// streams is whether the model's Responses requests ask for a stream.
+func (p *apiProvider) streams() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return !p.unstreamed
 }
 
 // dropped is the fields the model's requests leave out.
@@ -304,7 +336,7 @@ func (p *apiProvider) sign(req *http.Request, body []byte, token string) *http.R
 	}
 	if body != nil {
 		if p.format == formatResponses && p.isModelCall(r) {
-			body = requestBodyFor(body, p.dropped())
+			body = requestBodyFor(body, p.dropped(), p.streams())
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
