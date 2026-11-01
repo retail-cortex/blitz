@@ -74,7 +74,7 @@ func NewProvider(t testing.TB) *Provider {
 	mux.HandleFunc("GET /authorize", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if _, ok := p.Clients[q.Get("client_id")]; !ok || q.Get("code_challenge_method") != "S256" || q.Get("response_type") != "code" ||
-			!strings.Contains(q.Get("scope"), "openid") {
+			!strings.Contains(q.Get("scope"), "openid") || q.Get("nonce") == "" {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}

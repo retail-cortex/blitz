@@ -61,7 +61,9 @@ var scopes = []string{"openid", "email", "profile"}
 func (c *Client) oauth(app AppClient, p provider, redirect string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID: app.ClientID, ClientSecret: app.ClientSecret, RedirectURL: redirect, Scopes: scopes,
-		Endpoint: oauth2.Endpoint{AuthURL: p.Authorization, TokenURL: p.Token, DeviceAuthURL: p.Device},
+		// In the body: an app's client is public (RFC 6749 §2.3.1), and
+		// guessing the style spends the one-time code on the wrong guess.
+		Endpoint: oauth2.Endpoint{AuthURL: p.Authorization, TokenURL: p.Token, DeviceAuthURL: p.Device, AuthStyle: oauth2.AuthStyleInParams},
 	}
 }
 
@@ -136,7 +138,7 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 	go srv.Serve(ln)
 	defer srv.Close()
 
-	show(Prompt{URL: cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline)})
+	show(Prompt{URL: cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", random()))})
 	var q url.Values
 	for q == nil {
 		select {
