@@ -256,21 +256,21 @@ type TelemetryConfig struct {
 	CaptureContent bool `toml:"capture_content"`
 }
 
-// UpdatesConfig is how Blitz checks for its releases
-// (spec_update_checks_054).
-type UpdatesConfig struct {
-	// Count asks Retail Cortex for the latest release, which counts the
-	// install in use (a random ID, the version, the platform and the app);
-	// false asks GitHub alone. On by default (UC-20).
+// UsageConfig is whether Blitz counts its install as active
+// (spec_active_installs_054).
+type UsageConfig struct {
+	// Count sends a daily ping on a day Blitz is used, which counts the
+	// install as active (a random ID, the day, the front end, the version
+	// and the platform); false sends nothing. On by default (AI-30).
 	Count bool `toml:"count"`
 }
 
-// CountsUpdateChecks is the global settings' [updates] count, for the
-// programs that check for releases (the CLI, the desktop app's host):
-// false when the settings can't be read.
-func CountsUpdateChecks() bool {
+// CountsUsage is the global settings' [usage] count, for what marks a
+// day's use (the service, the CLI, the desktop app's host): false when
+// the settings can't be read.
+func CountsUsage() bool {
 	cfg, err := Load("")
-	return err == nil && cfg.Updates.Count
+	return err == nil && cfg.Usage.Count
 }
 
 // CheckpointConfig controls file snapshots used by /undo and /rewind.

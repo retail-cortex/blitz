@@ -67,6 +67,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//apps/tray/internal/tray",
+        "//pkg/activity",
         "//pkg/config",
         "//pkg/i18n",
         "//pkg/loginitem",

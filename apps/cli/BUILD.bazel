@@ -21,6 +21,7 @@ exports_files(["main.go"])
 go_library(
     name = "cli_lib",
     srcs = [
+        "activity.go",
         "agents.go",
         "auth.go",
         "configcmd.go",
@@ -56,6 +57,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//apps/cli/internal/tui",
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",
@@ -99,6 +101,7 @@ go_test(
     name = "cli_test",
     size = "small",
     srcs = [
+        "activity_test.go",
         "agents_test.go",
         "attach_test.go",
         "auth_test.go",
@@ -141,6 +144,7 @@ go_test(
     tags = ["no-sandbox"],
     deps = [
         "//apps/service/servicetest",
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",

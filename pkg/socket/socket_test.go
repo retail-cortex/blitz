@@ -113,3 +113,39 @@ func TestClient(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ok", string(body))
 }
+
+// Each request names the program's front end, unless it names one
+// already; with none set, nothing is added (spec_active_installs_054
+// AI-02).
+func TestClientNamesTheFrontEnd(t *testing.T) {
+	path := filepath.Join(shortTemp(t), "n.sock")
+	l, err := Listen(path)
+	require.NoError(t, err)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, r.Header.Get(ClientHeader))
+	})}
+	go func() { _ = srv.Serve(l) }()
+	t.Cleanup(func() { srv.Close() })
+	saved := Front
+	t.Cleanup(func() { Front = saved })
+
+	get := func(named string) string {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodGet, BaseURL+"/x", nil)
+		require.NoError(t, err)
+		if named != "" {
+			req.Header.Set(ClientHeader, named)
+		}
+		resp, err := Client(path).Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return string(body)
+	}
+	Front = ""
+	assert.Equal(t, "", get(""))
+	Front = "cli"
+	assert.Equal(t, "cli", get(""))
+	assert.Equal(t, "vscode", get("vscode"), "a request that names its own keeps it")
+}

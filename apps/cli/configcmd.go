@@ -223,8 +223,8 @@ enabled = false   # export OpenTelemetry traces and logs over OTLP/HTTP (or BLIT
 # endpoint = "http://localhost:4318"   # default: OTEL_EXPORTER_OTLP_ENDPOINT
 # capture_content = false              # true adds prompts, replies, tool args and results (secrets masked)
 
-[updates]
-count = true   # update checks ask Retail Cortex, which counts installs in use (a random ID, version, platform); false: GitHub only
+[usage]
+count = true   # once a day Blitz is used, a ping counts the install as active (a random ID, version, platform, front end); false: none
 
 [checkpoints]
 enabled = true

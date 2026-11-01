@@ -100,6 +100,7 @@ type AppMethods = {
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
   PrintPDF(html: string, pageSize: string): Promise<string>;
+  Used(): Promise<void>;
   CheckUpdate(force?: boolean): Promise<UpdateStatus>;
   UpdateStatus(): Promise<UpdateStatus>;
   DownloadUpdate(): Promise<UpdateStatus>;
@@ -510,6 +511,15 @@ export type AppMenuLabels = { about: string; settings: string; hide: string; hid
 /** Relabels the macOS app menu (DSK-101) in the window's language; nothing elsewhere. */
 export function setAppMenu(l: AppMenuLabels) {
   if (canCall("SetMenu")) app().SetMenu(l).catch(() => {});
+}
+
+/**
+ * Tells the host the window is in use: it counts the install as active,
+ * once a day (spec_active_installs_054 AI-01). Nothing when the host
+ * doesn't count, or the call fails.
+ */
+export function markUsed() {
+  if (canCall("Used")) app().Used().catch(() => {});
 }
 
 /** Whether the app updates itself (the Electron app's host answers). */

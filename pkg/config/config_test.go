@@ -282,17 +282,17 @@ func TestADCFile(t *testing.T) {
 	}
 }
 
-// Update checks are counted unless the settings say otherwise
-// (spec_update_checks_054 UC-20).
-func TestCountsUpdateChecks(t *testing.T) {
+// Use is counted unless the settings say otherwise
+// (spec_active_installs_054 AI-30).
+func TestCountsUsage(t *testing.T) {
 	for _, tc := range []struct {
 		name, file string
 		want       bool
 	}{
 		{"no settings", "", true},
 		{"settings without it", "[blitz]\ndefault_agent = \"blitz\"\n", true},
-		{"switched off", "[updates]\ncount = false\n", false},
-		{"settings it can't read", "[updates\n", false},
+		{"switched off", "[usage]\ncount = false\n", false},
+		{"settings it can't read", "[usage\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateConfigEnv(t)
@@ -301,7 +301,7 @@ func TestCountsUpdateChecks(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tc.file), 0o600))
 			}
 			t.Setenv("MODENV_PREFIX", dir)
-			assert.Equal(t, tc.want, CountsUpdateChecks())
+			assert.Equal(t, tc.want, CountsUsage())
 		})
 	}
 }

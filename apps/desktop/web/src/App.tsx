@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
+import { useCountUse } from "./activity";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
@@ -181,6 +182,9 @@ function Shell() {
     if (service.state === "up") watchWorkerFailures(Object.fromEntries(JSON.parse(seen)));
   }, [seen, service.state]);
   const version = useServiceVersion(service.state === "up");
+  // The window in use counts the install as active, once a day
+  // (spec_active_installs_054).
+  useCountUse();
   // The app's update: looked for when it opens (every five days at most),
   // downloaded, then offered with Restart (spec_electron_038 EL-90).
   useAutoUpdate(loaded && service.state === "up" && prefs.updates !== "off", (s) =>

@@ -106,9 +106,29 @@ func Running(path string) bool {
 // use it with BaseURL.
 func Client(path string) *http.Client {
 	var d net.Dialer
-	return &http.Client{Transport: &http.Transport{
+	return &http.Client{Transport: named{&http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return d.DialContext(ctx, "unix", path)
 		},
-	}}
+	}}}
+}
+
+// ClientHeader names the front end a request to the service comes from
+// (spec_active_installs_054 AI-02).
+const ClientHeader = "Blitz-Client"
+
+// Front is the front end this program is (activity.CLI, activity.Desktop),
+// set once in its main: each request Client makes carries it as
+// ClientHeader, unless the request names another (a page's, proxied).
+var Front string
+
+// named puts Front on each request.
+type named struct{ base http.RoundTripper }
+
+func (n named) RoundTrip(r *http.Request) (*http.Response, error) {
+	if Front != "" && r.Header.Get(ClientHeader) == "" {
+		r = r.Clone(r.Context())
+		r.Header.Set(ClientHeader, Front)
+	}
+	return n.base.RoundTrip(r)
 }

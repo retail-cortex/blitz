@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/fileview"
 	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
@@ -74,6 +75,10 @@ type Host struct {
 	Prefs *PrefsStore
 	// Updates updates the desktop app the host runs in (nil: no updates).
 	Updates *Updater
+	// Use counts the desktop app's use, once a day (spec_active_installs_054
+	// AI-01): the page says when its window opens or comes forward; nil,
+	// not counted.
+	Use *activity.Recorder
 }
 
 // ServiceStatus says whether the service answers and whether it starts at
@@ -158,6 +163,11 @@ func (h Host) methods() map[string]hostMethod {
 	m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
 	m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
 	m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
+	if u := h.Use; u != nil {
+		// Used: the window opened or came forward. A ping goes the first
+		// time each day, in the background.
+		m["Used"] = func([]json.RawMessage) (any, error) { u.Use(activity.Desktop); return nil, nil }
+	}
 	if u := h.Updates; u != nil {
 		// CheckUpdate(force): when the app opens (force false: GitHub is
 		// asked only five days after the last check) or Check now (true).

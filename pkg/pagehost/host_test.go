@@ -24,8 +24,11 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
@@ -277,4 +280,36 @@ func shortTemp(t *testing.T) string {
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	return dir
+}
+
+// The window in use counts the desktop app's use, once a day; a host
+// without a recorder has no such method (spec_active_installs_054 AI-01).
+func TestUsed(t *testing.T) {
+	var mu sync.Mutex
+	var fronts []string
+	retail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		mu.Lock()
+		fronts = append(fronts, m["front"])
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(retail.Close)
+	h := Host{Use: &activity.Recorder{Dir: t.TempDir(), Version: "dev", URL: retail.URL}}.Handler()
+	code, _ := call(t, h, "Used")
+	require.Equal(t, http.StatusOK, code)
+	code, _ = call(t, h, "Used")
+	require.Equal(t, http.StatusOK, code)
+	assert.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(fronts) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+	mu.Lock()
+	assert.Equal(t, []string{"desktop"}, fronts, "once a day")
+	mu.Unlock()
+
+	code, _ = call(t, Host{}.Handler(), "Used")
+	assert.Equal(t, http.StatusNotFound, code)
 }

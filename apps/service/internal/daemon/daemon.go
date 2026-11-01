@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/service/internal/server"
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
@@ -143,6 +144,8 @@ func Run(ctx context.Context, o Options) error {
 
 	// Each workspace gets its own configuration: a workspace owns and
 	// changes it.
+	// The front ends' use, counted once a day (spec_active_installs_054).
+	use := &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: o.Version, On: config.CountsUsage}
 	s := server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
 		cfg, err := config.LoadWorkspace(o.Config, dir) // its own settings over the global ones
 		if err != nil {
@@ -165,8 +168,9 @@ func Run(ctx context.Context, o Options) error {
 		}
 		slog.Info("workspace opened", "workspace", dir)
 		return w, nil
-	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config), server.WithLogDir(logDir(cfg)), server.WithShutdown(stop))
+	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config), server.WithLogDir(logDir(cfg)), server.WithShutdown(stop), server.WithUse(use))
 	defer s.Close()
+	go server.RetryPings(ctx, use, pingRetry)
 
 	l, err := socket.Listen(o.Socket)
 	if err != nil {
@@ -181,6 +185,10 @@ func Run(ctx context.Context, o Options) error {
 	slog.Info("serve", "socket", o.Socket)
 	return server.Serve(ctx, l, s.Handler(), grace)
 }
+
+// pingRetry is how often the service sends the day's pings that failed
+// (spec_active_installs_054 AI-12).
+var pingRetry = time.Hour
 
 // watchEvery is how often watch looks at the service's idle time.
 var watchEvery = time.Second

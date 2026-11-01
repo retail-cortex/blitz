@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	pings "github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"connectrpc.com/connect"
@@ -46,6 +47,8 @@ type Opener func(ctx context.Context, dir string) (*engine.Workspace, error)
 
 // Server holds the open workspaces and serves the API.
 type Server struct {
+	// use counts the front ends' use (WithUse; spec_active_installs_054).
+	use       *pings.Recorder
 	open      Opener
 	version   string      // reported by GetServiceInfo
 	configDir string      // the settings directory (--config; \"\" for ~/.blitz)
@@ -113,7 +116,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewConfigServiceHandler(configService{s}, limit))
 	mux.Handle(pb.NewFileServiceHandler(fileService{s}, limit))
 	mux.Handle(pb.NewLanguageServiceHandler(languageService{s}, limit))
-	return s.act.track(mux)
+	return s.act.track(s.countUse(mux))
 }
 
 // Close closes every workspace, once those being opened are (they close

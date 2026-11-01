@@ -94,9 +94,9 @@ type Config struct {
 	PluginCommandDirs []PluginDir     `toml:"-"`
 	Log               LogConfig       `toml:"log"`
 	Telemetry         TelemetryConfig `toml:"telemetry"`
-	// Updates is how Blitz checks for its releases
-	// (spec_update_checks_054).
-	Updates UpdatesConfig `toml:"updates"`
+	// Usage is whether Blitz counts its install as active, once a day it's
+	// used (spec_active_installs_054).
+	Usage UsageConfig `toml:"usage"`
 	// Pricing overrides or adds model prices, keyed by model name, for
 	// /cost and cost limits.
 	Pricing map[string]ModelPrice `toml:"pricing"`
@@ -852,7 +852,7 @@ func DefaultConfig() *Config {
 		},
 		Suggestions: SuggestionsConfig{Ideas: true},
 		Git:         GitConfig{AutoAdd: true},
-		Updates:     UpdatesConfig{Count: true},
+		Usage:       UsageConfig{Count: true},
 		Workers: WorkersConfig{
 			Enabled:  true,
 			Paths:    []string{".agents/workers", "workers"},

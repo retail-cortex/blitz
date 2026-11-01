@@ -21,6 +21,7 @@ go_library(
     visibility = ["//apps/service:__subpackages__"],
     deps = [
         "//apps/service/internal/server",
+        "//pkg/activity",
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/workers",

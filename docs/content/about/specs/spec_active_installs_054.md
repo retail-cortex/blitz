@@ -7,9 +7,9 @@ weight: 54
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-01: replaces the update-check counting this spec first described, 2026-10-30, before it shipped. The owner's request: "I'd like to get a call home once a day for active installs", for numbers an investor would ask for. On by default, a random install ID) |
-| Source | to come: `pkg/activity` (the day's use, the ping), the service's `Blitz-Client` header and where it marks use, the CLI's in-process marking, `pkg/config` (`[usage] count`), `docs/content/guide/privacy.md`; the license server's `POST /v1/blitz/active` (license-server `spec_server_001` LS-24–LS-28) |
-| Tests | to come |
+| Status | **Built** (2026-11-01: replaces the update-check counting this spec first described, 2026-10-30, before it shipped. The owner's request: "I'd like to get a call home once a day for active installs", for numbers an investor would ask for. On by default, a random install ID) |
+| Source | `pkg/activity` (`Recorder`: `Mark`, `Flush`, `Use`; `InstallID`), `pkg/socket` (`Front`, `ClientHeader`: each request names its front end), `apps/service/internal/server/use.go` (`WithUse`, the personal calls, `RetryPings`), `apps/service/internal/daemon` (the service's recorder, retried hourly), `apps/cli/activity.go` (each command but `--version` and help), `pkg/pagehost` (`Used`) and `apps/desktop/web/src/activity.ts` (`useCountUse`: the window opened or brought forward), `apps/vscode/src/proxy.ts` (`Blitz-Client: vscode`), `pkg/config` (`[usage] count`, `CountsUsage`), `docs/content/guide/privacy.md`; the license server's `POST /v1/blitz/active` (license-server `spec_server_001` LS-24–LS-28) |
+| Tests | `pkg/activity/activity_test.go` (`TestOncePerDayPerFront`: the fields; `TestOff`; `TestRetries`; `TestUseDoesntWait`; `TestActivityURL`; `TestInstallID`), `pkg/socket` (`TestClientNamesTheFrontEnd`), `apps/service/internal/server/use_test.go` (`TestCountUse`, `TestRetryPings`), `apps/cli/activity_test.go` (`TestCommandsCountUse`), `pkg/pagehost` (`TestUsed`), `apps/desktop/web/src/activity.test.ts`, `apps/vscode/src/proxy.test.ts`, `pkg/config` (`TestCountsUsage`) |
 | Depends on | [spec_service_021](spec_service_021.md) (blitzd, which front ends attach to), [spec_cli_020](spec_cli_020.md) (the CLI, attached or in-process), [spec_config_002](spec_config_002.md) (settings) |
 
 ## 1. Purpose
@@ -26,13 +26,13 @@ What it must never become: a way to know who someone is, what they work on, what
   - **vscode**: a session started or a prompt sent from the VS Code extension.
 
   Not use: the service running with no one using it, scheduled workers, status polls and health checks, the tray menu, or an update check.
-- **AI-02** Front ends attached to the service (spec_service_021) name themselves on every request with the header `Blitz-Client: desktop | cli | vscode`. The service marks the day's use only on the requests a person makes (AI-01), never on polling, and only for a front end it knows by that header.
-- **AI-03** The CLI running in-process (`--local`, or no service running, spec_cli_020) marks its own use, so it's counted whether or not the service runs.
+- **AI-02** Each front end names itself on every request to the service (spec_service_021) with the header `Blitz-Client: desktop | cli | vscode`: the CLI and the desktop app's host through `pkg/socket`, the VS Code extension through its proxy. The service marks the day's use only on the calls a person makes (a turn, a steer, a session started or opened, an approval, an answer), never on polling, and only for a front end it knows by that header.
+- **AI-03** Each front end also marks its own use, whether or not the service runs: the CLI on each command (attached or in-process, spec_cli_020), the desktop app's host when the page says its window opened or came forward (`Used`, at most every ten minutes).
 - **AI-04** Marking is local and cheap: the day and the front ends used are kept in `~/.blitz/activity.json` (mode 0600), shared by the service and the CLI, written atomically. Nothing about what was done is kept.
 
 ## 3. The ping
 
-- **AI-10** The first time a front end is used on a day, whoever marked it (the service, or the in-process CLI) sends `POST https://license.retailcortex.com/v1/blitz/active` with exactly this JSON, and nothing else:
+- **AI-10** The first time a front end is used on a day, whoever marked it (the service, the CLI, or the desktop app's host) sends `POST https://license.retailcortex.com/v1/blitz/active` with exactly this JSON, and nothing else:
   - `install`: the install's ID (AI-20);
   - `day`: the day, `2006-01-02`, UTC;
   - `front`: `desktop`, `cli` or `vscode`;
@@ -41,7 +41,7 @@ What it must never become: a way to know who someone is, what they work on, what
 
   So an install sends at most one ping a day for each front end it uses: one, for most people. No cookies, no headers beyond Go's own, no account, path, workspace, provider or model.
 - **AI-11** It waits at most 5 seconds and never holds anything up: a person's request is answered first, and the ping goes after, on its own.
-- **AI-12** A ping that fails (offline, the server down) is kept and tried again at the next use, or by the service within the hour, for up to 3 days; then it's dropped. A day that was used but never reached Retail Cortex is lost, not guessed.
+- **AI-12** A ping that fails (offline, the server down) is kept and tried again at the next use, or by the service within the hour, for up to 3 days; then it's dropped. One Retail Cortex refuses as not counted (`400`) isn't sent again. A day that was used but never reached Retail Cortex is lost, not guessed. The CLI waits at most a second for its ping before it exits; one not sent by then goes next time.
 - **AI-13** `BLITZ_ACTIVITY_URL` replaces the address, for tests and a local license server; empty, the default.
 
 ## 4. The install's ID
