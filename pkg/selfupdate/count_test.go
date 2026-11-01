@@ -139,3 +139,18 @@ func TestInstallID(t *testing.T) {
 	_, err = InstallID(filepath.Join(dir, "install-id", "below a file"))
 	assert.Error(t, err)
 }
+
+// When the ID can't be kept, nothing is counted, and a check with an
+// address that isn't one fails before anything is sent (UC-01, UC-10).
+func TestCountingWithoutAnID(t *testing.T) {
+	t.Setenv("BLITZ_UPDATE_URL", "")
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "install-id"), 0o700))
+	_, err := InstallID(dir)
+	assert.Error(t, err, "install-id is a folder: no ID can be written")
+	assert.Nil(t, GitHub().Counting(true, dir, "cli", "v1.0.0").Count, "no ID: not counted")
+
+	c := &Count{URL: "http://bad\x7f.example", Install: "0123456789abcdef0123456789abcdef", Version: "v1.0.0", App: "cli", GOOS: "linux", GOARCH: "amd64"}
+	_, err = c.latest(context.Background())
+	assert.Error(t, err)
+}
