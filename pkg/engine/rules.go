@@ -30,7 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Rules that gate a turn (spec_gates_041): before the agent runs, each
+// Rules that gate a turn (spec_041_gates): before the agent runs, each
 // before-agent rule judges the prompt; after, each after-agent rule the
 // answer and the turn's changes; in order, by the suggestions model.
 

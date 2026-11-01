@@ -90,7 +90,7 @@ func (w *Workspace) ListCommands() []api.CommandInfo {
 	for _, c := range byName {
 		out = append(out, api.CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
 	}
-	// Workflows run as /name (spec_workflows_043), over a command of the same name.
+	// Workflows run as /name (spec_043_workflows), over a command of the same name.
 	for _, f := range w.Workflows() {
 		out = slices.DeleteFunc(out, func(c api.CommandInfo) bool { return c.Name == f.Name })
 		out = append(out, api.CommandInfo{Name: f.Name, Description: cmp.Or(f.Description, i18n.T("flow.command")), ArgumentHint: i18n.T("flow.argument"), Source: "workflow"})

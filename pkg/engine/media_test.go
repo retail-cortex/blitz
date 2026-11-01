@@ -26,7 +26,7 @@ import (
 )
 
 // An attachment the active agent's model can't take is refused at once,
-// saying what it takes; what it takes attaches (spec_images_011).
+// saying what it takes; what it takes attaches (spec_011_images).
 func TestAttachmentsByModel(t *testing.T) {
 	w := openTest(t) // a test model: images, PDFs and text, no audio or video
 	mp4 := make([]byte, 16)

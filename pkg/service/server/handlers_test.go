@@ -593,7 +593,7 @@ func TestProcessesOverTheAPI(t *testing.T) {
 	assert.NotEmpty(t, all.Msg.Processes[0].Workspace)
 	assert.Equal(t, id, all.Msg.Processes[0].Process.SessionId, "who started it")
 	// The processes view's look at its output, whichever session started
-	// it (spec_processes_052).
+	// it (spec_052_processes).
 	anyOut, err := w.GetProcessOutput(ctx, connect.NewRequest(&pb.GetProcessOutputRequest{Workspace: dir, Id: p.Id, AnySession: true}))
 	require.NoError(t, err)
 	assert.Contains(t, anyOut.Msg.Output, "started")

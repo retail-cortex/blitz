@@ -15,7 +15,7 @@
 // Package session stores conversations: each session's metadata and its
 // messages and events on disk, snapshots to branch from, search over a
 // session's history, and the store ADK reads the conversation from
-// (spec_sessions_017).
+// (spec_017_sessions).
 package session
 
 import (
@@ -115,7 +115,7 @@ type Message struct {
 const (
 	KindSteer = "steer"
 	KindHook  = "hook"
-	KindRule  = "rule" // after-agent rules asking for a revision (spec_gates_041)
+	KindRule  = "rule" // after-agent rules asking for a revision (spec_041_gates)
 	KindPlan  = "plan" // the approved plan's go-ahead
 	KindTask  = "task" // a background task that ended (the model's side)
 )

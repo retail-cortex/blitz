@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Words marked in a document's preview: a search hit's (spec_search_035)
-// and Find in file's (spec_files_029). The CSS Custom Highlight API marks
+// Words marked in a document's preview: a search hit's (spec_035_search)
+// and Find in file's (spec_029_files). The CSS Custom Highlight API marks
 // them, which leaves the rendered document as it is.
 
 import { blockAt, matchSpans } from "../search";

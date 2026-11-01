@@ -24,4 +24,4 @@ weight: 2
 
 apps/cli.
 
-Spec: [client](../about/specs/spec_client_022.md).
+Spec: [client](../about/specs/spec_022_client.md).

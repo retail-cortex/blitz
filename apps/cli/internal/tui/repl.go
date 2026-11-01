@@ -16,7 +16,7 @@
 // and completion, the slash commands, streamed Markdown output, approvals
 // and questions answered at the terminal, and Ctrl+C to stop a turn. It
 // drives an api.Backend, so it works the same on a local workspace and on
-// one held by the service (spec_tui_019).
+// one held by the service (spec_019_tui).
 package tui
 
 import (
@@ -254,7 +254,7 @@ func (p *Printer) Handle(ev api.Event) {
 }
 
 // reflectHint is the welcome's line about what the harness has to learn
-// (spec_harness_learning_048 HE-05): the proposals to review, else the
+// (spec_048_harness_learning HE-05): the proposals to review, else the
 // patterns since the last reflection once there are enough; "" if neither.
 func reflectHint(w api.Backend) string {
 	r, err := w.Reflection()

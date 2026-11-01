@@ -18,7 +18,7 @@
 // the OS keychain, and environment variables applied last. Nothing is
 // read from the workspace itself, so a cloned repository can't redirect
 // a key or turn off approvals. It also edits the file in place, a line at
-// a time, for the settings the front ends change (spec_config_002).
+// a time, for the settings the front ends change (spec_002_config).
 package config
 
 import (
@@ -61,7 +61,7 @@ type Config struct {
 	Git   GitConfig   `toml:"git"`
 	Tools ToolsConfig `toml:"tools"`
 	// Processes say when an agent's background process looks bad
-	// (spec_processes_052).
+	// (spec_052_processes).
 	Processes ProcessesConfig `toml:"processes"`
 	Session   SessionConfig   `toml:"session"`
 	Sandbox   SandboxConfig   `toml:"sandbox"`
@@ -95,7 +95,7 @@ type Config struct {
 	Log               LogConfig       `toml:"log"`
 	Telemetry         TelemetryConfig `toml:"telemetry"`
 	// Usage is whether Blitz counts its install as active, once a day it's
-	// used (spec_active_installs_054).
+	// used (spec_054_active_installs).
 	Usage UsageConfig `toml:"usage"`
 	// Pricing overrides or adds model prices, keyed by model name, for
 	// /cost and cost limits.
@@ -622,7 +622,7 @@ type ToolsConfig struct {
 }
 
 // ProcessesConfig says when an agent's background process looks bad: the
-// processes view, /processes and the tray flag it (spec_processes_052).
+// processes view, /processes and the tray flag it (spec_052_processes).
 // Durations are Go durations ("2m"); unset or 0 keeps the default.
 type ProcessesConfig struct {
 	// CPUPercent of one core, kept up for BusyFor, flags it as busy
@@ -1004,7 +1004,7 @@ func IsWorkspaceRelative(p string) bool {
 // SkillSearchPaths returns skill directories to scan, expanded, with
 // workspace-relative entries resolved against workspace (the working
 // directory if ""). A project's skills load as prompt text; their scripts
-// run only once the project is trusted (spec_project_config_031).
+// run only once the project is trusted (spec_031_project_config).
 func (c *Config) SkillSearchPaths(workspace string) []string {
 	return resolvePaths(c.Skills.Paths, workspace)
 }

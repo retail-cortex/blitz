@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package activity counts the install as active, once a day it's used
-// (spec_active_installs_054): the first time a front end is used on a day,
+// (spec_054_active_installs): the first time a front end is used on a day,
 // it's marked in ~/.blitz/activity.json and a ping goes to Retail Cortex
 // with the install's random ID, the day, the front end, the version and
 // the platform, and nothing else. A ping that fails is tried again for

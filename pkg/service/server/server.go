@@ -47,7 +47,7 @@ type Opener func(ctx context.Context, dir string) (*engine.Workspace, error)
 
 // Server holds the open workspaces and serves the API.
 type Server struct {
-	// use counts the front ends' use (WithUse; spec_active_installs_054).
+	// use counts the front ends' use (WithUse; spec_054_active_installs).
 	use       *pings.Recorder
 	open      Opener
 	version   string      // reported by GetServiceInfo

@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Metrics (spec_parity_027 PAR-MOD-07): counters of what Blitz does,
+// Metrics (spec_027_parity PAR-MOD-07): counters of what Blitz does,
 // exported with traces and logs when telemetry is on. Without it the global
 // meter does nothing, so recording costs next to nothing.
 

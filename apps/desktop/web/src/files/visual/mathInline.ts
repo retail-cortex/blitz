@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Inline math in the visual editor (spec_files_029 FIL-67): drawn by
+// Inline math in the visual editor (spec_029_files FIL-67): drawn by
 // KaTeX; selected (a click, or the arrows onto it), its TeX opens in a
 // field below it, drawn as you type. Enter or leaving the field keeps it,
 // Escape puts it back, an empty field removes it.

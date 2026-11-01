@@ -240,7 +240,7 @@ type backgroundKey struct{}
 // Background marks ctx as a background task's run: what the workspace's
 // rules and mode allow runs, and anything that would ask the person is
 // refused instead, since nobody is asked for it
-// (spec_background_agents_032 BGA-40).
+// (spec_032_background_agents BGA-40).
 func Background(ctx context.Context) context.Context {
 	return context.WithValue(ctx, backgroundKey{}, true)
 }
@@ -253,7 +253,7 @@ func IsBackground(ctx context.Context) bool {
 
 // TaskAsker is who a background task's approval requests and questions go
 // to: its session's people, whenever one of them answers
-// (spec_background_agents_032 BGA-41).
+// (spec_032_background_agents BGA-41).
 type TaskAsker struct {
 	Approve api.Approver
 	Ask     api.UserPromptFunc

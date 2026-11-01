@@ -22,7 +22,7 @@ import type { connectionFromForm } from "./connectorForm";
 export type Written = ReturnType<typeof connectionFromForm>;
 
 /**
- * Where a pane's connections are kept and changed (spec_connectors_047
+ * Where a pane's connections are kept and changed (spec_047_connectors
  * CON-18): a workspace's (Studio, which lists the global ones too but
  * never changes them), or the global ones (Settings, with no workspace).
  */

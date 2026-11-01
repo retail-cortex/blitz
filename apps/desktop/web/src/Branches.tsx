@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The Changes page and the workspace's branches (spec_desktop_024 DSK-90c):
+// The Changes page and the workspace's branches (spec_024_desktop DSK-90c):
 // switch to one, create one, or merge one into the current branch. A
 // merge that stops on conflicts waits in MergeBanner, as a pull's does.
 

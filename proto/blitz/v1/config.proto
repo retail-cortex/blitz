@@ -29,7 +29,7 @@ option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 // Every request names its scope: workspace is an absolute directory, or ""
 // for the global settings.
 service ConfigService {
-  // The browser profiles (spec_browser_profiles_049): each with the sites
+  // The browser profiles (spec_049_browser_profiles): each with the sites
   // the agents browse with it without asking, and the one the workspace
   // named browses with (none: a throwaway profile each time).
   rpc ListBrowserProfiles(ListBrowserProfilesRequest) returns (ListBrowserProfilesResponse);
@@ -112,7 +112,7 @@ service ConfigService {
   // desktop app's System language follows them.
   rpc GetInterfaceLanguage(GetInterfaceLanguageRequest) returns (GetInterfaceLanguageResponse);
   // The skill registries the user added, and the skills installed from
-  // them (spec_skills_013 SK-90..SK-96).
+  // them (spec_013_skills SK-90..SK-96).
   rpc ListSkillRegistries(ListSkillRegistriesRequest) returns (ListSkillRegistriesResponse);
   // Checks a registry's index and remembers it, its token in the keychain
   // (REGISTRY_FAILED when the index can't be read).
@@ -143,7 +143,7 @@ service ConfigService {
   // Records that the user reviewed and trusted the scripts of the skill
   // in a folder, with the content hash they were shown (HASH_MISMATCH if
   // it changed since): its scripts then run without asking first, until
-  // its content changes (spec_skills_013 SK-108).
+  // its content changes (spec_013_skills SK-108).
   rpc TrustSkillScripts(TrustSkillScriptsRequest) returns (TrustSkillScriptsResponse);
   // Returns what a skill's scripts are, for review, when they need it
   // (nothing when they don't).
@@ -165,7 +165,7 @@ service ConfigService {
   // workspace (NOT_FOUND; ALREADY_EXISTS when a global one has its name).
   rpc MakeMCPServerGlobal(MakeMCPServerGlobalRequest) returns (MakeMCPServerGlobalResponse);
 
-  // Returns the global connectors (spec_connectors_047 CON-18): the
+  // Returns the global connectors (spec_047_connectors CON-18): the
   // categories and kinds of the built-in and global descriptors, and the
   // global connections. A workspace's Studio lists them but never
   // changes them.
@@ -264,7 +264,7 @@ message ApiHeader {
 }
 
 // The api provider's settings: a gateway that speaks OpenAI's Responses
-// API, signed with these headers (spec_models_015 §3.4).
+// API, signed with these headers (spec_015_models §3.4).
 message ApiProviderSettings {
   // Requests go to <base_url>/responses.
   string base_url = 1;
@@ -698,7 +698,7 @@ message InstalledSkill {
 }
 
 // What a skill's scripts are, for the user to review before trusting
-// them (spec_skills_013 SK-108).
+// them (spec_013_skills SK-108).
 message SkillReview {
   // The skill's folder and content hash, for TrustSkillScripts.
   string dir = 1;
@@ -1097,7 +1097,7 @@ message ListBrowserProfilesResponse {
   repeated BrowserProfile profiles = 1;
   // The workspace's profile ("": none).
   string workspace_profile = 2;
-  // browser.show: ask, watch or silent (spec_agent_browser_050).
+  // browser.show: ask, watch or silent (spec_050_agent_browser).
   string show = 3;
   // browser.open: ask, embedded or system (AB-10).
   string open = 4;

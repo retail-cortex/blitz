@@ -52,7 +52,7 @@ const actionIcons: Record<RuleAction, string> = { block: mdiCancel, warn: mdiAle
 type Open = { name: string } | null;
 
 /**
- * The workspace's rules (Studio › Rules, spec_gates_041): the gates
+ * The workspace's rules (Studio › Rules, spec_041_gates): the gates
  * before the agent and after it, each list in the order its rules run
  * (dragged, or moved with ↑ ↓, which writes their order), then the
  * instruction rules; each with its action (block, warn, revise). A rule's

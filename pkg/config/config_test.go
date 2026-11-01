@@ -142,7 +142,7 @@ func TestExpandHome(t *testing.T) {
 }
 
 // A project's agents and skills load as prompt text, with no trust
-// needed (their scripts need it: spec_project_config_031). Relative paths
+// needed (their scripts need it: spec_031_project_config). Relative paths
 // resolve against the workspace, not the working directory.
 func TestSearchPathsResolveAgainstTheWorkspace(t *testing.T) {
 	home := isolateConfigEnv(t)
@@ -283,7 +283,7 @@ func TestADCFile(t *testing.T) {
 }
 
 // Use is counted unless the settings say otherwise
-// (spec_active_installs_054 AI-30).
+// (spec_054_active_installs AI-30).
 func TestCountsUsage(t *testing.T) {
 	for _, tc := range []struct {
 		name, file string

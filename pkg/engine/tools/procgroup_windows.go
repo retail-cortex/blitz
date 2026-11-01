@@ -28,7 +28,7 @@ import (
 // closes. Blitz holds the handle, so it closes when the command ends
 // (Release), when it's killed, and when Blitz exits or crashes: nothing a
 // command started, a language server's children included, outlives Blitz
-// (spec_visual_editor_037 VE-46).
+// (spec_037_visual_editor VE-46).
 
 // jobs are the started commands' job objects.
 var jobs sync.Map // *exec.Cmd -> windows.Handle

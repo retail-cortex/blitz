@@ -136,7 +136,7 @@ message Worker {
   repeated string problems = 15;
   // Its latest recorded run (unset: none yet).
   WorkerRun last_run = 16;
-  // The workflow it runs, its prompt the input (spec_workflows_043).
+  // The workflow it runs, its prompt the input (spec_043_workflows).
   string workflow = 17;
 }
 
@@ -445,7 +445,7 @@ message ListAllWorkersResponse {
 }
 
 // The global limits on every worker, as the settings have them
-// ([workers.policy]; spec_workers_023 WK-63). A worker asks for
+// ([workers.policy]; spec_023_workers WK-63). A worker asks for
 // permissions and limits; these remove what isn't allowed, fill in what
 // it leaves out, and cap the rest.
 message WorkerPolicySettings {

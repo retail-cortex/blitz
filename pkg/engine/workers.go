@@ -194,7 +194,7 @@ func (w *Workspace) DraftWorker(spec api.WorkerSpec) (string, []byte, []string, 
 
 // PreviewSchedule is how text is understood as a schedule in the time zone
 // tz ("" for the service machine's): its cron form and its next n runs
-// after now (at most 20), for the schedule picker (spec_workers_023
+// after now (at most 20), for the schedule picker (spec_023_workers
 // WK-72) and create_job. A schedule it can't read is the parser's error.
 func PreviewSchedule(text, tz string, n int, now time.Time) (api.SchedulePreview, error) {
 	s, err := workers.ParseSchedule(text, tz)

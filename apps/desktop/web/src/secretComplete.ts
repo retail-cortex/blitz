@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Completing {secrets:…} as it's typed (spec_secrets_039 SEC-09): the
+// Completing {secrets:…} as it's typed (spec_039_secrets SEC-09): the
 // token before the caret, the names that match it, and the scoped form a
 // choice puts in. The composer, Studio's text boxes (SuggestTextarea)
 // and CodeMirror (secretCompletion) share it; values are never fetched.

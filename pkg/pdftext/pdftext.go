@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package pdftext reads PDF files: whether data is one, its page count and
-// its text, page by page (spec_images_011). Models that can't read a PDF
+// its text, page by page (spec_011_images). Models that can't read a PDF
 // get its text; read_file shows it. Reading is defensive: the parser's
 // panics become errors and a deadline bounds a pathological file. In the
 // programs (UseHelper), the text is read in a child process that's killed

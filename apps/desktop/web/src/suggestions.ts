@@ -95,7 +95,7 @@ export function welcomeTiles(res: GetSuggestionsResponse | undefined): Tile[] {
         break;
       case SuggestionKind.REFLECT:
         // The runs since the last reflection hit the same problems: learn
-        // from them (spec_harness_learning_048 HE-05).
+        // from them (spec_048_harness_learning HE-05).
         own.push({ key, icon: mdiHeadLightbulbOutline, text: t("desktop.suggest.reflect"), detail: tn("desktop.suggest.reflect_detail", s.count), action: { type: "send", prompt: "/reflect" } });
         break;
       case SuggestionKind.REFLECT_REVIEW:

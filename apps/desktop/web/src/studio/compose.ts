@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The composer's session as the page shows it (spec_composer_045).
+// The composer's session as the page shows it (spec_045_composer).
 
 import type { ComposeSession, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 

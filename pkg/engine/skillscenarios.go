@@ -28,7 +28,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 )
 
-// A skill's scenarios (spec_skills_013 SK-111) and trying it (SK-112):
+// A skill's scenarios (spec_013_skills SK-111) and trying it (SK-112):
 // a prompt runs as an eval case does (unattended, in a session of its
 // own), with the skills only offered, so what's checked is whether the
 // agent picks the skill up as well as what it answers.

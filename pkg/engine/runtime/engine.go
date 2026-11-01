@@ -17,7 +17,7 @@
 // its limits, delivers steering mid-turn, answers side questions without
 // touching history, compacts history, and records usage and traces. It
 // also makes the models (Gemini, Anthropic, OpenAI, Ollama) and falls back
-// between them (spec_engine_016, spec_models_015).
+// between them (spec_016_engine, spec_015_models).
 package runtime
 
 import (
@@ -162,7 +162,7 @@ func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore
 
 // WithProjectTrusted says whether the workspace's project settings are
 // trusted: until they are, the project's own agents may only tighten the
-// permission mode (spec_background_agents_032 BGA-50).
+// permission mode (spec_032_background_agents BGA-50).
 func WithProjectTrusted(trusted bool) Option { return func(e *Engine) { e.projectTrusted = trusted } }
 
 // WithNotice sets where the engine reports events the user should know
@@ -209,7 +209,7 @@ func WithAgentModel(agent string, llm model.LLM) Option {
 	}
 }
 
-// WithSecrets gives the engine {secrets:key} values (spec_secrets_039):
+// WithSecrets gives the engine {secrets:key} values (spec_039_secrets):
 // expand puts them in text's place and returns those used. They're put in
 // only as the model is called, never in the session, the transcript or
 // the hooks' view.
@@ -409,7 +409,7 @@ func (e *Engine) SetUploader(up images.Uploader) {
 }
 
 // AcceptedMedia is what agent's model takes as attachments ("": the
-// active agent's), for refusing others at upload (spec_images_011).
+// active agent's), for refusing others at upload (spec_011_images).
 func (e *Engine) AcceptedMedia(agent string) []Accept {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -877,7 +877,7 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	return nil, nil
 }
 
-// preToolHooks runs pre_tool hooks (spec_parity_027 PAR-HK-10): a block or
+// preToolHooks runs pre_tool hooks (spec_027_parity PAR-HK-10): a block or
 // deny stops the call; updated_args replace its arguments (checked against
 // the deny rules again; the tool still checks paths and the sandbox);
 // allow lets the call through its approvals, and ask puts it to the user
@@ -958,7 +958,7 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	}
 	observability.RecordToolCall(ctx, t.Name(), entry.Decision)
 	// What failed, for what agents learn from their runs
-	// (spec_harness_learning_048 HE-02): the call's arguments, and for a
+	// (spec_048_harness_learning HE-02): the call's arguments, and for a
 	// command that exited nonzero its code and the end of its output.
 	if code := exitCode(result); entry.Decision == "ok" && code != 0 {
 		out, _ := result["output"].(string)
@@ -991,7 +991,7 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 		out["diagnostics"] = d
 		changed = true
 	}
-	// The same call failing the same way again (spec_harness_learning_048
+	// The same call failing the same way again (spec_048_harness_learning
 	// HE-07): say so, so the agent changes course instead of retrying.
 	if entry.Decision != "ok" {
 		if n := repeatedFailure(ctx, t.Name(), args, entry.Error); n >= repeatWarnAt {

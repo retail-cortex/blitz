@@ -228,7 +228,7 @@ func (w *Workspace) searchAllowed(source, ref string) bool {
 	return true
 }
 
-// Search searches the workspace's index (spec_search_035).
+// Search searches the workspace's index (spec_035_search).
 func (w *Workspace) Search(ctx context.Context, q api.SearchQuery) (api.SearchResult, error) {
 	st := w.searchNow()
 	if st == nil {

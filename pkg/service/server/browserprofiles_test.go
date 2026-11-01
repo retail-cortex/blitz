@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The browser profiles over the API (spec_browser_profiles_049): made,
+// The browser profiles over the API (spec_049_browser_profiles): made,
 // chosen for a workspace, given sites, opened in Chrome to sign in,
 // cleared and deleted.
 func TestBrowserProfilesOverTheAPI(t *testing.T) {
@@ -171,7 +171,7 @@ func TestBrowserProfilesFailOverTheAPI(t *testing.T) {
 	}
 }
 
-// The window's side of the agent's browser (spec_agent_browser_050): it
+// The window's side of the agent's browser (spec_050_agent_browser): it
 // watches until it goes, and a reply for a browser that isn't open, or a
 // workspace that isn't one, is an error.
 func TestAgentBrowserOverTheAPI(t *testing.T) {

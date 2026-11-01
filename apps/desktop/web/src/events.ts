@@ -67,7 +67,7 @@ export function takePendingCompose(dir: string): ComposeDetail | undefined {
   return d;
 }
 
-/** The event that opens a web page in a workspace's editor (spec_electron_038 EL-100). */
+/** The event that opens a web page in a workspace's editor (spec_038_electron EL-100). */
 export const openWebEvent = "blitz:open-web";
 /** A web page to open in a workspace's editor ("" asks for its address). */
 export interface OpenWebDetail {
@@ -191,7 +191,7 @@ export function configChanged(detail: ConfigChangedDetail) {
   window.dispatchEvent(new CustomEvent(configChangedEvent, { detail }));
 }
 
-// Files (spec_files_029): open a file in a workspace's editor (at a line),
+// Files (spec_029_files): open a file in a workspace's editor (at a line),
 // ask for Go to file, or say that files may have changed (a tool ran, a
 // turn ended) so the shelf and editor look again.
 export const openFileEvent = "blitz:open-file";

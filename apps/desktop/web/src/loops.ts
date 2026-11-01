@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// /loop in the window (spec_desktop_024 DSK-102), as the terminal has it:
+// /loop in the window (spec_024_desktop DSK-102), as the terminal has it:
 // a prompt sent again every interval while the window stays open, per
 // workspace. A loop whose time comes while a turn runs waits for the next.
 // Workers are the way to run something after the window closes.

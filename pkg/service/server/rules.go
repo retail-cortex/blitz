@@ -25,7 +25,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Studio's rules (spec_gates_041).
+// Studio's rules (spec_041_gates).
 
 func ruleMsg(r gates.Rule, dir string) *pb.RuleFile {
 	return &pb.RuleFile{

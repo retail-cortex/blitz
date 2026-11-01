@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Export as PDF (spec_desktop_024): a Markdown file's preview, as it's
+// Export as PDF (spec_024_desktop): a Markdown file's preview, as it's
 // shown (highlighted code, Mermaid diagrams), made a page that the app's
 // own web engine prints (PrintPDF): its pictures inline, styled by the
 // window's CSS in the light theme, the user's light document CSS, and

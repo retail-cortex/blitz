@@ -28,7 +28,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 )
 
-// A connection's paths (spec_databases_046 DB-16): a setting its kind
+// A connection's paths (spec_046_databases DB-16): a setting its kind
 // marks as a path (SQLite's database) is written as the person wrote it,
 // so a committed file means the same on every machine, and resolved only
 // when Blitz connects: a relative one against the workspace's folder (a

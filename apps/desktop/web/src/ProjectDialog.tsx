@@ -26,7 +26,7 @@ import { Button, Dialog, useSnackbar } from "./ui/controls";
 /**
  * A workspace's project settings (.blitz/settings.toml): what they would
  * do that needs trust, what applies without it, and what was ignored,
- * with Trust and Don't trust (spec_project_config_031 PRJ-33). Shown when
+ * with Trust and Don't trust (spec_031_project_config PRJ-33). Shown when
  * a workspace opens with settings waiting for a decision, from the bar
  * above the conversation, and from Settings › Workspaces.
  */

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The job editor's schedule picker (spec_workers_023 WK-72): what repeats
+// The job editor's schedule picker (spec_023_workers WK-72): what repeats
 // and when, as a cron expression the service reads exactly, and back from
 // a job's schedule when it's one the picker makes. Anything else (plain
 // text, other cron) is Custom, kept as written.

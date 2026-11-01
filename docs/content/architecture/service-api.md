@@ -3,7 +3,7 @@ title: The service API
 weight: 20
 ---
 
-Specs: [service](../about/specs/spec_service_021.md), [client](../about/specs/spec_client_022.md).
+Specs: [service](../about/specs/spec_021_service.md), [client](../about/specs/spec_022_client.md).
 
 ## The protos
 

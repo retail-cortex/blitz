@@ -26,7 +26,7 @@ import (
 
 // enterWorktree makes the run's workspace a new git worktree
 // (--worktree[=name], --ref) of the repository --dir (or the working
-// directory) is in (spec_parity_027 PAR-PAR-10). The workspace lock and
+// directory) is in (spec_027_parity PAR-PAR-10). The workspace lock and
 // checkpoints are the worktree's own.
 func enterWorktree(g *globalFlags) error {
 	base := g.dir

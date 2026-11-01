@@ -32,7 +32,7 @@ import (
 )
 
 // The workspace and its remote: fetch, pull, push, and a pull's conflicts
-// (Changes, spec_desktop_024 DSK-90b). The user asks for each; nothing
+// (Changes, spec_024_desktop DSK-90b). The user asks for each; nothing
 // here runs on the agent's behalf.
 //
 // Fetching and pulling run git's transport, credential helpers, filters

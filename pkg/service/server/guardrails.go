@@ -25,7 +25,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Studio's guardrails (spec_gates_041).
+// Studio's guardrails (spec_041_gates).
 
 func guardrailMsg(g gates.Guardrail, dir string) *pb.GuardrailFile {
 	l := g.Limits

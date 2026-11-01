@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package plugins installs and loads Blitz plugins (spec_parity_027
+// Package plugins installs and loads Blitz plugins (spec_027_parity
 // §7.2): a directory with a plugin.toml bundling skills, commands, agents,
 // hooks and MCP servers. Installed plugins live in
 // ~/.blitz/plugins/<name>/<version>, pinned by the hash of their content: a

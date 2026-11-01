@@ -3,7 +3,7 @@ title: Privacy
 weight: 105
 ---
 
-Spec: [active installs](../about/specs/spec_active_installs_054.md).
+Spec: [active installs](../about/specs/spec_054_active_installs.md).
 
 Blitz runs on your machine and keeps your work there. What leaves it goes where you send it, plus one small check for updates.
 

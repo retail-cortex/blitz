@@ -26,7 +26,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// The composer over the API (spec_composer_045).
+// The composer over the API (spec_045_composer).
 
 func composeMsg(s compose.Session) *pb.ComposeSession {
 	m := &pb.ComposeSession{Id: s.ID, Kind: s.Kind, Asking: s.Asking(), CostUsd: s.CostUSD}

@@ -3,7 +3,7 @@ title: Configuration
 weight: 10
 ---
 
-Spec: [configuration](../about/specs/spec_config_002.md).
+Spec: [configuration](../about/specs/spec_002_config.md).
 
 ## Where settings live
 

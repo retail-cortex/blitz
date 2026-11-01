@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package browser drives a Chromium-family browser through the Chrome
-// DevTools Protocol for the agent's browser tool (spec_parity_027 §5.2):
+// DevTools Protocol for the agent's browser tool (spec_027_parity §5.2):
 // its own throwaway profile, never the user's, with every request it makes
 // going through a proxy that applies the web rules.
 package browser
@@ -30,7 +30,7 @@ import (
 
 // Transport carries a DevTools Protocol connection's messages, whole, as
 // JSON: a WebSocket to a browser Blitz started, or a relay to one someone
-// else runs, such as the desktop app's own view (spec_agent_browser_050).
+// else runs, such as the desktop app's own view (spec_050_agent_browser).
 // ReadJSON blocks for the next message and fails once it's closed.
 type Transport interface {
 	WriteJSON(v any) error

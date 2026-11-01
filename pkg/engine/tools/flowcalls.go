@@ -25,7 +25,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Workflows' calls (spec_workflows_043 WF-14): an API or A2A step's
+// Workflows' calls (spec_043_workflows WF-14): an API or A2A step's
 // requests go through web_fetch's guards (public addresses only unless
 // web.allow_private, web.deny_domains, the permission rules, approval
 // per host unless web.allow_domains), and an MCP step's call is approved

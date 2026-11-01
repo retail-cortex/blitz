@@ -62,7 +62,7 @@ func mimesOf(kind images.Kind) []string {
 	return out
 }
 
-// AcceptedMedia is what a model of provider takes (spec_images_011):
+// AcceptedMedia is what a model of provider takes (spec_011_images):
 //   - Gemini: pictures (HEIC too), PDFs, text, audio and video; audio and
 //     video over 14 MB through the Files API when upload is possible (the
 //     Gemini API, not Vertex AI), else no larger than that.

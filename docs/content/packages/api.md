@@ -13,7 +13,7 @@ It depends on nothing else in Blitz except `pkg/config` and `pkg/images`, and no
 
 | Name | |
 |---|---|
-| `Backend` | Everything a front end does: turns, sessions, agents and models, settings, context, changes, extensions, images and search ([workspace spec](../about/specs/spec_workspace_018.md) §3) |
+| `Backend` | Everything a front end does: turns, sessions, agents and models, settings, context, changes, extensions, images and search ([workspace spec](../about/specs/spec_018_workspace.md) §3) |
 | `Turn` | One prompt: its text, images, plan or read-only mode, limits (`MaxTurns`, `MaxCostUSD`, `Timeout`), pre-approved URLs, callbacks |
 | `Event` | One part of the agent's output: text (partial, repeated, thought), a tool call, or a tool result |
 | `ApprovalRequest`, `Approver`, `UserPromptFunc` | How the engine asks the front end before acting, and asks the user questions |
@@ -23,4 +23,4 @@ It depends on nothing else in Blitz except `pkg/config` and `pkg/images`, and no
 
 apps/cli, apps/cli/internal/tui, pkg/service/server, pkg/client, pkg/engine and its runtime, session, tools and jobs packages.
 
-Spec: [workspace](../about/specs/spec_workspace_018.md), [client](../about/specs/spec_client_022.md).
+Spec: [workspace](../about/specs/spec_018_workspace.md), [client](../about/specs/spec_022_client.md).

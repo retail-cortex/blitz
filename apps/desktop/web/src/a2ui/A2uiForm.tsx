@@ -31,7 +31,7 @@ const textClass: Record<string, string> = { h1: "t-headline", h2: "t-headline", 
 const justify: Record<string, string> = { start: "flex-start", center: "center", end: "flex-end", spaceBetween: "space-between", spaceAround: "space-around", spaceEvenly: "space-evenly", stretch: "stretch" };
 
 /**
- * An A2UI v0.9 form (spec_workflows_043 WF-18), drawn with the app's own
+ * An A2UI v0.9 form (spec_043_workflows WF-18), drawn with the app's own
  * controls: the basic catalog's components, inputs bound to its data, the
  * catalog's checks, and buttons whose actions answer it (onAction with the
  * action's name and context). Nothing in a form is run as code or HTML:

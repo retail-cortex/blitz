@@ -14,7 +14,7 @@
 
 package lsp
 
-// Code blocks as documents (spec_visual_editor_037 §7): a block in a
+// Code blocks as documents (spec_037_visual_editor §7): a block in a
 // Markdown file is opened as a file of its own that's never written, and a
 // Go fragment is made a whole file first, so the server can read it.
 

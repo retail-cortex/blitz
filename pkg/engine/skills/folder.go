@@ -26,7 +26,7 @@ import (
 )
 
 // The four kinds of skill, told from what its folder holds rather than a
-// field (spec_skills_013 SK-97).
+// field (spec_013_skills SK-97).
 const (
 	// KindSimple is SKILL.md alone.
 	KindSimple = "simple"

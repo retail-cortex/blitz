@@ -28,7 +28,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 )
 
-// Drafting an agent's eval cases (spec_evals_042 EV-11): the suggestions
+// Drafting an agent's eval cases (spec_042_evals EV-11): the suggestions
 // model proposes cases from what the agent is for and its instructions.
 
 // evalDraftBrief is the brief for drafting cases.

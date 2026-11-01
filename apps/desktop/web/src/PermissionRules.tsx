@@ -22,7 +22,7 @@ import { Button, IconButton, nudge, useAnchoredMenu } from "./ui/controls";
 import { parseRules, ruleExamples, ruleHelp, ruleKinds, rulesText, type Rule, type RuleKind } from "./workerForm";
 
 /**
- * What a job may do without asking, as rows (spec_workers_023 WK-71): a
+ * What a job may do without asking, as rows (spec_023_workers WK-71): a
  * kind (run commands, write files, …) and the pattern it covers, each
  * saying what it allows. value is the form's kind:pattern lines, so the
  * job's file is written as before. Kinds the host's policy doesn't allow

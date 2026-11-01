@@ -35,7 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
-// The REPL's views of its state (spec_parity_027 §8.3): /status, /config,
+// The REPL's views of its state (spec_027_parity §8.3): /status, /config,
 // /copy, /context's breakdown, a browsable /diff, and notifications when
 // a long turn ends or waits for you.
 

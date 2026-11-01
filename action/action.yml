@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Blitz in GitHub Actions (spec_parity_027 PAR-INT-01): answer "@blitz"
+# Blitz in GitHub Actions (spec_027_parity PAR-INT-01): answer "@blitz"
 # mentions in issues and pull requests, review pull requests, or turn an
 # issue into a pull request. See docs/content/guide/github-action.md.
 name: Blitz

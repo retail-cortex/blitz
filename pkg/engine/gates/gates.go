@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package gates is the rules that gate an agent's turn (spec_gates_041):
+// Package gates is the rules that gate an agent's turn (spec_041_gates):
 // checks written in plain English in .agents/rules/<name>.md, with front
 // matter when: before_agent or after_agent, judged in order by a model
 // before the agent runs (on the prompt) or after (on its answer and the
 // files it changed), each blocking, warning or asking for a revision. A
-// rule without when: is an instruction rule (spec_memory_012 MEM-07),
+// rule without when: is an instruction rule (spec_012_memory MEM-07),
 // listed here so Studio can edit it, and loaded by the memory package.
 package gates
 

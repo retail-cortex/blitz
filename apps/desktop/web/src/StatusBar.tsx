@@ -59,7 +59,7 @@ import { useWorkerFailures } from "./workerFailures";
 const gitPollMs = 10_000;
 
 /**
- * The status bar along the window's foot (spec_desktop_024 DSK-39): the
+ * The status bar along the window's foot (spec_024_desktop DSK-39): the
  * service and the workspace in view, its git branch, what runs, and the
  * agent, model, permission mode, context and cost, with the editor's
  * cursor when a file is shown. Items open what they describe.
@@ -199,7 +199,7 @@ function TasksItem() {
 }
 
 // The agents' background processes, in any workspace
-// (spec_processes_052 PR-50): a board icon, green while some run (amber
+// (spec_052_processes PR-50): a board icon, green while some run (amber
 // when one is flagged) and greyed when none do, the count in its hover
 // text. It opens a menu of them by workspace, each with what it uses and
 // Stop; a pick, or Output and details, opens the drawer on its output.

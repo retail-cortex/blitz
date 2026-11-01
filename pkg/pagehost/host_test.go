@@ -283,7 +283,7 @@ func shortTemp(t *testing.T) string {
 }
 
 // The window in use counts the desktop app's use, once a day; a host
-// without a recorder has no such method (spec_active_installs_054 AI-01).
+// without a recorder has no such method (spec_054_active_installs AI-01).
 func TestUsed(t *testing.T) {
 	var mu sync.Mutex
 	var fronts []string

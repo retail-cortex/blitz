@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Background runs (spec_parity_027 PAR-PAR-20): turns the service runs in
+// Background runs (spec_027_parity PAR-PAR-20): turns the service runs in
 // sessions of their own with no client attached (blitz --bg). A run's
 // events are kept, so a client can watch it from the start (blitz logs,
 // attach); its approval requests and questions go through the broker as a

@@ -181,7 +181,7 @@ service WorkspaceService {
   rpc GetSkill(GetSkillRequest) returns (GetSkillResponse);
   // Returns a skill as Studio edits it: its SKILL.md's fields and hash,
   // and whether it's the workspace's own, which may be edited
-  // (SKILL_NOT_FOUND; spec_skills_013 SK-100).
+  // (SKILL_NOT_FOUND; spec_013_skills SK-100).
   rpc GetSkillFile(GetSkillFileRequest) returns (GetSkillFileResponse);
   // Writes a skill of the workspace's from Studio's form: a new one in
   // .agents/skills, or an existing one (renamed when the name differs) if
@@ -220,7 +220,7 @@ service WorkspaceService {
   // a session of its own): the skill only offered, to see whether the
   // agent uses it, or forced. Saves nothing; costs one agent turn.
   rpc TrySkill(TrySkillRequest) returns (TrySkillResponse);
-  // Returns the workspace's rules (spec_gates_041): the gates in the
+  // Returns the workspace's rules (spec_041_gates): the gates in the
   // order they run (before the agent, then after), then the instruction
   // rules.
   rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
@@ -237,7 +237,7 @@ service WorkspaceService {
   // before-agent rule, an answer for an after-agent one. A judge that
   // fails gives problem.
   rpc TryRule(TryRuleRequest) returns (TryRuleResponse);
-  // Returns the workspace's guardrails (spec_gates_041): each built-in one
+  // Returns the workspace's guardrails (spec_041_gates): each built-in one
   // (its file, or its defaults), then the custom ones.
   rpc ListGuardrails(ListGuardrailsRequest) returns (ListGuardrailsResponse);
   // Writes a guardrail in .agents/guardrails from Studio's form (a
@@ -251,7 +251,7 @@ service WorkspaceService {
   // by the judge, the injection and secrets ones by their patterns. A
   // judge that fails gives problem.
   rpc TryGuardrail(TryGuardrailRequest) returns (TryGuardrailResponse);
-  // Returns the workspace's evals (spec_evals_042), by name, each with its
+  // Returns the workspace's evals (spec_042_evals), by name, each with its
   // last run's status.
   rpc ListEvals(ListEvalsRequest) returns (ListEvalsResponse);
   // Writes an eval in .agents/evals from Studio's form, keeping its front
@@ -282,7 +282,7 @@ service WorkspaceService {
   // beside the cases given, saving nothing. An unknown agent is
   // INVALID_ARGUMENT; a model that fails gives problem.
   rpc DraftEvalCases(DraftEvalCasesRequest) returns (DraftEvalCasesResponse);
-  // Returns the workspace's workflows (spec_workflows_043), by name. Run
+  // Returns the workspace's workflows (spec_043_workflows), by name. Run
   // one as a turn ("/name input"), in a session or in the background.
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
   // Writes a workflow in .agents/workflows from Studio's canvas; problems,
@@ -309,7 +309,7 @@ service WorkspaceService {
   // background, a worker); RUN_NOT_FOUND when it isn't running.
   rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
 
-  // The workspace dashboard (spec_health_044): the facts about its items
+  // The workspace dashboard (spec_044_health): the facts about its items
   // and runs, each item's latest verdict, and the scores.
   rpc GetWorkspaceHealth(GetWorkspaceHealthRequest) returns (GetWorkspaceHealthResponse);
   // Streams the dashboard: as it is, then again each time it changes (a
@@ -327,7 +327,7 @@ service WorkspaceService {
   // HEALTH_CHECK_RUNNING when one is going.
   rpc StartHealthCheck(StartHealthCheckRequest) returns (StartHealthCheckResponse);
 
-  // The composer (spec_composer_045): starts a guided conversation that
+  // The composer (spec_045_composer): starts a guided conversation that
   // makes a component of a kind ("workflow"), and runs its first turn: a
   // question, or a draft checked by the kind's own rules.
   rpc StartCompose(StartComposeRequest) returns (StartComposeResponse);
@@ -363,7 +363,7 @@ service WorkspaceService {
   rpc RestartMCPServer(RestartMCPServerRequest) returns (RestartMCPServerResponse);
   // Returns what the active agent can use.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
-  // Returns the connectors (spec_connectors_047): the categories and
+  // Returns the connectors (spec_047_connectors): the categories and
   // kinds there are (built-in, global and the workspace's descriptors,
   // each with any problem), the connections, global first, and how each
   // category's server is doing.
@@ -440,12 +440,12 @@ service WorkspaceService {
   // one of the given sessions started it).
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
   // Returns the agents' background processes still running, in every open
-  // workspace (the tray's Processes menu, spec_electron_038 EL-112).
+  // workspace (the tray's Processes menu, spec_038_electron EL-112).
   rpc ListRunningProcesses(ListRunningProcessesRequest) returns (ListRunningProcessesResponse);
   // Streams the agents' background processes still running, in every open
   // workspace (or one): as they are, then again each time one starts,
   // ends, is flagged or its usage moves (the processes view,
-  // spec_processes_052).
+  // spec_052_processes).
   rpc WatchProcesses(WatchProcessesRequest) returns (stream WatchProcessesResponse);
   // Records in the workspace's audit log a command the user ran directly
   // in a client (!cmd), as user_shell.
@@ -472,7 +472,7 @@ service WorkspaceService {
   // then each change. Requests are answered with SessionService.Approve and Answer.
   rpc WatchTasks(WatchTasksRequest) returns (stream WatchTasksResponse);
   // A desktop window hosts the agent's browser views while it watches
-  // (spec_agent_browser_050): each command for them (open a view, a
+  // (spec_050_agent_browser): each command for them (open a view, a
   // DevTools message for one, close it), in order; the newest window
   // hosts new ones. It answers with AgentBrowserReply.
   rpc WatchAgentBrowser(WatchAgentBrowserRequest) returns (stream WatchAgentBrowserResponse);
@@ -518,7 +518,7 @@ service WorkspaceService {
   rpc GetReflection(GetReflectionRequest) returns (GetReflectionResponse);
 
   // Holds off the chat's suggestion to reflect (TurnEvent.reflect_due) for
-  // a week: its Not now (spec_harness_learning_048 HE-63).
+  // a week: its Not now (spec_048_harness_learning HE-63).
   rpc SnoozeReflection(SnoozeReflectionRequest) returns (SnoozeReflectionResponse);
 
   // Reads an image or a PDF from the workspace for a prompt
@@ -535,7 +535,7 @@ service WorkspaceService {
   rpc SearchWeb(SearchWebRequest) returns (SearchWebResponse);
   // Searches the workspace's index: its files, the text of its PDFs and
   // notebooks, its chats and notes (SEARCH_DISABLED, UNKNOWN_SEARCH_SOURCE;
-  // spec_search_035).
+  // spec_035_search).
   rpc SearchWorkspace(SearchWorkspaceRequest) returns (SearchWorkspaceResponse);
   // Says how the workspace's search index is.
   rpc GetSearchStatus(GetSearchStatusRequest) returns (GetSearchStatusResponse);
@@ -1738,7 +1738,7 @@ message Process {
   bool measured = 9;
   // Why it looks bad: "cpu" (a core kept busy), "memory" (over the limit,
   // or growing), "left" (its session ended, or has had no turn for long);
-  // none while it looks fine (spec_processes_052).
+  // none while it looks fine (spec_052_processes).
   repeated string flags = 10;
   // How long its session has gone without a turn (0 while one runs).
   int64 idle_ms = 11;
@@ -3237,7 +3237,7 @@ message WorkflowFile {
   string problem = 6;
   // The permission mode its steps run in: auto (empty), accept-edits,
   // default, dont-ask or bypass; never looser than the workspace's
-  // (spec_workflows_043 WF-21).
+  // (spec_043_workflows WF-21).
   string mode = 7;
 }
 
@@ -3277,7 +3277,7 @@ message DeleteWorkflowRequest {
 // Response message for WorkspaceService.DeleteWorkflow.
 message DeleteWorkflowResponse {}
 
-// A workflow run's receipt (spec_workflows_043 WF-19): its envelope (what
+// A workflow run's receipt (spec_043_workflows WF-19): its envelope (what
 // started it, when, on what) and routing slip (each step's run, in the
 // order they ran), with what it spent.
 message WorkflowRun {
@@ -3309,7 +3309,7 @@ message WorkflowRun {
   string background_id = 16;
   // Approval requests that background run waits on.
   int32 approvals = 17;
-  // The permission mode its steps ran in (spec_workflows_043 WF-21).
+  // The permission mode its steps ran in (spec_043_workflows WF-21).
   string mode = 18;
 }
 
@@ -3407,7 +3407,7 @@ message StopWorkflowRunRequest {
 // Response message for WorkspaceService.StopWorkflowRun.
 message StopWorkflowRunResponse {}
 
-// A workspace's dashboard (spec_health_044).
+// A workspace's dashboard (spec_044_health).
 message WorkspaceHealth {
   google.protobuf.Timestamp at = 1;
   repeated HealthItem items = 2;
@@ -3437,7 +3437,7 @@ message WorkspaceHealth {
   repeated string last_errors = 18;
   // The reflection's schedule ("" or "off", the default: only /reflect),
   // its cost limit, and why the last scheduled one didn't run or stopped
-  // (spec_harness_learning_048 HE-06).
+  // (spec_048_harness_learning HE-06).
   string reflect_schedule = 19;
   double reflect_max_cost_usd = 20;
   string reflect_skipped = 21;
@@ -3684,7 +3684,7 @@ message DropComposeRequest {
 // Response message for WorkspaceService.DropCompose.
 message DropComposeResponse {}
 
-// A setting a kind of connector takes (spec_connectors_047).
+// A setting a kind of connector takes (spec_047_connectors).
 message ConnectorField {
   // Its name in the file: host, port, project…
   string key = 1;

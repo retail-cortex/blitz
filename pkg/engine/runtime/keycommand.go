@@ -24,7 +24,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
-// Keys from a command (spec_parity_027 PAR-MOD-04): llm.<provider>.
+// Keys from a command (spec_027_parity PAR-MOD-04): llm.<provider>.
 // api_key_command prints the key; it runs when a key is first needed and
 // again once api_key_ttl has passed, and every request carries the current
 // one, so a key a password manager or gateway rotates keeps working. The

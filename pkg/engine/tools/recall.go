@@ -24,7 +24,7 @@ import (
 )
 
 // SessionRecaller is where an earlier session of the workspace left off
-// (spec_memory_012 MEM-36): session's summary, or with session empty the
+// (spec_012_memory MEM-36): session's summary, or with session empty the
 // latest one's before current, written first when it's missing or behind.
 // The engine supplies it.
 type SessionRecaller func(ctx context.Context, current, session string) (RecallSessionOutput, error)

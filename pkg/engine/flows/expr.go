@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Expressions (spec_workflows_043 WF-13): conditions on links and
+// Expressions (spec_043_workflows WF-13): conditions on links and
 // {{ … }} in step settings are CEL, on these variables:
 //
 //	input   the run's input (text)

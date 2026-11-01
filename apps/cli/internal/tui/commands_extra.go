@@ -400,7 +400,7 @@ func cmdStyle(ctx context.Context, args []string, app *App) {
 }
 
 // cmdHooks lists the hooks by event, with where each came from and its
-// recent failures (spec_parity_027 PAR-HK-13).
+// recent failures (spec_027_parity PAR-HK-13).
 func cmdHooks(app *App) {
 	list := app.Workspace.ListHooks()
 	if len(list) == 0 {

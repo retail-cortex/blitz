@@ -38,7 +38,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// The workspace dashboard (spec_health_044): its facts, from what the
+// The workspace dashboard (spec_044_health): its facts, from what the
 // workspace records, and the judge's verdicts on each item.
 
 // HealthReport is the dashboard: the facts, each item's latest verdict and

@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// /setup leads with the specification (spec_memory_012 MEM-43): with none,
+// /setup leads with the specification (spec_012_memory MEM-43): with none,
 // the setup agent invokes project-spec in the foreground, whose questions
 // reach the person in the same turn, and carries on with what it wrote.
 func TestSetupRunsTheSpecAgentAndItsQuestionsReachThePerson(t *testing.T) {

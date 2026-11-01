@@ -32,7 +32,7 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// Code intelligence (spec_parity_027 PAR-TOOL-03): the lsp tool asks the
+// Code intelligence (spec_027_parity PAR-TOOL-03): the lsp tool asks the
 // workspace's language servers, started when first needed, guarded and in
 // the OS sandbox like shell commands; after an edit to a file whose
 // language server runs, its new diagnostics come with the edit's result.

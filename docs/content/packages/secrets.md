@@ -19,4 +19,4 @@ API keys in the OS keychain. Source: [`pkg/secrets`](https://github.com/retail-c
 
 pkg/config.
 
-Spec: [config](../about/specs/spec_config_002.md).
+Spec: [config](../about/specs/spec_002_config.md).

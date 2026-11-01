@@ -262,7 +262,7 @@ func (Backend) Render(cat connectors.Category, kind *connectors.Kind, c connecto
 	}
 	var b bytes.Buffer
 	b.WriteString(connectors.KindComment(kind.ID))
-	b.WriteString("# A connection for Blitz's agents (spec_connectors_047), written by Studio.\n# ${NAME} is the Blitz secret NAME.\n")
+	b.WriteString("# A connection for Blitz's agents (spec_047_connectors), written by Studio.\n# ${NAME} is the Blitz secret NAME.\n")
 	if d := strings.Join(strings.Fields(c.Description), " "); d != "" {
 		b.WriteString("# about: " + d + "\n")
 	}

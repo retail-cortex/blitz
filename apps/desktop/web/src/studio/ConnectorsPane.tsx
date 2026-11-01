@@ -60,7 +60,7 @@ type Open = { category: string; scope: ConnectorScope; name: string } | null;
 type DialogOpen = "delete" | "promote" | "build" | null;
 
 /**
- * The connectors the agents reach (spec_connectors_047), by category
+ * The connectors the agents reach (spec_047_connectors), by category
  * (Databases, served by MCP Toolbox for Databases inside Blitz). With a
  * workspace it's Studio › Connectors: the workspace's connections, which
  * it changes and can make global, and the global ones, shown as they are

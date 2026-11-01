@@ -24,7 +24,7 @@ import (
 	"strings"
 )
 
-// The api provider (spec_models_015 §3.4): a gateway that speaks OpenAI's
+// The api provider (spec_015_models §3.4): a gateway that speaks OpenAI's
 // Responses API but signs requests with its own headers, which may carry
 // a short-lived token printed by a script.
 
@@ -86,7 +86,7 @@ var headerNameRE = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 // valid anywhere in one, so where it lands says where the placeholder was.
 const urlSentinel = "blitztokenscriptplaceholder"
 
-// Check reports why the settings can't build a model (spec_models_015
+// Check reports why the settings can't build a model (spec_015_models
 // MDL-100), or nil.
 func (a APIConfig) Check() error {
 	if err := checkAPIBaseURL(a.BaseURL); err != nil {

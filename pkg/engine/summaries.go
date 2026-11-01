@@ -31,7 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Session summaries (spec_memory_012 MEM-35..37): where each session left
+// Session summaries (spec_012_memory MEM-35..37): where each session left
 // off, written by the small model when the person moves to another session
 // (and when one is asked for and missing or behind), listed in a new
 // session's first prompt and read with recall_session.

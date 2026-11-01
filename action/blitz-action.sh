@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The GitHub Action's steps (spec_parity_027 PAR-INT-01), from the event in
+# The GitHub Action's steps (spec_027_parity PAR-INT-01), from the event in
 # GITHUB_EVENT_PATH:
 #
 #   blitz-action.sh decide   prints run=true|false and why, for GITHUB_OUTPUT

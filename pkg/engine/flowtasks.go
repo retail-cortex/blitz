@@ -39,7 +39,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// People and time (spec_workflows_043 WF-16): a human task pauses its run
+// People and time (spec_043_workflows WF-16): a human task pauses its run
 // until someone fills in its form, a timer until its time. The run's
 // state is in its orchestration session (ADK replays finished steps when
 // it resumes); a record of the paused run says where to resume it: its

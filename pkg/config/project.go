@@ -33,7 +33,7 @@ import (
 // A workspace may carry settings for everyone who works in it, in
 // .blitz/settings.toml (committed) and .blitz/settings.local.toml
 // (personal). A repository is not trusted, so a project file may set only
-// the keys below, in three tiers (spec_project_config_031):
+// the keys below, in three tiers (spec_031_project_config):
 //
 //   - tier A only informs or tightens (deny and ask rules, blocked paths,
 //     lower limits, stricter skill and worker policy) and applies at once;

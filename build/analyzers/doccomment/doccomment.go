@@ -14,7 +14,7 @@
 
 // Package doccomment is a nogo analyzer: every package has a package
 // comment, and every exported declaration a doc comment
-// (spec_release_readiness_030 RR-12). A comment on a const, var or type
+// (spec_030_release_readiness RR-12). A comment on a const, var or type
 // group covers the names in it. Tests and generated files are exempt.
 package doccomment
 

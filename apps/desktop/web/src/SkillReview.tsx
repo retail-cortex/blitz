@@ -30,7 +30,7 @@ export interface ScriptsToReview {
 }
 
 /**
- * Reviewing a skill's scripts before they run unasked (spec_skills_013
+ * Reviewing a skill's scripts before they run unasked (spec_013_skills
  * SK-108): after a registry install, or when Studio shows a skill whose
  * scripts are new or changed. Each script with its language, file and
  * the packages it installs, and where the skill is; **Trust these

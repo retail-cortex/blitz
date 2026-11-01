@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package mcpauth signs Blitz in to MCP servers over HTTP with OAuth
-// (spec_parity_027 PAR-MCP-04): the authorization-code flow with PKCE,
+// (spec_027_parity PAR-MCP-04): the authorization-code flow with PKCE,
 // through a local callback or a code pasted over SSH, with the client
 // registered dynamically. The tokens and what refreshing them needs are
 // kept in the secret store (the OS keychain, else an owner-only file),

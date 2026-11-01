@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The Electron trial of the desktop app (spec_electron_038): Electron's
+# The Electron trial of the desktop app (spec_038_electron): Electron's
 # window over the desktop page, with blitz-tray --serve as its host.
 #   bazel run //apps/electron:dev   (this machine, against its service)
 

@@ -233,7 +233,7 @@ func TestEngineAuditsToolCalls(t *testing.T) {
 }
 
 // A failed call's result entry carries its arguments, for what agents
-// learn from their runs (spec_harness_learning_048 HE-02); one that
+// learn from their runs (spec_048_harness_learning HE-02); one that
 // worked doesn't repeat them.
 func TestEngineAuditsWhatFailed(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{},
@@ -262,7 +262,7 @@ func TestEngineAuditsWhatFailed(t *testing.T) {
 }
 
 // The third time the same call fails the same way in a turn, the agent is
-// told to stop repeating it (spec_harness_learning_048 HE-07); another
+// told to stop repeating it (spec_048_harness_learning HE-07); another
 // call, or the next turn, counts afresh.
 func TestEngineSaysWhenAFailureRepeats(t *testing.T) {
 	missing := map[string]any{"path": "missing.txt"}

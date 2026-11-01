@@ -27,7 +27,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 )
 
-// The editor's language servers (spec_visual_editor_037 §5–§6): the same
+// The editor's language servers (spec_037_visual_editor §5–§6): the same
 // servers as the agent's lsp tool, for the documents the editor has open.
 
 // The language servers' types and errors, as the service sees them.
@@ -99,7 +99,7 @@ func (w *Workspace) languages() (*lsp.Manager, error) {
 	return m, nil
 }
 
-// CodeBlock is a code block opened as a document (spec_visual_editor_037
+// CodeBlock is a code block opened as a document (spec_037_visual_editor
 // §7): its language as a file extension, and the client's ID for it.
 type CodeBlock struct {
 	Extension string

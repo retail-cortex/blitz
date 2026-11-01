@@ -26,7 +26,7 @@ import (
 )
 
 // Studio's guardrails over the API: the built-ins on by default, one tuned
-// and switched off, a custom one, try samples, reset one (spec_gates_041).
+// and switched off, a custom one, try samples, reset one (spec_041_gates).
 func TestGuardrailsOverTheAPI(t *testing.T) {
 	c, _ := serve(t, nil)
 	w := c.workspaces

@@ -755,7 +755,7 @@ function CommandLine() {
 }
 
 /**
- * The app's update (spec_electron_038 EL-90): where it is, Check now,
+ * The app's update (spec_038_electron EL-90): where it is, Check now,
  * Download or Restart to update, the release's notes, and whether it's
  * looked for when the app opens.
  */

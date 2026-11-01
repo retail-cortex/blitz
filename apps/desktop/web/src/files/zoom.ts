@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The editor's zoom (spec_files_029 FIL-66): the code editor and the
+// The editor's zoom (spec_029_files FIL-66): the code editor and the
 // documents (Preview, Visual) in the editor pane, never the rest of the
 // window. ⌘/Ctrl with + − 0, ⌘/Ctrl and the wheel, or a pinch; the pane
 // sets --zoom, which their sizes multiply. Kept in the preferences.

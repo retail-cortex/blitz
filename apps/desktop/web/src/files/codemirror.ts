@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The editor's CodeMirror setup (spec_files_029 §6): the window's colours,
+// The editor's CodeMirror setup (spec_029_files §6): the window's colours,
 // languages loaded when first needed, completion from the language and
 // from the file's words, and the editor's keys.
 import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
@@ -109,7 +109,7 @@ const theme = EditorView.theme({
   ".cm-tooltip": { backgroundColor: "var(--md-surface-container-high)", color: "var(--md-on-surface)", border: "1px solid var(--md-outline-variant)", borderRadius: "8px" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--md-secondary-container)", color: "var(--md-on-secondary-container)" },
   ".cm-foldPlaceholder": { backgroundColor: "var(--md-surface-container-high)", border: "none", color: "var(--md-on-surface-variant)" },
-  // Problems from a language server (spec_visual_editor_037 VE-35), in the
+  // Problems from a language server (spec_037_visual_editor VE-35), in the
   // window's colours rather than CodeMirror's.
   ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy var(--md-error)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
   ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy var(--md-warning)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
@@ -226,7 +226,7 @@ export function tooltipLayer(): HTMLElement {
   return layer;
 }
 
-// Math in Markdown's source ($…$, $$…$$; spec_files_029 FIL-67), read as
+// Math in Markdown's source ($…$, $$…$$; spec_029_files FIL-67), read as
 // GitHub does (math.ts isInlineMath): the TeX highlighted, its dollars
 // marked. The shape @lezer/markdown's inline parsers take.
 interface InlineContext {

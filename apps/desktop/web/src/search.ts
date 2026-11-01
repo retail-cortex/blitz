@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Workspace search's rules, apart from the dialog (spec_search_035): which
+// Workspace search's rules, apart from the dialog (spec_035_search): which
 // sources a search uses, what a hit opens, and which parts of a snippet
 // to mark.
 

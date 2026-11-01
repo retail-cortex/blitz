@@ -15,7 +15,7 @@
  */
 
 // The agents' background processes still running, in every open
-// workspace (spec_processes_052): one stream (WatchProcesses) serves the
+// workspace (spec_052_processes): one stream (WatchProcesses) serves the
 // status bar's count and the Processes view, with what the view shows of
 // each (its running time, usage and flags) and which to stop.
 

@@ -257,7 +257,7 @@ type TelemetryConfig struct {
 }
 
 // UsageConfig is whether Blitz counts its install as active
-// (spec_active_installs_054).
+// (spec_054_active_installs).
 type UsageConfig struct {
 	// Count sends a daily ping on a day Blitz is used, which counts the
 	// install as active (a random ID, the day, the front end, the version
@@ -431,7 +431,7 @@ type MCPServerConfig struct {
 	// Disabled is set too.
 	OffHere bool `toml:"-"`
 	// InProcess names a server Blitz runs inside its own process, in place
-	// of a command or URL ("databases", spec_databases_046). Blitz sets it;
+	// of a command or URL ("databases", spec_046_databases). Blitz sets it;
 	// settings files can't.
 	InProcess string `toml:"-"`
 	// Fingerprint changes when an in-process server's files do, so a
@@ -442,11 +442,11 @@ type MCPServerConfig struct {
 	ReadOnlyTools []string `toml:"-"`
 	// FileSettings are an in-process server's settings that name a file,
 	// by source type (SQLite's database): a relative one is resolved
-	// where its file belongs (spec_databases_046 DB-17).
+	// where its file belongs (spec_046_databases DB-17).
 	FileSettings map[string][]string `toml:"-"`
 }
 
-// BrowserConfig controls the browser tool (spec_parity_027 §5.2): a
+// BrowserConfig controls the browser tool (spec_027_parity §5.2): a
 // Chromium-family browser the agent drives, in its own profile, reaching
 // what the web rules allow.
 type BrowserConfig struct {
@@ -467,7 +467,7 @@ type BrowserConfig struct {
 	Width  int `toml:"width"`
 	Height int `toml:"height"`
 	// Show is how the agent browses while the desktop app is open
-	// (spec_agent_browser_050): "watch", in a tab you see; "silent", off
+	// (spec_050_agent_browser): "watch", in a tab you see; "silent", off
 	// screen; or "ask" (the default), the first time in each chat.
 	// Without the app, the headless browser.
 	Show string `toml:"show"`
@@ -584,7 +584,7 @@ type WebConfig struct {
 	TimeoutSeconds int `toml:"timeout_seconds"`
 	// BrowserFallback has web_fetch load a page in the browser when a
 	// plain request gets a bot check or a page that needs JavaScript (with
-	// [browser] enabled; spec_web_008 WEB-09).
+	// [browser] enabled; spec_008_web WEB-09).
 	BrowserFallback bool `toml:"browser_fallback"`
 	// SearchProvider enables web_search and /search web: "brave",
 	// "tavily", "searxng" (self-hosted, needs SearchURL), or "google"
@@ -711,7 +711,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Pricing = DefaultPricingAt(time.Now())
 }
 
-// HealthConfig is the workspace dashboard's judge (spec_health_044): it
+// HealthConfig is the workspace dashboard's judge (spec_044_health): it
 // rates each agent, skill, rule, guardrail, eval, workflow and worker on
 // the evidence, when asked and on a schedule. Only the user's settings
 // (global or a workspace's own) set it: a project may not spend the
@@ -730,7 +730,7 @@ type HealthConfig struct {
 }
 
 // HarnessConfig is what the harness learns from the workspace's runs
-// (spec_harness_learning_048). As [health], only the user's settings set
+// (spec_048_harness_learning). As [health], only the user's settings set
 // it: a project may not spend the user's money.
 type HarnessConfig struct {
 	// ReflectSchedule is when the reflector reads the evidence on its own

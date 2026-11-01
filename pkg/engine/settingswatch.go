@@ -34,7 +34,7 @@ import (
 // settingsPoll, and applies a change to the live rules, which every tool
 // call reads, so a turn already running obeys it from its next action.
 // Listeners (the service, for its clients) hear of it. A change to the
-// connector files (spec_connectors_047) restarts the connector servers.
+// connector files (spec_047_connectors) restarts the connector servers.
 
 // settingsPoll is how often the settings files are looked at.
 var settingsPoll = 2 * time.Second

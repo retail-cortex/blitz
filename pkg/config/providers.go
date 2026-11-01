@@ -343,7 +343,7 @@ func SecretScope(prefixDir, workspace string) string {
 	return filepath.Base(WorkspaceSettingsDir(prefixDir, workspace))
 }
 
-// Vault is the user's secrets (spec_secrets_039): their values in the
+// Vault is the user's secrets (spec_039_secrets): their values in the
 // OS store, their names beside the settings.
 func Vault(prefixDir string) secrets.Vault {
 	dir := ConfigDir(prefixDir)
@@ -485,10 +485,10 @@ var settableValues = map[string]bool{
 	"blitz.default_agent":   true,
 	"blitz.agency_level":    true,
 	"blitz.permission_mode": true,
-	// The workspace dashboard's judge and schedule (spec_health_044).
+	// The workspace dashboard's judge and schedule (spec_044_health).
 	"health.model":    true,
 	"health.schedule": true,
-	// The scheduled reflection (spec_harness_learning_048 HE-06).
+	// The scheduled reflection (spec_048_harness_learning HE-06).
 	"harness.reflect_schedule": true,
 	"ui.style":                 true,
 	"ui.locale":                true,
@@ -510,7 +510,7 @@ var typedValues = map[string]string{
 	"search.enrich_daily_limit": "int",
 	"search.include_ignored":    "bool",
 	"search.sources":            "sources",
-	// Settings › Workers' limits (spec_workers_023 WK-63).
+	// Settings › Workers' limits (spec_023_workers WK-63).
 	"workers.policy.allow":                "kinds",
 	"workers.policy.max_concurrent":       "int",
 	"workers.policy.default_max_turns":    "int",
@@ -522,9 +522,9 @@ var typedValues = map[string]string{
 	// Cost limits of the dashboard's and the reflector's schedules.
 	"health.max_cost_usd":  "usd",
 	"harness.max_cost_usd": "usd",
-	// When /reflect is suggested (spec_harness_learning_048 HE-62).
+	// When /reflect is suggested (spec_048_harness_learning HE-62).
 	"harness.reflect_threshold": "int",
-	// Settings › Browser (spec_agent_browser_050 AB-02, spec_web_008 WEB-09).
+	// Settings › Browser (spec_050_agent_browser AB-02, spec_008_web WEB-09).
 	"browser.show":         "show",
 	"browser.open":         "open",
 	"web.browser_fallback": "bool",

@@ -15,7 +15,7 @@
  */
 
 
-// A code block in the visual editor (spec_visual_editor_037 §4): a
+// A code block in the visual editor (spec_037_visual_editor §4): a
 // CodeMirror editor inside the document. Every change in it reaches the
 // document in the same event, and every change to the block from the
 // document (undo, a paste over it) reaches it; the document's history

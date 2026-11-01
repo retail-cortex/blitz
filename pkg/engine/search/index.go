@@ -16,7 +16,7 @@
 // (its files, the text of its PDFs and notebooks, its chats, its notes),
 // kept on disk per workspace, brought up to date by scans that read only
 // what changed, and searched by words (SQLite FTS5, ranked by BM25) and by
-// substrings for code (spec_search_035). The engine hands it the sources
+// substrings for code (spec_035_search). The engine hands it the sources
 // and says which items may be shown; it knows nothing else of the engine.
 package search
 

@@ -31,7 +31,7 @@ import (
 // ForkSession starts a new session copied from the active one up to and
 // including its prompt turn (1 the first; 0 or more than there are: all
 // of it), in the transcript and the event log, and makes it active; the
-// source is unchanged (spec_backlog_026 BL-SES-01, spec_parity_027
+// source is unchanged (spec_026_backlog BL-SES-01, spec_027_parity
 // PAR-SES-10).
 func (w *Workspace) ForkSession(ctx context.Context, turn int) (api.SessionInfo, error) {
 	active := w.storage.Active()
@@ -103,7 +103,7 @@ func (w *Workspace) ExportSession(id string) (string, error) {
 	return ExportSession(w.cfg, id)
 }
 
-// ExportSession is a stored session as Markdown (spec_parity_027
+// ExportSession is a stored session as Markdown (spec_027_parity
 // PAR-SES-11): its prompts, answers and tool calls (arguments and results
 // in brief) with their times, from the event log (else the transcript),
 // with configured secrets masked. It reads the files only, so the

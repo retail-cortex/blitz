@@ -265,7 +265,7 @@ function fakeTask(s: State, id: string) {
 }
 
 // The shop workspace's .blitz/settings.toml: a deny rule, and a hook, an
-// MCP server and an allow rule waiting for trust (spec_project_config_031).
+// MCP server and an allow rule waiting for trust (spec_031_project_config).
 function fakeProject(s: State) {
   if (!s.sessions[0].workspace.endsWith("shop")) return { state: "none", files: [], applied: [], pending: [], ignored: [], problems: [] };
   const trust = s.projectTrust ?? "new";
@@ -705,7 +705,7 @@ const fakeGuards: FakeGuard[] = [
   { name: "no-branch-delete", builtin: "", stage: "action", action: "block", agents: [], tools: ["run_shell_command"], description: "Branches stay", pii: false, judge: false, off: false, text: "Deleting a git branch, locally or on the remote." },
 ];
 const fakeGuardFile = (workspace: string, g: FakeGuard) => ({ ...g, path: `${workspace}/.agents/guardrails/${g.name}.md`, problem: "", editable: true });
-// Studio's connectors (spec_connectors_047): the databases category and
+// Studio's connectors (spec_047_connectors): the databases category and
 // its four kinds (English only: the real descriptors carry Spanish and
 // French); a read-only Postgres with a query of its own, a SQLite file
 // that came with the workspace (not trusted yet), and BigQuery for every
@@ -756,7 +756,7 @@ const fakeConnectorCategory = {
   origin: "builtin",
 };
 // The connector calls Studio and Settings share: the workspace's
-// connections and the global ones (spec_connectors_047 CON-18).
+// connections and the global ones (spec_047_connectors CON-18).
 const fakeConnectorCalls = {
   save: (workspace: string, c: Connector, previousName: string, secretValues: Record<string, string>) => {
     if (!/^[a-z][a-z0-9_]{0,39}$/.test(c.name)) return { problems: [`name "${c.name}": lower case letters, digits and _, starting with a letter`] };
@@ -1188,7 +1188,7 @@ const fakeOutputs: Record<string, string> = {
 };
 const fakeSpend: Record<string, [number, number, number, string[]]> = { "look-up": [3100, 410, 0.0052, ["gemini-4-argon"]], draft: [6300, 800, 0.0112, ["gemini-4-argon", "gemini-4-flash"]] };
 
-// The workspace dashboard (spec_health_044): the fake's items with facts,
+// The workspace dashboard (spec_044_health): the fake's items with facts,
 // most of them judged, a check that judges what changed item by item.
 const fakeDaily = (seed: number) => Array.from({ length: 30 }, (_, i) => ((i * 7 + seed * 3) % 5 === 0 ? 0 : (i + seed) % 4));
 const fakeVerdict = (overall: number, lines: [string, number, string][], summary: string, fixes: string[], current = true) =>
@@ -2328,7 +2328,7 @@ export function installFake() {
         trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
-        // Browser profiles (spec_browser_profiles_049), kept in the page.
+        // Browser profiles (spec_049_browser_profiles), kept in the page.
         listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
         createBrowserProfile: ({ name }) => {
           if (fakeProfiles.some((p) => p.name === name)) throw new ConnectError(`a browser profile named "${name}" exists`, Code.InvalidArgument);

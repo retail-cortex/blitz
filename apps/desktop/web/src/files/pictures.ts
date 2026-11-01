@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Pictures in Markdown (spec_files_029 FIL-65): shown when they're in the
+// Pictures in Markdown (spec_029_files FIL-65): shown when they're in the
 // document (a data: image) or in the workspace (read through the service,
 // shown from memory), never fetched from the web (DSK-24): a web picture
 // stays a link. Preview, Visual and the chat share this.

@@ -41,7 +41,7 @@ go_binary(
     visibility = ["//visibility:public"],
 )
 
-# The setup program as released (spec_electron_038 EL-81): for Windows,
+# The setup program as released (spec_038_electron EL-81): for Windows,
 # cross-built in pure Go, with no console window. packaging gives it its
 # icon (winexe), ships it in the zip as the uninstaller and makes the
 # setup program from it and the zip (pack).

@@ -147,7 +147,7 @@ func processInfo(m *pb.Process) api.ProcessInfo {
 }
 
 // RunningProcesses are the agents' background processes still running,
-// whichever session started them (/processes, spec_processes_052): this
+// whichever session started them (/processes, spec_052_processes): this
 // workspace's, or every open workspace's when everywhere.
 func (r *Remote) RunningProcesses(everywhere bool) ([]api.WorkspaceProcess, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)

@@ -27,7 +27,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Settings' global connectors (spec_connectors_047 CON-18): the person's
+// Settings' global connectors (spec_047_connectors CON-18): the person's
 // own, every workspace's, changed here and never by a workspace's Studio.
 
 // globalConnectors are the global connections with the global settings.

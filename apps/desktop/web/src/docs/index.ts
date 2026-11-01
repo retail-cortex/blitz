@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The user docs as pages (spec_desktop_024 DSK-103): the site's Markdown
+// The user docs as pages (spec_024_desktop DSK-103): the site's Markdown
 // files (Hugo's content tree) read the way the site reads them, so the app
 // shows the docs of its own release. A page's front matter gives its title
 // and weight (the navigation's order); its links are relative .md paths

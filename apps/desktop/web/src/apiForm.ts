@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Settings › Providers › API (spec_desktop_024 DSK-61; spec_models_015
+// Settings › Providers › API (spec_024_desktop DSK-61; spec_015_models
 // §3.4): the api provider's fields, to and from ApiProviderSettings. A
 // header's value is never shown (the service withholds it) unless it is
 // the token placeholder; an empty value keeps the saved one.

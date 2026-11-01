@@ -14,7 +14,7 @@
 
 // Package docx writes Markdown as a Word document (.docx, Office Open XML)
 // in pure Go, for Export as Word, the export_docx tool and /export
-// (spec_filetools_006 FS-75): GitHub-flavoured Markdown parsed by
+// (spec_006_filetools FS-75): GitHub-flavoured Markdown parsed by
 // goldmark, written as WordprocessingML with Word's own heading, list,
 // quote, code and table styles, so the navigation pane, a table of
 // contents and restyling work as in any Word document. Links stay links

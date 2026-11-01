@@ -46,7 +46,7 @@ type MediaType struct {
 	Exts []string
 }
 
-// Media are the attachable types (spec_images_011): what the providers
+// Media are the attachable types (spec_011_images): what the providers
 // take as input, Gemini the most of them. Which a model takes is the
 // engine's to say (runtime.AcceptedMedia).
 var Media = []MediaType{

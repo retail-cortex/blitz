@@ -15,7 +15,7 @@
  */
 
 
-// The visual editor's document (spec_visual_editor_037 §3): TipTap's
+// The visual editor's document (spec_037_visual_editor §3): TipTap's
 // nodes for CommonMark with GitHub's extensions, and two of Blitz's own
 // for what can't be edited visually (raw HTML, front matter, footnotes,
 // reference links), kept as their Markdown. Every top-level block carries
@@ -80,7 +80,7 @@ export const RawInline = Node.create({
 });
 
 /**
- * A math block (spec_files_029 FIL-67): its TeX, written as $$…$$ or, when
+ * A math block (spec_029_files FIL-67): its TeX, written as $$…$$ or, when
  * it was read from one, a ```math fence (fence).
  */
 export const MathBlock = Node.create({

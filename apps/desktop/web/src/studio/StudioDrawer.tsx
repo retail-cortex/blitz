@@ -41,8 +41,8 @@ import { cost } from "../workflowRuns";
 import { OverviewPane } from "./OverviewPane";
 
 /**
- * The kinds Studio holds (spec_studio_040), after the Overview of them all
- * (spec_health_044), in the order an agent is built: the agent and the
+ * The kinds Studio holds (spec_040_studio), after the Overview of them all
+ * (spec_044_health), in the order an agent is built: the agent and the
  * evals that prove it, what it follows (skills, rules, guardrails), what
  * runs (workflows, workers), and what it reaches (connectors, secrets).
  */
@@ -75,7 +75,7 @@ export const studioIcons: Record<StudioKind, string> = {
 };
 
 /**
- * The workspace's Studio (spec_studio_040): what its .agents folder
+ * The workspace's Studio (spec_040_studio): what its .agents folder
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, the connectors its agents use, and
  * its own secrets.
@@ -134,7 +134,7 @@ export function StudioDrawer({
     if (asked && initial.kind === "workflows") setKind("workflows");
   }, [asked, initial.kind]);
   // The dashboard, followed while Studio is open: the Overview's, and
-  // each list's grade badges (spec_health_044).
+  // each list's grade badges (spec_044_health).
   const { health, refresh: refreshHealth } = useWorkspaceHealth(dir);
   const grades = useMemo(() => {
     const m = new Map<string, string>();

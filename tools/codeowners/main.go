@@ -14,7 +14,7 @@
 
 // Command codeowners writes .github/CODEOWNERS from OWNERS.txt, so GitHub
 // requests reviews from the maintainers who own the paths a change touches
-// (spec_release_readiness_030 RR-42). With --check it only reports whether
+// (spec_030_release_readiness RR-42). With --check it only reports whether
 // the file is current, for CI.
 //
 //	bazel run //tools/codeowners [-- --check]

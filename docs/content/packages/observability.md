@@ -21,4 +21,4 @@ The diagnostic log and OpenTelemetry. Source: [`pkg/observability`](https://gith
 
 apps/cli, pkg/engine, pkg/engine/runtime, pkg/engine/tools.
 
-Spec: [observability](../about/specs/spec_observability_003.md).
+Spec: [observability](../about/specs/spec_003_observability.md).

@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // Command specs checks the specs against the repository
-// (spec_release_readiness_030 RR-21): every spec is in the specs index,
+// (spec_030_release_readiness RR-21): every spec is named
+// spec_<NNN>_<name>.md, so they list in order, and is in the specs index,
 // and every repository path a spec names in backquotes exists. Paths
 // under the old layout (internal/, cmd/, web/, go/, bazel/) are flagged
 // too, since none of them exist any more. A path introduced as an example
@@ -84,6 +85,9 @@ func check(dir string) ([]string, int, error) {
 	var problems []string
 	for _, s := range specs {
 		name := filepath.Base(s)
+		if !specName.MatchString(name) {
+			problems = append(problems, name+": not named spec_<NNN>_<name>.md")
+		}
 		if !strings.Contains(string(index), "("+name+")") {
 			problems = append(problems, name+": not in the specs index ("+indexFile+")")
 		}
@@ -98,6 +102,9 @@ func check(dir string) ([]string, int, error) {
 	sort.Strings(problems)
 	return problems, len(specs), nil
 }
+
+// specName is a spec's file name: its number first, then its name.
+var specName = regexp.MustCompile(`^spec_[0-9]{3}_[a-z0-9]+(_[a-z0-9]+)*\.md$`)
 
 var quoted = regexp.MustCompile("`([^`\\s]+)`")
 

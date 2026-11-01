@@ -17,7 +17,7 @@
 // `blitz exec`), and the commands around them: doctor, config, service,
 // workers and license. It attaches to the Blitz service when one is
 // running, so the terminal and the desktop app share workspaces; --local
-// runs the workspace in-process instead (spec_cli_020).
+// runs the workspace in-process instead (spec_020_cli).
 package main
 
 import (
@@ -90,7 +90,7 @@ func main() {
 	// Until observability.StartProcess installs the log file, slog's default would
 	// print to stderr and duplicate the terminal warnings.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
-	socket.Front = activity.CLI // on each request to the service (spec_active_installs_054 AI-02)
+	socket.Front = activity.CLI // on each request to the service (spec_054_active_installs AI-02)
 	root := newRootCommand()
 	err := root.Execute()
 	stopPrivate() // a run's own service stops with it
@@ -122,7 +122,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRoot(cmd, o, args)
 		},
-		// Any command counts the day's use (spec_active_installs_054
+		// Any command counts the day's use (spec_054_active_installs
 		// AI-01, AI-03), but --version (this root's own flag) and help
 		// (Cobra's, a command like any other); --help doesn't run this.
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {

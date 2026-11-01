@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The window's slash commands match the terminal's (spec_desktop_024
+// The window's slash commands match the terminal's (spec_024_desktop
 // DSK-102): every command the REPL's /help lists (helpGroups in
 // apps/cli/internal/tui/commands.go) is a built-in here, or one a window
 // has no use for (terminalOnly), so one added there can't be missed here.

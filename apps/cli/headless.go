@@ -30,7 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 )
 
-// Headless runs (spec_parity_027 §5.3): a JSON schema for the answer
+// Headless runs (spec_027_parity §5.3): a JSON schema for the answer
 // (--json-schema), a stream of prompts and answers on stdin
 // (--input-format stream-json), and runs that leave no session behind
 // (--no-session-persistence).

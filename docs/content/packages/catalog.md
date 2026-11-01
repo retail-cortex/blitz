@@ -5,7 +5,7 @@ weight: 10
 
 An organization's catalog, checked as Blitz reads it. Source: [`pkg/catalog`](https://github.com/retail-cortex/blitz/tree/main/pkg/catalog).
 
-An organization's catalog is a repository laid out as a workspace's `.agents` folder: the agents, rules, skills, guardrails, commands, MCP servers and connectors every person's Blitz works under ([spec_enterprise_053](../about/specs/spec_enterprise_053.md) EN-30, EN-31). `pkg/catalog` reads each file with the engine's own parsers, so a file Blitz would refuse can't be published; the engine's packages stay private.
+An organization's catalog is a repository laid out as a workspace's `.agents` folder: the agents, rules, skills, guardrails, commands, MCP servers and connectors every person's Blitz works under ([spec_053_enterprise](../about/specs/spec_053_enterprise.md) EN-30, EN-31). `pkg/catalog` reads each file with the engine's own parsers, so a file Blitz would refuse can't be published; the engine's packages stay private.
 
 | Path | Item |
 |---|---|
@@ -31,4 +31,4 @@ Each item may say how it applies: `lock` (`locked`, or `default`, which a worksp
 
 The enterprise service's catalog builds.
 
-Spec: [enterprise](../about/specs/spec_enterprise_053.md).
+Spec: [enterprise](../about/specs/spec_053_enterprise.md).

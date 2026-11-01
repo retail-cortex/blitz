@@ -22,7 +22,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 )
 
-// skillMentionRE is \skill-name where a word starts (spec_skills_013
+// skillMentionRE is \skill-name where a word starts (spec_013_skills
 // SK-104): a backslash, then a skill's name.
 var skillMentionRE = regexp.MustCompile(`(?:^|[\s(\[{"'])\\([a-z0-9]+(?:-[a-z0-9]+)*)`)
 

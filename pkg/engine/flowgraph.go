@@ -40,7 +40,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// A workflow runs on ADK's workflow engine (spec_workflows_043 WF-11), in
+// A workflow runs on ADK's workflow engine (spec_043_workflows WF-11), in
 // an orchestration session of its own kept on disk (<sessions>/flows):
 // one dynamic node schedules the steps as BPMN does with tokens (WF-12),
 // running each through workflow.RunNode, which keeps its result there so

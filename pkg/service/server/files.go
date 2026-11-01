@@ -26,7 +26,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// fileService implements FileService over the engine's files (spec_files_029).
+// fileService implements FileService over the engine's files (spec_029_files).
 type fileService struct{ s *Server }
 
 // fileError maps the file operations' errors to Connect codes and reasons.

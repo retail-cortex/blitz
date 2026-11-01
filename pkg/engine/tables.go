@@ -72,7 +72,7 @@ type TablePage struct {
 const tableHead = 256 << 10
 
 // ReadTable reads a page of a CSV or TSV file in the workspace (the table
-// viewer, spec_files_029): streamed, so a file of any size can be paged,
+// viewer, spec_029_files): streamed, so a file of any size can be paged,
 // searched, filtered and sorted.
 func (w *Workspace) ReadTable(ctx context.Context, q TableQuery) (TablePage, error) {
 	rel, slash, err := userPath(q.Path)

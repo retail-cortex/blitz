@@ -19,12 +19,12 @@ Blitz is specified in thirty documents, written from the code and kept with it: 
 
 A few to start with:
 
-- [Workspace](specs/spec_workspace_018.md): the UI-independent engine and the `api.Backend` contract every front end drives.
-- [Service](specs/spec_service_021.md): `blitzd`, its socket and Connect API, and approvals across processes.
-- [Approvals](specs/spec_approvals_005.md) and [shell](specs/spec_shell_007.md): permission modes and rules, the command policy, the OS sandbox.
-- [Skills](specs/spec_skills_013.md): Agent Skills with Castor's definitions, the skills policy, and scripts sandboxed by gVisor.
-- [Monorepo](specs/spec_monorepo_028.md): the layout, the dependency rules and the Bazel build.
-- [Backlog](specs/spec_backlog_026.md) and [parity](specs/spec_parity_027.md): what's still missing, including against Claude Code and Antigravity.
+- [Workspace](specs/spec_018_workspace.md): the UI-independent engine and the `api.Backend` contract every front end drives.
+- [Service](specs/spec_021_service.md): `blitzd`, its socket and Connect API, and approvals across processes.
+- [Approvals](specs/spec_005_approvals.md) and [shell](specs/spec_007_shell.md): permission modes and rules, the command policy, the OS sandbox.
+- [Skills](specs/spec_013_skills.md): Agent Skills with Castor's definitions, the skills policy, and scripts sandboxed by gVisor.
+- [Monorepo](specs/spec_028_monorepo.md): the layout, the dependency rules and the Bazel build.
+- [Backlog](specs/spec_026_backlog.md) and [parity](specs/spec_027_parity.md): what's still missing, including against Claude Code and Antigravity.
 
 ## License
 

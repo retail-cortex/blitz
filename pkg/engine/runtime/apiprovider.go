@@ -38,7 +38,7 @@ import (
 	"google.golang.org/adk/v2/model"
 )
 
-// The api provider (spec_models_015 §3.4): the adapter for the API the
+// The api provider (spec_015_models §3.4): the adapter for the API the
 // model speaks behind the gateway (MDL-100b), with a middleware that signs
 // each request with the configured headers and the session's token, and
 // fixes up the gateway's answers (apiresponse.go).

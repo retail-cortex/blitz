@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The desktop app's packages (spec_electron_038 EL-80) carry Electron's
+# The desktop app's packages (spec_038_electron EL-80) carry Electron's
 # program as Blitz's, the app with its programs (blitz-tray, blitzd,
 # blitz) and the license files: the Windows zip, Blitz.app, the .deb and
 # the Arch package (listing it needs zstd, which reads it from stdin).

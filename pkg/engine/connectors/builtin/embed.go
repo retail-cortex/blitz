@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package builtin holds the connector descriptors Blitz ships with
-// (spec_connectors_047): categories/<id>.yaml and kinds/<id>.yaml,
+// (spec_047_connectors): categories/<id>.yaml and kinds/<id>.yaml,
 // embedded in the binary.
 package builtin
 

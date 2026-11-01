@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The page inside an editor (spec_parity_027 PAR-INT-02): the VS Code
+// The page inside an editor (spec_027_parity PAR-INT-02): the VS Code
 // extension shows it in a webview for one workspace, with the service's
 // API through its own proxy, and the two talk by messages. The extension
 // sets window.blitzEditor before the page loads.

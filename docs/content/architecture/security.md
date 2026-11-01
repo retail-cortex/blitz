@@ -10,7 +10,7 @@ A coding agent runs model output as commands and edits on your machine. Blitz tr
 | Source | Trusted? | So |
 |---|---|---|
 | Your settings in `~/.blitz` | Yes | Your hooks, MCP servers and policies; a project's or a plugin's hooks and MCP servers apply only once you trust or enable them, and a project's MCP servers are always sandboxed and always ask |
-| The repository | No | A project's `.env.toml` is ignored. Its `.blitz/settings.toml` may only tighten until the person trusts its exact content (hash-pinned in `~/.blitz/trust.json`), and may never set credentials, endpoints or sandbox loosening; its agents and skills load as prompt text, their scripts only once trusted; its instruction files can't grant permissions (spec_project_config_031) |
+| The repository | No | A project's `.env.toml` is ignored. Its `.blitz/settings.toml` may only tighten until the person trusts its exact content (hash-pinned in `~/.blitz/trust.json`), and may never set credentials, endpoints or sandbox loosening; its agents and skills load as prompt text, their scripts only once trusted; its instruction files can't grant permissions (spec_031_project_config) |
 | The model's output | No | Every action goes through the rules, approvals and sandboxes below |
 | Fetched pages, tool output | No | Treated as data; `web_fetch` can't reach private addresses |
 
@@ -52,4 +52,4 @@ flowchart LR
 
 ## Limits
 
-bubblewrap can only hide blocked paths that exist when a command starts. The OS sandbox covers macOS and Linux only: on Windows, commands run without it and skill scripts don't run. The [security log](../about/security-log.md) records the problems found and fixed, and tracks the known gaps; the [backlog](../about/specs/spec_backlog_026.md) lists what else is open.
+bubblewrap can only hide blocked paths that exist when a command starts. The OS sandbox covers macOS and Linux only: on Windows, commands run without it and skill scripts don't run. The [security log](../about/security-log.md) records the problems found and fixed, and tracks the known gaps; the [backlog](../about/specs/spec_026_backlog.md) lists what else is open.

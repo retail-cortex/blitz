@@ -27,7 +27,7 @@ import (
 )
 
 // TaskRunner runs background tasks: sub-agents invoke_agent starts with
-// background: true (spec_background_agents_032). The engine supplies it;
+// background: true (spec_032_background_agents). The engine supplies it;
 // every call names the sessions whose tasks it may see.
 type TaskRunner interface {
 	// StartTask starts one; isolation "worktree" gives it its own git

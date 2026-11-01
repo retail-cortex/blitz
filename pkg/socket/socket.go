@@ -114,7 +114,7 @@ func Client(path string) *http.Client {
 }
 
 // ClientHeader names the front end a request to the service comes from
-// (spec_active_installs_054 AI-02).
+// (spec_054_active_installs AI-02).
 const ClientHeader = "Blitz-Client"
 
 // Front is the front end this program is (activity.CLI, activity.Desktop),

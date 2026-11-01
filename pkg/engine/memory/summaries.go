@@ -29,7 +29,7 @@ import (
 )
 
 // Session summaries are where each earlier session of a workspace left off
-// (spec_memory_012 MEM-35): what it was for, what was done and decided,
+// (spec_012_memory MEM-35): what it was for, what was done and decided,
 // what's open and what comes next, one Markdown file per session in the
 // workspace's notes folder (sessions/<id>.md). Kept beside the notes, not in
 // the project, since a conversation is the person's own.

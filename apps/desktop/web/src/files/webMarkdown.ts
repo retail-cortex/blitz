@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// A web page as Markdown, for Save to workspace (spec_electron_038
+// A web page as Markdown, for Save to workspace (spec_038_electron
 // EL-106): the visual editor's writer, so it reads as the editor writes.
 // Loaded only when a page is saved as Markdown (it brings TipTap).
 import { generateJSON, getSchema } from "@tiptap/core";

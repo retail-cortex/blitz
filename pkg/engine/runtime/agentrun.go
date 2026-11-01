@@ -26,7 +26,7 @@ import (
 )
 
 // agentRun gives a sub-agent's run its agent's own permission mode and
-// model-call budget, from its frontmatter (spec_background_agents_032
+// model-call budget, from its frontmatter (spec_032_background_agents
 // BGA-50). A mode looser than the workspace's applies only to built-in
 // agents, the user's own, and a trusted project's; bypass also needs the
 // OS sandbox. Otherwise the workspace's mode stays, and the log says why.

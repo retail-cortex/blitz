@@ -115,7 +115,7 @@ func TestClient(t *testing.T) {
 }
 
 // Each request names the program's front end, unless it names one
-// already; with none set, nothing is added (spec_active_installs_054
+// already; with none set, nothing is added (spec_054_active_installs
 // AI-02).
 func TestClientNamesTheFrontEnd(t *testing.T) {
 	path := filepath.Join(shortTemp(t), "n.sock")

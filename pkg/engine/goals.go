@@ -25,7 +25,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
-// Goals (spec_parity_027 PAR-SES-30): a session may have a condition to
+// Goals (spec_027_parity PAR-SES-30): a session may have a condition to
 // work toward. After each turn a judge model reads the end of the
 // conversation; while the goal isn't met, and isn't judged impossible, the
 // agent is sent on, up to blitz.goal_max_continues times, within the turn's

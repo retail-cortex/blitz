@@ -31,7 +31,7 @@ import (
 )
 
 // Importers turn another agent's plugin or extension into a Blitz plugin
-// (spec_parity_027 PAR-PLG-04): what maps is converted, what doesn't is
+// (spec_027_parity PAR-PLG-04): what maps is converted, what doesn't is
 // reported.
 
 // Report is what an import did.

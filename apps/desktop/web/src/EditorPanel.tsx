@@ -28,7 +28,7 @@ import { SnackbarProvider } from "./ui/controls";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
 /**
- * The page inside an editor (spec_parity_027 PAR-INT-02): one workspace's
+ * The page inside an editor (spec_027_parity PAR-INT-02): one workspace's
  * conversation, the rest being the editor's. Files open in the editor,
  * approvals' diffs show in its diff view, and the editor's selection and
  * files come into the composer.

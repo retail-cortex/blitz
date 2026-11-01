@@ -38,7 +38,7 @@ import (
 )
 
 // The workspace's files for the user (the desktop app's explorer and
-// editor, spec_files_029 §3–4): paths are relative to the workspace, with
+// editor, spec_029_files §3–4): paths are relative to the workspace, with
 // "/" separators.
 
 // FileKind is what a directory entry is.

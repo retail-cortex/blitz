@@ -200,7 +200,7 @@ func (w *Workspace) GitInit(ctx context.Context) (api.GitStatus, error) {
 		return st, fmt.Errorf("git init: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	// A new repository gets the hook that stops secrets being committed
-	// (spec_secret_hooks_051 SH-02); it isn't worth failing the init over.
+	// (spec_051_secret_hooks SH-02); it isn't worth failing the init over.
 	if r, err := w.InstallSecretHook(ctx); err != nil {
 		slog.Warn("adding the secrets hook to a new repository", "workspace", w.Dir(), "error", err)
 	} else {
@@ -211,7 +211,7 @@ func (w *Workspace) GitInit(ctx context.Context) (api.GitStatus, error) {
 
 // InstallSecretHook adds the pre-commit hook that stops commits adding API
 // keys and other secrets to the workspace's repository
-// (spec_secret_hooks_051): .githooks/pre-commit, versioned, and
+// (spec_051_secret_hooks): .githooks/pre-commit, versioned, and
 // core.hooksPath. A repository with other hooks is left alone.
 func (w *Workspace) InstallSecretHook(ctx context.Context) (secretscan.Result, error) {
 	return secretscan.Install(ctx, w.Dir())

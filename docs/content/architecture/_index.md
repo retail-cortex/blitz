@@ -3,7 +3,7 @@ title: Architecture
 weight: 40
 ---
 
-Blitz is a monorepo of its programs (the CLI, the service, the tray, the Electron desktop app and the VS Code extension) over shared Go packages, in one Go module (`github.com/retail-cortex/blitz`) built with Bazel. Spec: [monorepo](../about/specs/spec_monorepo_028.md).
+Blitz is a monorepo of its programs (the CLI, the service, the tray, the Electron desktop app and the VS Code extension) over shared Go packages, in one Go module (`github.com/retail-cortex/blitz`) built with Bazel. Spec: [monorepo](../about/specs/spec_028_monorepo.md).
 
 ## Layers
 

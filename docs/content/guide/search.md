@@ -3,7 +3,7 @@ title: Search
 weight: 70
 ---
 
-Specs: [workspace search](../about/specs/spec_search_035.md), [web](../about/specs/spec_web_008.md).
+Specs: [workspace search](../about/specs/spec_035_search.md), [web](../about/specs/spec_008_web.md).
 
 ## Workspace search
 

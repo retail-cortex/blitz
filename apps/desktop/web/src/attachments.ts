@@ -50,7 +50,7 @@ export interface Attachment {
 }
 
 /**
- * Content added from a web page in the editor (spec_electron_038 EL-104):
+ * Content added from a web page in the editor (spec_038_electron EL-104):
  * the page, a selection or its console's errors, sent with the prompt as
  * the turn's context (the service gives it to the agent as data).
  */

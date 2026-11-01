@@ -183,10 +183,10 @@ function Shell() {
   }, [seen, service.state]);
   const version = useServiceVersion(service.state === "up");
   // The window in use counts the install as active, once a day
-  // (spec_active_installs_054).
+  // (spec_054_active_installs).
   useCountUse();
   // The app's update: looked for when it opens (every five days at most),
-  // downloaded, then offered with Restart (spec_electron_038 EL-90).
+  // downloaded, then offered with Restart (spec_038_electron EL-90).
   useAutoUpdate(loaded && service.state === "up" && prefs.updates !== "off", (s) =>
     snack(t("desktop.update.snack", { version: s.latest }), {
       action: { label: t("desktop.update.restart_short"), run: () => void restart((m) => snack(m, { error: true })) },

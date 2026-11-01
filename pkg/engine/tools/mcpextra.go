@@ -32,7 +32,7 @@ import (
 )
 
 // Beyond tools, an MCP server has resources and prompts, and may ask the
-// user for input during a tool call (elicitation) (spec_parity_027
+// user for input during a tool call (elicitation) (spec_027_parity
 // PAR-MCP-02, -03, -05). Blitz gives each server its own MCP client: it
 // answers elicitation, and it notes the session the ADK's toolset opens,
 // so resources and prompts go over the same connection.

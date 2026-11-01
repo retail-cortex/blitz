@@ -51,7 +51,7 @@ const builtinIcons: Record<BuiltinId, string> = { prompt_injection: mdiShieldAle
 type Open = { builtin: BuiltinId } | { name: string } | null;
 
 /**
- * The workspace's guardrails (Studio › Guardrails, spec_gates_041): the
+ * The workspace's guardrails (Studio › Guardrails, spec_041_gates): the
  * built-in ones, each switched on or off where it's listed, with its
  * settings a click away; then the workspace's own. A guardrail's form
  * slides in over the list as the others do: a built-in's settings (the

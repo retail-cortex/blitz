@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Blitz in VS Code (spec_parity_027 PAR-INT-02): the desktop app's
+// Blitz in VS Code (spec_027_parity PAR-INT-02): the desktop app's
 // conversation in a view of its own, attached to the Blitz service like
 // the desktop app, for the window's workspace folder. Files the chat
 // links to open here, an approval's change shows in the diff view, and

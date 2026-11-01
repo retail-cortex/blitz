@@ -29,7 +29,7 @@ import (
 	"golang.org/x/term"
 )
 
-// The status line (spec_parity_027 PAR-UI-08): a dim line shown above each
+// The status line (spec_027_parity PAR-UI-08): a dim line shown above each
 // prompt, from ui.status_line: "default" for the built-in one, or a
 // command that reads the session's state as JSON on stdin and whose first
 // line of output is shown. Above, not under, the prompt: the line editor

@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// A skill's scenarios and trying it (spec_skills_013 SK-111, SK-112).
+// A skill's scenarios and trying it (spec_013_skills SK-111, SK-112).
 // Scenarios run through RunEval, as the eval "skill:<name>".
 
 func scenarioMsg(sc skills.Scenario) *pb.SkillScenario {

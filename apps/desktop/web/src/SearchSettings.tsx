@@ -28,7 +28,7 @@ import { Button, Chip, Field, Icon, Switch, useSnackbar } from "./ui/controls";
 const embeddingModels = ["gemini/text-embedding-004", "openai/text-embedding-3-small", "openai/text-embedding-3-large", "ollama/nomic-embed-text"];
 
 /**
- * Settings › Workspaces › Search (spec_search_035): whether the workspace
+ * Settings › Workspaces › Search (spec_035_search): whether the workspace
  * keeps an index, where a search looks by default, search by meaning (an
  * embedding model) and summaries (a model describing files), each saved in
  * the workspace's settings and applied at once; and how the index is.

@@ -26,7 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// The agents' background processes in the REPL (spec_processes_052
+// The agents' background processes in the REPL (spec_052_processes
 // PR-40): /processes lists them with what they use and why one looks
 // bad, shows one's output, and stops them, whichever session started
 // them.

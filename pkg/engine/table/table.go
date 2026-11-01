@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package table reads delimited tables (CSV, TSV) for the desktop app's
-// table viewer and workspace search (spec_files_029, spec_search_035):
+// table viewer and workspace search (spec_029_files, spec_035_search):
 // their delimiter and encoding (Latin-1 is decoded), a profile of their
 // columns, and pages of rows matched by a search across columns, filters
 // on columns and a sort, streamed so a file of hundreds of megabytes isn't

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// ```mermaid blocks drawn as diagrams (spec_files_029 FIL-55), in the chat
+// ```mermaid blocks drawn as diagrams (spec_029_files FIL-55), in the chat
 // and in Markdown previews. Mermaid loads the first time one shows. It
 // runs in strict mode: labels are text, no scripts or click handlers, and
 // its SVG passes through DOMPurify before it reaches the page.

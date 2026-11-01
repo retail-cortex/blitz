@@ -24,7 +24,7 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// Searcher searches the workspace's index (spec_search_035); the engine
+// Searcher searches the workspace's index (spec_035_search); the engine
 // supplies it.
 type Searcher func(ctx context.Context, q api.SearchQuery) (api.SearchResult, error)
 

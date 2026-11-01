@@ -24,4 +24,4 @@ It also edits the file in place, a line at a time, keeping comments, for the set
 
 every app and most packages.
 
-Spec: [config](../about/specs/spec_config_002.md).
+Spec: [config](../about/specs/spec_002_config.md).

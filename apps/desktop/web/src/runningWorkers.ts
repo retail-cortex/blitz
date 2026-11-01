@@ -15,7 +15,7 @@
  */
 
 // The worker runs going now (Studio › Workers, a workspace's; Settings ›
-// Workers, every workspace's), each with Stop (spec_desktop_024 DSK-91a).
+// Workers, every workspace's), each with Stop (spec_024_desktop DSK-91a).
 
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { WorkerRun } from "./gen/blitz/v1/worker_pb";

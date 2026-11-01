@@ -33,7 +33,7 @@ import (
 const IndexFile = "marketplace.toml"
 
 // Marketplace is a list of plugins to install by name
-// (spec_parity_027 PAR-PLG-03).
+// (spec_027_parity PAR-PLG-03).
 type Marketplace struct {
 	Name    string  `toml:"name"`
 	Plugins []Entry `toml:"plugins"`

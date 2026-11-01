@@ -248,7 +248,7 @@ function StepToolbox({ open, onToggle, onAdd }: { open: boolean; onToggle: () =>
 }
 
 /**
- * The workspace's workflows (Studio › Workflows, spec_workflows_043):
+ * The workspace's workflows (Studio › Workflows, spec_043_workflows):
  * listed, and each opened on a canvas: its steps from the palette, joined
  * by dragging from one's right edge to another's left, the selected step's
  * settings beside it. Run runs it in the background as /name; the run
@@ -285,7 +285,7 @@ export function WorkflowsPane({
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [choosing, setChoosing] = useState(false);
-  // The composer making a workflow from a conversation (spec_composer_045).
+  // The composer making a workflow from a conversation (spec_045_composer).
   const [composing, setComposing] = useState(false);
   // The mode a new workflow runs in, chosen as it's made (WF-21).
   const [newMode, setNewMode] = useState("auto");

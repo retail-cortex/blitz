@@ -50,7 +50,7 @@ export function endText(r: WorkflowRun): string {
 
 /**
  * Says when a workflow run ends, wherever it was started and whatever's
- * shown (spec_workflows_043 WF-19): a failure always (a snackbar with Open,
+ * shown (spec_043_workflows WF-19): a failure always (a snackbar with Open,
  * or a system notification when the window isn't in front); a run started
  * from the app (the canvas, a chat) finishing or stopping, briefly. A
  * worker's run that succeeds says nothing (its worker keeps the record).

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Include all changes (spec_files_029 FIL-59a): every change in the
+// Include all changes (spec_029_files FIL-59a): every change in the
 // workspace staged for the next commit, new files included and what git
 // ignores left out, from the Changes view, its menu and the Files tree.
 import { files } from "./api";

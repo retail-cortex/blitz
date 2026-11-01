@@ -3,7 +3,7 @@ title: Service (blitzd)
 weight: 20
 ---
 
-`blitzd` runs Blitz as a per-user service. It holds every workspace a client opens, runs the jobs' schedules, and serves the desktop app, the CLI when it attaches, and any other client. Source: `apps/service`. Specs: [service](../about/specs/spec_service_021.md), [client](../about/specs/spec_client_022.md), [jobs](../about/specs/spec_workers_023.md).
+`blitzd` runs Blitz as a per-user service. It holds every workspace a client opens, runs the jobs' schedules, and serves the desktop app, the CLI when it attaches, and any other client. Source: `apps/service`. Specs: [service](../about/specs/spec_021_service.md), [client](../about/specs/spec_022_client.md), [jobs](../about/specs/spec_023_workers.md).
 
 ## Running it
 

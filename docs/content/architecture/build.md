@@ -3,7 +3,7 @@ title: The build
 weight: 40
 ---
 
-Specs: [monorepo](../about/specs/spec_monorepo_028.md), [release](../about/specs/spec_release_025.md).
+Specs: [monorepo](../about/specs/spec_028_monorepo.md), [release](../about/specs/spec_025_release.md).
 
 ## Bazel
 
@@ -46,7 +46,7 @@ nogo runs in every compile of the repository's own Go code: Go vet's analyzers, 
 
 ## Pure Go where it counts
 
-The CLI and the service build with `CGO_ENABLED=0`: static binaries with no runtime dependencies, cross-compiled from either macOS or Linux to every platform. Only the tray uses cgo, on macOS (its Dock icon); the desktop app is Electron, from its prebuilt archives ([spec_electron_038](../about/specs/spec_electron_038.md)), with the same pure-Go programs inside.
+The CLI and the service build with `CGO_ENABLED=0`: static binaries with no runtime dependencies, cross-compiled from either macOS or Linux to every platform. Only the tray uses cgo, on macOS (its Dock icon); the desktop app is Electron, from its prebuilt archives ([spec_038_electron](../about/specs/spec_038_electron.md)), with the same pure-Go programs inside.
 
 ## Reproducible releases
 

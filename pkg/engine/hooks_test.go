@@ -201,7 +201,7 @@ func TestSubagentAndCompactionHooks(t *testing.T) {
 	assert.Len(t, post, 1, "compaction events %v %v", pre, post)
 }
 
-// pre_tool hooks decide (spec_parity_027 PAR-HK-10): rewrite a call's
+// pre_tool hooks decide (spec_027_parity PAR-HK-10): rewrite a call's
 // arguments and let it through its approval, add context for the agent,
 // put a call to the user, or deny it.
 func TestPreToolHookDecisions(t *testing.T) {

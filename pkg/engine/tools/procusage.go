@@ -24,7 +24,7 @@ import (
 )
 
 // groupUsage is what a background process and its children use: their
-// CPU time so far and their resident memory (spec_processes_052 PR-10).
+// CPU time so far and their resident memory (spec_052_processes PR-10).
 type groupUsage struct {
 	CPU    time.Duration
 	Memory int64 // bytes

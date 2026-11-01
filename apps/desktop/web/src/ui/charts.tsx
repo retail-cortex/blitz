@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Small charts drawn in SVG with the theme's colours (spec_health_044
+// Small charts drawn in SVG with the theme's colours (spec_044_health
 // HL-03): a score ring, bars, stacked day columns with a line, and a
 // sparkline. Each has a text alternative.
 

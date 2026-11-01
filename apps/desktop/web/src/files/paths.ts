@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Paths in the conversation that open the editor (spec_files_029 FIL-35):
+// Paths in the conversation that open the editor (spec_029_files FIL-35):
 // inline code naming a file in the workspace, with an optional :line or
 // :line:column.
 

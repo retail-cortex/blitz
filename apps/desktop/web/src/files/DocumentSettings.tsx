@@ -29,7 +29,7 @@ import { docCssTemplate, docCssToSave } from "./docCss";
 const key = (theme: Theme) => (theme === "dark" ? "markdown_css_dark" : "markdown_css_light");
 
 /**
- * Settings → Documents (spec_files_029 FIL-57): CSS for Markdown previews,
+ * Settings → Documents (spec_029_files FIL-57): CSS for Markdown previews,
  * one stylesheet per theme over the defaults, and a sample that shows it
  * as it's typed.
  */

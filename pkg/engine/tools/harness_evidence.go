@@ -30,7 +30,7 @@ import (
 // EvidenceReader returns what went wrong in the workspace's sessions since
 // then (the zero time: since the last reflection, else the default
 // window), only about skills, agents or rules when about says so, as text,
-// and the time it starts from (spec_harness_learning_048 HE-02); the
+// and the time it starts from (spec_048_harness_learning HE-02); the
 // engine supplies it.
 type EvidenceReader func(ctx context.Context, since time.Time, about string) (string, time.Time)
 

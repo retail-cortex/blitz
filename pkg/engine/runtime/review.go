@@ -29,7 +29,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// The auto permission mode's reviewer (spec_parity_027 PAR-PERM-20, -21):
+// The auto permission mode's reviewer (spec_027_parity PAR-PERM-20, -21):
 // what would ask the user goes to a model instead, with the request, the
 // recent conversation and the environment the user described, and it
 // allows or denies with a reason. Its tokens count for the session.
@@ -260,7 +260,7 @@ type GoalVerdict struct {
 }
 
 // JudgeGoal has a model (the auto reviewer's, else the session's) decide
-// whether the session's conversation shows condition holds (spec_parity_027
+// whether the session's conversation shows condition holds (spec_027_parity
 // PAR-SES-30).
 func (e *Engine) JudgeGoal(ctx context.Context, sessionID, condition string) (GoalVerdict, error) {
 	e.mu.RLock()

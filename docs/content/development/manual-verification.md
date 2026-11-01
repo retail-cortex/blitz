@@ -180,7 +180,7 @@ prefix = "fs"
   **Expected:** `Verified OK` and every file `OK`; the former repository's identity is rejected. (The items above were run against `rmcguinness/code_puppy`.)
 
 - [ ] Desktop release, before the Apple secrets are set: a tag's draft release has `Blitz_<v>_macos_arm64.dmg`, `Blitz_<v>_macos_x64.dmg`, the Windows zip, the `.deb`s, Arch packages and tarballs for amd64 and arm64, and a `.sigstore.json` for each, and the macOS job warns that it signed ad hoc. `cosign verify-blob --bundle <file>.sigstore.json` (identity flags as for `checksums.txt`) accepts each.
-- [ ] Set the six secrets (spec_release_025 REL-22), tag again. **Expected:** the macOS job notarises (a few minutes) and `spctl` passes. Download the dmg in Safari, open it, drag Blitz to Applications, open it: no Gatekeeper warning, About shows the tag's version, and "Install and start the service" works (the bundled CLI is signed too). On an Intel Mac too, if one is at hand.
+- [ ] Set the six secrets (spec_025_release REL-22), tag again. **Expected:** the macOS job notarises (a few minutes) and `spctl` passes. Download the dmg in Safari, open it, drag Blitz to Applications, open it: no Gatekeeper warning, About shows the tag's version, and "Install and start the service" works (the bundled CLI is signed too). On an Intel Mac too, if one is at hand.
 - [ ] On Ubuntu 24.04: `sudo apt install ./blitz-desktop_<v>_amd64.deb`; Blitz is in the app launcher with its icon, opens, installs the service (`systemctl --user status blitz`), and `sudo apt remove blitz-desktop` removes it.
 
 ## 19. Cost sanity 💲
@@ -308,7 +308,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] SearXNG instead: run `docker run -p 8888:8080 searxng/searxng` with `json` added to `search.formats`, set `search_provider = "searxng"` and `search_url = "http://localhost:8888"`, then `/search web …`. **Expected:** it works, with no API key.
 - [ ] Remove `search_provider`. `/search web x`. **Expected:** "Web search isn't set up…".
 
-### Workspace search (spec_search_035)
+### Workspace search (spec_035_search)
 
 - [ ] In a real repository, `blitz search --status` right after opening it, then again a few seconds later. **Expected:** "still being indexed", then counts per source and a last scan time. Note how long the first scan took for the repository's size.
 - [ ] `blitz search <a function name>` and `blitz search "<a phrase from a doc>"`. **Expected:** the defining file first, at the right line; the doc with its passage.
@@ -399,9 +399,9 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `bazel build //:mac-app`, copy it out of Bazel's output (`ditto "$(bazel cquery --output=files //:mac-app)" /tmp/Blitz.app`) and open it with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
 - [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that responses stream through the host (`blitz-tray --serve`) into the Electron window**, which the tests can't: they exercise the proxy without a window.
-- [ ] Skills' trigger phrases and scenarios (spec_skills_013 SK-110–SK-113): Studio › Skills, a skill with a clear purpose: add two trigger phrases and save. In a chat, ask for its job in other words. **Expected:** the agent activates the skill. On its **Scenarios** tab, try a prompt it's for (**Expected:** "It used …") and one it isn't (**Expected:** "It didn't use …"); **Keep it** for both (flip **Should use the skill** off for the second), then **Run all**: both pass. `blitz eval --skill <name>` prints the same results; `scenarios/*.md` is in Castor's format.
-- [ ] Evals in the background (spec_evals_042 EV-07a): Studio › Evals, open an eval with a few cases, **Run**, then **Cancel** while it runs. **Expected:** "… goes on running in the background"; the list marks it running. Choose **Studio › Close Studio** (spec_studio_040 STU-01), then **Studio › Evals**. Open the eval: the run shows where it is and goes on; **Stop** ends it, recorded as stopped.
-- [ ] Many streams at once (spec_electron_038 EL-01a): open four workspaces, start a turn in two, open Studio › Overview and a workflow's canvas. **Expected:** the window keeps answering: menus, Settings and opening files respond at once. In the window's developer tools (View › Toggle Developer Tools › Network, the Protocol column), the page's requests are `h2`.
+- [ ] Skills' trigger phrases and scenarios (spec_013_skills SK-110–SK-113): Studio › Skills, a skill with a clear purpose: add two trigger phrases and save. In a chat, ask for its job in other words. **Expected:** the agent activates the skill. On its **Scenarios** tab, try a prompt it's for (**Expected:** "It used …") and one it isn't (**Expected:** "It didn't use …"); **Keep it** for both (flip **Should use the skill** off for the second), then **Run all**: both pass. `blitz eval --skill <name>` prints the same results; `scenarios/*.md` is in Castor's format.
+- [ ] Evals in the background (spec_042_evals EV-07a): Studio › Evals, open an eval with a few cases, **Run**, then **Cancel** while it runs. **Expected:** "… goes on running in the background"; the list marks it running. Choose **Studio › Close Studio** (spec_040_studio STU-01), then **Studio › Evals**. Open the eval: the run shows where it is and goes on; **Stop** ends it, recorded as stopped.
+- [ ] Many streams at once (spec_038_electron EL-01a): open four workspaces, start a turn in two, open Studio › Overview and a workflow's canvas. **Expected:** the window keeps answering: menus, Settings and opening files respond at once. In the window's developer tools (View › Toggle Developer Tools › Network, the Protocol column), the page's requests are `h2`.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
@@ -476,7 +476,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 `/plan add a --version flag`: the plan shows in a picker; "Yes, carry it out" makes the change in the same turn and `.blitz/plans/` has the plan. Again with feedback typed ("also update the README"): the agent revises and asks again. `/mode plan`, a prompt, "Yes, and accept its file edits": the prompt tag becomes `[accept-edits]`.
 - [ ] 💲 A three-step task: the checklist appears and ticks off (☐ → ☒) as the agent works. `plan_review = "always"` in the config: a simple prompt is planned first.
 
-## 39. Monorepo and Bazel (spec_monorepo_028)
+## 39. Monorepo and Bazel (spec_028_monorepo)
 
 - [ ] A fresh clone on a Mac with only Bazelisk (`brew install bazelisk`): `bazel test //...` passes, downloading Go, Node and the tools itself.
 - [ ] The same on Ubuntu 24.04 with git and bubblewrap: `bazel test //...` passes; `bazel build //:deb`, `sudo apt install ./…deb`, and Blitz opens from the app launcher.
@@ -489,7 +489,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] With an older service running (or one whose program was deleted), `bazel run //:desktop`. **Expected:** a banner says the service is older (or its program is gone) with **Restart the service**; clicking it stops that service (its login item, else its process) and starts this build's `blitzd` at login, and the banner goes, with "The service restarted". Settings › Service shows both versions, the service program, and **Restart** and **Stop**: Stop stops it (the window then offers to start it), also for a `blitzd` started by hand in a terminal.
 - [ ] Open workspace from `bazel run //:desktop`: the folder dialog stays open until you choose.
 
-## 40. API keys and per-workspace settings (spec_config_002 §6)
+## 40. API keys and per-workspace settings (spec_002_config §6)
 
 These touch your real keychain and settings: use a test key, or a throwaway `--config DIR` for the CLI steps.
 
@@ -528,7 +528,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] `\skill` in the chat: type `\rel`: the composer offers the skills; Tab puts in `\release-notes `. Send it: the model answers using the skill's instructions; the transcript shows the prompt as typed.
 - [ ] Secrets completion: type `{secrets:` in the composer, an agent's instructions, an MCP server's environment, the settings file (`</>`) and a file in the Files editor. **Expected:** `global:` and `workspace:` first, then the names; Tab puts in `{secrets:global:name}`; Escape closes the list without closing the drawer; a name that doesn't exist is warned of under the instructions.
 - [ ] Secrets: Settings › Library › Secrets › add `demo_token` = `demo-value-123456`; a workspace's settings › Secrets › add `demo_token` = `workspace-value-1234`. In that workspace, 💲 ask `Repeat this exactly: {secrets:demo_token}`. **Expected:** the conversation and the history show `{secrets:demo_token}` as typed; the answer shows `[REDACTED]`; `~/.blitz/logs` has no `workspace-value-1234`; Keychain Access (or Credential Manager) has `urn:blitz:…:secrets:demo_token`. Replace and delete one: the list follows.
-- [ ] Tray submenus (macOS, Ubuntu, Windows), with two MCP servers and a workspace with jobs: **MCP servers** lists both, checked; uncheck one: Settings › Connectors › MCP servers shows it Off within 5 s, and a turn no longer offers its tools; check it again. Under a **Workspaces** heading, each workspace open in the app that has jobs or workflows has a submenu (then any other with jobs, then **Global**; one with neither isn't listed, and a workspace with only workflows has no Jobs heading); **MCP servers** sits with the service's Start, Stop and Restart, with **Jobs** and **Workflows** and its switch first (◉ On or ○ Off), then ▶ Run, ■ Stop and ↗ Open, ● before what runs, ⚠ before a job whose last run failed. A job's **Run** starts a run: it shows under **Running** at the menu's top (with its progress, and the icon pulses); **Stop** there stops it. Click **◉ On · runs on its schedule**: the job's line says *off*, **▶ Run** is greyed and the switch reads **○ Off · doesn't run**; click it: the job is on again, without a review. A new job has **↗ Review in Blitz to turn it on**, which opens the app on its jobs. A job's **↗ Open** opens that job's details in Studio › Jobs (a global job's in Settings › Library › Jobs), not the list. A workflow's **Run** runs it in the background: it's under **Running** and its item has the running dot; **Open** opens the app on its canvas, on the run, even with the app closed, and brings the window forward when it's open. When nothing runs, the icon is still. Stop the service: the submenus go. (spec_electron_038 EL-111)
+- [ ] Tray submenus (macOS, Ubuntu, Windows), with two MCP servers and a workspace with jobs: **MCP servers** lists both, checked; uncheck one: Settings › Connectors › MCP servers shows it Off within 5 s, and a turn no longer offers its tools; check it again. Under a **Workspaces** heading, each workspace open in the app that has jobs or workflows has a submenu (then any other with jobs, then **Global**; one with neither isn't listed, and a workspace with only workflows has no Jobs heading); **MCP servers** sits with the service's Start, Stop and Restart, with **Jobs** and **Workflows** and its switch first (◉ On or ○ Off), then ▶ Run, ■ Stop and ↗ Open, ● before what runs, ⚠ before a job whose last run failed. A job's **Run** starts a run: it shows under **Running** at the menu's top (with its progress, and the icon pulses); **Stop** there stops it. Click **◉ On · runs on its schedule**: the job's line says *off*, **▶ Run** is greyed and the switch reads **○ Off · doesn't run**; click it: the job is on again, without a review. A new job has **↗ Review in Blitz to turn it on**, which opens the app on its jobs. A job's **↗ Open** opens that job's details in Studio › Jobs (a global job's in Settings › Library › Jobs), not the list. A workflow's **Run** runs it in the background: it's under **Running** and its item has the running dot; **Open** opens the app on its canvas, on the run, even with the app closed, and brings the window forward when it's open. When nothing runs, the icon is still. Stop the service: the submenus go. (spec_038_electron EL-111)
 - [ ] Settings › Connectors › MCP servers (with or without a workspace open; it's global): **Add server** with a command (`npx -y @modelcontextprotocol/server-everything`): it's listed, on, and the next turn in an open workspace has its tools without restarting the service. Edit it; turn it off: the next turn has none of its tools. **Remove** asks first. A bad name, address or environment line is listed under the form and nothing is saved.
 - [ ] Command line (Ubuntu 24.04 and macOS), with no `blitz` on PATH: Settings › Service › **Command line** says so; **Install**. **Expected:** a link in `~/.local/bin` (or a folder already on PATH), and if `~/.local/bin` wasn't on PATH, a line in `~/.zshrc` (`~/.bash_profile` for bash on macOS, `~/.bashrc` on Linux); a new terminal runs `blitz --version`, and the row now says this app's is on PATH. With Homebrew's `blitz` on PATH instead, the row names it and offers no Install.
 - [ ] The sandbox required on Linux: on Ubuntu 24.04 with the AppArmor restriction on and no `[sandbox] shell` in the settings, `blitz` and the desktop app refuse to open a workspace, saying why and how to fix it or set `auto`, and `blitz doctor` fails its sandbox check; after `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` they open, sandboxed (`/sandbox`); with `shell = "auto"` they open, unsandboxed, and `doctor` warns.
@@ -540,7 +540,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] 💲 Chats survive a service restart: start a chat in the desktop app, restart the service (Settings › Service › **Restart**), send two more prompts in the same chat, then reopen it from the history. **Expected:** every prompt and answer is there, titled by the first prompt; no "Failed to save session" in Settings › Logs.
 - [ ] Settings › Logs: today's service log, newest first. **Errors** leaves only errors; searching a workspace's name narrows to its records; another day from the list shows that day; **Open the folder** opens `~/.blitz/logs` in the file manager. With `log.level = "off"` (and the service restarted) it says the log is off.
 
-## 41. Files: the shelf and the editor (spec_files_029, phase 1)
+## 41. Files: the shelf and the editor (spec_029_files, phase 1)
 
 - [ ] In a git project, the top bar's **Files** button: the tree lists folders first, modified files in orange with **M**, new ones in green with **U**/**A**, folders with changes marked. Dotfiles, ignored files (`node_modules`, `bin/`) and `.env` aren't listed; **Show hidden files** lists them dimmed, `.env` with a lock ("Hidden from Blitz"); the setting is remembered after a restart.
 - [ ] Open a Go, a TypeScript, a Markdown and a YAML file: each is highlighted in the window's colours (light and dark); typing offers the file's words and the language's keywords; ⌘F searches and replaces; ⌃G goes to a line.
@@ -557,7 +557,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] Drag and drop with the computer (FIL-36, EL-15; v0.8.4): drag a file and a folder from Finder (Explorer, Dolphin) onto a folder in the tree: the app asks **Copy here** / **Move here**; **Copy** adds both (the folder with what's in it, empty folders too) and the originals stay; **Move** adds them and the originals are in the trash. Drop a file whose name is there: **Replace**, **Keep both** (`name 2.ext`) and **Skip** each do what they say. Drop a file over 32 MB (a video): it arrives whole. Drag a file out of the tree onto the desktop: a copy appears there and the workspace keeps its file. Drag a row onto another folder in the tree: it moves, as before. In a browser (`bazel run //apps/desktop/web:dev`, `?fake`), a dropped file is copied without asking.
 - [ ] Pictures in Markdown (VE-11, VE-11a; v0.8.4): in a Markdown file's Visual mode, **Image…** lists the workspace's pictures with thumbnails; typing narrows them; choosing one fills in its address relative to the document and a description; **From your computer…** saves the picture beside the document (in `images/` if there is one) and chooses it. Drag a picture from the tree into the document, in Visual and in Source: `![name](relative/path)` at the drop point, a space from the words around it. Drag one from Finder: it's saved beside the document, then linked. Paste a screenshot: saved as `pasted-…png`, then linked. Drop a PDF: a link, not an image.
 
-## 42. Licensing (spec_release_readiness_030 §3)
+## 42. Licensing (spec_030_release_readiness §3)
 
 - [ ] `blitz license`: Blitz's NOTICE (Copyright 2026 Retail Cortex, then Code Puppy's MIT notice) and where the rest is; `blitz license full` the Apache License; `blitz license third-party` the notices, in `less` (or `$PAGER`); `/license` in the REPL the same.
 - [ ] `blitzd --license`, `--license=full`, `--license=third-party`: the texts, and the service doesn't start.
@@ -565,7 +565,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] A release: each archive has `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES`; `Blitz.app/Contents/Resources` has them; after installing the `.deb`, `/usr/share/doc/blitz-desktop/` has `copyright`, `NOTICE` and `THIRD_PARTY_NOTICES`.
 - [ ] Add a Go or npm dependency without updating the notices: CI's "third_party_notices --check" fails until `tools/third_party_notices.sh` is run.
 
-## 43. The docs site (spec_release_readiness_030 §6)
+## 43. The docs site (spec_030_release_readiness §6)
 
 - [ ] `bazel run //docs:serve`, then http://localhost:1313: the menu has Getting started, Products, Guide, Architecture, Shared packages, Development and About; search finds a word from a spec; the dark-mode toggle works.
 - [ ] After a push to `main` that changes `docs/`, the **docs** workflow deploys, and https://retail-cortex.github.io/blitz/ shows the change; the architecture page's diagrams render; **Edit page** opens the file on GitHub.
@@ -573,14 +573,14 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] On a phone-width window, the menu opens from the ☰ button and no page scrolls sideways.
 - [ ] Architecture › API reference: a page per proto; every diagram draws (the workspace page has 100 and takes a few seconds), in light and dark mode; a comment with a placeholder (`turn.proto`'s `plan` field: "/plan <text>") shows the placeholder.
 
-## 44. README, owners and coverage (spec_release_readiness_030 §7)
+## 44. README, owners and coverage (spec_030_release_readiness §7)
 
 - [ ] On GitHub: the README shows the desktop screenshot and its links work; **Contributing** in the repository's sidebar opens `docs/CONTRIBUTING.md`.
 - [ ] Open a pull request: GitHub requests a review from the owner in `.github/CODEOWNERS`.
 - [ ] CI's Linux job summary has the coverage table; lower `tools/coverage/floor.txt`'s number above the total on a branch and the job fails.
 - [ ] After CI on `main`, the site's **About › Coverage** shows the same total, the commit it measured, and each package's files when expanded.
 
-## 45. Windows: the tray (spec_windows_036)
+## 45. Windows: the tray (spec_036_windows)
 
 On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.exe` (or unzip `Blitz_<version>_windows_x64.zip`), with no API key set for a free run. The tray is `resources\app\bin\blitz-tray.exe` in the app's folder.
 
@@ -599,7 +599,7 @@ On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.
 - [ ] `icacls %USERPROFILE%\.blitz\run`
   **Expected:** only you, SYSTEM and Administrators.
 
-## 46. Word documents (spec_filetools_006 FS-75, spec_desktop_024 DSK-93b)
+## 46. Word documents (spec_006_filetools FS-75, spec_024_desktop DSK-93b)
 
 - [ ] In the desktop app, open a Markdown file with headings, a numbered list starting at 5, a task list, a table, code, a link to `#a-heading` and a workspace image; **Export › Export as Word**.
   **Expected:** `<name>.docx` beside it; a second export asks **Replace <name>.docx?**.
@@ -608,7 +608,7 @@ On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.
 - [ ] In a session, `/export chat.docx`; from a shell, `blitz sessions export <id> -o chat.docx`.
   **Expected:** both open in Word with the conversation's headings and code.
 
-## 47. Branches on the Changes page (spec_desktop_024 DSK-90c, spec_service_021 SVC-37)
+## 47. Branches on the Changes page (spec_024_desktop DSK-90c, spec_021_service SVC-37)
 
 - [ ] In a repository with a remote and a second branch on it, open **Changes › Version control** and click the branch button.
   **Expected:** **Branches** lists the local ones (the current one checked), **On the remote** the remote's branches no local branch tracks, each with its last commit's subject.
@@ -625,12 +625,12 @@ On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.
 - [ ] Click the branch in the status bar.
   **Expected:** Changes opens on Git (in simple mode, on this session's changes).
 
-## 48. Plain words for version control (spec_desktop_024 DSK-90d)
+## 48. Plain words for version control (spec_024_desktop DSK-90d)
 
 - [ ] In each language (Settings › Appearance › Interface language), go through the Changes menu, the Changes view's toolbar, the commit dialog, a file's right-click menu in the Files tree, its history and the status bar's branch.
   **Expected:** no "Git", "stage" or ".gitignore" in a label: **Version control**, **Commit changes…**, **Include in commit** / **Leave out of commit**, **Include all changes**, **Do not version** / **Version it again**, **View history…**. Git is named only when it isn't installed, in the sign-in message and in a repository-config warning.
 
-## 49. Agent files apply from the next message (spec_memory_012 MEM-25, spec_desktop_024 DSK-91d)
+## 49. Agent files apply from the next message (spec_012_memory MEM-25, spec_024_desktop DSK-91d)
 
 - [ ] 💲 In a workspace with a rule in `.agents/rules/` (say, "Answer in French"), start a conversation and send a message; then edit the rule ("Answer in German") in an editor and send another, in the same conversation.
   **Expected:** the second answer follows the edited rule, with no reload. The same for `AGENTS.md`, and for a skill's `SKILL.md` edited in place (its new description in `/skills`).
@@ -639,7 +639,7 @@ On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.
 - [ ] **Agents › Reload agent files**, then `/reload` in the chat.
   **Expected:** "Reloaded N agents, N skills and N instruction files and rules."; `/reload` lists the files. Break a skill's frontmatter and reload: the error says which file didn't load.
 
-## 50. Panels stay put: the drawer (spec_desktop_024 DSK-65c, DSK-60)
+## 50. Panels stay put: the drawer (spec_024_desktop DSK-65c, DSK-60)
 
 - [ ] Open Settings (⌘,), then drag the window by the title bar.
   **Expected:** Settings slides down from under the top menu over the whole middle, to the status bar; the window moves and Settings stays open.
@@ -652,7 +652,7 @@ On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.
 - [ ] Light and dark, with Transparency on and off.
   **Expected:** the drawer is a pane like the chat's, the panes under it not showing through, with no clipped controls; in a narrow window Settings' sections are a rail of icons.
 
-## 51. Workflow tasks: people and time (spec_workflows_043 WF-16–WF-18, spec_electron_038 EL-110)
+## 51. Workflow tasks: people and time (spec_043_workflows WF-16–WF-18, spec_038_electron EL-110)
 
 Use a test service with the API keys unset (`env -u GEMINI_API_KEY`); the workflow below needs no model.
 
@@ -671,7 +671,7 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`); the workfl
 - [ ] Linux without a notification daemon, and Windows.
   **Expected:** Linux opens the tasks window directly; on Windows the notification comes from the Blitz app and opens the same window.
 
-## 52. Workflow runs: the canvas, receipts, schedules and modes (spec_workflows_043 WF-09, WF-10, WF-19, WF-20, WF-21)
+## 52. Workflow runs: the canvas, receipts, schedules and modes (spec_043_workflows WF-09, WF-10, WF-19, WF-20, WF-21)
 
 Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everything but the cost checks; a run with agent steps on a real model costs a few cents.
 
@@ -704,7 +704,7 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everyth
 - [ ] Settings › Workspaces › the workspace › Behaviour › Permission mode: *Ask*. Restart the service, reopen the workspace, run the workflow again.
   **Expected:** the workspace is still *Ask*; the workflow's settings say the workspace's mode applies instead; the run asks for the save; its summary says *Ask* and its events "Asked for Auto; the workspace's mode, Ask, applied". A workflow set to *Don't ask* refuses the save instead of asking.
 
-## 53. Workspace health: Studio's Overview (spec_health_044)
+## 53. Workspace health: Studio's Overview (spec_044_health)
 
 The facts cost nothing; a check makes one model call per item judged (cents for a small workspace). Use a test service with keys unset for the facts, and keys set only for the check.
 
@@ -723,7 +723,7 @@ The facts cost nothing; a check makes one model call per item judged (cents for 
 - [ ] The gear: schedule *every 5 minutes*, limit *0.0001*.
   **Expected:** saved for the workspace; within a few minutes "The scheduled check didn't run: judging n items would cost about $…, over the $0.00 limit". With limit 0 it runs by itself. A new workspace that was never checked by hand is never checked on a schedule.
 
-## 54. The composer: a workflow from a conversation (spec_composer_045)
+## 54. The composer: a workflow from a conversation (spec_045_composer)
 
 Each turn is one small model call (well under a cent); the composer uses the suggestions model, else the auto reviewer's.
 
@@ -738,7 +738,7 @@ Each turn is one small model call (well under a cent); the composer uses the sug
 - [ ] With the model unreachable (a wrong key), Start.
   **Expected:** the dialog shows the error; the status bar stays *Connected* (not "The Blitz service isn't answering").
 
-## 55. The usability pass: providers, connectors and Settings (spec_desktop_024 DSK-104–DSK-108, spec_connectors_047 CON-21–CON-25, spec_models_015 MDL-111)
+## 55. The usability pass: providers, connectors and Settings (spec_024_desktop DSK-104–DSK-108, spec_047_connectors CON-21–CON-25, spec_015_models MDL-111)
 
 Trying a key lists models (no model call, no cost). Use a throwaway `HOME` for the first-run checks, and the real one for "found on this machine".
 

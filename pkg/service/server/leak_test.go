@@ -24,7 +24,7 @@ import (
 // No test may leave a goroutine running. The test binary is also the fake
 // language server the LanguageService tests start. opencensus's stats
 // worker runs for the process from its package's init (MCP Toolbox for
-// Databases links it, spec_databases_046).
+// Databases links it, spec_046_databases).
 func TestMain(m *testing.M) {
 	lsptest.MaybeServe()
 	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"))

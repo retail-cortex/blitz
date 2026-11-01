@@ -28,7 +28,7 @@ import (
 
 // A workspace's project settings (.blitz/settings.toml) and the trust
 // they need, as the REPL, blitz trust and doctor show them
-// (spec_project_config_031).
+// (spec_031_project_config).
 
 // ProjectItem is one project setting in words: "hook stop runs
 // ./scripts/stop.sh".

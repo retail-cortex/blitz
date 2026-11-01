@@ -38,7 +38,7 @@ const (
 )
 
 // ContextParts estimates what a session's next prompt is made of
-// (spec_parity_027 PAR-UI-06): the active agent's system prompt, the
+// (spec_027_parity PAR-UI-06): the active agent's system prompt, the
 // project instructions and notes, the tool declarations, the prompts,
 // replies, tool calls and results, images, PDFs and summaries of earlier
 // conversation. Each is its text's length / 4 (images a flat amount, PDFs

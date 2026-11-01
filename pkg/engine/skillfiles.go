@@ -26,7 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
-// Studio's skills (spec_skills_013 SK-100–SK-103): the workspace's own,
+// Studio's skills (spec_013_skills SK-100–SK-103): the workspace's own,
 // in .agents/skills (or another skills folder inside the workspace),
 // read, written, renamed, copied and deleted, with their references and
 // scripts; any skill the workspace sees may be copied in.

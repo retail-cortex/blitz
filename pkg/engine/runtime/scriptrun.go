@@ -30,7 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
-// Credential scripts (spec_models_015 MDL-55, MDL-102): api_key_command
+// Credential scripts (spec_015_models MDL-55, MDL-102): api_key_command
 // and the api provider's token script print one line, a key or a token.
 // They run with the service's environment, outside the agent's sandbox:
 // they're the user's own settings, never a project's.

@@ -43,7 +43,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// Workflows' calls (spec_workflows_043 WF-14): MCP tools, remote agents
+// Workflows' calls (spec_043_workflows WF-14): MCP tools, remote agents
 // (A2A) and HTTP APIs. {secrets:key} in a call's values is put in as it's
 // made, never kept in the workflow's events, and masked wherever it
 // shows; requests go through web_fetch's guards and approvals.

@@ -15,7 +15,7 @@
  */
 
 // A workspace's project settings (.blitz/settings.toml) in words, as the
-// REPL says them (spec_project_config_031), from the same catalogs.
+// REPL says them (spec_031_project_config), from the same catalogs.
 import type { ProjectItem, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 

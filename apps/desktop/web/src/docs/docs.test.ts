@@ -100,7 +100,7 @@ describe("pages and links", () => {
     ["../_index.md", { kind: "page", path: "", anchor: undefined }],
     ["models.md#prices", { kind: "anchor", id: "prices" }],
     ["#prices", { kind: "anchor", id: "prices" }],
-    ["../about/specs/spec_models_015.md", { kind: "url", href: `${siteURL}about/specs/spec_models_015/` }],
+    ["../about/specs/spec_015_models.md", { kind: "url", href: `${siteURL}about/specs/spec_015_models/` }],
     ["../../../../etc.md", { kind: "url", href: siteURL }],
     ["https://example.com/x", { kind: "url", href: "https://example.com/x" }],
     ["/licenses/x.txt", { kind: "url", href: `${siteURL}licenses/x.txt` }],

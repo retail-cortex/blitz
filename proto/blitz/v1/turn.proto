@@ -107,10 +107,10 @@ message TurnEvent {
     // Something the user should know about the turn that isn't the
     // agent's output, such as a message that couldn't be saved.
     Notice notice = 10;
-    // A workflow's step starting or ending (spec_workflows_043).
+    // A workflow's step starting or ending (spec_043_workflows).
     FlowStep flow_step = 11;
     // At a chat turn's end: the runs since the last reflection hit
-    // enough problems to /reflect on (spec_harness_learning_048 HE-63).
+    // enough problems to /reflect on (spec_048_harness_learning HE-63).
     ReflectDue reflect_due = 12;
   }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's guardrail form (spec_gates_041): a guardrail as the form
+// Studio's guardrail form (spec_041_gates): a guardrail as the form
 // holds it, from and to the API. Lists are typed as text: tools and
 // domains comma-separated, commands one a line.
 

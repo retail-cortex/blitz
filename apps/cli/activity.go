@@ -21,7 +21,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
-// activeUse counts the CLI's use, once a day (spec_active_installs_054
+// activeUse counts the CLI's use, once a day (spec_054_active_installs
 // AI-03): whether it's attached to the service or runs in-process. A
 // variable for tests.
 var activeUse = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage}

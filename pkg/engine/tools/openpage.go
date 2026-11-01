@@ -29,7 +29,7 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// Where open_page shows a page (spec_agent_browser_050 AB-10).
+// Where open_page shows a page (spec_050_agent_browser AB-10).
 const (
 	// PageEmbedded is a web tab of the desktop app's.
 	PageEmbedded = "embedded"

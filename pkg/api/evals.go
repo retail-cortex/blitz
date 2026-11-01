@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// Evals (spec_evals_042): cases in .agents/evals/<name>.md, run against
+// Evals (spec_042_evals): cases in .agents/evals/<name>.md, run against
 // agents and scored.
 
 // An eval result's status: it passed, or what its failure means by the
@@ -69,12 +69,12 @@ type EvalResult struct {
 	CostUSD  float64       `json:"cost_usd,omitempty"`
 	Duration time.Duration `json:"duration"`
 	// SkillsUsed are the skills the agent used (a skill's scenario,
-	// spec_skills_013 SK-111).
+	// spec_013_skills SK-111).
 	SkillsUsed []string `json:"skills_used,omitempty"`
 }
 
 // SkillEvalPrefix names a skill's scenarios as an eval: RunEval,
-// EvalRuns and blitz eval take "skill:<name>" (spec_skills_013 SK-111).
+// EvalRuns and blitz eval take "skill:<name>" (spec_013_skills SK-111).
 const SkillEvalPrefix = "skill:"
 
 // SkillTry is a prompt tried once with a skill (SK-112): what the agent

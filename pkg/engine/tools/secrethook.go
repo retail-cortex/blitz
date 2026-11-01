@@ -35,7 +35,7 @@ type InstallSecretHookOutput struct {
 
 // NewInstallSecretHookTool is install_secret_hook: project-setup adds, as
 // it makes the harness, the pre-commit hook that stops commits adding API
-// keys and other secrets (spec_secret_hooks_051 SH-02), shown and asked
+// keys and other secrets (spec_051_secret_hooks SH-02), shown and asked
 // about as a write. A repository with other hooks is left alone.
 func NewInstallSecretHookTool(r *Registry) (tool.Tool, error) {
 	return functiontool.New(

@@ -28,7 +28,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Skill registries for the desktop app's Settings › Skills (spec_skills_013
+// Skill registries for the desktop app's Settings › Skills (spec_013_skills
 // SK-90..SK-96): the same store `blitz skills` uses, in the service's
 // settings directory.
 
@@ -71,7 +71,7 @@ func (h configService) installedSkill(i skillreg.Installed) *pb.InstalledSkill {
 }
 
 // skillTrust is the store of reviewed skills in the service's settings
-// directory (spec_skills_013 SK-108).
+// directory (spec_013_skills SK-108).
 func (h configService) skillTrust() *config.HashTrust {
 	return config.OpenSkillTrust(config.ConfigDir(h.s.configDir))
 }

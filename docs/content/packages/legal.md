@@ -20,4 +20,4 @@ The CLI shows them with `blitz license` and `/license`, the service with `blitzd
 
 apps/cli/internal/tui, apps/service, pkg/pagehost (the desktop app's licenses).
 
-Spec: [release readiness](../about/specs/spec_release_readiness_030.md).
+Spec: [release readiness](../about/specs/spec_030_release_readiness.md).

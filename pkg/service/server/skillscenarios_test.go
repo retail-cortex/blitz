@@ -27,7 +27,7 @@ import (
 )
 
 // A skill's trigger phrases and scenarios over the API: saved and read
-// back, tried, run as the eval "skill:<name>" (spec_skills_013 SK-110–
+// back, tried, run as the eval "skill:<name>" (spec_013_skills SK-110–
 // SK-112).
 func TestSkillScenariosOverTheAPI(t *testing.T) {
 	c, _ := serve(t, nil, genai.NewContentFromText("Hello.", genai.RoleModel), genai.NewContentFromText("## What's new", genai.RoleModel))

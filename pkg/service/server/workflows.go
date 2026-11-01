@@ -26,7 +26,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Studio's workflows (spec_workflows_043).
+// Studio's workflows (spec_043_workflows).
 
 func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode}

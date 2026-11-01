@@ -41,7 +41,7 @@ func newCappedBuffer(limit int) *cappedBuffer {
 }
 
 // newHeadTailBuffer keeps the first half of limit and the latest half: a
-// long-running process's start and what it says now (spec_processes_052).
+// long-running process's start and what it says now (spec_052_processes).
 func newHeadTailBuffer(limit int) *cappedBuffer {
 	c := newCappedBuffer(limit - limit/2)
 	c.tailCap = limit / 2

@@ -14,7 +14,7 @@
 
 package engine
 
-// Background processes' notices (spec_parity_027 PAR-TOOL-04):
+// Background processes' notices (spec_027_parity PAR-TOOL-04):
 // run_shell_command's notify and notify_pattern report a process's exit
 // and matching lines to its session. A turn running there reads them with
 // its next tool result, as a message sent while it runs; otherwise they

@@ -31,7 +31,7 @@ import (
 )
 
 // browserProfiles is the store of the person's browser profiles
-// (spec_browser_profiles_049).
+// (spec_049_browser_profiles).
 func (h configService) browserProfiles() *config.BrowserProfiles {
 	return config.OpenBrowserProfiles(config.ConfigDir(h.s.configDir))
 }

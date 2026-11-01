@@ -29,7 +29,7 @@ import (
 )
 
 // ProviderModels are the models a configured provider offers
-// (spec_parity_027 PAR-MOD-03), or why they couldn't be listed.
+// (spec_027_parity PAR-MOD-03), or why they couldn't be listed.
 type ProviderModels struct {
 	Provider string
 	Models   []ListedModel

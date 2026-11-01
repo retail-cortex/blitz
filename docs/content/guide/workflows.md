@@ -5,7 +5,7 @@ weight: 58
 
 A **workflow** writes down work that's the same few steps every time (read the notes, look something up, draft, tighten, save) and runs them in order, each step's output going to the next. Run one from the chat as `/name`, or build and run it on a canvas in the desktop app.
 
-Spec: [workflows](../about/specs/spec_workflows_043.md).
+Spec: [workflows](../about/specs/spec_043_workflows.md).
 
 ## Running one
 

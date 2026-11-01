@@ -24,7 +24,7 @@ import { limitFields, permissionKinds, toggleKind, type LimitField } from "./wor
 import { Chip, useSnackbar } from "./ui/controls";
 
 /**
- * The global limits on every worker (Settings › Workers; spec_workers_023
+ * The global limits on every worker (Settings › Workers; spec_023_workers
  * WK-63), [workers.policy] in the global settings: how many runs go at
  * once, what a worker that sets no limit gets and the most it may ask for
  * (model calls, cost, time), and the permission kinds it may be given.

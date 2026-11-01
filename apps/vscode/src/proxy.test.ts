@@ -61,7 +61,7 @@ describe("the proxy", () => {
     const res = await call("/blitz.v1.SessionService/ListSessions", { "x-blitz-token": "secret", Origin: origin, "Blitz-Client": "desktop" }, '{"workspace":"/w"}');
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBe(origin);
-    // Named as the extension, whatever the page said (spec_active_installs_054 AI-02).
+    // Named as the extension, whatever the page said (spec_054_active_installs AI-02).
     expect(await res.json()).toEqual({ url: "/blitz.v1.SessionService/ListSessions", body: '{"workspace":"/w"}', token: null, origin: null, client: "vscode" });
   });
   it.each([

@@ -102,7 +102,7 @@ type Incoming = {
 type Naming = { kind: "file" | "folder"; dir: string } | { kind: "rename"; path: string };
 
 /**
- * The Files shelf (spec_files_029 §5): the workspace as a tree, loaded a
+ * The Files shelf (spec_029_files §5): the workspace as a tree, loaded a
  * folder at a time, with git status, the agent's rules, and file
  * operations.
  */

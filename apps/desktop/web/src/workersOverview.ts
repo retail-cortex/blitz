@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Every workspace's workers (Settings › Workers, spec_workers_023
+// Every workspace's workers (Settings › Workers, spec_023_workers
 // WK-61–WK-63): what's said of each workspace, the home workspace the
 // global workers run in, and the global limits' fields.
 

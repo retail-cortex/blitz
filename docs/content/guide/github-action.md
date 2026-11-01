@@ -3,7 +3,7 @@ title: GitHub Action
 weight: 110
 ---
 
-Spec: [parity](../about/specs/spec_parity_027.md) §11 (PAR-INT-01).
+Spec: [parity](../about/specs/spec_027_parity.md) §11 (PAR-INT-01).
 
 The Blitz action runs the agent in your repository's GitHub Actions: it answers `@blitz` in issues and pull requests, reviews pull requests, or turns an issue into a pull request. It installs a Blitz release (its signature checked), runs `blitz exec` with a cost, time and turn limit, and posts the answer as a comment, or the change as a pull request.
 

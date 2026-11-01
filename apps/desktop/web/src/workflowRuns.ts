@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Workflow runs going on, in every workspace (spec_workflows_043 WF-19):
+// Workflow runs going on, in every workspace (spec_043_workflows WF-19):
 // one stream (WatchWorkflowRuns) serves the status bar, Studio's canvas
 // and the alerts, wherever the run was started (the canvas, a chat, a
 // worker), so a run goes on with Studio closed and its end is heard of

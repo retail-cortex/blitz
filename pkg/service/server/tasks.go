@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Paused workflow runs' tasks (spec_workflows_043 WF-16, WF-17).
+// Paused workflow runs' tasks (spec_043_workflows WF-16, WF-17).
 
 // recordDirs are where paused runs are recorded: the default session
 // storage, and each open workspace's.

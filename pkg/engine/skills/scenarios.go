@@ -27,7 +27,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// A skill's scenarios (spec_skills_013 SK-111) are Castor's behaviour
+// A skill's scenarios (spec_013_skills SK-111) are Castor's behaviour
 // tests (FR-8, ScenarioDefinition): scenarios/<name>.md, its front matter
 // the prompt, whether the skill should be used for it (executes), which
 // skills must be (expected_skills, or skills_applied), and the threshold

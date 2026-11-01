@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Refreshes third_party/mcp-toolbox, the pruned copy of MCP Toolbox for
-# Databases that blitzd runs in-process (spec_databases_046):
+# Databases that blitzd runs in-process (spec_046_databases):
 #
 #   tools/update_toolbox.sh [version]     (default: the one in VERSION)
 #

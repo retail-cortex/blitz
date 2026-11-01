@@ -16,7 +16,7 @@
 
 
 /*
- * The visual editor (spec_visual_editor_037 VE-15): the document styled as
+ * The visual editor (spec_037_visual_editor VE-15): the document styled as
  * Preview styles it (files/document.css, under .preview-markdown .markdown),
  * and what editing adds drawn in the app's colours. No TipTap or ProseMirror
  * stylesheet is loaded: these are all the editor's rules.

@@ -29,7 +29,7 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// Jupyter notebooks (spec_parity_027 PAR-TOOL-02): notebook_edit replaces,
+// Jupyter notebooks (spec_027_parity PAR-TOOL-02): notebook_edit replaces,
 // inserts or deletes a cell, keeping the rest of the JSON as it was
 // (unknown fields, numbers as written); read_file shows a notebook as its
 // cells with their outputs.

@@ -27,7 +27,7 @@ import (
 )
 
 // AcceptedMedia is what the active agent's model takes as attachments
-// (spec_images_011), for the front ends to offer only those.
+// (spec_011_images), for the front ends to offer only those.
 func (w *Workspace) AcceptedMedia() []runtime.Accept { return w.engine.AcceptedMedia("") }
 
 // checkMedia refuses an attachment the active agent's model can't take:

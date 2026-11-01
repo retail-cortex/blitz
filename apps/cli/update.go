@@ -41,7 +41,7 @@ var (
 )
 
 // newUpdateCommand is `blitz update`: install the latest release over this
-// one, after checking its signature and checksum (spec_parity_027
+// one, after checking its signature and checksum (spec_027_parity
 // PAR-MOD-06).
 func newUpdateCommand() *cobra.Command {
 	var check, skipSignature bool

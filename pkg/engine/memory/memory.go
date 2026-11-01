@@ -238,7 +238,7 @@ func (l *loader) rules(dir, root, base string) {
 		}
 		paths, gate, body := splitRule(text)
 		if gate {
-			continue // a gate (when:), judged around the turn, not an instruction (spec_gates_041)
+			continue // a gate (when:), judged around the turn, not an instruction (spec_041_gates)
 		}
 		if len(paths) == 0 {
 			// Loaded like an instruction file (imports included).

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Where a Markdown link goes (spec_files_029 FIL-56): web and mail links
+// Where a Markdown link goes (spec_029_files FIL-56): web and mail links
 // to the browser, #anchors within the document, and relative paths to the
 // workspace file or folder they name, resolved against the document's own
 // folder. Nothing outside the workspace opens.

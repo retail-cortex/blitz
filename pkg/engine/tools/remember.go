@@ -24,7 +24,7 @@ import (
 )
 
 // NoteSaver keeps a note the agent remembers across sessions and returns
-// its name (spec_parity_027 PAR-MEM-10); the engine supplies it.
+// its name (spec_027_parity PAR-MEM-10); the engine supplies it.
 type NoteSaver func(ctx context.Context, kind, text string) (string, error)
 
 // SetNoteSaver supplies the remember tool's saver; nil turns it off.

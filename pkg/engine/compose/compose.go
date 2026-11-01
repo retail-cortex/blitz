@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package compose is the composer (spec_composer_045): a guided
+// Package compose is the composer (spec_045_composer): a guided
 // conversation that makes a workspace's component. It asks what it needs,
 // writes the component in its file format, and checks it with the kind's
 // own rules, sending the problems back to be fixed, before handing it on

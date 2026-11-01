@@ -31,7 +31,7 @@ import (
 )
 
 // UpdateStatus is the desktop app's update, as the page shows it
-// (spec_electron_038 EL-90).
+// (spec_038_electron EL-90).
 type UpdateStatus struct {
 	Current   string `json:"current"`
 	Latest    string `json:"latest"`

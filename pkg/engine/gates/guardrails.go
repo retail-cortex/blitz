@@ -30,7 +30,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Guardrails (spec_gates_041 GT-20 on): safety and limits at every step
+// Guardrails (spec_041_gates GT-20 on): safety and limits at every step
 // of a turn, in .agents/guardrails/<name>.md. A built-in one runs with its
 // defaults until its file (builtin:) changes them, or switches it off
 // (enabled: false); a custom one is a check in plain English the judge

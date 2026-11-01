@@ -25,8 +25,8 @@ import (
 // HashTrust keeps what the person reviewed and trusted, by path (symbolic
 // links resolved) and at which content (a hash): something changed since
 // needs review again. It holds skills' scripts (skill-trust.json,
-// spec_skills_013 SK-108) and workspace connection files
-// (connector-trust.json, spec_connectors_047 CON-09).
+// spec_013_skills SK-108) and workspace connection files
+// (connector-trust.json, spec_047_connectors CON-09).
 type HashTrust struct {
 	path string
 	// key names the decisions in the file: skills, or connections.

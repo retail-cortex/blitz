@@ -3,7 +3,7 @@ title: Language
 weight: 90
 ---
 
-Spec: [internationalisation](../about/specs/spec_i18n_004.md).
+Spec: [internationalisation](../about/specs/spec_004_i18n.md).
 
 The interface speaks English (`en-US`, the default), Spanish (`es`) and Canadian French (`fr-CA`). `/locale` shows the current language; `/locale es` switches and saves `[ui] locale = "es"`. Codes are forgiving: `es-ES`, `es_MX`, `spanish` and `español` all work. The desktop app follows the system's language by default and switches in **Settings › Appearance**, from the same catalogs.
 

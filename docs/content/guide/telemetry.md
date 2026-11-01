@@ -3,7 +3,7 @@ title: Logs and telemetry
 weight: 100
 ---
 
-Spec: [observability](../about/specs/spec_observability_003.md).
+Spec: [observability](../about/specs/spec_003_observability.md).
 
 ## Diagnostic log
 

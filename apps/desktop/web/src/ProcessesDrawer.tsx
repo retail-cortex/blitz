@@ -31,7 +31,7 @@ type Output = { text?: string; error?: string; loading: boolean };
 
 /**
  * The agents' background processes' output and details
- * (spec_processes_052), in the drawer from the status bar's Processes
+ * (spec_052_processes), in the drawer from the status bar's Processes
  * menu: every open workspace's, under each workspace (dir's first), each
  * with its running time, usage and flags, Stop, and its last lines of
  * output when expanded. Stop flagged stops every flagged one, after

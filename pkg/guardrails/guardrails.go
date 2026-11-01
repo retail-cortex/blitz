@@ -14,7 +14,7 @@
 
 // Package guardrails runs Blitz's guardrails on a model's request and
 // reply, for a program that has those rather than an engine turn: a
-// gateway between Blitz and the models (spec_enterprise_053 EN-23). The
+// gateway between Blitz and the models (spec_053_enterprise EN-23). The
 // rules and their checks are the engine's own (pkg/engine/gates), so a
 // guardrail means the same there as on the desktop:
 //

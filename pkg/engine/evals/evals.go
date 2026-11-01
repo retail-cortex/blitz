@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package evals reads and writes eval files (spec_evals_042): cases, each
+// Package evals reads and writes eval files (spec_042_evals): cases, each
 // a prompt and the output expected of it, in a Markdown table in
 // .agents/evals/<name>.md; scores an agent's output against a case; and
 // keeps the runs.

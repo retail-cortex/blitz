@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Pan and zoom for a drawn diagram (spec_files_029 FIL-66), wherever one
+// Pan and zoom for a drawn diagram (spec_029_files FIL-66), wherever one
 // shows (Preview, Visual, the chat): ⌘/Ctrl and the wheel, or a pinch,
 // zoom at the pointer; dragging pans; a double-click fits it again. The
 // diagram's head gets + / − / Fit / Expand, Expand a window-sized viewer.

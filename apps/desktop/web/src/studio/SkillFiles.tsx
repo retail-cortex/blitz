@@ -75,7 +75,7 @@ interface RunResult {
 }
 
 /**
- * A skill's References or Scripts tab (spec_skills_013 SK-101, SK-102),
+ * A skill's References or Scripts tab (spec_013_skills SK-101, SK-102),
  * as a list and a file, the way Studio's lists and forms are: the files
  * in references/ or scripts/ fill the tab (a script with its language,
  * where it comes from and the policy's verdict), with New file (and

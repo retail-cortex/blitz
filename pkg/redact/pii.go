@@ -19,7 +19,7 @@ import (
 	"strings"
 )
 
-// Personal data a guardrail can mask in answers (spec_gates_041): email
+// Personal data a guardrail can mask in answers (spec_041_gates): email
 // addresses, phone numbers, payment card numbers that pass the Luhn
 // check, and US social security numbers. Each is replaced by a label
 // saying what it was.

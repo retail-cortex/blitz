@@ -44,7 +44,7 @@ const zones: string[] = (() => {
 })();
 
 /**
- * When a job runs (spec_workers_023 WK-72): what repeats (every hour, day,
+ * When a job runs (spec_023_workers WK-72): what repeats (every hour, day,
  * weekday, chosen weekdays or a day of the month) and at what time, or a
  * Custom schedule as text or cron; the time zone; and the next runs as the
  * service reads them (PreviewSchedule), listed and marked on a month.

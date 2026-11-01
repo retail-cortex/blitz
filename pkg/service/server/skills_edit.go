@@ -24,7 +24,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Studio's skills (spec_skills_013 SK-100–SK-103).
+// Studio's skills (spec_013_skills SK-100–SK-103).
 
 func skillFileMsg(f api.SkillFile) *pb.SkillFile {
 	return &pb.SkillFile{

@@ -18,7 +18,7 @@
 // may loosen the permission mode only once the project is trusted) and
 // enabled plugins, each a name, a description, a system
 // prompt, the tools it may use and optionally its own model
-// (spec_agents_014).
+// (spec_014_agents).
 package agents
 
 import (

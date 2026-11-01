@@ -25,7 +25,7 @@ import (
 )
 
 // newMemoryCommand is `blitz memory list|show|edit|forget`: the notes the
-// agent saved in a workspace with its remember tool (spec_parity_027
+// agent saved in a workspace with its remember tool (spec_027_parity
 // PAR-MEM-11), through the Blitz service.
 func newMemoryCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "memory", Short: "List, show, edit and forget the notes the agent saved"}

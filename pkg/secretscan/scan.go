@@ -14,7 +14,7 @@
 
 // Package secretscan finds API keys and other secrets in files about to
 // be committed, for the pre-commit hook a harness gets
-// (spec_secret_hooks_051): known key formats anywhere, and long random
+// (spec_051_secret_hooks): known key formats anywhere, and long random
 // values assigned to key-like names in .env and config files. A line
 // with "blitz:allow-secret" is skipped (a false alarm, a test fixture).
 package secretscan

@@ -59,7 +59,7 @@ type Open = { name: string } | null;
 type Tab = "general" | "references" | "scripts" | "scenarios";
 
 /**
- * The workspace's skills (Studio › Skills, spec_skills_013 SK-100–SK-103):
+ * The workspace's skills (Studio › Skills, spec_013_skills SK-100–SK-103):
  * its own, with their kind, fill the pane, with New and **Add from…**
  * (copy any skill the workspace sees, or reference it in the open meta
  * skill). A skill's form slides in over the list, as an agent's does,

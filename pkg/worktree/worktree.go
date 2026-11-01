@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package worktree gives work its own git worktree, so it can change files
-// without touching the checkout the user works in (spec_parity_027 §8.2):
+// without touching the checkout the user works in (spec_027_parity §8.2):
 // <repo>/.blitz/worktrees/<name> on the branch blitz/<name>, from HEAD or
 // another ref, with the untracked files .worktreeinclude lists (a .env,
 // say) copied in.

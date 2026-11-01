@@ -29,7 +29,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Output styles (spec_parity_027 PAR-MEM-21): instructions on how the agent
+// Output styles (spec_027_parity PAR-MEM-21): instructions on how the agent
 // writes its answers, added to its instructions. Built in: default (none),
 // concise and explanatory; the user's are Markdown files in
 // ~/.blitz/styles/<name>.md, with an optional description in frontmatter,

@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Studio's evals (spec_evals_042).
+// Studio's evals (spec_042_evals).
 
 func evalCasesMsg(cases []evals.Case) []*pb.EvalCase {
 	out := make([]*pb.EvalCase, 0, len(cases))

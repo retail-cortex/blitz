@@ -3,7 +3,7 @@ title: The engine
 weight: 10
 ---
 
-Specs: [workspace](../about/specs/spec_workspace_018.md), [engine](../about/specs/spec_engine_016.md), [sessions](../about/specs/spec_sessions_017.md).
+Specs: [workspace](../about/specs/spec_018_workspace.md), [engine](../about/specs/spec_016_engine.md), [sessions](../about/specs/spec_017_sessions.md).
 
 ## A workspace
 

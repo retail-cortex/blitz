@@ -15,7 +15,7 @@
 // Package engine is Blitz without a user interface: it opens a workspace
 // (registries, tools, sessions, the model and the engine) and exposes what a
 // front end needs as an api.Backend. The service and the CLI's --local mode
-// run it; none of it prints (spec_workspace_018).
+// run it; none of it prints (spec_018_workspace).
 package engine
 
 import (
@@ -114,7 +114,7 @@ type Workspace struct {
 	// written).
 	mcpLive  []config.MCPServerConfig
 	policyMu sync.Mutex // guards cfg.Workers.Policy, which the settings can change
-	guards   guarding   // each turn's guardrails (spec_gates_041)
+	guards   guarding   // each turn's guardrails (spec_041_gates)
 	agents   *agents.Registry
 	skills   *skills.Provider
 	tools    *tools.Registry
@@ -320,11 +320,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			return n.Name, err
 		})
 	}
-	if cfg.Memory.SummariesOn() { // recall_session (spec_memory_012 MEM-36)
+	if cfg.Memory.SummariesOn() { // recall_session (spec_012_memory MEM-36)
 		w.tools.SetSessionRecaller(w.recallSession)
 	}
 	// What went wrong in the sessions, for the agents that improve the
-	// harness (spec_harness_learning_048).
+	// harness (spec_048_harness_learning).
 	w.tools.SetEvidenceReader(w.readEvidence)
 	w.tools.SetProposalSaver(w.saveProposals)
 	w.tools.SetJobs(tools.Jobs{
@@ -436,7 +436,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithTaskDone(w.taskEnded),
 		runtime.WithProjectTrusted(w.project.Loaded),
 		runtime.WithSecrets(w.expandSecrets),
-		runtime.WithGuard(guard{w}), // guardrails at every step (spec_gates_041)
+		runtime.WithGuard(guard{w}), // guardrails at every step (spec_041_gates)
 	)...)
 	if err != nil {
 		w.Close()
@@ -607,7 +607,7 @@ func (w *Workspace) instructions() string {
 func FindBrowser(path string) (string, error) { return browser.Find(path) }
 
 // browserProfile is the browser profile the workspace browses with, as the
-// person chose it (spec_browser_profiles_049 BP-03): its name, its folder
+// person chose it (spec_049_browser_profiles BP-03): its name, its folder
 // and the sites it browses without asking. None ("") when none is chosen, or the
 // project's settings wait for trust or were declined, since a project the
 // person hasn't trusted could steer the agent into their sign-ins.
@@ -627,7 +627,7 @@ func (w *Workspace) browserProfile() tools.BrowserProfile {
 }
 
 // harnessFolders tells the agents about the harness's scratch folder and
-// support scripts, when the workspace has them (spec_harness_learning_048
+// support scripts, when the workspace has them (spec_048_harness_learning
 // HE-50): where working files go, and what's there to run.
 func harnessFolders(dir string) string {
 	var b strings.Builder
@@ -747,7 +747,7 @@ func mcpWithSecrets(servers []config.MCPServerConfig, dir string) []config.MCPSe
 	return out
 }
 
-// expandSecrets puts secrets' values into text (spec_secrets_039):
+// expandSecrets puts secrets' values into text (spec_039_secrets):
 // {secrets:key} the workspace's own, else the global one;
 // {secrets:global:key} and {secrets:workspace:key} only that scope's.
 func (w *Workspace) expandSecrets(text string) (string, []string) {

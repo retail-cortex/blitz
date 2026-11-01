@@ -37,7 +37,7 @@ const next = (w: Worker) => (w.nextRun ? new Date(Number(w.nextRun.seconds) * 10
 type Draft = { name: string; schedule: string; input: string };
 
 /**
- * When a workflow runs by itself (spec_workflows_043 WF-20): its schedules,
+ * When a workflow runs by itself (spec_043_workflows WF-20): its schedules,
  * each a worker that runs it (a deterministic worker: the workflow's steps,
  * its prompt the workflow's input), added, changed, switched on and off
  * and removed here. What a worker may do and its limits are in Studio ›

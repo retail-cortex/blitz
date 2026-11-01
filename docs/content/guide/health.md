@@ -5,7 +5,7 @@ weight: 59
 
 **Studio › Overview** is your workspace's dashboard: what it holds, how its runs go, what needs attention, and how good each agent, skill, rule, guardrail, eval, workflow and job is. Studio opens on it.
 
-Spec: [workspace health](../about/specs/spec_health_044.md).
+Spec: [workspace health](../about/specs/spec_044_health.md).
 
 ## What it shows
 

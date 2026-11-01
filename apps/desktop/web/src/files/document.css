@@ -15,7 +15,7 @@
  */
 
 /*
- * Markdown files' previews as documents (spec_files_029 FIL-57): a reading
+ * Markdown files' previews as documents (spec_029_files FIL-57): a reading
  * measure, a type scale, and the window's colours. The chat keeps its own
  * compact style (app.css). Everything here reads the --doc-* variables, so
  * the CSS in Settings → Documents can restyle a theme by setting them.

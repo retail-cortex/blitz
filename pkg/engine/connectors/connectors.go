@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package connectors is how Blitz's agents reach the systems a team
-// works with (spec_connectors_047): databases now, email and others
+// works with (spec_047_connectors): databases now, email and others
 // later. A connector is described, not coded: a category (Databases)
 // and its kinds (PostgreSQL, SQLite…) are YAML descriptors, the built-in
 // ones embedded and more read from <config>/connectors/kinds and a

@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-// Where connectors' files live (spec_connectors_047), shared by the
+// Where connectors' files live (spec_047_connectors), shared by the
 // engine's connectors and the tray, which lists them without the engine:
 // a connectors folder in the settings folder (global) and in a
 // workspace's .agents, holding descriptors (kinds/, categories/) and a

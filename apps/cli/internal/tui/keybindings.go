@@ -25,7 +25,7 @@ import (
 	"github.com/ergochat/readline"
 )
 
-// KeyBindings are the REPL's keys (spec_parity_027 PAR-UI-09), from
+// KeyBindings are the REPL's keys (spec_027_parity PAR-UI-09), from
 // ~/.blitz/keybindings.toml:
 //
 //	editor = "ctrl+g"          # edit the line in $EDITOR

@@ -27,7 +27,7 @@ import (
 )
 
 // GlobalConnectors are the person's own connections, every workspace's
-// (spec_connectors_047 CON-18): Settings › Connectors changes them, never
+// (spec_047_connectors CON-18): Settings › Connectors changes them, never
 // a workspace's Studio. They're read with no workspace: the built-in and
 // global descriptors only, the global secrets, and the built-in sql-query
 // skill.

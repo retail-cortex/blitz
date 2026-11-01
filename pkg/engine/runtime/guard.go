@@ -21,7 +21,7 @@ import (
 )
 
 // Guard checks what a turn reads, says and does, at every step
-// (guardrails, spec_gates_041): a tool call before it runs, a tool's
+// (guardrails, spec_041_gates): a tool call before it runs, a tool's
 // result before the model reads it, and the model's answers.
 type Guard interface {
 	// ToolCall decides a call before it runs.

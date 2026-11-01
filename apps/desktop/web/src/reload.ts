@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Reloading the agent files (spec_desktop_024 DSK-91d): what a reload
+// Reloading the agent files (spec_024_desktop DSK-91d): what a reload
 // loaded, in a sentence, for the snackbar and /reload.
 
 import { t, tn } from "./i18n";

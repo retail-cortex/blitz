@@ -55,7 +55,7 @@ type RunShellCommandInput struct {
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"Timeout in seconds (default 120, max 1800)"`
 	Background     bool   `json:"background,omitempty" jsonschema:"Run asynchronously; inspect or stop it with manage_background_process"`
 	// Notify and NotifyPattern (background only) tell the agent about the
-	// process as it runs (spec_parity_027 PAR-TOOL-04).
+	// process as it runs (spec_027_parity PAR-TOOL-04).
 	Notify        bool   `json:"notify,omitempty" jsonschema:"Background only: tell you when the process exits (with its last output), during your turn or in a new one"`
 	NotifyPattern string `json:"notify_pattern,omitempty" jsonschema:"Background only: also tell you each output line matching this regular expression (up to 20), e.g. ERROR|listening on"`
 }

@@ -186,7 +186,7 @@ go_test(
 
 # The REPL's commands (/help's list, helpGroups), in the output tree, for
 # the desktop page's test that its slash commands match them
-# (//apps/desktop/web:test, spec_desktop_024 DSK-102).
+# (//apps/desktop/web:test, spec_024_desktop DSK-102).
 copy_to_bin(
     name = "commands",
     srcs = ["commands.go"],

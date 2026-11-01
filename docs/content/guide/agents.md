@@ -5,7 +5,7 @@ weight: 40
 
 An **agent** is a system prompt, the tools it may use, and optionally its own model and settings. Blitz comes with a general agent, a coding specialist and a few others; you can add your own for yourself or for a project, and the main agent hands work to the others when it helps.
 
-Spec: [agents](../about/specs/spec_agents_014.md).
+Spec: [agents](../about/specs/spec_014_agents.md).
 
 ## Using agents
 

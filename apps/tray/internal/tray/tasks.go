@@ -69,7 +69,7 @@ func Arrived(seen map[string]bool, tasks []*pb.HumanTask) []*pb.HumanTask {
 }
 
 // TasksLink is the link that tells the desktop app tasks have arrived
-// (spec_electron_038 EL-110): blitz://tasks opens its tasks window (or
+// (spec_038_electron EL-110): blitz://tasks opens its tasks window (or
 // its dialog, when the app is open), with notify=1 a notification first,
 // titled and worded here in the user's language. "" when alerts are off
 // or nothing arrived.
@@ -93,7 +93,7 @@ func TasksLink(alerts string, arrived []*pb.HumanTask) string {
 }
 
 // FetchRuns asks the service for the latest workflow runs, in every
-// workspace (spec_workflows_043 WF-19), newest first.
+// workspace (spec_043_workflows WF-19), newest first.
 func FetchRuns(ctx context.Context, sock string) ([]*pb.WorkflowRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()

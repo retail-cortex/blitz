@@ -36,7 +36,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Workflows (spec_workflows_043): a workflow runs as a turn (/name input),
+// Workflows (spec_043_workflows): a workflow runs as a turn (/name input),
 // its steps in order, each agent step a turn of its own in the session, so
 // it streams, asks for approval and keeps its guardrails as any turn does.
 

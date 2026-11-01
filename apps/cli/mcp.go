@@ -37,10 +37,10 @@ import (
 
 // newMCPCommand is `blitz mcp`: the MCP servers of the global settings,
 // added, listed, shown, removed, enabled and disabled in place, and
-// signed in to (spec_parity_027 PAR-MCP-01, -04). With --workspace, the
+// signed in to (spec_027_parity PAR-MCP-01, -04). With --workspace, the
 // workspace's own instead (--dir's, else the current directory's: its
 // settings in ~/.blitz, never the project), as Studio › Connectors edits
-// them (spec_mcp_009 MCP-50): list shows every server it runs with its
+// them (spec_009_mcp MCP-50): list shows every server it runs with its
 // scope, disable and enable turn a global one off or on there alone, and
 // make-global moves one of its own to every workspace.
 func newMCPCommand(g *globalFlags) *cobra.Command {

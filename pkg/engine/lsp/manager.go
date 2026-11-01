@@ -212,7 +212,7 @@ func (m *Manager) startServer(ctx context.Context, cfg Server) (*server, error) 
 		"capabilities": map[string]any{
 			"textDocument": map[string]any{
 				"synchronization": map[string]any{"didSave": false},
-				// The editor's completion (spec_visual_editor_037 VE-32).
+				// The editor's completion (spec_037_visual_editor VE-32).
 				"completion": map[string]any{
 					"contextSupport": true,
 					"completionItem": map[string]any{

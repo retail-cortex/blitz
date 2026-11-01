@@ -36,7 +36,7 @@ export function usedThrottle(now: () => number, hidden: () => boolean, mark: () 
 /**
  * Tells the host the window is in use when it opens and each time it comes
  * forward (focus, or shown again), at most every USED_EVERY_MS: the host
- * counts the install as active once a day (spec_active_installs_054 AI-01).
+ * counts the install as active once a day (spec_054_active_installs AI-01).
  */
 export function useCountUse() {
   useEffect(() => {

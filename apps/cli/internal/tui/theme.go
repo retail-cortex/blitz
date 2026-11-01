@@ -37,7 +37,7 @@ func applyTheme(app *App, name string) {
 }
 
 // cmdTheme shows the themes or switches to one, keeping it with --save
-// (spec_parity_027 PAR-UI-09).
+// (spec_027_parity PAR-UI-09).
 func cmdTheme(args []string, app *App) {
 	save := slices.Contains(args, "--save")
 	args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--save" })

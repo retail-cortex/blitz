@@ -25,7 +25,7 @@ import { useApp } from "./state";
 import { Button, Icon, IconButton, useSnackbar } from "./ui/controls";
 
 /**
- * Settings › Skills (spec_skills_013 SK-96): the skill registries, such as
+ * Settings › Skills (spec_013_skills SK-96): the skill registries, such as
  * Castor, the skills they offer, and those installed from them; then the
  * skills Blitz ships with. A skill installs for the user or into the
  * active workspace; open sessions see it at once.

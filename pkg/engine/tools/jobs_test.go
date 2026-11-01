@@ -49,7 +49,7 @@ func fakeJobs(dir string, problems []string, created *[]api.WorkerSpec) Jobs {
 }
 
 // create_job: a job asked for in the chat, shown with its file and next
-// runs, always asked about, created paused (spec_workers_023 WK-70).
+// runs, always asked about, created paused (spec_023_workers WK-70).
 func TestCreateJobTool(t *testing.T) {
 	args := map[string]any{
 		"name":        "ai-news",

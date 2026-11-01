@@ -31,7 +31,7 @@ import (
 )
 
 // A personal call from a named front end counts its use; one without the
-// name, polling, or a front end that isn't one don't (spec_active_installs_054
+// name, polling, or a front end that isn't one don't (spec_054_active_installs
 // AI-01, AI-02).
 func TestCountUse(t *testing.T) {
 	var mu sync.Mutex

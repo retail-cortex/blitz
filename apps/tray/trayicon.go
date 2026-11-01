@@ -25,7 +25,7 @@ import (
 const pulseEvery = 250 * time.Millisecond
 
 // trayIcon is the tray's icon: the service's state, a dot while tasks
-// wait, and, while workflows or jobs run, a slow pulse (spec_electron_038
+// wait, and, while workflows or jobs run, a slow pulse (spec_038_electron
 // EL-111) through tray.PulseFrames.
 type trayIcon struct {
 	mu                     sync.Mutex

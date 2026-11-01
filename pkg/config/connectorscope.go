@@ -23,7 +23,7 @@ import (
 )
 
 // ConnectorScope keeps which connections the person turned off in each
-// workspace (spec_connectors_047 CON-17): connector-scope.json in the
+// workspace (spec_047_connectors CON-17): connector-scope.json in the
 // settings directory, by the workspace's folder with symbolic links
 // resolved, each workspace's connections off by their key
 // (<scope>/<category>/<name>). It's the person's, never the project's,

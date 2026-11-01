@@ -22,7 +22,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 )
 
-// Background tasks (spec_background_agents_032): a front end in this
+// Background tasks (spec_032_background_agents): a front end in this
 // process sees every task; the service shows a client its own sessions'
 // (the *In methods).
 

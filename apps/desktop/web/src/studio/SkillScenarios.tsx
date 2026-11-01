@@ -38,7 +38,7 @@ interface ScenarioForm {
 }
 
 /**
- * A skill's Scenarios tab (spec_skills_013 SK-111, SK-112): **Try it**
+ * A skill's Scenarios tab (spec_013_skills SK-111, SK-112): **Try it**
  * runs a prompt once (the skill offered, or given), showing whether the
  * agent used it and what it said; **Keep it** saves that as a scenario
  * (scenarios/<name>.md, Castor's format); the skill's scenarios are

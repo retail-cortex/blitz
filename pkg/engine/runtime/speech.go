@@ -49,7 +49,7 @@ const (
 	defaultOpenAIVoice = "coral"
 )
 
-// NewSpeaker builds the [audio] model's speaker (spec_models_015): a
+// NewSpeaker builds the [audio] model's speaker (spec_015_models): a
 // Gemini speech model (through the Gemini API or Vertex AI, as [llm.gemini]
 // signs in) or an OpenAI one. nil without a model; an error for a provider
 // that can't speak or credentials that don't work.

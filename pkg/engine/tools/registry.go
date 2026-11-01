@@ -17,7 +17,7 @@
 // undo), shell commands under the command policy and the OS sandbox,
 // approvals and permission rules, web fetch and search, MCP servers, skill
 // scripts, images, the task list and questions to the user
-// (spec_filetools_006, spec_shell_007, spec_approvals_005).
+// (spec_006_filetools, spec_007_shell, spec_005_approvals).
 package tools
 
 import (
@@ -63,7 +63,7 @@ type Registry struct {
 	searcher     *webSearcher  // nil: no search provider configured
 	searchErr    error         // why the configured provider can't be used
 	fetch        bool          // web_fetch is available
-	// web is the web settings, for workflows' calls (spec_workflows_043).
+	// web is the web settings, for workflows' calls (spec_043_workflows).
 	web   WebFetchConfig
 	webOn bool
 	// modeNote is why the configured permission mode couldn't be used
@@ -72,7 +72,7 @@ type Registry struct {
 	rules    *PermissionRules
 
 	browser *browserTool // nil: no browser tool
-	page    pageTool     // open_page (spec_agent_browser_050 AB-10)
+	page    pageTool     // open_page (spec_050_agent_browser AB-10)
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
 
 	mediaMu    sync.RWMutex
@@ -98,7 +98,7 @@ type Registry struct {
 	jobs Jobs
 	// profile is the browser profile the workspace browses with; nil:
 	// none. agentBrowser opens a view of the desktop app's for the
-	// agent's browser (spec_agent_browser_050); nil: none. evidenceMu
+	// agent's browser (spec_050_agent_browser); nil: none. evidenceMu
 	// guards them.
 	profile      func() BrowserProfile
 	agentBrowser AgentBrowserHost
@@ -126,7 +126,7 @@ func (r *Registry) browserProfile() func() BrowserProfile {
 }
 
 // AgentBrowserOptions are what a view of the app's for the agent opens
-// with (spec_agent_browser_050).
+// with (spec_050_agent_browser).
 type AgentBrowserOptions struct {
 	// Show is "watch" or "silent".
 	Show        string

@@ -47,7 +47,7 @@ var (
 )
 
 // NewGeminiUploader sends attachments too large to go inline through
-// Gemini's Files API, signed in as [llm.gemini] (spec_images_011): nil
+// Gemini's Files API, signed in as [llm.gemini] (spec_011_images): nil
 // without a Gemini API key or key command (Vertex AI has no Files API).
 func NewGeminiUploader(ctx context.Context, cfg *config.Config) (images.Uploader, error) {
 	g := cfg.LLM.Gemini

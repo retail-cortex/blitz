@@ -35,7 +35,7 @@ const embedBatch = 64
 const maxEmbedChars = 8000
 
 // Embedder turns texts into vectors with a provider's embedding model:
-// the semantic half of workspace search (spec_search_035 SRCH-50).
+// the semantic half of workspace search (spec_035_search SRCH-50).
 type Embedder struct {
 	ref   string
 	embed func(ctx context.Context, texts []string) ([][]float32, error)

@@ -24,7 +24,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 )
 
-// Eval runs going on (spec_evals_042 EV-09a): each runs in the service,
+// Eval runs going on (spec_042_evals EV-09a): each runs in the service,
 // not in the request that started it, so Studio can be left while it goes
 // on, and followed or stopped again from anywhere. A run is forgotten
 // here once it has ended, by then recorded with the workspace's runs.

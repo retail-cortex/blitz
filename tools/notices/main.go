@@ -17,7 +17,7 @@
 // into the desktop app's page, from the copies Bazel fetched. It fails
 // when a component has no license file, or one outside the licenses
 // Blitz accepts. tools/third_party_notices.sh finds its inputs and runs
-// it (spec_release_readiness_030 RR-04).
+// it (spec_030_release_readiness RR-04).
 package main
 
 import (

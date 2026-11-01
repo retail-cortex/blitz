@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// blitz eval (spec_evals_042 EV-10): runs one of the workspace's evals,
+// blitz eval (spec_042_evals EV-10): runs one of the workspace's evals,
 // for CI: each result as it's scored, then the run; it exits 1 when the
 // eval fails.
 

@@ -3,7 +3,7 @@ title: Providers
 weight: 5
 ---
 
-Spec: [models](../about/specs/spec_models_015.md).
+Spec: [models](../about/specs/spec_015_models.md).
 
 A provider is where Blitz's models come from, and setting one up is the first thing Blitz needs: until a provider has a key or a sign-in, no chat, job or eval can run. Pick the provider you already have access to; you can add more later for [fallbacks](models.md#fallback-models) and [per-agent models](models.md#per-agent-models).
 

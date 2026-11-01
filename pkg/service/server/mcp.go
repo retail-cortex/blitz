@@ -25,7 +25,7 @@ import (
 )
 
 // MCP servers for the desktop app's Settings › Connectors › MCP servers,
-// Studio › Connectors and the tray (spec_mcp_009 MCP-45..MCP-50): the
+// Studio › Connectors and the tray (spec_009_mcp MCP-45..MCP-50): the
 // global settings' [[mcp.servers]] and a workspace's own, edited as
 // `blitz mcp` does, and applied to open workspaces at once.
 

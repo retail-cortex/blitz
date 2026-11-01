@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The workspace dashboard's state and arithmetic (spec_health_044): the
+// The workspace dashboard's state and arithmetic (spec_044_health): the
 // service's WorkspaceHealth, followed live, and what the Overview and
 // Studio's grade badges make of it.
 

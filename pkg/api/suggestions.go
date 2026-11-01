@@ -79,7 +79,7 @@ type Reflection struct {
 	Patterns int
 	// Score weighs them, the costly ones twice; /reflect is suggested once
 	// it reaches Threshold ([harness] reflect_threshold; 0: never)
-	// (spec_harness_learning_048 HE-62).
+	// (spec_048_harness_learning HE-62).
 	Score     int
 	Threshold int
 	// Proposals is how many changes a scheduled reflection proposed,

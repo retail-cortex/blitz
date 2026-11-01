@@ -15,7 +15,7 @@
  */
 
 
-// The visual editor's Markdown (spec_visual_editor_037 VE-90): every
+// The visual editor's Markdown (spec_037_visual_editor VE-90): every
 // Markdown file in the repository reads and writes back unchanged, and an
 // edit rewrites only what it touched.
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";

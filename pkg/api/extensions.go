@@ -52,7 +52,7 @@ type SkillInfo struct {
 	// Dir is the skill's folder on disk ("" for a built-in skill).
 	Dir string
 	// Kind is simple, references, scripts or meta, from its folder
-	// (spec_skills_013 SK-97).
+	// (spec_013_skills SK-97).
 	Kind string
 	// Agents are the agents it's offered to (none: every one); Members the
 	// skills a meta skill combines; References its files under
@@ -67,7 +67,7 @@ type SkillInfo struct {
 	// NeedsReview means its scripts, on disk, weren't reviewed and trusted
 	// with this content (new, changed, a registry's): each run asks first.
 	NeedsReview bool
-	// Triggers are its trigger phrases (spec_skills_013 SK-110);
+	// Triggers are its trigger phrases (spec_013_skills SK-110);
 	// Scenarios how many scenarios/*.md it carries (SK-111).
 	Triggers  []string
 	Scenarios int

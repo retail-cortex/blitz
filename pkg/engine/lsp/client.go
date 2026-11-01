@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package lsp talks to language servers for the agent's code intelligence
-// (spec_parity_027 PAR-TOOL-03): definitions, references, hover, symbols
+// (spec_027_parity PAR-TOOL-03): definitions, references, hover, symbols
 // and diagnostics, from servers started lazily per language.
 package lsp
 

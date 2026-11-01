@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package embed runs MCP Toolbox for Databases inside Blitz's own process
-// (spec_databases_046): a pruned copy of Toolbox (third_party/mcp-toolbox)
+// (spec_046_databases): a pruned copy of Toolbox (third_party/mcp-toolbox)
 // with only the databases Blitz offers (Postgres, AlloyDB, SQLite with
 // sqlite-vec, BigQuery), its config parser (config.go, taken from
 // Toolbox's cmd/internal), and Start, which serves one config's tools as

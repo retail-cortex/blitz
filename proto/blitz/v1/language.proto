@@ -21,7 +21,7 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 
 // LanguageService is the workspace's language servers for the editor
-// (spec_visual_editor_037): completion, hover, definitions, references and
+// (spec_037_visual_editor): completion, hover, definitions, references and
 // problems for the documents it has open, unsaved text included. The
 // editor shares the servers the agent's lsp tool uses: one per workspace
 // and language.
@@ -96,7 +96,7 @@ message OpenDocumentRequest {
   // The editor's version of the text (it only grows).
   int64 version = 5;
   // Set for a code block in the Markdown file at path, rather than the
-  // file itself (spec_visual_editor_037 §7).
+  // file itself (spec_037_visual_editor §7).
   CodeBlock block = 6;
 }
 

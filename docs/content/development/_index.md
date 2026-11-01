@@ -16,7 +16,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `apps/service` | `blitzd`, the per-user service's command: its flags, `--license` and `blitzd doctor` (`internal/doctor`), over `pkg/service` |
 | `apps/vscode` | The VS Code extension (TypeScript): the desktop app's page in a view, a local proxy to the service, packed by `tools/vsix` |
 | `apps/desktop/web` | The desktop page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), shown by the Electron app, the tray's page on Windows and the VS Code extension |
-| `apps/electron` | The desktop app ([spec_electron_038](../about/specs/spec_electron_038.md)): its main process and preload (TypeScript), with the page and `blitz-tray --serve` as its host (`pkg/pagehost`); the Electron runtime comes from `MODULE.bazel`; `appicon.png` its icon; `winexe` (Go, run at build time) gives the Windows program that icon and its details; `packaging/` its macOS app, Windows zip and Linux packages (the Arch one made by `tools/pacman`) and the macOS signing script |
+| `apps/electron` | The desktop app ([spec_038_electron](../about/specs/spec_038_electron.md)): its main process and preload (TypeScript), with the page and `blitz-tray --serve` as its host (`pkg/pagehost`); the Electron runtime comes from `MODULE.bazel`; `appicon.png` its icon; `winexe` (Go, run at build time) gives the Windows program that icon and its details; `packaging/` its macOS app, Windows zip and Linux packages (the Arch one made by `tools/pacman`) and the macOS signing script |
 | `apps/tray` | `blitz-tray`, the service in the system tray (fyne.io/systray: D-Bus StatusNotifierItem on Linux, Cocoa on macOS, Win32 on Windows): `internal/tray` has its behaviour (the menu for a status, the actions, the page's `/host/` calls), `main.go` draws it; shipped beside the app in the `.deb` and `Blitz.app`, and in the Windows zip, where it serves the desktop page (`bazel run //apps/tray:blitz-tray_page` tries that here) |
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
@@ -25,7 +25,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `pkg/pageserver` | The desktop page in front of the service: the proxy to its socket (the tray uses it, for the Electron app), and the loopback server, HTTP/2 over TLS with a certificate of its own, behind a one-time link and a cookie, that serves the page to a browser on Windows |
 | `pkg/fileview` | Showing files and folders in the system's programs (file manager, viewer), never running one: for the desktop app and the tray |
 | `pkg/socket` | Where the service listens (the per-user Unix socket), and how to reach it |
-| `pkg/service` | The service itself, so another program can run it ([spec_enterprise_053](../about/specs/spec_enterprise_053.md) EN-01): `service.Run` opens each workspace a client names and serves it; `server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker; `servicetest` runs it inside other packages' tests |
+| `pkg/service` | The service itself, so another program can run it ([spec_053_enterprise](../about/specs/spec_053_enterprise.md) EN-01): `service.Run` opens each workspace a client names and serves it; `server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker; `servicetest` runs it inside other packages' tests |
 | `pkg/engine` | The program without a UI: `engine.Open` builds a `Workspace` (registries, tools, sessions, model, engine) implementing `api.Backend` with typed operations that return data and never print |
 | `pkg/engine/runtime` | The engine over the ADK runner: models and providers, fallback, per-model settings, compaction, steering, side questions, usage and cost |
 | `pkg/engine/tools` | Tools and their guardrails: workspace roots, approvals, command policy, OS sandbox, script sandbox (gVisor), skill scripts and their environments, web, MCP, hooks, checkpoints |
@@ -37,7 +37,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `tools` | Runnable checks and upkeep: `check_deps`, `check_format.sh`, `license_headers`, `third_party_notices.sh` (and its generator, `notices`), `specs`, `tidy`, `buf`, the gopls driver |
 | `third_party` | Patches to dependencies |
 | `docs` | This site: Hugo with the Geekdoc theme, built by Bazel (`//docs:site`) and published to GitHub Pages from `main` |
-| `release` | The CLI release archives, every platform ([spec_monorepo_028](../about/specs/spec_monorepo_028.md) MR-22) |
+| `release` | The CLI release archives, every platform ([spec_028_monorepo](../about/specs/spec_028_monorepo.md) MR-22) |
 | `.github/workflows` | `ci.yml` (Bazel: every test and the packages' tests on macOS and Linux, with the race detector on Linux; main's run skips the tests its pull request already passed on the same files; sandbox and gVisor checks, the dependency rules, formatting, govulncheck and protos on Linux; an archive must be identical on both), `release.yml` (Bazel-built archives, SBOMs, cosign, the desktop packages; on a tag push, or by hand on a tag when a `[skip ci]` in the commit skipped it) |
 
 ## Commands
@@ -62,7 +62,7 @@ bazel run //:docs               # this site at http://localhost:1313
 tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
 bazel test //apps/desktop/web:coverage   # the desktop page's line and branch coverage; fails below vite.config.ts's thresholds
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
-bazel run //:desktop            # the desktop app (Electron, spec_electron_038) on this machine's service
+bazel run //:desktop            # the desktop app (Electron, spec_038_electron) on this machine's service
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
 bazel build //:mac-app          # the desktop app for this Mac; //:deb, //:pacman, //:desktop-tar on Linux; //:windows-zip anywhere
 bazel build //:archives         # the CLI release archives, every platform

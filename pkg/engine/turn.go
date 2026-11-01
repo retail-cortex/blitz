@@ -46,7 +46,7 @@ import (
 func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
 	var opts []runtime.ExecOption
 	if t.Command {
-		// A workflow runs as this turn, step by step (spec_workflows_043).
+		// A workflow runs as this turn, step by step (spec_043_workflows).
 		if f, input, ok := w.flowCommand(t.Text); ok {
 			return w.runFlow(ctx, sessionID, f, input, on)
 		}
@@ -62,7 +62,7 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
 	if t.Command && isReflect(t.Text) && err == nil {
 		// The next reflection's evidence starts where this one began
-		// (spec_harness_learning_048 HE-04).
+		// (spec_048_harness_learning HE-04).
 		w.reflected(start)
 	}
 	if t.Command && (isSetup(t.Text) || isReflect(t.Text)) {
@@ -78,7 +78,7 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	}
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	w.auditTurnEnd(sessionID, err)
-	// A long turn's end is worth telling you about (spec_parity_027
+	// A long turn's end is worth telling you about (spec_027_parity
 	// PAR-UI-03): notification hooks hear of it.
 	if after := w.cfg.UI.NotifyAfter; after > 0 && time.Since(start) >= time.Duration(after)*notifyUnit && !errors.Is(err, context.Canceled) {
 		w.tools.Hooks().Notify(context.WithoutCancel(ctx), "turn_finished", i18n.T("notify.turn_finished", "seconds", int(time.Since(start).Seconds())))
@@ -114,7 +114,7 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 	w.sessionStarted(rec.ID, "background")
 	var opts []runtime.ExecOption
 	if t.Command {
-		// A workflow (spec_workflows_043 WF-10) or a command runs as it
+		// A workflow (spec_043_workflows WF-10) or a command runs as it
 		// would in a chat.
 		if f, input, ok := w.flowCommand(t.Text); ok {
 			return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f, input, on)
@@ -153,7 +153,7 @@ func turnOutcome(err error) string {
 }
 
 // auditTurnEnd records a turn that didn't finish, stopped or at a limit,
-// for what agents learn from their runs (spec_harness_learning_048 HE-02);
+// for what agents learn from their runs (spec_048_harness_learning HE-02);
 // one that finished, or failed otherwise, isn't recorded.
 func (w *Workspace) auditTurnEnd(sessionID string, err error) {
 	e := audit.Entry{Kind: audit.KindTurnEnd, Session: sessionID}
@@ -191,7 +191,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// tools, records its session.
 	ctx = audit.WithSession(ctx, sessionID)
 	// Its background processes are left running once its turns stop for
-	// long (spec_processes_052 PR-21).
+	// long (spec_052_processes PR-21).
 	defer w.tools.Processes().TurnStarted(sessionID)()
 	// A model that couldn't be built may work now (a sign-in since), and
 	// agents, skills, instruction files or rules may have changed.
@@ -215,7 +215,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			return api.TurnResult{}, err
 		}
 		if !t.Aside {
-			// Before-agent rules judge the prompt (spec_gates_041).
+			// Before-agent rules judge the prompt (spec_041_gates).
 			note := func(text string, isErr bool) { ruleNotices = append(ruleNotices, api.Notice{Text: text, Error: isErr}) }
 			// Input guardrails first: safety before the team's expectations.
 			if err = w.inputGuardrails(ctx, sessionID, t.Text, note); err != nil {

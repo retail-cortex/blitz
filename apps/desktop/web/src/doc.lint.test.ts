@@ -15,7 +15,7 @@
  */
 
 // Every exported function, component, class, type and constant of the
-// page's code has a doc comment (spec_release_readiness_030 RR-12), as the
+// page's code has a doc comment (spec_030_release_readiness RR-12), as the
 // Go code's nogo check requires there. It reads the sources with the
 // TypeScript compiler; the license header doesn't count.
 import { readdirSync, readFileSync } from "node:fs";

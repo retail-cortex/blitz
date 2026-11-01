@@ -28,7 +28,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// The user's own secrets (spec_secrets_039): values kept in the Store
+// The user's own secrets (spec_039_secrets): values kept in the Store
 // under urn:blitz:<scope>:secrets:<key>, where scope is "global" or a
 // workspace's (config.SecretScope), and named in prompts, instructions
 // and settings as {secrets:<key>}. An index beside the settings keeps

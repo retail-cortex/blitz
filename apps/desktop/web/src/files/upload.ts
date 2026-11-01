@@ -15,7 +15,7 @@
  */
 
 // Files and folders dropped on the Files shelf from the computer
-// (spec_files_029 FIL-36): read from the drop, then uploaded into a
+// (spec_029_files FIL-36): read from the drop, then uploaded into a
 // workspace folder in chunks, since a request to the service carries at
 // most 32 MiB. The bytes go through the API, so this works in the app, in
 // a browser and with a service elsewhere.

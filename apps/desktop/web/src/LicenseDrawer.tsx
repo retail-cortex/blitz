@@ -23,7 +23,7 @@ import { Segmented } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 
 /**
- * Blitz's license terms (spec_release_readiness_030 RR-05): the NOTICE,
+ * Blitz's license terms (spec_030_release_readiness RR-05): the NOTICE,
  * the Apache License and the third-party notices, as the app embeds them.
  * Opened from Settings › About and by /license.
  */

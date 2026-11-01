@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's workflow canvas (spec_workflows_043): a workflow as the canvas
+// Studio's workflow canvas (spec_043_workflows): a workflow as the canvas
 // holds it, from and to the API, each step type's defaults, and the
 // templates a new workflow can start from.
 

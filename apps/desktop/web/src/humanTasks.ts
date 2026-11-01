@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Workflows' human tasks waiting, in every workspace (spec_workflows_043
+// Workflows' human tasks waiting, in every workspace (spec_043_workflows
 // WF-16, WF-18): one poll serves the status bar, the tasks dialog and the
 // tasks window; new ones are announced as the user's [ui] task_alerts says.
 

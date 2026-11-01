@@ -66,7 +66,7 @@ type Options struct {
 	Private bool
 	// AdoptPath gives the service the user's login shell's PATH at start:
 	// blitzd's, started by the tray, launchd or systemd with the system's
-	// bare one (spec_service_021 SVC-57). A private service has its
+	// bare one (spec_021_service SVC-57). A private service has its
 	// terminal's already, and tests' services keep theirs.
 	AdoptPath bool
 	// Network serves the API to other machines too, beside the socket:
@@ -155,7 +155,7 @@ func Run(ctx context.Context, o Options) error {
 
 	// Each workspace gets its own configuration: a workspace owns and
 	// changes it.
-	// The front ends' use, counted once a day (spec_active_installs_054).
+	// The front ends' use, counted once a day (spec_054_active_installs).
 	use := &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: o.Version, On: config.CountsUsage}
 	s := server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
 		cfg, err := config.LoadWorkspace(o.Config, dir) // its own settings over the global ones
@@ -216,7 +216,7 @@ func Run(ctx context.Context, o Options) error {
 }
 
 // pingRetry is how often the service sends the day's pings that failed
-// (spec_active_installs_054 AI-12).
+// (spec_054_active_installs AI-12).
 var pingRetry = time.Hour
 
 // watchEvery is how often watch looks at the service's idle time.

@@ -15,7 +15,7 @@
  */
 
 // A2UI v0.9 (https://a2ui.org/specification/v0.9-a2ui/), the part a
-// workflow's human task uses (spec_workflows_043 WF-18): a form's
+// workflow's human task uses (spec_043_workflows WF-18): a form's
 // components (a flat list, one with id "root"), its data model (JSON
 // Pointer paths), dynamic values (a literal, {path}, or {call} of a
 // catalog function), the basic catalog's checks, and the context a

@@ -484,7 +484,7 @@ func TestSearchSettingsApplyAtOnce(t *testing.T) {
 
 // The api provider's settings round-trip through the service with header
 // values withheld; an empty value keeps the stored one; settings the model
-// can't use are refused (spec_config_002 CFG-44, CFG-45b; SVC-35).
+// can't use are refused (spec_002_config CFG-44, CFG-45b; SVC-35).
 func TestConfigServiceAPIProvider(t *testing.T) {
 	_, s := serve(t, nil, text("hi"))
 	secrets.SetDefault(&secrets.Memory{})

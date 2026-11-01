@@ -56,7 +56,7 @@ libs='kind("go_library", %s)'
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'
 	# The enterprise service builds on this repository, never the other
-	# way (spec_enterprise_053 EN-04).
+	# way (spec_053_enterprise EN-04).
 	if enterprise="$(grep -rl --include='*.go' 'github.com/retail-cortex/blitz-enterprise' apps pkg tools build 2>/dev/null)"; then
 		echo "✗ nothing here imports blitz-enterprise:" >&2
 		sed 's/^/    /' <<<"$enterprise" >&2

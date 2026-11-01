@@ -3,7 +3,7 @@
 A pruned copy of [MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox)
 (Apache-2.0, Google LLC; the version is in `VERSION`), which `blitzd` runs
 inside its own process to give agents database tools over MCP
-(spec_databases_046). Only Toolbox's core and the databases Blitz offers are
+(spec_046_databases). Only Toolbox's core and the databases Blitz offers are
 here: Postgres, AlloyDB for PostgreSQL, SQLite (with sqlite-vec) and
 BigQuery. Toolbox's tests, command line, documentation and the other
 databases are left out.

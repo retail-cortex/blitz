@@ -37,7 +37,7 @@ import (
 	"google.golang.org/adk/v2/model"
 )
 
-// Models on the clouds (spec_parity_027 PAR-MOD-02): Claude on Amazon
+// Models on the clouds (spec_027_parity PAR-MOD-02): Claude on Amazon
 // Bedrock, and OpenAI models and Claude on Azure, each with its cloud's
 // standard credentials. Claude on Vertex AI is the anthropic provider with
 // auth = "adc" ("vertex-anthropic" names it).

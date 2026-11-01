@@ -3,7 +3,7 @@
 One list, in the order to work through it. Sizes: S (hours), M (a day or
 two), L (a week or more). Each item says where the work is and what "done"
 means. Written 2026-09-28, last updated 2026-10-23; the backlog spec
-(`docs/content/about/specs/spec_backlog_026.md`) keeps the long tail.
+(`docs/content/about/specs/spec_026_backlog.md`) keeps the long tail.
 
 ## Picking up
 
@@ -88,7 +88,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
      where it landed, so the workspace keeps its file.
    - Check the API's request size limit for large drops (Connect's
      read max); stream or chunk if it's below ~100 MiB.
-   - Specs: FIL-30/31 (spec_files_029), EL-12 (spec_electron_038).
+   - Specs: FIL-30/31 (spec_029_files), EL-12 (spec_038_electron).
      Tests: shelf drop tests with the fake service; Electron bridge by
      hand (manual-verification).
 2. **Images in Markdown (#71, M).**
@@ -104,7 +104,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
      images (FindFiles filtered to image types) with thumbnails
      (`pictureURL`), a folder tree, **From your computer…** (upload as
      above), and the address field kept for URLs. Alt text stays.
-   - Specs: VE-11, VE-60 (spec_visual_editor_037), FIL-65.
+   - Specs: VE-11, VE-60 (spec_037_visual_editor), FIL-65.
 3. **web_fetch falls back to the browser (S–M).** Today `web.go`
    `fetch` is a plain GET with no browser path at all. When the reply
    is a challenge (403/429/503 with cf-chl / "Just a moment" / similar
@@ -114,7 +114,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
    key (`web:<host>`), same `allow_domains`, same size cap; a
    `web.browser_fallback` switch (default on). The registry builds the
    browser before web_fetch so it can hold it. Specs: WEB-07, §6
-   "Known limits" (spec_web_008). Go tests with an httptest server and
+   "Known limits" (spec_008_web). Go tests with an httptest server and
    the existing fake browser.
 4. **The agent's browser is the in-app browser (L).** When a desktop
    window is connected, the `browser` tool (and 3's fallback) drives a
@@ -137,7 +137,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
    silent runs the view off screen (not attached to the window, or
    `offscreen` rendering) with a small "Browsing example.com" chip in
    the conversation that opens it as a tab. New spec
-   (spec_agent_browser_050), WEB-30.
+   (spec_050_agent_browser), WEB-30.
 5. **Browser profiles for sign-ins (M–L).** Research below. Named
    profiles, each an Electron partition `persist:profile-<name>` (the
    in-app browser) and, for the headless browser, a persistent
@@ -151,13 +151,13 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
    throwaway profile. Each profile has its own
    allowed domains; a domain outside them asks. Passkeys: handle
    `select-webauthn-account` (macOS Touch ID). New spec
-   (spec_browser_profiles_049), WEB-30.
+   (spec_049_browser_profiles), WEB-30.
 
 6. **The status bar's branch toggles Changes (XS).** `StatusBar.tsx:129`
    sends `showView({view: "changes"})`, which only opens. A second click
    closes it: `ViewDetail.toggle`, and App's view handler closes the
    view when it's the one shown. Same for the status bar's jobs button.
-   Spec: spec_desktop_024 (status bar).
+   Spec: spec_024_desktop (status bar).
 7. **Git: Add all, and created files caught (S–M).** Two parts:
    - *Add all changes* (`git add --all`, .gitignore honoured) in the
      Changes view's header and menu and the tree's background menu, at
@@ -170,7 +170,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
      init`, a generator, a build), a job's, and dropped files never
      are. Fix: list untracked files at the turn's start (`git ls-files
      --others --exclude-standard`), again at its end, and add the new
-     ones (temporary files left out, as now). Specs: spec_files_029
+     ones (temporary files left out, as now). Specs: spec_029_files
      FIL-59, the git settings' doc.
 8. **uv projects ask which layout (S–M).** A built-in skill
    `python-uv` (`pkg/engine/skills/builtin/`, on by default, offered
@@ -194,7 +194,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
    (schedule's next runs, permissions) and creates it on approval.
    Created paused, as the New Job dialog does ("review and enable"),
    with a card in the chat to **Review** / **Enable**. Paused for review
-   (decision e below). Spec: spec_workers_023.
+   (decision e below). Spec: spec_023_workers.
 10. **"May do without asking" as a rule builder (M).** The New Job
     dialog's free-form box (`desktop.newworker.permissions`, "one
     kind:pattern a line") becomes rows: a kind select (**Run
@@ -224,7 +224,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
     set more. A host that wants a cap still sets `max_*` (Settings ›
     Jobs: **The most it may ask for**, optional, "No limit"). Settings
     files that set `max_*` keep it. Labels: "Model calls a run
-    (default 50)". Spec: spec_workers_023, the settings reference.
+    (default 50)". Spec: spec_023_workers, the settings reference.
 13. **A pre-commit hook against committed keys (M).** When the harness
     is set up (project-setup's `git init`) or the window makes a
     repository (`GitInit`, `pkg/engine/changes.go:186`), Blitz adds
@@ -242,7 +242,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
     scan to it instead. Commits Blitz makes (the commit dialog) run it
     too. For existing repositories: project-setup offers it, and
     Settings › Git has **Protect against committing keys**. New spec
-    (spec_secret_hooks_051).
+    (spec_051_secret_hooks).
 
 14. **Support scripts and a scratch folder in the harness (S–M).**
     project-setup (`pkg/engine/agents/builtin/project-setup.md`)
@@ -268,7 +268,7 @@ plumbing; 3 is Go only; 4 and 5 share the Electron browser bridge, so
       Add all leave it out (7).
     - harness-update adds both to a harness that lacks them; the
       setup's summary names them. Specs: the harness spec
-      (spec_harness_learning_048 or the setup's), the user guide's
+      (spec_048_harness_learning or the setup's), the user guide's
       harness page.
 
 **Order of work (all done 2026-10-23):** 1 and 2 → 6 and 7 (quick, and 7 feeds the hook)
@@ -400,7 +400,7 @@ helper process (IMG-52).
 - **Chromebooks:** if a colleague sees a blank window, turn the
   graphics card off automatically on ChromeOS (`BLITZ_GPU=off`, EL-07).
 - **A signed macOS release:** the Apple Developer ID is pending.
-- **Windows, by hand:** the tray and its page are built (spec_windows_036);
+- **Windows, by hand:** the tray and its page are built (spec_036_windows);
   run them on Windows (WIN-40, manual verification §45), then a native
   folder picker and Arm64 (WIN-42).
 
@@ -415,13 +415,13 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
-- Background sub-agents (spec_background_agents_032): tasks, their tools,
+- Background sub-agents (spec_032_background_agents): tasks, their tools,
   results at the next step or prompt, requests asked of the session's
   people (REPL prompt, desktop cards, Ctrl+J), WatchTasks, agent
   frontmatter defaults. Not yet run on Linux or checked by hand
   (manual-verification: "Background tasks"). Gap: a task's edits join the
   latest turn's checkpoint rather than their own.
-- Project configuration with a trust boundary (spec_project_config_031):
+- Project configuration with a trust boundary (spec_031_project_config):
   `.blitz/settings.toml` in three tiers, hash-pinned trust in
   `~/.blitz/trust.json`, the REPL's question, `/trust`, `blitz trust`,
   doctor, and the desktop dialog. Not yet run on Linux or checked by hand

@@ -14,7 +14,7 @@
 
 // Command pack makes Blitz's Windows setup program: the setup program
 // (winsetup, built for Windows) with the app's zip at its end, which it
-// installs (spec_electron_038 EL-81). Run at build time, on any machine:
+// installs (spec_038_electron EL-81). Run at build time, on any machine:
 //
 //	pack --exe winsetup.exe --zip Blitz_windows_x64.zip --out Blitz_setup.exe
 package main

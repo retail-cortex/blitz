@@ -5,7 +5,7 @@ weight: 57
 
 An **eval** checks that your agents still answer as they should, after you change their instructions, their skills or their model. It's a list of cases, each a prompt and the answer you expect; Blitz runs each prompt on the agents you name, without changing anything in the workspace, and compares the answers with yours.
 
-Spec: [evals](../about/specs/spec_evals_042.md).
+Spec: [evals](../about/specs/spec_042_evals.md).
 
 ## From an agent to its evals
 

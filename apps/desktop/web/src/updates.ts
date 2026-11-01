@@ -15,7 +15,7 @@
  */
 
 
-// The desktop app's updates (spec_electron_038 EL-90): what the page says
+// The desktop app's updates (spec_038_electron EL-90): what the page says
 // about one, and the check when the app opens that downloads it, ready to
 // restart.
 import { useEffect, useRef } from "react";

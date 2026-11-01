@@ -138,7 +138,7 @@ type Backend interface {
 	ListMCPServers() []MCPServer
 	ListCommands() []CommandInfo
 	ActiveAgentTools() AgentTools
-	// RunEval runs the workspace's eval name (spec_evals_042) and records
+	// RunEval runs the workspace's eval name (spec_042_evals) and records
 	// the run.
 	RunEval(ctx context.Context, name string, o EvalOptions) (EvalRun, error)
 
@@ -167,7 +167,7 @@ type Backend interface {
 	GitDiff(ctx context.Context, color bool) (string, error)
 	ListApprovals() []Approval
 
-	// Workspace search (spec_search_035).
+	// Workspace search (spec_035_search).
 	Search(ctx context.Context, q SearchQuery) (SearchResult, error)
 	SearchStatus() SearchStatus
 	// Reindex starts a scan of the workspace for search and returns at once.
@@ -194,7 +194,7 @@ type Processes interface {
 
 // ProjectSettings are what a workspace's project files
 // (.blitz/settings.toml, .blitz/settings.local.toml) say, and whether the
-// person trusts the part that needs it (spec_project_config_031).
+// person trusts the part that needs it (spec_031_project_config).
 type ProjectSettings struct {
 	// Files are the project files found, relative to the workspace.
 	Files []string
@@ -277,7 +277,7 @@ type WorkspaceProcess struct {
 	Process   ProcessInfo
 }
 
-// Why a background process looks bad (spec_processes_052).
+// Why a background process looks bad (spec_052_processes).
 const (
 	// ProcessFlagCPU: it has kept a core busy for a while.
 	ProcessFlagCPU = "cpu"

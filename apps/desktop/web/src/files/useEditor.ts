@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// A workspace's open files (spec_files_029 §6): their tabs, and the
+// A workspace's open files (spec_029_files §6): their tabs, and the
 // editor state of each, kept while the workspace is open so unsaved
 // changes survive switching views and workspaces.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +46,7 @@ export interface Tab {
   disk?: "changed" | "deleted";
   /** A save was refused: the file changed since (its version now). */
   conflict?: string;
-  /** A web page's tab (path web:<id>, spec_electron_038 EL-100), not a file's. */
+  /** A web page's tab (path web:<id>, spec_038_electron EL-100), not a file's. */
   web?: WebPage;
 }
 
@@ -57,7 +57,7 @@ export interface WebPage {
   loading: boolean;
   back: boolean;
   forward: boolean;
-  /** The agent's view, which it drives (spec_agent_browser_050); false once the user takes it over. */
+  /** The agent's view, which it drives (spec_050_agent_browser); false once the user takes it over. */
   agent?: boolean;
 }
 
@@ -96,9 +96,9 @@ export interface EditorModel {
   check: () => Promise<void>;
   /** A file was renamed or deleted in the shelf. */
   moved: (from: string, to: string | null) => void;
-  /** Opens a web page in a tab of its own (spec_electron_038 EL-100); returns the tab's path. */
+  /** Opens a web page in a tab of its own (spec_038_electron EL-100); returns the tab's path. */
   openWeb: (url: string) => string;
-  /** Shows the agent's watched view id as a tab (spec_agent_browser_050 AB-03). */
+  /** Shows the agent's watched view id as a tab (spec_050_agent_browser AB-03). */
   openAgentWeb: (id: string) => void;
   /** What a web tab's preview said of its page. */
   setWeb: (path: string, page: Partial<WebPage>) => void;

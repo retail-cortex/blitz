@@ -30,7 +30,7 @@ import (
 )
 
 // Notes are what the agent remembers across sessions of a workspace
-// (spec_parity_027 PAR-MEM-10, -11): short facts, preferences and
+// (spec_027_parity PAR-MEM-10, -11): short facts, preferences and
 // corrections it saves with the remember tool, one Markdown file each in
 // ~/.blitz/memory/<workspace>-<hash>/, added to its instructions as notes
 // (never as permissions) and reviewed with /memory and blitz memory.

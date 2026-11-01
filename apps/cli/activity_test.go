@@ -30,7 +30,7 @@ import (
 )
 
 // A command counts the CLI's use, once a day; --version and --help don't
-// (spec_active_installs_054 AI-01, AI-03), and the CLI waits for the ping
+// (spec_054_active_installs AI-01, AI-03), and the CLI waits for the ping
 // at most pingGrace.
 func TestCommandsCountUse(t *testing.T) {
 	var mu sync.Mutex

@@ -385,7 +385,7 @@ func checkADC(provider, project, location, confirm string) (checkStatus, string)
 }
 
 // checkAPI says whether the api provider's settings can build a model
-// (spec_models_015 MDL-109): its endpoint and the headers it sends, by name
+// (spec_015_models MDL-109): its endpoint and the headers it sends, by name
 // only (a value can be a credential), and where its token comes from. The
 // script runs only with --online, in the model's request, so a token isn't
 // spent on a look at the settings.

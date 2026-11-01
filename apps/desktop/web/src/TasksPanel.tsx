@@ -28,7 +28,7 @@ import { AppStateProvider } from "./state";
 import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
 
 /**
- * Workflows' human tasks (spec_workflows_043 WF-18): with more than one, a
+ * Workflows' human tasks (spec_043_workflows WF-18): with more than one, a
  * list to choose from; the chosen task's form, whose buttons answer it and
  * let its run go on. done: there are none left.
  */
@@ -111,7 +111,7 @@ export function TasksApp() {
 }
 
 /**
- * The Electron app's tasks window (?tasks, spec_electron_038 EL-110): only
+ * The Electron app's tasks window (?tasks, spec_038_electron EL-110): only
  * the tasks, with Later (closing it) and Open Blitz; it closes when the
  * last one is answered.
  */

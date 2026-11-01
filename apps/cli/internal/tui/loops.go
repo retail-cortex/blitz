@@ -26,7 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
-// Loops (spec_parity_027 PAR-SES-31): /loop <interval> <prompt> sends a
+// Loops (spec_027_parity PAR-SES-31): /loop <interval> <prompt> sends a
 // prompt again every interval while the REPL stays open. A loop that comes
 // due while you're at the prompt runs at once (an unfinished line is
 // dropped); during a turn it waits for the turn to end. Loops end with the

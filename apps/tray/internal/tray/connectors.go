@@ -23,7 +23,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
-// A workspace's connectors in its submenu (spec_connectors_047 CON-20):
+// A workspace's connectors in its submenu (spec_047_connectors CON-20):
 // each connection it reaches, its own and the global ones, checked while
 // it's on there; a click turns it off or on in that workspace only, as
 // Studio's switch does. Read from disk, as the workflows are, so the

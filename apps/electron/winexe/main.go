@@ -15,7 +15,7 @@
 // Command winexe gives a Windows program Blitz's icon and details (the
 // name Explorer, the taskbar and Task Manager show): it rewrites the
 // resources of the Electron program the Windows zip ships as Blitz.exe
-// (spec_electron_038 EL-06). Run at build time, on any machine:
+// (spec_038_electron EL-06). Run at build time, on any machine:
 //
 //	winexe --in electron.exe --icon appicon.png --version 0.6.6 --out Blitz.exe
 package main

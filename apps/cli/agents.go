@@ -36,7 +36,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Background runs (spec_parity_027 PAR-PAR-20): blitz --bg starts a turn in
+// Background runs (spec_027_parity PAR-PAR-20): blitz --bg starts a turn in
 // the service and returns; blitz agents lists them, and attach, logs and
 // stop work with one.
 

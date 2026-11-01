@@ -25,7 +25,7 @@ import (
 )
 
 // WithUse counts the front ends' use with r, once a day each
-// (spec_active_installs_054 AI-02): nil, or without it, nothing is
+// (spec_054_active_installs AI-02): nil, or without it, nothing is
 // counted.
 func WithUse(r *pings.Recorder) Option { return func(s *Server) { s.use = r } }
 

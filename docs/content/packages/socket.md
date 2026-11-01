@@ -20,4 +20,4 @@ Where the service listens, and how to reach it. Source: [`pkg/socket`](https://g
 
 apps/cli, apps/service, pkg/service, apps/tray, pkg/client, pkg/pagehost, pkg/pageserver.
 
-Spec: [service](../about/specs/spec_service_021.md).
+Spec: [service](../about/specs/spec_021_service.md).

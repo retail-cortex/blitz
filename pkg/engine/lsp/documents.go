@@ -14,7 +14,7 @@
 
 package lsp
 
-// The editor's documents (spec_visual_editor_037 §5–§6): files the editor
+// The editor's documents (spec_037_visual_editor §5–§6): files the editor
 // has open, with their text as the editor has it, sent to the same servers
 // the agent uses. A document belongs to a client (a window) and closes when
 // the client stops calling (a lease), so a window that crashed leaves

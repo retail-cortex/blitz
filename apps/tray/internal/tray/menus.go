@@ -33,7 +33,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The tray's richer menu (spec_electron_038 EL-111): what's going on, at
+// The tray's richer menu (spec_038_electron EL-111): what's going on, at
 // its top, each run with Show and Stop; then a submenu per workspace with
 // its jobs and its workflows, each with Run, Stop and Show; the icons by
 // name (main draws them), and the tray's icon pulsing while anything

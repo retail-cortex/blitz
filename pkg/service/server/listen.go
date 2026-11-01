@@ -42,7 +42,7 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Durat
 
 // ServeTLS serves h on l over TLS with cfg (HTTP/2, and HTTP/1.1 for
 // clients without it), as Serve does: the network listener of a service
-// others reach (spec_enterprise_053 EN-03).
+// others reach (spec_053_enterprise EN-03).
 func ServeTLS(ctx context.Context, l net.Listener, h http.Handler, cfg *tls.Config, grace time.Duration) error {
 	srv := &http.Server{Handler: h, TLSConfig: cfg.Clone(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: idleTimeout}
 	srv.Protocols = new(http.Protocols)

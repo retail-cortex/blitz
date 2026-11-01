@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// The user's secrets (spec_secrets_039), for Settings › Secrets and a
+// The user's secrets (spec_039_secrets), for Settings › Secrets and a
 // workspace's settings: names listed, values only ever written.
 
 // secretScope is the vault and scope a request's workspace names.

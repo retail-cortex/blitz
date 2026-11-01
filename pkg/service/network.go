@@ -24,7 +24,7 @@ import (
 )
 
 // Network is a listener other machines reach, beside the socket: for a
-// program that runs the service for many people (spec_enterprise_053
+// program that runs the service for many people (spec_053_enterprise
 // EN-03). Every request on it needs credentials Auth accepts. blitzd never
 // sets it: the socket is only its owner's, and the service runs commands.
 type Network struct {

@@ -28,7 +28,7 @@ import (
 
 // newTrustCommand is `blitz trust [dir] [--revoke]`: a workspace's
 // project settings (.blitz/settings.toml), and trusting or declining the
-// part that runs code or loosens a policy (spec_project_config_031).
+// part that runs code or loosens a policy (spec_031_project_config).
 func newTrustCommand(g *globalFlags) *cobra.Command {
 	var revoke bool
 	cmd := &cobra.Command{

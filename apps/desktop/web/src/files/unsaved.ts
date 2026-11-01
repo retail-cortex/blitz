@@ -15,7 +15,7 @@
  */
 
 // Unsaved changes across the window's workspaces, for closing the window
-// (the app asks first, spec_files_029 FIL-45).
+// (the app asks first, spec_029_files FIL-45).
 import { setUnsaved } from "../desktop";
 import { t, tn } from "../i18n";
 

@@ -30,7 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Run receipts (spec_workflows_043 WF-19): every run of a workflow keeps a
+// Run receipts (spec_043_workflows WF-19): every run of a workflow keeps a
 // receipt, its envelope and routing slip: what started it and when, each
 // step's run (when it started and ended, its tries, the models it used,
 // its tokens and cost, what it produced and the text it streamed), the

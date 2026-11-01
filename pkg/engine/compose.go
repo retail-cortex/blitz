@@ -29,7 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 )
 
-// The composer (spec_composer_045): a guided conversation that makes a
+// The composer (spec_045_composer): a guided conversation that makes a
 // workspace's component, checked with the engine's own rules.
 
 // composeSessions are the composer's conversations going, in memory.

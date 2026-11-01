@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Prints the Homebrew formula for a release (spec_parity_027 PAR-MOD-06),
+# Prints the Homebrew formula for a release (spec_027_parity PAR-MOD-06),
 # from its checksums.txt:
 #
 #   release/homebrew_formula.sh 0.1.0 checksums.txt > Formula/blitz.rb

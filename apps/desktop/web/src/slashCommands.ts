@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The window's own slash commands (spec_desktop_024 DSK-102): the
+// The window's own slash commands (spec_024_desktop DSK-102): the
 // terminal's, as far as a window has them, in the same groups as its
 // /help. Each runs against the service's API and answers with a notice in
 // the conversation, a turn, or the window's own UI. The terminal-only ones

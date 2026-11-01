@@ -5,7 +5,7 @@ weight: 46
 
 Connect a database and your agents can answer questions from your data: how many orders failed last night, which tables a migration touches, what a customer bought. Blitz runs [MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox) inside itself, so there's nothing else to install, and every database starts **read-only**: the database itself refuses any change, whatever the agent asks.
 
-Databases are the first of Blitz's [connectors](connectors.md). Spec: [databases](../about/specs/spec_databases_046.md).
+Databases are the first of Blitz's [connectors](connectors.md). Spec: [databases](../about/specs/spec_046_databases.md).
 
 ## Connect one
 
@@ -27,7 +27,7 @@ In the desktop app, open **Studio › Connectors** for one this workspace has (s
 3. Leave **Read-only** on unless the agents should change data.
 4. Press **Test** to connect and see the tools the agents will get, then **Save**.
 
-The password goes into your system's keychain as a [secret](../about/specs/spec_secrets_039.md) (`DB_SHOP_PASSWORD`), never into the file, so a workspace's database file is safe to commit.
+The password goes into your system's keychain as a [secret](../about/specs/spec_039_secrets.md) (`DB_SHOP_PASSWORD`), never into the file, so a workspace's database file is safe to commit.
 
 ## What the agents get
 

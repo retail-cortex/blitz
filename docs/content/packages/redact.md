@@ -18,4 +18,4 @@ Masking secrets before they're written. Source: [`pkg/redact`](https://github.co
 
 pkg/engine, pkg/engine/audit, pkg/observability.
 
-Spec: [observability](../about/specs/spec_observability_003.md).
+Spec: [observability](../about/specs/spec_003_observability.md).

@@ -26,7 +26,7 @@ import { cost } from "../workflowRuns";
 import { draftSteps, question } from "./compose";
 
 /**
- * The composer (spec_composer_045): what the user wants, a short guided
+ * The composer (spec_045_composer): what the user wants, a short guided
  * conversation, then the drafted component, checked, to open in its
  * editor (onDraft). Closing ends the session.
  */

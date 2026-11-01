@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Web pages in the editor (spec_electron_038 EL-100): their tabs, the
+// Web pages in the editor (spec_038_electron EL-100): their tabs, the
 // links that open in them, when the window's view of one must hide, and
 // what Add to chat sends of one.
 import type { WebBlock } from "../attachments";

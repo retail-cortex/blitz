@@ -116,11 +116,11 @@ type Event struct {
 	// Notice is something the user should know about the turn that isn't
 	// the agent's output, such as a message that couldn't be saved.
 	Notice *Notice
-	// Step is a workflow's step starting or ending (spec_workflows_043).
+	// Step is a workflow's step starting or ending (spec_043_workflows).
 	Step *FlowStep
 	// Reflect, at a chat turn's end, says the runs since the last
 	// reflection hit enough problems to /reflect on
-	// (spec_harness_learning_048 HE-63).
+	// (spec_048_harness_learning HE-63).
 	Reflect *ReflectDue
 }
 

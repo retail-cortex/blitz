@@ -23,7 +23,7 @@ import { useSnackbar } from "./ui/controls";
 
 /**
  * Announces workflows' human tasks as they arrive, as [ui] task_alerts
- * says (spec_workflows_043 WF-18): open shows the tasks dialog; notify
+ * says (spec_043_workflows WF-18): open shows the tasks dialog; notify
  * shows a snackbar with Open, or a system notification when the window
  * isn't in front (clicking it opens the dialog); off, nothing (the status
  * bar still shows them). The tray's "tasks waiting" opens the dialog too.

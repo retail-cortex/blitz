@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Workflow runs' receipts (spec_workflows_043 WF-19): every run, wherever
+// Workflow runs' receipts (spec_043_workflows WF-19): every run, wherever
 // it was started, listed and followed by its receipt, so a client shows
 // what's running and what each run did and spent.
 

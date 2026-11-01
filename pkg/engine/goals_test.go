@@ -26,7 +26,7 @@ import (
 )
 
 // A goal sends the agent on until the judge says it holds, or can't, or
-// the limit is reached (spec_parity_027 PAR-SES-30).
+// the limit is reached (spec_027_parity PAR-SES-30).
 func TestGoals(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -21,7 +21,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
-// The background processes' health (spec_processes_052): what each uses,
+// The background processes' health (spec_052_processes): what each uses,
 // sampled while any runs, and the flags that say one looks bad.
 
 // ProcessLimits say when a background process looks bad.

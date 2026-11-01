@@ -29,7 +29,7 @@ import (
 )
 
 // Install is the desktop app's installation, as its host finds it from
-// its own program (…/resources/app/bin/blitz-tray, spec_electron_038).
+// its own program (…/resources/app/bin/blitz-tray, spec_038_electron).
 type Install struct {
 	// Root is what an update replaces: Blitz.app on macOS, the app's
 	// folder elsewhere.

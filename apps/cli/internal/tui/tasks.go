@@ -25,7 +25,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Background tasks in the REPL (spec_background_agents_032 BGA-30).
+// Background tasks in the REPL (spec_032_background_agents BGA-30).
 
 // TaskLine is a task on one line: "[task-3] qa · running · 1m20s · $0.02 —
 // review the cart".

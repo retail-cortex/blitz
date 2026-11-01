@@ -148,7 +148,7 @@ const (
 	LanguageTypeScript  ScriptLanguage = "typescript"
 	// LanguageShell is a POSIX shell script (/bin/sh; macOS and Linux) and
 	// LanguageCmd a Windows batch script (cmd.exe): Blitz's, not Castor's
-	// (spec_skills_013 SK-105).
+	// (spec_013_skills SK-105).
 	LanguageShell ScriptLanguage = "shell"
 	LanguageCmd   ScriptLanguage = "cmd"
 	// LanguageJavaScript runs with node, as TypeScript does, and

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The user docs the app carries (spec_desktop_024 DSK-103): the
+// The user docs the app carries (spec_024_desktop DSK-103): the
 // repository's docs/content, the sections a user reads, as the release was
 // built with them. Loaded with the viewer (its own chunk), never with the
 // page.

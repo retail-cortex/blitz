@@ -46,7 +46,7 @@ import { exportPath, paperFor, printablePage } from "./printPage";
 import { drawAsPicture, drawForPrint, mermaidSources } from "../mermaid";
 
 /**
- * The editor beside the conversation (spec_files_029 §6): the open files'
+ * The editor beside the conversation (spec_029_files §6): the open files'
  * tabs, the active one's path, notes about it, and CodeMirror. One view
  * shows each tab's own state in turn.
  */
@@ -109,7 +109,7 @@ export function EditorPane({
   const snack = useSnackbar();
   const { prefs, theme, update } = useApp();
   const [exporting, setExporting] = useState(false);
-  // Markdown in advanced mode is edited where it shows (spec_visual_editor_037
+  // Markdown in advanced mode is edited where it shows (spec_037_visual_editor
   // VE-01): Visual in Preview's place, except while it prints (Export as
   // PDF prints the preview) or shows a search hit. MDX keeps Preview.
   const visual = advanced && kind === "markdown" && !!tab && !/\.mdx$/i.test(tab.path);

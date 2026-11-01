@@ -38,7 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 )
 
-// The query builder (spec_connectors_047 CON-12): a connection whose kind
+// The query builder (spec_047_connectors CON-12): a connection whose kind
 // has the query-builder capability reads its schema (failing when it can
 // read no table), and the sql-query skill, given the schema and what the
 // user is looking for, writes one of the connection's queries: its name,

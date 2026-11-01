@@ -675,7 +675,7 @@ func (c *Checkpoints) SessionDiff(session string) string {
 
 // LatestTurnDiff returns a unified diff of the files session's latest
 // turn changed, from before it to their current content ("" when it
-// changed none): what an after-agent rule judges (spec_gates_041).
+// changed none): what an after-agent rule judges (spec_041_gates).
 func (c *Checkpoints) LatestTurnDiff(session string) string {
 	if c == nil {
 		return ""
@@ -693,7 +693,7 @@ func (c *Checkpoints) LatestTurnDiff(session string) string {
 }
 
 // LatestTurnFiles are the files session's latest turn changed (absolute
-// paths): what the limits guardrail counts (spec_gates_041).
+// paths): what the limits guardrail counts (spec_041_gates).
 func (c *Checkpoints) LatestTurnFiles(session string) []string {
 	if c == nil {
 		return nil

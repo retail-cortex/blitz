@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package flows reads, checks and writes workflows (spec_workflows_043):
+// Package flows reads, checks and writes workflows (spec_043_workflows):
 // steps joined into a graph, in .agents/workflows/<name>.flow.yaml, beside
 // the .md commands there.
 package flows
@@ -164,7 +164,7 @@ type Node struct {
 	// Instructions are what the step is to do (a browser step's goal).
 	Instructions string `yaml:"instructions,omitempty"`
 	// Rules are rules the step's output must pass (judged, as after-agent
-	// gates are: spec_gates_041).
+	// gates are: spec_041_gates).
 	Rules []string `yaml:"rules,omitempty"`
 	// Skill and ScriptName are a script step's script; Args its arguments.
 	Skill      string   `yaml:"skill,omitempty"`

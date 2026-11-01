@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package mdpdf typesets Markdown as a PDF in pure Go, for the export_pdf
-// tool (spec_filetools_006): GitHub-flavoured Markdown parsed by goldmark,
+// tool (spec_006_filetools): GitHub-flavoured Markdown parsed by goldmark,
 // laid out with fpdf in embedded Noto fonts, with an outline of the
 // headings, page numbers, tables, highlighted code and the images the
 // caller lets it read. Raw HTML is skipped and Mermaid diagrams print as

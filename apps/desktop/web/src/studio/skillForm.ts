@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's skill form (spec_skills_013 SK-100–SK-103): the fields as the
+// Studio's skill form (spec_013_skills SK-100–SK-103): the fields as the
 // form holds them, from and to the API, and the rules for names and files.
 
 import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";

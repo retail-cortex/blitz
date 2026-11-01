@@ -30,7 +30,7 @@ go_library(
         # The engine, the service, and the CLI's --local mode; the other
         # three only in tests (//tools:check_deps checks libraries); and
         # pkg/catalog, which checks an organization's files as the engine
-        # reads them (spec_enterprise_053 EN-30).
+        # reads them (spec_053_enterprise EN-30).
         "//apps/cli:__pkg__",
         "//apps/cli/internal/tui:__pkg__",
         "//apps/service:__subpackages__",

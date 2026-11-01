@@ -30,7 +30,7 @@ import (
 
 // newPluginCommand is `blitz plugin`: install, list, enable, disable,
 // remove and update plugins, add marketplaces, and import other agents'
-// plugins (spec_parity_027 PAR-PLG-02..04).
+// plugins (spec_027_parity PAR-PLG-02..04).
 func newPluginCommand() *cobra.Command {
 	return newPluginCommandWith(plugins.Default())
 }

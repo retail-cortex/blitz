@@ -3,7 +3,7 @@ title: CLI (blitz)
 weight: 10
 ---
 
-`blitz` (or its shortcut `blz`) is Blitz in the terminal: an interactive session in the current directory, or a single prompt that runs and exits. Source: `apps/cli`, with the interactive session in `apps/cli/internal/tui`. Specs: [CLI](../about/specs/spec_cli_020.md), [REPL](../about/specs/spec_tui_019.md).
+`blitz` (or its shortcut `blz`) is Blitz in the terminal: an interactive session in the current directory, or a single prompt that runs and exits. Source: `apps/cli`, with the interactive session in `apps/cli/internal/tui`. Specs: [CLI](../about/specs/spec_020_cli.md), [REPL](../about/specs/spec_019_tui.md).
 
 ## Running it
 
@@ -95,7 +95,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
   "ctrl+t" = "/tasks"      # at an empty prompt
   ```
 
-- **Status line**: `ui.status_line = "default"` shows the model, mode, context and cost above each prompt; set it to a command instead and its first line of output is shown, with the session's state as JSON on its stdin (fields in [spec_tui_019](../about/specs/spec_tui_019.md) TUI-48).
+- **Status line**: `ui.status_line = "default"` shows the model, mode, context and cost above each prompt; set it to a command instead and its first line of output is shown, with the session's state as JSON on its stdin (fields in [spec_019_tui](../about/specs/spec_019_tui.md) TUI-48).
 - **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off`.
 
 ### Commands

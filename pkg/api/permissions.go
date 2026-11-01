@@ -153,7 +153,7 @@ const (
 	ModeDontAsk PermissionMode = "dont-ask"
 	// ModeAuto sends what would ask to a reviewer model instead, which
 	// allows or denies it with a reason; ask rules still ask the user
-	// (spec_parity_027 PAR-PERM-20).
+	// (spec_027_parity PAR-PERM-20).
 	ModeAuto PermissionMode = "auto"
 	// ModeBypass asks for nothing. Deny rules, blocked paths and the
 	// sandboxes still apply, and the registry allows it only while the

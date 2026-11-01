@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The Electron trial's main process (spec_electron_038): it starts
+// The Electron trial's main process (spec_038_electron): it starts
 // blitz-tray --serve beside it (the page, the service's API and the
 // host's /host/ calls, on one loopback origin), opens a window on the
 // link it prints, and answers what only a window can do (the folder

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Files dropped or pasted into a Markdown document (spec_visual_editor_037
+// Files dropped or pasted into a Markdown document (spec_037_visual_editor
 // VE-11a): a workspace file is linked where it is, relative to the
 // document; a file from the computer is saved beside the document first
 // (in its images/ folder if it has one). Pictures become images, other

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// The table viewer's rules, apart from its view (spec_files_029): sorting,
+// The table viewer's rules, apart from its view (spec_029_files): sorting,
 // paging and a row to open at.
 
 /** How a table is sorted: by a column (0-based), ascending or not. */

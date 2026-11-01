@@ -28,7 +28,7 @@ import (
 )
 
 // newSkillsCommand is `blitz skills`: skill registries, and the skills
-// installed from them (spec_skills_013 SK-90..SK-96).
+// installed from them (spec_013_skills SK-90..SK-96).
 func newSkillsCommand() *cobra.Command {
 	return newSkillsCommandWith(skillreg.Default())
 }

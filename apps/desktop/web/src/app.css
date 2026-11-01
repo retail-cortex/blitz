@@ -92,7 +92,7 @@
 .sb-meter.high > span { background: var(--md-error); }
 .sb-cost, .sb-cursor { font-variant-numeric: tabular-nums; }
 .sb-cursor { gap: 10px; }
-/* The file's problems and its language server's note (spec_visual_editor_037 VE-35, VE-37). */
+/* The file's problems and its language server's note (spec_037_visual_editor VE-35, VE-37). */
 .sb-problems { display: inline-flex; gap: 8px; }
 .sb-errors, .sb-warnings { display: inline-flex; align-items: center; gap: 3px; }
 .sb-errors { color: var(--md-error); }
@@ -743,7 +743,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-reference .ref-setting { display: block; padding: 6px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .settings-reference dd { margin: 2px 0 0; }
 
-/* Files (spec_files_029): the shelf, the editor beside the conversation. */
+/* Files (spec_029_files): the shelf, the editor beside the conversation. */
 /* Always in the row, never over the editor or the chat: in a narrow
    window it gives way down to 180 px, as the editor does to 160 px. */
 .files-shelf { position: relative; width: 272px; flex: 0 1 auto; min-width: 180px; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
@@ -1255,7 +1255,7 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .find-bar input:focus { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .find-bar input:focus { border-color: var(--md-primary); }
 .find-bar .find-count { min-width: 80px; font-size: 12px; }
-/* A web page in the editor (spec_electron_038 EL-100): its toolbar, its
+/* A web page in the editor (spec_038_electron EL-100): its toolbar, its
    address (as the find bar's field), and the place the window's view of
    the page fills. */
 .web-bar { gap: 4px; padding-left: 8px; }
@@ -1292,7 +1292,7 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .signin-code { font: 600 24px/32px var(--md-mono); letter-spacing: 3px; padding: 4px 12px; border-radius: var(--md-shape-sm); background: var(--accent-tint); color: var(--on-accent-tint); }
 :root[data-glass="on"] .signin-card { background: var(--glass-strong); }
 
-/* Settings › Workspaces › Language servers (spec_visual_editor_037 VE-45). */
+/* Settings › Workspaces › Language servers (spec_037_visual_editor VE-45). */
 .lsp-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
 .lsp-row { display: grid; grid-template-columns: 10px 96px minmax(0, 1fr) minmax(0, 1.4fr) 32px; align-items: center; gap: 10px; min-height: 36px; }
 .lsp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-outline-variant); }
@@ -1449,7 +1449,7 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 /* A merge is a ring in its lane's colour. */
 .history-graph .node.merge { fill: var(--md-surface-container-high); stroke-width: 2.5; }
 
-/* Studio's Overview (spec_health_044): the workspace dashboard. Cards in a
+/* Studio's Overview (spec_044_health): the workspace dashboard. Cards in a
    grid that reflows with the pane; each opens in place into its detail. */
 .overview { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding-bottom: 16px; container-type: inline-size; container-name: overview; }
 .overview-loading { padding: 16px; }
@@ -1542,7 +1542,7 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .chart-legend .legend.line::before { height: 2px; vertical-align: 3px; background: var(--md-primary); }
 .sparkline polyline { fill: none; stroke: var(--md-primary); stroke-width: 1.5; }
 
-/* The composer (spec_composer_045): a short conversation, then the draft. */
+/* The composer (spec_045_composer): a short conversation, then the draft. */
 .compose-dialog .body { gap: 12px; }
 .compose-turns { max-height: 46vh; overflow-y: auto; padding-right: 4px; }
 .compose-turn { max-width: 85%; padding: 8px 12px; border-radius: var(--md-shape-md); font-size: 14px; line-height: 20px; white-space: pre-wrap; }

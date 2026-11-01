@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Math in Markdown (spec_files_029 FIL-67), as GitHub writes it: $…$
+// Math in Markdown (spec_029_files FIL-67), as GitHub writes it: $…$
 // inline, $$…$$ and ```math blocks, drawn by KaTeX. A single $ is math
 // only as GitHub and Pandoc have it (no space inside either dollar, no
 // digit after the closing one), so prices stay prices; the chat takes the

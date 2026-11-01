@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The desktop app's packages (spec_electron_038 EL-80): Electron's runtime
+# The desktop app's packages (spec_038_electron EL-80): Electron's runtime
 # for each platform, named Blitz, with the app (//apps/electron) in its
 # resources/app. Build with --config=release for the version. Signing,
 # notarising and the disk images are the release workflow's

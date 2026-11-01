@@ -22,7 +22,7 @@
 // base64; Expand swaps the references for the bytes just before each model
 // request. A PDF is kept as it is, with its page count; Expand gives it to
 // a model that reads PDFs as is, and to others as its text
-// (spec_images_011).
+// (spec_011_images).
 package images
 
 import (

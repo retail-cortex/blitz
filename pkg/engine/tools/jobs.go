@@ -27,7 +27,7 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// Jobs makes and lists the workspace's jobs (workers, spec_workers_023
+// Jobs makes and lists the workspace's jobs (workers, spec_023_workers
 // WK-70) for create_job and list_jobs; the engine supplies them.
 type Jobs struct {
 	// Draft is what Create would write: the job's folder, its WORKER.md,

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package wininstall installs the desktop app on Windows for one user,
-// without an administrator (spec_electron_038 EL-81): the app's zip,
+// without an administrator (spec_038_electron EL-81): the app's zip,
 // carried at the end of the setup program (Payload), unpacked in
 // %LOCALAPPDATA%\Programs\Blitz (Unpack, Place), and its entry in Add or
 // remove programs (Entry, in the registry on Windows). The setup program

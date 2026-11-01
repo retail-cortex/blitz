@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package harness is what a workspace's harness learns from its runs
-// (spec_harness_learning_048): the evidence of what went wrong in its
+// (spec_048_harness_learning): the evidence of what went wrong in its
 // sessions, drawn from the audit log without a model, for the reflector
 // and /skills update and /agents update to propose changes from.
 package harness

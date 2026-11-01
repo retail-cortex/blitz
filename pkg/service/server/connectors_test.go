@@ -34,7 +34,7 @@ import (
 // Studio's connectors over the API: the catalog (categories and kinds),
 // a SQLite connection saved, listed, tested, tried and its schema read; a
 // Postgres one with its password kept as a secret; renamed, deleted; the
-// query builder's refusals (spec_connectors_047).
+// query builder's refusals (spec_047_connectors).
 func TestConnectorsOverTheAPI(t *testing.T) {
 	c, _ := serve(t, nil)
 	secrets.SetDefault(&secrets.Memory{})

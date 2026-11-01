@@ -3,7 +3,7 @@ title: Attachments, PDFs and audio
 weight: 80
 ---
 
-Specs: [attachments](../about/specs/spec_images_011.md), [file tools](../about/specs/spec_filetools_006.md) (`export_pdf`, `generate_audio`), [models](../about/specs/spec_models_015.md) (speech).
+Specs: [attachments](../about/specs/spec_011_images.md), [file tools](../about/specs/spec_006_filetools.md) (`export_pdf`, `generate_audio`), [models](../about/specs/spec_015_models.md) (speech).
 
 ## What you can attach
 

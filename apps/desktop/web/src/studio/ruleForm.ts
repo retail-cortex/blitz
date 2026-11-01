@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's rule form (spec_gates_041): a rule as the form holds it, the
+// Studio's rule form (spec_041_gates): a rule as the form holds it, the
 // lists it shows (before the agent, after, instructions) and moving a
 // rule within its list.
 

@@ -170,7 +170,7 @@ func TestNotesFilesystemErrors(t *testing.T) {
 }
 
 // A rule with when: is a gate, judged around the turn: never an
-// instruction in the prompt (spec_gates_041).
+// instruction in the prompt (spec_041_gates).
 func TestGateRulesAreNotInstructions(t *testing.T) {
 	ws := t.TempDir()
 	dir := filepath.Join(ws, ".agents", "rules")

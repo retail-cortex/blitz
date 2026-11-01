@@ -16,7 +16,7 @@
 
 // The workspace's branches and remote, in words: what a pull or a merge
 // did, what an error means, and what the agent is asked when it resolves
-// conflicts (spec_desktop_024 DSK-90b, DSK-90c).
+// conflicts (spec_024_desktop DSK-90b, DSK-90c).
 
 import { message, reason } from "./errors";
 import { t, tn } from "./i18n";

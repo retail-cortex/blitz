@@ -114,7 +114,7 @@ func newBrowserTool(r *Registry, cfg config.BrowserConfig, web WebFetchConfig, t
 	return &browserTool{r: r, cfg: cfg, web: web, timeout: timeout, dir: dir, launch: browser.Launch}
 }
 
-// NewBrowserTool is browser: the agent drives a real browser (spec_parity_027
+// NewBrowserTool is browser: the agent drives a real browser (spec_027_parity
 // PAR-TOOL-10..12).
 func NewBrowserTool(bt *browserTool) (tool.Tool, error) {
 	return functiontool.New(

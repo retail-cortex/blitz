@@ -36,7 +36,7 @@ import (
 
 // Background tasks: sub-agents invoke_agent starts with background: true,
 // running beside the turn that started them, detached from it
-// (spec_background_agents_032). A task runs as a background run
+// (spec_032_background_agents). A task runs as a background run
 // (tools.Background): what the workspace's rules and mode allow runs, and
 // anything that would ask the person is refused. Its tokens count for the
 // session that started it and for itself. When it ends, a note for the

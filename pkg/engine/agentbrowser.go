@@ -27,7 +27,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
-// The agent's browser in the desktop app (spec_agent_browser_050): a
+// The agent's browser in the desktop app (spec_050_agent_browser): a
 // window watching the workspace (WatchAgentBrowser) hosts a view of its
 // own for the agent, a tab the user watches or one off screen, and relays
 // the DevTools Protocol between it and the engine's browser package

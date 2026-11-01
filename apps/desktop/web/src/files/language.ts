@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Language servers in the editor (spec_visual_editor_037 §5): the
+// Language servers in the editor (spec_037_visual_editor §5): the
 // workspace's documents on the service's LanguageService, and the
 // CodeMirror extension that gives a file completion, problems, hover and
 // go to definition from them. The service shares the agent's servers; a

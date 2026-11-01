@@ -15,7 +15,7 @@
 package api
 
 // AgentBrowserCommand is what a desktop window is asked to do with a view
-// of the agent's browser (spec_agent_browser_050): open one, pass it a
+// of the agent's browser (spec_050_agent_browser): open one, pass it a
 // DevTools message, or close it.
 type AgentBrowserCommand struct {
 	// BrowserID names the view, the same in every command and reply.

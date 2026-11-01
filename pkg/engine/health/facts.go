@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package health is a workspace's dashboard (spec_health_044): the facts
+// Package health is a workspace's dashboard (spec_044_health): the facts
 // about what it holds and how its runs go, taken from what it already
 // records (no model call), and the judge's verdicts on each item's
 // quality, kept with their history.

@@ -31,7 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 )
 
-// Writing a skill from Studio's form (spec_skills_013 SK-100): SKILL.md's
+// Writing a skill from Studio's form (spec_013_skills SK-100): SKILL.md's
 // front matter keeps every field the form doesn't edit, in its order, and
 // the files under references/ and scripts/ are written one at a time,
 // never outside the skill's folder.

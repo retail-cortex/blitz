@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package databases is the connectors' toolbox backend
-// (spec_databases_046, spec_connectors_047): MCP Toolbox for Databases,
+// (spec_046_databases, spec_047_connectors): MCP Toolbox for Databases,
 // run inside Blitz's process (third_party/mcp-toolbox/embed), serving a
 // category's connection files (Toolbox YAML: sources, tools, toolsets)
 // as one MCP server, its tools named <prefix>__<tool> (db__shop_list_tables).

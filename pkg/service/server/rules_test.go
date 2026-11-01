@@ -27,7 +27,7 @@ import (
 
 // Studio's rules over the API: save gates and an instruction rule, list
 // them in the order they run, reorder, try one (a judge that can't answer
-// is a problem), delete (spec_gates_041).
+// is a problem), delete (spec_041_gates).
 func TestRulesOverTheAPI(t *testing.T) {
 	c, _ := serve(t, nil)
 	w := c.workspaces

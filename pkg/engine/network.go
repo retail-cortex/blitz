@@ -29,7 +29,7 @@ var networkOnce sync.Mutex
 
 // SetupNetwork trusts [network] ca_file's certificate authorities besides
 // the system's, in every client built from Go's default transport (the
-// model SDKs, MCP, web search) and in web_fetch (spec_parity_027
+// model SDKs, MCP, web search) and in web_fetch (spec_027_parity
 // PAR-MOD-05). Proxies come from the environment already.
 func SetupNetwork(cfg *config.Config) error {
 	file := cfg.Network.CAFile

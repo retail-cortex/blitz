@@ -26,7 +26,7 @@ import (
 
 // newModelsCommand is `blitz models [provider…]`: the models each
 // configured provider offers, from its API, with the prices Blitz knows
-// (spec_parity_027 PAR-MOD-03).
+// (spec_027_parity PAR-MOD-03).
 func newModelsCommand(g *globalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "models [provider…]",

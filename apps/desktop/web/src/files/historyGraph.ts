@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The lanes of a history graph (spec_files_029 FIL-59b), as git log
+// The lanes of a history graph (spec_029_files FIL-59b), as git log
 // --graph draws them: each commit on a lane, a line down each lane to the
 // commit it expects next, lines that join where a merge's parents meet
 // and split where a commit has several. Pure, so the drawing (one row per

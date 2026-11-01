@@ -38,7 +38,7 @@ func (r *Registry) Images() *images.Store { return r.images }
 type MediaCheck func(name, mime string, size int64) error
 
 // SetMediaCheck sets what refuses attachments the model can't take
-// (spec_images_011); nil accepts every supported type.
+// (spec_011_images); nil accepts every supported type.
 func (r *Registry) SetMediaCheck(c MediaCheck) {
 	r.mediaMu.Lock()
 	defer r.mediaMu.Unlock()

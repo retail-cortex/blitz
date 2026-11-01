@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package a2ui is the part of A2UI v0.9 (https://a2ui.org) a workflow's
-// human task uses, on the service's side (spec_workflows_043 WF-18): a
+// human task uses, on the service's side (spec_043_workflows WF-18): a
 // form as the standard server-to-client messages any A2UI renderer can
 // draw, and an answer (the client-to-server action message) checked
 // against the form before a run goes on, so no client is trusted to have

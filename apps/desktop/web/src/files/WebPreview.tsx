@@ -33,7 +33,7 @@ const opened = new Set<string>();
 export const adoptPreview = (id: string) => opened.add(id);
 
 /**
- * A web page in the editor (spec_electron_038 EL-100): its toolbar (back,
+ * A web page in the editor (spec_038_electron EL-100): its toolbar (back,
  * forward, reload, the address, Add to chat) over the place the window's
  * view of the page fills. The view is drawn above the page, so it's
  * hidden while a menu, a dialog or a drawer overlaps it, and while the tab
@@ -181,7 +181,7 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
         />
       </div>
       {web.agent && (
-        // The agent drives this page (spec_agent_browser_050 AB-03): the
+        // The agent drives this page (spec_050_agent_browser AB-03): the
         // user can take it over, or stop the agent's browsing.
         <div className="card row t-body-sm web-agent-bar" role="status">
           <Icon path={mdiRobotOutline} size="sm" />

@@ -15,7 +15,7 @@
  */
 
 
-// Markdown in and out of the visual editor (spec_visual_editor_037 VE-03 –
+// Markdown in and out of the visual editor (spec_037_visual_editor VE-03 –
 // VE-05). Reading keeps each top-level block's source and the text before
 // it; writing puts an untouched block's source back as it was and prints
 // only changed blocks, in one house style. So a file opened and saved

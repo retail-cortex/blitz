@@ -3,7 +3,7 @@ title: Extending
 weight: 50
 ---
 
-Specs: [memory](../about/specs/spec_memory_012.md), [MCP](../about/specs/spec_mcp_009.md), [hooks](../about/specs/spec_hooks_010.md), [agents and commands](../about/specs/spec_agents_014.md).
+Specs: [memory](../about/specs/spec_012_memory.md), [MCP](../about/specs/spec_009_mcp.md), [hooks](../about/specs/spec_010_hooks.md), [agents and commands](../about/specs/spec_014_agents.md).
 
 ## Project memory
 
@@ -207,4 +207,4 @@ enable  = ["lint-kit"]   # needs trust
 disable = ["noisy-kit"]
 ```
 
-The importers convert what maps from Claude Code plugins and Gemini CLI extensions (commands, skills, agents, hooks, MCP servers) and list what they couldn't. See the [plugins spec](../about/specs/spec_plugins_033.md).
+The importers convert what maps from Claude Code plugins and Gemini CLI extensions (commands, skills, agents, hooks, MCP servers) and list what they couldn't. See the [plugins spec](../about/specs/spec_033_plugins.md).

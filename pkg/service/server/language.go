@@ -24,7 +24,7 @@ import (
 )
 
 // languageService implements LanguageService over the workspace's
-// language servers (spec_visual_editor_037).
+// language servers (spec_037_visual_editor).
 type languageService struct{ s *Server }
 
 // languageError maps the language servers' errors to Connect codes and

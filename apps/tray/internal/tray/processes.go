@@ -26,7 +26,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// The tray's Processes submenu (spec_electron_038 EL-112): the background
+// The tray's Processes submenu (spec_038_electron EL-112): the background
 // processes the agents started and that still run, in every open
 // workspace, each with its workspace and Stop, so the person sees what's
 // left running and can end it.
@@ -35,7 +35,7 @@ import (
 const processTitle = 60
 
 // ProcessesTitle is the submenu's own item: how many are running, and
-// how many of them look bad (spec_processes_052).
+// how many of them look bad (spec_052_processes).
 func ProcessesTitle(procs []*pb.WorkspaceProcess) string {
 	flagged := 0
 	for _, wp := range procs {

@@ -29,7 +29,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Studio's connectors (spec_connectors_047).
+// Studio's connectors (spec_047_connectors).
 
 // Reasons: a connection that isn't there, a global one a workspace was
 // asked to change (ConfigService changes those), and one the person

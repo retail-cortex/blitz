@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// \skill-name in the composer (spec_skills_013 SK-104): finding the one
+// \skill-name in the composer (spec_013_skills SK-104): finding the one
 // being typed, the skills it could be, and putting the chosen one in its
 // place. The service sends a named skill's instructions with the prompt.
 

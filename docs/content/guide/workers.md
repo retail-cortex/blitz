@@ -5,7 +5,7 @@ weight: 55
 
 A **job** runs a prompt on a schedule, unattended: a nightly dependency check, a weekly report, a morning digest of new papers. It lives in the workspace as a Markdown file, runs in the Blitz service, and may only do what you allowed when you enabled it.
 
-Spec: [jobs](../about/specs/spec_workers_023.md).
+Spec: [jobs](../about/specs/spec_023_workers.md).
 
 ## Before you start
 

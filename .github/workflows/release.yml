@@ -112,13 +112,13 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes "${pre[@]}" \
             --notes-file .github/release-footer.md dist/*
 
-  # The desktop app (Electron, apps/electron/packaging; spec_electron_038
+  # The desktop app (Electron, apps/electron/packaging; spec_038_electron
   # EL-80): a macOS disk image for each Mac (arm64, x64), and Linux .debs,
   # Arch Linux packages and tarballs, attached to the draft release, each
   # signed keylessly with its own cosign bundle (the Windows zip is the
   # release job's). Bazel builds the apps and the packages; on macOS
   # sign_macos.sh signs them with a Developer ID and notarises them when
-  # the signing secrets are set (spec_release_025 REL-22), else signs them
+  # the signing secrets are set (spec_025_release REL-22), else signs them
   # ad hoc with a warning.
   desktop:
     needs: release

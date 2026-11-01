@@ -3,7 +3,7 @@ title: Desktop app
 weight: 30
 ---
 
-Blitz's desktop app is a window onto the [service](../service.md), laid out like an IDE: the workspace's files on the left, an editor in the middle, and the agent's chat on the right. It contains no engine. Every workspace, turn, approval, session and job lives in the service, which keeps running, and keeps running jobs, after the window closes. Source: `apps/electron` (Electron) and `apps/desktop/web` (React and TypeScript), with `blitz-tray --serve` as its host (`pkg/pagehost`). Specs: [desktop](../../about/specs/spec_desktop_024.md), [Electron](../../about/specs/spec_electron_038.md), [files](../../about/specs/spec_files_029.md).
+Blitz's desktop app is a window onto the [service](../service.md), laid out like an IDE: the workspace's files on the left, an editor in the middle, and the agent's chat on the right. It contains no engine. Every workspace, turn, approval, session and job lives in the service, which keeps running, and keeps running jobs, after the window closes. Source: `apps/electron` (Electron) and `apps/desktop/web` (React and TypeScript), with `blitz-tray --serve` as its host (`pkg/pagehost`). Specs: [desktop](../../about/specs/spec_024_desktop.md), [Electron](../../about/specs/spec_038_electron.md), [files](../../about/specs/spec_029_files.md).
 
 ![The desktop app: the workspace's files, an editor, and the chat with an approval and the agent's task list](../../images/desktop.png)
 
@@ -44,7 +44,7 @@ The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel
 
 ### On Windows
 
-Install it with `Blitz_<version>_windows_x64_setup.exe` (above). The app comes with `blitz-tray.exe`, which starts the service and puts a bolt in the notification area (amber while the service runs, grey when it doesn't); **Open Blitz** in its menu opens the app, and **Start Blitz at login** keeps the tray. Up to 0.7.1 the CLI's zip had a tray that showed the app in an Edge window instead; that's gone, since the app does it all. Spec: [Windows](../../about/specs/spec_windows_036.md).
+Install it with `Blitz_<version>_windows_x64_setup.exe` (above). The app comes with `blitz-tray.exe`, which starts the service and puts a bolt in the notification area (amber while the service runs, grey when it doesn't); **Open Blitz** in its menu opens the app, and **Start Blitz at login** keeps the tray. Up to 0.7.1 the CLI's zip had a tray that showed the app in an Edge window instead; that's gone, since the app does it all. Spec: [Windows](../../about/specs/spec_036_windows.md).
 
 ## The window
 

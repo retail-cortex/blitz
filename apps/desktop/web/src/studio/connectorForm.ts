@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's connector form (spec_connectors_047): a connection as the
+// Studio's connector form (spec_047_connectors): a connection as the
 // form holds it, from and to the API, drawn from its kind's descriptor. A
 // password is typed into secretValues and saved as a Blitz secret; the
 // form never holds a kept one.
@@ -24,7 +24,7 @@ import type { Connector, ConnectorKind, ConnectorQuery } from "../gen/blitz/v1/w
 /** Where a connection is: this workspace's .agents/connectors, or every workspace's. */
 export type ConnectorScope = "workspace" | "global";
 
-/** A capability a kind of connector has (spec_connectors_047). */
+/** A capability a kind of connector has (spec_047_connectors). */
 export type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
 
 /** A query's parameter as the form holds it. */

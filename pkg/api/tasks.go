@@ -21,7 +21,7 @@ import (
 
 // TaskInfo is a background task: a sub-agent that invoke_agent started
 // with background: true, running beside the turn that started it
-// (spec_background_agents_032).
+// (spec_032_background_agents).
 type TaskInfo struct {
 	ID    string `json:"id"` // task-1, task-2, … in the workspace
 	Agent string `json:"agent"`
@@ -73,7 +73,7 @@ var ErrUnknownTask = errors.New("no such task")
 
 // TaskRequest is a background task's approval request or question,
 // waiting for one of its session's people to answer
-// (spec_background_agents_032 BGA-41).
+// (spec_032_background_agents BGA-41).
 type TaskRequest struct {
 	ID      string // answered with AnswerTaskRequest
 	TaskID  string

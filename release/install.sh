@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Installs Blitz from its GitHub release (spec_parity_027 PAR-MOD-06):
+# Installs Blitz from its GitHub release (spec_027_parity PAR-MOD-06):
 #
 #   curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/install.sh | sh
 #

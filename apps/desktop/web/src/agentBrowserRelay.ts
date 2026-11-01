@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The agent's browser in the desktop app (spec_agent_browser_050): the
+// The agent's browser in the desktop app (spec_050_agent_browser): the
 // page carries the service's commands for the window's views (open one,
 // a DevTools message, close it) to the window, and the views' messages
 // back, in order, a view at a time. A watched view shows as a tab. A page

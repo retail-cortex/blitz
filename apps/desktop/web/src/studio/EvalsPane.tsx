@@ -81,7 +81,7 @@ const summary = (run: Pick<EvalRun, "counts" | "results">) => {
 const scoreText = (r: EvalResult) => (r.status === "error" ? "" : r.type === "near" ? `${r.score.toFixed(2)} / ${r.threshold.toFixed(2)}` : t(r.score ? "desktop.evals.matched" : "desktop.evals.no_match"));
 
 /**
- * The workspace's evals (Studio › Evals, spec_evals_042): each listed with
+ * The workspace's evals (Studio › Evals, spec_042_evals): each listed with
  * its last run, and run from the list. An eval's form slides in over the
  * list with three tabs: its cases (each a row that opens into its editor:
  * the prompt, the output expected, exact or near and the threshold, and

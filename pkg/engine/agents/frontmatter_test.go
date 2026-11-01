@@ -79,7 +79,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 	}
 
 	// /reflect's agent: reads the evidence with its tool, writes the
-	// experience only when chosen, with no shell (spec_harness_learning_048
+	// experience only when chosen, with no shell (spec_048_harness_learning
 	// HE-03).
 	reflect, ok := reg.Get("harness-reflect")
 	require.True(t, ok)
@@ -115,7 +115,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 	assert.NotContains(t, setup.SystemPrompt, "Set up without a specification", "it no longer asks whether to")
 	assert.Contains(t, spec.SystemPrompt, "When /setup invoked you", "the spec agent doesn't send people back to /setup")
 
-	// What the harness learns (spec_harness_learning_048): setup starts
+	// What the harness learns (spec_048_harness_learning): setup starts
 	// the experience file and its import, keeps how to work apart from
 	// the project's facts, and offers rules and guardrails; the updates
 	// read the evidence and cite it.

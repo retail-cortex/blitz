@@ -5,7 +5,7 @@ weight: 45
 
 The [Model Context Protocol](https://modelcontextprotocol.io) lets the agent use tools other programs offer: your issue tracker, a database, a design tool, a company knowledge base. Add a server once, and its tools appear beside Blitz's own, with the same approvals.
 
-Spec: [MCP](../about/specs/spec_mcp_009.md).
+Spec: [MCP](../about/specs/spec_009_mcp.md).
 
 For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has one built in, set up in **Studio › Connectors**. See [Databases](databases.md) and [Connectors](connectors.md).
 

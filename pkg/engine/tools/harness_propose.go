@@ -25,7 +25,7 @@ import (
 )
 
 // ProposalSaver keeps a scheduled reflection's proposed changes for the
-// user to review with /reflect (spec_harness_learning_048 HE-06); the
+// user to review with /reflect (spec_048_harness_learning HE-06); the
 // engine supplies it.
 type ProposalSaver func(ctx context.Context, changes []string) error
 
@@ -89,7 +89,7 @@ func NewHarnessProposeTool(r *Registry) (tool.Tool, error) {
 }
 
 // GlobalExperienceSaver adds a "How to work" entry to the user's global
-// instructions file and returns its path (spec_harness_learning_048
+// instructions file and returns its path (spec_048_harness_learning
 // HE-21); the engine supplies it.
 type GlobalExperienceSaver func(ctx context.Context, entry string) (string, error)
 

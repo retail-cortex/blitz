@@ -15,7 +15,7 @@
  */
 
 // The service's background runs (blitz --bg), in every workspace: the
-// inbox (spec_parity_027 PAR-PAR-20). One poll serves every inbox button.
+// inbox (spec_027_parity PAR-PAR-20). One poll serves every inbox button.
 
 import { useSyncExternalStore } from "react";
 import { sessions } from "./api";

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Saving a web page into the workspace (spec_electron_038 EL-106): where
+// Saving a web page into the workspace (spec_038_electron EL-106): where
 // it goes, and the page as HTML (Markdown is webMarkdown.ts's, loaded when
 // it's asked for; a PDF is the window's).
 

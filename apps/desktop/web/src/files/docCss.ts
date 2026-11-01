@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The user's CSS for Markdown previews (spec_files_029 FIL-57): one
+// The user's CSS for Markdown previews (spec_029_files FIL-57): one
 // stylesheet per theme, over document.css, kept in the window's prefs.
 import type { Prefs } from "../prefs";
 import type { Theme } from "../theme";

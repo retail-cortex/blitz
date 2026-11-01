@@ -25,7 +25,7 @@ import (
 	"strings"
 )
 
-// The user's own file operations (the desktop app's files, spec_files_029):
+// The user's own file operations (the desktop app's files, spec_029_files):
 // confined to the workspace directory through os.Root, like the agent's,
 // but not bound by the agent's blocked paths or read-only roots (they're
 // the user's files) and not checkpointed as the agent's turns are. Paths

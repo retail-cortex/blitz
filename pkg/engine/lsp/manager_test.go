@@ -161,7 +161,7 @@ func startProcess(argv []string) (lsp.Process, error) {
 	return &osProcess{cmd: cmd, in: in, out: out}, nil
 }
 
-// TestGoplsSnippets asks gopls about code blocks (spec_visual_editor_037
+// TestGoplsSnippets asks gopls about code blocks (spec_037_visual_editor
 // §7): files that exist only for the server, in the workspace's module, so
 // a block sees the workspace's packages; and a fragment of statements made
 // a whole file. Set BLITZ_TEST_GOPLS=1 with gopls installed.
@@ -280,7 +280,7 @@ func TestGoplsSnippetsOutsideModule(t *testing.T) {
 }
 
 // TestPyright asks pyright about a Python file and a Python code block
-// (spec_visual_editor_037 §7): it answers only once told the client's
+// (spec_037_visual_editor §7): it answers only once told the client's
 // configuration changed. Set BLITZ_TEST_PYRIGHT=1 with pyright installed.
 func TestPyright(t *testing.T) {
 	if os.Getenv("BLITZ_TEST_PYRIGHT") == "" {

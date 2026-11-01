@@ -15,7 +15,7 @@
 // Package skills loads the skills a workspace offers: a SKILL.md with
 // frontmatter and instructions, optionally scripts, from the built-in set,
 // ~/.blitz/skills and (when trusted) the project; and the policy that caps
-// what their scripts may do (spec_skills_013).
+// what their scripts may do (spec_013_skills).
 package skills
 
 import (
@@ -69,7 +69,7 @@ type SkillMetadata struct {
 	SourceURI            string                `yaml:"source_uri,omitempty"`
 
 	// Agents are the agents the skill is offered to (none: every one);
-	// Members the skills a meta skill combines (spec_skills_013 SK-99).
+	// Members the skills a meta skill combines (spec_013_skills SK-99).
 	Agents  []string `yaml:"agents,omitempty"`
 	Members []string `yaml:"skills,omitempty"`
 }

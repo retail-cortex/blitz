@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The Changes page and the workspace's remote (spec_desktop_024 DSK-90b):
+// The Changes page and the workspace's remote (spec_024_desktop DSK-90b):
 // Pull and Push with the ahead and behind counts, and a pull's conflicts —
 // the merge or rebase waiting, and each conflicted file.
 

@@ -28,7 +28,7 @@ import (
 )
 
 // BrowserProfiles keeps the person's browser profiles and which one each
-// workspace browses with (spec_browser_profiles_049): browser-profiles.json
+// workspace browses with (spec_049_browser_profiles): browser-profiles.json
 // in the settings directory, and each profile's data (cookies, sign-ins,
 // local storage) in browser/profiles/<name> beside it, owner-only. A
 // profile's cookies are credentials, so it's the person's, never a

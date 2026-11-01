@@ -34,7 +34,7 @@ import (
 // Settings' global connections over ConfigService: saved, listed in
 // every workspace's Studio (which can't change them), tested, tried, read,
 // renamed and deleted; Studio's Make Global moves one of the workspace's
-// there (spec_connectors_047 CON-18, CON-19).
+// there (spec_047_connectors CON-18, CON-19).
 func TestGlobalConnectorsOverTheAPI(t *testing.T) {
 	c, s := serve(t, nil)
 	secrets.SetDefault(&secrets.Memory{})

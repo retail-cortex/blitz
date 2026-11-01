@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Studio's grade badges (spec_health_044 HL-15): each list's items show
+// Studio's grade badges (spec_044_health HL-15): each list's items show
 // the judge's grade, from the dashboard Studio follows.
 
 import { createContext, useContext } from "react";

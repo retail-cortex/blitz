@@ -15,7 +15,7 @@
 // Package catalog checks an organization's catalog: a repository laid
 // out as a workspace's .agents folder, whose agents, rules, skills,
 // guardrails, commands, MCP servers and connectors every person's Blitz
-// works under (spec_enterprise_053 EN-30, EN-31). Each file is read as
+// works under (spec_053_enterprise EN-30, EN-31). Each file is read as
 // Blitz reads it, by the engine's own parsers, so a file Blitz would
 // refuse can't be published. Each item may say how it applies: lock
 // (locked, or a default a workspace or person may override) and groups

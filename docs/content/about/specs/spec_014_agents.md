@@ -1,0 +1,75 @@
+---
+aliases: ["/about/specs/spec_agents_014/"]
+title: "014 · Agents"
+weight: 14
+---
+
+*Agents, delegation and forged tools* (`spec_014_agents`)
+
+| | |
+|---|---|
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Source | `pkg/engine/agents/{manager,frontmatter,files}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/agentfiles.go`; `pkg/engine/runtime/settings.go`; `pkg/engine/tools/{agent_tools,universal_constructor}.go`; `pkg/service/server/agents.go`; `apps/desktop/web/src/AgentEditor.tsx` |
+| Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/agentfiles_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/{pin,settings}_test.go`; `pkg/service/server/handlers_test.go` |
+| Depends on | [spec_002_config](spec_002_config.md), [spec_007_shell](spec_007_shell.md), [spec_005_approvals](spec_005_approvals.md) |
+| Used by | [spec_016_engine](spec_016_engine.md) |
+
+## 1. Purpose
+
+An agent is a persona: a system prompt, a tool list, an agency level and optionally its own model, defined in Markdown with YAML frontmatter. One agent is active (the root); the others are sub-agents it can delegate to. Helios can forge small tools at runtime.
+
+## 2. Agent definitions
+
+- **AG-01** File format: `---` YAML frontmatter `---` then the system prompt. Frontmatter: `name` (required), `display_name`, `description`, `tools` (registry tool names, aliases allowed), `default_model` (`provider/model`), `agency_level`, and the model settings of AG-21.
+- **AG-02** Prompts may contain `{agency_instructions}` or `{{agency_instructions}}`, replaced by the rules for the level (empty = high):
+  - **low** — one step at a time; after each meaningful unit, stop, summarise and ask; no consequential or irreversible action without explicit approval.
+  - **medium** — do routine, clearly requested work; check in at major milestones or before consequential changes.
+  - **high** (default) — complete the task autonomously; ask only when blocked by missing requirements or irreversible actions needing approval.
+  - **extreme** — maximal persistence; don't stop while a background process gates completion; check progress.
+- **AG-03** The root agent uses the configured `blitz.agency_level` (changeable with `/set agency=`); sub-agents use their own frontmatter level.
+- **AG-04** *2026-10-22.* Each turn is the agent the run asks for: the active agent, or a command's (`agent:` in its frontmatter, such as `/spec`, `/skills update` and `/reflect`), whoever answered before. The other agents are the root's sub-agents for `transfer_to_agent`, built never to transfer back (`DisallowTransferToParent`), so the ADK runner, which otherwise hands the next turn to the agent that answered last, falls back to the root. A transfer lasts the rest of its turn. Before, once a conversation had a turn, a command's agent and a switch with `/agent` were ignored and the last agent kept answering (`TestTheAskedAgentAnswersAfterHistory`, `TestTransferLastsTheTurn`).
+
+## 3. Registry
+
+- **AG-10** Built-in agents are embedded. External agents are loaded (recursively, `*.md`) from `~/.blitz/agents` (`config.UserAgentsDir`), then the workspace's `.agents/agents` (`config.ProjectAgentsDir`, as prompt text, [spec_031_project_config](spec_031_project_config.md); a later folder wins a name), then enabled plugins' `agents/`. *2026-10-01:* the workspace folder moved from `./agents` to `.agents/agents`, beside `.agents/workers` and `.agents/skills`; `./agents` is no longer read. External specs may add agents but **may not replace a built-in** (that would let a directory swap a trusted persona's prompt and tools); rejected or unparseable specs are reported, valid ones still load.
+- **AG-11** `List` is sorted by name.
+- **AG-13** *2026-10-01.* Agents reload without reopening the workspace. The registry keeps the folders it loaded and a stamp of their `*.md` files (path, size, modification time); `Registry.Refresh` reloads them when the stamp changes, keeping the built-ins. `Workspace.RefreshAgents` runs it before each turn and job run and when agents or jobs are listed or an agent is switched: an added file's agent is offered, an edited one's prompt, tools, settings and `default_model` apply from the next turn (models pinned or unpinned to match), and a removed one is gone (the active agent falls back to `blitz`). Files that don't load are warnings. *2026-10-16:* `/reload` makes the next refresh load them regardless (`Registry.Invalidate`), for an edit that kept a file's size and time, and lists what didn't load (spec_012_memory MEM-25).
+- **AG-14** *2026-10-01.* Agent files are written by the editors through `WorkspaceService.ListAgentFiles`, `SaveAgentFile` and `DeleteAgentFile`, per scope: `AGENT_SCOPE_WORKSPACE` (the workspace's `.agents/agents`) or `AGENT_SCOPE_USER` (`~/.blitz/agents`, needing no workspace). Listing returns every file with what it defines or why it doesn't load (unparseable, a built-in's name). Saving checks the name (`^[a-z0-9][a-z0-9_-]{0,63}$`, not a built-in's, not another file's in the folder), a description, the agency level and the model settings, and returns problems with nothing written; it writes `<name>.md` atomically (an edit keeps the agent's file whatever it's called, a rename moves it to the new name's file), and the workspace named reloads at once. Writing a file drops YAML comments and keys Blitz doesn't know.
+
+| Built-in | Role | Agency |
+|---|---|---|
+| `blitz` | Primary agent (default): code, documents, research and data; makes small changes itself and hands substantial code changes to `coder` (AG-14a) | high |
+| `coder` | Coding specialist: reads, changes, runs and verifies code, loading the language skills for the workspace's stack | high |
+| `helios` | Universal Constructor: forges and runs tools | high |
+| `qa` | Tests, TDD, regression suites, edge cases | high |
+| `web-retriever` | Documentation and web research | high |
+| `planning-agent` | Requirement decomposition, roadmaps, verification gates (read-only tools + `invoke_agent`) | medium |
+| `agent-creator` | Creates and validates agent specs and skills | high |
+| `model-judge` | Compares model responses | medium |
+| `project-setup` | Sets up a workspace's agent harness: interviews, `.agents/AGENTS.md`, the instruction files importing it, skills and agents (`/setup`, [spec_012_memory](spec_012_memory.md) MEM-22) | medium |
+| `project-spec` | Writes and revises the project's specification in `.agents/specs/` after an interview on intent, users, performance, platform and security (`/spec`, MEM-42) | medium |
+| `harness-update` | Revisits the skills or agents against the specification (`/skills update`, `/agents update`, MEM-44) | medium |
+
+- **AG-12** Built-in prompts are persona-free and terse (no mascot, plain status marks).
+- **AG-14a** *2026-10-28 (the owner's request).* `blitz` is a generalist, not a coding agent: it works out what a task needs, does small things itself (a line or two, a setting, a document) and hands a substantial code change to `coder` with `invoke_agent`, giving the goal, the files involved, what it found and what done looks like. `coder` carries Blitz's working rules word for word (terse; small focused changes, DRY, YAGNI, tests with behaviour changes; files under about 600 lines; read before editing; targeted diffs; `command -v`, never `find`), which `blitz` keeps too, so the code is as good whoever writes it (`TestEmbeddedRegistry` holds them in both). Before changing code, `coder` loads the skills for the stack it sees (`go.mod`, `pyproject.toml`, `package.json`): the built-in `go`, `python`, `python-uv`, `react` and, with `playwright.config.*`, `playwright` (spec_013_skills SK-01). Languages are skills, not agents: a task crosses languages, and one more agent is one more routing choice. A sub-agent with `activate_skill` gets the skill index offered to it in its instruction, as the primary agent does (`skillIndex`, `subInstruction` in `pkg/engine/runtime/engine.go`). Asked about the project (where the work stands, what's left, the spec), `blitz` looks before answering (`.agents/specs/`, its instructions, `git log`, the code) and never says it has no access or context: a small model (`qwen2.5-coder:7b`) answered \"Where are we on the tasks?\" with \"I don't have any information\" though the harness was in its prompt. A greeting, small talk or a thank-you gets a sentence of plain text with no tools, in `blitz`'s prompt and in `ask_user_question`'s description ("not for conversation"): small local models (seen with `qwen2.5-coder:7b`) answered "Hi, how are you?" with a question form. The engine's own prompts (compaction, the reviewer, hooks, goals, the agent drafter, next-step ideas) say "an AI agent", not "a coding agent".
+
+## 4. Models per agent
+
+- **AG-21** *2026-10-01.* An agent's frontmatter may set `temperature` (0–2), `top_p` (above 0, at most 1), `max_tokens` (at least 1), `effort` (minimal, low, medium, high, max; `xhigh` reads as max) and `thinking_budget` (0 or more). They apply to that agent's model calls only, as the main agent or a sub-agent, over the model's own `[model_settings]` and the session's effort; settings it leaves unset stay the model's. Settings the provider can't take are dropped as for `[model_settings]` (spec_016_engine). The model is wrapped when the agent is built (`withAgentSettings`), and the settings travel in the call's context to the model's settings wrapper.
+- **AG-20** An agent runs on (highest first): an `[agent_models]` pin, its own `default_model`, the configured model. Pinned agents keep the fallback chain behaviour of their own model and are priced by it. `/pin_model <agent> <model>` and `/unpin <agent>` change pins live and in the config file ([spec_018_workspace](spec_018_workspace.md) WS-41). `doctor` checks each pin.
+
+## 5. Delegation tools
+
+- **AG-30** `list_agents(filter?)` → name, display name, description (substring filter).
+- **AG-31** `invoke_agent(agent_name, prompt, background?)` → the sub-agent's final text (`response`) or `error`; with `background: true` (or the agent's own `background: true` when the call doesn't say) it returns at once with a `task_id` and the sub-agent runs as a task ([spec_032_background_agents](spec_032_background_agents.md)). An agent's frontmatter may also set `permission_mode` (its own mode through `invoke_agent`; a looser one than the workspace's only for built-in agents, the user's own and a trusted project's; bypass only in the OS sandbox) and `max_turns` (its own model-call budget). The sub-agent runs in a fresh isolated session, gets the MCP servers offered to it, and nesting is capped at depth 3 ([spec_016_engine](spec_016_engine.md) ENG-70). In plan/read-only runs the sub-agent is equally restricted.
+- **AG-31a** *2026-10-29 (the owner: "the checklist doesn't seem to update" during /setup).* A sub-agent run in the foreground shows its work in the conversation as it happens (`runtime.WithSubagentEvents`): its tool calls and results under its name (`Event.Author`), and its task list in the checklist; when it returns, the calling agent's own list is shown again. Its words reach only the agent that asked (the tool's `response`), so they aren't shown or kept as the conversation's. Every final event of it is kept in the session's sub-agent log, `<session>.subagents.jsonl`, owner-only and deleted with the session, since its own session is in memory. A background task's events go to the task, as before (BGA).
+
+## 6. Universal Constructor (`universal_constructor`)
+
+Args: `action` (`create|run|list|delete`), `tool_name`, `language` (`bash`/`sh`, `python`/`py`, `go`; default bash), `code`, `description`, `args` (whitespace-separated).
+
+- **AG-40** Tool names match `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` (no separators or traversal). Tools are stored in `tools.uc_tools_dir` (default `~/.blitz/uc_tools`, created lazily) as the script plus a JSON manifest (`name, language, description, created`); the script path is never stored — it is recomputed from the validated name and language.
+- **AG-41** `create` needs write approval (kind `write_file`); `delete` needs delete approval (kind `delete_file`); `list` returns `name (language): description`.
+- **AG-42** `run`: the command policy sees the synthetic command `universal_constructor <tool> <args…>` (shell-quoted, so allow-lists must opt in with e.g. `universal_constructor *`); deny blocks; otherwise approval unless auto-approved (kind `run_command`, key `uc-run:<tool>\x00<args…>`, "this forged tool with these arguments"). Runs as `bash <script>`, `python3 <script>` or `go run <script>` through the exec environment (OS sandbox, scrubbed env, process guard), 60 s timeout, 100 KiB output.
+- **AG-43** Manifests are untrusted on reload: name and language are re-validated and the script must be a regular file (not a symlink) at the derived path. Forged tools persist across sessions.
+- **AG-44** *2026-10-18.* An agent's tools are exactly its list: with none it can only reply. A new agent made in the desktop app starts with tools to read, search and change the workspace's files, the web, asking the user and skills (`starterTools`: no commands, which are added on purpose), and the editor warns when an agent has no tools.

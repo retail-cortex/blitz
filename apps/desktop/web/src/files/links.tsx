@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Paths in the conversation that open the editor (spec_files_029 FIL-35).
+// Paths in the conversation that open the editor (spec_029_files FIL-35).
 // The workspace provides which files exist (Go to file's list), so only
 // real files become links.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";

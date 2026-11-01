@@ -35,7 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Guardrails (spec_gates_041 GT-20 on): safety and limits at every step of
+// Guardrails (spec_041_gates GT-20 on): safety and limits at every step of
 // a turn, read from .agents/guardrails (then the global folder) as the
 // turn starts. Unlike rules, a guardrail that can't be checked refuses
 // (block) rather than lets things through.

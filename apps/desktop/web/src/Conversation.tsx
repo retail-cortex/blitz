@@ -559,13 +559,13 @@ export function Conversation({
   };
 
   // Background tasks of this session, followed while it's open
-  // (spec_background_agents_032 BGA-41): their requests wait here, and
+  // (spec_032_background_agents BGA-41): their requests wait here, and
   // one that ends while nothing runs says so, and may start a turn.
   const latest = useRef({ running, run, continueOn: prefs.task_continue });
   latest.current = { running, run, continueOn: prefs.task_continue };
   const sessionId = session?.id;
   // A background run going on in this session (blitz --bg, the inbox;
-  // spec_parity_027 PAR-PAR-20) shows as a turn from its start: its
+  // spec_027_parity PAR-PAR-20) shows as a turn from its start: its
   // requests wait here, and Stop stops it.
   useEffect(() => {
     if (!sessionId) return;
@@ -1494,7 +1494,7 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
 /**
  * A background task (invoke_agent with background: true): its agent,
  * state, runtime and cost, followed until it ends, with Show (its latest
- * events and result) and Stop (spec_background_agents_032 BGA-33).
+ * events and result) and Stop (spec_032_background_agents BGA-33).
  */
 function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: string }) {
   const snack = useSnackbar();
@@ -1565,12 +1565,12 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
 }
 
 /**
- * A job the agent made from the chat (create_job, spec_workers_023 WK-70):
+ * A job the agent made from the chat (create_job, spec_023_workers WK-70):
  * paused until it's reviewed, with Review (Studio › Jobs, its details) and
  * Enable here; once enabled, when it next runs.
  */
 /**
- * The chat's suggestion to reflect (spec_harness_learning_048 HE-63): the
+ * The chat's suggestion to reflect (spec_048_harness_learning HE-63): the
  * runs since the last reflection hit the same problems. Reflect runs
  * /reflect in a new chat; Not now holds the suggestion off for a week.
  */

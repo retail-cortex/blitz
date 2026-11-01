@@ -57,7 +57,7 @@ type Options struct {
 	// watches, sized by the window) instead of Width×Height.
 	KeepViewport bool
 	// ProfileDir is a profile kept between runs (a browser profile's,
-	// spec_browser_profiles_049 BP-03): its sign-ins and cookies last, and
+	// spec_049_browser_profiles BP-03): its sign-ins and cookies last, and
 	// Close leaves it. Empty: a new, empty profile, removed on Close.
 	ProfileDir string
 }
@@ -251,7 +251,7 @@ func Attach(ctx context.Context, wsURL string, opts Options) (*Browser, error) {
 
 // AttachTransport drives the page at the other end of t, a relay to a
 // browser someone else runs (the desktop app's own view,
-// spec_agent_browser_050): as Attach, its network isn't filtered here
+// spec_050_agent_browser): as Attach, its network isn't filtered here
 // (the other end filters it), but page loads still go through Navigation.
 func AttachTransport(ctx context.Context, t Transport, opts Options) (*Browser, error) {
 	b := newBrowser(opts)

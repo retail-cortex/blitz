@@ -25,7 +25,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
-// Studio's connectors (spec_connectors_047): the catalog of categories
+// Studio's connectors (spec_047_connectors): the catalog of categories
 // and kinds, the workspace's connection files and the global ones, saved,
 // tested, tried and read; a save or delete serves the files as they are
 // now.

@@ -25,7 +25,7 @@ import (
 )
 
 // newSessionsCommand is `blitz sessions export <id>`: a stored session as
-// Markdown, from the service (spec_parity_027 PAR-SES-11).
+// Markdown, from the service (spec_027_parity PAR-SES-11).
 func newSessionsCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "sessions", Short: "Work with saved sessions"}
 	var out string

@@ -75,7 +75,7 @@ type Host struct {
 	Prefs *PrefsStore
 	// Updates updates the desktop app the host runs in (nil: no updates).
 	Updates *Updater
-	// Use counts the desktop app's use, once a day (spec_active_installs_054
+	// Use counts the desktop app's use, once a day (spec_054_active_installs
 	// AI-01): the page says when its window opens or comes forward; nil,
 	// not counted.
 	Use *activity.Recorder

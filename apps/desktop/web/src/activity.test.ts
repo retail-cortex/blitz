@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { USED_EVERY_MS, usedThrottle } from "./activity";
 import { detectHost, markUsed, resetHost } from "./desktop";
 
-describe("the window in use (spec_active_installs_054 AI-01)", () => {
+describe("the window in use (spec_054_active_installs AI-01)", () => {
   it("is marked when it opens, then at most every ten minutes, and never while hidden", () => {
     let t = 0;
     let hidden = false;

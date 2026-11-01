@@ -34,7 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// Evals (spec_evals_042): each case's prompt runs on each agent the eval
+// Evals (spec_042_evals): each case's prompt runs on each agent the eval
 // names, unattended, in a session of its own that's deleted after; its
 // output is scored against the expected one.
 

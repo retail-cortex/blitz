@@ -160,7 +160,7 @@ exports_files(["LICENSE", "data/assets.json"])""",
 use_repo(hugo_deps, "geekdoc", "hugo")
 
 # The Electron runtime for the Electron trial (apps/electron,
-# spec_electron_038), one archive a platform, fetched here rather than by
+# spec_038_electron), one archive a platform, fetched here rather than by
 # the electron npm package's install script (pnpm runs none).
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 

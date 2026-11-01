@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Which evals check an agent or a skill (spec_evals_042 EV-12), what to
+// Which evals check an agent or a skill (spec_042_evals EV-12), what to
 // ask when refining an agent from its failures, and running evals in the
 // background after a save.
 

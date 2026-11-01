@@ -20,7 +20,7 @@ import (
 )
 
 // HomeWorkspace is the folder the user's global workers run in
-// (~/.blitz/home, spec_workers_023 WK-60): a workspace of its own, for
+// (~/.blitz/home, spec_023_workers WK-60): a workspace of its own, for
 // work that belongs to no project.
 func HomeWorkspace(prefixDir string) string {
 	return filepath.Join(ConfigDir(prefixDir), "home")

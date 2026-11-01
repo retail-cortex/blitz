@@ -26,7 +26,7 @@ import (
 )
 
 // The workspace's branches: list, switch, create, and merge one into the
-// current branch (Changes, spec_desktop_024 DSK-90c). The user asks for
+// current branch (Changes, spec_024_desktop DSK-90c). The user asks for
 // each; nothing here runs on the agent's behalf. Switching and merging
 // check files out and merge them, which runs filters, merge drivers and
 // hooks, so they take the same care as a pull (gitremote.go): the

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package skillreg installs skills from registries (spec_skills_013
+// Package skillreg installs skills from registries (spec_013_skills
 // SK-90..SK-96): a registry is a URL serving a JSON index of skills, each
 // a .zip archive pinned by its SHA-256, as the Castor skills registry or
 // anyone else can serve it. The registries the user added, and the skills

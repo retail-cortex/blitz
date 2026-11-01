@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Command winsetup installs Blitz on Windows for the person running it,
-// without an administrator, and uninstalls it (spec_electron_038 EL-81).
+// without an administrator, and uninstalls it (spec_038_electron EL-81).
 // Released as Blitz_<version>_windows_x64_setup.exe: this program with
 // the app's zip at its end (pack). Without a zip it's the uninstaller,
 // "Uninstall Blitz.exe" in the installed app, which Add or remove

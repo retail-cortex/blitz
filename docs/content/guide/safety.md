@@ -3,7 +3,7 @@ title: Safety
 weight: 20
 ---
 
-Blitz's guardrails are layered: approvals and permission rules decide what may run, the file sandbox and the OS sandbox limit what it can reach when it does, and checkpoints and the audit log let you see and undo what happened. [Sandboxing and trust](../architecture/security.md) explains the design. Specs: [approvals](../about/specs/spec_approvals_005.md), [file tools](../about/specs/spec_filetools_006.md), [shell](../about/specs/spec_shell_007.md).
+Blitz's guardrails are layered: approvals and permission rules decide what may run, the file sandbox and the OS sandbox limit what it can reach when it does, and checkpoints and the audit log let you see and undo what happened. [Sandboxing and trust](../architecture/security.md) explains the design. Specs: [approvals](../about/specs/spec_005_approvals.md), [file tools](../about/specs/spec_006_filetools.md), [shell](../about/specs/spec_007_shell.md).
 
 ## Approvals
 

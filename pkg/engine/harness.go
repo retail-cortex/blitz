@@ -38,7 +38,7 @@ import (
 )
 
 // What the harness learns from the workspace's runs
-// (spec_harness_learning_048).
+// (spec_048_harness_learning).
 
 // HarnessEvidence is what went wrong in the workspace's sessions since
 // then (HE-02): from the audit log, its chats', jobs' and detached runs'

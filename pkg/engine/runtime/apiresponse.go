@@ -25,7 +25,7 @@ import (
 	"strings"
 )
 
-// The api provider's bodies (spec_models_015 MDL-104, MDL-106): requests
+// The api provider's bodies (spec_015_models MDL-104, MDL-106): requests
 // never stored or streamed and without what the model refuses, and the
 // gateway's answers made into what the openai adapter reads. Only the
 // fields named change; the rest is kept as the bytes it was.

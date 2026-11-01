@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// The workspace dashboard over the API (spec_health_044).
+// The workspace dashboard over the API (spec_044_health).
 
 // watchHealthEvery is how often WatchWorkspaceHealth looks again.
 var watchHealthEvery = 5 * time.Second
@@ -257,7 +257,7 @@ func (s *Server) healthDue() {
 
 // reflectDue runs the scheduled reflections that are due, of the open
 // workspaces, in the background, one at a time per workspace
-// (spec_harness_learning_048 HE-06).
+// (spec_048_harness_learning HE-06).
 func (s *Server) reflectDue() {
 	now := time.Now()
 	for _, dir := range s.openDirs() {

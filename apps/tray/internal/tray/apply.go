@@ -28,7 +28,7 @@ import (
 
 // Update puts a downloaded desktop app in place of the running one
 // (blitz-tray --apply-update, run by the app's host from outside the app,
-// spec_electron_038 EL-90): it waits for the app to quit, stops the
+// spec_038_electron EL-90): it waits for the app to quit, stops the
 // service if it runs from the app (Windows can't replace a program in
 // use), swaps them, starts the service again and then the app, the new
 // one or, if the swap failed, the old one.

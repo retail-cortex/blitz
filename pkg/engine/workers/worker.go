@@ -78,7 +78,7 @@ type Worker struct {
 	CatchUp string
 	// Prompt is the workflow: WORKER.md's body.
 	Prompt string
-	// Flow is a workflow (spec_workflows_043 WF-17) the worker runs, its
+	// Flow is a workflow (spec_043_workflows WF-17) the worker runs, its
 	// prompt the workflow's input.
 	Flow string
 }
