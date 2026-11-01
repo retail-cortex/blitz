@@ -31,6 +31,10 @@ type Network struct {
 	// Listener is where it listens; TLS, its certificate.
 	Listener net.Listener
 	TLS      *tls.Config
+	// Plain serves without TLS, HTTP/1.1 and HTTP/2 in cleartext (h2c),
+	// for a listener only a front end that ends TLS itself reaches: Cloud
+	// Run's, say. TLS is then unused.
+	Plain bool
 	// Auth says who a request is from; Authz, whether they may make it
 	// (nil: anyone Auth accepts may).
 	Auth  Authenticator
@@ -93,7 +97,7 @@ func (n *Network) check() error {
 	switch {
 	case n.Listener == nil:
 		return errors.New("network listener: no listener")
-	case n.TLS == nil || (len(n.TLS.Certificates) == 0 && n.TLS.GetCertificate == nil):
+	case !n.Plain && (n.TLS == nil || (len(n.TLS.Certificates) == 0 && n.TLS.GetCertificate == nil)):
 		return errors.New("network listener: no TLS certificate")
 	case n.Auth == nil:
 		return errors.New("network listener: no authenticator")

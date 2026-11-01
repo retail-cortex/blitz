@@ -196,6 +196,9 @@ func TestNetworkCheck(t *testing.T) {
 		})
 	}
 	assert.NoError(t, good().check())
+	plain := good()
+	plain.TLS, plain.Plain = nil, true
+	assert.NoError(t, plain.check(), "plain needs no certificate: a front end ends TLS")
 	n := good()
 	n.TLS = &tls.Config{GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &cert, nil }}
 	assert.NoError(t, n.check(), "a certificate callback will do")

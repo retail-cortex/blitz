@@ -51,6 +51,17 @@ func ServeTLS(ctx context.Context, l net.Listener, h http.Handler, cfg *tls.Conf
 	return serveUntil(ctx, srv, func() error { return srv.ServeTLS(l, "", "") }, grace)
 }
 
+// ServePlain serves h on l without TLS, HTTP/1.1 and HTTP/2 in cleartext
+// (h2c), until ctx is done, as ServeTLS does: for a listener behind a
+// front end that ends TLS itself (spec_053_enterprise EN-03).
+func ServePlain(ctx context.Context, l net.Listener, h http.Handler, grace time.Duration) error {
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: idleTimeout}
+	srv.Protocols = new(http.Protocols)
+	srv.Protocols.SetHTTP1(true)
+	srv.Protocols.SetUnencryptedHTTP2(true)
+	return serveUntil(ctx, srv, func() error { return srv.Serve(l) }, grace)
+}
+
 // serveUntil runs start until it fails or ctx is done, then shuts srv down.
 func serveUntil(ctx context.Context, srv *http.Server, start func() error, grace time.Duration) error {
 	done := make(chan error, 1)

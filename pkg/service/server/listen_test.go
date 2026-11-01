@@ -113,3 +113,38 @@ func TestServeOverTheSocket(t *testing.T) {
 		t.Fatal("serve didn't stop")
 	}
 }
+
+// ServePlain answers HTTP/1.1 and cleartext HTTP/2 (h2c), as a front end
+// that ends TLS itself sends either, and stops with its context.
+func TestServePlain(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- ServePlain(ctx, l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, r.Proto)
+		}), time.Second)
+	}()
+	url := "http://" + l.Addr().String() + "/"
+	for name, protocols := range map[string]func(*http.Protocols){
+		"HTTP/1.1": func(p *http.Protocols) { p.SetHTTP1(true) },
+		"HTTP/2.0": func(p *http.Protocols) { p.SetUnencryptedHTTP2(true) },
+	} {
+		tr := &http.Transport{Protocols: new(http.Protocols)}
+		protocols(tr.Protocols)
+		res, err := (&http.Client{Transport: tr}).Get(url)
+		require.NoError(t, err, name)
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		assert.Equal(t, name, string(body))
+		tr.CloseIdleConnections()
+	}
+	cancel()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("ServePlain didn't stop")
+	}
+}

@@ -18,10 +18,12 @@ package service
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -198,7 +200,13 @@ func Run(ctx context.Context, o Options) error {
 	if n := o.Network; n != nil {
 		slog.Info("serve", "network", n.Listener.Addr().String())
 		go func() {
-			err := server.ServeTLS(ctx, n.Listener, n.handler(s.Handler()), n.TLS, grace)
+			serve := server.ServeTLS
+			if n.Plain {
+				serve = func(ctx context.Context, l net.Listener, h http.Handler, _ *tls.Config, grace time.Duration) error {
+					return server.ServePlain(ctx, l, h, grace)
+				}
+			}
+			err := serve(ctx, n.Listener, n.handler(s.Handler()), n.TLS, grace)
 			if err != nil && ctx.Err() == nil {
 				stop() // the socket's service stops with it
 			}
