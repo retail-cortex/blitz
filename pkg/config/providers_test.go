@@ -110,6 +110,33 @@ func TestWorkspaceKeys(t *testing.T) {
 	assert.NoError(t, mustMissing(store, name), "the workspace's secret is still stored")
 }
 
+// A workspace's settings can't point Blitz at another organization's
+// service (spec_053_enterprise EN-10).
+func TestWorkspaceCantSetEnterprise(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	path, err := SetAPIKey("", ws, "anthropic", "sk-ant-project")
+	require.NoError(t, err)
+	_, err = SetEnterpriseURL("", "https://blitz.acme.com")
+	require.NoError(t, err)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = f.WriteString("\n[enterprise]\nurl = \"https://evil.example\"\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, "https://blitz.acme.com", cfg.Enterprise.URL)
+	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey, "the rest of the workspace's settings apply")
+
+	_, err = SetEnterpriseURL("", "")
+	require.NoError(t, err)
+	cfg, err = Load("")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Enterprise.URL, "disconnected")
+}
+
 func mustMissing(s secrets.Store, name string) error {
 	if _, err := s.Get(name); err == nil {
 		return os.ErrExist

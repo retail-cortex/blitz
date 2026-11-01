@@ -85,11 +85,18 @@ var anthropicAuthHeaders = []string{"X-Api-Key", "Authorization"}
 
 // apiProvider signs the api provider's requests.
 type apiProvider struct {
-	cfg        config.APIConfig
-	format     apiFormat
-	tokens     *sessionTokens // nil when nothing uses the placeholder
-	query      url.Values     // base_url's query, put on every request
-	tokenInURL bool           // base_url uses the placeholder
+	cfg    config.APIConfig
+	format apiFormat
+	tokens *sessionTokens // nil when nothing uses the placeholder
+	// source gives the token in place of a script: the organization's
+	// service's sign-in (spec_053_enterprise EN-20), which renews itself.
+	source tokenSource
+	// messagesAt is where Claude's requests go, under the base URL:
+	// /responses on a gateway that takes every model's there, /messages on
+	// the organization's service.
+	messagesAt string
+	query      url.Values // base_url's query, put on every request
+	tokenInURL bool       // base_url uses the placeholder
 
 	mu   sync.Mutex
 	drop []string // request fields the model refuses (MDL-104b)
@@ -105,7 +112,20 @@ func newAPIModel(ctx context.Context, c config.APIConfig, name string, pol retry
 	if err := c.Check(); err != nil {
 		return nil, err
 	}
-	p := &apiProvider{cfg: c, format: apiFormatOf(name), tokenInURL: strings.Contains(c.BaseURL, config.TokenPlaceholder)}
+	p := &apiProvider{cfg: c, format: apiFormatOf(name)}
+	if c.UsesToken() {
+		p.tokens = newSessionTokens(p.fetchToken)
+	}
+	return buildAPIModel(ctx, p, name, pol)
+}
+
+// buildAPIModel is the model p signs the requests of.
+func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPolicy) (model.LLM, error) {
+	c := p.cfg
+	p.tokenInURL = strings.Contains(c.BaseURL, config.TokenPlaceholder)
+	if p.messagesAt == "" {
+		p.messagesAt = "/responses"
+	}
 	if p.format == formatResponses && rejectsSampling(name) {
 		p.drop = slices.Clone(samplingParams)
 	}
@@ -117,9 +137,6 @@ func newAPIModel(ctx context.Context, c config.APIConfig, name string, pol retry
 		return nil, fmt.Errorf("[llm.api] base_url's query: %w", err)
 	}
 	p.query = query
-	if c.UsesToken() {
-		p.tokens = newSessionTokens(p.fetchToken)
-	}
 	baseURL := strings.ReplaceAll(base, config.TokenPlaceholder, escapedPlaceholder)
 	if p.format == formatMessages {
 		// No credentials or base URL from the environment; no server-side
@@ -176,6 +193,16 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 		return nil, err
 	}
 	res, err := next(p.sign(req, body, token))
+	if p.source != nil && err == nil && res.StatusCode == http.StatusUnauthorized {
+		// The service no longer takes it (it expired early, or the key
+		// that signed it changed): renewed once.
+		p.source.Invalidate()
+		if fresh, ferr := p.source.AccessToken(ctx); ferr == nil {
+			discardResponse(res)
+			token = fresh
+			res, err = next(p.sign(req, body, fresh))
+		}
+	}
 	if p.tokens != nil {
 		switch {
 		case err != nil || res.StatusCode >= http.StatusInternalServerError:
@@ -300,6 +327,9 @@ func keepErrorBody(ctx context.Context, res *http.Response, err error) {
 
 // token is session's token, or "" when nothing uses one.
 func (p *apiProvider) token(ctx context.Context, session string) (string, error) {
+	if p.source != nil {
+		return p.source.AccessToken(ctx)
+	}
 	if p.tokens == nil {
 		return "", nil
 	}
@@ -317,7 +347,7 @@ func (p *apiProvider) sign(req *http.Request, body []byte, token string) *http.R
 			// The gateway takes Claude's requests where it takes the others;
 			// the beta client's ?beta=true isn't the gateway's.
 			u := *r.URL
-			u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), messagesPath) + "/responses"
+			u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), messagesPath) + p.messagesAt
 			u.RawPath = ""
 			q := u.Query()
 			q.Del("beta")
@@ -330,6 +360,16 @@ func (p *apiProvider) sign(req *http.Request, body []byte, token string) *http.R
 	}
 	for name, value := range p.cfg.Headers {
 		r.Header.Set(name, strings.ReplaceAll(value, config.TokenPlaceholder, token))
+	}
+	if p.source != nil {
+		// Which session and agent the call is for, so the service applies
+		// their guardrails and counts their use (EN-22).
+		if session := sessionOf(r.Context()); session != "" {
+			r.Header.Set("Blitz-Session", session)
+		}
+		if agent := agentOf(r.Context()); agent != "" {
+			r.Header.Set("Blitz-Agent", agent)
+		}
 	}
 	if len(p.query) > 0 || p.tokenInURL {
 		r.URL = p.requestURL(r.URL, token)
@@ -396,11 +436,15 @@ func (m *apiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, s
 	return func(yield func(*model.LLMResponse, error) bool) {
 		session := adkSessionID(ctx)
 		if _, err := m.p.token(ctx, session); err != nil {
-			yield(nil, fmt.Errorf("[llm.api] token script: %w", err))
+			if m.p.source != nil {
+				yield(nil, err)
+			} else {
+				yield(nil, fmt.Errorf("[llm.api] token script: %w", err))
+			}
 			return
 		}
 		var reply atomic.Pointer[errorReply]
-		ctx = context.WithValue(withSession(ctx, session), errorBodyKey{}, &reply)
+		ctx = context.WithValue(withAgent(withSession(ctx, session), adkAgentName(ctx)), errorBodyKey{}, &reply)
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			if err != nil {
 				err = apiError(err, reply.Load())

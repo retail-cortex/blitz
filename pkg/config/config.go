@@ -97,6 +97,10 @@ type Config struct {
 	// Usage is whether Blitz counts its install as active, once a day it's
 	// used (spec_054_active_installs).
 	Usage UsageConfig `toml:"usage"`
+	// Enterprise is the organization's Blitz service this computer
+	// connects to (spec_053_enterprise EN-10). Only the global settings
+	// set it: a workspace's can't.
+	Enterprise EnterpriseConfig `toml:"enterprise"`
 	// Pricing overrides or adds model prices, keyed by model name, for
 	// /cost and cost limits.
 	Pricing map[string]ModelPrice `toml:"pricing"`

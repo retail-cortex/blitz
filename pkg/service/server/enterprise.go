@@ -1,0 +1,192 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package server
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/secrets"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+)
+
+// enterpriseConn is the service's connection to the organization's
+// service (spec_053_enterprise §3): one client for the address in the
+// settings, registered so the models renew through it too, and one
+// sign-in at a time.
+type enterpriseConn struct {
+	mu        sync.Mutex
+	c         *enterprise.Client
+	signingIn sync.Mutex
+	// HTTP is what the calls go through (tests set it); nil for the
+	// default client.
+	http *http.Client
+}
+
+// discoverTimeout bounds checking an address.
+const discoverTimeout = 15 * time.Second
+
+// enterpriseClient is the client for the settings' address, nil when
+// there's none.
+func (s *Server) enterpriseClient() (*enterprise.Client, error) {
+	cfg, err := config.Load(s.configDir)
+	if err != nil {
+		return nil, err
+	}
+	return s.enterpriseFor(cfg.Enterprise.URL)
+}
+
+func (s *Server) enterpriseFor(raw string) (*enterprise.Client, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	u, err := enterprise.Normalize(raw)
+	if err != nil {
+		return nil, err
+	}
+	s.ent.mu.Lock()
+	defer s.ent.mu.Unlock()
+	if s.ent.c == nil || s.ent.c.URL() != u {
+		s.ent.c = enterprise.New(u, secrets.Default(s.configDir), enterprise.Options{HTTP: s.ent.http, Client: "blitz " + s.version})
+		enterprise.Register(s.ent.c)
+	}
+	return s.ent.c, nil
+}
+
+// enterpriseState is c's state; with check, after asking the service.
+func (s *Server) enterpriseState(ctx context.Context, c *enterprise.Client, check bool) *pb.EnterpriseState {
+	if c == nil {
+		return &pb.EnterpriseState{}
+	}
+	st := c.Status()
+	out := &pb.EnterpriseState{Url: st.URL, SignedIn: st.SignedIn, TermsVersion: st.Terms}
+	info := st.Info
+	if check {
+		cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
+		defer cancel()
+		out.Checked = true
+		fresh, err := enterprise.Discover(cctx, s.ent.httpClient(), st.URL)
+		if err != nil {
+			out.Error = err.Error()
+		} else {
+			out.Reachable, info = true, fresh
+		}
+	}
+	out.Name, out.Version, out.Capabilities = info.Name, info.Version, info.Capabilities
+	if st.SignedIn {
+		out.Email, out.PersonName, out.Roles = st.Person.Email, st.Person.Name, st.Person.Roles
+		if !st.Renews.IsZero() {
+			out.RenewsUnix = st.Renews.Unix()
+		}
+	}
+	return out
+}
+
+func (e *enterpriseConn) httpClient() *http.Client {
+	if e.http != nil {
+		return e.http
+	}
+	return http.DefaultClient
+}
+
+func (h configService) GetEnterprise(ctx context.Context, r req[pb.GetEnterpriseRequest]) (*connect.Response[pb.GetEnterpriseResponse], error) {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.GetEnterpriseResponse{State: h.s.enterpriseState(ctx, c, r.Msg.Check)})
+}
+
+func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEnterpriseRequest]) (*connect.Response[pb.ConnectEnterpriseResponse], error) {
+	previous, _ := h.s.enterpriseClient()
+	var next *enterprise.Client
+	if r.Msg.Url != "" {
+		u, err := enterprise.Normalize(r.Msg.Url)
+		if err != nil {
+			return nil, apiError(connect.CodeInvalidArgument, "INVALID_ADDRESS", err)
+		}
+		cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
+		defer cancel()
+		if _, err := enterprise.Discover(cctx, h.s.ent.httpClient(), u); err != nil {
+			return nil, apiError(connect.CodeUnavailable, "UNREACHABLE", err)
+		}
+		r.Msg.Url = u
+	}
+	if previous != nil && previous.URL() != r.Msg.Url {
+		// Another organization, or none: this one's session ends.
+		if err := previous.SignOut(ctx); err != nil {
+			slog.Warn("signing out of the organization's service", "error", err)
+		}
+	}
+	path, err := config.SetEnterpriseURL(h.s.configDir, r.Msg.Url)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if next, err = h.s.enterpriseFor(r.Msg.Url); err != nil {
+		return nil, invalid(err)
+	}
+	h.changed(ctx, "", path)
+	return ok(&pb.ConnectEnterpriseResponse{State: h.s.enterpriseState(ctx, next, r.Msg.Url != "")})
+}
+
+func (h configService) EnterpriseSignIn(ctx context.Context, r req[pb.EnterpriseSignInRequest], stream *connect.ServerStream[pb.EnterpriseSignInResponse]) error {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return invalid(err)
+	}
+	if c == nil {
+		return apiError(connect.CodeFailedPrecondition, "NOT_CONNECTED", errors.New("connect to your organization's service first"))
+	}
+	if !h.s.ent.signingIn.TryLock() {
+		return apiError(connect.CodeAborted, "SIGN_IN_RUNNING", errors.New("a sign-in to your organization is already under way"))
+	}
+	defer h.s.ent.signingIn.Unlock()
+	show := func(p enterprise.Prompt) { _ = stream.Send(&pb.EnterpriseSignInResponse{Url: p.URL, Code: p.Code}) }
+	if r.Msg.Device {
+		err = c.SignInDevice(ctx, show)
+	} else {
+		err = c.SignInBrowser(ctx, show, nil)
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return connect.NewError(connect.CodeCanceled, ctx.Err())
+		}
+		return apiError(connect.CodeUnauthenticated, "SIGN_IN_FAILED", err)
+	}
+	h.changed(ctx, "", "")
+	return stream.Send(&pb.EnterpriseSignInResponse{Done: true, State: h.s.enterpriseState(ctx, c, false)})
+}
+
+func (h configService) EnterpriseSignOut(ctx context.Context, _ req[pb.EnterpriseSignOutRequest]) (*connect.Response[pb.EnterpriseSignOutResponse], error) {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if c != nil {
+		if err := c.SignOut(ctx); err != nil {
+			// Signed out here all the same.
+			slog.Warn("signing out of the organization's service", "error", err)
+		}
+		h.changed(ctx, "", "")
+	}
+	return ok(&pb.EnterpriseSignOutResponse{State: h.s.enterpriseState(ctx, c, false)})
+}

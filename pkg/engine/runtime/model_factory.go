@@ -80,6 +80,7 @@ func NewModelRef(ctx context.Context, cfg *config.Config, ref string) (model.LLM
 var knownProviders = map[string]bool{
 	"gemini": true, "anthropic": true, "openai": true, "ollama": true,
 	"bedrock": true, "azure": true, "vertex-anthropic": true, "api": true,
+	"enterprise": true,
 }
 
 // ParseModelRef splits "provider/model" into its parts. Without a known
@@ -158,6 +159,11 @@ func openAIKey(ctx context.Context, llm config.LLMConfig, provider string, pol r
 // newProviderModel builds one model of the given provider, applying its
 // [model_settings] on each call.
 func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelName string) (model.LLM, error) {
+	if cfg.Enterprise.URL != "" {
+		// Connected to an organization, its models are the models
+		// (spec_053_enterprise EN-20).
+		provider = "enterprise"
+	}
 	m, err := buildProviderModel(ctx, cfg, provider, modelName)
 	if err != nil {
 		return nil, err
@@ -225,6 +231,9 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 
 	case "api":
 		return newAPIModel(ctx, cfg.LLM.API, modelName, pol)
+
+	case "enterprise":
+		return newEnterpriseModel(ctx, cfg, modelName, pol)
 
 	case "":
 		// If Gemini key is set and provider is empty, try gemini, else fallback to openai/ollama

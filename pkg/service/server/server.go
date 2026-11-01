@@ -58,11 +58,12 @@ type Server struct {
 	shutdown  func()      // stops the service, for Shutdown (nil: it can't)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
-	runs      runs          // background runs
-	evals     evalRuns      // eval runs going on
-	models    modelLists    // providers' models, for ListModels
-	act       activity      // requests served, for IdleFor
-	signins   signin.Runner // providers' sign-ins, one per provider at a time
+	runs      runs           // background runs
+	evals     evalRuns       // eval runs going on
+	models    modelLists     // providers' models, for ListModels
+	act       activity       // requests served, for IdleFor
+	signins   signin.Runner  // providers' sign-ins, one per provider at a time
+	ent       enterpriseConn // the organization's service (spec_053_enterprise)
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory

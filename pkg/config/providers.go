@@ -99,9 +99,11 @@ func overlay(cfg *Config, prefixDir, workspace string) error {
 	path := filepath.Join(dir, ".env.toml")
 	// A list the workspace sets would replace the global one: its
 	// permission rules add to the global rules instead.
-	// Its MCP servers add to the global ones in the same way.
-	global, globalMCP := cfg.Permissions, cfg.MCP
+	// Its MCP servers add to the global ones in the same way. Which
+	// organization Blitz connects to isn't a workspace's to say.
+	global, globalMCP, enterprise := cfg.Permissions, cfg.MCP, cfg.Enterprise
 	cfg.Permissions, cfg.MCP = PermissionsConfig{}, MCPConfig{}
+	defer func() { cfg.Enterprise = enterprise }()
 	if _, err := toml.DecodeFile(path, cfg); err != nil && !errors.Is(err, os.ErrNotExist) {
 		cfg.Permissions, cfg.MCP = global, globalMCP
 		return fmt.Errorf("the workspace's settings (%s): %w", path, err)

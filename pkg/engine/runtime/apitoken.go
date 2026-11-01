@@ -18,6 +18,7 @@ import (
 	"context"
 	"sync"
 
+	"google.golang.org/adk/v2/agent"
 	adksession "google.golang.org/adk/v2/session"
 )
 
@@ -110,6 +111,13 @@ func (s *sessionTokens) dropOldest(keep string) {
 	delete(s.entries, oldest)
 }
 
+// tokenSource gives a token kept and renewed elsewhere: the
+// organization's service's sign-in.
+type tokenSource interface {
+	AccessToken(ctx context.Context) (string, error)
+	Invalidate()
+}
+
 // sessionKey carries a call's session ID down to its HTTP requests.
 type sessionKey struct{}
 
@@ -130,5 +138,28 @@ func withSession(ctx context.Context, session string) context.Context {
 // sessionOf is the session ctx carries ("" outside one).
 func sessionOf(ctx context.Context) string {
 	s, _ := ctx.Value(sessionKey{}).(string)
+	return s
+}
+
+// agentKey carries a call's agent down to its HTTP requests.
+type agentKey struct{}
+
+// adkAgentName is the name of the agent a model call is for, "" outside
+// an invocation.
+func adkAgentName(ctx context.Context) string {
+	if c, ok := ctx.(interface{ Agent() agent.Agent }); ok && c.Agent() != nil {
+		return c.Agent().Name()
+	}
+	return ""
+}
+
+// withAgent is ctx carrying name for the api provider's requests.
+func withAgent(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, agentKey{}, name)
+}
+
+// agentOf is the agent ctx carries ("" outside one).
+func agentOf(ctx context.Context) string {
+	s, _ := ctx.Value(agentKey{}).(string)
 	return s
 }

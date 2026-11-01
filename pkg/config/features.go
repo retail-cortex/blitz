@@ -15,8 +15,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -263,6 +265,33 @@ type UsageConfig struct {
 	// install as active (a random ID, the day, the front end, the version
 	// and the platform); false sends nothing. On by default (AI-30).
 	Count bool `toml:"count"`
+}
+
+// EnterpriseConfig is the organization's service (spec_053_enterprise).
+type EnterpriseConfig struct {
+	// URL is the service's address, such as https://blitz.acme.com; empty
+	// for none. Set it with Settings › Organization or blitz enterprise
+	// connect.
+	URL string `toml:"url"`
+}
+
+// SetEnterpriseURL sets [enterprise] url in the global settings, or
+// removes it when u is empty; it's never a workspace's. u is the
+// service's address as the caller checked it. It returns the file's path.
+func SetEnterpriseURL(prefixDir, u string) (string, error) {
+	return editConfigFile(scopeDir(prefixDir, ""),
+		func(doc string) string {
+			if u == "" {
+				return removeTOMLKey(doc, "enterprise", "url")
+			}
+			return setTOMLKey(doc, "enterprise", "url", strconv.Quote(u))
+		},
+		func(check map[string]any) error {
+			if got := lookup(check, "enterprise", "url"); (u == "" && got != nil) || (u != "" && got != u) {
+				return errors.New("could not set enterprise.url")
+			}
+			return nil
+		})
 }
 
 // CountsUsage is the global settings' [usage] count, for what marks a

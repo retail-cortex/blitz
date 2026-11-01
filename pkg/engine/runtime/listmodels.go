@@ -48,8 +48,12 @@ type ListedModel struct {
 const listTimeout = 20 * time.Second
 
 // ConfiguredProviders are the providers cfg has credentials (or, for
-// Ollama, a choice) for.
+// Ollama, a choice) for: only the organization's service when Blitz is
+// connected to one (spec_053_enterprise EN-20).
 func ConfiguredProviders(cfg *config.Config) []string {
+	if cfg.Enterprise.URL != "" {
+		return []string{"enterprise"}
+	}
 	var out []string
 	if cfg.LLM.Gemini.APIKey != "" || cfg.LLM.Gemini.APIKeyCommand != "" || cfg.LLM.Gemini.UsesADC() {
 		out = append(out, "gemini")
@@ -90,6 +94,10 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 			defer func() { done <- struct{}{} }()
 			lctx, cancel := context.WithTimeout(ctx, listTimeout)
 			defer cancel()
+			if p == "enterprise" {
+				out[i] = listEnterprise(lctx, cfg)
+				return
+			}
 			ids, err := listProvider(lctx, cfg, p)
 			sort.Strings(ids)
 			pm := ProviderModels{Provider: p, Err: err}
@@ -194,4 +202,29 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// listEnterprise is the organization's models the person may use, at its
+// prices (EN-21).
+func listEnterprise(ctx context.Context, cfg *config.Config) ProviderModels {
+	pm := ProviderModels{Provider: "enterprise"}
+	c, err := enterpriseClient(cfg)
+	if err != nil {
+		pm.Err = err
+		return pm
+	}
+	list, err := c.Models(ctx)
+	if err != nil {
+		pm.Err = err
+		return pm
+	}
+	for _, m := range list {
+		lm := ListedModel{ID: m.ID}
+		if m.Price != nil {
+			lm.Price = &config.ModelPrice{InputPerMTok: m.Price.InputPerMTok, OutputPerMTok: m.Price.OutputPerMTok}
+		}
+		pm.Models = append(pm.Models, lm)
+	}
+	sort.Slice(pm.Models, func(i, j int) bool { return pm.Models[i].ID < pm.Models[j].ID })
+	return pm
 }

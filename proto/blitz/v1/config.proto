@@ -187,6 +187,22 @@ service ConfigService {
   // Drafts one of a global connection's queries from what the user is
   // looking for, with the built-in sql-query skill. Nothing is saved.
   rpc DraftGlobalConnectorQuery(DraftGlobalConnectorQueryRequest) returns (DraftGlobalConnectorQueryResponse);
+
+  // The organization's service this computer connects to, and who is
+  // signed in to it (spec_053_enterprise EN-10 to EN-14); with check, it
+  // asks the service too, to say whether it's reached.
+  rpc GetEnterprise(GetEnterpriseRequest) returns (GetEnterpriseResponse);
+  // Connects to the organization's service at an address, after checking
+  // it's one, or disconnects with "", signing out first (INVALID_ADDRESS,
+  // UNREACHABLE).
+  rpc ConnectEnterprise(ConnectEnterpriseRequest) returns (ConnectEnterpriseResponse);
+  // Signs in to the organization's service with its identity provider:
+  // through a browser on this computer, or with a code entered in one
+  // anywhere (device). Streams the address to open, and the code, then
+  // the state once signed in (NOT_CONNECTED, SIGN_IN_FAILED).
+  rpc EnterpriseSignIn(EnterpriseSignInRequest) returns (stream EnterpriseSignInResponse);
+  // Signs out of the organization's service, here and there.
+  rpc EnterpriseSignOut(EnterpriseSignOutRequest) returns (EnterpriseSignOutResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1161,4 +1177,73 @@ message OpenBrowserProfileRequest {
 message OpenBrowserProfileResponse {
   // The browser opened.
   string browser = 1;
+}
+
+// The organization's service, as this computer sees it.
+message EnterpriseState {
+  // Its address; "" when this computer isn't connected to one.
+  string url = 1;
+  // What it said about itself when the person signed in, or when checked.
+  string name = 2;
+  string version = 3;
+  repeated string capabilities = 4;
+  bool signed_in = 5;
+  string email = 6;
+  string person_name = 7;
+  repeated string roles = 8;
+  // When the access token is next renewed, in Unix seconds; 0 until one
+  // is asked for.
+  int64 renews_unix = 9;
+  // A version of the organization's terms to accept, if any.
+  string terms_version = 10;
+  // Whether it answered, and why not, when checked.
+  bool checked = 11;
+  bool reachable = 12;
+  string error = 13;
+}
+
+// Request message for ConfigService.GetEnterprise.
+message GetEnterpriseRequest {
+  bool check = 1;
+}
+
+// Response message for ConfigService.GetEnterprise.
+message GetEnterpriseResponse {
+  EnterpriseState state = 1;
+}
+
+// Request message for ConfigService.ConnectEnterprise.
+message ConnectEnterpriseRequest {
+  // The service's address, such as https://blitz.acme.com; "" to
+  // disconnect.
+  string url = 1;
+}
+
+// Response message for ConfigService.ConnectEnterprise.
+message ConnectEnterpriseResponse {
+  EnterpriseState state = 1;
+}
+
+// Request message for ConfigService.EnterpriseSignIn.
+message EnterpriseSignInRequest {
+  // Sign in with a code instead of a browser on this computer.
+  bool device = 1;
+}
+
+// Response message for ConfigService.EnterpriseSignIn: what to open and
+// enter, then the end.
+message EnterpriseSignInResponse {
+  string url = 1;
+  // The code to enter, for the device sign-in.
+  string code = 2;
+  bool done = 3;
+  EnterpriseState state = 4;
+}
+
+// Request message for ConfigService.EnterpriseSignOut.
+message EnterpriseSignOutRequest {}
+
+// Response message for ConfigService.EnterpriseSignOut.
+message EnterpriseSignOutResponse {
+  EnterpriseState state = 1;
 }
