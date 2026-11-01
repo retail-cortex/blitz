@@ -117,8 +117,8 @@ func (r *Recorder) load() state {
 	return s
 }
 
-// save writes s whole, through a file beside it, so a reader never sees
-// half of it.
+// save writes s whole, through a private file beside it (one for each
+// process), so a reader never sees half of it.
 func (r *Recorder) save(s state) error {
 	data, err := json.Marshal(s)
 	if err != nil {
@@ -127,24 +127,11 @@ func (r *Recorder) save(s state) error {
 	if err := os.MkdirAll(r.Dir, 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(r.Dir, ".activity-*.json")
-	if err != nil {
+	tmp := fmt.Sprintf("%s.%d.tmp", r.file(), os.Getpid())
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	return os.Rename(tmp.Name(), r.file())
+	return os.Rename(tmp, r.file())
 }
 
 // recent keeps es from the last Keep days before today, and today.

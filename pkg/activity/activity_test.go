@@ -254,3 +254,23 @@ func TestInstallID(t *testing.T) {
 	_, err = InstallID(filepath.Join(dir, "install-id", "below a file"))
 	assert.Error(t, err)
 }
+
+// Where activity.json can't be kept, nothing is marked; an address that
+// isn't one fails the flush, and the ping is kept (AI-04, AI-12).
+func TestFailures(t *testing.T) {
+	now := start
+	blocked := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocked, nil, 0o600))
+	r := &Recorder{Dir: filepath.Join(blocked, ".blitz"), Version: "dev", URL: "http://127.0.0.1:1", Now: func() time.Time { return now }}
+	_, err := r.Mark(CLI)
+	assert.Error(t, err, "its folder is under a file")
+	<-r.Use(CLI)
+
+	bad := newRecorder(t, "http://bad\x7f.example", &now)
+	_, err = bad.Mark(CLI)
+	require.NoError(t, err)
+	assert.Error(t, bad.Flush(context.Background()))
+	due, err := bad.Mark(CLI)
+	require.NoError(t, err)
+	assert.False(t, due, "kept, not marked again")
+}

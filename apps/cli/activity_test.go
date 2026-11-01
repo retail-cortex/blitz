@@ -72,3 +72,14 @@ func TestCommandsCountUse(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, []string{"cli"}, fronts, "once a day")
 }
+
+// The CLI waits for a slow ping at most pingGrace, then exits (AI-11).
+func TestPingGrace(t *testing.T) {
+	saved, savedGrace := pinging, pingGrace
+	t.Cleanup(func() { pinging, pingGrace = saved, savedGrace })
+	pingGrace = 20 * time.Millisecond
+	pinging = make(chan struct{}) // never done
+	began := time.Now()
+	waitForPing()
+	assert.Less(t, time.Since(began), time.Second)
+}
