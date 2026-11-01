@@ -22,6 +22,7 @@ import {
   mdiXml,
   mdiCogOutline,
   mdiFolderMultipleOutline,
+  mdiDomain,
   mdiKeyChainVariant,
   mdiKeyVariant,
   mdiProgressClock,
@@ -79,6 +80,7 @@ import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "@b
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "@blitz/webui";
 import { Drawer } from "@blitz/webui";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
+import { OrganizationSettings } from "./OrganizationSettings";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
 /**
@@ -89,6 +91,7 @@ export type Section = SectionId | "file";
 
 const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
+  organization: mdiDomain,
   secrets: mdiKeyVariant,
   appearance: mdiPaletteOutline,
   agents: mdiBookshelf, // the Library's entry
@@ -178,6 +181,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
               <Tabs label={t("desktop.settings.library")} value={section} tabs={libraryTabs.map((id) => ({ value: id, label: t(`desktop.settings.${id}`), icon: libraryIcons[id] }))} onChange={(id) => pick(id)} />
             )}
             {section === "providers" && <ProviderSettings workspace="" />}
+            {section === "organization" && <OrganizationSettings />}
             {section === "secrets" && <SecretsEditor />}
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}

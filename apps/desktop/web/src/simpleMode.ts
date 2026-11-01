@@ -21,7 +21,7 @@
 // with useAdvanced (state.tsx); the larger ones are here.
 
 /** The Settings dialog's sections, in order. */
-export const allSections = ["providers", "appearance", "agents", "skills", "workers", "mcp", "connectors", "browser", "secrets", "workspaces", "permissions", "service", "logs", "about"] as const;
+export const allSections = ["providers", "organization", "appearance", "agents", "skills", "workers", "mcp", "connectors", "browser", "secrets", "workspaces", "permissions", "service", "logs", "about"] as const;
 /** A section of the Settings dialog. */
 export type SectionId = (typeof allSections)[number];
 
@@ -47,13 +47,13 @@ export const homeOf = (s: SectionId): SectionId => homes[s] ?? s;
  * shown inside them (homeOf), they're allSections.
  */
 export const sectionGroups: readonly { id: string; sections: readonly SectionId[] }[] = [
-  { id: "start", sections: ["providers", "appearance"] },
+  { id: "start", sections: ["providers", "organization", "appearance"] },
   { id: "setup", sections: ["agents", "connectors", "browser"] },
   { id: "access", sections: ["workspaces", "permissions"] },
   { id: "system", sections: ["service", "logs", "about"] },
 ];
 
-const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "appearance", "connectors", "workspaces", "about"]);
+const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "organization", "appearance", "connectors", "workspaces", "about"]);
 
 /** The side list's entries shown: everything, or what a newcomer needs. */
 export function settingsSections(advanced: boolean): SectionId[] {

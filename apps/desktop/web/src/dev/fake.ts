@@ -37,6 +37,26 @@ import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOpera
 const fakeSignedIn = new Set<string>();
 /** Whether the page's address has ?name (the fake's switches). */
 const fakeParam = (name: string) => new URLSearchParams(location.search).has(name);
+
+// The organization's service this computer is connected to (?org starts
+// connected), and whether the person is signed in to it.
+const fakeOrg = { url: fakeParam("org") ? "https://blitz.acme.com" : "", signedIn: false };
+function fakeOrgState(checked: boolean) {
+  if (!fakeOrg.url) return {};
+  return {
+    url: fakeOrg.url,
+    name: "Acme Assist",
+    version: "1.0.0",
+    capabilities: ["gateway", "jobs"],
+    signedIn: fakeOrg.signedIn,
+    email: fakeOrg.signedIn ? "ana@acme.com" : "",
+    personName: fakeOrg.signedIn ? "Ana Kim" : "",
+    roles: fakeOrg.signedIn ? ["member"] : [],
+    renewsUnix: fakeOrg.signedIn ? BigInt(Math.floor(Date.now() / 1000) + 540) : 0n,
+    checked,
+    reachable: checked,
+  };
+}
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };
 function fakeSignIn(provider: string) {
   const found = provider === "google" || provider === "aws";
@@ -2483,6 +2503,26 @@ export function installFake() {
         signOut: ({ provider }) => {
           fakeSignedIn.delete(provider);
           return { status: fakeSignIn(provider) };
+        },
+        // The organization's service: any https address connects, as Acme
+        // Assist; signing in takes a moment in the "browser".
+        getEnterprise: () => ({ state: fakeOrgState(true) }),
+        connectEnterprise: ({ url }) => {
+          if (url && !url.startsWith("https://")) throw new ConnectError("the organization's service is reached over https", Code.InvalidArgument);
+          fakeOrg.url = url.replace(/\/$/, "");
+          fakeOrg.signedIn = false;
+          return { state: fakeOrgState(!!url) };
+        },
+        enterpriseSignIn: async function* () {
+          if (!fakeOrg.url) throw new ConnectError("connect to your organization's service first", Code.FailedPrecondition);
+          yield { url: "https://accounts.example.com/o/oauth2/auth?client_id=blitz-desktop" };
+          await sleep(1500);
+          fakeOrg.signedIn = true;
+          yield { done: true, state: fakeOrgState(false) };
+        },
+        enterpriseSignOut: () => {
+          fakeOrg.signedIn = false;
+          return { state: fakeOrgState(false) };
         },
         listModels: ({ providers }) =>
           // Ollama answers with ?ollama (it runs on the machine), else it isn't there.

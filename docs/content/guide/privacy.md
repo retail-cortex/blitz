@@ -12,6 +12,7 @@ Blitz runs on your machine and keeps your work there. What leaves it goes where 
 - **The model providers you set up**: your messages, the files and tool results the agent reads, and images you attach, to the provider of the model you use (OpenAI, Anthropic, Google, a local model, …), under that provider's terms.
 - **The web**: pages the agent fetches, searches through the search provider you choose, and sites you open in the desktop app's preview.
 - **Connectors and MCP servers you add**: what the agent sends them.
+- **Your organization's service, if you connect to one**: your sign-in, and your requests to its models, which go through it ([Your organization](organization.md)).
 - **Telemetry, if you turn it on**: traces and logs to the collector you name ([Logs and telemetry](telemetry.md)). It's off by default.
 - **Updates**: the release's files from GitHub, and the trust root their signatures are checked with from Sigstore.
 - **Counting active installs**: below.
