@@ -22,7 +22,7 @@ import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertOutline } from "@mdi/js";
 import { t, tn } from "./i18n";
-import { Button, Dialog } from "./ui/controls";
+import { Button, Dialog } from "@blitz/webui";
 import { isGoing, useWorkflowRuns } from "./workflowRuns";
 
 /**

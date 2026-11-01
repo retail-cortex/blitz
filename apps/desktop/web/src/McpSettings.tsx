@@ -23,7 +23,7 @@ import type { MCPServerConfig } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { emptyForm, formProblems, fromForm, targetOf, toForm, type McpForm } from "./mcpForm";
 import { SuggestTextarea } from "./SecretSuggest";
-import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "@blitz/webui";
 
 /**
  * Settings › Connectors › MCP servers (spec_009_mcp MCP-46): the global settings' MCP

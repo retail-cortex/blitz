@@ -18,7 +18,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiUndoVariant } from "@mdi/js";
 import { t } from "../i18n";
-import { Button, Dialog, Icon } from "../ui/controls";
+import { Button, Dialog, Icon } from "@blitz/webui";
 import { FormStamps } from "./formStamps";
 
 // What Studio's sliding panes (Rules, Guardrails, Skills, Evals,

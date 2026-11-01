@@ -19,7 +19,7 @@
 
 import { createContext, useContext } from "react";
 import { t } from "../i18n";
-import { gradeTone } from "../ui/charts";
+import { gradeTone } from "@blitz/webui";
 
 /** What the badges show, by item key (kind/name): its grade, and whether a check is judging it now. */
 export interface Grades {

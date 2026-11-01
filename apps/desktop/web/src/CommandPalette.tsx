@@ -48,7 +48,7 @@ import { useApp } from "./state";
 import type { Section } from "./SettingsDrawer";
 import type { SearchHit } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
-import { Icon, useModal } from "./ui/controls";
+import { Icon, useModal } from "@blitz/webui";
 import { canPreview, toggleFullscreen } from "./desktop";
 
 /**

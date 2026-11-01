@@ -19,7 +19,7 @@ import { mdiDeleteOutline, mdiLoading, mdiPlay, mdiPlus } from "@mdi/js";
 import { message } from "../errors";
 import { t } from "../i18n";
 import type { ConnectorKind } from "../gen/blitz/v1/workspace_pb";
-import { Button, Field, IconButton } from "../ui/controls";
+import { Button, Field, IconButton } from "@blitz/webui";
 import { agentTool, type ConnectorApi } from "./connectorApi";
 import { can, connectionFromForm, paramTypes, readsOnly, statementParams, type ConnectorForm, type QueryForm } from "./connectorForm";
 

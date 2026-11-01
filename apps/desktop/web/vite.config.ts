@@ -33,6 +33,9 @@ const coverageDir = process.env.TEST_UNDECLARED_OUTPUTS_DIR ? `${process.env.TES
 
 export default defineConfig({
   plugins: [react()],
+  // One React for the page and the shared controls (@blitz/webui), which
+  // take it as a peer: resolved from the page.
+  resolve: { dedupe: ["react", "react-dom"] },
   // Relative asset paths: the VS Code extension serves the page from a
   // folder of its own (apps/vscode), the desktop app from its root.
   base: "./",
@@ -43,6 +46,9 @@ export default defineConfig({
     // links; Node runs (and reports coverage for) their real paths, in
     // the directory the real package.json is in.
     root: dirname(realpathSync("package.json")),
+    // The shared controls are TypeScript sources, compiled as the page's
+    // own rather than run as a built dependency.
+    server: { deps: { inline: ["@blitz/webui"] } },
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],

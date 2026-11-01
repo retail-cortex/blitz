@@ -24,7 +24,7 @@ import { canCommit, statusKey, subject, subjectLimit } from "./commit";
 import { message as errorMessage } from "./errors";
 import type { StagedFile } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
-import { Button, Dialog, Icon, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, useSnackbar } from "@blitz/webui";
 
 /** The commit dialog for the workspace in dir; onCommitted after a commit (to refresh). */
 export function CommitDialog({ dir, onClose, onCommitted }: { dir: string; onClose: () => void; onCommitted?: () => void }) {

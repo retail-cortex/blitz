@@ -22,7 +22,7 @@ import { message } from "../errors";
 import { filesTouched, openFile } from "../events";
 import { FileKind } from "../gen/blitz/v1/file_pb";
 import { t } from "../i18n";
-import { Button, Dialog, Field, Segmented, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Segmented, useSnackbar } from "@blitz/webui";
 import { paperFor } from "./printPage";
 import { pageHTML, pictureLimits, pictureName, picturesFolder, saveName, savePath, type SaveFormat } from "./webSave";
 

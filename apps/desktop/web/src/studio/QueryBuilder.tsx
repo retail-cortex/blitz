@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiCreationOutline, mdiLoading } from "@mdi/js";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
-import { Button, Dialog, Icon } from "../ui/controls";
+import { Button, Dialog, Icon } from "@blitz/webui";
 import { agentTool, type ConnectorApi } from "./connectorApi";
 import { connectionFromForm, queryForm, type ConnectorForm, type QueryForm } from "./connectorForm";
 

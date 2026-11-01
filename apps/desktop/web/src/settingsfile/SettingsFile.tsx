@@ -23,7 +23,7 @@ import { message } from "../errors";
 import { configChanged } from "../events";
 import { fileState, goToLine, languageSupport } from "../files/codemirror";
 import { t } from "../i18n";
-import { Button, Icon, useSnackbar } from "../ui/controls";
+import { Button, Icon, useSnackbar } from "@blitz/webui";
 import { secretCompletion } from "../files/secretCompletion";
 import { settingsExtensions, setProblems, type LineProblem } from "./editor";
 import { searchSettings, type SettingRef } from "./toml";

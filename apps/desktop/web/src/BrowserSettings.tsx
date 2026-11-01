@@ -21,7 +21,7 @@ import { canCall, signInWindow } from "./desktop";
 import { message } from "./errors";
 import type { BrowserProfile } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
-import { Button, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 /** Whether name can name a profile: lowercase letters, digits, - and _, up to 32. */
 export const validProfileName = (name: string) => /^[a-z0-9][a-z0-9_-]{0,31}$/.test(name);

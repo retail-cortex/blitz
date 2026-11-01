@@ -24,7 +24,7 @@ import { KeySource, type ConfigChange, type DescribeConfigResponse, type Provide
 import { t, tn } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
-import { Button, Chip, Icon, Segmented, useSnackbar } from "./ui/controls";
+import { Button, Chip, Icon, Segmented, useSnackbar } from "@blitz/webui";
 import { keyPages, listedProviders, noProviderReady, providerState, type OllamaProbe, type ProviderFacts, type ProviderState } from "./providerStatus";
 import { useAdvanced } from "./state";
 import { showsSignIn } from "./simpleMode";

@@ -31,7 +31,7 @@ import { intent as newIntent } from "./intent";
 import { WorkersPane } from "./studio/WorkersPane";
 import { lastFailed, workerStateLabel } from "./Workers";
 import { workspaceFlag } from "./workersOverview";
-import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 /** How often the overview asks for every workspace's workers again. */
 const overviewPollMs = 10000;

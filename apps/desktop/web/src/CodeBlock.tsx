@@ -22,7 +22,7 @@ import { mdiCheck, mdiContentCopy, mdiPlay } from "@mdi/js";
 import { highlight, languageFor } from "./highlight";
 import { t } from "./i18n";
 import { ShellRunContext, shellCommandOf } from "./shellRun";
-import { IconButton } from "./ui/controls";
+import { IconButton } from "@blitz/webui";
 
 /** A code block in Markdown, highlighted for lang. */
 export function CodeBlock({ children, lang }: { children: string; lang: string }) {

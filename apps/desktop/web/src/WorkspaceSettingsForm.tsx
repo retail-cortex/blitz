@@ -54,7 +54,7 @@ import { lookOf, WorkspaceFields, type WorkspaceLook } from "./WorkspaceFields";
 import { editWorkspace, type WorkspacePrefs } from "./prefs";
 import { projectState, waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
-import { Button, Field, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { Button, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 // Which sections the user unfolded, kept in the window (localStorage):
 // they start folded.

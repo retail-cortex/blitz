@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.24.0",
   "dependencies": {
+    "@blitz/webui": "workspace:*",
     "@bufbuild/protobuf": "2.15.0",
     "@codemirror/autocomplete": "6.20.3",
     "@codemirror/commands": "6.11.1",

@@ -31,7 +31,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiClose, mdiMagnify, mdiMenuDown } from "@mdi/js";
-import { t } from "../i18n";
+import { t } from "./i18n";
 
 /** A Material Design icon, given its SVG path (from @mdi/js). */
 export function Icon({ path, size, spin, className = "", style }: { path: string; size?: "sm" | "lg"; spin?: boolean; className?: string; style?: CSSProperties }) {

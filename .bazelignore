@@ -2,3 +2,4 @@ apps/desktop/web/node_modules
 node_modules
 apps/vscode/node_modules
 apps/electron/node_modules
+pkg/webui/node_modules

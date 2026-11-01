@@ -22,7 +22,7 @@ import { t, tn } from "./i18n";
 import { notify } from "./notify";
 import { openWorkspace } from "./prefs";
 import { useApp } from "./state";
-import { Icon, Menu, useSnackbar } from "./ui/controls";
+import { Icon, Menu, useSnackbar } from "@blitz/webui";
 import { cost, failedStep, isGoing, ms, onRunEnded, progress, seeRun, took, unseenFailures, useWorkflowRuns, watchedRuns } from "./workflowRuns";
 
 /** Opens a run on its workflow's canvas (Studio › Workflows), in its workspace. */

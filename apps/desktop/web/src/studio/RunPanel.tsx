@@ -31,7 +31,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
-import { Button, Icon, IconButton, Tabs, useSnackbar } from "../ui/controls";
+import { Button, Icon, IconButton, Tabs, useSnackbar } from "@blitz/webui";
 import { modeOf } from "../options";
 import { cost, ms, progress, tokens, took } from "../workflowRuns";
 

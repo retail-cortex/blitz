@@ -25,7 +25,7 @@ import type { SearchHit, SearchStatus } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 import { useApp } from "./state";
 import { defaultSources, findTerms, hitTarget, markTerms, queryTerms, searchSources, toggleSource, type SearchSource } from "./search";
-import { Chip, Icon, IconButton, Segmented, useModal } from "./ui/controls";
+import { Chip, Icon, IconButton, Segmented, useModal } from "@blitz/webui";
 
 /**
  * Cmd/Ctrl+Shift+F, or the palette: search everything in the workspace

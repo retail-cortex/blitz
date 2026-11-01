@@ -24,7 +24,7 @@ import { mdiAlertCircleOutline, mdiShieldLockOutline } from "@mdi/js";
 import { fixSandbox, restartService, sandboxStatus, serviceStatus, type SandboxFix, type SandboxStatus } from "./desktop";
 import { t } from "./i18n";
 import { serviceInfo, waitForService } from "./serviceVersion";
-import { Button, Icon } from "./ui/controls";
+import { Button, Icon } from "@blitz/webui";
 
 /** Where fixing the sandbox is: asking for the password, then restarting the service. */
 export type FixPhase = "idle" | "fixing" | "restarting" | "done";

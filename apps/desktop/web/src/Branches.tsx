@@ -25,7 +25,7 @@ import { filesTouched } from "./events";
 import { t } from "./i18n";
 import { PullOutcome, type Branch, type GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
 import { inProgress, mergeMessage, remoteErrorText } from "./gitRemote";
-import { Button, Dialog, Field, Icon, Menu, useSnackbar, type MenuEntry } from "./ui/controls";
+import { Button, Dialog, Field, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 
 type Props = {
   dir: string;

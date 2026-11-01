@@ -24,7 +24,7 @@ import { message } from "./errors";
 import type { LogEntry, ReadLogResponse } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 import { canDelete, logTime } from "./logs";
-import { Button, Dialog, IconButton, Segmented, useSnackbar } from "./ui/controls";
+import { Button, Dialog, IconButton, Segmented, useSnackbar } from "@blitz/webui";
 
 type Level = "" | "info" | "warn" | "error";
 

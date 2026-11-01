@@ -24,7 +24,7 @@ import { mdiDeleteOutline, mdiHistory, mdiMagnify } from "@mdi/js";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { deletable, filterHistory, historyCounts, toggleAll, type HistoryFilter } from "./history";
 import { language, t, tn } from "./i18n";
-import { Button, Icon, IconButton, Segmented, nudge, useAnchoredMenu } from "./ui/controls";
+import { Button, Icon, IconButton, Segmented, nudge, useAnchoredMenu } from "@blitz/webui";
 
 /** A session's name in the history: a snapshot's, else its title. */
 export function chatTitle(s: SessionInfo): string {

@@ -21,7 +21,7 @@ import { message } from "./errors";
 import type { ProjectItem, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 import { projectItemText, projectReason, projectState } from "./project";
-import { Button, Dialog, useSnackbar } from "./ui/controls";
+import { Button, Dialog, useSnackbar } from "@blitz/webui";
 
 /**
  * A workspace's project settings (.blitz/settings.toml): what they would

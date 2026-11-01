@@ -20,7 +20,7 @@ import { chooseFile } from "../desktop";
 import { language, t } from "../i18n";
 import type { ConnectorKind } from "../gen/blitz/v1/workspace_pb";
 import { useAdvanced } from "../state";
-import { Button, Field, Switch } from "../ui/controls";
+import { Button, Field, Switch } from "@blitz/webui";
 import type { ConnectorApi } from "./connectorApi";
 import { can, newQueryForm, parseConnectionURL, relativeTo, startFolder, takesURL, typedName, textIn, withKind, withSetting, type ConnectorForm, type QueryForm } from "./connectorForm";
 import { QueryCard } from "./QueryCard";

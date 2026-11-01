@@ -51,7 +51,7 @@ import { t } from "../i18n";
 import type { SkillFile } from "../gen/blitz/v1/workspace_pb";
 import { Preview } from "../files/Preview";
 import { previewKind, previewOnly, type PreviewKind } from "../files/previewKind";
-import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "@blitz/webui";
 import { CodeArea } from "./CodeArea";
 import { DraftButton } from "./Draft";
 import { activePackageFiles, filePath, languageOfScript, packageKind, packageTemplate, scriptLanguages, scriptTemplate, splitArgs, type ScriptLanguage } from "./skillForm";

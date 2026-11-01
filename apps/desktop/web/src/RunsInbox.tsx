@@ -24,8 +24,8 @@ import { t } from "./i18n";
 import { isActive, refreshRuns, runAge } from "./backgroundRuns";
 import { displayName, openWorkspace } from "./prefs";
 import { useApp } from "./state";
-import { Button, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
+import { Button, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 
 /** The background runs, to open or stop (the status bar's). */
 export function InboxDrawer({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {

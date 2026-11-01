@@ -18,7 +18,7 @@
 // keeps them in ~/.blitz/desktop.json. The helpers here are pure, so the
 // rules for opening, closing and editing workspaces are tested alone.
 import type { ThemePref } from "./theme";
-import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
+import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "@blitz/webui";
 
 /**
  * A workspace as the window knows it: its folder, the name, description

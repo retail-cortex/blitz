@@ -23,7 +23,7 @@ import { language as languageApi } from "./api";
 import { message } from "./errors";
 import { ServerState, type GetLanguageStatusResponse } from "./gen/blitz/v1/language_pb";
 import { t } from "./i18n";
-import { IconButton, useSnackbar } from "./ui/controls";
+import { IconButton, useSnackbar } from "@blitz/webui";
 
 const stateKeys: Partial<Record<ServerState, string>> = {
   [ServerState.READY]: "desktop.lsp.ready",

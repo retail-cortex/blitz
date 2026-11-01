@@ -24,7 +24,7 @@ import { t } from "./i18n";
 import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { AppStateProvider, useApp } from "./state";
-import { SnackbarProvider } from "./ui/controls";
+import { SnackbarProvider } from "@blitz/webui";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
 /**

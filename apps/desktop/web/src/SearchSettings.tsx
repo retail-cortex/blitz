@@ -22,7 +22,7 @@ import { configChanged } from "./events";
 import type { SearchStatus } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { searchSources, toggleSource, type SearchSource } from "./search";
-import { Button, Chip, Field, Icon, Switch, useSnackbar } from "./ui/controls";
+import { Button, Chip, Field, Icon, Switch, useSnackbar } from "@blitz/webui";
 
 /** Embedding models to suggest: Gemini's, OpenAI's, and a local one. */
 const embeddingModels = ["gemini/text-embedding-004", "openai/text-embedding-3-small", "openai/text-embedding-3-large", "ollama/nomic-embed-text"];

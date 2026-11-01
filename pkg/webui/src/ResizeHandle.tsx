@@ -15,7 +15,7 @@
  */
 
 
-import { t } from "../i18n";
+import { t } from "./i18n";
 
 /**
  * A panel's edge that sets its width when dragged, kept when let go: the

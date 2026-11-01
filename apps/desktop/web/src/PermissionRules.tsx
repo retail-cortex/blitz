@@ -18,7 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { mdiDeleteOutline, mdiHelpCircleOutline, mdiPlus } from "@mdi/js";
 import { t } from "./i18n";
-import { Button, IconButton, nudge, useAnchoredMenu } from "./ui/controls";
+import { Button, IconButton, nudge, useAnchoredMenu } from "@blitz/webui";
 import { parseRules, ruleExamples, ruleHelp, ruleKinds, rulesText, type Rule, type RuleKind } from "./workerForm";
 
 /**

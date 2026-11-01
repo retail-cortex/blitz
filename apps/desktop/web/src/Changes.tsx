@@ -31,8 +31,8 @@ import { inProgress } from "./gitRemote";
 import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
 import { highlight } from "./highlight";
-import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
+import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 import { useAdvanced } from "./state";
 
 const lang = (path: string) => languageFor(path);

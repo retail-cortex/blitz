@@ -17,7 +17,7 @@
 import { useState, type ReactNode } from "react";
 import { mdiInformationOutline, mdiScaleBalance, mdiShieldLockOutline } from "@mdi/js";
 import { t } from "../i18n";
-import { Button, Icon, IconButton } from "../ui/controls";
+import { Button, Icon, IconButton } from "@blitz/webui";
 
 /** The questions the comparison answers, in order. */
 const aspects = ["for", "when", "sees", "fails", "example"] as const;

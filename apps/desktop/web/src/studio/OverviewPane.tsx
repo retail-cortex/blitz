@@ -22,8 +22,8 @@ import { message } from "../errors";
 import { compose } from "../events";
 import type { HealthItem, HealthVerdict, WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
-import { Bars, Columns, ScoreRing, Sparkline, gradeTone } from "../ui/charts";
-import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "../ui/controls";
+import { Bars, Columns, ScoreRing, Sparkline, gradeTone } from "@blitz/webui";
+import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { cost, ms, took } from "../workflowRuns";
 import { attention, dayColumns, dayTotals, delta, grade, healthKinds, itemKey, kindSummary, startCheck, stopCheck, topRuns, type HealthKind } from "./health";
 

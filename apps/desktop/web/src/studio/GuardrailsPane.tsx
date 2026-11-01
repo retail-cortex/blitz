@@ -38,7 +38,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
-import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "../ui/controls";
+import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { builtinDefaults, emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, sameGuardrailForm, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
 import { GatesTitle } from "./RulesOrGuardrails";

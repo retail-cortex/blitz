@@ -25,7 +25,7 @@ import type { FormAction } from "./a2ui/model";
 import { t, tn } from "./i18n";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { AppStateProvider } from "./state";
-import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "@blitz/webui";
 
 /**
  * Workflows' human tasks (spec_043_workflows WF-18): with more than one, a

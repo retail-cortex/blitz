@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { HealthItemSchema, HealthSignalSchema, type HealthItem } from "../gen/blitz/v1/workspace_pb";
-import { chartGeometry, ringDash } from "../ui/chartMath";
+import { chartGeometry, ringDash } from "@blitz/webui";
 import { attention, dayColumns, dayTotals, delta, grade, itemKey, kindSummary, topRuns } from "./health";
 
 const item = (init: Parameters<typeof create<typeof HealthItemSchema>>[1]): HealthItem => create(HealthItemSchema, init);

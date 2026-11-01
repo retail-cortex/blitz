@@ -45,8 +45,8 @@ import { StatusBar } from "./StatusBar";
 import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
-import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
-import { DrawerProvider, DrawerSlot } from "./ui/Drawer";
+import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "@blitz/webui";
+import { DrawerProvider, DrawerSlot } from "@blitz/webui";
 import { restart, useAutoUpdate } from "./updates";
 import { Workspace } from "./Workspace";
 

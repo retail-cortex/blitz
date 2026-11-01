@@ -20,7 +20,7 @@ import { files } from "../api";
 import { canCall, openDocument } from "../desktop";
 import { message } from "../errors";
 import { t } from "../i18n";
-import { Button, useSnackbar } from "../ui/controls";
+import { Button, useSnackbar } from "@blitz/webui";
 import { takeAnchor } from "../events";
 import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
 import { playsVideo, type PreviewKind } from "./previewKind";

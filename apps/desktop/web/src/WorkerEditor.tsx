@@ -24,7 +24,7 @@ import { ModelInput, useModelCatalog } from "./ModelInput";
 import { PermissionRules } from "./PermissionRules";
 import { SchedulePicker } from "./SchedulePicker";
 import { ComposeDialog } from "./studio/ComposeDialog";
-import { Button, Dialog, Icon, Segmented, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, Segmented, useSnackbar } from "@blitz/webui";
 import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
 import type { RewriteWorkerResponse, WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
 

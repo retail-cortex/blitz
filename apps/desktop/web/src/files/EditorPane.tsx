@@ -24,7 +24,7 @@ import { addToContext, findInFileEvent, openFile, openWeb, showHistory } from ".
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
-import { Button, ContextMenu, Dialog, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "../ui/controls";
+import { Button, ContextMenu, Dialog, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { Preview } from "./Preview";
 import { WebPreview } from "./WebPreview";
 import { isWebPath } from "./webTabs";

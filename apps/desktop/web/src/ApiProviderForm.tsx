@@ -18,7 +18,7 @@ import { useId, useRef, type KeyboardEvent } from "react";
 import { mdiDeleteOutline, mdiPlus } from "@mdi/js";
 import { newHeader, scriptLanguages, tokenPlaceholder, usesToken, type ApiForm, type ApiHeaderRow } from "./apiForm";
 import { t } from "./i18n";
-import { Button, IconButton, Switch } from "./ui/controls";
+import { Button, IconButton, Switch } from "@blitz/webui";
 
 /**
  * The api provider's fields in the provider card (DSK-61): its endpoint,

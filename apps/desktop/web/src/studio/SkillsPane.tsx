@@ -42,7 +42,7 @@ import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
 import { SkillReviewDialog } from "../SkillReview";
 import { forgetSkills } from "../skillMention";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar, MultiSelect } from "../ui/controls";
+import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";

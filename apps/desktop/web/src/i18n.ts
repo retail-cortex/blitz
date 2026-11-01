@@ -21,6 +21,7 @@
 // placeholders are {name}, and plurals pick ".one" or ".other" by the
 // language's CLDR rules. The pseudo-locale en-XA shows English accented
 // and bracketed, to find text that isn't in a catalog.
+import { setTranslator } from "@blitz/webui";
 import { useSyncExternalStore } from "react";
 import enUS from "../../../../pkg/i18n/locales/en-US.json";
 import es from "../../../../pkg/i18n/locales/es.json";
@@ -160,3 +161,6 @@ export function useLanguage(): string {
     () => current,
   );
 }
+
+// The shared controls (@blitz/webui) say their words through t.
+setTranslator(t);

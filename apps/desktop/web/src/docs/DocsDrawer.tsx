@@ -23,8 +23,8 @@ import { mdiArrowLeft, mdiArrowRight, mdiBookOpenPageVariantOutline, mdiFormatLi
 import { openURL } from "../desktop";
 import { t } from "../i18n";
 import { DocsLinksProvider, Markdown, type DocsLinks } from "../Markdown";
-import { Icon, IconButton } from "../ui/controls";
-import { Drawer } from "../ui/Drawer";
+import { Icon, IconButton } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 import { docLink, docPicture, searchDocs, siteURLOf, type DocNode, type DocPage } from "./index";
 import { loadAppDocs, type AppDocs as Docs } from "./load";
 import { firstPage, lastPlace, savePlace } from "./place";

@@ -22,7 +22,7 @@ import { Markdown } from "../Markdown";
 import { maxMarkdownCSS } from "../prefs";
 import { useApp } from "../state";
 import type { Theme } from "../theme";
-import { Button, Segmented } from "../ui/controls";
+import { Button, Segmented } from "@blitz/webui";
 import { fileState, languageSupport } from "./codemirror";
 import { docCssTemplate, docCssToSave } from "./docCss";
 

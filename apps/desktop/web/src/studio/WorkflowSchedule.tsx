@@ -20,7 +20,7 @@ import { workers } from "../api";
 import { message, reason } from "../errors";
 import { WorkerState, type Worker } from "../gen/blitz/v1/worker_pb";
 import { t } from "../i18n";
-import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "@blitz/webui";
 import { createPortal } from "react-dom";
 
 /** A new schedule's worker's name: the workflow's, then -2, -3, … past those taken. */

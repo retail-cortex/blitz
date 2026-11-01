@@ -68,7 +68,7 @@ import { message } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { HumanTask, SkillInfo, WorkflowFile, WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import type { ItemIntent } from "../intent";
-import { ResizeHandle } from "../ui/ResizeHandle";
+import { ResizeHandle } from "@blitz/webui";
 import { flowModes, looser, modeOf } from "../options";
 import { useWorkspaceStatus } from "../status";
 import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRuns, watchedRuns } from "../workflowRuns";
@@ -77,7 +77,7 @@ import { WorkflowSchedule } from "./WorkflowSchedule";
 import { ComposeDialog } from "./ComposeDialog";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
-import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "@blitz/webui";
 import { schedulePermissions, startsOnInput, addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */

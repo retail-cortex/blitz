@@ -21,7 +21,7 @@ import { workers } from "./api";
 import { message } from "./errors";
 import { language, t } from "./i18n";
 import { describe, fromNow, fromSchedule, monthGrid, runDays, toSchedule, zoneGroups, zoneOffset, type Repeat, type SchedulePick } from "./scheduleForm";
-import { Chip, Icon, IconButton } from "./ui/controls";
+import { Chip, Icon, IconButton } from "@blitz/webui";
 
 const repeats: Repeat[] = ["hourly", "daily", "weekdays", "weekly", "monthly", "custom"];
 

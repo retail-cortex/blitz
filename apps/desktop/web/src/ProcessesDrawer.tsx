@@ -23,8 +23,8 @@ import { t, tn } from "./i18n";
 import { displayName } from "./prefs";
 import { byWorkspace, flaggedOf, flagLabel, outputLines, processDetail, processKey, processOutput, stopProcess, useProcesses } from "./processes";
 import { useApp } from "./state";
-import { Button, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
+import { Button, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 
 /** A row's output, once asked for: the text, or why it couldn't be read. */
 type Output = { text?: string; error?: string; loading: boolean };

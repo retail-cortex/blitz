@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { mdiCheck, mdiCheckCircleOutline, mdiCloseCircleOutline, mdiConsoleLine, mdiContentCopy, mdiLoading, mdiStop } from "@mdi/js";
 import type { Entry } from "./turns";
 import { t } from "./i18n";
-import { Icon, IconButton } from "./ui/controls";
+import { Icon, IconButton } from "@blitz/webui";
 
 /** One ! command's card. */
 export function ShellCard({ entry, onStop }: { entry: Extract<Entry, { kind: "shell" }>; onStop: (id: string) => void }) {

@@ -75,9 +75,9 @@ import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
 import { homeOf, libraryTabs, sectionShown, shownGroups, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
-import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
-import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
+import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "@blitz/webui";
+import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
 

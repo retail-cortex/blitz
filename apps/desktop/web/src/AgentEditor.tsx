@@ -28,8 +28,8 @@ import { agencies, efforts, modes } from "./options";
 import { SuggestTextarea } from "./SecretSuggest";
 import { DraftButton } from "./studio/Draft";
 import { evalsForAgent, runInBackground } from "./studio/evalCoverage";
-import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
+import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 import { workerName } from "./workerForm";
 import type { ItemIntent } from "./intent";
 

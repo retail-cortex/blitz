@@ -39,7 +39,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
-import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "../ui/controls";
+import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";

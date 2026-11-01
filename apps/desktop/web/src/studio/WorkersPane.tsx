@@ -26,7 +26,7 @@ import { runDetail } from "../runningWorkers";
 import { WorkerEditor } from "../WorkerEditor";
 import { savePauses } from "../workerForm";
 import { lastFailed, WorkerChip, WorkerView, workerStateLabel } from "../Workers";
-import { Button, Dialog, Icon, IconButton, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import type { ItemIntent } from "../intent";
 
 /** How often the pane asks for the workers and their runs again. */

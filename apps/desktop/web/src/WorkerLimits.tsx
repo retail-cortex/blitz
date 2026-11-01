@@ -21,7 +21,7 @@ import { message } from "./errors";
 import { t } from "./i18n";
 import type { WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
 import { limitFields, permissionKinds, toggleKind, type LimitField } from "./workersOverview";
-import { Chip, useSnackbar } from "./ui/controls";
+import { Chip, useSnackbar } from "@blitz/webui";
 
 /**
  * The global limits on every worker (Settings › Workers; spec_023_workers

@@ -40,7 +40,7 @@ import { message } from "../errors";
 import { language, t, tn, useLanguage } from "../i18n";
 import type { Connector, ConnectorCategory, ConnectorKind, ConnectorTable, ConnectorTool } from "../gen/blitz/v1/workspace_pb";
 import { useAdvanced } from "../state";
-import { Button, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
+import { Button, Icon, IconButton, Switch, useSnackbar } from "@blitz/webui";
 import { agentTool, globalApi, workspaceApi } from "./connectorApi";
 import { ConnectorFields } from "./ConnectorFields";
 import { can, connectionFromForm, formForTarget, formFromConnection, newConnectorForm, sameConnectorForm, textIn, type ConnectorForm, type ConnectorScope } from "./connectorForm";

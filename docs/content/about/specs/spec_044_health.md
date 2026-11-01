@@ -9,7 +9,7 @@ weight: 44
 | | |
 |---|---|
 | Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17; HL-18 in the usability pass and HL-19 (2026-10-26). |
-| Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `pkg/service/server/health.go`, `pkg/service/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
+| Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `pkg/service/server/health.go`, `pkg/service/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `pkg/webui/src/charts.tsx`, `pkg/webui/src/chartMath.ts` |
 | Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `pkg/service/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
 | Depends on | [spec_040_studio](spec_040_studio.md) (the kinds), [spec_042_evals](spec_042_evals.md) (pass rates), [spec_043_workflows](spec_043_workflows.md) (receipts, schedules), [spec_041_gates](spec_041_gates.md) (the judge, rules, guardrails), [spec_032_background_agents](spec_032_background_agents.md) (jobs) |
 

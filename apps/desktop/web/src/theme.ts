@@ -20,7 +20,7 @@
 
 import { nativeGlass, setAppearance } from "./desktop";
 import { editorConfig, editorIsDark, onEditorThemeChange } from "./host";
-import type { DarkThemeId, LightThemeId } from "./themes";
+import type { DarkThemeId, LightThemeId } from "@blitz/webui";
 
 /** The user's choice of theme: the system's, light or dark. */
 export type ThemePref = "system" | "light" | "dark";

@@ -122,7 +122,7 @@ import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
-import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
 
 /** A background task's approval request or question, waiting for an answer. */
 type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };

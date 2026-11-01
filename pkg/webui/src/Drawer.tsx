@@ -22,7 +22,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiClose, mdiUndoVariant } from "@mdi/js";
-import { t } from "../i18n";
+import { t } from "./i18n";
 import { Button, Dialog, Icon, IconButton } from "./controls";
 import { DrawerClaims, type Ask, type Claim } from "./drawerClaims";
 

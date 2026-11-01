@@ -27,7 +27,7 @@ import { message } from "./errors";
 import { configChanged } from "./events";
 import type { SignInStatus } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
-import { Button, Icon, useSnackbar } from "./ui/controls";
+import { Button, Icon, useSnackbar } from "@blitz/webui";
 
 /** A provider's sign-in status and buttons (provider: google, anthropic, aws or azure). */
 export function SignInPanel({ workspace, provider, profile = "" }: { workspace: string; provider: string; profile?: string }) {

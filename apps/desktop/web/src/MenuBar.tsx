@@ -45,7 +45,7 @@ import { studioGroups, studioIcons, type StudioKind } from "./studio/StudioDrawe
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
-import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "./ui/controls";
+import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
 
 /** The app's name and mark, at the left of the top bar. */

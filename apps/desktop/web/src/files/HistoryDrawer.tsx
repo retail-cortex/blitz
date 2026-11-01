@@ -23,8 +23,8 @@ import { message } from "../errors";
 import { RevisionDiff, type FileRevision, type RestoredFile } from "../gen/blitz/v1/file_pb";
 import { language, t, tn } from "../i18n";
 import { parseDiff } from "../turns";
-import { Button, Dialog, IconButton, Segmented, useSnackbar } from "../ui/controls";
-import { Drawer } from "../ui/Drawer";
+import { Button, Dialog, IconButton, Segmented, useSnackbar } from "@blitz/webui";
+import { Drawer } from "@blitz/webui";
 import { authorHue, changeShare, dateGroup, sameGroup, type DateGroup } from "./history";
 import { layoutGraph, type GraphRow } from "./historyGraph";
 

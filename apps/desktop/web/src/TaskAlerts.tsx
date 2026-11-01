@@ -19,7 +19,7 @@ import { onTasksOpen } from "./desktop";
 import { onArrived, showTasks, useTasks } from "./humanTasks";
 import { t, tn } from "./i18n";
 import { notify } from "./notify";
-import { useSnackbar } from "./ui/controls";
+import { useSnackbar } from "@blitz/webui";
 
 /**
  * Announces workflows' human tasks as they arrive, as [ui] task_alerts

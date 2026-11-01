@@ -22,7 +22,7 @@ import type { BuiltinSkill, InstalledSkill, RegistrySkill, SkillRegistry } from 
 import { t, tn } from "./i18n";
 import { SkillReviewDialog } from "./SkillReview";
 import { useApp } from "./state";
-import { Button, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 /**
  * Settings › Skills (spec_013_skills SK-96): the skill registries, such as

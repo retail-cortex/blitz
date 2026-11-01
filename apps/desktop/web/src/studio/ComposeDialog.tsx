@@ -21,7 +21,7 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import type { ComposeDraft, ComposeSession } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
-import { Button, Dialog, Icon, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Icon, useSnackbar } from "@blitz/webui";
 import { cost } from "../workflowRuns";
 import { draftSteps, question } from "./compose";
 

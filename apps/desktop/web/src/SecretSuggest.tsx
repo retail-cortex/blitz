@@ -18,7 +18,7 @@ import { useEffect, useState, type InputHTMLAttributes, type KeyboardEvent, type
 import { mdiKeyVariant } from "@mdi/js";
 import { t } from "./i18n";
 import { insertSecret, missingSecrets, secretNames, secretOptions, secretTokenAt, type SecretName, type SecretOption } from "./secretComplete";
-import { Icon } from "./ui/controls";
+import { Icon } from "@blitz/webui";
 
 /** The names a workspace (or "") can name, loaded once a field shows. */
 export function useSecretNames(workspace: string): SecretName[] {

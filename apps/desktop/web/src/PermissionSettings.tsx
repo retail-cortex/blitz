@@ -23,7 +23,7 @@ import { configChanged } from "./events";
 import type { CheckPermissionResponse, DescribePermissionsResponse, PermissionEntry } from "./gen/blitz/v1/config_pb";
 import type { PermissionRule } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
-import { Button, Icon, IconButton, Switch, useSnackbar } from "./ui/controls";
+import { Button, Icon, IconButton, Switch, useSnackbar } from "@blitz/webui";
 
 const effects = ["allow", "ask", "deny"];
 

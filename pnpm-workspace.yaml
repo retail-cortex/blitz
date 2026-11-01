@@ -15,10 +15,12 @@
 # No dependency runs install scripts (rules_js requires saying so).
 onlyBuiltDependencies: []
 
-# The packages: the desktop app's page, the VS Code extension and the
+# The packages: the desktop app's page, the VS Code extension, the
 # Electron trial (its electron package for the types only: the runtime
-# comes from MODULE.bazel, so its install script mustn't run).
+# comes from MODULE.bazel, so its install script mustn't run), and the
+# page's controls as a package (pkg/webui, which other pages link).
 packages:
   - apps/desktop/web
   - apps/electron
   - apps/vscode
+  - pkg/webui

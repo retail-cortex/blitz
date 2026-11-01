@@ -21,7 +21,7 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
 import type { EvalResult, EvalRun, SkillFile, SkillScenario, TrySkillResponse } from "../gen/blitz/v1/workspace_pb";
-import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "@blitz/webui";
 import { money, resultsCost } from "./evalForm";
 import { Results, statusClass, statusIcon } from "./EvalsPane";
 import { scenarioName } from "./skillForm";

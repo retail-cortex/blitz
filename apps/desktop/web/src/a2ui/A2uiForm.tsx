@@ -18,7 +18,7 @@ import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAccountCircleOutline, mdiAlertCircleOutline, mdiCheck, mdiClose, mdiPlus } from "@mdi/js";
 import { t } from "../i18n";
-import { Button, Chip, Dialog, Field, Icon, Segmented, Tabs } from "../ui/controls";
+import { Button, Chip, Dialog, Field, Icon, Segmented, Tabs } from "@blitz/webui";
 import { actionOf, byId, childrenOf, failing, formProblems, resolve, safeUrl, scoped, setPath, type Component, type Form, type FormAction } from "./model";
 
 /** The basic catalog's icons this renderer draws (others are left out). */

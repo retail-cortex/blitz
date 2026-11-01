@@ -1,0 +1,26 @@
+{
+  "name": "@blitz/webui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Blitz's controls, charts, drawer, themes and styles, for any page that should look like Blitz (spec_053_enterprise EN-05)",
+  "exports": {
+    ".": "./src/index.ts",
+    "./m3.css": "./src/m3.css",
+    "./glass.css": "./src/glass.css",
+    "./themes.css": "./src/themes.css"
+  },
+  "dependencies": {
+    "@mdi/js": "7.4.47",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "happy-dom": "20.14.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.1",
+    "vitest": "5.0.2"
+  }
+}

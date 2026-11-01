@@ -42,7 +42,7 @@ import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
 import type { DocTarget } from "./docs/index";
-import { Icon, useSnackbar } from "./ui/controls";
+import { Icon, useSnackbar } from "@blitz/webui";
 
 /** The Markdown file being shown: its workspace and its path in it. */
 export interface MarkdownDoc {

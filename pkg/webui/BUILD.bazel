@@ -1,0 +1,65 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Blitz's controls, charts, drawer, themes and styles as a package
+# (spec_053_enterprise EN-05): the desktop page imports it as
+# @blitz/webui, and so does the enterprise admin console, from Blitz's
+# Bazel module.
+
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/webui:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//pkg/webui:vitest/package_json.bzl", vitest_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+_srcs = glob(
+    ["src/**"],
+    exclude = ["src/**/*.test.*"],
+) + [
+    "package.json",
+    "tsconfig.json",
+]
+
+# The package as pages link it (pnpm's workspace:*), its sources as they
+# are: each page's Vite compiles them.
+npm_package(
+    name = "pkg",
+    srcs = _srcs,
+    package = "@blitz/webui",
+    visibility = ["//visibility:public"],
+)
+
+vitest_bin.vitest_test(
+    name = "test",
+    args = ["run"],
+    chdir = package_name(),
+    data = glob(["src/**"]) + [
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+        ":node_modules",
+    ],
+)
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    args = ["--noEmit"],
+    chdir = package_name(),
+    data = glob(["src/**"]) + [
+        "package.json",
+        "tsconfig.json",
+        ":node_modules",
+    ],
+)

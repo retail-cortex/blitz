@@ -52,7 +52,7 @@ import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
-import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "./ui/controls";
+import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
 
 /** How often the branch and changed files are asked for while shown. */

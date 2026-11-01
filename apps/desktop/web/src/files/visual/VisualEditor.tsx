@@ -56,7 +56,7 @@ import {
 import { message } from "../../errors";
 import { t } from "../../i18n";
 import { followLink } from "../../Markdown";
-import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
+import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "@blitz/webui";
 import type { LanguageHooks } from "../language";
 import { files } from "../../api";
 import { altText, imageExtensions, insertsIn, readDocDrop, relativeLink, type Insert } from "../docDrop";

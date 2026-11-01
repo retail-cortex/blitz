@@ -25,7 +25,7 @@ import { t } from "./i18n";
 import { useApp } from "./state";
 import type { Theme } from "./theme";
 import { diagramControls, panZoom } from "./panzoom";
-import { IconButton } from "./ui/controls";
+import { IconButton } from "@blitz/webui";
 
 type Mermaid = (typeof import("mermaid"))["default"];
 

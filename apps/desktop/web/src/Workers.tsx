@@ -36,7 +36,7 @@ import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
-import { Button, Chip, Icon } from "./ui/controls";
+import { Button, Chip, Icon } from "@blitz/webui";
 import { useOpenRun } from "./FlowRunAlerts";
 import { cost, goingRun, ms, progress, took, useWorkflowRuns } from "./workflowRuns";
 

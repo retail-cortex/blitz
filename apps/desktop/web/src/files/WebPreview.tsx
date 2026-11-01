@@ -20,7 +20,7 @@ import { agentBrowser, openURL, previewBounds, previewCapture, previewConsole, p
 import { message } from "../errors";
 import { addWeb } from "../events";
 import { t } from "../i18n";
-import { Button, Icon, IconButton, Menu, useSnackbar } from "../ui/controls";
+import { Button, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
 import { SaveWebDialog } from "./SaveWebDialog";
 import type { EditorModel, Tab } from "./useEditor";
 import { consoleBlock, covered, overlays, pageBlock, webId, webTabName } from "./webTabs";

@@ -19,7 +19,7 @@ import { colorLabel, colorNames, workspaceColor } from "./palette";
 import { baseName, type WorkspacePrefs } from "./prefs";
 import { useApp } from "./state";
 import { t } from "./i18n";
-import { Field, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 /** How a workspace is shown: its name, description and colour. */
 export interface WorkspaceLook {

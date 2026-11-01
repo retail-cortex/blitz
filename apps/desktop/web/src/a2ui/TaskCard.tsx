@@ -17,7 +17,7 @@
 import { mdiAccountCheckOutline } from "@mdi/js";
 import type { HumanTask } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
-import { Icon } from "../ui/controls";
+import { Icon } from "@blitz/webui";
 import { A2uiForm } from "./A2uiForm";
 import { parseMessages, type FormAction } from "./model";
 

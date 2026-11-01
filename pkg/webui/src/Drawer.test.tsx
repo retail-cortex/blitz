@@ -19,6 +19,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Dialog } from "./controls";
 import { Drawer } from "./Drawer";
+import { setTranslator } from "./i18n";
+
+// The app's words for the controls' keys, as an app hands them over.
+setTranslator((key) => ({ "desktop.close": "Close" })[key] ?? key);
 
 // What the views would show (not the page's own text).
 const [settings, commit, body, foot] = ["Settings", "Commit", "body", "foot"];

@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { mdiChevronDown, mdiChevronUp, mdiClose, mdiMagnify } from "@mdi/js";
 import { t } from "../i18n";
-import { Icon, IconButton } from "../ui/controls";
+import { Icon, IconButton } from "@blitz/webui";
 import { findMarks, findRanges, hitMarks, paint, unpaint } from "./find";
 
 /**

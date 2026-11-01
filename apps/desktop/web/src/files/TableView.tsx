@@ -20,7 +20,7 @@ import { files } from "../api";
 import { message } from "../errors";
 import type { ReadTableResponse } from "../gen/blitz/v1/file_pb";
 import { t } from "../i18n";
-import { Icon, IconButton } from "../ui/controls";
+import { Icon, IconButton } from "@blitz/webui";
 import { activeFilters, nextSort, offsetFor, pageRange, pageSize, rowOfLine, type Sort } from "./table";
 
 /**
