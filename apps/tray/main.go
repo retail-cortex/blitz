@@ -44,6 +44,7 @@ import (
 
 	"fyne.io/systray"
 	"github.com/retail-cortex/blitz/apps/tray/internal/tray"
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
@@ -65,6 +66,7 @@ const every = 2 * time.Second
 const tasksEvery = 10 * time.Second
 
 func main() {
+	socket.Front = activity.Desktop // the page's requests, through this host (spec_active_installs_054 AI-02)
 	install := flag.Bool("install", false, "Start the tray at login (and now), then exit")
 	uninstall := flag.Bool("uninstall", false, "Stop starting the tray at login, then exit")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
@@ -183,6 +185,7 @@ func serveWindow(dir string) error {
 		}
 	}()
 	// The Electron app updates itself through its host (pkg/pagehost).
+	host.Use = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage}
 	host.Updates = &pagehost.Updater{
 		Version: version, HostExe: host.Tray,
 		Dir: config.ExpandHome("~/.blitz/updates"), CacheDir: config.ExpandHome("~/.blitz"),

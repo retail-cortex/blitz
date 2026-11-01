@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
@@ -89,9 +90,11 @@ func main() {
 	// Until observability.StartProcess installs the log file, slog's default would
 	// print to stderr and duplicate the terminal warnings.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
+	socket.Front = activity.CLI // on each request to the service (spec_active_installs_054 AI-02)
 	root := newRootCommand()
 	err := root.Execute()
 	stopPrivate() // a run's own service stops with it
+	waitForPing()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", err))
 	}
@@ -118,6 +121,15 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRoot(cmd, o, args)
+		},
+		// Any command counts the day's use (spec_active_installs_054
+		// AI-01, AI-03), but --version (this root's own flag) and help
+		// (Cobra's, a command like any other); --help doesn't run this.
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if v, err := cmd.Flags().GetBool("version"); (err == nil && v) || cmd.Name() == "help" {
+				return
+			}
+			markUse()
 		},
 	}
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error {

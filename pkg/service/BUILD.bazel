@@ -23,6 +23,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/service",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/activity",
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/workers",

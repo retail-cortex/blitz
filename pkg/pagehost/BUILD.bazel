@@ -29,6 +29,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/pagehost",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/activity",
         "//pkg/fileview",
         "//pkg/legal",
         "//pkg/loginitem",
@@ -58,6 +59,7 @@ go_test(
     ],
     embed = [":pagehost"],
     deps = [
+        "//pkg/activity",
         "//pkg/legal",
         "//pkg/loginitem",
         "//pkg/pageserver",

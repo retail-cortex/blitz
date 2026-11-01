@@ -63,5 +63,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 051 | [secrets hook](spec_secret_hooks_051.md) | A pre-commit hook that stops commits adding API keys and other secrets (`blitz security scan-secrets`), put in when the harness or the window makes a repository; since v0.8.4 |
 | 052 | [processes](spec_processes_052.md) | The agents' background processes: what each uses, flags for the busy, the growing and the left running, and one place to see and stop them (the window's status bar and view, `/processes`, the tray); since v0.8.5 |
 | 053 | [enterprise foundations](spec_enterprise_053.md) | Draft: the service assembled from `pkg/` with extension points, and clients that connect to an organization's licensed service: its sign-in, its models, its signed catalog and its jobs |
+| 054 | [active installs](spec_active_installs_054.md) | Once a day, on a day someone uses Blitz, a ping counts the install as active (front end, version, platform) with a random install ID: daily, weekly and monthly actives and retention. On by default, `[usage] count = false` turns it off |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

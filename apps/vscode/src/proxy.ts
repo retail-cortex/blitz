@@ -63,7 +63,9 @@ export async function startProxy(socket: string, token = randomBytes(24).toStrin
       res.writeHead(req.url?.startsWith(apiPrefix) ? 403 : 404).end();
       return;
     }
-    const headers: Record<string, string | string[] | undefined> = { ...req.headers, host: "blitz" };
+    // The extension names itself, so the service can count its use once a
+    // day (spec_active_installs_054 AI-02); whatever the page sent is replaced.
+    const headers: Record<string, string | string[] | undefined> = { ...req.headers, host: "blitz", "blitz-client": "vscode" };
     delete headers["x-blitz-token"];
     delete headers.origin;
     const out = request({ socketPath: socket, path: req.url, method: req.method, headers }, (up) => {

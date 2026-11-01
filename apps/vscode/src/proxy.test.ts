@@ -41,7 +41,7 @@ beforeAll(async () => {
         return;
       }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ url: req.url, body, token: req.headers["x-blitz-token"] ?? null, origin: req.headers.origin ?? null }));
+      res.end(JSON.stringify({ url: req.url, body, token: req.headers["x-blitz-token"] ?? null, origin: req.headers.origin ?? null, client: req.headers["blitz-client"] ?? null }));
     });
   });
   await new Promise<void>((r) => service.listen(join(dir, "s.sock"), r));
@@ -57,11 +57,12 @@ const call = (path: string, headers: Record<string, string> = {}, body = "{}") =
   fetch(proxy.url + path, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body });
 
 describe("the proxy", () => {
-  it("forwards the page's calls with the token, and not the token or origin", async () => {
-    const res = await call("/blitz.v1.SessionService/ListSessions", { "x-blitz-token": "secret", Origin: origin }, '{"workspace":"/w"}');
+  it("forwards the page's calls with the token, and not the token or origin, as VS Code's", async () => {
+    const res = await call("/blitz.v1.SessionService/ListSessions", { "x-blitz-token": "secret", Origin: origin, "Blitz-Client": "desktop" }, '{"workspace":"/w"}');
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBe(origin);
-    expect(await res.json()).toEqual({ url: "/blitz.v1.SessionService/ListSessions", body: '{"workspace":"/w"}', token: null, origin: null });
+    // Named as the extension, whatever the page said (spec_active_installs_054 AI-02).
+    expect(await res.json()).toEqual({ url: "/blitz.v1.SessionService/ListSessions", body: '{"workspace":"/w"}', token: null, origin: null, client: "vscode" });
   });
   it.each([
     ["without the token", "/blitz.v1.SessionService/ListSessions", {}, 403],

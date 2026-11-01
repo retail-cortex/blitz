@@ -78,6 +78,7 @@ This spec began as a trial of Electron beside the Wails app: Chromium on macOS, 
 ## 6. Updates
 
 - **EL-90** *Since v0.7.0* the app updates itself from the releases (the owner's choice: Blitz's own updater, not Electron's). The host (`pkg/pagehost` `Updater`, in `blitz-tray --serve`) answers:
+  - `Used()`: the window opened or came forward; the host counts the install as active, once a day ([spec_active_installs_054](spec_active_installs_054.md) AI-01).
   - `CheckUpdate(force)`: the latest release and where the update is (`UpdateStatus`: current, latest, available, can and why not, downloading, ready, error, the release's page). The answer of the last check (`~/.blitz/updates/last-check.json`) stands for five days (`CheckEvery`): GitHub is asked again only after that, or when forced (**Check now**).
   - `DownloadUpdate`: downloads the release's package for this machine (`selfupdate.DesktopAsset`: the Mac's disk image, the Windows zip, the Linux tarball) into `~/.blitz/updates/<tag>`, checks it against its own Sigstore bundle (`selfupdate.VerifySignature`, [spec_release_025](spec_release_025.md) REL-13 and REL-24), and unpacks it (a disk image through `hdiutil`, mounted where nothing shows it; archives refusing anything outside their folder). The call returns when it's done: nothing is polled.
   - `UpdateStatus`: where it is, without asking GitHub.

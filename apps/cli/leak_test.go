@@ -23,6 +23,9 @@ import (
 // No test may leave a goroutine running.
 // opencensus's stats worker runs for the process from its package's init
 // (MCP Toolbox for Databases links it, spec_databases_046).
+// No test counts as a day's use: nothing is sent to Retail Cortex
+// (spec_active_installs_054).
 func TestMain(m *testing.M) {
+	activeUse.On = func() bool { return false }
 	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"))
 }

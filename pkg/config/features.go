@@ -256,6 +256,23 @@ type TelemetryConfig struct {
 	CaptureContent bool `toml:"capture_content"`
 }
 
+// UsageConfig is whether Blitz counts its install as active
+// (spec_active_installs_054).
+type UsageConfig struct {
+	// Count sends a daily ping on a day Blitz is used, which counts the
+	// install as active (a random ID, the day, the front end, the version
+	// and the platform); false sends nothing. On by default (AI-30).
+	Count bool `toml:"count"`
+}
+
+// CountsUsage is the global settings' [usage] count, for what marks a
+// day's use (the service, the CLI, the desktop app's host): false when
+// the settings can't be read.
+func CountsUsage() bool {
+	cfg, err := Load("")
+	return err == nil && cfg.Usage.Count
+}
+
 // CheckpointConfig controls file snapshots used by /undo and /rewind.
 type CheckpointConfig struct {
 	// Enabled keeps file snapshots for /undo and /rewind.
