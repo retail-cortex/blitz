@@ -18,6 +18,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -155,4 +157,80 @@ func TestEnterpriseJourney(t *testing.T) {
 	out, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, out.Msg.State.Url, "nothing to sign out of")
+}
+
+// What goes wrong: settings that can't be read or name no service, the
+// organization's service down when signing out or switching (signed out
+// here all the same), and a sign-in given up on.
+func TestEnterpriseErrors(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	settings := filepath.Join(home, ".blitz", ".env.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(settings), 0o700))
+
+	for name, file := range map[string]string{
+		"unreadable settings":     "[enterprise\n",
+		"not a service's address": "[enterprise]\nurl = \"http://evil.example\"\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(settings, []byte(file), 0o600))
+			_, err := c.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{}))
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			_, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{}))
+			require.NoError(t, err)
+			for stream.Receive() {
+			}
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(stream.Err()))
+			require.NoError(t, stream.Close())
+		})
+	}
+	require.NoError(t, os.Remove(settings))
+
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	s.ent.http = &http.Client{} // the service's own client, as a proxy's would be
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+
+	t.Run("a sign-in given up on", func(t *testing.T) {
+		cctx, cancel := context.WithCancel(ctx)
+		stream, err := c.EnterpriseSignIn(cctx, connect.NewRequest(&pb.EnterpriseSignInRequest{}))
+		require.NoError(t, err)
+		require.True(t, stream.Receive(), "the address to open")
+		cancel()
+		for stream.Receive() {
+		}
+		assert.Equal(t, connect.CodeCanceled, connect.CodeOf(stream.Err()))
+		_ = stream.Close()
+	})
+
+	signIn := func() {
+		stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+		require.NoError(t, err)
+		defer stream.Close()
+		for stream.Receive() {
+		}
+		require.NoError(t, stream.Err())
+	}
+	signIn()
+	org.Offline = true
+	out, err := c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
+	require.NoError(t, err, "signed out here, the service down")
+	assert.False(t, out.Msg.State.SignedIn)
+
+	org.Offline = false
+	signIn()
+	org.Offline = true
+	gone, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{}))
+	require.NoError(t, err, "disconnected, the service down")
+	assert.Empty(t, gone.Msg.State.Url)
 }

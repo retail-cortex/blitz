@@ -168,6 +168,20 @@ func TestEnterpriseModel(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, s.renewals)
 	})
+	t.Run("the session ended after the model was built", func(t *testing.T) {
+		s := newOrgService(t)
+		cfg := signedIn(t, s)
+		m, err := NewModel(context.Background(), cfg, "fast")
+		require.NoError(t, err)
+		c, err := enterpriseClient(cfg)
+		require.NoError(t, err)
+		c.Invalidate()
+		s.mu.Lock()
+		s.refresh = "ended"
+		s.mu.Unlock()
+		_, _, err = callAPI(inSession("sess-4"), m, helloRequest())
+		assert.ErrorIs(t, err, enterprise.ErrNotSignedIn)
+	})
 	t.Run("signed out", func(t *testing.T) {
 		s := newOrgService(t)
 		enterprise.Register(enterprise.New(s.URL, &secrets.Memory{}, enterprise.Options{}))

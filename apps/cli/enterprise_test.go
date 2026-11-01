@@ -17,6 +17,8 @@ package main
 import (
 	"bytes"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ import (
 // disconnect; an address that isn't a service is a usage error.
 func TestEnterpriseCommand(t *testing.T) {
 	t.Cleanup(http.DefaultClient.CloseIdleConnections)
-	isolate(t)
+	home := isolate(t)
 	secrets.SetDefault(&secrets.Memory{})
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
@@ -78,6 +80,24 @@ func TestEnterpriseCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "logout")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Not connected to an organization.")
+
+	// Settings the service can't use: each command says so.
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[enterprise]\nurl = \"http://evil.example\"\n"), 0o600))
+	for _, args := range [][]string{{"status"}, {"login"}, {"logout"}} {
+		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
+		assert.Error(t, err, args)
+	}
+	_, err = runCLI(t, "enterprise", "disconnect")
+	assert.NoError(t, err, "disconnecting is how a bad address is undone")
+
+	// No service: each command says it couldn't start one.
+	file := filepath.Join(t.TempDir(), "a-file")
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	t.Setenv("BLITZ_SOCKET", filepath.Join(file, "s.sock"))
+	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}} {
+		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
+		assert.ErrorContains(t, err, "starting the Blitz service", args)
+	}
 }
 
 // The status says what it knows: a service not reached, the terms to

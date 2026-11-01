@@ -72,3 +72,20 @@ func TestOrganization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, o.URL)
 }
+
+// A service that's gone: each call says so.
+func TestOrganizationUnreachable(t *testing.T) {
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	c := AttachSettingsHTTP(http.DefaultClient, gone.URL)
+	ctx := context.Background()
+	_, err := c.Organization(ctx, false)
+	assert.Error(t, err)
+	_, err = c.Connect(ctx, "https://b.acme.com")
+	assert.Error(t, err)
+	_, err = c.SignInOrganization(ctx, false, func(OrganizationPrompt) {})
+	assert.Error(t, err)
+	_, err = c.SignOutOrganization(ctx)
+	assert.Error(t, err)
+	assert.Equal(t, Organization{}, organization(nil))
+}
