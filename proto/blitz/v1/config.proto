@@ -267,8 +267,9 @@ service ConfigService {
   // requests.
   rpc GetOrgUsage(GetOrgUsageRequest) returns (GetOrgUsageResponse);
   // How the person hears of their jobs' runs on the organization's
-  // service (the enterprise spec's JB-31), and setting it.
+  // service (the enterprise spec's JB-31).
   rpc GetOrgNotices(GetOrgNoticesRequest) returns (GetOrgNoticesResponse);
+  // Keeps how the person hears of their jobs' runs (JB-31).
   rpc SetOrgNotices(SetOrgNoticesRequest) returns (SetOrgNoticesResponse);
   // The workspace's items that can be published to the organization's
   // catalog (EN-36): its .agents folder's agents, skills, rules,
