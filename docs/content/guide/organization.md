@@ -56,7 +56,7 @@ If your organization publishes a catalog, Blitz works under it: its agents, skil
 
 Studio's Agents, Skills, Rules and Guardrails lists end with **From your organization**: what the catalog gives this workspace, each marked locked or default and with the groups it's for. A locked one is changed by your organization's Admins, through a review. A default one has **Copy to this workspace**, which puts it in `.agents` for you to change; the workspace's copy then takes its place. From the terminal, `blitz enterprise catalog` lists them and `blitz enterprise catalog copy rule/house-style` copies one.
 
-Its policy may also turn off tools for every agent, your own `!` commands, your own MCP servers or connections (or the kinds of connection it doesn't list), or your own model providers. Studio's Connectors marks the organization's connections, and says why one of yours isn't used. Where it allows your own providers, name one with its prefix (`anthropic/claude-…`) to use it; bare model names are your organization's.
+Its policy may also switch off Blitz's own built-in agents, skills or guardrails (never the agent your sessions start with), turn off tools for every agent, your own `!` commands, your own MCP servers or connections (or the kinds of connection it doesn't list), or your own model providers. Studio's Connectors marks the organization's connections, and says why one of yours isn't used. Where it allows your own providers, name one with its prefix (`anthropic/claude-…`) to use it; bare model names are your organization's.
 
 ## Your organization's look and terms
 

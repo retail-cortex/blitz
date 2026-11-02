@@ -391,6 +391,7 @@
     "model.fallback": "{primary} is unavailable; answering with fallback {model} for now.",
     "model.fallback_recovered": "{model} is answering again.",
     "model.reconnecting": "Lost the connection to the model ({error}). Reconnecting…",
+    "org.builtin_kept": "Your organization switches off the built-in agent {name}, but sessions start with it: it's kept. Set another default agent to go without it.",
     "model.busy": "Waiting for {model}: busy. Trying again…",
     "model.busy_in": "Waiting for {model}: busy. Trying again in {seconds}s…",
     "model.the_model": "the model",

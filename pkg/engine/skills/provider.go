@@ -211,6 +211,21 @@ func (p *Provider) rediscover(now map[string]string) error {
 	return err
 }
 
+// SwitchOff takes the built-in skills named out (the organization's
+// policy, spec_053 EN-31); a name that isn't a built-in skill's is
+// ignored. A search again doesn't bring them back.
+func (p *Provider) SwitchOff(names []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, name := range names {
+		if p.builtin[name] {
+			if s := p.skills[name]; s != nil && s.hostDir == "" { // the built-in one, not a file in its place
+				delete(p.skills, name)
+			}
+		}
+	}
+}
+
 // refresh is Refresh for a look at the skills.
 func (p *Provider) refresh() { p.Refresh() }
 

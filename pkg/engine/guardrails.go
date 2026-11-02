@@ -64,8 +64,15 @@ func (w *Workspace) guardrailDirs() []string {
 }
 
 // Guardrails are the workspace's guardrails, read afresh: the built-in
-// ones (with their defaults when they have no file), then custom ones.
-func (w *Workspace) Guardrails() []gates.Guardrail { return gates.LoadGuardrails(w.guardrailDirs()...) }
+// ones (with their defaults when they have no file) but those the
+// organization's policy switches off (spec_053 EN-31), then custom ones.
+func (w *Workspace) Guardrails() []gates.Guardrail {
+	all := gates.LoadGuardrails(w.guardrailDirs()...)
+	if off := w.cfg.Org.Policy.Builtins.Off; len(off) > 0 {
+		all = slices.DeleteFunc(all, func(g gates.Guardrail) bool { return g.Builtin != "" && slices.Contains(off, g.Builtin) })
+	}
+	return all
+}
 
 // guardState is what the guardrails hold during a turn: those read as it
 // started, and the notices already given (once per turn and guardrail).

@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -657,4 +658,29 @@ func TestWorkspaceBrowserProfile(t *testing.T) {
 			assert.Empty(t, w.browserProfile().Name, "a project not trusted never reaches the sign-ins")
 		})
 	}
+}
+
+// The organization's policy switches off Blitz's built-in agents, skills
+// and guardrails by name (spec_053 EN-31), but the agent sessions start
+// with, which is kept; others' names stay reserved.
+func TestBuiltinsOff(t *testing.T) {
+	w, _ := openTestWith(t, func(cfg *config.Config) {
+		cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
+		cfg.Org.Policy.Builtins.Off = []string{"coder", "go", gates.BuiltinSecrets, "blitz", "not-one"}
+	})
+	names := map[string]bool{}
+	for _, a := range w.ListAgents() {
+		names[a.Name] = true
+	}
+	assert.False(t, names["coder"], "switched off")
+	assert.True(t, names["blitz"], "sessions start with it: kept")
+	assert.True(t, w.Agents().IsBuiltin("coder"), "its name stays reserved")
+	_, ok := w.Skills().Get("go")
+	assert.False(t, ok, "switched off")
+	_, ok = w.Skills().Get("python")
+	assert.True(t, ok)
+	for _, g := range w.Guardrails() {
+		assert.NotEqual(t, gates.BuiltinSecrets, g.Builtin)
+	}
+	assert.NotEmpty(t, w.Guardrails(), "the others stay")
 }

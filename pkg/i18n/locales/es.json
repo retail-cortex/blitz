@@ -391,6 +391,7 @@
     "model.fallback": "{primary} no está disponible; por ahora responde el modelo de respaldo {model}.",
     "model.fallback_recovered": "{model} vuelve a responder.",
     "model.reconnecting": "Se perdió la conexión con el modelo ({error}). Reconectando…",
+    "org.builtin_kept": "Tu organización desactiva el agente integrado {name}, pero las sesiones empiezan con él: se mantiene. Elige otro agente predeterminado para prescindir de él.",
     "model.busy": "Esperando a {model}: ocupado. Reintentando…",
     "model.busy_in": "Esperando a {model}: ocupado. Reintentando en {seconds} s…",
     "model.the_model": "el modelo",

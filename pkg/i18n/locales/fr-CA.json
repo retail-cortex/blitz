@@ -391,6 +391,7 @@
     "model.fallback": "{primary} n’est pas disponible; le modèle de relève {model} répond pour l’instant.",
     "model.fallback_recovered": "{model} répond de nouveau.",
     "model.reconnecting": "Connexion au modèle perdue ({error}). Reconnexion…",
+    "org.builtin_kept": "Votre organisation désactive l'agent intégré {name}, mais les sessions commencent avec lui : il est conservé. Choisissez un autre agent par défaut pour vous en passer.",
     "model.busy": "En attente de {model} : occupé. Nouvel essai…",
     "model.busy_in": "En attente de {model} : occupé. Nouvel essai dans {seconds} s…",
     "model.the_model": "le modèle",

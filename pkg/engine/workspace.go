@@ -276,6 +276,16 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if w.skills, err = skills.NewProvider(); err != nil {
 		return nil, fmt.Errorf("failed to load skills provider: %w", err)
 	}
+	// The built-in agents and skills the organization switches off
+	// (spec_053 EN-31), but the agent sessions start with.
+	if off := cfg.Org.Policy.Builtins.Off; len(off) > 0 {
+		if slices.Contains(off, cfg.Blitz.DefaultAgent) {
+			o.Warn(i18n.T("org.builtin_kept", "name", cfg.Blitz.DefaultAgent))
+			off = slices.DeleteFunc(slices.Clone(off), func(n string) bool { return n == cfg.Blitz.DefaultAgent })
+		}
+		w.agents.SwitchOff(off)
+		w.skills.SwitchOff(off)
+	}
 	if cfg.Skills.Enabled {
 		if err := w.skills.DiscoverExternal(cfg.SkillSearchPaths(dir)); err != nil {
 			o.Warn(err.Error())
