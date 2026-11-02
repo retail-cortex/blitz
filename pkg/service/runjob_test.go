@@ -83,6 +83,9 @@ func TestRunJob(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(work, ".agents", "workers", "digest"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(work, ".agents", "workers", "digest", "WORKER.md"),
 		[]byte("---\nschedule: Daily at 6 AM\nruns_on: service\n---\nWrite the digest.\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(work, ".agents", "workers", "odd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(work, ".agents", "workers", "odd", "WORKER.md"),
+		[]byte("---\nschedule: Daily at 6 AM\nruns_on: moon\n---\nOdd.\n"), 0o644))
 	git(work, "add", "-A")
 	git(work, "commit", "--quiet", "-m", "The digest")
 	git(work, "push", "--quiet", "origin", "HEAD:main")
@@ -130,6 +133,41 @@ func TestRunJob(t *testing.T) {
 		j.CloneURL = s.URL + "/git/nowhere.git"
 		err := RunJob(ctx, j, JobOptions{Config: t.TempDir(), Open: open(false)})
 		assert.ErrorContains(t, err, "cloning the workspace")
+	})
+
+	ended := func(run string) map[string]any {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		return s.Ends[run]
+	}
+
+	t.Run("a job that doesn't read", func(t *testing.T) {
+		assert.ErrorContains(t, RunJob(ctx, job("r5", "odd"), JobOptions{Config: t.TempDir(), Open: open(false)}), `runs_on "moon"`)
+		assert.Equal(t, "failed", ended("r5")["status"])
+	})
+
+	t.Run("a workspace that doesn't open", func(t *testing.T) {
+		broken := func(context.Context, *config.Config, engine.Options) (*engine.Workspace, error) {
+			return nil, os.ErrPermission
+		}
+		assert.ErrorContains(t, RunJob(ctx, job("r6", "digest"), JobOptions{Config: t.TempDir(), Open: broken}), "opening the workspace")
+	})
+
+	t.Run("a folder it can't use", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "file")
+		require.NoError(t, os.WriteFile(file, nil, 0o600))
+		assert.ErrorContains(t, RunJob(ctx, job("r7", "digest"), JobOptions{Config: t.TempDir(), Open: open(false), Dir: filepath.Join(file, "ws")}),
+			"a folder to clone into")
+	})
+
+	t.Run("a push the service refuses", func(t *testing.T) {
+		hook := filepath.Join(s.Repo("plans"), "hooks", "pre-receive")
+		require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\necho no >&2\nexit 1\n"), 0o755))
+		defer os.Remove(hook)
+		err := RunJob(ctx, job("r8", "digest"), JobOptions{Config: t.TempDir(), Open: open(true)})
+		assert.ErrorContains(t, err, "its changes weren't pushed")
+		assert.Equal(t, "failed", ended("r8")["status"])
+		assert.Equal(t, "The digest is written.", ended("r8")["output"], "its output kept")
 	})
 
 	t.Run("a secret the service doesn't know", func(t *testing.T) {

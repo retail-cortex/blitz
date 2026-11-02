@@ -65,6 +65,15 @@ func TestStrict(t *testing.T) {
 		res.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, res.StatusCode, path)
 	}
+	// A run's calls need its secret, as JSON.
+	for body, want := range map[string]int{`not JSON`: http.StatusBadRequest, `{"secret":"wrong"}`: http.StatusUnauthorized} {
+		for _, path := range []string{"/api/v1/runs/r1/token", "/api/v1/runs/r1/end"} {
+			res, err := http.Post(s.URL+path, "application/json", strings.NewReader(body))
+			require.NoError(t, err)
+			res.Body.Close()
+			assert.Equal(t, want, res.StatusCode, "%s %s", path, body)
+		}
+	}
 	res, err = http.Post(s.URL+"/api/v1/session", "application/json", strings.NewReader(`{"id_token":"forged"}`))
 	require.NoError(t, err)
 	res.Body.Close()

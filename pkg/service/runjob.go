@@ -119,9 +119,6 @@ func RunJob(ctx context.Context, j Job, o JobOptions) error {
 	enterprise.Register(c) // the organization's models find it by the service's address
 	run := &jobRun{j: j, o: o, c: c}
 	end := run.run(ctx)
-	if end.Status == "" {
-		end.Status = string(api.RunFailed)
-	}
 	// The run's end is told even when its time is up.
 	tell, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()

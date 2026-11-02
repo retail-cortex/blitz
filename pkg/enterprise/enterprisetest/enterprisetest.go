@@ -177,7 +177,7 @@ type Service struct {
 	Refreshes int
 	SignIns   []string // the client each sign-in named
 	Offline   bool
-	Tokenless bool // a sign-in answered without tokens
+	Tokenless bool // a sign-in or a run's token answered without tokens
 	// Key signs the branding; Branding is what it serves (none when nil),
 	// and Terms the version in force, accepted or not, by person.
 	Key      ed25519.PrivateKey
@@ -546,6 +546,10 @@ func NewService(t testing.TB, issuer string) *Service {
 			return
 		}
 		s.n++
+		if s.Tokenless {
+			_ = json.NewEncoder(w).Encode(map[string]any{"expires_in": s.ExpiresIn})
+			return
+		}
 		access := fmt.Sprintf("at-%d", s.n)
 		s.Access[access] = "run:" + r.PathValue("id")
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": access, "expires_in": s.ExpiresIn})

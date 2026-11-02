@@ -168,5 +168,8 @@ func TestRun(t *testing.T) {
 
 	_, err = NewRun(s.URL, "r2", "nope", Options{}).AccessToken(ctx)
 	assert.Error(t, err)
+	s.Runs["r3"], s.Tokenless = "s", true
+	_, err = NewRun(s.URL, "r3", "s", Options{}).AccessToken(ctx)
+	assert.ErrorContains(t, err, "no access token")
 	assert.Error(t, New(s.URL, nil, Options{}).EndRun(ctx, RunEnd{}), "not a run")
 }

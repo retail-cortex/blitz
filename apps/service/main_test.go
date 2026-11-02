@@ -35,6 +35,12 @@ func TestUsageErrors(t *testing.T) {
 	assert.Equal(t, 0, code, "blitzd --version: exit %d", code)
 	t.Setenv("BLITZ_RUN", "")
 	assert.Equal(t, exitUsage, run(context.Background(), []string{"run-job"}), "not a job's run")
+	for k, v := range map[string]string{"BLITZ_SERVICE": "http://127.0.0.1:1", "BLITZ_RUN": "r1", "BLITZ_RUN_SECRET": "s",
+		"BLITZ_CLONE_URL": "http://127.0.0.1:1/git/plans.git", "BLITZ_JOB": "digest"} {
+		t.Setenv(k, v)
+	}
+	t.Setenv("HOME", t.TempDir())
+	assert.Equal(t, exitFailure, run(context.Background(), []string{"run-job"}), "a service it can't reach")
 }
 
 // --license shows the NOTICE, the Apache License or the third-party
