@@ -43,6 +43,7 @@ type workerOps interface {
 	UndoWorkerRun(runID string, force bool) ([]string, error)
 	RunningWorkerRuns() ([]api.Run, error)
 	StopWorkerRun(runID string) error
+	MoveToService(ctx context.Context, name string, force bool) ([]string, bool, error)
 }
 
 // openWorkers reaches the workspace's workers in the Blitz service (started
@@ -102,6 +103,20 @@ still works.)`,
 		RunE:  func(cmd *cobra.Command, args []string) error { return workersUndo(cmd, g, args[0], force) },
 	}
 	undo.Flags().BoolVarP(&force, "force", "f", false, "Overwrite files changed since the run")
+	var anyway bool
+	move := &cobra.Command{
+		Use:   "move <name>",
+		Short: "Move a job to your organization's service, saying first what can't run there",
+		Long: `Moves a job in one of your organization's workspaces to its service
+(runs_on: service), which runs it at its times whether or not this computer
+is on. First it says what keeps the job from running there as it runs here
+(a local MCP server, a file outside the workspace, a localhost address); it
+moves only when nothing does, or with --anyway. Push it to the workspace's
+main for the service to pick it up (a workspace with sync on does that).`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error { return workersMove(cmd, g, args[0], anyway) },
+	}
+	move.Flags().BoolVar(&anyway, "anyway", false, "Move it even with problems")
 	cmd.AddCommand(
 		&cobra.Command{Use: "list", Short: "List the workspace's jobs", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return workersList(cmd, g) }},
@@ -114,6 +129,7 @@ still works.)`,
 		&cobra.Command{Use: "stop <name|run-id>", Short: "Stop a job's run that's going now", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersStop(cmd, g, args[0]) }},
 		undo,
+		move,
 	)
 	return cmd
 }
@@ -346,4 +362,27 @@ func workerErr(err error) error {
 		}
 	}
 	return err
+}
+
+// workersMove moves a job to the organization's service (spec_053 EN-40,
+// EN-41), saying what keeps it from running there.
+func workersMove(cmd *cobra.Command, g *globalFlags, name string, anyway bool) error {
+	ops, done, err := openWorkers(cmd.Context(), g)
+	if err != nil {
+		return err
+	}
+	defer done()
+	problems, moved, err := ops.MoveToService(cmd.Context(), name, anyway)
+	if err != nil {
+		return workerErr(err)
+	}
+	out := cmd.OutOrStdout()
+	for _, p := range problems {
+		fmt.Fprintln(out, "! "+p)
+	}
+	if !moved {
+		return withCode(exitFailure, fmt.Errorf("%s stays on this computer: fix what's above, or move it with --anyway", name))
+	}
+	fmt.Fprintf(out, "✓ %s runs on your organization's service now (runs_on: service). Push it to the workspace's main for the service to pick it up.\n", name)
+	return nil
 }

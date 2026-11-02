@@ -518,3 +518,19 @@ func (h workerService) ForgetWorkspaceWorkers(ctx context.Context, r req[pb.Forg
 	sc.rescan(ctx)
 	return ok(&pb.ForgetWorkspaceWorkersResponse{})
 }
+
+func (h workerService) MoveWorkerToService(ctx context.Context, r req[pb.MoveWorkerToServiceRequest]) (*connect.Response[pb.MoveWorkerToServiceResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	problems, info, moved, err := w.MoveToService(r.Msg.Name, r.Msg.Force)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	out := &pb.MoveWorkerToServiceResponse{Problems: problems, Moved: moved}
+	if moved {
+		out.Worker = workerMsg(info)
+	}
+	return ok(out)
+}

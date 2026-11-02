@@ -196,3 +196,14 @@ func workerRun(r *pb.WorkerRun) api.Run {
 	}
 	return out
 }
+
+// MoveToService moves a job to the organization's service
+// (WorkerService.MoveWorkerToService): what keeps it from running there,
+// and whether it moved (only with none, or force).
+func (w *Workers) MoveToService(ctx context.Context, name string, force bool) (problems []string, moved bool, err error) {
+	res, err := w.c.MoveWorkerToService(ctx, connect.NewRequest(&pb.MoveWorkerToServiceRequest{Workspace: w.dir, Name: name, Force: force}))
+	if err != nil {
+		return nil, false, fromAPI(err)
+	}
+	return res.Msg.Problems, res.Msg.Moved, nil
+}

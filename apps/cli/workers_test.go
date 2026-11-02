@@ -133,6 +133,25 @@ func TestWorkersCommandsThroughTheService(t *testing.T) {
 	out, err := runCLI(t, "-d", ws, "workers", "run", "hello")
 	require.NoError(t, err, "run through the service: %v\n%s", err, out)
 	require.Contains(t, out, "succeeded", "run through the service: %v\n%s", err, out)
+
+	// Moved to the organization's service (EN-40, EN-41): one that reaches
+	// this computer stays, unless moved anyway.
+	addWorker(t, ws, "local", "---\nschedule: daily at noon\n---\nCheck http://localhost:3000.\n")
+	out, err = runCLI(t, "-d", ws, "jobs", "move", "local")
+	require.Error(t, err)
+	assert.Contains(t, out, "! it reaches localhost:3000, which on the service is the runner itself")
+	assert.Contains(t, err.Error(), "local stays on this computer")
+	out, err = runCLI(t, "-d", ws, "jobs", "move", "local", "--anyway")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ local runs on your organization's service now")
+	out, err = runCLI(t, "-d", ws, "jobs", "move", "hello")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "!")
+	data, err := os.ReadFile(filepath.Join(ws, "workers", "hello", "WORKER.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "runs_on: service")
+	_, err = runCLI(t, "-d", ws, "jobs", "move", "nope")
+	assert.Error(t, err)
 }
 
 // scriptedModel answers model calls in turn with outputs (each a JSON

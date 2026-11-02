@@ -62,6 +62,8 @@ describe("workerRequest", () => {
       maxCostUsd: 0,
       timeout: "20m",
       catchUp: "once",
+      runsOn: "",
+      onRequest: "",
       prompt: "Report.",
     });
     expect(workerRequest(emptyWorkerForm).catchUp).toBe("");
@@ -82,10 +84,17 @@ describe("formFromWorker", () => {
     maxCostUsd: 0.5,
     timeout: "20m",
     catchUp: "once",
+    runsOn: "service",
+    onRequest: "refuse",
     prompt: "Report.",
   };
   it("round-trips through the form", () => {
     expect(workerRequest(formFromWorker(written))).toEqual(written);
+  });
+  it("keeps where it runs through an edit (EN-40)", () => {
+    expect(formFromWorker(written).runsOn).toBe("service");
+    expect(formFromWorker({ ...written, runsOn: "" }).runsOn).toBe("here");
+    expect(formFromWorker({ ...written, onRequest: "maybe" }).onRequest).toBe("");
   });
   it.each([
     ["unset numbers stay empty", { maxTurns: 0, maxCostUsd: 0 }, { maxTurns: "", maxCostUSD: "" }],

@@ -3077,6 +3077,15 @@ export function installFake() {
           fakeWorkers.unshift(w);
           return { worker: w };
         },
+        // A job moved to the organization's service (EN-40, EN-41): nightly-deps can't go as it is.
+        moveWorkerToService: ({ name, force }) => {
+          const problems = name === "nightly-deps" ? ["the MCP server github is a program on this computer (npx): the service can't start it", "it reaches localhost:5432, which on the service is the runner itself"] : [];
+          const w = fakeWorkers.find((x) => x.name === name);
+          if (!w) throw new ConnectError(`no worker ${name}`, Code.NotFound);
+          if (problems.length && !force) return { problems, moved: false };
+          w.runsOn = "service";
+          return { problems, moved: true, worker: w };
+        },
         listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
         // The schedule picker's preview: the picker's own cron forms, roughly
         // (hours and minutes, every day or the weekdays named), else a problem.

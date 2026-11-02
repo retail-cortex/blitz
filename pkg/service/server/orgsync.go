@@ -39,6 +39,9 @@ type orgSyncs struct {
 	mu      sync.Mutex
 	running map[string]*orgSync // by the clone's folder
 	kick    chan struct{}
+	// told are the pairs of files with both versions each workspace's agent
+	// has been told of (EN-63), by folder: told once, on the next turn.
+	told map[string]map[[2]string]bool
 }
 
 type orgSync struct {
@@ -204,4 +207,43 @@ func (h configService) GetOrgSync(_ context.Context, r req[pb.GetOrgSyncRequest]
 		}
 	}
 	return ok(&pb.GetOrgSyncResponse{})
+}
+
+// conflictNote is what the next turn's agent in dir is told of the files
+// whose two versions sync kept (EN-63) that it hasn't been told of yet:
+// "" when there are none.
+func (s *Server) conflictNote(dir string) string {
+	key, err := canonical(dir)
+	if err != nil {
+		return ""
+	}
+	s.ent.syncs.mu.Lock()
+	defer s.ent.syncs.mu.Unlock()
+	var pairs [][2]string
+	for d, rs := range s.ent.syncs.running {
+		if k, err := canonical(d); err == nil && k == key {
+			pairs = rs.s.State().Pairs
+		}
+	}
+	if s.ent.syncs.told == nil {
+		s.ent.syncs.told = map[string]map[[2]string]bool{}
+	}
+	told := s.ent.syncs.told[key]
+	if told == nil {
+		told = map[[2]string]bool{}
+		s.ent.syncs.told[key] = told
+	}
+	var b strings.Builder
+	for _, p := range pairs {
+		if told[p] {
+			continue
+		}
+		told[p] = true
+		fmt.Fprintf(&b, "- %s (the shared version) and %s (this person's)\n", p[0], p[1])
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "<workspace-sync>\nThis workspace is kept in step with others in the organization. Someone else changed these files at the same time, so both versions were kept:\n" +
+		b.String() + "When your task touches one, merge this person's changes into the shared file and delete the copy; otherwise leave them, and mention them once.\n</workspace-sync>"
 }

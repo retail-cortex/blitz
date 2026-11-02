@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -218,8 +219,14 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 		}
 	}
 	ctx = withSink(ctx, send)
+	// Files whose two versions sync kept, told once (EN-63); the
+	// transcript keeps what the person wrote.
+	prompt := t.Prompt
+	if note := h.s.conflictNote(r.Msg.Workspace); note != "" {
+		prompt = cmp.Or(prompt, t.Text) + "\n\n" + note
+	}
 	res, runErr := w.Run(ctx, r.Msg.SessionId, api.Turn{
-		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
+		Text: t.Text, Prompt: prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
 		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
 		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command, Context: added,
 		OnAccepted: func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) },

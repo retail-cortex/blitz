@@ -541,6 +541,19 @@ func TestOrgSync(t *testing.T) {
 	none, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: t.TempDir()}))
 	require.NoError(t, err)
 	assert.Empty(t, none.Msg.State, "not one kept in step")
+
+	// Bo and Ana change the same lines at once: both versions are kept, and
+	// the agent's next turn is told so, once (EN-63).
+	run(filepath.Join(other, "bo"), "pull", "-q", "origin", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(other, "bo", "plan.md"), []byte("Bo's plan."), 0o644))
+	run(filepath.Join(other, "bo"), "commit", "-q", "-am", "Bo: edited plan.md")
+	run(filepath.Join(other, "bo"), "push", "-q", "origin", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("Ana's plan."), 0o644))
+	require.Eventually(t, func() bool { return state() == "conflicts" }, 10*time.Second, 20*time.Millisecond, "both versions kept")
+	note := s.conflictNote(dir)
+	assert.Contains(t, note, "- plan.md (the shared version) and plan (conflict, Ana).md (this person's)")
+	assert.Empty(t, s.conflictNote(dir), "told once")
+	assert.Empty(t, s.conflictNote(t.TempDir()), "not one kept in step")
 }
 
 // The organization workspaces' calls when it can't work: not connected,

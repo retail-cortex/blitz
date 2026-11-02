@@ -34,6 +34,10 @@ export interface WorkerForm {
   maxCostUSD: string;
   timeout: string;
   catchUp: "none" | "once";
+  /** Where it runs (spec_053 EN-40): kept through every edit. */
+  runsOn: "here" | "service";
+  /** What a run does when it needs more (EN-43): "" for where it runs's default. */
+  onRequest: "" | "refuse" | "pause";
   prompt: string;
 }
 
@@ -51,6 +55,8 @@ export const emptyWorkerForm: WorkerForm = {
   maxCostUSD: "",
   timeout: "",
   catchUp: "none",
+  runsOn: "here",
+  onRequest: "",
   prompt: "",
 };
 
@@ -98,6 +104,8 @@ export function workerRequest(f: WorkerForm) {
     maxCostUsd: num(f.maxCostUSD),
     timeout: f.timeout.trim(),
     catchUp: f.catchUp === "once" ? "once" : "",
+    runsOn: f.runsOn === "service" ? "service" : "",
+    onRequest: f.onRequest as string,
     prompt: f.prompt.trim(),
   };
 }
@@ -120,6 +128,8 @@ export function formFromWorker(d: WorkerFields): WorkerForm {
     maxCostUSD: d.maxCostUsd > 0 ? String(d.maxCostUsd) : "",
     timeout: d.timeout,
     catchUp: d.catchUp === "once" ? "once" : "none",
+    runsOn: d.runsOn === "service" ? "service" : "here",
+    onRequest: d.onRequest === "refuse" || d.onRequest === "pause" ? d.onRequest : "",
     prompt: d.prompt,
   };
 }

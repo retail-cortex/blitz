@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { useOrgWorkspaces } from "./orgBranding";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiAutoFix, mdiCreationOutline, mdiRefresh } from "@mdi/js";
@@ -74,6 +75,9 @@ export function WorkerEditor({
   const [composing, setComposing] = useState(false);
   // The host's limits for every job, for the limit fields' defaults and caps.
   const [policy, setPolicy] = useState<WorkerPolicySettings>();
+  // An organization workspace's jobs may run on its service (EN-40).
+  const org = useOrgWorkspaces();
+  const orgs = !!org?.workspaces.some((w) => w.dir === dir);
   useEffect(() => {
     workers.listAllWorkers({}).then(
       (r) => setPolicy(r.policy),
@@ -340,6 +344,38 @@ export function WorkerEditor({
           />
           <span className="t-body-sm muted">{t("desktop.newworker.catchup_hint")}</span>
         </div>
+        {(orgs || f.runsOn === "service") && (
+          <div className="row wrap" style={{ gap: 12 }}>
+            <span className="t-label">{t("desktop.newworker.runsOn")}</span>
+            <Segmented
+              small
+              label={t("desktop.newworker.runsOn")}
+              value={f.runsOn}
+              onChange={(v) => set("runsOn", v)}
+              options={[
+                { value: "here", label: t("desktop.newworker.runs_here") },
+                { value: "service", label: t("desktop.newworker.runs_service") },
+              ]}
+            />
+            <span className="t-body-sm muted">{t("desktop.newworker.runs_hint")}</span>
+          </div>
+        )}
+        {f.runsOn === "service" && (
+          <div className="row wrap" style={{ gap: 12 }}>
+            <span className="t-label">{t("desktop.newworker.onRequest")}</span>
+            <Segmented
+              small
+              label={t("desktop.newworker.onRequest")}
+              value={f.onRequest === "refuse" ? "refuse" : "pause"}
+              onChange={(v) => set("onRequest", v)}
+              options={[
+                { value: "pause", label: t("desktop.newworker.on_pause") },
+                { value: "refuse", label: t("desktop.newworker.on_refuse") },
+              ]}
+            />
+            <span className="t-body-sm muted">{t("desktop.newworker.on_hint")}</span>
+          </div>
+        )}
         {suggestion && (
           <Dialog
             wide

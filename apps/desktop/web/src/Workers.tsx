@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   mdiAlertCircleOutline,
+  mdiCloudUploadOutline,
   mdiCheckCircleOutline,
   mdiCloseCircleOutline,
   mdiDeleteOutline,
@@ -36,7 +37,9 @@ import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
-import { Button, Chip, Icon } from "@blitz/webui";
+import { Button, Chip, Dialog, Icon, useSnackbar } from "@blitz/webui";
+import { createPortal } from "react-dom";
+import { useOrgWorkspaces } from "./orgBranding";
 import { useOpenRun } from "./FlowRunAlerts";
 import { ServiceJobView } from "./ServiceJob";
 import { cost, goingRun, ms, progress, took, useWorkflowRuns } from "./workflowRuns";
@@ -203,6 +206,26 @@ export function WorkerView({
     void (request === "run" ? requested.current.runNow() : requested.current.disable());
   }, [request]);
 
+  // An organization workspace's job moves to its service (EN-40), after
+  // saying what won't work there (EN-41).
+  const org = useOrgWorkspaces();
+  const orgs = !!org?.workspaces.some((w) => w.dir === dir);
+  const snack = useSnackbar();
+  const [moveProblems, setMoveProblems] = useState<string[] | null>(null);
+  const move = async (force: boolean) => {
+    setError("");
+    try {
+      const r = await workers.moveWorkerToService({ workspace: dir, name: worker.name, force });
+      if (r.moved) {
+        setMoveProblems(null);
+        snack(t("desktop.worker.moved", { name: worker.name }));
+        onChange();
+      } else setMoveProblems(r.problems);
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+
   const limits = worker.limits;
   const enabled = worker.state === WorkerState.ENABLED;
   return (
@@ -279,10 +302,42 @@ export function WorkerView({
           <Button variant={worker.state === WorkerState.INVALID ? "filled" : "outlined"} icon={mdiPencilOutline} onClick={onEdit} title={worker.path}>
             {t("desktop.worker.edit")}
           </Button>
+          {orgs && (
+            <Button variant="outlined" icon={mdiCloudUploadOutline} onClick={() => void move(false)}>
+              {t("desktop.worker.move")}
+            </Button>
+          )}
           <Button danger icon={mdiDeleteOutline} onClick={onDelete}>
             {t("desktop.workers.delete")}
           </Button>
         </div>
+        {moveProblems &&
+          createPortal(
+            <Dialog
+              title={t("desktop.worker.move_title", { name: worker.name })}
+              icon={mdiCloudUploadOutline}
+              onClose={() => setMoveProblems(null)}
+              footer={
+                <>
+                  <Button onClick={() => setMoveProblems(null)}>{t("desktop.cancel")}</Button>
+                  <Button variant="filled" danger onClick={() => void move(true)}>
+                    {t("desktop.worker.move_anyway")}
+                  </Button>
+                </>
+              }
+            >
+              <p>{t("desktop.worker.move_body")}</p>
+              <p className="t-label">{t("desktop.worker.move_problems")}</p>
+              <ul>
+                {moveProblems.map((p) => (
+                  <li key={p} className="t-body-sm">
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </Dialog>,
+            document.body,
+          )}
         {error && <p className="error-text">{error}</p>}
         {live && (
           <div className="card outlined live-run">

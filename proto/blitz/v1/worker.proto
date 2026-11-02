@@ -89,6 +89,10 @@ service WorkerService {
   // picker: its cron form and its next runs, or why it can't be read
   // (problem, not an error, since it's asked as the user types).
   rpc PreviewSchedule(PreviewScheduleRequest) returns (PreviewScheduleResponse);
+  // Moves a job to the organization's service (runs_on: service; spec_053
+  // EN-40, EN-41): what keeps it from running there as it runs here, and,
+  // when nothing does or force, moves it, all else as written.
+  rpc MoveWorkerToService(MoveWorkerToServiceRequest) returns (MoveWorkerToServiceResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -511,4 +515,21 @@ message PreviewScheduleResponse {
   repeated google.protobuf.Timestamp next_runs = 3;
   // Why the schedule can't be read; empty when it can.
   string problem = 4;
+}
+
+// Request message for WorkerService.MoveWorkerToService.
+message MoveWorkerToServiceRequest {
+  string workspace = 1;
+  string name = 2;
+  // Move it even with problems.
+  bool force = 3;
+}
+
+// Response message for WorkerService.MoveWorkerToService.
+message MoveWorkerToServiceResponse {
+  // What keeps it from running there as it runs here.
+  repeated string problems = 1;
+  bool moved = 2;
+  // The job, moved.
+  Worker worker = 3;
 }

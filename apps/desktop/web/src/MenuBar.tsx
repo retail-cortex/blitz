@@ -141,15 +141,21 @@ export function MenuBar({
     ...(studioKind ? (["divider", { label: t("desktop.studio.close"), icon: mdiClose, onSelect: () => onCloseStudio?.() }] as MenuEntry[]) : []),
   ];
 
+  const orgWs = useOrgWorkspaces();
+  // A workspace kept in step with the organization saves itself: its
+  // Changes are this session's and its History, never Git's words (EN-64).
+  const synced = !!dir && !!orgWs?.workspaces.some((w) => w.dir === dir && w.sync && w.role !== "viewer");
   const changes: MenuEntry[] = [
     { label: t("desktop.menu.changes.session"), detail: t("desktop.changes.session"), icon: mdiHistory, onSelect: () => onChanges?.("session") },
-    { label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") },
   ];
-  if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
-  if (onCommit) changes.push("divider");
-  if (onIncludeAll) changes.push({ label: t("desktop.commit.stage_all"), icon: mdiPlusBoxMultipleOutline, onSelect: onIncludeAll });
-  if (onProtect) changes.push({ label: t("desktop.secrethook.menu"), detail: t("desktop.secrethook.menu_detail"), icon: mdiShieldKeyOutline, onSelect: onProtect });
-  if (onCommit) changes.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
+  if (!synced) changes.push({ label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") });
+  if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), detail: synced ? t("desktop.menu.changes.history_synced") : undefined, icon: mdiSourceBranch, onSelect: onHistory });
+  if (!synced) {
+    if (onCommit) changes.push("divider");
+    if (onIncludeAll) changes.push({ label: t("desktop.commit.stage_all"), icon: mdiPlusBoxMultipleOutline, onSelect: onIncludeAll });
+    if (onProtect) changes.push({ label: t("desktop.secrethook.menu"), detail: t("desktop.secrethook.menu_detail"), icon: mdiShieldKeyOutline, onSelect: onProtect });
+    if (onCommit) changes.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
+  }
 
   const status = (w: { dir: string }) => {
     const a = activity[w.dir];
@@ -157,7 +163,7 @@ export function MenuBar({
     return a?.waiting ? t("desktop.switcher.waiting") : a?.running ? t("desktop.switcher.working") : n > 0 ? tn("desktop.switcher.failed_runs", n) : "";
   };
   const recent = recentWorkspaces(prefs).slice(0, 8);
-  const org = useOrgWorkspaces();
+  const org = orgWs;
   const [orgDialog, setOrgDialog] = useState<{ share?: { dir: string; name: string } } | null>(null);
   const orgDone = async (w: OrgWorkspace, notes: string[]) => {
     const shared = !!orgDialog?.share;
@@ -254,7 +260,7 @@ export function MenuBar({
       {dir && (
         <>
           {/* Simple mode: Changes is this session's, a button; Git is advanced. */}
-          {advanced ? (
+          {advanced || (synced && onHistory) ? (
             <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.view.changes")} {...p} />} items={changes} />
           ) : (
             <button type="button" className="menubar-item" onClick={() => onChanges?.("session")}>
