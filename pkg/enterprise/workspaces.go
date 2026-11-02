@@ -88,14 +88,15 @@ func (c *Client) Workspaces(ctx context.Context) ([]Workspace, error) {
 }
 
 // CreateWorkspace makes a workspace of the organization's, the person its
-// owner; handle "" lets the service make one from the name.
-func (c *Client) CreateWorkspace(ctx context.Context, name, handle string) (Workspace, error) {
+// owner; handle "" lets the service make one from the name. A personal
+// one's handle is ~<the person>/<handle> (blitz-enterprise WS-01).
+func (c *Client) CreateWorkspace(ctx context.Context, name, handle string, personal bool) (Workspace, error) {
 	token, err := c.AccessToken(ctx)
 	if err != nil {
 		return Workspace{}, err
 	}
 	var v workspaceView
-	if err := call(ctx, c.hc, http.MethodPost, c.url+"/api/v1/workspaces", token, map[string]string{"name": name, "handle": handle}, &v); err != nil {
+	if err := call(ctx, c.hc, http.MethodPost, c.url+"/api/v1/workspaces", token, map[string]any{"name": name, "handle": handle, "personal": personal}, &v); err != nil {
 		return Workspace{}, err
 	}
 	if !ValidHandle(v.Workspace.Handle) {
@@ -149,7 +150,7 @@ func (c *Client) events(ctx context.Context, path string, on func(data string)) 
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return &Refusal{Status: res.StatusCode}
+		return refusal(res)
 	}
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {

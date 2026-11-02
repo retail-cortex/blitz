@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,7 +96,7 @@ func TestEnterpriseCommand(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "a-file")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	t.Setenv("BLITZ_SOCKET", filepath.Join(file, "s.sock"))
-	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}, {"terms"}, {"workspaces"}, {"open", "x"}, {"create", "x"}} {
+	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}, {"terms"}, {"workspaces"}, {"open", "x"}, {"create", "x"}, {"share", "."}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.ErrorContains(t, err, "starting the Blitz service", args)
 	}
@@ -196,6 +197,22 @@ func TestEnterpriseWorkspacesCommand(t *testing.T) {
 	assert.Contains(t, out, "not on this computer: blitz enterprise open q4-launch")
 	_, err = runCLI(t, "enterprise", "open", "nope")
 	assert.Error(t, err)
+	out, err = runCLI(t, "enterprise", "create", "--personal", "Home")
+	require.NoError(t, err)
+	assert.Contains(t, out, "(~ana/home)", "everyone's own home")
+
+	// A folder whose history holds a key isn't shared.
+	leaky := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"commit", "-q", "-m", "first"}} {
+		if args[0] == "add" {
+			require.NoError(t, os.WriteFile(filepath.Join(leaky, "config.py"), []byte("KEY = 'AKIAIOSFODNN7EXAMPLE'\n"), 0o644))
+		}
+		cmd := exec.Command("git", append([]string{"-C", leaky, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	_, err = runCLI(t, "enterprise", "share", leaky, "--name", "Leaky")
+	assert.ErrorContains(t, err, "config.py:1")
 	// One already on this computer: listed where it is, and opened there.
 	home, _ := os.UserHomeDir()
 	clone := filepath.Join(home, "Blitz", "Acme Assist", "q4-launch")

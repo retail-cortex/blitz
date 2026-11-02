@@ -46,6 +46,11 @@ func (s *Server) orgHandle(dir string) (*enterprise.Client, string, error) {
 	if !c.Status().SignedIn {
 		return nil, "", enterpriseError(enterprise.ErrNotSignedIn)
 	}
+	for handle, sf := range sharedFor(c.URL()) {
+		if filepath.Clean(sf.Dir) == filepath.Clean(dir) {
+			return c, handle, nil
+		}
+	}
 	rel, err := filepath.Rel(s.orgFolder(c, cfg), filepath.Clean(dir))
 	handle := filepath.ToSlash(rel)
 	if err != nil || !enterprise.ValidHandle(handle) {
@@ -219,7 +224,8 @@ func (h configService) WatchServiceRuns(ctx context.Context, _ req[pb.WatchServi
 		return err
 	}
 	folder := h.s.orgFolder(c, cfg)
-	dir := func(handle string) string { return filepath.Join(folder, filepath.FromSlash(handle)) }
+	shared := sharedFor(c.URL())
+	dir := func(handle string) string { d, _ := orgDir(shared, folder, handle); return d }
 	send := func(change *pb.ServiceRunChange) error {
 		list, err := c.GoingRuns(ctx)
 		if err != nil {

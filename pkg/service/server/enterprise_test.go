@@ -772,6 +772,25 @@ func TestServiceJobs(t *testing.T) {
 	require.NotNil(t, watch.Msg().Change, "the odd one isn't sent")
 	assert.Equal(t, "succeeded", watch.Msg().Change.Status)
 	assert.Equal(t, plans, watch.Msg().Change.Dir)
+	// The service's stream drops: followed again, with the list as it is.
+	defer func(d time.Duration) { watchRunsRetry = d }(watchRunsRetry)
+	watchRunsRetry = 20 * time.Millisecond
+	org.EndRunStreams <- struct{}{}
+	require.True(t, watch.Receive(), watch.Err())
+	assert.Nil(t, watch.Msg().Change, "the list again")
+	assert.Len(t, watch.Msg().Runs, 1)
+	// Then the license stops carrying jobs: the stream says so.
+	org.Mu.Lock()
+	org.JobsRefused = true
+	org.Mu.Unlock()
+	org.EndRunStreams <- struct{}{}
+	for watch.Receive() {
+	}
+	_, info = errorReason(t, watch.Err())
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+	org.Mu.Lock()
+	org.JobsRefused = false
+	org.Mu.Unlock()
 	stopWatch()
 	_ = watch.Close()
 
@@ -793,4 +812,184 @@ func TestServiceJobs(t *testing.T) {
 	assert.False(t, refused.Receive())
 	_, info = errorReason(t, refused.Err())
 	assert.Equal(t, "FEATURE_OFF", info.Reason)
+}
+
+// A folder already on this computer shared with the organization where it
+// is (EN-66): its work committed, its history checked for secrets, pushed
+// to a new workspace (a personal one here), kept in step there through its
+// own remote, its origin left alone; never twice, never a secret, never a
+// folder inside another repository.
+func TestShareWithOrganization(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	s.ent.syncEvery, s.ent.syncQuiet, s.ent.syncPoll = 50*time.Millisecond, 50*time.Millisecond, 20*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	git := func(dir string, args ...string) string {
+		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, args...)...).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return strings.TrimSpace(string(out))
+	}
+	share := func(dir, name string, personal bool) (*connect.Response[pb.ShareWithOrganizationResponse], error) {
+		return c.ShareWithOrganization(ctx, connect.NewRequest(&pb.ShareWithOrganizationRequest{Workspace: dir, Name: name, Personal: personal}))
+	}
+	notes := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(notes, "plan.md"), []byte("Ship it.\n"), 0o644))
+
+	_, err := share(notes, "Home", true)
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	_, err = share(notes, "Home", true)
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	token, err := s.ent.c.AccessToken(ctx)
+	require.NoError(t, err)
+	t.Setenv("BLITZ_TEST_TOKEN", token)
+	s.ent.gitHelper = `!f() { echo username=blitz; echo "password=$BLITZ_TEST_TOKEN"; }; f`
+
+	t.Run("a key in its history", func(t *testing.T) {
+		leaky := t.TempDir()
+		git(leaky, "init", "-q")
+		require.NoError(t, os.WriteFile(filepath.Join(leaky, "config.py"), []byte("KEY = 'AKIAIOSFODNN7EXAMPLE'\n"), 0o644))
+		git(leaky, "add", "-A")
+		git(leaky, "commit", "-q", "-m", "first")
+		git(leaky, "rm", "-q", "config.py")
+		git(leaky, "commit", "-q", "-m", "gone")
+		_, err := share(leaky, "Leaky", false)
+		code, info := errorReason(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, code)
+		assert.Equal(t, "SECRETS_FOUND", info.Reason)
+		assert.Contains(t, err.Error(), "config.py:1")
+		org.Mu.Lock()
+		_, made := org.Workspaces["leaky"]
+		org.Mu.Unlock()
+		assert.False(t, made, "nothing made")
+	})
+
+	t.Run("inside another repository", func(t *testing.T) {
+		outer := t.TempDir()
+		git(outer, "init", "-q")
+		inner := filepath.Join(outer, "sub")
+		require.NoError(t, os.MkdirAll(inner, 0o755))
+		_, err := share(inner, "Sub", false)
+		_, info := errorReason(t, err)
+		assert.Equal(t, "INSIDE_REPOSITORY", info.Reason)
+		_, err = share(filepath.Join(outer, "nope"), "Nope", false)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	})
+
+	shared, err := share(notes, "Home", true)
+	require.NoError(t, err)
+	assert.Equal(t, "~ana/home", shared.Msg.Workspace.Handle)
+	assert.Equal(t, notes, shared.Msg.Workspace.Dir, "where it is")
+	assert.True(t, shared.Msg.Workspace.Cloned)
+	assert.Contains(t, shared.Msg.Notes[0], "committed first")
+	bare := org.Repo("~ana/home")
+	assert.Equal(t, "Ship it.", git(bare, "show", "main:plan.md"))
+	assert.Equal(t, org.URL+"/git/~ana/home.git", git(notes, "remote", "get-url", "organization"))
+
+	_, err = share(notes, "Home", true)
+	_, info = errorReason(t, err)
+	assert.Equal(t, "ALREADY_SHARED", info.Reason)
+	list, err := c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Workspaces, 1)
+	assert.Equal(t, notes, list.Msg.Workspaces[0].Dir)
+
+	// Kept in step where it is, through its own remote.
+	require.Eventually(t, func() bool {
+		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: notes}))
+		return err == nil && st.Msg.State == "saved"
+	}, 10*time.Second, 20*time.Millisecond)
+	require.NoError(t, os.WriteFile(filepath.Join(notes, "more.md"), []byte("More."), 0o644))
+	require.Eventually(t, func() bool {
+		out, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%s", "main").Output()
+		return strings.Contains(string(out), "more.md")
+	}, 10*time.Second, 20*time.Millisecond, "its change saved and shared")
+
+	// A repository with an origin of its own keeps it.
+	code := t.TempDir()
+	git(code, "init", "-q")
+	git(code, "remote", "add", "origin", "https://github.com/acme/code.git")
+	require.NoError(t, os.WriteFile(filepath.Join(code, "main.go"), []byte("package main\n"), 0o644))
+	git(code, "add", "-A")
+	git(code, "commit", "-q", "-m", "first")
+	made, err := share(code, "Code", false)
+	require.NoError(t, err)
+	assert.Equal(t, "code", made.Msg.Workspace.Handle)
+	assert.Empty(t, made.Msg.Notes, "nothing to commit first")
+	assert.Equal(t, "https://github.com/acme/code.git", git(code, "remote", "get-url", "origin"))
+
+	t.Run("what can go wrong", func(t *testing.T) {
+		folder := func(files map[string]string) string {
+			dir := t.TempDir()
+			for name, data := range files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644))
+			}
+			return dir
+		}
+		// A long history only partly checked, a large file, and a remote
+		// called organization already there.
+		defer func(n int, size int64) { maxShareScan, largeShareFile = n, size }(maxShareScan, largeShareFile)
+		maxShareScan, largeShareFile = 1, 4
+		big := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
+		git(big, "init", "-q")
+		git(big, "remote", "add", "organization", "https://old.example/x.git")
+		made, err := share(big, "Big", false)
+		require.NoError(t, err)
+		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "only its first 1 files")
+		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "data.csv is 0 MB")
+		assert.Equal(t, org.URL+"/git/big.git", git(big, "remote", "get-url", "organization"))
+		maxShareScan, largeShareFile = 50_000, 50<<20
+
+		// A name that's taken: nothing pushed.
+		_, err = share(folder(map[string]string{"a.md": "a"}), "Big", false)
+		assert.Error(t, err)
+
+		// A push the service refuses.
+		t.Setenv("BLITZ_TEST_TOKEN", "not a token")
+		_, err = share(folder(map[string]string{"b.md": "b"}), "Refused", false)
+		_, info := errorReason(t, err)
+		assert.Equal(t, "PUSH_FAILED", info.Reason)
+		t.Setenv("BLITZ_TEST_TOKEN", token)
+
+		// The record of shared folders can't be read.
+		require.NoError(t, os.WriteFile(sharedPath(), []byte("not JSON"), 0o600))
+		assert.Nil(t, sharedFor(org.URL))
+		assert.Error(t, addShared(org.URL, "x", sharedFolder{Dir: "/x"}))
+		_, err = share(folder(map[string]string{"c.md": "c"}), "Unrecorded", false)
+		_, info = errorReason(t, err)
+		assert.Equal(t, "INTERNAL", info.Reason)
+		require.NoError(t, os.Remove(sharedPath()))
+		require.NoError(t, addShared(org.URL, "~ana/home", sharedFolder{Dir: notes, Remote: "organization"}))
+	})
+
+	// A shared folder's jobs are found by where it is.
+	found, err := c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: notes, Name: "digest"}))
+	require.NoError(t, err)
+	assert.False(t, found.Msg.Found)
+
+	// A Viewer's clone is read-only, saying why; an Owner's isn't.
+	org.AddWorkspace(t, "board", "Board", "viewer")
+	home, _ := os.UserHomeDir()
+	board := filepath.Join(home, "Blitz", "Acme Assist", "board")
+	require.NoError(t, os.MkdirAll(board, 0o700))
+	assert.Contains(t, s.ReadOnlyFor(ctx, board), "a Viewer of Acme Assist's workspace Board")
+	assert.Empty(t, s.ReadOnlyFor(ctx, notes), "Ana's own")
+	assert.Empty(t, s.ReadOnlyFor(ctx, t.TempDir()), "not the organization's")
+	assert.Empty(t, s.ReadOnlyFor(ctx, filepath.Join(t.TempDir(), "gone")))
 }

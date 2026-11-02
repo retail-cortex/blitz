@@ -159,12 +159,14 @@ func Run(ctx context.Context, o Options) error {
 	// changes it.
 	// The front ends' use, counted once a day (spec_054_active_installs).
 	use := &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: o.Version, On: config.CountsUsage}
-	s := server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+	var s *server.Server
+	s = server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
 		cfg, err := config.LoadWorkspace(o.Config, dir) // its own settings over the global ones
 		if err != nil {
 			return nil, err
 		}
 		cfg.Tools.WorkspaceDir = dir
+		cfg.Tools.ReadOnly = s.ReadOnlyFor(ctx, dir) // a Viewer's clone (EN-60)
 		o.Run.apply(cfg)
 		w, err := engine.Open(ctx, cfg, engine.Options{
 			Streaming:          true,

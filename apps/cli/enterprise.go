@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -216,16 +217,21 @@ are the ones Blitz uses, under its limits.`,
 			return nil
 		},
 	}
+	var personal bool
+	var handle string
 	create := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Make a workspace of your organization's, with you its owner",
-		Args:  cobra.ExactArgs(1),
+		Long: `Makes a workspace of your organization's, with you its owner. --personal
+makes it yours alone, its handle ~<you>/<name>: anyone may have one called
+home.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := settings(cmd)
 			if err != nil {
 				return err
 			}
-			w, err := s.CreateOrgWorkspace(cmd.Context(), args[0], "")
+			w, err := s.CreateOrgWorkspace(cmd.Context(), args[0], handle, personal)
 			if err != nil {
 				return err
 			}
@@ -233,7 +239,47 @@ are the ones Blitz uses, under its limits.`,
 			return nil
 		},
 	}
-	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create)
+	create.Flags().BoolVar(&personal, "personal", false, "make it yours alone (~<you>/<name>)")
+	create.Flags().StringVar(&handle, "handle", "", "its handle (default: made from the name)")
+	var shareName, shareHandle string
+	var sharePersonal bool
+	share := &cobra.Command{
+		Use:   "share [folder]",
+		Short: "Share a folder with your organization where it is, and keep it in step",
+		Long: `Shares a folder (the current one by default) with your organization where
+it is: its changes are committed, the folder and its history are checked for
+secrets (nothing is sent if any are found), a workspace is made for it and
+the folder is pushed there, then kept in step as you work. A repository's own
+origin stays as it was; the organization's is the remote "organization".`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			w, notes, err := s.ShareWithOrganization(cmd.Context(), abs, shareName, shareHandle, sharePersonal)
+			if err != nil {
+				return err
+			}
+			for _, n := range notes {
+				fmt.Fprintln(cmd.OutOrStdout(), "! "+n)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Shared %s as %s (%s), kept in step where it is.\n", abs, w.Name, w.Handle)
+			return nil
+		},
+	}
+	share.Flags().StringVar(&shareName, "name", "", "the workspace's name (default: the folder's)")
+	share.Flags().StringVar(&shareHandle, "handle", "", "its handle (default: made from the name)")
+	share.Flags().BoolVar(&sharePersonal, "personal", false, "make it yours alone (~<you>/<name>)")
+	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create, share)
 	return cmd
 }
 

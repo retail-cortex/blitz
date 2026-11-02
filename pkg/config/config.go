@@ -603,6 +603,10 @@ type ToolsConfig struct {
 	// WorkspaceDir is the workspace: the directory the tools work in (the
 	// --dir flag, else the current directory).
 	WorkspaceDir string `toml:"workspace_dir"`
+	// ReadOnly, set by the service (never a setting), makes the workspace
+	// read-only for the tools and the editor, saying why: a Viewer's clone
+	// of an organization workspace (spec_053 EN-60).
+	ReadOnly string `toml:"-"`
 	// AutoApproveCommands runs shell commands without asking (the sandbox and
 	// deny rules still apply).
 	AutoApproveCommands bool `toml:"auto_approve_commands"`

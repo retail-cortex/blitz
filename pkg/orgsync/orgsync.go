@@ -67,6 +67,9 @@ var ErrSignedOut = errors.New("signed out of the organization")
 type Syncer struct {
 	Dir string
 	Git Git
+	// Upstream is the Git remote that's the organization's ("origin"): a
+	// folder shared with it keeps its own origin.
+	Upstream string
 	// Who names the person in the saves' messages ("Ana").
 	Who string
 	// Busy reports whether a turn is running in the workspace now.
@@ -87,6 +90,13 @@ type Syncer struct {
 	remote  chan struct{}
 	status  string    // git status as last seen
 	changed time.Time // when it last changed
+}
+
+func (s *Syncer) upstream() string {
+	if s.Upstream != "" {
+		return s.Upstream
+	}
+	return "origin"
 }
 
 func (s *Syncer) now() time.Time {
@@ -227,7 +237,7 @@ func (s *Syncer) commit(ctx context.Context) error {
 func (s *Syncer) push(ctx context.Context) {
 	var err error
 	for range 3 {
-		if _, err = s.Git(ctx, s.Dir, "push", "-q", "origin", "HEAD"); err == nil {
+		if _, err = s.Git(ctx, s.Dir, "push", "-q", s.upstream(), "HEAD:main"); err == nil {
 			s.settle()
 			return
 		}
@@ -240,7 +250,7 @@ func (s *Syncer) push(ctx context.Context) {
 
 // ahead reports whether this computer has saves the service hasn't.
 func (s *Syncer) ahead(ctx context.Context) bool {
-	out, err := s.Git(ctx, s.Dir, "rev-list", "--count", "@{upstream}..HEAD")
+	out, err := s.Git(ctx, s.Dir, "rev-list", "--count", s.upstream()+"/main..HEAD")
 	return err == nil && strings.TrimSpace(string(out)) != "0"
 }
 
@@ -266,11 +276,11 @@ func (s *Syncer) take(ctx context.Context) bool {
 		s.failed(err)
 		return false
 	}
-	if _, err := s.Git(ctx, s.Dir, "fetch", "-q", "origin"); err != nil {
+	if _, err := s.Git(ctx, s.Dir, "fetch", "-q", s.upstream()); err != nil {
 		s.failed(err)
 		return false
 	}
-	upstream := "@{upstream}"
+	upstream := s.upstream() + "/main"
 	if _, err := s.Git(ctx, s.Dir, "rev-parse", "--verify", "-q", upstream); err != nil {
 		return true // nothing shared yet
 	}

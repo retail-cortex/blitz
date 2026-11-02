@@ -67,8 +67,8 @@ func (s *Server) orgFolder(c *enterprise.Client, cfg *config.Config) string {
 	return filepath.Join(config.ExpandHome(root), name)
 }
 
-func (s *Server) orgWorkspaceMsg(w enterprise.Workspace, folder string) *pb.OrgWorkspace {
-	dir := filepath.Join(folder, w.Handle)
+func (s *Server) orgWorkspaceMsg(w enterprise.Workspace, folder string, shared map[string]sharedFolder) *pb.OrgWorkspace {
+	dir, _ := orgDir(shared, folder, w.Handle)
 	_, err := os.Stat(filepath.Join(dir, ".git"))
 	return &pb.OrgWorkspace{Handle: w.Handle, Name: w.Name, Role: w.Role, Sync: w.Sync, CloneUrl: w.CloneURL, Dir: dir, Cloned: err == nil}
 }
@@ -83,10 +83,11 @@ func (h configService) ListOrgWorkspaces(ctx context.Context, _ req[pb.ListOrgWo
 		return nil, enterpriseError(err)
 	}
 	folder := h.s.orgFolder(c, cfg)
+	shared := sharedFor(c.URL())
 	out := &pb.ListOrgWorkspacesResponse{Organization: filepath.Base(folder)}
 	for _, w := range list {
 		if !w.Archived {
-			out.Workspaces = append(out.Workspaces, h.s.orgWorkspaceMsg(w, folder))
+			out.Workspaces = append(out.Workspaces, h.s.orgWorkspaceMsg(w, folder, shared))
 		}
 	}
 	return ok(out)
@@ -97,11 +98,11 @@ func (h configService) CreateOrgWorkspace(ctx context.Context, r req[pb.CreateOr
 	if err != nil {
 		return nil, err
 	}
-	w, err := c.CreateWorkspace(ctx, r.Msg.Name, r.Msg.Handle)
+	w, err := c.CreateWorkspace(ctx, r.Msg.Name, r.Msg.Handle, r.Msg.Personal)
 	if err != nil {
 		return nil, enterpriseError(err)
 	}
-	return ok(&pb.CreateOrgWorkspaceResponse{Workspace: h.s.orgWorkspaceMsg(w, h.s.orgFolder(c, cfg))})
+	return ok(&pb.CreateOrgWorkspaceResponse{Workspace: h.s.orgWorkspaceMsg(w, h.s.orgFolder(c, cfg), sharedFor(c.URL()))})
 }
 
 // gitHelper is the credential helper Git runs for the organization's
@@ -149,7 +150,7 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 	if i < 0 {
 		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", fmt.Errorf("you have no role in a workspace %q of your organization's", r.Msg.Handle))
 	}
-	w := h.s.orgWorkspaceMsg(list[i], h.s.orgFolder(c, cfg))
+	w := h.s.orgWorkspaceMsg(list[i], h.s.orgFolder(c, cfg), sharedFor(c.URL()))
 	if w.Cloned {
 		return ok(&pb.OpenOrgWorkspaceResponse{Dir: w.Dir})
 	}

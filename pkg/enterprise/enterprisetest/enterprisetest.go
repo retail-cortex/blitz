@@ -236,6 +236,9 @@ type Service struct {
 	// sent, each as it comes, on every runs' stream.
 	Going      []GoingRun
 	RunChanges chan RunChange
+	// EndRunStreams ends the runs' streams open now, as a service that
+	// restarts does.
+	EndRunStreams chan struct{}
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -297,7 +300,7 @@ type Artifact struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, Runs: map[string]string{}, repos: t.TempDir(), Pushes: make(chan string, 4), RunChanges: make(chan RunChange, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, Runs: map[string]string{}, repos: t.TempDir(), Pushes: make(chan string, 4), RunChanges: make(chan RunChange, 4), EndRunStreams: make(chan struct{}, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -516,16 +519,31 @@ func NewService(t testing.TB, issuer string) *Service {
 		if !signedIn(w, r) {
 			return
 		}
-		var in struct{ Name, Handle string }
+		var in struct {
+			Name, Handle string
+			Personal     bool
+		}
 		_ = json.NewDecoder(r.Body).Decode(&struct {
-			Name   *string `json:"name"`
-			Handle *string `json:"handle"`
-		}{&in.Name, &in.Handle})
+			Name     *string `json:"name"`
+			Handle   *string `json:"handle"`
+			Personal *bool   `json:"personal"`
+		}{&in.Name, &in.Handle, &in.Personal})
 		if in.Handle == "" {
 			in.Handle = strings.ToLower(strings.ReplaceAll(in.Name, " ", "-"))
 		}
+		if in.Personal {
+			in.Handle = "~ana/" + in.Handle
+		}
+		s.Mu.Lock()
+		_, taken := s.Workspaces[in.Handle]
+		s.Mu.Unlock()
+		if taken {
+			refuse(w, http.StatusConflict, "taken", "a workspace has that handle already")
+			return
+		}
 		ws := Workspace{Name: in.Name, Role: "owner", Sync: true}
-		if err := s.addRepo(in.Handle); err != nil {
+		// Empty, as the service makes a new workspace's.
+		if err := s.makeRepo(in.Handle, false); err != nil {
 			refuse(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
@@ -696,6 +714,8 @@ func NewService(t testing.TB, issuer string) *Service {
 			case <-r.Context().Done():
 				return
 			case <-s.quit:
+				return
+			case <-s.EndRunStreams:
 				return
 			case c := <-s.RunChanges:
 				data, _ := json.Marshal(c)
@@ -878,8 +898,15 @@ func (s *Service) AddWorkspace(t testing.TB, handle, name, role string) {
 }
 
 // addRepo makes handle's bare repository, with a first commit.
-func (s *Service) addRepo(handle string) error {
-	bare := filepath.Join(s.repos, handle+".git")
+func (s *Service) addRepo(handle string) error { return s.makeRepo(handle, true) }
+
+// makeRepo makes handle's bare repository, with a first commit when first
+// (an empty one, as the service makes for a new workspace, when not).
+func (s *Service) makeRepo(handle string, first bool) error {
+	bare := filepath.Join(s.repos, filepath.FromSlash(handle)+".git")
+	if err := os.MkdirAll(filepath.Dir(bare), 0o700); err != nil {
+		return err
+	}
 	work, err := os.MkdirTemp("", "ws")
 	if err != nil {
 		return err
@@ -896,12 +923,14 @@ func (s *Service) addRepo(handle string) error {
 	if err := git(s.repos, "init", "--bare", bare); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("# "+handle+"\n"), 0o600); err != nil {
-		return err
-	}
-	for _, args := range [][]string{{"init"}, {"add", "-A"}, {"commit", "-m", "First"}, {"push", bare, "HEAD:main"}} {
-		if err := git(work, args...); err != nil {
+	if first {
+		if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("# "+handle+"\n"), 0o600); err != nil {
 			return err
+		}
+		for _, args := range [][]string{{"init"}, {"add", "-A"}, {"commit", "-m", "First"}, {"push", bare, "HEAD:main"}} {
+			if err := git(work, args...); err != nil {
+				return err
+			}
 		}
 	}
 	if err := git(bare, "config", "http.receivepack", "true"); err != nil {
@@ -911,4 +940,6 @@ func (s *Service) addRepo(handle string) error {
 }
 
 // Repo is the bare repository of a workspace, for a test to look in.
-func (s *Service) Repo(handle string) string { return filepath.Join(s.repos, handle+".git") }
+func (s *Service) Repo(handle string) string {
+	return filepath.Join(s.repos, filepath.FromSlash(handle)+".git")
+}

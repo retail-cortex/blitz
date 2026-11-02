@@ -882,6 +882,12 @@ const fakeWorkers: FakeWorker[] = [
   },
 ];
 
+// The organization's workspaces the person has a role in.
+const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boolean; dir: string; cloned: boolean }[] = [
+  { handle: "plans", name: "Plans", role: "editor", sync: true, dir: "/home/me/Blitz/Acme Assist/plans", cloned: true },
+  { handle: "q4-launch", name: "Q4 Launch", role: "owner", sync: true, dir: "/home/me/Blitz/Acme Assist/q4-launch", cloned: false },
+];
+
 // The service's runs of sales-digest, newest first, and what each left.
 const fakeServiceSet = "urn:blitz:artifacts:9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e";
 const fakeServiceJob = { id: "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", urn: "urn:blitz:jobs:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", name: "sales-digest", schedule: "Mondays at 06:00", enabled: true };
@@ -2589,13 +2595,25 @@ export function installFake() {
         },
         listOrgWorkspaces: () => {
           if (!fakeOrg.url) throw new ConnectError("connect to your organization's service first", Code.FailedPrecondition);
-          return {
-            organization: "Acme Assist",
-            workspaces: [
-              { handle: "plans", name: "Plans", role: "editor", sync: true, dir: "/home/me/Blitz/Acme Assist/plans", cloned: true },
-              { handle: "q4-launch", name: "Q4 Launch", role: "owner", sync: true, dir: "/home/me/Blitz/Acme Assist/q4-launch", cloned: false },
-            ],
-          };
+          return { organization: "Acme Assist", workspaces: fakeOrgWorkspaces };
+        },
+        createOrgWorkspace: async ({ name, personal }) => {
+          await sleep(600);
+          const handle = (personal ? "~me/" : "") + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+          if (fakeOrgWorkspaces.some((w) => w.handle === handle)) throw new ConnectError("a workspace has that handle already", Code.FailedPrecondition);
+          const w = { handle, name, role: "owner", sync: true, dir: `/home/me/Blitz/Acme Assist/${handle}`, cloned: false };
+          fakeOrgWorkspaces.push(w);
+          return { workspace: w };
+        },
+        // A folder shared where it is; one named "leaky" holds a key (EN-66).
+        shareWithOrganization: async ({ workspace, name, personal }) => {
+          await sleep(1200);
+          if (workspace.includes("leaky") || name.toLowerCase().includes("leaky"))
+            throw new ConnectError("nothing was shared: the folder or its history holds what look like secrets: config.py:1 (AWS access key AKIA••••••••••••). Remove them from the files and the history, or mark a false alarm with blitz:allow-secret on its line", Code.FailedPrecondition);
+          const handle = (personal ? "~me/" : "") + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+          const w = { handle, name, role: "owner", sync: true, dir: workspace, cloned: true };
+          fakeOrgWorkspaces.push(w);
+          return { workspace: w, notes: ["Your changes not yet committed were committed first, as “Shared with Acme Assist”."] };
         },
         openOrgWorkspace: async ({ handle }) => {
           await sleep(800);

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io/fs"
@@ -28,6 +29,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -173,6 +175,7 @@ func TestFilePreviewsAndFailures(t *testing.T) {
 	}
 	assert.Equal(t, "INTERNAL", errorInfo(errors.New("disk on fire")).Reason, "an error with no reason of its own")
 	assert.Equal(t, "INTERNAL", reasonOf(fileError(errors.New("disk on fire"))))
+	assert.Equal(t, "READ_ONLY", reasonOf(fileError(fmt.Errorf("%w: plan.md: you're a Viewer", tools.ErrReadOnlyPath))), "a Viewer's clone (EN-60)")
 }
 
 // reasonOf is an API error's reason.

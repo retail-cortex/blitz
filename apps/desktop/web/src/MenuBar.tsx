@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mdiAutoFix,
   mdiBookOpenPageVariantOutline,
@@ -23,6 +25,8 @@ import {
   mdiDeleteOutline,
   mdiFolderOpenOutline,
   mdiFolderAccountOutline,
+  mdiFolderPlusOutline,
+  mdiFolderSyncOutline,
   mdiFolderOutline,
   mdiGit,
   mdiHistory,
@@ -37,7 +41,8 @@ import {
 } from "@mdi/js";
 import type { ChangesSource } from "./Changes";
 import { canPreview } from "./desktop";
-import { openDocs, openWeb, startSetup } from "./events";
+import { configChanged, openDocs, openWeb, startSetup } from "./events";
+import { OrgWorkspaceDialog } from "./OrgWorkspaceDialog";
 import { docSections } from "./docs/sections";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
@@ -153,6 +158,16 @@ export function MenuBar({
   };
   const recent = recentWorkspaces(prefs).slice(0, 8);
   const org = useOrgWorkspaces();
+  const [orgDialog, setOrgDialog] = useState<{ share?: { dir: string; name: string } } | null>(null);
+  const orgDone = async (w: OrgWorkspace, notes: string[]) => {
+    const shared = !!orgDialog?.share;
+    setOrgDialog(null);
+    configChanged({ dir: "" }); // the list again
+    if (shared) {
+      for (const n of notes) snack(n);
+      snack(t("desktop.org.shared", { handle: w.handle }));
+    } else await openOrg(w);
+  };
   const openOrg = async (w: OrgWorkspace) => {
     if (!w.cloned) snack(t("desktop.org.cloning", { name: w.name || w.handle }));
     try {
@@ -196,8 +211,11 @@ export function MenuBar({
         ]
       : []),
   ];
-  // The organization's workspaces, cloned the first time they're opened.
-  if (org && org.workspaces.length > 0) {
+  // The organization's workspaces, cloned the first time they're opened;
+  // a new one, and this folder shared with it where it is (EN-60, EN-66).
+  const current = dir ? openWorkspaces(prefs).find((w) => w.dir === dir) : undefined;
+  const isOrgs = !!dir && !!org?.workspaces.some((w) => w.dir === dir);
+  if (org) {
     workspaceItems.push(
       { heading: org.organization },
       ...org.workspaces.map(
@@ -208,6 +226,10 @@ export function MenuBar({
           onSelect: () => void openOrg(w),
         }),
       ),
+      { label: t("desktop.org.new"), icon: mdiFolderPlusOutline, onSelect: () => setOrgDialog({}) },
+      ...(dir && current && !isOrgs
+        ? [{ label: t("desktop.org.share", { name: displayName(current), org: org.organization }), icon: mdiFolderSyncOutline, onSelect: () => setOrgDialog({ share: { dir, name: displayName(current) } }) }]
+        : []),
     );
   }
   const othersWaiting = openWorkspaces(prefs).some((w) => w.dir !== prefs.active && activity[w.dir]?.waiting);
@@ -225,6 +247,9 @@ export function MenuBar({
 
   return (
     <nav className="menubar no-drag" aria-label={t("desktop.menu.label")}>
+      {orgDialog &&
+        org &&
+        createPortal(<OrgWorkspaceDialog org={org.organization} share={orgDialog.share} onClose={() => setOrgDialog(null)} onDone={(w, notes) => void orgDone(w, notes)} />, document.body)}
       <Menu className="menubar-menu wide-menu" trigger={(p) => <MenuButton label={t("desktop.menu.workspaces")} dot={othersWaiting} {...p} />} items={workspaceItems} />
       {dir && (
         <>

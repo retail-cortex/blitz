@@ -248,6 +248,12 @@ service ConfigService {
   // workspaces, first as they are, then again with each run's change as it
   // comes (EN-42: the Processes view, and Studio's service jobs).
   rpc WatchServiceRuns(WatchServiceRunsRequest) returns (stream WatchServiceRunsResponse);
+  // Shares a folder on this computer with the organization where it is
+  // (EN-66): makes the workspace (a team's, or the person's own), checks
+  // that the folder and its history hold no secrets (FAILED_PRECONDITION
+  // SECRETS_FOUND, naming them), pushes it, and keeps it in step there.
+  // ALREADY_SHARED for a folder that's the organization's already.
+  rpc ShareWithOrganization(ShareWithOrganizationRequest) returns (ShareWithOrganizationResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1386,6 +1392,8 @@ message CreateOrgWorkspaceRequest {
   string name = 1;
   // "" to make one from the name.
   string handle = 2;
+  // The person's own: its handle ~<them>/<handle>, so anyone may have a "home".
+  bool personal = 3;
 }
 
 // Response message for ConfigService.CreateOrgWorkspace.
@@ -1567,4 +1575,22 @@ message WatchServiceRunsResponse {
   ServiceRunChange change = 2;
   // Always true: the page server's keepalives are empty messages.
   bool listed = 3;
+}
+
+// Request message for ConfigService.ShareWithOrganization.
+message ShareWithOrganizationRequest {
+  // The folder.
+  string workspace = 1;
+  // The workspace's name ("" for the folder's).
+  string name = 2;
+  // Its handle ("" to make one from the name).
+  string handle = 3;
+  bool personal = 4;
+}
+
+// Response message for ConfigService.ShareWithOrganization.
+message ShareWithOrganizationResponse {
+  OrgWorkspace workspace = 1;
+  // What the person should know: changes saved first, large files.
+  repeated string notes = 2;
 }

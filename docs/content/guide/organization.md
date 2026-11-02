@@ -46,7 +46,13 @@ If your organization has terms, Blitz shows them before anything else when you s
 
 ## Your organization's workspaces
 
-Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. From the terminal: `blitz enterprise workspaces`, `blitz enterprise open <workspace>`, and `blitz enterprise create <name>` for a new one.
+Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. If you're only a Viewer of one, it's read-only on your computer: Blitz's file tools, its commands and the editor won't change it, and say why.
+
+**New workspace…** in the same menu makes one, with you its owner. Switch on **Just for me** to make it yours alone: it's named `~you/<name>`, so everyone can have one called `home`. Otherwise it's a team workspace you can invite people to.
+
+To share a folder you already have, open it and choose **Share <folder> with <organization>…**. It stays where it is and is kept in step from then on. Your changes are committed first, and the folder and its history are checked for secrets: if any are found, nothing is sent, and Blitz tells you which file and line. A repository's own `origin` (GitHub, say) stays as it was; your organization's is the remote `organization`.
+
+From the terminal: `blitz enterprise workspaces`, `blitz enterprise open <workspace>`, `blitz enterprise create <name>` (`--personal` for one of your own), and `blitz enterprise share [folder]` (`--name`, `--personal`).
 
 A workspace with sync on saves and shares itself: a few seconds after you or an agent stop changing it (never mid-turn), Blitz saves it and sends it to your organization, and brings in others' changes between turns. If you and someone else changed the same file, both versions are kept: theirs under the file's name, yours beside it as `name (conflict, You).ext`. The status bar says how it stands: **Saved**, **Saving…**, **Offline: saved on this computer**, **Signed out: sign in to sync**, or how many files have both versions. Blitz's service does this, so it goes on with the window closed.
 

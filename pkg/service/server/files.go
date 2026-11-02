@@ -23,6 +23,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -37,6 +38,8 @@ func fileError(err error) error {
 		return apiError(connect.CodeFailedPrecondition, "FILE_CHANGED", err, "path", changed.Path, "current_version", changed.Current)
 	case errors.Is(err, engine.ErrBadPath):
 		return apiError(connect.CodeInvalidArgument, "BAD_PATH", err)
+	case errors.Is(err, tools.ErrReadOnlyPath):
+		return apiError(connect.CodeFailedPrecondition, "READ_ONLY", err)
 	case errors.Is(err, fs.ErrNotExist):
 		return apiError(connect.CodeNotFound, "FILE_NOT_FOUND", err)
 	case errors.Is(err, fs.ErrExist):

@@ -262,3 +262,24 @@ func TestExtraRootsResolveAgainstTheWorkspace(t *testing.T) {
 	want, _ := filepath.EvalSymlinks(shared)
 	assert.Contains(t, w.RootDirs(), want, "roots %v lack %s", w.RootDirs(), want)
 }
+
+// A read-only workspace (a Viewer's clone, spec_053 EN-60) is read but not
+// written, deleted or made writable for the shell, and says why; its
+// extra read-write roots stay writable.
+func TestReadOnlyWorkspace(t *testing.T) {
+	dir, extra := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("Ship it.\n"), 0o644))
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, AllowedPaths: []string{extra}, ReadOnly: "you're a Viewer of Plans"})
+	require.NoError(t, err)
+	defer ws.Close()
+	assert.Equal(t, "you're a Viewer of Plans", ws.ReadOnly())
+	b, err := ws.ReadFile("plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, "Ship it.\n", string(b))
+	err = ws.WriteFileAtomic(context.Background(), "plan.md", []byte("x"))
+	require.ErrorIs(t, err, ErrReadOnlyPath)
+	assert.ErrorContains(t, err, "you're a Viewer of Plans", "says why")
+	assert.ErrorIs(t, ws.RemoveFile(context.Background(), "plan.md"), ErrReadOnlyPath)
+	assert.NotContains(t, ws.WritableDirs(), ws.Dir(), "nor for the shell")
+	assert.NoError(t, ws.WriteFileAtomic(context.Background(), filepath.Join(extra, "out.md"), []byte("x")), "its other roots stay writable")
+}

@@ -175,12 +175,23 @@ func (s *Settings) OrgWorkspaces(ctx context.Context) ([]OrgWorkspace, string, e
 
 // CreateOrgWorkspace makes a workspace of the organization's
 // (ConfigService.CreateOrgWorkspace).
-func (s *Settings) CreateOrgWorkspace(ctx context.Context, name, handle string) (OrgWorkspace, error) {
-	res, err := s.c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: name, Handle: handle}))
+func (s *Settings) CreateOrgWorkspace(ctx context.Context, name, handle string, personal bool) (OrgWorkspace, error) {
+	res, err := s.c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: name, Handle: handle, Personal: personal}))
 	if err != nil {
 		return OrgWorkspace{}, fromAPI(err)
 	}
 	return orgWorkspace(res.Msg.Workspace), nil
+}
+
+// ShareWithOrganization shares the folder dir with the organization where
+// it is (ConfigService.ShareWithOrganization, EN-66): the workspace, and
+// what the person should know.
+func (s *Settings) ShareWithOrganization(ctx context.Context, dir, name, handle string, personal bool) (OrgWorkspace, []string, error) {
+	res, err := s.c.ShareWithOrganization(ctx, connect.NewRequest(&pb.ShareWithOrganizationRequest{Workspace: dir, Name: name, Handle: handle, Personal: personal}))
+	if err != nil {
+		return OrgWorkspace{}, nil, fromAPI(err)
+	}
+	return orgWorkspace(res.Msg.Workspace), res.Msg.Notes, nil
 }
 
 // OpenOrgWorkspace clones an organization workspace the first time, and

@@ -191,6 +191,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		ReadOnlyPaths: sb.ReadOnlyPaths,
 		BlockedPaths:  blocked,
 		MaxFileSize:   cfg.Tools.MaxFileSizeBytes,
+		ReadOnly:      cfg.Tools.ReadOnly,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open workspace: %w", err)

@@ -47,6 +47,9 @@ type WorkspaceOptions struct {
 	ReadOnlyPaths []string // additional read-only roots
 	BlockedPaths  []string // glob patterns never readable or writable
 	MaxFileSize   int64
+	// ReadOnly, when set, makes the workspace itself read-only and says
+	// why (a Viewer's clone of an organization workspace, spec_053 EN-60).
+	ReadOnly string
 }
 
 // Workspace is the file sandbox. Every file tool goes through it: paths must
@@ -55,6 +58,7 @@ type WorkspaceOptions struct {
 // rejects ".." traversal and symlinks leaving the root at the OS level.
 type Workspace struct {
 	roots       []*fsRoot // roots[0] is the workspace
+	readOnly    string    // why the workspace is read-only ("" when it isn't)
 	blocked     *PathMatcher
 	maxFileSize int64
 	checkpoints *Checkpoints // nil when disabled
@@ -87,7 +91,7 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 	if opts.Dir == "" {
 		opts.Dir = "."
 	}
-	w := &Workspace{maxFileSize: opts.MaxFileSize}
+	w := &Workspace{maxFileSize: opts.MaxFileSize, readOnly: opts.ReadOnly}
 	if w.maxFileSize <= 0 {
 		w.maxFileSize = DefaultMaxFileSize
 	}
@@ -104,7 +108,7 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 		w.roots = append(w.roots, &fsRoot{dir: real, root: root, writable: writable})
 		return nil
 	}
-	if err := add(opts.Dir, true); err != nil {
+	if err := add(opts.Dir, opts.ReadOnly == ""); err != nil {
 		return nil, err
 	}
 	// Additional roots are relative to the workspace.
@@ -130,6 +134,9 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 	w.blocked = blocked
 	return w, nil
 }
+
+// ReadOnly is why the workspace itself is read-only ("" when it isn't).
+func (w *Workspace) ReadOnly() string { return w.readOnly }
 
 // Dir returns the absolute workspace path.
 func (w *Workspace) Dir() string { return w.roots[0].dir }
@@ -233,6 +240,9 @@ func (w *Workspace) locate(abs string) (location, bool) {
 
 func (w *Workspace) check(loc location, write bool) error {
 	if write && !loc.root.writable {
+		if loc.root == w.roots[0] && w.readOnly != "" {
+			return fmt.Errorf("%w: %s: %s", ErrReadOnlyPath, w.display(loc.abs()), w.readOnly)
+		}
 		return fmt.Errorf("%w: %s", ErrReadOnlyPath, w.display(loc.abs()))
 	}
 	if pat, blocked := w.blocked.Match(loc.abs()); blocked {

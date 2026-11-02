@@ -108,15 +108,17 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 	}()
 	for {
 		want := map[string]enterprise.Workspace{}
+		remotes := map[string]string{}
 		if c.Status().SignedIn {
 			if list, err := c.Workspaces(ctx); err == nil {
 				cfg, err := config.Load(s.configDir)
 				if err == nil {
 					folder := s.orgFolder(c, cfg)
+					shared := sharedFor(c.URL())
 					for _, w := range list {
-						dir := filepath.Join(folder, w.Handle)
+						dir, remote := orgDir(shared, folder, w.Handle)
 						if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil && w.Sync && !w.Archived && w.Role != "viewer" {
-							want[dir] = w
+							want[dir], remotes[dir] = w, remote
 						}
 					}
 				}
@@ -129,7 +131,7 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 		}
 		for dir, w := range want {
 			if running[dir] == nil {
-				r := s.startSync(ctx, c, dir, w.Handle)
+				r := s.startSync(ctx, c, dir, w.Handle, remotes[dir])
 				s.ent.syncs.mu.Lock()
 				running[dir] = r
 				s.ent.syncs.mu.Unlock()
@@ -149,13 +151,13 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 
 // startSync runs a syncer for the clone at dir, and follows its watch
 // stream so others' pushes come in as they happen.
-func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, handle string) *orgSync {
+func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, handle, remote string) *orgSync {
 	ctx, cancel := context.WithCancel(parent)
 	who := c.Status().Person.Name
 	if who == "" {
 		who, _, _ = strings.Cut(c.Status().Person.Email, "@")
 	}
-	sy := &orgsync.Syncer{Dir: dir, Git: s.gitOut, Who: who,
+	sy := &orgsync.Syncer{Dir: dir, Git: s.gitOut, Who: who, Upstream: remote,
 		Busy:     func() bool { return s.busyIn(dir) },
 		SignedIn: func() bool { return c.Status().SignedIn },
 		Quiet:    s.ent.syncQuiet, Poll: s.ent.syncPoll,
