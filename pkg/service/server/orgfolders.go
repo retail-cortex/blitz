@@ -110,31 +110,36 @@ func orgDir(shared map[string]sharedFolder, folder, handle string) (string, stri
 	return filepath.Join(folder, filepath.FromSlash(handle)), "origin"
 }
 
-// ReadOnlyFor is why the workspace at dir is read-only ("" when it isn't):
-// it's a clone of an organization workspace the person is only a Viewer
-// of (spec_053 EN-60). Asked as the workspace opens; when the service
-// can't be reached it isn't (a Viewer's push is refused there anyway).
-func (s *Server) ReadOnlyFor(ctx context.Context, dir string) string {
+// OrgWorkspaceFor is the organization's workspace at dir, asked as the
+// workspace opens: its ID ("" when dir isn't one; each model call carries
+// it, spec_053 EN-22), and why it's read-only ("" when it isn't): it's a
+// clone the person is only a Viewer of (EN-60). When the service can't be
+// reached it's neither (a Viewer's push is refused there anyway).
+func (s *Server) OrgWorkspaceFor(ctx context.Context, dir string) (id, readOnly string) {
 	c, cfg, err := s.orgClient()
 	if err != nil || !c.Status().SignedIn {
-		return ""
+		return "", ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	list, err := c.Workspaces(ctx)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	folder, shared := s.orgFolder(c, cfg), sharedFor(c.URL())
 	key, err := canonical(dir)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	for _, w := range list {
 		at, _ := orgDir(shared, folder, w.Handle)
-		if k, err := canonical(at); err == nil && k == key && w.Role == "viewer" {
-			return fmt.Sprintf("you're a Viewer of %s's workspace %s: ask its owner to make you an Editor to change it", filepath.Base(folder), cmp.Or(w.Name, w.Handle))
+		if k, err := canonical(at); err != nil || k != key {
+			continue
 		}
+		if w.Role == "viewer" {
+			readOnly = fmt.Sprintf("you're a Viewer of %s's workspace %s: ask its owner to make you an Editor to change it", filepath.Base(folder), cmp.Or(w.Name, w.Handle))
+		}
+		return w.ID, readOnly
 	}
-	return ""
+	return "", ""
 }

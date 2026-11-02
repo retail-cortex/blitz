@@ -399,7 +399,8 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		_, _ = w.Write([]byte(`{"object":"list","data":[
 			{"id":"fast","display_name":"Fast","vendor":"google","api":"responses","price":{"input_per_mtok":0.75,"output_per_mtok":3.75}},
-			{"id":"smart","display_name":"Smart","vendor":"anthropic","api":"messages","default":true,"max_output_tokens":32000}]}`))
+			{"id":"smart","display_name":"Smart","vendor":"anthropic","api":"messages","default":true,"max_output_tokens":32000,
+			 "capabilities":{"tools":true,"images":true,"thinking":true,"context":200000}}]}`))
 	})
 	mux.HandleFunc("GET /api/v1/branding", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()
@@ -510,7 +511,7 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 	})
 	view := func(handle string, ws Workspace) map[string]any {
-		return map[string]any{"workspace": map[string]any{"handle": handle, "name": ws.Name, "role": ws.Role, "sync": ws.Sync}, "clone_url": s.URL + "/git/" + handle + ".git"}
+		return map[string]any{"workspace": map[string]any{"id": WorkspaceID(handle), "handle": handle, "name": ws.Name, "role": ws.Role, "sync": ws.Sync}, "clone_url": s.URL + "/git/" + handle + ".git"}
 	}
 	mux.HandleFunc("GET /api/v1/workspaces", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {
@@ -1013,6 +1014,11 @@ func (s *Service) AddWorkspace(t testing.TB, handle, name, role string) {
 	s.Mu.Lock()
 	s.Workspaces[handle] = Workspace{Name: name, Role: role, Sync: true}
 	s.Mu.Unlock()
+}
+
+// WorkspaceID is the fake service's ID for the workspace handle.
+func WorkspaceID(handle string) string {
+	return "ws-" + strings.NewReplacer("~", "", "/", "-").Replace(handle)
 }
 
 // addRepo makes handle's bare repository, with a first commit.

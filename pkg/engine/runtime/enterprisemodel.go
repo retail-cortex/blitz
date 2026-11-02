@@ -61,8 +61,14 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if !ok {
 		return nil, fmt.Errorf("your organization (%s) offers you no models: ask its admins", c.URL())
 	}
+	headers := map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder}
+	if cfg.Tools.OrgWorkspace != "" {
+		// The organization's workspace the call is for, so the service
+		// applies its guardrails and limits (EN-22).
+		headers["Blitz-Workspace"] = cfg.Tools.OrgWorkspace
+	}
 	p := &apiProvider{
-		cfg:        config.APIConfig{BaseURL: c.URL() + "/api/v1", Model: m.ID, Headers: map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder}},
+		cfg:        config.APIConfig{BaseURL: c.URL() + "/api/v1", Model: m.ID, Headers: headers},
 		format:     formatResponses,
 		source:     c,
 		messagesAt: "/messages",

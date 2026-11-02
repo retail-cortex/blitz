@@ -166,7 +166,8 @@ func Run(ctx context.Context, o Options) error {
 			return nil, err
 		}
 		cfg.Tools.WorkspaceDir = dir
-		cfg.Tools.ReadOnly = s.ReadOnlyFor(ctx, dir) // a Viewer's clone (EN-60)
+		// The organization's ID for it (EN-22), and read-only for a Viewer's clone (EN-60).
+		cfg.Tools.OrgWorkspace, cfg.Tools.ReadOnly = s.OrgWorkspaceFor(ctx, dir)
 		o.Run.apply(cfg)
 		w, err := engine.Open(ctx, cfg, engine.Options{
 			Streaming:          true,

@@ -53,6 +53,11 @@ type ListedModel struct {
 	ID                          string
 	HasPrice                    bool
 	InputPerMTok, OutputPerMTok float64
+	// DisplayName, Default and Caps are the organization's, for its models
+	// (EN-21); Caps is nil when it says nothing of what one can do.
+	DisplayName string
+	Default     bool
+	Caps        *pb.ModelCapabilities
 }
 
 // ListModels lists the models of the providers named, or of every one
@@ -67,7 +72,8 @@ func (s *Settings) ListModels(ctx context.Context, dir string, providers ...stri
 	for i, p := range res.Msg.Providers {
 		out[i] = ProviderModels{Provider: p.Provider, Note: p.Note, Err: p.Error}
 		for _, m := range p.Models {
-			out[i].Models = append(out[i].Models, ListedModel{ID: m.Id, HasPrice: m.HasPrice, InputPerMTok: m.InputPerMtok, OutputPerMTok: m.OutputPerMtok})
+			out[i].Models = append(out[i].Models, ListedModel{ID: m.Id, HasPrice: m.HasPrice, InputPerMTok: m.InputPerMtok, OutputPerMTok: m.OutputPerMtok,
+				DisplayName: m.DisplayName, Default: m.IsDefault, Caps: m.Capabilities})
 		}
 	}
 	return out, nil

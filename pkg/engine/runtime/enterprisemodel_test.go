@@ -73,7 +73,7 @@ func newOrgService(t *testing.T, replies ...[2]any) *orgService {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"fast","api":"responses"},{"id":"smart","api":"messages","default":true}]}`))
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"fast","api":"responses"},{"id":"smart","api":"messages","default":true,"capabilities":{"tools":true,"context":200000}}]}`))
 	})
 	mux.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		if !s.takes(r) {
@@ -121,12 +121,13 @@ func inAgent(t *testing.T, session, name string) context.Context {
 
 // Connected to an organization, its models are the models: whatever the
 // settings name, through its gateway with the person's own session, the
-// session and agent named (spec_053_enterprise EN-20, EN-22).
+// workspace, session and agent named (spec_053_enterprise EN-20, EN-22).
 func TestEnterpriseModel(t *testing.T) {
 	t.Run("an OpenAI model", func(t *testing.T) {
 		s := newOrgService(t)
 		cfg := signedIn(t, s)
 		cfg.LLM.Provider, cfg.LLM.Gemini.APIKey = "gemini", "a key of my own"
+		cfg.Tools.OrgWorkspace = "ws-plans"
 		m, err := NewModel(context.Background(), cfg, "fast")
 		require.NoError(t, err)
 		text, _, err := callAPI(inAgent(t, "sess-1", "coder"), m, helloRequest())
@@ -138,6 +139,7 @@ func TestEnterpriseModel(t *testing.T) {
 		assert.Equal(t, "Bearer at-1", got[0].Header.Get("Authorization"))
 		assert.Equal(t, "sess-1", got[0].Header.Get("Blitz-Session"))
 		assert.Equal(t, "coder", got[0].Header.Get("Blitz-Agent"))
+		assert.Equal(t, "ws-plans", got[0].Header.Get("Blitz-Workspace"))
 		assert.Equal(t, "fast", got[0].Body["model"])
 	})
 	t.Run("a Claude model, at /messages", func(t *testing.T) {
@@ -154,6 +156,7 @@ func TestEnterpriseModel(t *testing.T) {
 		assert.Equal(t, "smart", got[0].Body["model"], "not offered: the organization's default")
 		assert.Empty(t, got[0].Header.Get("X-Api-Key"), "no key of its own")
 		assert.Empty(t, got[0].Header.Get("Blitz-Agent"), "outside an agent")
+		assert.Empty(t, got[0].Header.Get("Blitz-Workspace"), "not the organization's workspace")
 	})
 	t.Run("an access token the service stopped taking is renewed", func(t *testing.T) {
 		s := newOrgService(t)
@@ -236,7 +239,7 @@ func TestEnterpriseListModels(t *testing.T) {
 	got := ListModels(context.Background(), cfg)
 	require.Len(t, got, 1)
 	require.NoError(t, got[0].Err)
-	assert.Equal(t, []ListedModel{{ID: "fast"}, {ID: "smart", Default: true}}, got[0].Models)
+	assert.Equal(t, []ListedModel{{ID: "fast"}, {ID: "smart", Default: true, Caps: &enterprise.Capabilities{Tools: true, Context: 200000}}}, got[0].Models)
 
 	priced := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/models") {

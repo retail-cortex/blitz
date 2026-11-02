@@ -1065,15 +1065,22 @@ func TestShareWithOrganization(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, found.Msg.Found)
 
-	// A Viewer's clone is read-only, saying why; an Owner's isn't.
+	// Each is known by the service's ID (EN-22); a Viewer's clone is
+	// read-only, saying why; an Owner's isn't.
 	org.AddWorkspace(t, "board", "Board", "viewer")
 	home, _ := os.UserHomeDir()
 	board := filepath.Join(home, "Blitz", "Acme Assist", "board")
 	require.NoError(t, os.MkdirAll(board, 0o700))
-	assert.Contains(t, s.ReadOnlyFor(ctx, board), "a Viewer of Acme Assist's workspace Board")
-	assert.Empty(t, s.ReadOnlyFor(ctx, notes), "Ana's own")
-	assert.Empty(t, s.ReadOnlyFor(ctx, t.TempDir()), "not the organization's")
-	assert.Empty(t, s.ReadOnlyFor(ctx, filepath.Join(t.TempDir(), "gone")))
+	id, readOnly := s.OrgWorkspaceFor(ctx, board)
+	assert.Equal(t, enterprisetest.WorkspaceID("board"), id)
+	assert.Contains(t, readOnly, "a Viewer of Acme Assist's workspace Board")
+	id, readOnly = s.OrgWorkspaceFor(ctx, notes)
+	assert.Equal(t, enterprisetest.WorkspaceID("~ana/home"), id)
+	assert.Empty(t, readOnly, "Ana's own")
+	for _, dir := range []string{t.TempDir(), filepath.Join(t.TempDir(), "gone")} {
+		id, readOnly = s.OrgWorkspaceFor(ctx, dir)
+		assert.Empty(t, id+readOnly, "not the organization's")
+	}
 }
 
 // An Admin publishes a workspace's items to the organization's catalog

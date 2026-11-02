@@ -49,6 +49,27 @@ type Model struct {
 	MaxOutputTokens int            `json:"max_output_tokens"`
 }
 
+// Capabilities are what a model can do, as the organization says
+// (EN-21): whether it uses tools, reads images and thinks before
+// answering, and its context window in tokens (0 when unknown).
+type Capabilities struct {
+	Tools, Images, Thinking bool
+	Context                 int
+}
+
+// Caps are m's capabilities; ok is false when the service says none.
+func (m Model) Caps() (c Capabilities, ok bool) {
+	if len(m.Capabilities) == 0 {
+		return c, false
+	}
+	is := func(k string) bool { v, _ := m.Capabilities[k].(bool); return v }
+	c = Capabilities{Tools: is("tools"), Images: is("images"), Thinking: is("thinking")}
+	if n, isNum := m.Capabilities["context"].(float64); isNum && n > 0 {
+		c.Context = int(n)
+	}
+	return c, true
+}
+
 // models is the last list and its ETag, asked again with If-None-Match.
 type models struct {
 	mu   sync.Mutex

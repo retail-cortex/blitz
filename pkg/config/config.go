@@ -607,6 +607,11 @@ type ToolsConfig struct {
 	// read-only for the tools and the editor, saying why: a Viewer's clone
 	// of an organization workspace (spec_053 EN-60).
 	ReadOnly string `toml:"-"`
+	// OrgWorkspace, set by the service (never a setting), is the
+	// organization's ID for the workspace when it's one of its workspaces:
+	// each model call carries it, so the service applies the workspace's
+	// guardrails and limits (spec_053 EN-22).
+	OrgWorkspace string `toml:"-"`
 	// AutoApproveCommands runs shell commands without asking (the sandbox and
 	// deny rules still apply).
 	AutoApproveCommands bool `toml:"auto_approve_commands"`

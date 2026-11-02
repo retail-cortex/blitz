@@ -91,6 +91,9 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		for _, m := range pm.Models {
 			p.Ids = append(p.Ids, m.ID)
 			lm := &pb.ListedModel{Id: m.ID, DisplayName: m.DisplayName, IsDefault: m.Default}
+			if c := m.Caps; c != nil {
+				lm.Capabilities = &pb.ModelCapabilities{Tools: c.Tools, Images: c.Images, Thinking: c.Thinking, Context: int32(c.Context)}
+			}
 			if m.Price != nil {
 				lm.HasPrice, lm.InputPerMtok, lm.OutputPerMtok = true, m.Price.InputPerMTok, m.Price.OutputPerMTok
 			}

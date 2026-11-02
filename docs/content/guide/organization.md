@@ -25,9 +25,9 @@ The desktop app, the CLI and the tray share one sign-in: the Blitz service on yo
 
 ## What changes while you're connected
 
-- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back.
+- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Under the choice, Blitz says what that model can do (tools, images, thinking, how much it reads at once) and its price; `blitz models` lists the same. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back.
 - **Its limits apply.** Your organization may cap what you spend, a day or a month, and how fast you can send requests.
-- **What you send goes to it.** Your requests to models go through your organization's service, which may keep a record of them under its policies. Ask your admins what they keep.
+- **What you send goes to it.** Your requests to models go through your organization's service, which may keep a record of them under its policies. In one of your organization's workspaces, each request says which, so its guardrails and limits apply. Ask your admins what they keep.
 - **Signed out, the models wait.** A workspace tells you to sign in rather than falling back to your own keys.
 
 A workspace's settings can't connect Blitz to an organization, or change which one: only you can, in your own settings (`[enterprise] url`).

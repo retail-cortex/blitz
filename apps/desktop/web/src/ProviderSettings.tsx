@@ -22,7 +22,7 @@ import { openURL } from "./desktop";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
 import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ListedModel, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
-import { t, tn } from "./i18n";
+import { language, t, tn } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
 import { Button, Chip, Icon, Segmented, useSnackbar } from "@blitz/webui";
@@ -582,6 +582,11 @@ function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: stri
             ))}
           </select>
         </label>
+        {(() => {
+          const m = models?.find((x) => (current ? x.id === current : x.isDefault));
+          const facts = m ? modelFacts(m) : "";
+          return facts ? <p className="t-body-sm muted org-model-facts">{facts}</p> : null;
+        })()}
         {!org.signedIn ? (
           <p className="t-body-sm muted">{t("desktop.org.models_sign_in")}</p>
         ) : listError ? (
@@ -667,4 +672,19 @@ export function ConnectModelCard({ onSetUp }: { onSetUp: () => void }) {
       </Button>
     </div>
   );
+}
+
+/**
+ * What the organization says one of its models can do, and its price
+ * (spec_053 EN-21): "Uses tools · Reads images · 200K context · …".
+ */
+export function modelFacts(m: ListedModel): string {
+  const c = m.capabilities;
+  const parts: string[] = [];
+  if (c?.tools) parts.push(t("desktop.org.can.tools"));
+  if (c?.images) parts.push(t("desktop.org.can.images"));
+  if (c?.thinking) parts.push(t("desktop.org.can.thinking"));
+  if (c?.context) parts.push(t("desktop.org.can.context", { k: Math.round(c.context / 1000).toLocaleString(language()) }));
+  if (m.hasPrice) parts.push(t("desktop.org.model_price", { input: m.inputPerMtok.toFixed(2), output: m.outputPerMtok.toFixed(2) }));
+  return parts.join(" · ");
 }

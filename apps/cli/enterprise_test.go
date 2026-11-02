@@ -424,4 +424,10 @@ func TestEnterpriseCatalogCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "rule/style  (default)  this workspace has its own")
 	assert.NotContains(t, out, "reviewer")
+
+	// The organization's models, with what each can do (EN-21).
+	out, err = runCLI(t, "models")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Smart · the default · tools, images, thinking, 200K context")
+	assert.Regexp(t, `enterprise/fast +\$0\.75 in, \$3\.75 out per million tokens +Fast\n`, out)
 }

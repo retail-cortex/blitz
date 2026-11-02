@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/retail-cortex/blitz/pkg/client"
@@ -69,7 +70,11 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 					if m.HasPrice {
 						price = fmt.Sprintf("$%.2f in, $%.2f out per million tokens", m.InputPerMTok, m.OutputPerMTok)
 					}
-					fmt.Fprintf(tw, "  %s/%s\t%s\n", pm.Provider, m.ID, price)
+					line := fmt.Sprintf("  %s/%s\t%s", pm.Provider, m.ID, price)
+					if about := modelAbout(m); about != "" {
+						line += "\t" + about
+					}
+					fmt.Fprintln(tw, line)
 				}
 				tw.Flush()
 				fmt.Fprintln(out)
@@ -80,4 +85,34 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// modelAbout is what the organization says of one of its models (EN-21):
+// its name, whether it's the default, and what it can do.
+func modelAbout(m client.ListedModel) string {
+	var parts []string
+	if m.DisplayName != "" && m.DisplayName != m.ID {
+		parts = append(parts, m.DisplayName)
+	}
+	if m.Default {
+		parts = append(parts, "the default")
+	}
+	if c := m.Caps; c != nil {
+		var can []string
+		for _, f := range []struct {
+			on   bool
+			what string
+		}{{c.Tools, "tools"}, {c.Images, "images"}, {c.Thinking, "thinking"}} {
+			if f.on {
+				can = append(can, f.what)
+			}
+		}
+		if c.Context > 0 {
+			can = append(can, fmt.Sprintf("%dK context", c.Context/1000))
+		}
+		if len(can) > 0 {
+			parts = append(parts, strings.Join(can, ", "))
+		}
+	}
+	return strings.Join(parts, " · ")
 }

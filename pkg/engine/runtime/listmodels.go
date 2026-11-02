@@ -25,6 +25,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"google.golang.org/genai"
 )
 
@@ -45,6 +46,9 @@ type ListedModel struct {
 	// DisplayName and Default are the organization's, for its models.
 	DisplayName string
 	Default     bool
+	// Caps are what the organization says its model can do (EN-21); nil
+	// when it says nothing, and for every other provider's.
+	Caps *enterprise.Capabilities
 }
 
 // listTimeout bounds each provider's listing.
@@ -227,6 +231,9 @@ func listEnterprise(ctx context.Context, cfg *config.Config) ProviderModels {
 	}
 	for _, m := range list {
 		lm := ListedModel{ID: m.ID, DisplayName: m.DisplayName, Default: m.Default}
+		if c, ok := m.Caps(); ok {
+			lm.Caps = &c
+		}
 		if m.Price != nil {
 			lm.Price = &config.ModelPrice{InputPerMTok: m.Price.InputPerMTok, OutputPerMTok: m.Price.OutputPerMTok}
 		}

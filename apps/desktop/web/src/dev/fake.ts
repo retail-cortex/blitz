@@ -2755,7 +2755,7 @@ export function installFake() {
                 defaultProvider: "enterprise",
                 providers: [
                   fakeOrg.signedIn
-                    ? { provider: "enterprise", ids: ["fast", "smart"], models: [{ id: "fast", displayName: "Gemini Flash", hasPrice: true, inputPerMtok: 0.75, outputPerMtok: 3.75 }, { id: "smart", displayName: "Claude Opus", isDefault: true }] }
+                    ? { provider: "enterprise", ids: ["fast", "smart"], models: [{ id: "fast", displayName: "Gemini Flash", hasPrice: true, inputPerMtok: 0.75, outputPerMtok: 3.75, capabilities: { tools: true, images: true, thinking: false, context: 1_000_000 } }, { id: "smart", displayName: "Claude Opus", isDefault: true, hasPrice: true, inputPerMtok: 5, outputPerMtok: 25, capabilities: { tools: true, images: true, thinking: true, context: 200_000 } }] }
                     : { provider: "enterprise", error: "sign in to your organization to use its models" },
                 ],
               }

@@ -586,6 +586,18 @@ message ListedModel {
   string display_name = 5;
   // The organization's default model.
   bool is_default = 6;
+  // What the organization says its model can do (EN-21); unset when it
+  // says nothing, and for every other provider's models.
+  ModelCapabilities capabilities = 7;
+}
+
+// What a model can do.
+message ModelCapabilities {
+  bool tools = 1;
+  bool images = 2;
+  bool thinking = 3;
+  // Its context window in tokens; 0 when unknown.
+  int32 context = 4;
 }
 
 // Request message for ConfigService.GetSignIn.

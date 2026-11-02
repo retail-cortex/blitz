@@ -30,6 +30,9 @@ import (
 // in (spec_053_enterprise EN-60): a Git repository the service keeps,
 // cloned through it at CloneURL.
 type Workspace struct {
+	// ID is the service's, which never changes (the Blitz-Workspace header,
+	// EN-22).
+	ID       string
 	Handle   string
 	Name     string
 	Role     string // owner, editor, runner or viewer
@@ -52,6 +55,7 @@ var errHandle = errors.New("the organization's service named a workspace with a 
 // workspaceView is how the service answers for a workspace.
 type workspaceView struct {
 	Workspace struct {
+		ID       string  `json:"id"`
 		Handle   string  `json:"handle"`
 		Name     string  `json:"name"`
 		Role     string  `json:"role"`
@@ -63,7 +67,7 @@ type workspaceView struct {
 
 func (v workspaceView) workspace() Workspace {
 	w := v.Workspace
-	return Workspace{Handle: w.Handle, Name: w.Name, Role: w.Role, Sync: w.Sync, CloneURL: v.CloneURL, Archived: w.Archived != nil}
+	return Workspace{ID: w.ID, Handle: w.Handle, Name: w.Name, Role: w.Role, Sync: w.Sync, CloneURL: v.CloneURL, Archived: w.Archived != nil}
 }
 
 // Workspaces are the organization's workspaces the person has a role in.
