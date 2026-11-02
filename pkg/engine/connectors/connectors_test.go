@@ -17,6 +17,7 @@ package connectors_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -603,4 +604,84 @@ func TestBackendCapabilities(t *testing.T) {
 	pg, _ := cat.Kind("postgres")
 	_, ok := pg.Field("nope")
 	assert.False(t, ok)
+}
+
+// The organization's catalog's connections (spec_053 EN-30, EN-35): a
+// locked one takes the place of the person's of its name and is served
+// even when turned off; a default one gives way to the person's; the
+// policy refuses the person's own, or kinds it doesn't list; none of them
+// is the person's to delete.
+func TestOrgConnections(t *testing.T) {
+	ws := home(t)
+	const url = "https://blitz.acme.com"
+	_, err := config.SetEnterpriseURL("", url)
+	require.NoError(t, err)
+	org := config.EnterpriseDir("", url)
+	policy := func(own bool, kinds ...string) {
+		p := map[string]any{"policy": map[string]any{"connectors": map[string]any{"own": own, "kinds": kinds}}}
+		data, err := json.Marshal(p)
+		require.NoError(t, err)
+		write(t, filepath.Join(org, "policy.json"), string(data))
+		_, err = config.Load("")
+		require.NoError(t, err)
+	}
+	sqlite := func(name string) string {
+		return "# kind: sqlite\nkind: source\nname: " + name + "\ntype: sqlite\ndatabase: /tmp/" + name + ".db\n"
+	}
+	write(t, filepath.Join(org, "catalog", "locked", "connectors", "databases", "sales.yaml"), sqlite("sales"))
+	write(t, filepath.Join(org, "catalog", "default", "connectors", "databases", "notes.yaml"), sqlite("notes"))
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "sales.yaml"), sqlite("sales"))
+	write(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "notes.yaml"), sqlite("notes"))
+	d := connectors.Dirs{Workspace: ws}
+	cat := connectors.Load("", ws)
+	problems := func() map[string]string {
+		out := map[string]string{}
+		for _, c := range connectors.List(cat, d) {
+			out[c.Scope+"/"+c.Name] = c.Problem
+		}
+		return out
+	}
+
+	policy(true)
+	got := problems()
+	assert.Len(t, got, 4)
+	assert.Empty(t, got["org-locked/sales"])
+	assert.Contains(t, got["workspace/sales"], "locked connection of this name takes its place")
+	assert.Contains(t, got["org-default/notes"], "your own connection of this name takes its place")
+	assert.Empty(t, got["workspace/notes"])
+
+	policy(false)
+	got = problems()
+	assert.Contains(t, got["workspace/notes"], "doesn't allow connections of your own")
+	assert.Empty(t, got["org-default/notes"], "the person's own don't count")
+
+	policy(true, "postgres")
+	got = problems()
+	assert.Contains(t, got["workspace/notes"], "doesn't allow sqlite connections")
+	assert.Empty(t, got["org-default/notes"], "the person's refused: the organization's is used")
+	_, refused, err := connectors.Save(cat, d, connectors.Connection{Name: "scratch", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": "/tmp/s.db"}}, nil, "")
+	require.NoError(t, err)
+	assert.Contains(t, refused, "your organization doesn't allow sqlite connections")
+
+	// Served: the organization's locked one even when turned off, with the
+	// person's global secrets; the person's refused ones not.
+	var warned []string
+	off := func(string) bool { return false }
+	out := connectors.With(nil, connectors.ServeOptions{Dirs: d, On: off})
+	require.Len(t, out, 1)
+	assert.Equal(t, "databases", out[0].Name)
+	connectors.With(nil, connectors.ServeOptions{Dirs: d, Warn: func(s string) { warned = append(warned, s) }})
+	require.Len(t, warned, 2, "the person's two")
+	assert.Contains(t, warned[0], "isn't served: your organization")
+	assert.Equal(t, secrets.GlobalScope, d.SecretScope(connectors.ScopeOrgLocked))
+
+	assert.ErrorIs(t, connectors.Delete(cat, d, connectors.Ref{Scope: connectors.ScopeOrgLocked, Category: "databases", Name: "sales"}), connectors.ErrOrgOwned)
+	assert.True(t, connectors.IsOrg(connectors.ScopeOrgDefault))
+	assert.False(t, connectors.IsOrg(connectors.ScopeGlobal))
+
+	_, err = config.SetEnterpriseURL("", "")
+	require.NoError(t, err)
+	_, err = config.Load("")
+	require.NoError(t, err)
+	assert.Len(t, connectors.List(cat, d), 2, "disconnected: the person's own alone")
 }

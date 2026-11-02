@@ -1950,7 +1950,13 @@ export function installFake() {
             },
           ],
           kinds: [...fakeConnectorKinds, { id: "mysql", category: "databases", name: en("MySQL"), backend: "toolbox", origin: "workspace", path: `${workspace}/.agents/connectors/kinds/mysql.yaml`, problem: 'source "mysql": not in Blitz\'s Toolbox' }],
-          connections: fakeConnectors.map((d) => fakeConnectorMsg(workspace, d)),
+          connections: [
+            ...fakeConnectors.map((d) => fakeConnectorMsg(workspace, d)),
+            // The organization's (EN-30): ?org&signedin.
+            ...(fakeOrg.signedIn
+              ? [{ ...fakeConnectorMsg(workspace, { ...fakeConnectors[0], name: "warehouse", description: "Acme's sales warehouse" }), scope: "org-locked", trusted: true, path: "~/.blitz/enterprise/blitz.acme.com/catalog/locked/connectors/databases/warehouse.yaml" }]
+              : []),
+          ],
           workspaceDir: `${workspace}/.agents/connectors`,
           globalDir: "~/.blitz/connectors",
         }),

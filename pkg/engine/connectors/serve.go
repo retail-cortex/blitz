@@ -48,14 +48,20 @@ func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerCo
 		type group struct{ global, local []string }
 		groups := map[string]*group{}
 		var order []string
+		rules := rulesFor(o.Dirs, c.ID)
 		for _, scope := range Scopes {
 			for _, f := range o.Files(scope, c.ID) {
-				if o.On != nil && !o.On(Key(scope, c.ID, idOf(f))) {
+				// The organization's locked ones can't be turned off (EN-31).
+				if o.On != nil && scope != ScopeOrgLocked && !o.On(Key(scope, c.ID, idOf(f))) {
 					continue
 				}
 				text, err := os.ReadFile(f)
 				if err != nil {
 					warn(o.Warn, fmt.Sprintf("%s isn't served: %v", f, err))
+					continue
+				}
+				if why := rules.refusal(scope, idOf(f), KindOf(string(text))); why != "" {
+					warn(o.Warn, fmt.Sprintf("%s isn't served: %s", f, why))
 					continue
 				}
 				b, ok := backendFor(cat, c, string(text))
@@ -68,10 +74,10 @@ func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerCo
 					groups[b.ID()] = g
 					order = append(order, b.ID())
 				}
-				if scope == ScopeGlobal {
-					g.global = append(g.global, f)
-				} else {
+				if scope == ScopeWorkspace {
 					g.local = append(g.local, f)
+				} else { // the person's or the organization's, with global secrets
+					g.global = append(g.global, f)
 				}
 			}
 		}

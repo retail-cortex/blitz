@@ -42,6 +42,11 @@ const (
 const (
 	ConnectorScopeWorkspace = "workspace"
 	ConnectorScopeGlobal    = "global"
+	// The organization's catalog's connections (spec_053 EN-30): a locked
+	// one takes the place of the person's of its name, a default one gives
+	// way to it. Neither is the person's to change.
+	ConnectorScopeOrgLocked  = "org-locked"
+	ConnectorScopeOrgDefault = "org-default"
 )
 
 // connectorNameRE is a connection's (or a query's) name.

@@ -284,7 +284,8 @@ type Connection struct {
 	// Name is the file's name; its tools are named <name>_<tool>.
 	Name     string
 	Category string
-	// Scope is workspace (.agents/connectors/<category>) or global.
+	// Scope is workspace (.agents/connectors/<category>), global, or the
+	// organization's (org-locked, org-default).
 	Scope string
 	Path  string
 	// Kind is its kind's ID ("" for a custom file the backend can't say).
@@ -322,6 +323,10 @@ func (c Connection) Key() string { return Key(c.Scope, c.Category, c.Name) }
 const (
 	ScopeWorkspace = config.ConnectorScopeWorkspace
 	ScopeGlobal    = config.ConnectorScopeGlobal
+	// ScopeOrgLocked and ScopeOrgDefault are the organization's catalog's
+	// layers (spec_053 EN-30): read-only here.
+	ScopeOrgLocked  = config.ConnectorScopeOrgLocked
+	ScopeOrgDefault = config.ConnectorScopeOrgDefault
 )
 
 // Origins of descriptors.

@@ -25,9 +25,11 @@ import {
   mdiDatabaseLockOutline,
   mdiDatabaseOutline,
   mdiDeleteOutline,
+  mdiDomain,
   mdiEarth,
   mdiLanConnect,
   mdiLoading,
+  mdiLockOutline,
   mdiPlus,
   mdiPowerPlugOffOutline,
   mdiShieldAlertOutline,
@@ -447,14 +449,21 @@ export function ConnectorsPane({ workspace, onDirty, extra, connect }: { workspa
   );
 }
 
-/** A connection in the list: its kind, scope, trust, read-only or not, tools and description; its switch in Studio. */
+/**
+ * A connection in the list: its kind, scope, trust, read-only or not,
+ * tools and description; its switch in Studio. The organization's (spec_053
+ * EN-30) don't open, being its Admins' to change, and a locked one has no
+ * switch.
+ */
 function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connector; kind: ConnectorKind | undefined; icon: string; studio: boolean; onOpen: () => void; onEnable: (on: boolean) => void }) {
   const lang = language();
   const distrusted = c.scope === "workspace" && !c.trusted;
+  const org = c.scope === "org-locked" || c.scope === "org-default";
+  const where = org ? t(c.scope === "org-locked" ? "desktop.connectors.org_locked" : "desktop.connectors.org_default") : studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "";
   const detail = [
     c.enabled ? "" : t("desktop.connectors.off_here"),
     c.custom || !kind ? t("desktop.connectors.custom") : textIn(kind.name, lang),
-    studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "",
+    where,
     distrusted ? t("desktop.connectors.untrusted_short") : "",
     c.readOnly ? t("desktop.connectors.read_only") : c.custom ? "" : t("desktop.connectors.read_write"),
     c.custom ? "" : tn("desktop.connectors.tool_count", c.tools.length + c.queries.length),
@@ -463,15 +472,15 @@ function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connect
     .filter(Boolean)
     .join(" · ");
   return (
-    <div className="list-item">
-      <button type="button" className="row-open" onClick={onOpen}>
-        <Icon path={c.problem ? mdiAlertCircleOutline : !c.enabled ? mdiPowerPlugOffOutline : distrusted ? mdiShieldAlertOutline : c.readOnly ? mdiDatabaseLockOutline : icon} className={c.problem ? "error-text" : !c.enabled ? "muted" : undefined} />
+    <div className="list-item" title={org ? t("desktop.connectors.org_hint") : undefined}>
+      <button type="button" className="row-open" onClick={onOpen} disabled={org}>
+        <Icon path={c.problem ? mdiAlertCircleOutline : !c.enabled ? mdiPowerPlugOffOutline : distrusted ? mdiShieldAlertOutline : c.scope === "org-locked" ? mdiLockOutline : org ? mdiDomain : c.readOnly ? mdiDatabaseLockOutline : icon} className={c.problem ? "error-text" : !c.enabled ? "muted" : undefined} />
         <span className="lines spacer">
           <span className="ellipsis">{c.name}</span>
           <small className={`ellipsis ${c.problem ? "error-text" : ""}`}>{c.problem || detail}</small>
         </span>
       </button>
-      {studio && (
+      {studio && c.scope !== "org-locked" && (
         <span className="trailing">
           <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={onEnable} />
         </span>

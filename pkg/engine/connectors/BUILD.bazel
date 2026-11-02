@@ -20,6 +20,7 @@ go_library(
         "backend.go",
         "connectors.go",
         "descriptors.go",
+        "orgrules.go",
         "serve.go",
         "store.go",
     ],

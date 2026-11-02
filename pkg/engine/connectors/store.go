@@ -59,7 +59,7 @@ func (d Dirs) Files(scope, category string) []string {
 
 // SecretScope is the secrets scope of a connection scope's.
 func (d Dirs) SecretScope(scope string) string {
-	if scope == ScopeGlobal {
+	if scope != ScopeWorkspace { // the organization's use the person's global secrets
 		return secrets.GlobalScope
 	}
 	return config.SecretScope(d.Prefix, d.Workspace)
@@ -70,7 +70,7 @@ func (d Dirs) Global() Dirs { return Dirs{Prefix: d.Prefix} }
 
 // Scopes are the connection scopes, the global one first: what Dirs
 // lists in order.
-var Scopes = []string{ScopeGlobal, ScopeWorkspace}
+var Scopes = []string{ScopeOrgDefault, ScopeGlobal, ScopeWorkspace, ScopeOrgLocked}
 
 // Ref names a connection: its scope, category and name.
 type Ref struct {
@@ -140,6 +140,17 @@ func List(cat Catalog, d Dirs) []Connection {
 				}
 				out = append(out, conn)
 			}
+		}
+	}
+	rules := map[string]orgRules{}
+	for i, conn := range out {
+		r, ok := rules[conn.Category]
+		if !ok {
+			r = rulesFor(d, conn.Category)
+			rules[conn.Category] = r
+		}
+		if why := r.refusal(conn.Scope, conn.Name, conn.Kind); why != "" && conn.Problem == "" {
+			out[i].Problem = why
 		}
 	}
 	return out
@@ -323,6 +334,8 @@ func planSave(cat Catalog, d Dirs, conn Connection, values map[string]string, pr
 	problems := Check(b, k, conn)
 	if conn.Scope != ScopeGlobal && conn.Scope != ScopeWorkspace {
 		problems = append(problems, fmt.Sprintf("scope %q: workspace or global", conn.Scope))
+	} else if why := rulesFor(d, c.ID).refusal(conn.Scope, conn.Name, conn.Kind); why != "" {
+		problems = append(problems, why)
 	}
 	dir := d.ConnectionDir(conn.Scope, c.ID)
 	if dir == "" {
@@ -403,6 +416,9 @@ func Delete(cat Catalog, d Dirs, r Ref) error {
 	c, ok := cat.Category(r.Category)
 	if !ok {
 		return fmt.Errorf("%w: category %q", ErrUnknown, r.Category)
+	}
+	if IsOrg(r.Scope) {
+		return ErrOrgOwned
 	}
 	p := file(d.ConnectionDir(r.Scope, r.Category), r.Name)
 	if p == "" {

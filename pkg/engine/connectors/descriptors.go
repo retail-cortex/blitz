@@ -61,8 +61,18 @@ func WorkspaceDir(workspace string) string { return config.WorkspaceConnectorsDi
 // Dir is a scope's connectors folder ("" for a workspace scope with no
 // workspace).
 func Dir(prefixDir, workspace, scope string) string {
-	if scope == ScopeGlobal {
+	switch scope {
+	case ScopeGlobal:
 		return GlobalDir(prefixDir)
+	case ScopeOrgLocked, ScopeOrgDefault:
+		o := config.OrgLayerFor(prefixDir)
+		if !o.Active() {
+			return ""
+		}
+		if scope == ScopeOrgLocked {
+			return filepath.Join(o.Locked, config.ConnectorsFolder)
+		}
+		return filepath.Join(o.Defaults, config.ConnectorsFolder)
 	}
 	if workspace == "" {
 		return ""

@@ -68,9 +68,10 @@ func homeDir() string {
 }
 
 // scopeBase is the folder a connection's relative paths start from, by
-// its scope: the workspace's, or the home folder.
+// its scope: the workspace's, or the home folder (a global one's and the
+// organization's).
 func scopeBase(scope, workspace string) string {
-	if scope != connectors.ScopeGlobal && workspace != "" {
+	if (scope == "" || scope == connectors.ScopeWorkspace) && workspace != "" { // "" is a new one, the workspace's
 		return workspace
 	}
 	return homeDir()

@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -76,6 +77,12 @@ type OrgPolicy struct {
 	MCP struct {
 		Own bool `json:"own"`
 	} `json:"mcp"`
+	// Connectors says whether people may have connections of their own,
+	// and which kinds anyone's may be (every kind when none).
+	Connectors struct {
+		Own   bool     `json:"own"`
+		Kinds []string `json:"kinds"`
+	} `json:"connectors"`
 	Builtins struct {
 		Off []string `json:"off"`
 	} `json:"builtins"`
@@ -102,6 +109,7 @@ type orgState struct {
 // one on this computer: its layers, its policy, and its MCP servers, the
 // policy's tools denied for every agent.
 func applyOrg(cfg *Config, prefixDir string) {
+	orgLayers.Delete(ConfigDir(prefixDir))
 	dir := EnterpriseDir(prefixDir, cfg.Enterprise.URL)
 	if dir == "" {
 		return
@@ -116,6 +124,7 @@ func applyOrg(cfg *Config, prefixDir string) {
 	}
 	layers := filepath.Join(dir, "catalog")
 	cfg.Org = OrgLayer{Defaults: filepath.Join(layers, "default"), Locked: filepath.Join(layers, "locked"), Policy: st.Policy, Expires: st.Expires}
+	orgLayers.Store(ConfigDir(prefixDir), cfg.Org)
 	for _, tool := range st.Policy.Tools.Off {
 		if !slices.Contains(cfg.Permissions.Deny, tool) {
 			cfg.Permissions.Deny = append(cfg.Permissions.Deny, tool)
@@ -192,3 +201,17 @@ func (o OrgLayer) LockedFirst(dirs []string, subs ...string) []string {
 // Around is the exported form of around, for the engine's own lists
 // (commands).
 func (o OrgLayer) Around(sub string, dirs []string) []string { return o.around(sub, dirs) }
+
+// orgLayers is each settings folder's organization layer, as its settings
+// last loaded it, for what reads the catalog without the settings to hand
+// (connectors).
+var orgLayers sync.Map
+
+// OrgLayerFor is the organization layer the settings in prefixDir last
+// loaded ("" for ~/.blitz); an empty one when there's none.
+func OrgLayerFor(prefixDir string) OrgLayer {
+	if o, ok := orgLayers.Load(ConfigDir(prefixDir)); ok {
+		return o.(OrgLayer)
+	}
+	return OrgLayer{}
+}
