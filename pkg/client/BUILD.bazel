@@ -21,6 +21,7 @@ go_library(
         "client.go",
         "convert.go",
         "enterprise.go",
+        "jobs.go",
         "processes.go",
         "project.go",
         "settings.go",

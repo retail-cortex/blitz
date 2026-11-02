@@ -67,8 +67,12 @@ func stamp(t *time.Time) *timestamppb.Timestamp {
 }
 
 func serviceRunMsg(r enterprise.ServiceRun) *pb.ServiceRun {
-	return &pb.ServiceRun{Id: r.ID, Urn: r.URN, Trigger: r.Trigger, Status: r.Status, Note: r.Note, Output: r.Output, CostUsd: r.CostUSD,
-		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts}
+	m := &pb.ServiceRun{Id: r.ID, Urn: r.URN, Trigger: r.Trigger, Status: r.Status, Note: r.Note, Output: r.Output, CostUsd: r.CostUSD,
+		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts, Answer: r.Answer, AnswerNote: r.AnswerNote}
+	if p := r.Pending; p != nil {
+		m.Pending = &pb.ServiceRequest{Tool: p.Tool, Kind: p.Kind, Detail: p.Detail}
+	}
+	return m
 }
 
 func (h configService) GetServiceJob(ctx context.Context, r req[pb.GetServiceJobRequest]) (*connect.Response[pb.GetServiceJobResponse], error) {
@@ -285,4 +289,66 @@ func (h configService) WatchServiceRuns(ctx context.Context, _ req[pb.WatchServi
 		}
 		_ = send(nil)
 	}
+}
+
+func (h configService) ListServiceApprovals(ctx context.Context, _ req[pb.ListServiceApprovalsRequest]) (*connect.Response[pb.ListServiceApprovalsResponse], error) {
+	c, cfg, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.PendingRuns(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	folder, shared := h.s.orgFolder(c, cfg), sharedFor(c.URL())
+	out := &pb.ListServiceApprovalsResponse{}
+	for _, g := range list {
+		if !enterprise.ValidHandle(g.Workspace) {
+			continue
+		}
+		dir, _ := orgDir(shared, folder, g.Workspace)
+		out.Runs = append(out.Runs, &pb.GoingServiceRun{Run: serviceRunMsg(g.ServiceRun), JobId: g.Job, JobName: g.JobName, Workspace: g.Workspace, Dir: dir})
+	}
+	return ok(out)
+}
+
+func (h configService) AnswerServiceRun(ctx context.Context, r req[pb.AnswerServiceRunRequest]) (*connect.Response[pb.AnswerServiceRunResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	run, err := c.AnswerRun(ctx, r.Msg.RunId, r.Msg.Approve, r.Msg.Note)
+	if err != nil {
+		var ref *enterprise.Refusal
+		if errors.As(err, &ref) && ref.Status == 409 {
+			return nil, apiError(connect.CodeFailedPrecondition, "ANSWERED", err)
+		}
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.AnswerServiceRunResponse{Run: serviceRunMsg(run)})
+}
+
+func (h configService) ListServiceJobs(ctx context.Context, _ req[pb.ListServiceJobsRequest]) (*connect.Response[pb.ListServiceJobsResponse], error) {
+	c, cfg, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := c.Jobs(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	folder, shared := h.s.orgFolder(c, cfg), sharedFor(c.URL())
+	out := &pb.ListServiceJobsResponse{}
+	for _, j := range jobs {
+		if !enterprise.ValidHandle(j.Workspace) {
+			continue
+		}
+		dir, _ := orgDir(shared, folder, j.Workspace)
+		m := &pb.ServiceJob{Id: j.ID, Urn: j.URN, Name: j.Name, Schedule: j.Schedule, Enabled: j.Enabled, Workspace: j.Workspace, Dir: dir}
+		if j.Enabled {
+			m.NextRun = stamp(j.NextRun)
+		}
+		out.Jobs = append(out.Jobs, m)
+	}
+	return ok(out)
 }

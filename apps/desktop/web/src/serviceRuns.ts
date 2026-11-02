@@ -19,7 +19,7 @@
 // jobs, which refresh as a run of theirs changes instead of asking again
 // and again.
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { config } from "./api";
 import type { GoingServiceRun, ServiceRunChange } from "./gen/blitz/v1/config_pb";
 
@@ -80,4 +80,25 @@ function subscribe(f: () => void) {
 /** The service's runs going now, and its last change, kept up to date while in use. */
 export function useServiceRuns(): ServiceRunsState {
   return useSyncExternalStore(subscribe, () => state);
+}
+
+/**
+ * The service's runs paused for the person's answer (spec_053 EN-43),
+ * asked again as the runs' stream says one changed; reload asks now.
+ */
+export function useServiceApprovals(): { runs: GoingServiceRun[]; reload: () => void } {
+  const { changes } = useServiceRuns();
+  const [runs, setRuns] = useState<GoingServiceRun[]>([]);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let live = true;
+    config.listServiceApprovals({}).then(
+      (r) => live && setRuns(r.runs),
+      () => live && setRuns([]), // not connected, signed out, or no jobs on this license
+    );
+    return () => {
+      live = false;
+    };
+  }, [changes, n]);
+  return { runs, reload: () => setN((x) => x + 1) };
 }

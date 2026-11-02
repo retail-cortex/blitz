@@ -891,7 +891,17 @@ const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boo
 // The service's runs of sales-digest, newest first, and what each left.
 const fakeServiceSet = "urn:blitz:artifacts:9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e";
 const fakeServiceJob = { id: "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", urn: "urn:blitz:jobs:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", name: "sales-digest", schedule: "Mondays at 06:00", enabled: true };
-const fakeServiceRuns = [
+const fakeServiceRuns: { id: string; trigger: string; status: string; output?: string; note?: string; costUsd: number; created: ReturnType<typeof now>; branch?: string; artifacts: string; pending?: { tool: string; kind: string; detail: string } }[] = [
+  {
+    id: "7a7a7a7a-7b1c-4d2e-a3f4-5b6c7d8e9f00",
+    trigger: "schedule",
+    status: "paused",
+    output: "The numbers are ready. To publish them, I need to upload the chart to the team drive.",
+    costUsd: 0.0412,
+    created: timestampFromDate(new Date(Date.now() - 2 * 3600e3)),
+    artifacts: `${fakeServiceSet}:7a7a7a7a-7b1c-4d2e-a3f4-5b6c7d8e9f00`,
+    pending: { tool: "run_shell_command", kind: "shell", detail: "gsutil cp out/sales-by-region.png gs://acme-team/" },
+  },
   {
     id: "e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01",
     trigger: "schedule",
@@ -2639,6 +2649,18 @@ export function installFake() {
             await sleep(500);
             if (ctx?.signal.aborted) return;
           }
+        },
+        listServiceApprovals: () => ({
+          runs: fakeServiceRuns
+            .filter((r) => r.status === "paused")
+            .map((run) => ({ run, jobId: fakeServiceJob.id, jobName: fakeServiceJob.name, workspace: "plans", dir: "/home/me/Blitz/Acme Assist/plans" })),
+        }),
+        answerServiceRun: ({ runId }) => {
+          const run = fakeServiceRuns.find((r) => r.id === runId && r.status === "paused");
+          if (!run) throw new ConnectError("that run isn't waiting for an answer", Code.FailedPrecondition);
+          run.status = "running";
+          run.pending = undefined;
+          return { run };
         },
         getServiceJob: ({ name }) => (name === "sales-digest" ? { found: true, job: fakeServiceJob, runs: fakeServiceRuns } : { found: false, runs: [] }),
         runServiceJob: () => {

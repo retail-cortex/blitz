@@ -51,6 +51,7 @@ go_test(
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/runtime",
+        "//pkg/enterprise",
         "//pkg/enterprise/enterprisetest",
         "//pkg/socket",
         "//pkg/urn",

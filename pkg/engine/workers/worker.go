@@ -56,6 +56,7 @@ type frontmatter struct {
 	Overlap     string     `yaml:"overlap"`
 	CatchUp     string     `yaml:"catch_up"`
 	RunsOn      string     `yaml:"runs_on"`
+	OnRequest   string     `yaml:"on_request"`
 }
 
 // Worker is a worker as read from its directory.
@@ -81,6 +82,9 @@ type Worker struct {
 	// RunsOn is where it runs: jobspec.Here, or jobspec.Service (the
 	// organization's service runs it; this computer doesn't, EN-40).
 	RunsOn string
+	// OnRequest is "refuse" or "pause" ("" for where it runs's default,
+	// EN-43).
+	OnRequest string
 	// Prompt is the workflow: WORKER.md's body.
 	Prompt string
 	// Flow is a workflow (spec_043_workflows WF-17) the worker runs, its
@@ -158,6 +162,11 @@ func Load(dir string) (*Worker, error) {
 	if w.RunsOn, err = jobspec.RunsOn(f.RunsOn); err != nil {
 		problems = append(problems, err.Error())
 	}
+	switch w.OnRequest = f.OnRequest; w.OnRequest {
+	case "", "refuse", "pause":
+	default:
+		problems = append(problems, fmt.Sprintf("on_request %q: use \"refuse\" or \"pause\"", w.OnRequest))
+	}
 	switch w.CatchUp {
 	case "":
 		w.CatchUp = "none"
@@ -207,7 +216,7 @@ func ParseSpec(name string, data []byte) api.WorkerSpec {
 	}
 	spec.Description, spec.Schedule, spec.Timezone = f.Description, f.Schedule, f.Timezone
 	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp, spec.Workflow = f.Agent, f.Model, f.Permissions, f.CatchUp, f.Workflow
-	spec.RunsOn = f.RunsOn
+	spec.RunsOn, spec.OnRequest = f.RunsOn, f.OnRequest
 	spec.Limits = api.Limits{MaxTurns: f.Limits.MaxTurns, MaxCostUSD: f.Limits.MaxCostUSD, TimeoutRaw: f.Limits.TimeoutRaw}
 	spec.Prompt = strings.TrimSpace(string(body))
 	return spec
@@ -229,6 +238,7 @@ type fileFrontmatter struct {
 	Limits      *fileLimits `yaml:"limits,omitempty"`
 	CatchUp     string      `yaml:"catch_up,omitempty"`
 	RunsOn      string      `yaml:"runs_on,omitempty"`
+	OnRequest   string      `yaml:"on_request,omitempty"`
 }
 
 type fileLimits struct {
@@ -243,7 +253,7 @@ func Render(s api.WorkerSpec) []byte {
 	fm := fileFrontmatter{
 		Name: s.Name, Description: strings.TrimSpace(s.Description), Schedule: strings.TrimSpace(s.Schedule),
 		Timezone: strings.TrimSpace(s.Timezone), Agent: strings.TrimSpace(s.Agent), Model: strings.TrimSpace(s.Model),
-		Workflow: strings.TrimSpace(s.Workflow), CatchUp: s.CatchUp, RunsOn: s.RunsOn,
+		Workflow: strings.TrimSpace(s.Workflow), CatchUp: s.CatchUp, RunsOn: s.RunsOn, OnRequest: s.OnRequest,
 	}
 	for _, p := range s.Permissions {
 		if p = strings.TrimSpace(p); p != "" {

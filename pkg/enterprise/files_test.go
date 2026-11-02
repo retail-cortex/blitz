@@ -172,7 +172,8 @@ func TestRun(t *testing.T) {
 	assert.Error(t, NewRun("http://127.0.0.1:1", "r1", "s3cret", Options{}).KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""))
 	assert.Error(t, New(s.URL, nil, Options{}).KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""), "not a run")
 
-	require.ErrorContains(t, c.EndRun(ctx, RunEnd{Status: "won"}), "succeeded, failed or stopped")
+	require.ErrorContains(t, c.EndRun(ctx, RunEnd{Status: "won"}), "succeeded, failed, stopped or paused")
+	require.ErrorContains(t, c.EndRun(ctx, RunEnd{Status: RunPaused}), "what it asks for")
 	require.NoError(t, c.EndRun(ctx, RunEnd{Status: "succeeded", Output: "Done.", Branch: "blitz/jobs/digest/r1", CostUSD: 0.25}))
 	assert.Equal(t, map[string]any{"status": "succeeded", "output": "Done.", "branch": "blitz/jobs/digest/r1", "cost_usd": 0.25}, s.Ends["r1"])
 	assert.Error(t, c.EndRun(ctx, RunEnd{Status: "succeeded"}), "once")

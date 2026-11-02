@@ -43,6 +43,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/retail-cortex/blitz/pkg/urn"
 )
 
 // Provider is an identity provider as strict as Google's: the authorization
@@ -239,6 +241,10 @@ type Service struct {
 	// EndRunStreams ends the runs' streams open now, as a service that
 	// restarts does.
 	EndRunStreams chan struct{}
+	// Waiting are the runs paused for the person's answer; Answers each
+	// answer given, by run.
+	Waiting []GoingRun
+	Answers map[string]map[string]any
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -269,16 +275,17 @@ type ServiceJob struct {
 
 // ServiceRun is one of its runs.
 type ServiceRun struct {
-	ID        string    `json:"id"`
-	URN       string    `json:"urn"`
-	Trigger   string    `json:"trigger"`
-	Status    string    `json:"status"`
-	Note      string    `json:"note,omitempty"`
-	Output    string    `json:"output,omitempty"`
-	CostUSD   float64   `json:"cost_usd"`
-	Created   time.Time `json:"created"`
-	Branch    string    `json:"branch,omitempty"`
-	Artifacts string    `json:"artifacts,omitempty"`
+	Pending   map[string]string `json:"pending,omitempty"`
+	ID        string            `json:"id"`
+	URN       string            `json:"urn"`
+	Trigger   string            `json:"trigger"`
+	Status    string            `json:"status"`
+	Note      string            `json:"note,omitempty"`
+	Output    string            `json:"output,omitempty"`
+	CostUSD   float64           `json:"cost_usd"`
+	Created   time.Time         `json:"created"`
+	Branch    string            `json:"branch,omitempty"`
+	Artifacts string            `json:"artifacts,omitempty"`
 }
 
 // File is a file under a resource name.
@@ -655,8 +662,13 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		switch in["status"] {
 		case "succeeded", "failed", "stopped":
+		case "paused": // waiting for its owner's answer, saying for what
+			if in["pending"] == nil || in["session"] == "" || in["session"] == nil {
+				refuse(w, http.StatusBadRequest, "bad_request", "A paused run says what it asks for and its session.")
+				return
+			}
 		default:
-			refuse(w, http.StatusBadRequest, "bad_request", "A run ends succeeded, failed or stopped.")
+			refuse(w, http.StatusBadRequest, "bad_request", "A run ends succeeded, failed, stopped or paused.")
 			return
 		}
 		delete(in, "secret")
@@ -700,6 +712,36 @@ func NewService(t testing.TB, issuer string) *Service {
 			defer s.Mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
 		}
+	})
+	mux.HandleFunc("GET /api/v1/runs/pending", func(w http.ResponseWriter, r *http.Request) {
+		if jobs(w, r) {
+			defer s.Mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Waiting...)})
+		}
+	})
+	mux.HandleFunc("POST /api/v1/runs/{id}/answer", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		var in map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in["approve"] == nil {
+			refuse(w, http.StatusBadRequest, "bad_request", `Send {"approve": true or false, "note": "…"}.`)
+			return
+		}
+		for i, g := range s.Waiting {
+			if g.ID == r.PathValue("id") {
+				s.Waiting = append(s.Waiting[:i:i], s.Waiting[i+1:]...)
+				if s.Answers == nil {
+					s.Answers = map[string]map[string]any{}
+				}
+				s.Answers[g.ID] = in
+				g.ServiceRun.Status, g.ServiceRun.Pending = "running", nil
+				_ = json.NewEncoder(w).Encode(g.ServiceRun)
+				return
+			}
+		}
+		refuse(w, http.StatusConflict, "answered", "That run isn't waiting for an answer.")
 	})
 	mux.HandleFunc("GET /api/v1/runs/watch", func(w http.ResponseWriter, r *http.Request) {
 		if !jobs(w, r) {
@@ -774,6 +816,7 @@ func NewService(t testing.TB, issuer string) *Service {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
 		name := strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/resources/")
+		s.keptFiles(name)
 		switch q := r.URL.Query(); {
 		case q.Has("content"):
 			body, ok := s.Contents[name]
@@ -942,4 +985,30 @@ func (s *Service) makeRepo(handle string, first bool) error {
 // Repo is the bare repository of a workspace, for a test to look in.
 func (s *Service) Repo(handle string) string {
 	return filepath.Join(s.repos, filepath.FromSlash(handle)+".git")
+}
+
+// keptFiles adds what a run kept (Kept) under its artifacts' name to Files
+// and Contents, as the service serves them back; s.Mu is held.
+func (s *Service) keptFiles(name string) {
+	n, err := urn.Parse(name)
+	if err != nil || n.Kind != urn.Artifacts || len(n.IDs) != 3 {
+		return
+	}
+	set, _ := urn.New(urn.Artifacts, n.IDs...)
+	for path, a := range s.Kept[n.IDs[2]] {
+		f, err := set.File(path)
+		if err != nil {
+			continue
+		}
+		if s.Files == nil {
+			s.Files = map[string][]File{}
+		}
+		if s.Contents == nil {
+			s.Contents = map[string]string{}
+		}
+		if _, ok := s.Contents[f.String()]; !ok {
+			s.Files[set.String()] = append(s.Files[set.String()], File{URN: f.String(), Kind: "artifacts", Title: path, MediaType: a.MediaType, Size: int64(len(a.Body))})
+		}
+		s.Contents[f.String()] = a.Body
+	}
 }

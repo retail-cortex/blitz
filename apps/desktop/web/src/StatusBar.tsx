@@ -15,13 +15,18 @@
  */
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useServiceRuns } from "./serviceRuns";
+import { useServiceApprovals, useServiceRuns } from "./serviceRuns";
+import { notify } from "./notify";
+import type { GoingServiceRun } from "./gen/blitz/v1/config_pb";
 import { ms, took } from "./workflowRuns";
 import {
   mdiAccountAlertOutline,
   mdiAccountCheckOutline,
+  mdiAccountClockOutline,
+  mdiCheck,
+  mdiClose,
   mdiAlertCircleOutline,
   mdiAlertOutline,
   mdiFileCompare,
@@ -104,6 +109,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       <span className="spacer" />
       {ws && <Activity dir={dir} running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
       {serviceUp && <TasksItem />}
+      {serviceUp && <ApprovalsItem dir={dir} />}
       {serviceUp && <RunsItem />}
       {serviceUp && <FlowRunsItem />}
       {ws && <FailedItem dir={dir} />}
@@ -240,6 +246,63 @@ function RunsItem() {
       </button>
       {open && <InboxDrawer list={list} onClose={() => setOpen(false)} />}
     </>
+  );
+}
+
+// The organization's jobs waiting for the person's answer (spec_053
+// EN-43): a count, and a menu of what each asks to do with Approve and
+// Deny; each new one notifies, as an agent waiting does.
+function ApprovalsItem({ dir }: { dir: string }) {
+  const { prefs } = useApp();
+  const snack = useSnackbar();
+  const { runs, reload } = useServiceApprovals();
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set(runs.map((g) => g.run?.id ?? ""));
+    if (seen.current && prefs.notifications === "on") {
+      for (const g of runs) {
+        const id = g.run?.id ?? "";
+        if (!seen.current.has(id)) notify(t("desktop.approvals.notify_title", { job: g.jobName }), `${g.run?.pending?.tool}: ${g.run?.pending?.detail}`, g.dir || dir);
+      }
+    }
+    seen.current = ids; // the first list is what was there already
+  }, [runs, prefs.notifications, dir]);
+  if (runs.length === 0) return null;
+  const answer = async (g: GoingServiceRun, approve: boolean) => {
+    try {
+      await config.answerServiceRun({ runId: g.run?.id ?? "", approve, note: "" });
+      snack(t(approve ? "desktop.approvals.approved" : "desktop.approvals.denied", { job: g.jobName }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+    reload();
+  };
+  const label = t("desktop.approvals.label", { count: runs.length });
+  const items: MenuEntry[] = [
+    { heading: t("desktop.approvals.heading") },
+    ...runs.map((g) => ({
+      label: g.jobName,
+      detail: [t("desktop.approvals.asks", { tool: g.run?.pending?.tool ?? "", detail: g.run?.pending?.detail ?? "" }), displayName(prefs.workspaces.find((w) => w.dir === g.dir) ?? { dir: g.dir })].join(" · "),
+      icon: mdiCloudOutline,
+      onSelect: () => (g.dir === dir ? showView({ dir, view: "workers", worker: g.jobName }) : undefined),
+      actions: [
+        { icon: mdiCheck, label: t("desktop.approvals.approve"), removes: true, onSelect: () => void answer(g, true) },
+        { icon: mdiClose, label: t("desktop.approvals.deny"), removes: true, onSelect: () => void answer(g, false) },
+      ],
+    })),
+  ];
+  return (
+    <Menu
+      placement="up start"
+      className="wide-menu"
+      trigger={(p) => (
+        <button className="sb-item sb-button sb-warn" title={label} aria-label={label} {...p}>
+          <Icon path={mdiAccountClockOutline} size="sm" />
+          <span>{runs.length}</span>
+        </button>
+      )}
+      items={items}
+    />
   );
 }
 

@@ -20,7 +20,10 @@ go_library(
     srcs = ["enterprisetest.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "//pkg/urn",
+        "@com_github_stretchr_testify//assert",
+    ],
 )
 
 go_test(

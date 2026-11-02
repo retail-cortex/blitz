@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/urn"
 )
@@ -69,15 +71,21 @@ func TestJobFromEnv(t *testing.T) {
 		ana = "7c1e0d2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a"
 	)
 	full[envRun], full[envRunAs], full[envArtifacts] = run, ana, "urn:blitz:artifacts:"+ws+":"+job+":"+run
+	full[envResume], full[envAnswer], full[envNote], full[envRequest] = "s-1", "deny", "Not today.", `{"tool":"run_shell_command","detail":"make deploy"}`
 	j, err = JobFromEnv(with("", ""))
 	require.NoError(t, err)
 	assert.Equal(t, ana, j.RunAs)
+	assert.Equal(t, "s-1", j.Resume)
+	assert.Equal(t, "make deploy", j.Request.Detail)
+	assert.Contains(t, resumePrompt(j), "denied your request (run_shell_command: make deploy). They said: \"Not today.\"")
 	assert.Equal(t, []string{ws, job, run}, j.Artifacts.IDs)
 	for name, c := range map[string]struct{ k, v, err string }{
 		"not a person's ID":    {envRunAs, "ana", "isn't a person's ID"},
 		"not a name":           {envArtifacts, "artifacts", "isn't this run's artifacts"},
 		"another run's":        {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job + ":" + job, "isn't this run's artifacts"},
 		"a job's, not a run's": {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job, "isn't this run's artifacts"},
+		"an answer of neither": {envAnswer, "maybe", "approve or deny"},
+		"no request answered":  {envRequest, "{}", "isn't the request answered"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := JobFromEnv(with(c.k, c.v))
@@ -265,4 +273,114 @@ func TestRunJob(t *testing.T) {
 		err := RunJob(ctx, j, JobOptions{Config: t.TempDir(), Open: open(false)})
 		assert.ErrorContains(t, err, "telling the organization's service")
 	})
+}
+
+// A run that needs more than its job allows pauses (spec_053 EN-43): it
+// says what it asks for, keeps its session, and ends; answered yes, the
+// same run goes on in that session, allowed that request once.
+func TestRunJobPauses(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	ctx := context.Background()
+	p := enterprisetest.NewProvider(t)
+	s := enterprisetest.NewService(t, p.URL)
+	s.AddWorkspace(t, "plans", "Plans", "owner")
+	git := func(dir string, args ...string) string {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return string(out)
+	}
+	work := t.TempDir()
+	git(work, "clone", "--quiet", s.Repo("plans"), ".")
+	for name, spec := range map[string]string{
+		"release": "---\nschedule: Daily at 6 AM\nruns_on: service\n---\nWrite the release notes.\n",
+		"careful": "---\nschedule: Daily at 6 AM\nruns_on: service\non_request: refuse\n---\nWrite the release notes.\n",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(work, ".agents", "workers", name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(work, ".agents", "workers", name, "WORKER.md"), []byte(spec), 0o644))
+	}
+	git(work, "add", "-A")
+	git(work, "commit", "--quiet", "-m", "Jobs")
+	git(work, "push", "--quiet", "origin", "HEAD:main")
+
+	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "RELEASE.md", "content": "# 2.0\n"}}}}}
+	opener := func(responses ...*genai.Content) func(context.Context, *config.Config, engine.Options) (*engine.Workspace, error) {
+		return func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+			o.Model = runtime.NewMockLLM("m", responses...)
+			return engine.Open(ctx, cfg, o)
+		}
+	}
+	const (
+		ws  = "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b"
+		id  = "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e"
+		run = "e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01"
+	)
+	job := func(name string) Job {
+		s.Mu.Lock()
+		s.Runs[run] = "secret"
+		s.Mu.Unlock()
+		a, err := urn.New(urn.Artifacts, ws, id, run)
+		require.NoError(t, err)
+		return Job{Service: s.URL, Run: run, Secret: "secret", CloneURL: s.URL + "/git/plans.git", Name: name, Artifacts: a, Deadline: time.Now().Add(time.Minute)}
+	}
+	root := t.TempDir()
+
+	// It asks to write a file: paused, its session kept.
+	require.NoError(t, RunJob(ctx, job("release"), JobOptions{Config: t.TempDir(), Root: root, Open: opener(create, genai.NewContentFromText("Waiting.", genai.RoleModel))}))
+	s.Mu.Lock()
+	end, kept := s.Ends[run], s.Kept[run]
+	s.Mu.Unlock()
+	require.Equal(t, "paused", end["status"])
+	pending := end["pending"].(map[string]any)
+	assert.Equal(t, "create_file", pending["tool"])
+	session, _ := end["session"].(string)
+	require.NotEmpty(t, session)
+	var sessionFiles int
+	for path := range kept {
+		if strings.HasPrefix(path, "session/") {
+			sessionFiles++
+		}
+	}
+	assert.Positive(t, sessionFiles, "its session kept")
+
+	// Approved: the same run goes on in its session, allowed that once.
+	resumed := job("release")
+	resumed.Resume, resumed.Answer, resumed.Note = session, "approve", "Ship it."
+	resumed.Request = &enterprise.Request{Tool: "create_file", Kind: pending["kind"].(string), Detail: pending["detail"].(string)}
+	resumeOpen := opener(create, genai.NewContentFromText("Released.", genai.RoleModel))
+	require.NoError(t, RunJob(ctx, resumed, JobOptions{Config: t.TempDir(), Root: t.TempDir(), Open: resumeOpen}))
+	s.Mu.Lock()
+	end = s.Ends[run]
+	s.Mu.Unlock()
+	assert.Equal(t, "succeeded", end["status"])
+	assert.Equal(t, "Released.", end["output"])
+	assert.Contains(t, git(s.Repo("plans"), "show", "blitz/jobs/release/"+run+":RELEASE.md"), "# 2.0")
+
+	// Paused again later and denied: it goes on from its own branch.
+	again := job("release")
+	again.Resume, again.Answer = session, "deny"
+	again.Request = resumed.Request
+	var sawRelease bool
+	fromBranch := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+		_, err := os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "RELEASE.md"))
+		sawRelease = err == nil
+		return opener(genai.NewContentFromText("Done without it.", genai.RoleModel))(ctx, cfg, o)
+	}
+	require.NoError(t, RunJob(ctx, again, JobOptions{Config: t.TempDir(), Open: fromBranch}))
+	assert.True(t, sawRelease, "its branch, with its changes so far")
+
+	// A run whose session can't be found doesn't go on.
+	lost := job("release")
+	other, err := urn.New(urn.Artifacts, ws, id, "00000000-0000-4000-8000-000000000000")
+	require.NoError(t, err)
+	lost.Artifacts, lost.Resume, lost.Answer, lost.Request = other, session, "approve", resumed.Request
+	assert.ErrorContains(t, RunJob(ctx, lost, JobOptions{Config: t.TempDir(), Open: opener()}), "its session, to go on")
+
+	// A job that refuses instead: it goes on without, and ends.
+	require.NoError(t, RunJob(ctx, job("careful"), JobOptions{Config: t.TempDir(), Open: opener(create, genai.NewContentFromText("Couldn't write it.", genai.RoleModel))}))
+	s.Mu.Lock()
+	assert.Equal(t, "succeeded", s.Ends[run]["status"], "refused, not paused")
+	s.Mu.Unlock()
 }

@@ -645,6 +645,18 @@ func TestServiceJobs(t *testing.T) {
 			return err
 		},
 		func() error {
+			_, err := c.ListServiceJobs(ctx, connect.NewRequest(&pb.ListServiceJobsRequest{}))
+			return err
+		},
+		func() error {
+			_, err := c.ListServiceApprovals(ctx, connect.NewRequest(&pb.ListServiceApprovalsRequest{}))
+			return err
+		},
+		func() error {
+			_, err := c.AnswerServiceRun(ctx, connect.NewRequest(&pb.AnswerServiceRunRequest{RunId: "r"}))
+			return err
+		},
+		func() error {
 			_, err := c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: "urn:blitz:artifacts:" + strings.Repeat("9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:", 2) + "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b"}))
 			return err
 		},
@@ -794,6 +806,30 @@ func TestServiceJobs(t *testing.T) {
 	stopWatch()
 	_ = watch.Close()
 
+	// A paused run waits for the person's answer: listed, answered once.
+	org.Mu.Lock()
+	org.Waiting = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: run, Status: "paused",
+		Pending: map[string]string{"tool": "run_shell_command", "kind": "shell", "detail": "make deploy"}}, Job: job, JobName: "digest", Workspace: "plans"}}
+	org.Mu.Unlock()
+	jobs, err := c.ListServiceJobs(ctx, connect.NewRequest(&pb.ListServiceJobsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, jobs.Msg.Jobs, 2)
+	assert.Equal(t, plans, jobs.Msg.Jobs[0].Dir)
+	waiting, err := c.ListServiceApprovals(ctx, connect.NewRequest(&pb.ListServiceApprovalsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, waiting.Msg.Runs, 1)
+	assert.Equal(t, "make deploy", waiting.Msg.Runs[0].Run.Pending.Detail)
+	assert.Equal(t, plans, waiting.Msg.Runs[0].Dir)
+	answered, err := c.AnswerServiceRun(ctx, connect.NewRequest(&pb.AnswerServiceRunRequest{RunId: run, Approve: true, Note: "Go ahead."}))
+	require.NoError(t, err)
+	assert.Equal(t, "running", answered.Msg.Run.Status)
+	org.Mu.Lock()
+	assert.Equal(t, map[string]any{"approve": true, "note": "Go ahead."}, org.Answers[run])
+	org.Mu.Unlock()
+	_, err = c.AnswerServiceRun(ctx, connect.NewRequest(&pb.AnswerServiceRunRequest{RunId: run, Approve: false}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "ANSWERED", info.Reason)
+
 	// A Downloads folder that can't be one.
 	require.NoError(t, os.RemoveAll(filepath.Join(home, "Downloads")))
 	require.NoError(t, os.WriteFile(filepath.Join(home, "Downloads"), nil, 0o600))
@@ -805,6 +841,15 @@ func TestServiceJobs(t *testing.T) {
 	org.JobsRefused = true
 	org.Mu.Unlock()
 	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+	_, err = c.ListServiceApprovals(ctx, connect.NewRequest(&pb.ListServiceApprovalsRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+	_, err = c.ListServiceJobs(ctx, connect.NewRequest(&pb.ListServiceJobsRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+	_, err = c.AnswerServiceRun(ctx, connect.NewRequest(&pb.AnswerServiceRunRequest{RunId: run}))
 	_, info = errorReason(t, err)
 	assert.Equal(t, "FEATURE_OFF", info.Reason)
 	refused, err := c.WatchServiceRuns(ctx, connect.NewRequest(&pb.WatchServiceRunsRequest{}))

@@ -29,6 +29,7 @@ go_library(
         "configperms.go",
         "doctor.go",
         "enterprise.go",
+        "enterprisejobs.go",
         "eval.go",
         "exitcode.go",
         "headless.go",

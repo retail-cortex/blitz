@@ -72,6 +72,21 @@ type RunEnd struct {
 	// Branch is where its changes went ("" for none).
 	Branch  string  `json:"branch,omitempty"`
 	CostUSD float64 `json:"cost_usd"`
+	// A paused run's (RunPaused): what it asks for, and its session.
+	Pending *Request `json:"pending,omitempty"`
+	Session string   `json:"session,omitempty"`
+}
+
+// RunPaused is the status of a run that waits for its owner's answer
+// (blitz-enterprise spec_009_jobs JB-13).
+const RunPaused = "paused"
+
+// Request is what a paused run asks for: a tool, its kind, and what
+// exactly.
+type Request struct {
+	Tool   string `json:"tool"`
+	Kind   string `json:"kind"`
+	Detail string `json:"detail"`
 }
 
 // EndRun tells the service how the run ended; after it, the run's secret

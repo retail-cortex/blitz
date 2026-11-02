@@ -59,6 +59,10 @@ type ServiceRun struct {
 	Branch    string `json:"branch"`
 	Artifacts string `json:"artifacts"`
 	As        string `json:"as"`
+	// A paused run's request (status paused), and how it was answered.
+	Pending    *Request `json:"pending"`
+	Answer     string   `json:"answer"`
+	AnswerNote string   `json:"answer_note"`
 }
 
 // Resource is what the service says a resource name is (spec_055_urns
@@ -200,4 +204,22 @@ func (c *Client) WatchRuns(ctx context.Context, on func(RunChange)) error {
 		err = errors.New("the organization's service ended the runs' stream")
 	}
 	return err
+}
+
+// PendingRuns are the runs paused for the person's answer (theirs, or in
+// workspaces they're an Owner of; spec_053 EN-43).
+func (c *Client) PendingRuns(ctx context.Context) ([]GoingRun, error) {
+	var out struct {
+		Runs []GoingRun `json:"runs"`
+	}
+	err := c.signedCall(ctx, http.MethodGet, "/api/v1/runs/pending", nil, &out)
+	return out.Runs, err
+}
+
+// AnswerRun approves or denies what a paused run asks for, with a note;
+// the run goes on.
+func (c *Client) AnswerRun(ctx context.Context, run string, approve bool, note string) (ServiceRun, error) {
+	var r ServiceRun
+	err := c.signedCall(ctx, http.MethodPost, "/api/v1/runs/"+url.PathEscape(run)+"/answer", map[string]any{"approve": approve, "note": note}, &r)
+	return r, err
 }

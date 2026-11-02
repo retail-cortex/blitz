@@ -141,6 +141,9 @@ message Worker {
   // Where it runs: "here", or "service" when the organization's service
   // runs it and this computer doesn't.
   string runs_on = 18;
+  // What a run does when it needs more than it may do: "refuse", or
+  // "pause" for its owner's answer; "" for where it runs's default.
+  string on_request = 19;
 }
 
 // Request message for WorkerService.ListWorkers.
@@ -181,6 +184,8 @@ message CreateWorkerRequest {
   string workflow = 14;
   // "", "here" or "service".
   string runs_on = 15;
+  // "", "refuse" or "pause".
+  string on_request = 16;
 }
 
 // WorkerDefinition is a WORKER.md as written: its frontmatter fields and
@@ -209,6 +214,8 @@ message WorkerDefinition {
   string workflow = 13;
   // "", "here" or "service".
   string runs_on = 14;
+  // "", "refuse" or "pause".
+  string on_request = 15;
 }
 
 // Request message for WorkerService.GetWorkerSpec.

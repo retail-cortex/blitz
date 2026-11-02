@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -29,6 +30,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -53,6 +55,11 @@ type Job struct {
 	// may be unknown to an older service.
 	RunAs     string
 	Artifacts urn.Name
+	// Resume is the session a paused run goes on in (spec_053 EN-43), with
+	// the answer to what it asked (approve or deny), its note, and the
+	// request answered.
+	Resume, Answer, Note string
+	Request              *enterprise.Request
 	// Deadline is when the run must have ended.
 	Deadline time.Time
 }
@@ -67,6 +74,10 @@ const (
 	envDeadline  = "BLITZ_DEADLINE"
 	envRunAs     = "BLITZ_RUN_AS"
 	envArtifacts = "BLITZ_ARTIFACTS"
+	envResume    = "BLITZ_RESUME"
+	envAnswer    = "BLITZ_ANSWER"
+	envNote      = "BLITZ_ANSWER_NOTE"
+	envRequest   = "BLITZ_REQUEST"
 )
 
 // JobFromEnv is the run getenv describes.
@@ -96,6 +107,17 @@ func JobFromEnv(getenv func(string) string) (Job, error) {
 			return j, fmt.Errorf("%s %q isn't this run's artifacts", envArtifacts, a)
 		}
 		j.Artifacts = n
+	}
+	if j.Resume = getenv(envResume); j.Resume != "" {
+		j.Answer, j.Note = getenv(envAnswer), getenv(envNote)
+		if j.Answer != "approve" && j.Answer != "deny" {
+			return j, fmt.Errorf("%s %q: approve or deny", envAnswer, j.Answer)
+		}
+		var req enterprise.Request
+		if err := json.Unmarshal([]byte(getenv(envRequest)), &req); err != nil || req.Tool == "" {
+			return j, fmt.Errorf("%s isn't the request answered", envRequest)
+		}
+		j.Request = &req
 	}
 	if d := getenv(envDeadline); d != "" {
 		t, err := time.Parse(time.RFC3339, d)
@@ -152,19 +174,42 @@ func RunJob(ctx context.Context, j Job, o JobOptions) error {
 	if err := c.EndRun(tell, end); err != nil {
 		return fmt.Errorf("telling the organization's service how the run ended (%s): %w", end.Status, err)
 	}
-	if end.Status != string(api.RunSucceeded) {
+	if end.Status != string(api.RunSucceeded) && end.Status != enterprise.RunPaused {
 		return fmt.Errorf("the run %s: %s", end.Status, end.Note)
 	}
 	return nil
 }
 
 type jobRun struct {
-	j   Job
-	o   JobOptions
-	c   *enterprise.Client
-	dir string // the clone
-	out string // what it leaves for people
-	log string // its events, one JSON a line
+	j        Job
+	o        JobOptions
+	c        *enterprise.Client
+	dir      string // the clone
+	out      string // what it leaves for people
+	log      string // its events, one JSON a line
+	sessions string // its session's folder, kept with it while it waits
+}
+
+// errPaused ends a run that asked for more than its job allows: it waits
+// for its owner's answer (spec_053 EN-43).
+var errPaused = errors.New("it waits for its owner's approval")
+
+// sameRequest is whether req is the one answered.
+func sameRequest(req api.ApprovalRequest, answered *enterprise.Request) bool {
+	return answered != nil && req.Tool == answered.Tool && req.Detail == answered.Detail
+}
+
+// resumePrompt tells a paused run's agent how its request was answered.
+func resumePrompt(j Job) string {
+	what := fmt.Sprintf("%s: %s", j.Request.Tool, j.Request.Detail)
+	note := ""
+	if j.Note != "" {
+		note = fmt.Sprintf(` They said: "%s".`, j.Note)
+	}
+	if j.Answer == "approve" {
+		return fmt.Sprintf("Your job's owner approved your request (%s).%s Do it now, then go on with the job where you left off.", what, note)
+	}
+	return fmt.Sprintf("Your job's owner denied your request (%s).%s Go on without it: finish what you can, and say what you couldn't do.", what, note)
 }
 
 // folder is the run's own: jobs/<person>/<job>/<run> under root, by IDs
@@ -215,12 +260,24 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 	}
 	folder := r.folder(root)
 	r.dir, r.out, r.log = filepath.Join(folder, "workspace"), filepath.Join(folder, "out"), filepath.Join(folder, "events.jsonl")
-	for _, d := range []string{r.dir, r.out} {
+	r.sessions = filepath.Join(folder, "sessions")
+	for _, d := range []string{r.dir, r.out, r.sessions} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return failed("a folder to clone into: %v", err)
 		}
 	}
-	if _, err := r.git(ctx, "clone", "--quiet", "--branch", "main", "--single-branch", r.j.CloneURL, "."); err != nil {
+	// A paused run goes on from its own branch, where its changes so far
+	// are, with its session as it was.
+	from := "main"
+	if r.j.Resume != "" {
+		if err := r.restore(ctx); err != nil {
+			return failed("its session, to go on: %v", err)
+		}
+		if _, err := r.git(ctx, "ls-remote", "--exit-code", "--heads", r.j.CloneURL, r.branch()); err == nil {
+			from = r.branch()
+		}
+	}
+	if _, err := r.git(ctx, "clone", "--quiet", "--branch", from, "--single-branch", r.j.CloneURL, "."); err != nil {
 		return failed("cloning the workspace: %v", err)
 	}
 	cfg, err := config.LoadWorkspace(r.o.Config, r.dir)
@@ -230,6 +287,7 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 	cfg.Tools.WorkspaceDir = r.dir
 	cfg.Enterprise.URL = r.j.Service
 	cfg.Sandbox.AllowedPaths = append(cfg.Sandbox.AllowedPaths, r.out)
+	cfg.Session.StorageDir = r.sessions
 	store, err := workers.OpenStore(filepath.Join(folder, "workers.json"))
 	if err != nil {
 		return failed("the jobs' record: %v", err)
@@ -244,10 +302,10 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 	if err != nil {
 		return failed("reading the workspace's jobs: %v", err)
 	}
-	var hash string
+	var hash, onRequest string
 	for _, info := range list {
 		if info.Name == r.j.Name {
-			hash = info.Hash
+			hash, onRequest = info.Hash, info.OnRequest
 			if len(info.Problems) > 0 {
 				return failed("the job doesn't read: %s", strings.Join(info.Problems, "; "))
 			}
@@ -260,12 +318,41 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 		return failed("the job: %v", err)
 	}
 	var last strings.Builder
-	events, err := os.OpenFile(r.log, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	events, err := os.OpenFile(r.log, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // a paused run's goes on
 	if err != nil {
 		return failed("the run's log: %v", err)
 	}
 	enc := json.NewEncoder(events)
-	result, err := w.RunWorker(ctx, r.j.Name, engine.RunOptions{Manual: true, OnEvent: func(e api.Event) {
+	// What its permissions don't allow: the one request answered yes is
+	// allowed, once; anything else pauses it for its owner (EN-43).
+	runCtx, stopRun := context.WithCancelCause(ctx)
+	defer stopRun(nil)
+	var mu sync.Mutex
+	var pending *enterprise.Request
+	approved := r.j.Answer == "approve"
+	var session string
+	opts := engine.RunOptions{Manual: true, Session: r.j.Resume,
+		OnStart: func(run api.Run) { session = run.SessionID },
+		OnRequest: func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if approved && sameRequest(req, r.j.Request) {
+				approved = false
+				return api.DecisionOnce, nil
+			}
+			if pending == nil {
+				pending = &enterprise.Request{Tool: req.Tool, Kind: string(req.Kind), Detail: req.Detail}
+				stopRun(errPaused)
+			}
+			return api.DecisionDeny, nil
+		}}
+	if r.j.Resume != "" {
+		opts.Prompt = resumePrompt(r.j)
+	}
+	if onRequest == "refuse" { // the job's choice: refused, as on a computer
+		opts.OnRequest = nil
+	}
+	opts.OnEvent = func(e api.Event) {
 		// The run's output is its last message.
 		if t := e.Text; t != nil && !t.Thought && !t.Partial {
 			last.Reset()
@@ -275,10 +362,15 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 		if e.Text == nil || !e.Text.Partial {
 			_ = enc.Encode(e)
 		}
-	}})
+	}
+	result, err := w.RunWorker(runCtx, r.j.Name, opts)
 	_ = events.Close()
 	end := enterprise.RunEnd{Status: string(result.Status), Note: result.Error, Output: strings.TrimSpace(last.String()), CostUSD: result.CostUSD}
 	switch {
+	case errors.Is(context.Cause(runCtx), errPaused):
+		mu.Lock()
+		end.Status, end.Note, end.Pending, end.Session = enterprise.RunPaused, errPaused.Error(), pending, session
+		mu.Unlock()
 	case err != nil && result.Status == "":
 		return failed("running the job: %v", err)
 	case result.Status == api.RunSucceeded, result.Status == api.RunStopped:
@@ -337,6 +429,14 @@ func (r *jobRun) keep(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 	put(r.log, "events.jsonl")
+	// Its session, for a paused run to go on in (EN-43).
+	_ = filepath.WalkDir(r.sessions, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			rel, _ := filepath.Rel(r.sessions, path)
+			put(path, "session/"+filepath.ToSlash(rel))
+		}
+		return nil
+	})
 	return errors.Join(errs...)
 }
 
@@ -360,9 +460,54 @@ func (r *jobRun) push(ctx context.Context) (string, error) {
 		"commit", "--quiet", "-m", fmt.Sprintf("%s: run %s", r.j.Name, r.j.Run)); err != nil {
 		return "", err
 	}
-	branch := "blitz/jobs/" + r.j.Name + "/" + r.j.Run
+	branch := r.branch()
 	if _, err := r.git(ctx, "push", "--quiet", "origin", "HEAD:refs/heads/"+branch); err != nil {
 		return "", err
 	}
 	return branch, nil
+}
+
+// branch is the run's own branch.
+func (r *jobRun) branch() string { return "blitz/jobs/" + r.j.Name + "/" + r.j.Run }
+
+// restore puts a paused run's session back where it was (its files under
+// session/ in the run's artifacts).
+func (r *jobRun) restore(ctx context.Context) error {
+	items, err := r.c.Children(ctx, r.j.Artifacts.String())
+	if err != nil {
+		return err
+	}
+	for _, it := range items {
+		n, err := urn.Parse(it.URN)
+		if err != nil {
+			continue
+		}
+		rel, ok := strings.CutPrefix(n.Path, "session/")
+		if !ok {
+			continue
+		}
+		path := filepath.Join(r.sessions, filepath.FromSlash(rel))
+		if !strings.HasPrefix(path, r.sessions+string(filepath.Separator)) {
+			continue // never outside its folder
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return err
+		}
+		body, err := r.c.OpenResource(ctx, n.String())
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err == nil {
+			_, err = io.Copy(f, body)
+			if cerr := f.Close(); err == nil {
+				err = cerr
+			}
+		}
+		body.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

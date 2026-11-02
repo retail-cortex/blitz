@@ -254,6 +254,16 @@ service ConfigService {
   // SECRETS_FOUND, naming them), pushes it, and keeps it in step there.
   // ALREADY_SHARED for a folder that's the organization's already.
   rpc ShareWithOrganization(ShareWithOrganizationRequest) returns (ShareWithOrganizationResponse);
+  // The service's runs paused for the person's answer (EN-43): of jobs
+  // they own, or in workspaces they're an Owner of.
+  rpc ListServiceApprovals(ListServiceApprovalsRequest) returns (ListServiceApprovalsResponse);
+  // Every job the organization's service runs in the person's workspaces
+  // (EN-42), with each one's workspace; the runs of one with
+  // GetServiceJob.
+  rpc ListServiceJobs(ListServiceJobsRequest) returns (ListServiceJobsResponse);
+  // Approves or denies what a paused run asks for, with a note; the run
+  // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
+  rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1453,6 +1463,9 @@ message ServiceJob {
   bool enabled = 5;
   // Its next time, when it has one and is on.
   google.protobuf.Timestamp next_run = 6;
+  // Its workspace's handle, and where it's cloned on this computer.
+  string workspace = 7;
+  string dir = 8;
 }
 
 // One of a service job's runs.
@@ -1475,6 +1488,19 @@ message ServiceRun {
   string branch = 10;
   // The name of the files it left (urn:blitz:artifacts:…).
   string artifacts = 11;
+  // A paused run's request (status paused), and how it was answered
+  // (approve or deny, with a note).
+  ServiceRequest pending = 12;
+  string answer = 13;
+  string answer_note = 14;
+}
+
+// What a paused run asks for: a tool, the kind of thing it does, and what
+// exactly.
+message ServiceRequest {
+  string tool = 1;
+  string kind = 2;
+  string detail = 3;
 }
 
 // Request message for ConfigService.GetServiceJob.
@@ -1593,4 +1619,32 @@ message ShareWithOrganizationResponse {
   OrgWorkspace workspace = 1;
   // What the person should know: changes saved first, large files.
   repeated string notes = 2;
+}
+
+// Request message for ConfigService.ListServiceApprovals.
+message ListServiceApprovalsRequest {}
+
+// Response message for ConfigService.ListServiceApprovals.
+message ListServiceApprovalsResponse {
+  repeated GoingServiceRun runs = 1;
+}
+
+// Request message for ConfigService.AnswerServiceRun.
+message AnswerServiceRunRequest {
+  string run_id = 1;
+  bool approve = 2;
+  string note = 3;
+}
+
+// Response message for ConfigService.AnswerServiceRun.
+message AnswerServiceRunResponse {
+  ServiceRun run = 1;
+}
+
+// Request message for ConfigService.ListServiceJobs.
+message ListServiceJobsRequest {}
+
+// Response message for ConfigService.ListServiceJobs.
+message ListServiceJobsResponse {
+  repeated ServiceJob jobs = 1;
 }

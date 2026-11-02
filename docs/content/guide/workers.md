@@ -69,6 +69,7 @@ blitz jobs enable deps     # shows what it may do, then asks
 | `catch_up` | `none` | `once`: when the service starts or the job is enabled, run once if a scheduled time passed since its last run |
 | `overlap` | `skip` | A run that's due while one is still going is skipped |
 | `runs_on` | `here` | `service`: your organization's Blitz service runs it, on its own schedule, and this computer doesn't ([Jobs on the service](#jobs-on-the-service)) |
+| `on_request` | `refuse` here, `pause` on the service | What a run does when it needs something its permissions don't allow: `refuse` it and go on without, or `pause` and wait for its owner's answer |
 
 **Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
 
@@ -152,6 +153,10 @@ notify_on = ["failed", "limited"]
 ## Jobs on the service
 
 When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: set `runs_on: service` and push it to the workspace's `main`. The service picks it up within a minute; this computer leaves it alone. Each run clones `main` and runs the job with the organization's models as the job's owner: whoever last pushed a change to its `WORKER.md` to `main`, as long as they're still a Runner of the workspace. Changes to the workspace's files go to a branch of the run's own, `blitz/jobs/<job>/<run>`, for you to review and merge. Files the job makes for people (reports, data, charts) go in the folder it's told of, `out/`: they're kept with the run for 30 days, with the run's log, and you can download them from the organization's service. In Studio › Jobs, such a job shows the service's runs, not this computer's: how each went, its last message and branch, and **Files** to save what it left in your Downloads folder; **Run now** and **Turn off** act on the service. While a run goes, it's also in the status bar's Processes menu, under **On your organization's service**.
+
+A run on the service that needs something its permissions don't allow pauses and waits for you, its owner (or an Owner of its workspace): nothing runs meanwhile, and its times are skipped. You're notified, the status bar shows how many wait, and its menu and Studio › Jobs show what each asks to do, with **Approve** and **Deny** and a note for its agent. The run goes on from where it stopped: approved, it does that one thing; denied, it goes on without. A run nobody answers in 7 days stops. Set `on_request: refuse` for a job that should never wait. From the terminal: `blitz enterprise jobs pending`, then `approve <run>` or `deny <run>` (`--note`).
+
+From the terminal, `blitz enterprise jobs` lists the jobs the service runs in your workspaces; `runs <job>`, `run <job>`, `on <job>` and `off <job>` do what Studio does, and `files <urn> [--save]` lists or saves what a run left.
 
 ## Good to know
 

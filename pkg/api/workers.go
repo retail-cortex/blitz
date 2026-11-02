@@ -43,6 +43,10 @@ type WorkerInfo struct {
 	// RunsOn is "here", or "service" when the organization's service runs
 	// it and this computer doesn't (spec_053_enterprise EN-40).
 	RunsOn string
+	// OnRequest is what a run does when it needs more than it may do:
+	// "refuse", or "pause" for its owner's answer; "" for where it runs's
+	// default (refuse here, pause on the service; EN-43).
+	OnRequest string
 	// Permissions and Limits are what the worker gets after the host
 	// policy.
 	Permissions []string
@@ -147,6 +151,7 @@ type WorkerSpec struct {
 	Limits             Limits   // TimeoutRaw, not Timeout
 	CatchUp            string   // "", "none" or "once"
 	RunsOn             string   // "", "here" or "service" (spec_053_enterprise EN-40)
+	OnRequest          string   // "", "refuse" or "pause" (EN-43)
 	Prompt             string
 }
 

@@ -238,3 +238,92 @@ func TestEnterpriseWorkspacesCommand(t *testing.T) {
 		assert.Error(t, err, args)
 	}
 }
+
+// The service's jobs from the terminal (EN-42, EN-43): listed, their
+// runs, run now, on and off, their files saved, and paused runs answered.
+func TestEnterpriseJobsCommand(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+
+	out, err := runCLI(t, "enterprise", "jobs")
+	require.NoError(t, err)
+	assert.Contains(t, out, "runs no jobs in your workspaces")
+
+	const (
+		ws  = "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b"
+		job = "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e"
+		run = "e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01"
+	)
+	set := "urn:blitz:artifacts:" + ws + ":" + job + ":" + run
+	org.Mu.Lock()
+	org.ServiceJobs = []enterprisetest.ServiceJob{{ID: job, Workspace: "plans", Name: "digest", Schedule: "Daily at 6 AM", Enabled: true},
+		{ID: "other", Workspace: "q4", Name: "digest"}, {ID: "lone", Workspace: "q4", Name: "tidy"}}
+	org.ServiceRuns = map[string][]enterprisetest.ServiceRun{job: {{ID: run, Status: "succeeded", Trigger: "schedule", Output: "Done.", Branch: "blitz/jobs/digest/" + run, Artifacts: set, CostUSD: 0.05}}}
+	org.Files = map[string][]enterprisetest.File{set: {{URN: set + "/out/report.csv", Title: "out/report.csv", Size: 4}}}
+	org.Contents = map[string]string{set + "/out/report.csv": "a,b\n"}
+	org.Waiting = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: run, Status: "paused", Output: "Ready to deploy.",
+		Pending: map[string]string{"tool": "run_shell_command", "kind": "shell", "detail": "make deploy"}}, Job: job, JobName: "digest", Workspace: "plans"}}
+	org.Mu.Unlock()
+
+	out, err = runCLI(t, "enterprise", "jobs")
+	require.NoError(t, err)
+	assert.Contains(t, out, "plans")
+	assert.Contains(t, out, "Daily at 6 AM")
+	_, err = runCLI(t, "enterprise", "jobs", "runs", "digest")
+	assert.ErrorContains(t, err, "say which with --workspace")
+	_, err = runCLI(t, "enterprise", "jobs", "runs", "nope")
+	assert.ErrorContains(t, err, `runs no job "nope"`)
+	out, err = runCLI(t, "enterprise", "jobs", "runs", "digest", "--workspace", "plans")
+	require.NoError(t, err)
+	assert.Contains(t, out, "succeeded (schedule)  $0.0500")
+	assert.Contains(t, out, "branch: blitz/jobs/digest/"+run)
+	assert.Contains(t, out, "files: blitz enterprise jobs files "+set)
+	out, err = runCLI(t, "enterprise", "jobs", "runs", "tidy")
+	require.NoError(t, err)
+	assert.Contains(t, out, "It hasn't run yet.")
+
+	out, err = runCLI(t, "enterprise", "jobs", "run", "tidy")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ tidy: run")
+	out, err = runCLI(t, "enterprise", "jobs", "off", "tidy")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ tidy is off.")
+	out, err = runCLI(t, "enterprise", "jobs", "on", "tidy")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ tidy is on.")
+
+	out, err = runCLI(t, "enterprise", "jobs", "files", set)
+	require.NoError(t, err)
+	assert.Contains(t, out, "out/report.csv  4 bytes")
+	out, err = runCLI(t, "enterprise", "jobs", "files", set, "--save")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ out/report.csv → ")
+	_, err = runCLI(t, "enterprise", "jobs", "files", "urn:blitz:artifacts:"+ws+":"+job+":"+job)
+	assert.Error(t, err)
+
+	out, err = runCLI(t, "enterprise", "jobs", "pending")
+	require.NoError(t, err)
+	assert.Contains(t, out, "asks to run_shell_command: make deploy")
+	assert.Contains(t, out, "Ready to deploy.")
+	out, err = runCLI(t, "enterprise", "jobs", "approve", run, "--note", "Go ahead.")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ Approved: the run goes on")
+	_, err = runCLI(t, "enterprise", "jobs", "deny", run)
+	assert.ErrorContains(t, err, "isn't waiting")
+	out, err = runCLI(t, "enterprise", "jobs", "pending")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Nothing waits for your answer.")
+
+	org.Close()
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}} {
+		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
+		assert.Error(t, err, args)
+	}
+}

@@ -17,7 +17,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
+  mdiAccountClockOutline,
+  mdiCheck,
   mdiCheckCircleOutline,
+  mdiClose,
   mdiCloseCircleOutline,
   mdiDeleteOutline,
   mdiDownload,
@@ -40,6 +43,7 @@ import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 
 const statusIcon: Record<string, string> = {
+  paused: mdiAccountClockOutline,
   queued: mdiProgressClock,
   running: mdiProgressClock,
   succeeded: mdiCheckCircleOutline,
@@ -123,16 +127,47 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
       {job !== undefined && runs.length === 0 && <p className="muted t-body-sm">{t("desktop.worker.no_runs")}</p>}
       <div className="runs">
         {runs.map((r) => (
-          <ServiceRunRow key={r.id} run={r} onSaved={(path) => snack(t("desktop.service_job.saved", { path }))} onError={(e) => snack(e, { error: true })} />
+          <ServiceRunRow
+            key={r.id}
+            run={r}
+            jobName={worker.name}
+            onSaved={(path) => snack(t("desktop.service_job.saved", { path }))}
+            onError={(e) => snack(e, { error: true })}
+            onAnswered={(msg) => (snack(msg), void refresh())}
+          />
         ))}
       </div>
     </>
   );
 }
 
-/** One of the service's runs: how it went, its branch, and its files on request. */
-function ServiceRunRow({ run, onSaved, onError }: { run: ServiceRun; onSaved: (path: string) => void; onError: (e: string) => void }) {
+/** One of the service's runs: how it went, its branch, its files on request, and a paused one's Approve and Deny (EN-43). */
+function ServiceRunRow({
+  run,
+  jobName,
+  onSaved,
+  onError,
+  onAnswered,
+}: {
+  run: ServiceRun;
+  jobName: string;
+  onSaved: (path: string) => void;
+  onError: (e: string) => void;
+  onAnswered: (message: string) => void;
+}) {
   const [files, setFiles] = useState<ServiceRunFile[] | null>(null);
+  const [note, setNote] = useState("");
+  const [answering, setAnswering] = useState(false);
+  const answer = async (approve: boolean) => {
+    setAnswering(true);
+    try {
+      await config.answerServiceRun({ runId: run.id, approve, note: note.trim() });
+      onAnswered(t(approve ? "desktop.approvals.approved" : "desktop.approvals.denied", { job: jobName }));
+    } catch (e) {
+      onError(message(e));
+    }
+    setAnswering(false);
+  };
   const failed = run.status === "failed";
   const showFiles = async () => {
     if (files) return setFiles(null);
@@ -158,8 +193,23 @@ function ServiceRunRow({ run, onSaved, onError }: { run: ServiceRun; onSaved: (p
           {run.costUsd > 0 ? ` · $${run.costUsd.toFixed(4)}` : ""}
         </span>
         {run.created && <span className="t-body-sm muted">{timestampDate(run.created).toLocaleString(language())}</span>}
-        {run.note && <span className={`t-body-sm ${failed ? "error-text" : "muted"}`}>{run.note}</span>}
         {run.output && <span className="t-body-sm live-text">{run.output}</span>}
+        {run.status === "paused" && run.pending ? (
+          <span className="stack" style={{ gap: 6 }}>
+            <span className="t-body-sm warning-text">{t("desktop.approvals.waits", { tool: run.pending.tool, detail: run.pending.detail })}</span>
+            <input className="input" value={note} disabled={answering} placeholder={t("desktop.approvals.note")} aria-label={t("desktop.approvals.note")} onChange={(e) => setNote(e.target.value)} />
+            <span className="row" style={{ gap: 8 }}>
+              <Button small variant="filled" icon={mdiCheck} disabled={answering} onClick={() => void answer(true)}>
+                {t("desktop.approvals.approve")}
+              </Button>
+              <Button small danger icon={mdiClose} disabled={answering} onClick={() => void answer(false)}>
+                {t("desktop.approvals.deny")}
+              </Button>
+            </span>
+          </span>
+        ) : (
+          run.note && <span className={`t-body-sm ${failed ? "error-text" : "muted"}`}>{run.note}</span>
+        )}
         {run.branch && (
           <span className="t-body-sm muted row" style={{ gap: 4 }}>
             <Icon path={mdiSourceBranch} size="sm" /> {t("desktop.service_job.branch", { branch: run.branch })}
