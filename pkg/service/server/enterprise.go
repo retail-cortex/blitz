@@ -19,6 +19,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +139,10 @@ func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEn
 		if err := previous.SignOut(ctx); err != nil {
 			slog.Warn("signing out of the organization's service", "error", err)
 		}
+		// And how it looked: the app is Blitz again (EN-54).
+		if err := enterprise.ForgetBranding(h.s.brandingDir(previous)); err != nil {
+			slog.Warn("removing the organization's branding", "error", err)
+		}
 	}
 	path, err := config.SetEnterpriseURL(h.s.configDir, r.Msg.Url)
 	if err != nil {
@@ -189,4 +196,93 @@ func (h configService) EnterpriseSignOut(ctx context.Context, _ req[pb.Enterpris
 		h.changed(ctx, "", "")
 	}
 	return ok(&pb.EnterpriseSignOutResponse{State: h.s.enterpriseState(ctx, c, false)})
+}
+
+// brandingDir is the organization's folder (spec_053_enterprise EN-54):
+// ~/.blitz/enterprise/<the service's host>, so another's never mixes in.
+func (s *Server) brandingDir(c *enterprise.Client) string {
+	u, err := url.Parse(c.URL())
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return filepath.Join(config.ConfigDir(s.configDir), "enterprise", strings.ReplaceAll(u.Host, ":", "_"))
+}
+
+func brandingMsg(b *enterprise.Branding) *pb.Branding {
+	if b == nil {
+		return nil
+	}
+	out := &pb.Branding{Name: b.Name, ShortName: b.ShortName, Accent: b.Accent, AccentDark: b.AccentDark, Support: b.Support, About: b.About, Images: b.Images}
+	for _, d := range b.Terms {
+		out.Documents = append(out.Documents, &pb.OrgDocument{Document: d.Document, Version: d.Version, Text: d.Text, Url: d.URL})
+	}
+	return out
+}
+
+func (h configService) GetBranding(ctx context.Context, r req[pb.GetBrandingRequest]) (*connect.Response[pb.GetBrandingResponse], error) {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if c == nil {
+		return ok(&pb.GetBrandingResponse{})
+	}
+	dir := h.s.brandingDir(c)
+	if !r.Msg.Refresh {
+		return ok(&pb.GetBrandingResponse{Branding: brandingMsg(enterprise.LoadBranding(dir))})
+	}
+	cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
+	defer cancel()
+	b, err := c.RefreshBranding(cctx, dir)
+	res := &pb.GetBrandingResponse{Branding: brandingMsg(b)}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	return ok(res)
+}
+
+func (h configService) GetTerms(ctx context.Context, _ req[pb.GetTermsRequest]) (*connect.Response[pb.GetTermsResponse], error) {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if c == nil {
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_CONNECTED", errors.New("connect to your organization's service first"))
+	}
+	t, err := c.Terms(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.GetTermsResponse{Version: t.Version, Accepted: t.Accepted, Text: t.Text, Url: t.URL})
+}
+
+func (h configService) AcceptTerms(ctx context.Context, r req[pb.AcceptTermsRequest]) (*connect.Response[pb.AcceptTermsResponse], error) {
+	c, err := h.s.enterpriseClient()
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if c == nil {
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_CONNECTED", errors.New("connect to your organization's service first"))
+	}
+	if err := c.AcceptTerms(ctx, r.Msg.Version); err != nil {
+		return nil, enterpriseError(err)
+	}
+	h.changed(ctx, "", "") // models refused for the terms can be built now
+	return ok(&pb.AcceptTermsResponse{State: h.s.enterpriseState(ctx, c, false)})
+}
+
+// enterpriseError gives an error from the organization's service its
+// code: signed out, a refusal by its status, else unavailable.
+func enterpriseError(err error) error {
+	var ref *enterprise.Refusal
+	switch {
+	case errors.Is(err, enterprise.ErrNotSignedIn):
+		return apiError(connect.CodeUnauthenticated, "NOT_SIGNED_IN", err)
+	case errors.As(err, &ref) && ref.Status == http.StatusConflict:
+		return apiError(connect.CodeAborted, "CONFLICT", err)
+	case errors.As(err, &ref) && ref.Status/100 == 4:
+		return apiError(connect.CodeFailedPrecondition, strings.ToUpper(ref.Code), err)
+	default:
+		return apiError(connect.CodeUnavailable, "UNREACHABLE", err)
+	}
 }

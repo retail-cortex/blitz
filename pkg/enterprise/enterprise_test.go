@@ -16,10 +16,14 @@ package enterprise
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -533,4 +537,121 @@ func TestShared(t *testing.T) {
 	mine := New("https://shared.example", &secrets.Memory{}, Options{})
 	Register(mine)
 	assert.Same(t, mine, Shared("https://shared.example", store, Options{}))
+}
+
+// The organization's branding: fetched without sign-in, its signature
+// checked, kept on disk and checked again when read, asked again with its
+// ETag, a forged copy refused (the last one kept), gone when the service
+// has none, and removed on disconnecting (EN-50, EN-54).
+func TestBranding(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "enterprise", "blitz.acme.com")
+
+	b, err := c.RefreshBranding(ctx, dir)
+	require.NoError(t, err)
+	assert.Nil(t, b, "none published")
+	assert.Nil(t, LoadBranding(dir))
+
+	s.Branding = map[string]any{"name": "Acme Assist", "short_name": "Acme", "accent": "#1a56db", "accent_dark": "#7aa7ff",
+		"images": map[string]string{"logo.svg": "data:image/svg+xml;base64,PHN2Zy8+"}, "terms": []map[string]string{{"document": "terms", "version": "v1", "text": "Be kind."}}}
+	b, err = c.RefreshBranding(ctx, dir)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	assert.Equal(t, "Acme Assist", b.Name)
+	assert.Equal(t, "#7aa7ff", b.AccentDark)
+	assert.Equal(t, "Be kind.", b.Terms[0].Text)
+	assert.Equal(t, b, LoadBranding(dir), "kept, and checked again when read")
+	info, err := os.Stat(filepath.Join(dir, "branding.json"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	again, err := c.RefreshBranding(ctx, dir)
+	require.NoError(t, err)
+	assert.Equal(t, b, again, "unchanged: 304")
+
+	t.Run("a copy changed on disk isn't shown", func(t *testing.T) {
+		other := t.TempDir()
+		require.NoError(t, os.CopyFS(other, os.DirFS(dir)))
+		data, _ := os.ReadFile(filepath.Join(other, "branding.json"))
+		require.NoError(t, os.WriteFile(filepath.Join(other, "branding.json"), []byte(strings.Replace(string(data), `"payload":"`, `"payload":"x`, 1)), 0o600))
+		assert.Nil(t, LoadBranding(other))
+		require.NoError(t, os.Remove(filepath.Join(other, "keys.json")))
+		assert.Nil(t, LoadBranding(other), "no keys")
+	})
+	t.Run("a copy signed by another key is refused, the last one kept", func(t *testing.T) {
+		s.Forged = true
+		s.Branding["name"] = "Evil Corp"
+		got, err := c.RefreshBranding(ctx, dir)
+		assert.ErrorIs(t, err, ErrSignature)
+		assert.Equal(t, "Acme Assist", got.Name)
+		s.Forged = false
+	})
+	t.Run("a new key, published since", func(t *testing.T) {
+		_, s.Key, _ = ed25519.GenerateKey(nil)
+		s.KeyID = "catalog-2"
+		s.Branding["name"] = "Acme Assist 2"
+		got, err := c.RefreshBranding(ctx, dir)
+		require.NoError(t, err)
+		assert.Equal(t, "Acme Assist 2", got.Name)
+	})
+	t.Run("the service unreachable: the copy kept", func(t *testing.T) {
+		gone := New("http://127.0.0.1:1", &secrets.Memory{}, Options{})
+		got, err := gone.RefreshBranding(ctx, dir)
+		assert.Error(t, err)
+		assert.Equal(t, "Acme Assist 2", got.Name)
+	})
+	t.Run("a refusal: the copy kept", func(t *testing.T) {
+		odd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusBadGateway) }))
+		t.Cleanup(odd.Close)
+		got, err := New(odd.URL, &secrets.Memory{}, Options{}).RefreshBranding(ctx, dir)
+		var ref *Refusal
+		assert.ErrorAs(t, err, &ref)
+		assert.Equal(t, "Acme Assist 2", got.Name)
+	})
+
+	s.Branding = nil
+	b, err = c.RefreshBranding(ctx, dir)
+	require.NoError(t, err)
+	assert.Nil(t, b, "withdrawn: Blitz's look")
+	assert.Nil(t, LoadBranding(dir))
+
+	require.NoError(t, ForgetBranding(dir))
+	assert.NoDirExists(t, dir)
+	assert.NoError(t, ForgetBranding(""))
+}
+
+// The terms: the version in force, accepted or not, and accepting it
+// (EN-53).
+func TestTerms(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	_, err := c.Terms(ctx)
+	assert.ErrorIs(t, err, ErrNotSignedIn)
+	assert.ErrorIs(t, c.AcceptTerms(ctx, "v1"), ErrNotSignedIn)
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	got, err := c.Terms(ctx)
+	require.NoError(t, err)
+	assert.True(t, got.Accepted, "none in force")
+
+	s.Version = "v2"
+	got, err = c.Terms(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Terms{Version: "v2", Text: "Be kind."}, got)
+	assert.Equal(t, "v2", c.Status().Terms)
+
+	var ref *Refusal
+	require.ErrorAs(t, c.AcceptTerms(ctx, "v1"), &ref)
+	assert.Equal(t, http.StatusConflict, ref.Status)
+	require.NoError(t, c.AcceptTerms(ctx, "v2"))
+	assert.Empty(t, c.Status().Terms)
+	got, err = c.Terms(ctx)
+	require.NoError(t, err)
+	assert.True(t, got.Accepted)
+
+	s.Close()
+	_, err = c.Terms(ctx)
+	assert.Error(t, err)
+	assert.Error(t, c.AcceptTerms(ctx, "v2"))
 }

@@ -52,7 +52,7 @@ func TestEnterpriseCommand(t *testing.T) {
 
 	out, err = runCLI(t, "enterprise", "status")
 	require.NoError(t, err)
-	assert.Contains(t, out, "version 1.0.0; offers gateway, jobs")
+	assert.Contains(t, out, "version 1.0.0; offers gateway, jobs, branding")
 	assert.Contains(t, out, "Signed in     no: blitz enterprise login")
 
 	out, err = runCLI(t, "enterprise", "login")

@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -90,7 +92,7 @@ func TestEnterpriseJourney(t *testing.T) {
 	st := conn.Msg.State
 	assert.Equal(t, org.URL, st.Url)
 	assert.Equal(t, "Acme Assist", st.Name)
-	assert.Equal(t, []string{"gateway", "jobs"}, st.Capabilities)
+	assert.Equal(t, []string{"gateway", "jobs", "branding"}, st.Capabilities)
 	assert.True(t, st.Reachable)
 	assert.False(t, st.SignedIn)
 	cfg, err := config.Load("")
@@ -238,4 +240,92 @@ func TestEnterpriseErrors(t *testing.T) {
 	gone, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{}))
 	require.NoError(t, err, "disconnected, the service down")
 	assert.Empty(t, gone.Msg.State.Url)
+}
+
+// The organization's branding and terms through the service: none until
+// connected, kept after a refresh and read back offline, the terms asked
+// for and accepted, and all of it gone on disconnecting (EN-50 to EN-54).
+func TestEnterpriseBrandingAndTerms(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	b, err := c.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{Refresh: true}))
+	require.NoError(t, err)
+	assert.Nil(t, b.Msg.Branding, "not connected")
+	_, err = c.GetTerms(ctx, connect.NewRequest(&pb.GetTermsRequest{}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.AcceptTerms(ctx, connect.NewRequest(&pb.AcceptTermsRequest{Version: "v1"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+
+	org.Branding = map[string]any{"name": "Acme Assist", "accent": "#1a56db", "images": map[string]string{"logo.svg": "data:image/svg+xml;base64,PHN2Zy8+"},
+		"terms": []map[string]string{{"document": "privacy", "version": "p1", "url": "https://acme.com/privacy"}}}
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	b, err = c.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{}))
+	require.NoError(t, err)
+	assert.Nil(t, b.Msg.Branding, "none kept yet")
+	b, err = c.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{Refresh: true}))
+	require.NoError(t, err)
+	require.NotNil(t, b.Msg.Branding, b.Msg.Error)
+	assert.Equal(t, "Acme Assist", b.Msg.Branding.Name)
+	assert.Equal(t, "https://acme.com/privacy", b.Msg.Branding.Documents[0].Url)
+
+	org.Offline = true
+	org.Close() // offline: the kept copy
+	b, err = c.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{Refresh: true}))
+	require.NoError(t, err)
+	assert.Equal(t, "Acme Assist", b.Msg.Branding.GetName())
+	assert.Contains(t, b.Msg.Error, "reaching the organization's service")
+
+	// The terms, with a service that answers.
+	org2 := enterprisetest.NewService(t, idp.URL)
+	org2.Version = "v2"
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org2.URL}))
+	require.NoError(t, err)
+	_, err = c.GetTerms(ctx, connect.NewRequest(&pb.GetTermsRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	terms, err := c.GetTerms(ctx, connect.NewRequest(&pb.GetTermsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "v2", terms.Msg.Version)
+	assert.False(t, terms.Msg.Accepted)
+	assert.Equal(t, "Be kind.", terms.Msg.Text)
+	_, err = c.AcceptTerms(ctx, connect.NewRequest(&pb.AcceptTermsRequest{Version: "v1"}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeAborted, code)
+	assert.Equal(t, "CONFLICT", info.Reason)
+	accepted, err := c.AcceptTerms(ctx, connect.NewRequest(&pb.AcceptTermsRequest{Version: "v2"}))
+	require.NoError(t, err)
+	assert.Empty(t, accepted.Msg.State.TermsVersion)
+
+	// The first organization's folder went when Blitz moved to the second;
+	// disconnecting removes the second's.
+	home, _ := os.UserHomeDir()
+	entries, _ := os.ReadDir(filepath.Join(home, ".blitz", "enterprise"))
+	assert.Empty(t, entries, "the second published no branding; the first's is gone")
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{}))
+	require.NoError(t, err)
+	b, err = c.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{Refresh: true}))
+	require.NoError(t, err)
+	assert.Nil(t, b.Msg.Branding)
+
+	t.Run("errors from the service", func(t *testing.T) {
+		assert.Equal(t, "UNREACHABLE", errorInfo(enterpriseError(errors.New("connection refused"))).GetReason())
+		assert.Equal(t, "TERMS_REQUIRED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden, Code: "terms_required"})).GetReason())
+	})
 }

@@ -21,6 +21,7 @@
 package enterprisetest
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -158,18 +159,27 @@ func NewProvider(t testing.TB) *Provider {
 // refresh token is good once, and one used again ends its session.
 type Service struct {
 	*httptest.Server
-	Mu         sync.Mutex
-	issuer     string
-	sessions   map[string]string // refresh token → session; "" when used
-	Ended      map[string]bool
-	Access     map[string]string // access token → session
-	n          int
-	ExpiresIn  int
-	Terms      string
-	Refreshes  int
-	SignIns    []string // the client each sign-in named
-	Offline    bool
-	Tokenless  bool // a sign-in answered without tokens
+	Mu        sync.Mutex
+	issuer    string
+	sessions  map[string]string // refresh token → session; "" when used
+	Ended     map[string]bool
+	Access    map[string]string // access token → session
+	n         int
+	ExpiresIn int
+	Terms     string
+	Refreshes int
+	SignIns   []string // the client each sign-in named
+	Offline   bool
+	Tokenless bool // a sign-in answered without tokens
+	// Key signs the branding; Branding is what it serves (none when nil),
+	// and Terms the version in force, accepted or not, by person.
+	Key      ed25519.PrivateKey
+	KeyID    string
+	Branding map[string]any
+	Version  string
+	Accepts  map[string]bool
+	// Forged signs the branding with a key the service doesn't publish.
+	Forged     bool
 	ModelCalls int
 	ModelsFail bool
 }
@@ -178,7 +188,8 @@ type Service struct {
 // ID tokens NewProvider gives; it names itself Acme Assist, offers the
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
-	s := &Service{issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	_, key, _ := ed25519.GenerateKey(nil)
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -198,7 +209,7 @@ func NewService(t testing.TB, issuer string) *Service {
 	mux.HandleFunc("GET /api/v1/info", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, `{"name":"Acme Assist","version":"1.0.0","oidc":{"issuer":%q,"client_id":"console",
 			"desktop":{"client_id":"desktop","client_secret":"d-secret"},"device":{"client_id":"device","client_secret":"v-secret"}},
-			"session_hours":12,"capabilities":["gateway","jobs"]}`, s.issuer)
+			"session_hours":12,"capabilities":["gateway","jobs","branding"],"catalog_keys":{%q:%q}}`, s.issuer, s.KeyID, base64.StdEncoding.EncodeToString(s.Key.Public().(ed25519.PublicKey)))
 	})
 	mux.HandleFunc("POST /api/v1/session", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ IDToken, Client string }
@@ -265,6 +276,57 @@ func NewService(t testing.TB, issuer string) *Service {
 			{"id":"fast","display_name":"Fast","vendor":"google","api":"responses","price":{"input_per_mtok":0.75,"output_per_mtok":3.75}},
 			{"id":"smart","display_name":"Smart","vendor":"anthropic","api":"messages","default":true,"max_output_tokens":32000}]}`))
 	})
+	mux.HandleFunc("GET /api/v1/branding", func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		br := s.Branding
+		s.Mu.Unlock()
+		if br == nil {
+			refuse(w, http.StatusNotFound, "not_found", "The organization hasn't published branding.")
+			return
+		}
+		key := s.Key
+		if s.Forged {
+			_, key, _ = ed25519.GenerateKey(nil)
+		}
+		env := Seal(s.KeyID, key, br)
+		sum := sha256.Sum256(env)
+		etag := `"` + base64.RawURLEncoding.EncodeToString(sum[:9]) + `"`
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = w.Write(env)
+	})
+	mux.HandleFunc("GET /api/v1/terms", func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		session, ok := s.Access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		if !ok {
+			refuse(w, http.StatusUnauthorized, "unauthenticated", "Sign in first.")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": s.Version, "accepted": s.Version == "" || s.Accepts[session+s.Version],
+			"text": "Be kind.", "url": ""})
+	})
+	mux.HandleFunc("POST /api/v1/terms/accept", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Version string `json:"version"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		session, ok := s.Access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		switch {
+		case !ok:
+			refuse(w, http.StatusUnauthorized, "unauthenticated", "Sign in first.")
+		case in.Version != s.Version:
+			refuse(w, http.StatusConflict, "conflict", "That isn't the version of the terms in force: fetch it again.")
+		default:
+			s.Accepts[session+in.Version] = true
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	mux.HandleFunc("DELETE /api/v1/session", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
@@ -293,4 +355,15 @@ func Browse(t testing.TB) func(string) {
 			}
 		}()
 	}
+}
+
+// Seal signs v as the service does: its JSON in base64url, signed with
+// Ed25519 over "blitz-enterprise/v1", NUL, the key's ID, NUL and the
+// payload.
+func Seal(kid string, key ed25519.PrivateKey, v any) []byte {
+	payload, _ := json.Marshal(v)
+	signed := append([]byte("blitz-enterprise/v1\x00"+kid+"\x00"), payload...)
+	env, _ := json.Marshal(map[string]string{"kid": kid, "payload": base64.RawURLEncoding.EncodeToString(payload),
+		"signature": base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, signed))})
+	return env
 }

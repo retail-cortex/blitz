@@ -203,6 +203,17 @@ service ConfigService {
   rpc EnterpriseSignIn(EnterpriseSignInRequest) returns (stream EnterpriseSignInResponse);
   // Signs out of the organization's service, here and there.
   rpc EnterpriseSignOut(EnterpriseSignOutRequest) returns (EnterpriseSignOutResponse);
+  // How the organization's Blitz looks (spec_053_enterprise EN-50 to
+  // EN-54): the copy kept on this computer, checked against the service's
+  // signature, or with refresh asked of the service first (no sign-in
+  // needed). Empty when there's none: Blitz's own look.
+  rpc GetBranding(GetBrandingRequest) returns (GetBrandingResponse);
+  // The organization's terms in force and whether they're accepted
+  // (EN-53; NOT_CONNECTED).
+  rpc GetTerms(GetTermsRequest) returns (GetTermsResponse);
+  // Records that the person accepted a version of the terms (CONFLICT when
+  // it isn't the one in force).
+  rpc AcceptTerms(AcceptTermsRequest) returns (AcceptTermsResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1245,5 +1256,65 @@ message EnterpriseSignOutRequest {}
 
 // Response message for ConfigService.EnterpriseSignOut.
 message EnterpriseSignOutResponse {
+  EnterpriseState state = 1;
+}
+
+// One of the organization's documents: its terms of service ("terms") or
+// privacy notice ("privacy"), as text or a link.
+message OrgDocument {
+  string document = 1;
+  string version = 2;
+  string text = 3;
+  string url = 4;
+}
+
+// The organization's branding.
+message Branding {
+  string name = 1;
+  string short_name = 2;
+  // "#rrggbb" for the light and the dark theme.
+  string accent = 3;
+  string accent_dark = 4;
+  string support = 5;
+  string about = 6;
+  // Data URLs by file name: logo.svg, logo-dark.svg, icon.png.
+  map<string, string> images = 7;
+  repeated OrgDocument documents = 8;
+}
+
+// Request message for ConfigService.GetBranding.
+message GetBrandingRequest {
+  // Ask the service first (with the kept copy's ETag).
+  bool refresh = 1;
+}
+
+// Response message for ConfigService.GetBranding.
+message GetBrandingResponse {
+  // Unset when there's none.
+  Branding branding = 1;
+  // Why the service couldn't be asked, when refresh was; the kept copy
+  // is answered all the same.
+  string error = 2;
+}
+
+// Request message for ConfigService.GetTerms.
+message GetTermsRequest {}
+
+// Response message for ConfigService.GetTerms.
+message GetTermsResponse {
+  // "" when none are in force.
+  string version = 1;
+  bool accepted = 2;
+  string text = 3;
+  string url = 4;
+}
+
+// Request message for ConfigService.AcceptTerms.
+message AcceptTermsRequest {
+  string version = 1;
+}
+
+// Response message for ConfigService.AcceptTerms.
+message AcceptTermsResponse {
   EnterpriseState state = 1;
 }

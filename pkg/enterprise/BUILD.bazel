@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "enterprise",
     srcs = [
+        "branding.go",
         "enterprise.go",
         "models.go",
         "signin.go",

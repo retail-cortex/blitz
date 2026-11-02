@@ -152,6 +152,7 @@ go_test(
         "//pkg/engine/memory",
         "//pkg/engine/runtime",
         "//pkg/engine/workers",
+        "//pkg/enterprise",
         "//pkg/enterprise/enterprisetest",
         "//pkg/images",
         "//pkg/secrets",

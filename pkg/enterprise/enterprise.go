@@ -78,6 +78,9 @@ type Info struct {
 	} `json:"oidc"`
 	SessionHours int      `json:"session_hours"`
 	Capabilities []string `json:"capabilities"`
+	// CatalogKeys check what the service signs (its branding, its
+	// catalog), by key ID: Ed25519 public keys, base64.
+	CatalogKeys map[string]string `json:"catalog_keys"`
 }
 
 // Has is whether the service offers a capability (gateway, catalog,
