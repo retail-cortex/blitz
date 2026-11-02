@@ -95,7 +95,7 @@ func TestEnterpriseCommand(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "a-file")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	t.Setenv("BLITZ_SOCKET", filepath.Join(file, "s.sock"))
-	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}} {
+	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}, {"terms"}, {"workspaces"}, {"open", "x"}, {"create", "x"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.ErrorContains(t, err, "starting the Blitz service", args)
 	}
@@ -196,6 +196,16 @@ func TestEnterpriseWorkspacesCommand(t *testing.T) {
 	assert.Contains(t, out, "not on this computer: blitz enterprise open q4-launch")
 	_, err = runCLI(t, "enterprise", "open", "nope")
 	assert.Error(t, err)
+	// One already on this computer: listed where it is, and opened there.
+	home, _ := os.UserHomeDir()
+	clone := filepath.Join(home, "Blitz", "Acme Assist", "q4-launch")
+	require.NoError(t, os.MkdirAll(filepath.Join(clone, ".git"), 0o700))
+	out, err = runCLI(t, "enterprise", "workspaces")
+	require.NoError(t, err)
+	assert.Contains(t, out, clone)
+	out, err = runCLI(t, "enterprise", "open", "q4-launch")
+	require.NoError(t, err)
+	assert.Equal(t, clone+"\n", out)
 
 	host := strings.TrimPrefix(org.URL, "http://")
 	out, err = runCLIWith(t, "protocol=http\nhost="+host+"\n\n", "git-credential", "get")
@@ -204,4 +214,10 @@ func TestEnterpriseWorkspacesCommand(t *testing.T) {
 	out, err = runCLIWith(t, "protocol=https\nhost=github.com\n\n", "git-credential", "get")
 	require.NoError(t, err)
 	assert.Empty(t, out)
+
+	org.Close()
+	for _, args := range [][]string{{"workspaces"}, {"create", "y"}} {
+		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
+		assert.Error(t, err, args)
+	}
 }

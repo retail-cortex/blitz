@@ -191,3 +191,100 @@ func TestMessages(t *testing.T) {
 	assert.Equal(t, "docs/plan (conflict, Ana).md", conflictName("docs/plan.md", "Ana"))
 	assert.Equal(t, "Makefile (conflict, Ana)", conflictName("Makefile", "Ana"))
 }
+
+// failing is git that fails at the commands named.
+func failing(who string, at ...string) Git {
+	real := gitAs(who, nil)
+	return func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		for _, a := range at {
+			if len(args) > 0 && args[0] == a {
+				return nil, &gitErr{a + " failed"}
+			}
+		}
+		return real(ctx, dir, args...)
+	}
+}
+
+// Each step that can fail leaves it offline, its saves on this computer.
+func TestFailures(t *testing.T) {
+	for _, step := range []string{"add", "commit", "fetch", "push"} {
+		t.Run(step, func(t *testing.T) {
+			_, ana, _ := shared(t)
+			s := &Syncer{Dir: ana, Git: failing("Ana", step), Who: "Ana", Quiet: 10 * time.Millisecond, Poll: 10 * time.Millisecond, Fetch: time.Hour}
+			var seen []string
+			s.OnState = func(st State) { seen = append(seen, st.State) }
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() { s.Run(ctx); close(done) }()
+			t.Cleanup(func() { cancel(); <-done })
+			require.NoError(t, os.WriteFile(filepath.Join(ana, "x.md"), []byte("x"), 0o644))
+			eventually(t, func() bool { return s.State().State == Offline }, "offline")
+			assert.Contains(t, s.State().Err, step+" failed")
+		})
+	}
+	t.Run("a merge that stops without conflicts", func(t *testing.T) {
+		_, ana, bo := shared(t)
+		require.NoError(t, os.WriteFile(filepath.Join(bo, "b.md"), []byte("b"), 0o644))
+		run(t, bo, "add", "-A")
+		run(t, bo, "commit", "-q", "-m", "b")
+		run(t, bo, "push", "-q", "origin", "main")
+		s := &Syncer{Dir: ana, Git: failing("Ana", "merge"), Who: "Ana"}
+		assert.False(t, s.take(context.Background()))
+		assert.Equal(t, Offline, s.State().State)
+		assert.Contains(t, s.State().Err, "couldn't be taken")
+	})
+	t.Run("nothing shared yet", func(t *testing.T) {
+		dir := t.TempDir()
+		run(t, dir, "init", "-q", "-b", "main")
+		bare := t.TempDir()
+		run(t, bare, "init", "-q", "--bare")
+		run(t, dir, "remote", "add", "origin", bare)
+		s := &Syncer{Dir: dir, Git: gitAs("Ana", nil), Who: "Ana"}
+		assert.True(t, s.take(context.Background()))
+		s.Remote() // before Run: nothing to tell
+	})
+}
+
+// Conflicts' other cases: a file this person deleted that the other
+// changed stays changed; a step that fails while keeping both versions
+// undoes the merge and leaves it offline.
+func TestConflictCases(t *testing.T) {
+	t.Run("this person deleted, they changed", func(t *testing.T) {
+		_, ana, bo := shared(t)
+		require.NoError(t, os.WriteFile(filepath.Join(ana, "plan.md"), []byte("Ana's plan"), 0o644))
+		run(t, ana, "add", "-A")
+		run(t, ana, "commit", "-q", "-m", "Ana")
+		run(t, ana, "push", "-q", "origin", "main")
+		require.NoError(t, os.Remove(filepath.Join(bo, "plan.md")))
+		s := &Syncer{Dir: bo, Git: gitAs("Bo", nil), Who: "Bo", Now: time.Now}
+		assert.True(t, s.take(context.Background()))
+		assert.Equal(t, "Ana's plan", read(bo, "plan.md"), "changed beats deleted")
+		assert.Empty(t, s.State().Pairs)
+	})
+	for _, step := range []string{"show", "checkout", "commit"} {
+		t.Run("keeping both fails at "+step, func(t *testing.T) {
+			_, ana, bo := shared(t)
+			require.NoError(t, os.WriteFile(filepath.Join(ana, "plan.md"), []byte("Ana's"), 0o644))
+			run(t, ana, "add", "-A")
+			run(t, ana, "commit", "-q", "-m", "Ana")
+			run(t, ana, "push", "-q", "origin", "main")
+			require.NoError(t, os.WriteFile(filepath.Join(bo, "plan.md"), []byte("Bo's"), 0o644))
+			run(t, bo, "add", "-A")
+			run(t, bo, "commit", "-q", "-m", "Bo")
+			real := gitAs("Bo", nil)
+			merging := false
+			s := &Syncer{Dir: bo, Who: "Bo", Git: func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+				if args[0] == "merge" && len(args) > 1 && args[1] == "-q" {
+					merging = true
+				}
+				if merging && args[0] == step && !(step == "commit" && len(args) > 2 && args[2] == "-m" && !strings.Contains(args[len(args)-1], "both versions")) {
+					return nil, &gitErr{step + " failed"}
+				}
+				return real(ctx, dir, args...)
+			}}
+			assert.False(t, s.take(context.Background()))
+			assert.Equal(t, Offline, s.State().State)
+			assert.Equal(t, "Bo's", read(bo, "plan.md"), "the merge undone: Bo's as it was")
+		})
+	}
+}

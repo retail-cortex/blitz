@@ -35,7 +35,10 @@ go_library(
 go_test(
     name = "enterprise_test",
     size = "small",
-    srcs = ["enterprise_test.go"],
+    srcs = [
+        "enterprise_test.go",
+        "files_test.go",
+    ],
     embed = [":enterprise"],
     deps = [
         "//pkg/enterprise/enterprisetest",

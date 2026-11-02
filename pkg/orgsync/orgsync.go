@@ -309,6 +309,8 @@ func (s *Syncer) keepBoth(ctx context.Context) ([][2]string, error) {
 		ours, oursErr := s.Git(ctx, s.Dir, "show", ":2:"+name)
 		_, theirsErr := s.Git(ctx, s.Dir, "show", ":3:"+name)
 		switch {
+		case oursErr != nil && theirsErr != nil: // neither can be read: nothing to go on
+			return nil, oursErr
 		case theirsErr != nil: // they deleted it; this person changed it
 			if _, err := s.Git(ctx, s.Dir, "checkout", "--ours", "--", name); err != nil {
 				return nil, err

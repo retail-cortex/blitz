@@ -778,3 +778,110 @@ func TestCatalog(t *testing.T) {
 		assert.Error(t, c.WatchCatalog(ctx, func() {}))
 	})
 }
+
+// What goes wrong with the catalog: a kept copy without its keys or
+// changed on disk isn't read, an access token the service no longer takes
+// is refused (and renewed next time), a file the service won't give stops
+// the version, and the stream refused says so.
+func TestCatalogFailures(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	s.Catalog = map[string]enterprisetest.CatalogFile{"rules/a.md": {Kind: "rule", Name: "a", Lock: "default", Data: "A."}}
+	_, _, err := c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+
+	t.Run("a kept copy that doesn't check", func(t *testing.T) {
+		other := t.TempDir()
+		require.NoError(t, os.CopyFS(other, os.DirFS(dir)))
+		data, _ := os.ReadFile(filepath.Join(other, "catalog.json"))
+		require.NoError(t, os.WriteFile(filepath.Join(other, "catalog.json"), []byte(strings.Replace(string(data), `"payload":"`, `"payload":"x`, 1)), 0o600))
+		assert.Nil(t, LoadCatalog(other))
+		require.NoError(t, os.Remove(filepath.Join(other, "keys.json")))
+		assert.Nil(t, LoadCatalog(other))
+		assert.Nil(t, LoadCatalog(t.TempDir()))
+	})
+	t.Run("an access token the service stopped taking", func(t *testing.T) {
+		s.Mu.Lock()
+		s.Access = map[string]string{}
+		s.Mu.Unlock()
+		got, _, err := c.RefreshCatalog(ctx, dir)
+		var ref *Refusal
+		require.ErrorAs(t, err, &ref)
+		assert.Equal(t, http.StatusUnauthorized, ref.Status)
+		assert.NotNil(t, got, "the kept one")
+		_, _, err = c.RefreshCatalog(ctx, dir)
+		assert.NoError(t, err, "renewed")
+		s.Mu.Lock()
+		s.Access = map[string]string{}
+		s.Mu.Unlock()
+		assert.Error(t, c.WatchCatalog(ctx, func() {}), "the stream refused")
+		c.Invalidate()
+	})
+	t.Run("a file the service won't give", func(t *testing.T) {
+		s.Catalog["rules/b.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "b", Lock: "default", Data: "B.", Missing: true}
+		got, _, err := c.RefreshCatalog(ctx, dir)
+		assert.ErrorContains(t, err, "rules/b.md")
+		assert.Len(t, got.Files, 1)
+		delete(s.Catalog, "rules/b.md")
+	})
+	t.Run("forgetting what isn't there", func(t *testing.T) {
+		assert.NoError(t, ForgetCatalog(t.TempDir()))
+	})
+	t.Run("the organization's workspaces, signed out", func(t *testing.T) {
+		_, _, c2, _, _ := setup(t)
+		_, err := c2.Workspaces(ctx)
+		assert.ErrorIs(t, err, ErrNotSignedIn)
+		_, err = c2.CreateWorkspace(ctx, "x", "")
+		assert.ErrorIs(t, err, ErrNotSignedIn)
+		assert.ErrorIs(t, c2.WatchWorkspace(ctx, "x", func(string, string, string) {}), ErrNotSignedIn)
+		assert.Equal(t, "", New("::", &secrets.Memory{}, Options{}).Host())
+	})
+	t.Run("a workspace's stream", func(t *testing.T) {
+		s.AddWorkspace(t, "plans", "Plans", "editor")
+		wctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		seen := make(chan string, 1)
+		done := make(chan error, 1)
+		go func() { done <- c.WatchWorkspace(wctx, "plans", func(ref, _, by string) { seen <- ref + " " + by }) }()
+		s.Pushes <- "plans"
+		select {
+		case got := <-seen:
+			assert.Equal(t, "refs/heads/main bo@acme.com", got)
+		case <-time.After(5 * time.Second):
+			t.Fatal("no push")
+		}
+		cancel()
+		assert.Error(t, <-done)
+		list, err := c.Workspaces(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "plans", list[0].Handle)
+		made, err := c.CreateWorkspace(ctx, "Q4", "q4")
+		require.NoError(t, err)
+		assert.Equal(t, "q4", made.Handle)
+		assert.NotEmpty(t, s.Repo("q4"))
+	})
+	t.Run("the service down", func(t *testing.T) {
+		s.Close()
+		_, err := c.Workspaces(ctx)
+		assert.Error(t, err)
+		assert.Error(t, c.WatchWorkspace(ctx, "plans", func(string, string, string) {}))
+	})
+}
+
+// A folder that can't be written: the branding and catalog say so.
+func TestUnwritable(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	file := filepath.Join(t.TempDir(), "a-file")
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	s.Branding = map[string]any{"name": "Acme Assist"}
+	_, err := c.RefreshBranding(ctx, filepath.Join(file, "dir"))
+	assert.Error(t, err)
+	s.Catalog = map[string]enterprisetest.CatalogFile{"rules/a.md": {Kind: "rule", Name: "a", Lock: "default", Data: "A."}}
+	_, _, err = c.RefreshCatalog(ctx, filepath.Join(file, "dir"))
+	assert.Error(t, err)
+	assert.Error(t, writeFile(filepath.Join(file, "dir"), "x", []byte("x")))
+}

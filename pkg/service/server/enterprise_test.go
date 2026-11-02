@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -346,7 +347,7 @@ func TestEnterpriseCatalogLoop(t *testing.T) {
 	org.Catalog = map[string]enterprisetest.CatalogFile{
 		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Data: "---\nname: reviewer\n---\nReview."},
 	}
-	org.CatalogPolicy = map[string]any{"tools": map[string]any{"off": []string{"web_fetch"}}}
+	org.CatalogPolicy = map[string]any{"tools": map[string]any{"off": []string{"web_fetch"}}, "refresh": "1h"}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
@@ -540,4 +541,76 @@ func TestOrgSync(t *testing.T) {
 	none, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: t.TempDir()}))
 	require.NoError(t, err)
 	assert.Empty(t, none.Msg.State, "not one kept in step")
+}
+
+// The organization workspaces' calls when it can't work: not connected,
+// settings the service can't use, the organization's service down.
+func TestOrgWorkspacesFailures(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	for name, call := range map[string]func() error{
+		"create": func() error {
+			_, err := c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: "x"}))
+			return err
+		},
+		"open": func() error {
+			_, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "x"}))
+			return err
+		},
+	} {
+		_, info := errorReason(t, call())
+		assert.Equal(t, "NOT_CONNECTED", info.Reason, name)
+	}
+	cred, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: "blitz.acme.com"}))
+	require.NoError(t, err)
+	assert.False(t, cred.Msg.Ok, "not connected: nothing")
+	st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: "/no/such/folder"}))
+	require.NoError(t, err)
+	assert.Empty(t, st.Msg.State)
+
+	home, _ := os.UserHomeDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[enterprise\n"), 0o600))
+	_, err = c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "settings it can't read")
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[enterprise]\nurl = \"http://evil.example\"\n"), 0o600))
+	_, err = c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an address that isn't a service")
+	require.NoError(t, os.Remove(filepath.Join(home, ".blitz", ".env.toml")))
+
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	_ = stream.Close()
+	org.Close()
+	for name, call := range map[string]func() error{
+		"list": func() error {
+			_, err := c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+			return err
+		},
+		"create": func() error {
+			_, err := c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: "x"}))
+			return err
+		},
+		"open": func() error {
+			_, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "x"}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
+	assert.Equal(t, "!\"x\" git-credential", fmt.Sprintf("!%q git-credential", "x"))
+	s.ent.gitHelper = ""
+	assert.Contains(t, s.gitHelper(), "git-credential", "this program's, by default")
 }

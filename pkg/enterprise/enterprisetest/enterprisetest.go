@@ -380,7 +380,7 @@ func NewService(t testing.TB, issuer string) *Service {
 		defer s.Mu.Unlock()
 		s.FileCalls++
 		for _, f := range s.Catalog {
-			if sum := sha256.Sum256([]byte(f.Data)); hex.EncodeToString(sum[:]) == r.PathValue("sha") {
+			if sum := sha256.Sum256([]byte(f.Data)); hex.EncodeToString(sum[:]) == r.PathValue("sha") && !f.Missing {
 				data := f.Data
 				if f.Corrupt {
 					data += "!"
@@ -565,8 +565,9 @@ func Seal(kid string, key ed25519.PrivateKey, v any) []byte {
 // CatalogFile is a file of the fake service's catalog.
 type CatalogFile struct {
 	Kind, Name, Lock, Data string
-	// Corrupt serves contents that don't match the file's hash.
-	Corrupt bool
+	// Corrupt serves contents that don't match the file's hash; Missing
+	// doesn't serve them at all.
+	Corrupt, Missing bool
 }
 
 // Close ends the watch streams, then the server.
