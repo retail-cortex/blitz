@@ -3118,6 +3118,8 @@
     "desktop.status.processes_flagged.one": "{count} proceso en segundo plano en marcha, con aviso",
     "desktop.status.processes_flagged.other": "{count} procesos en segundo plano en marcha, {flagged} con aviso",
     "desktop.processes.title": "Procesos",
+    "desktop.processes.service": "En el servicio de tu organización",
+    "desktop.processes.show_job": "Mostrar {name} en Studio",
     "desktop.processes.details": "Salida y detalles…",
     "desktop.processes.empty_all": "No hay procesos en segundo plano.",
     "desktop.processes.hint": "Lo que el agente inició en segundo plano. Despliega uno para ver su salida.",

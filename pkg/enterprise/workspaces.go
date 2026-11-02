@@ -118,11 +118,26 @@ func (c *Client) Host() string {
 // service's WS-06), calling on with each pushed ref's new commit, until ctx
 // ends or the stream does (the error says why).
 func (c *Client) WatchWorkspace(ctx context.Context, handle string, on func(ref, commit, by string)) error {
+	err := c.events(ctx, "/api/v1/workspaces/"+url.PathEscape(handle)+"/watch", func(data string) {
+		var p struct{ Ref, Commit, By string }
+		if json.Unmarshal([]byte(data), &p) == nil {
+			on(p.Ref, p.Commit, p.By)
+		}
+	})
+	if err == nil {
+		err = errors.New("the organization's service ended the workspace's stream")
+	}
+	return err
+}
+
+// events follows a stream of server-sent events at path, calling on with
+// each event's data, until it ends (nil) or fails.
+func (c *Client) events(ctx context.Context, path string, on func(data string)) error {
 	token, err := c.AccessToken(ctx)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"/api/v1/workspaces/"+url.PathEscape(handle)+"/watch", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
 	if err != nil {
 		return err
 	}
@@ -138,17 +153,9 @@ func (c *Client) WatchWorkspace(ctx context.Context, handle string, on func(ref,
 	}
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {
-		data, ok := strings.CutPrefix(sc.Text(), "data: ")
-		if !ok {
-			continue
-		}
-		var p struct{ Ref, Commit, By string }
-		if json.Unmarshal([]byte(data), &p) == nil {
-			on(p.Ref, p.Commit, p.By)
+		if data, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
+			on(data)
 		}
 	}
-	if err := sc.Err(); err != nil {
-		return err
-	}
-	return errors.New("the organization's service ended the workspace's stream")
+	return sc.Err()
 }

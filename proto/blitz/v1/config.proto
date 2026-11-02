@@ -244,6 +244,10 @@ service ConfigService {
   rpc ListServiceRunFiles(ListServiceRunFilesRequest) returns (ListServiceRunFilesResponse);
   // Saves one of a run's files in the Downloads folder, answering where.
   rpc SaveServiceRunFile(SaveServiceRunFileRequest) returns (SaveServiceRunFileResponse);
+  // The runs going now on the organization's service in the person's
+  // workspaces, first as they are, then again with each run's change as it
+  // comes (EN-42: the Processes view, and Studio's service jobs).
+  rpc WatchServiceRuns(WatchServiceRunsRequest) returns (stream WatchServiceRunsResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1530,4 +1534,37 @@ message SaveServiceRunFileRequest {
 message SaveServiceRunFileResponse {
   // Where it was saved.
   string path = 1;
+}
+
+// A run going now on the organization's service.
+message GoingServiceRun {
+  ServiceRun run = 1;
+  string job_id = 2;
+  string job_name = 3;
+  // Its workspace's handle, and where it's cloned on this computer.
+  string workspace = 4;
+  string dir = 5;
+}
+
+// One run's change: queued, started, ended, or its branch pushed.
+message ServiceRunChange {
+  string run_id = 1;
+  string job_id = 2;
+  // Its workspace's handle, and where it's cloned on this computer.
+  string workspace = 3;
+  string dir = 4;
+  string status = 5;
+}
+
+// Request message for ConfigService.WatchServiceRuns.
+message WatchServiceRunsRequest {}
+
+// Response message for ConfigService.WatchServiceRuns.
+message WatchServiceRunsResponse {
+  // Every run going now.
+  repeated GoingServiceRun runs = 1;
+  // The change that sent it (none in the first).
+  ServiceRunChange change = 2;
+  // Always true: the page server's keepalives are empty messages.
+  bool listed = 3;
 }

@@ -232,6 +232,26 @@ type Service struct {
 	Files       map[string][]File
 	Contents    map[string]string
 	JobsRefused bool
+	// Going are the runs going now (GET /api/v1/runs); RunChanges are
+	// sent, each as it comes, on every runs' stream.
+	Going      []GoingRun
+	RunChanges chan RunChange
+}
+
+// GoingRun is a run going now, with its job and workspace.
+type GoingRun struct {
+	ServiceRun
+	Job       string `json:"job"`
+	JobName   string `json:"job_name"`
+	Workspace string `json:"workspace"`
+}
+
+// RunChange is one run's change on the runs' stream.
+type RunChange struct {
+	Run       string `json:"run"`
+	Job       string `json:"job"`
+	Workspace string `json:"workspace"`
+	Status    string `json:"status"`
 }
 
 // ServiceJob is a job the service runs, as GET /api/v1/jobs answers it.
@@ -277,7 +297,7 @@ type Artifact struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, Runs: map[string]string{}, repos: t.TempDir(), Pushes: make(chan string, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, Runs: map[string]string{}, repos: t.TempDir(), Pushes: make(chan string, 4), RunChanges: make(chan RunChange, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -655,6 +675,33 @@ func NewService(t testing.TB, issuer string) *Service {
 		if jobs(w, r) {
 			defer s.Mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"jobs": append([]ServiceJob{}, s.ServiceJobs...)})
+		}
+	})
+	mux.HandleFunc("GET /api/v1/runs", func(w http.ResponseWriter, r *http.Request) {
+		if jobs(w, r) {
+			defer s.Mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
+		}
+	})
+	mux.HandleFunc("GET /api/v1/runs/watch", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		s.Mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(": watching\n\n"))
+		w.(http.Flusher).Flush()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-s.quit:
+				return
+			case c := <-s.RunChanges:
+				data, _ := json.Marshal(c)
+				fmt.Fprintf(w, "event: run\ndata: %s\n\n", data)
+				w.(http.Flusher).Flush()
+			}
 		}
 	})
 	mux.HandleFunc("GET /api/v1/jobs/{id}/runs", func(w http.ResponseWriter, r *http.Request) {

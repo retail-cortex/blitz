@@ -32,13 +32,12 @@ import {
 } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
+import { useServiceRuns } from "./serviceRuns";
 import { language, t } from "./i18n";
 import type { ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
 import type { Worker } from "./gen/blitz/v1/worker_pb";
 import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
-/** How often the view asks the service for the job's runs again. */
-const servicePollMs = 10000;
 
 const statusIcon: Record<string, string> = {
   queued: mdiProgressClock,
@@ -77,11 +76,13 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
       setError(message(e));
     }
   }, [dir, worker.name]);
+  useEffect(() => void refresh(), [refresh]);
+  // Asked again as a run of this job changes, as the service's stream says.
+  const { change, changes } = useServiceRuns();
+  const jobId = job?.id;
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(refresh, servicePollMs);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    if (changes > 0 && jobId && change?.jobId === jobId) void refresh();
+  }, [changes, change, jobId, refresh]);
 
   const act = async (f: () => Promise<unknown>) => {
     setError("");

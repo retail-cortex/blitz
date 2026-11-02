@@ -2601,6 +2601,27 @@ export function installFake() {
           await sleep(800);
           return { dir: `/home/me/Blitz/Acme Assist/${handle}`, cloned: true };
         },
+        // The service's runs going now: sales-digest's own run now, while it runs (8 s), then it succeeds.
+        watchServiceRuns: async function* (_req, ctx) {
+          if (!fakeOrg.url || !fakeOrg.signedIn) throw new ConnectError("connect to your organization's service first", Code.FailedPrecondition);
+          let last = "";
+          for (;;) {
+            const going = fakeServiceRuns.filter((r) => r.status === "running");
+            const sig = going.map((r) => r.id).join("|");
+            if (sig !== last) {
+              const change = last && { runId: last.split("|")[0], jobId: fakeServiceJob.id, workspace: "plans", dir: "/home/me/Blitz/Acme Assist/plans", status: "succeeded" };
+              last = sig;
+              yield {
+                listed: true,
+                change: change || undefined,
+                runs: going.map((run) => ({ run, jobId: fakeServiceJob.id, jobName: fakeServiceJob.name, workspace: "plans", dir: "/home/me/Blitz/Acme Assist/plans" })),
+              };
+            }
+            for (const r of going) if (Date.now() - Number(r.created?.seconds ?? 0n) * 1000 > 8000) r.status = "succeeded";
+            await sleep(500);
+            if (ctx?.signal.aborted) return;
+          }
+        },
         getServiceJob: ({ name }) => (name === "sales-digest" ? { found: true, job: fakeServiceJob, runs: fakeServiceRuns } : { found: false, runs: [] }),
         runServiceJob: () => {
           const run = { id: `run-${Date.now()}`, trigger: "now", status: "running", costUsd: 0, created: now(), artifacts: `${fakeServiceSet}:${Date.now()}` };

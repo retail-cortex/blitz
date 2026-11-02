@@ -16,7 +16,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiChevronDown, mdiChevronRight, mdiConsole, mdiRefresh, mdiStopCircleOutline } from "@mdi/js";
+import { mdiCalendarClock, mdiChevronDown, mdiChevronRight, mdiCloudOutline, mdiConsole, mdiRefresh, mdiStopCircleOutline } from "@mdi/js";
+import { showView } from "./events";
+import { useServiceRuns } from "./serviceRuns";
+import { ms, took } from "./workflowRuns";
 import { message } from "./errors";
 import type { WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
@@ -43,6 +46,8 @@ export function ProcessesDrawer({ dir, expand, expandIn, onClose }: { dir: strin
   const { prefs } = useApp();
   const snack = useSnackbar();
   const { list, receivedAt } = useProcesses();
+  // The organization's runs going now (spec_053 EN-42): jobs, not processes, but where people look for what's running.
+  const { runs: serviceRuns } = useServiceRuns();
   const [outputs, setOutputs] = useState<Record<string, Output>>({});
   const [confirm, setConfirm] = useState(false);
   const [stopping, setStopping] = useState<Set<string>>(new Set());
@@ -103,7 +108,7 @@ export function ProcessesDrawer({ dir, expand, expandIn, onClose }: { dir: strin
       onClose={onClose}
     >
       {list.length === 0 ? (
-        <p className="muted">{t("desktop.processes.empty_all")}</p>
+        serviceRuns.length === 0 && <p className="muted">{t("desktop.processes.empty_all")}</p>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
           <div className="row">
@@ -169,6 +174,29 @@ export function ProcessesDrawer({ dir, expand, expandIn, onClose }: { dir: strin
           </div>
           </div>
           ))}
+        </div>
+      )}
+      {serviceRuns.length > 0 && (
+        <div className="stack" style={{ gap: 4, marginBlockStart: list.length ? 16 : 0 }}>
+          <h3 className="t-title-sm">{t("desktop.processes.service")}</h3>
+          <div className="list">
+            {serviceRuns.map((g) => (
+              <div key={g.run?.id} className="list-item static-item">
+                <Icon path={mdiCloudOutline} />
+                <span className="lines spacer">
+                  <span className="ellipsis">{g.jobName}</span>
+                  <small className="ellipsis">
+                    {[wsName(g.dir), t(`desktop.service_job.status.${g.run?.status}`), took(ms(g.run?.created), now)].join(" · ")}
+                  </small>
+                </span>
+                {g.dir === dir && (
+                  <span className="trailing">
+                    <IconButton icon={mdiCalendarClock} label={t("desktop.processes.show_job", { name: g.jobName })} small onClick={() => showView({ dir, view: "workers", worker: g.jobName })} />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {confirm &&

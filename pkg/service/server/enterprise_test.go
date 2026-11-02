@@ -656,6 +656,11 @@ func TestServiceJobs(t *testing.T) {
 		_, info := errorReason(t, call())
 		assert.Equal(t, "NOT_CONNECTED", info.Reason)
 	}
+	notYet, err := c.WatchServiceRuns(ctx, connect.NewRequest(&pb.WatchServiceRunsRequest{}))
+	require.NoError(t, err)
+	assert.False(t, notYet.Receive())
+	_, info = errorReason(t, notYet.Err())
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
 	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
 	require.NoError(t, err)
 	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
@@ -747,6 +752,29 @@ func TestServiceJobs(t *testing.T) {
 	_, err = c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: "urn:blitz:artifacts:" + ws + ":" + job + ":" + ws}))
 	assert.Error(t, err)
 
+	// The runs going now, then again as each changes.
+	org.Mu.Lock()
+	org.Going = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: run, Status: "running"}, Job: job, JobName: "digest", Workspace: "plans"},
+		{ServiceRun: enterprisetest.ServiceRun{ID: "odd"}, Workspace: "../x"}}
+	org.Mu.Unlock()
+	wctx, stopWatch := context.WithCancel(ctx)
+	watch, err := c.WatchServiceRuns(wctx, connect.NewRequest(&pb.WatchServiceRunsRequest{}))
+	require.NoError(t, err)
+	require.True(t, watch.Receive(), watch.Err())
+	require.Len(t, watch.Msg().Runs, 1, "never a handle that isn't one")
+	assert.Equal(t, plans, watch.Msg().Runs[0].Dir)
+	assert.Equal(t, "digest", watch.Msg().Runs[0].JobName)
+	assert.Nil(t, watch.Msg().Change)
+	assert.True(t, watch.Msg().Listed)
+	org.RunChanges <- enterprisetest.RunChange{Run: "x", Workspace: "../x", Status: "running"}
+	org.RunChanges <- enterprisetest.RunChange{Run: run, Job: job, Workspace: "plans", Status: "succeeded"}
+	require.True(t, watch.Receive(), watch.Err())
+	require.NotNil(t, watch.Msg().Change, "the odd one isn't sent")
+	assert.Equal(t, "succeeded", watch.Msg().Change.Status)
+	assert.Equal(t, plans, watch.Msg().Change.Dir)
+	stopWatch()
+	_ = watch.Close()
+
 	// A Downloads folder that can't be one.
 	require.NoError(t, os.RemoveAll(filepath.Join(home, "Downloads")))
 	require.NoError(t, os.WriteFile(filepath.Join(home, "Downloads"), nil, 0o600))
@@ -759,5 +787,10 @@ func TestServiceJobs(t *testing.T) {
 	org.Mu.Unlock()
 	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
 	_, info = errorReason(t, err)
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+	refused, err := c.WatchServiceRuns(ctx, connect.NewRequest(&pb.WatchServiceRunsRequest{}))
+	require.NoError(t, err)
+	assert.False(t, refused.Receive())
+	_, info = errorReason(t, refused.Err())
 	assert.Equal(t, "FEATURE_OFF", info.Reason)
 }

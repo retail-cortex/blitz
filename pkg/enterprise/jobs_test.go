@@ -18,6 +18,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,8 +83,32 @@ func TestServiceJobs(t *testing.T) {
 	assert.False(t, list[0].Enabled)
 
 	s.Mu.Lock()
+	s.Going = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: "r2", Status: "running"}, Job: "j1", JobName: "digest", Workspace: "plans"}}
+	s.Mu.Unlock()
+	going, err := c.GoingRuns(ctx)
+	require.NoError(t, err)
+	require.Len(t, going, 1)
+	assert.Equal(t, "digest", going[0].JobName)
+	assert.Equal(t, "j1", going[0].Job)
+
+	wctx, cancel := context.WithCancel(ctx)
+	heard := make(chan RunChange, 1)
+	done := make(chan error, 1)
+	go func() { done <- c.WatchRuns(wctx, func(ch RunChange) { heard <- ch }) }()
+	s.RunChanges <- enterprisetest.RunChange{Run: "r2", Job: "j1", Workspace: "plans", Status: "succeeded"}
+	select {
+	case ch := <-heard:
+		assert.Equal(t, RunChange{Run: "r2", Job: "j1", Workspace: "plans", Status: "succeeded"}, ch)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no change")
+	}
+	cancel()
+	assert.Error(t, <-done)
+
+	s.Mu.Lock()
 	s.JobsRefused = true
 	s.Mu.Unlock()
+	assert.Error(t, c.WatchRuns(ctx, func(RunChange) {}), "refused")
 	_, err = c.Jobs(ctx)
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, "feature_off", refused.Code)

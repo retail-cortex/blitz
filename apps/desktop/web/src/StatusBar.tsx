@@ -17,6 +17,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useServiceRuns } from "./serviceRuns";
+import { ms, took } from "./workflowRuns";
 import {
   mdiAccountAlertOutline,
   mdiAccountCheckOutline,
@@ -26,6 +28,7 @@ import {
   mdiCloudSyncOutline,
   mdiCloudOffOutline,
   mdiCloudCheckOutline,
+  mdiCloudOutline,
   mdiCircleMedium,
   mdiCloseCircleOutline,
   mdiCreationOutline,
@@ -273,8 +276,21 @@ function ProcessesItem({ dir }: { dir: string }) {
   };
   const open = (p?: WorkspaceProcess) => showView({ dir, view: "processes", process: p?.process?.id, processIn: p?.workspace });
   const now = Date.now();
+  // The organization's runs going now (spec_053 EN-42), after this computer's.
+  const { runs: serviceRuns } = useServiceRuns();
+  const service: MenuEntry[] = serviceRuns.length
+    ? [
+        { heading: t("desktop.processes.service") },
+        ...serviceRuns.map((g) => ({
+          label: g.jobName,
+          detail: [displayName(prefs.workspaces.find((w) => w.dir === g.dir) ?? { dir: g.dir }), t(`desktop.service_job.status.${g.run?.status}`), took(ms(g.run?.created), now)].join(" · "),
+          icon: mdiCloudOutline,
+          onSelect: () => (g.dir === dir ? showView({ dir, view: "workers", worker: g.jobName }) : open()),
+        })),
+      ]
+    : [];
   const items: MenuEntry[] = !on
-    ? [{ heading: t("desktop.processes.title") }, { label: t("desktop.processes.empty_all"), disabled: true, onSelect: () => {} }]
+    ? [{ heading: t("desktop.processes.title") }, { label: t("desktop.processes.empty_all"), disabled: true, onSelect: () => {} }, ...service]
     : [
         ...byWorkspace(list, dir).flatMap((g): MenuEntry[] => [
           { heading: displayName(prefs.workspaces.find((w) => w.dir === g.workspace) ?? { dir: g.workspace }) },
@@ -287,6 +303,7 @@ function ProcessesItem({ dir }: { dir: string }) {
             actions: [{ icon: mdiStopCircleOutline, label: t("desktop.processes.stop"), removes: true, onSelect: () => void stop([p]) }],
           })),
         ]),
+        ...service,
         "divider",
         ...(flagged.length > 0
           ? [{ label: `${t("desktop.processes.stop_flagged")} (${flagged.length})`, icon: mdiStopCircleOutline, danger: true, onSelect: () => setConfirm(true) }]

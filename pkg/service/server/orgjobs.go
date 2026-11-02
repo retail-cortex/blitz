@@ -208,3 +208,75 @@ func createUnique(dir, name string) (*os.File, error) {
 	}
 	return nil, fmt.Errorf("no free name for %s in %s", name, dir)
 }
+
+// watchRunsRetry is how long WatchServiceRuns waits to follow the
+// service's stream again after it drops (a variable for tests).
+var watchRunsRetry = 10 * time.Second
+
+func (h configService) WatchServiceRuns(ctx context.Context, _ req[pb.WatchServiceRunsRequest], stream *connect.ServerStream[pb.WatchServiceRunsResponse]) error {
+	c, cfg, err := h.s.orgClient()
+	if err != nil {
+		return err
+	}
+	folder := h.s.orgFolder(c, cfg)
+	dir := func(handle string) string { return filepath.Join(folder, filepath.FromSlash(handle)) }
+	send := func(change *pb.ServiceRunChange) error {
+		list, err := c.GoingRuns(ctx)
+		if err != nil {
+			return enterpriseError(err)
+		}
+		out := &pb.WatchServiceRunsResponse{Change: change, Listed: true}
+		for _, g := range list {
+			if enterprise.ValidHandle(g.Workspace) {
+				out.Runs = append(out.Runs, &pb.GoingServiceRun{Run: serviceRunMsg(g.ServiceRun), JobId: g.Job, JobName: g.JobName,
+					Workspace: g.Workspace, Dir: dir(g.Workspace)})
+			}
+		}
+		return stream.Send(out)
+	}
+	if err := send(nil); err != nil {
+		return err
+	}
+	changes := make(chan enterprise.RunChange, 16)
+	for {
+		wctx, cancel := context.WithCancel(ctx)
+		ended := make(chan error, 1)
+		go func() {
+			ended <- c.WatchRuns(wctx, func(ch enterprise.RunChange) {
+				select {
+				case changes <- ch:
+				default: // the next change sends the list anyway
+				}
+			})
+		}()
+	follow:
+		for {
+			select {
+			case <-ctx.Done():
+				cancel()
+				return nil
+			case ch := <-changes:
+				if !enterprise.ValidHandle(ch.Workspace) {
+					continue
+				}
+				// A list that can't be had now comes with the next change.
+				_ = send(&pb.ServiceRunChange{RunId: ch.Run, JobId: ch.Job, Workspace: ch.Workspace, Dir: dir(ch.Workspace), Status: ch.Status})
+			case err := <-ended:
+				cancel()
+				var ref *enterprise.Refusal
+				if errors.Is(err, enterprise.ErrNotSignedIn) || (errors.As(err, &ref) && ref.Status/100 == 4) {
+					return enterpriseError(err)
+				}
+				break follow
+			}
+		}
+		// Dropped (offline, the service restarting): again in a while, with
+		// the list as it is then.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(watchRunsRetry):
+		}
+		_ = send(nil)
+	}
+}

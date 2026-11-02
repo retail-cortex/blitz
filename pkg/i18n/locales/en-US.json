@@ -3118,6 +3118,8 @@
     "desktop.status.processes_flagged.one": "{count} background process running, and it looks bad",
     "desktop.status.processes_flagged.other": "{count} background processes running, {flagged} flagged",
     "desktop.processes.title": "Processes",
+    "desktop.processes.service": "On your organization's service",
+    "desktop.processes.show_job": "Show {name} in Studio",
     "desktop.processes.details": "Output and details…",
     "desktop.processes.empty_all": "No background processes are running.",
     "desktop.processes.hint": "What the agent started in the background. Expand one to see its output.",

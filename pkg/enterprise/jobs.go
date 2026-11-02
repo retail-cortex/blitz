@@ -16,6 +16,8 @@ package enterprise
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +44,7 @@ type ServiceJob struct {
 type ServiceRun struct {
 	ID      string `json:"id"`
 	URN     string `json:"urn"`
+	Job     string `json:"job"`     // its ID
 	Trigger string `json:"trigger"` // schedule, catch_up or now
 	// Status is queued, running, succeeded, failed, skipped or stopped.
 	Status  string     `json:"status"`
@@ -157,4 +160,44 @@ func (c *Client) signedCall(ctx context.Context, method, path string, in, out an
 		return err
 	}
 	return call(ctx, c.hc, method, c.url+path, token, in, out)
+}
+
+// GoingRun is a run going now, with its job's name and workspace's handle.
+type GoingRun struct {
+	ServiceRun
+	JobName   string `json:"job_name"`
+	Workspace string `json:"workspace"`
+}
+
+// GoingRuns are the runs going now in the person's workspaces.
+func (c *Client) GoingRuns(ctx context.Context) ([]GoingRun, error) {
+	var out struct {
+		Runs []GoingRun `json:"runs"`
+	}
+	err := c.signedCall(ctx, http.MethodGet, "/api/v1/runs", nil, &out)
+	return out.Runs, err
+}
+
+// RunChange is one run's change: queued, started, ended, or its branch
+// pushed.
+type RunChange struct {
+	Run, Job string
+	// Workspace is its handle.
+	Workspace, Status string
+}
+
+// WatchRuns follows the changes of runs in the person's workspaces
+// (blitz-enterprise spec_009_jobs JB-60), calling on with each, until ctx
+// ends or the stream does (an error either way).
+func (c *Client) WatchRuns(ctx context.Context, on func(RunChange)) error {
+	err := c.events(ctx, "/api/v1/runs/watch", func(data string) {
+		var ch RunChange
+		if json.Unmarshal([]byte(data), &ch) == nil {
+			on(ch)
+		}
+	})
+	if err == nil {
+		err = errors.New("the organization's service ended the runs' stream")
+	}
+	return err
 }
