@@ -71,7 +71,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 
 ## 6. Jobs on the service
 
-- **EN-40** A job has `runs_on`: `here` (the default, today's) or `service`, and **Runs on** in Studio › Jobs with **Move to the service**. One job runs in one place; there is no "here when on, the service otherwise".
+- **EN-40** *Built for `runs_on` (2026-11-02; `pkg/jobspec`, which the service reads jobs with too; the local scheduler skips `service` jobs; Studio keeps it through an edit). Studio's **Runs on** and **Move to the service** are to come; a run on the service is `service.RunJob` (blitz-enterprise's `blitz-runner`, or `blitzd run-job`), which clones the workspace with its run's token, runs the job, pushes to `blitz/<job>` and reports its end.* A job has `runs_on`: `here` (the default, today's) or `service`, and **Runs on** in Studio › Jobs with **Move to the service**. One job runs in one place; there is no "here when on, the service otherwise".
 - **EN-41** Before a job moves, Blitz checks it can run there and says what can't: an MCP server that runs only on this computer (stdio), a file outside the workspace, a `localhost` address, a connector the service doesn't have.
 - **EN-42** A service job's runs show beside local ones in Studio › Jobs and the Processes view, with their output, from the service (`JobRunner`); the person's computer doesn't need to be on for them to run.
 

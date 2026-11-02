@@ -68,6 +68,7 @@ blitz jobs enable deps     # shows what it may do, then asks
 | `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout` |
 | `catch_up` | `none` | `once`: when the service starts or the job is enabled, run once if a scheduled time passed since its last run |
 | `overlap` | `skip` | A run that's due while one is still going is skipped |
+| `runs_on` | `here` | `service`: your organization's Blitz service runs it, on its own schedule, and this computer doesn't ([Jobs on the service](#jobs-on-the-service)) |
 
 **Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
 
@@ -147,6 +148,10 @@ A run's file changes are its own checkpoint, outside `/undo`: `blitz jobs undo <
 notify = 'osascript -e "display notification \"$BLITZ_WORKER $BLITZ_RUN_STATUS\" with title \"Blitz\""'
 notify_on = ["failed", "limited"]
 ```
+
+## Jobs on the service
+
+When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: set `runs_on: service` and push it to the workspace's `main`. The service picks it up within a minute; this computer leaves it alone. Each run clones `main`, runs the job as the workspace's owner with the organization's models, and pushes what it changed to the branch `blitz/<job>`.
 
 ## Good to know
 

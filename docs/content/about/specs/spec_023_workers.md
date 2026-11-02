@@ -29,6 +29,7 @@ timezone: Europe/Paris                # optional; default the machine's
 permissions: ["shell:go list -m -u all", "write:reports/"]
 limits: { max_turns: 30, max_cost_usd: 0.50, timeout: 20m }
 catch_up: once                        # none (default) | once
+runs_on: here                         # here (default) | service: the organization's service runs it (spec_053_enterprise EN-40)
 overlap: skip                         # only "skip"
 agent: qa                             # optional: runs as this agent
 model: anthropic/claude-haiku-4-5     # optional: runs on this model
@@ -42,7 +43,7 @@ Check for outdated Go modules and write reports/deps.md.
 - **WK-01c** *2026-10-02.* Deleting. `DeleteWorker(name)` (`WorkerService.DeleteWorker`) removes the job's directory (its `WORKER.md` and anything beside it, `os.RemoveAll`) and forgets it in the store (`Store.Forget`: it's `new` if it comes back; a workspace with none left isn't watched). Its past runs stay in the run log. Refused while a run of it goes (`RUN_IN_PROGRESS`); an unknown name is `UNKNOWN_WORKER`. The scheduler rescans after. The desktop deletes from the Jobs menu and the job's view (DSK-65a), confirmed.
 - **WK-02** The directory name is the job's name: `^[a-z0-9][a-z0-9_-]{0,63}$`; a frontmatter `name` must match it. Only valid names are looked up (they become file names).
 - **WK-03** Frontmatter is decoded strictly (unknown keys are errors — a misspelling would silently change behaviour). A leading BOM and blank lines are tolerated; missing frontmatter delimiters are errors.
-- **WK-04** Invalid if: bad name, empty workflow body, unparseable schedule or time zone, bad permission, bad or non-positive `limits.timeout`, negative limits, unsupported `overlap`/`catch_up`, hashing failure. An invalid job still loads with its problems listed.
+- **WK-04** Invalid if: bad name, empty workflow body, unparseable schedule or time zone, bad permission, bad or non-positive `limits.timeout`, negative limits, unsupported `overlap`/`catch_up`/`runs_on`, hashing failure. An invalid job still loads with its problems listed.
 - **WK-05** Content hash: SHA-256 over every regular file under the job directory (relative path, size, content; symlinks skipped; ≤ 64 MB), `sha256:<hex>`.
 
 ## 3. Schedules

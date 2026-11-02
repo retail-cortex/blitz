@@ -117,7 +117,7 @@ every login.`,
 	cmd.Flags().StringVar(&license, "license", "", "show the license and exit: the NOTICE, or =full (the Apache License) or =third-party (the notices of the software blitzd includes)")
 	cmd.Flags().Lookup("license").NoOptDefVal = "notice"
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %v", errUsage, err) })
-	cmd.AddCommand(newDoctorCommand(), newGitCredentialCommand())
+	cmd.AddCommand(newDoctorCommand(), newGitCredentialCommand(), newRunJobCommand())
 	cmd.SetArgs(args)
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		if errors.Is(err, errChecksFailed) {
@@ -193,6 +193,28 @@ var errUsage = errors.New("usage")
 // organization clone's own Git settings. It asks the running service for
 // the access token, which only the service renews; with no service
 // running, it answers nothing.
+// newRunJobCommand is blitzd run-job: one run of a job the organization's
+// service runs (spec_009_jobs JB-10), in the runner the service starts,
+// which describes the run in its environment.
+func newRunJobCommand() *cobra.Command {
+	var configDir string
+	cmd := &cobra.Command{
+		Use:    "run-job",
+		Short:  "Run one run of a job for your organization's Blitz service",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			j, err := service.JobFromEnv(os.Getenv)
+			if err != nil {
+				return fmt.Errorf("%w: %v", errUsage, err)
+			}
+			return service.RunJob(cmd.Context(), j, service.JobOptions{Config: configDir, Client: "blitzd " + version + " (job)"})
+		},
+	}
+	cmd.Flags().StringVar(&configDir, "config", "", "configuration file (default: the usual search)")
+	return cmd
+}
+
 func newGitCredentialCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    "git-credential <get|store|erase>",

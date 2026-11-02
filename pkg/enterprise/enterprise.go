@@ -232,6 +232,7 @@ type Client struct {
 	info    Info          // what the service last said about itself, kept past a sign-out
 
 	models models
+	run    *runCreds // a job's run's, instead of a person's sign-in
 }
 
 // Options are a Client's.
@@ -357,6 +358,9 @@ func (c *Client) renewAt() time.Time {
 func (c *Client) AccessToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.run != nil {
+		return c.runToken(ctx)
+	}
 	r := c.load()
 	if r == nil {
 		return "", ErrNotSignedIn

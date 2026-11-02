@@ -33,6 +33,8 @@ func TestUsageErrors(t *testing.T) {
 	}
 	code := run(context.Background(), []string{"--version"})
 	assert.Equal(t, 0, code, "blitzd --version: exit %d", code)
+	t.Setenv("BLITZ_RUN", "")
+	assert.Equal(t, exitUsage, run(context.Background(), []string{"run-job"}), "not a job's run")
 }
 
 // --license shows the NOTICE, the Apache License or the third-party

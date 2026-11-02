@@ -21,6 +21,7 @@ go_library(
         "catalog.go",
         "enterprise.go",
         "models.go",
+        "run.go",
         "signin.go",
         "workspaces.go",
     ],

@@ -211,6 +211,11 @@ type Service struct {
 	quitOnce   sync.Once
 	ModelCalls int
 	ModelsFail bool
+	// Runs are jobs' runs, by ID, each with its secret: a token for the
+	// secret is an access token as Ana; Ends are how they ended, as each
+	// runner said (the secret is no good after).
+	Runs map[string]string
+	Ends map[string]map[string]any
 }
 
 // NewService is a service whose identity provider is issuer, taking the
@@ -218,7 +223,7 @@ type Service struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, repos: t.TempDir(), Pushes: make(chan string, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, Runs: map[string]string{}, repos: t.TempDir(), Pushes: make(chan string, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -520,6 +525,51 @@ func NewService(t testing.TB, issuer string) *Service {
 			s.Accepts[session+in.Version] = true
 			w.WriteHeader(http.StatusNoContent)
 		}
+	})
+	run := func(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
+		var in map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			refuse(w, http.StatusBadRequest, "bad_request", "The request isn't the JSON expected.")
+			return nil, false
+		}
+		id := r.PathValue("id")
+		if secret, ok := s.Runs[id]; !ok || secret == "" || in["secret"] != secret {
+			refuse(w, http.StatusUnauthorized, "unauthenticated", "That isn't this run's secret, or the run is over.")
+			return nil, false
+		}
+		return in, true
+	}
+	mux.HandleFunc("POST /api/v1/runs/{id}/token", func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if _, ok := run(w, r); !ok {
+			return
+		}
+		s.n++
+		access := fmt.Sprintf("at-%d", s.n)
+		s.Access[access] = "run:" + r.PathValue("id")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": access, "expires_in": s.ExpiresIn})
+	})
+	mux.HandleFunc("POST /api/v1/runs/{id}/end", func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		in, ok := run(w, r)
+		if !ok {
+			return
+		}
+		switch in["status"] {
+		case "succeeded", "failed", "stopped":
+		default:
+			refuse(w, http.StatusBadRequest, "bad_request", "A run ends succeeded, failed or stopped.")
+			return
+		}
+		delete(in, "secret")
+		if s.Ends == nil {
+			s.Ends = map[string]map[string]any{}
+		}
+		s.Ends[r.PathValue("id")] = in
+		s.Runs[r.PathValue("id")] = ""
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("DELETE /api/v1/session", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()

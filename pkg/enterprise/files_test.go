@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,4 +139,34 @@ func TestFetchFailures(t *testing.T) {
 		readOnly(t, store)
 		assert.Error(t, client(srv.URL).fetchFiles(ctx, "t", dir, files))
 	})
+}
+
+// A job's run gets its access tokens for its secret, renews them near
+// their end, and says how it ended, once.
+func TestRun(t *testing.T) {
+	ctx := context.Background()
+	_, s, _, _, now := setup(t)
+	s.Runs["r1"] = "s3cret"
+	c := NewRun(s.URL, "r1", "s3cret", Options{Now: func() time.Time { return *now }})
+	tok, err := c.AccessToken(ctx)
+	require.NoError(t, err)
+	again, err := c.AccessToken(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, tok, again, "kept while it's good")
+	*now = now.Add(10 * time.Minute)
+	renewed, err := c.AccessToken(ctx)
+	require.NoError(t, err)
+	assert.NotEqual(t, tok, renewed)
+
+	require.ErrorContains(t, c.EndRun(ctx, RunEnd{Status: "won"}), "succeeded, failed or stopped")
+	require.NoError(t, c.EndRun(ctx, RunEnd{Status: "succeeded", Output: "Done.", CostUSD: 0.25}))
+	assert.Equal(t, map[string]any{"status": "succeeded", "output": "Done.", "cost_usd": 0.25}, s.Ends["r1"])
+	assert.Error(t, c.EndRun(ctx, RunEnd{Status: "succeeded"}), "once")
+	*now = now.Add(10 * time.Minute)
+	_, err = c.AccessToken(ctx)
+	assert.Error(t, err, "the secret's no good after")
+
+	_, err = NewRun(s.URL, "r2", "nope", Options{}).AccessToken(ctx)
+	assert.Error(t, err)
+	assert.Error(t, New(s.URL, nil, Options{}).EndRun(ctx, RunEnd{}), "not a run")
 }
