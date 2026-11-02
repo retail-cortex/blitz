@@ -39,6 +39,7 @@ go_library(
         "models.go",
         "orgfolders.go",
         "orgjobs.go",
+        "orgpublish.go",
         "orgshare.go",
         "orgsync.go",
         "orgworkspaces.go",
@@ -67,6 +68,7 @@ go_library(
     deps = [
         "//pkg/activity",
         "//pkg/api",
+        "//pkg/catalog",
         "//pkg/config",
         "//pkg/docx",
         "//pkg/engine",

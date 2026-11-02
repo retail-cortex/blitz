@@ -247,6 +247,11 @@ type Service struct {
 	Answers map[string]map[string]any
 	// Usage is GET /api/v1/usage's answer, as JSON.
 	Usage map[string]any
+	// Reviews are the catalog's reviews (POST makes one, open, with each
+	// file kept in Published); NotAdmin refuses them as to a member.
+	Reviews   []map[string]any
+	Published map[string]string
+	NotAdmin  bool
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -714,6 +719,60 @@ func NewService(t testing.TB, issuer string) *Service {
 			defer s.Mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
 		}
+	})
+	admin := func(w http.ResponseWriter, r *http.Request) bool {
+		if !signedIn(w, r) {
+			return false
+		}
+		if s.NotAdmin {
+			refuse(w, http.StatusForbidden, "forbidden", "That's for the organization's Admins.")
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("POST /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		var in struct {
+			Title string
+			Files []struct{ Path, Content string }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || len(in.Files) == 0 {
+			refuse(w, http.StatusBadRequest, "bad_request", "Publish from 1 to 200 files.")
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.Published == nil {
+			s.Published = map[string]string{}
+		}
+		var paths []string
+		for _, f := range in.Files {
+			s.Published[f.Path] = f.Content
+			paths = append(paths, f.Path)
+		}
+		sort.Strings(paths)
+		s.n++
+		rev := map[string]any{"id": fmt.Sprintf("rev-%d", s.n), "title": in.Title, "by_email": "ana@acme.com", "branch": "publish/ana/x",
+			"paths": paths, "problems": []string{}, "state": "open", "created": time.Now()}
+		s.Reviews = append([]map[string]any{rev}, s.Reviews...)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(rev)
+	})
+	mux.HandleFunc("GET /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		out := []map[string]any{}
+		for _, rev := range s.Reviews {
+			if st := r.URL.Query().Get("state"); st == "" || rev["state"] == st {
+				out = append(out, rev)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"reviews": out})
 	})
 	mux.HandleFunc("GET /api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

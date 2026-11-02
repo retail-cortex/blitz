@@ -266,6 +266,17 @@ service ConfigService {
   // left, the rate limits, and whether full prompt logs keep their
   // requests.
   rpc GetOrgUsage(GetOrgUsageRequest) returns (GetOrgUsageResponse);
+  // The workspace's items that can be published to the organization's
+  // catalog (EN-36): its .agents folder's agents, skills, rules,
+  // guardrails, commands and connectors, each with how it applies now and
+  // what the catalog would refuse.
+  rpc ListPublishable(ListPublishableRequest) returns (ListPublishableResponse);
+  // Publishes items to the organization's catalog as a review another
+  // Admin approves (EN-36; an Admin's; FAILED_PRECONDITION PROBLEMS when
+  // the catalog would refuse one).
+  rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse);
+  // The catalog's reviews, the newest first (an Admin's).
+  rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -1705,4 +1716,76 @@ message GetOrgUsageResponse {
   // Whether the organization's full prompt logs keep any of the person's
   // requests.
   bool prompt_logs = 5;
+}
+
+// An item in a workspace that can be published to the catalog.
+message PublishableItem {
+  // agent, skill, rule, guardrail, command or connector.
+  string kind = 1;
+  string name = 2;
+  // Its path in the catalog (and in the workspace's .agents folder).
+  string path = 3;
+  // What the catalog would refuse ("" none).
+  repeated string problems = 4;
+  // How it applies now: locked or default, and its groups.
+  string lock = 5;
+  repeated string groups = 6;
+}
+
+// Request message for ConfigService.ListPublishable.
+message ListPublishableRequest {
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListPublishable.
+message ListPublishableResponse {
+  repeated PublishableItem items = 1;
+}
+
+// An item to publish, and how it's to apply.
+message PublishItem {
+  string kind = 1;
+  string name = 2;
+  // locked or default.
+  string lock = 3;
+  // Who it's for; everyone when none.
+  repeated string groups = 4;
+}
+
+// A change to the catalog, waiting for another Admin or answered.
+message CatalogReview {
+  string id = 1;
+  string title = 2;
+  string by_email = 3;
+  repeated string paths = 4;
+  repeated string problems = 5;
+  // open, approved or rejected.
+  string state = 6;
+  string note = 7;
+  // The version it went out in, once approved (0 before).
+  int32 version = 8;
+  google.protobuf.Timestamp created = 9;
+}
+
+// Request message for ConfigService.PublishToOrganization.
+message PublishToOrganizationRequest {
+  string workspace = 1;
+  repeated PublishItem items = 2;
+  string title = 3;
+}
+
+// Response message for ConfigService.PublishToOrganization.
+message PublishToOrganizationResponse {
+  CatalogReview review = 1;
+}
+
+// Request message for ConfigService.ListCatalogReviews.
+message ListCatalogReviewsRequest {
+  // open, approved, rejected, or "" for all.
+  string state = 1;
+}
+
+// Response message for ConfigService.ListCatalogReviews.
+message ListCatalogReviewsResponse {
+  repeated CatalogReview reviews = 1;
 }

@@ -345,8 +345,38 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 		assert.Contains(t, out, want)
 	}
 
+	// Publishing to the catalog (EN-36).
+	pubWS := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(pubWS, ".agents", "agents"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "writer.md"), []byte("---\nname: writer\ndescription: Writes briefs\n---\nWrite.\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "broken.md"), []byte("no front matter"), 0o644))
+	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS)
+	require.NoError(t, err)
+	assert.Contains(t, out, "agent/writer  (default)")
+	assert.Contains(t, out, "agent/broken  (default)\n    ! ")
+	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/writer", "--lock", "locked", "--groups", "sales,eng")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ In review: Publish agent writer")
+	org.Mu.Lock()
+	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales, eng]")
+	org.Mu.Unlock()
+	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "writer")
+	assert.ErrorContains(t, err, "<kind>/<name>")
+	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/broken")
+	assert.ErrorContains(t, err, "the catalog would refuse it")
+	out, err = runCLI(t, "enterprise", "reviews")
+	require.NoError(t, err)
+	assert.Contains(t, out, "open  by ana@acme.com: Publish agent writer")
+	out, err = runCLI(t, "enterprise", "reviews", "--state", "approved")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No reviews.")
+	empty := t.TempDir()
+	out, err = runCLI(t, "enterprise", "publish", "-d", empty)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Nothing to publish")
+
 	org.Close()
-	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}} {
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}

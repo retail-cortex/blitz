@@ -16,9 +16,9 @@ package embed
 
 import (
 	"context"
-	"errors"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"

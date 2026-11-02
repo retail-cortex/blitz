@@ -1075,3 +1075,94 @@ func TestShareWithOrganization(t *testing.T) {
 	assert.Empty(t, s.ReadOnlyFor(ctx, t.TempDir()), "not the organization's")
 	assert.Empty(t, s.ReadOnlyFor(ctx, filepath.Join(t.TempDir(), "gone")))
 }
+
+// An Admin publishes a workspace's items to the organization's catalog
+// (EN-36): listed with how each applies and what the catalog would
+// refuse, sent with their lock and groups set (a skill with its files),
+// and the reviews listed; one the catalog would refuse isn't sent.
+func TestPublishToOrganization(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	ws := t.TempDir()
+	for p, data := range map[string]string{
+		".agents/agents/writer.md":   "---\nname: writer\ndescription: Writes briefs\n---\nWrite a brief.\n",
+		".agents/agents/broken.md":   "no front matter",
+		".agents/rules/short.md":     "---\nwhen: after_agent\naction: warn\n---\nOne line.\n",
+		".agents/skills/go/SKILL.md": "---\nname: go\ndescription: Go\n---\nUse gofmt.\n",
+		".agents/skills/go/lint.sh":  "#!/bin/sh\ngolangci-lint run\n",
+		".agents/notes/readme.md":    "not an item",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(ws, p)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(ws, p), []byte(data), 0o644))
+	}
+
+	list, err := c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: ws}))
+	require.NoError(t, err)
+	got := map[string]*pb.PublishableItem{}
+	for _, it := range list.Msg.Items {
+		got[it.Kind+"/"+it.Name] = it
+	}
+	require.Len(t, got, 4, "agents, a rule and a skill, not its script nor notes")
+	assert.Equal(t, "default", got["agent/writer"].Lock)
+	assert.NotEmpty(t, got["agent/broken"].Problems)
+	assert.Empty(t, got["skill/go"].Problems)
+
+	publish := func(items ...*pb.PublishItem) (*connect.Response[pb.PublishToOrganizationResponse], error) {
+		return c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: ws, Items: items}))
+	}
+	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked"})
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+
+	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "broken", Lock: "default"})
+	_, info = errorReason(t, err)
+	assert.Equal(t, "PROBLEMS", info.Reason)
+	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "nope", Lock: "default"})
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "maybe"})
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = publish()
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go", Lock: "default"})
+	require.NoError(t, err)
+	assert.Equal(t, "open", made.Msg.Review.State)
+	assert.Equal(t, []string{"agents/writer.md", "skills/go/SKILL.md", "skills/go/lint.sh"}, made.Msg.Review.Paths)
+	assert.Contains(t, made.Msg.Review.Title, "agent writer, skill go")
+	org.Mu.Lock()
+	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales]")
+	assert.Equal(t, "#!/bin/sh\ngolangci-lint run\n", org.Published["skills/go/lint.sh"])
+	org.Mu.Unlock()
+	data, err := os.ReadFile(filepath.Join(ws, ".agents", "agents", "writer.md"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "lock:", "the workspace's own file as it was")
+
+	reviews, err := c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, reviews.Msg.Reviews, 1)
+	org.Mu.Lock()
+	org.NotAdmin = true
+	org.Mu.Unlock()
+	_, err = c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FORBIDDEN", info.Reason)
+	_, err = publish(&pb.PublishItem{Kind: "rule", Name: "short", Lock: "default"})
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FORBIDDEN", info.Reason)
+}

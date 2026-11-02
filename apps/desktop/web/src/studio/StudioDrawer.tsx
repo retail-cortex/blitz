@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+import { PublishDialog, useOrgAdmin } from "./PublishDialog";
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -173,6 +175,9 @@ export function StudioDrawer({
       snack(message(e), { error: true });
     }
   };
+  // An Admin publishes the workspace's items to the organization (EN-36).
+  const orgAdmin = useOrgAdmin();
+  const [publishing, setPublishing] = useState(false);
   return (
     <Drawer
       title={t("desktop.studio")}
@@ -181,8 +186,14 @@ export function StudioDrawer({
       className={`settings-drawer studio-drawer ${compact ? "is-compact" : ""}`}
       dirty={dirty}
       closeRequest={closeRequest}
-      headerActions={<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />}
+      headerActions={
+        <>
+          {orgAdmin.admin && <IconButton icon={mdiCloudUploadOutline} label={t("desktop.publish.open")} onClick={() => setPublishing(true)} />}
+          <IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />
+        </>
+      }
     >
+      {publishing && createPortal(<PublishDialog dir={dir} org={orgAdmin.org} onClose={() => setPublishing(false)} />, document.body)}
       <div className="settings">
         <div className="settings-nav list" role="tablist">
           {studioGroups.map((group, i) => [

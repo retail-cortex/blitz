@@ -51,7 +51,7 @@ function fakeOrgState(checked: boolean) {
     signedIn: fakeOrg.signedIn,
     email: fakeOrg.signedIn ? "ana@acme.com" : "",
     personName: fakeOrg.signedIn ? "Ana Kim" : "",
-    roles: fakeOrg.signedIn ? ["member"] : [],
+    roles: fakeOrg.signedIn ? (fakeParam("admin") ? ["admin", "member"] : ["member"]) : [],
     renewsUnix: fakeOrg.signedIn ? BigInt(Math.floor(Date.now() / 1000) + 540) : 0n,
     checked,
     reachable: checked,
@@ -880,6 +880,12 @@ const fakeWorkers: FakeWorker[] = [
     limits: { maxTurns: 30, maxCostUsd: 1 },
     spec: fakeSpec("sales-digest", { schedule: "Mondays at 06:00", timezone: "America/Chicago", prompt: "Write last week's sales by region to out/sales.csv, with a chart." }),
   },
+];
+
+// The catalog's reviews (EN-36).
+const fakeReviews: { id: string; title: string; byEmail: string; paths: string[]; problems: string[]; state: string; note: string; version: number; created: ReturnType<typeof now> }[] = [
+  { id: "rev-1", title: "Publish agent writer", byEmail: "ana@acme.com", paths: ["agents/writer.md"], problems: [], state: "approved", note: "", version: 7, created: timestampFromDate(new Date(Date.now() - 50 * 3600e3)) },
+  { id: "rev-2", title: "Publish rule short-answers", byEmail: "bo@acme.com", paths: ["rules/short-answers.md"], problems: [], state: "rejected", note: "Too strict for support.", version: 0, created: timestampFromDate(new Date(Date.now() - 120 * 3600e3)) },
 ];
 
 // The organization's workspaces the person has a role in.
@@ -2651,6 +2657,22 @@ export function installFake() {
           }
         },
         // The person's usage and limits (EN-24): ?budget nearly spent.
+        // Publish to organization (EN-36): ?admin is one of its Admins.
+        listPublishable: () => ({
+          items: [
+            { kind: "agent", name: "reviewer", path: "agents/reviewer.md", problems: [], lock: "default", groups: [] },
+            { kind: "skill", name: "release-notes", path: "skills/release-notes/SKILL.md", problems: [], lock: "default", groups: [] },
+            { kind: "rule", name: "no-secrets", path: "rules/no-secrets.md", problems: [], lock: "locked", groups: ["eng"] },
+            { kind: "agent", name: "draft", path: "agents/draft.md", problems: ["agents/draft.md: the front matter needs a description"], lock: "default", groups: [] },
+          ],
+        }),
+        publishToOrganization: async ({ items, title }) => {
+          await sleep(700);
+          const review = { id: `rev-${Date.now()}`, title: title || `Publish ${items.map((i) => `${i.kind} ${i.name}`).join(", ")}`, byEmail: "ana@acme.com", paths: items.map((i) => `${i.kind}s/${i.name}.md`), problems: [], state: "open", note: "", version: 0, created: now() };
+          fakeReviews.unshift(review);
+          return { review };
+        },
+        listCatalogReviews: () => ({ reviews: fakeReviews }),
         getOrgUsage: () => ({
           today: [
             { model: "claude-sonnet-5-5", requests: 42n, inputTokens: 380_000n, outputTokens: 41_000n, costUsd: 1.84 },

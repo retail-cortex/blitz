@@ -20,11 +20,11 @@ import (
 	"net/http"
 
 	yaml "github.com/goccy/go-yaml"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util/parameters"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const resourceType string = "postgres-list-publication-tables"

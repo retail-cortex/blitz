@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -361,4 +362,112 @@ func rateText(r *pb.OrgRateLimit) string {
 		}
 	}
 	return strings.Join(parts, ", ")
+}
+
+// newEnterprisePublishCommand is blitz enterprise publish: a workspace's
+// items to the organization's catalog, as a review (spec_053 EN-36).
+func newEnterprisePublishCommand() *cobra.Command {
+	var dir, lock, title string
+	var groups []string
+	cmd := &cobra.Command{
+		Use:   "publish [<kind>/<name>...]",
+		Short: "Publish a workspace's agents, skills, rules… to your organization's catalog, for another Admin to approve",
+		Long: `Publishes items from a workspace's .agents folder (agent/<name>, skill/<name>,
+rule/<name>, guardrail/<name>, command/<name>, connector/<name>) to your
+organization's catalog as a review: another Admin approves it in the admin
+console, and the next version carries it. With none named, lists what
+can be published and how each applies now. For the organization's Admins.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			s := client.AttachSettings(sock)
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(args) == 0 {
+				items, err := s.Publishable(cmd.Context(), abs)
+				if err != nil {
+					return err
+				}
+				if len(items) == 0 {
+					fmt.Fprintln(out, "Nothing to publish: this workspace's .agents folder has no agents, skills, rules, guardrails, commands or connectors.")
+				}
+				for _, it := range items {
+					line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
+					if len(it.Groups) > 0 {
+						line += ", for " + strings.Join(it.Groups, ", ")
+					}
+					fmt.Fprintln(out, line+")")
+					for _, p := range it.Problems {
+						fmt.Fprintln(out, "    ! "+p)
+					}
+				}
+				return nil
+			}
+			var items []*pb.PublishItem
+			for _, a := range args {
+				kind, name, ok := strings.Cut(a, "/")
+				if !ok {
+					return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", a))
+				}
+				items = append(items, &pb.PublishItem{Kind: kind, Name: name, Lock: lock, Groups: groups})
+			}
+			rv, err := s.PublishToOrganization(cmd.Context(), abs, title, items)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "✓ In review: %s (%s). Another Admin approves it in the admin console; the next version carries it.\n", rv.Title, strings.Join(rv.Paths, ", "))
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
+	cmd.Flags().StringVar(&lock, "lock", "default", "locked (nobody changes or switches it off) or default (a workspace or person may)")
+	cmd.Flags().StringSliceVar(&groups, "groups", nil, "who it's for (everyone when none)")
+	cmd.Flags().StringVar(&title, "title", "", "the review's title (default: what's published)")
+	return cmd
+}
+
+// newEnterpriseReviewsCommand is blitz enterprise reviews: the catalog's
+// reviews (EN-36).
+func newEnterpriseReviewsCommand() *cobra.Command {
+	var state string
+	cmd := &cobra.Command{
+		Use:   "reviews",
+		Short: "Changes to your organization's catalog: waiting, approved or rejected",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			list, err := client.AttachSettings(sock).CatalogReviews(cmd.Context(), state)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(list) == 0 {
+				fmt.Fprintln(out, "No reviews.")
+			}
+			for _, rv := range list {
+				status := rv.State
+				if rv.State == "approved" && rv.Version > 0 {
+					status = fmt.Sprintf("published in version %d", rv.Version)
+				}
+				fmt.Fprintf(out, "%s  %s  by %s: %s\n", rv.Id, status, rv.ByEmail, rv.Title)
+				for _, p := range rv.Problems {
+					fmt.Fprintln(out, "    ! "+p)
+				}
+				if rv.Note != "" {
+					fmt.Fprintln(out, "    "+rv.Note)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&state, "state", "", "open, approved or rejected")
+	return cmd
 }

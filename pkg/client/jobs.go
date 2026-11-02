@@ -171,3 +171,32 @@ func (s *Settings) OrgUsage(ctx context.Context) (OrgUsage, error) {
 	}
 	return res.Msg, nil
 }
+
+// Publishable are the workspace's items that can be published to the
+// organization's catalog (ConfigService.ListPublishable).
+func (s *Settings) Publishable(ctx context.Context, dir string) ([]*pb.PublishableItem, error) {
+	res, err := s.c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Items, nil
+}
+
+// PublishToOrganization sends items to the catalog as a review
+// (ConfigService.PublishToOrganization).
+func (s *Settings) PublishToOrganization(ctx context.Context, dir, title string, items []*pb.PublishItem) (*pb.CatalogReview, error) {
+	res, err := s.c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: dir, Title: title, Items: items}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Review, nil
+}
+
+// CatalogReviews are the catalog's reviews (ConfigService.ListCatalogReviews).
+func (s *Settings) CatalogReviews(ctx context.Context, state string) ([]*pb.CatalogReview, error) {
+	res, err := s.c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{State: state}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Reviews, nil
+}

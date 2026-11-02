@@ -324,7 +324,9 @@ func TestReflectionWithoutTheAuditLog(t *testing.T) {
 }
 
 func TestReflectDue(t *testing.T) {
-	now := time.Now()
+	// Mid-hour: in an hour's first minute, a /reflect a minute ago was in
+	// the hour before, and the hourly time since it is already due.
+	now := time.Date(2026, 11, 2, 10, 30, 0, 0, time.Local)
 	tests := []struct {
 		name     string
 		schedule string
