@@ -15,6 +15,7 @@
 package workers
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -299,13 +300,13 @@ func TestRenderLoadsBack(t *testing.T) {
 			spec: api.WorkerSpec{
 				Name: "deps", Description: "Outdated modules", Schedule: "Weekdays at 9:30", Timezone: "Europe/Paris",
 				Agent: "qa", Model: "gemini-3.8-flash", Permissions: []string{"shell:go list -m -u all", " ", "write:reports/*"},
-				Limits: api.Limits{MaxTurns: 20, MaxCostUSD: 0.5, TimeoutRaw: "15m"}, CatchUp: "once", Prompt: "  Report outdated modules.\n\nIn reports/deps.md.  ",
+				Limits: api.Limits{MaxTurns: 20, MaxCostUSD: 0.5, TimeoutRaw: "15m"}, CatchUp: "once", RunsOn: "service", Prompt: "  Report outdated modules.\n\nIn reports/deps.md.  ",
 			},
 		},
 		{
 			name: "the least",
 			spec: api.WorkerSpec{Name: "tidy", Schedule: "@daily", Prompt: "Tidy up."},
-			not:  []string{"description", "timezone", "agent", "model", "permissions", "limits", "catch_up"},
+			not:  []string{"description", "timezone", "agent", "model", "permissions", "limits", "catch_up", "runs_on"},
 		},
 		{
 			name: "text that needs quoting",
@@ -332,6 +333,8 @@ func TestRenderLoadsBack(t *testing.T) {
 			assert.Equal(t, c.spec.Limits.MaxTurns, w.Limits.MaxTurns)
 			assert.Equal(t, c.spec.Limits.MaxCostUSD, w.Limits.MaxCostUSD)
 			assert.Equal(t, c.spec.Limits.TimeoutRaw, w.Limits.TimeoutRaw)
+			assert.Equal(t, cmp.Or(c.spec.RunsOn, "here"), w.RunsOn)
+			assert.Equal(t, c.spec.RunsOn, ParseSpec(c.spec.Name, data).RunsOn, "an edit keeps it")
 			var perms []string
 			for _, p := range w.Permissions {
 				perms = append(perms, p.String())
@@ -355,6 +358,7 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 		"negative":   {"---\nschedule: hourly\nlimits: {max_turns: -1}\n---\ndo it\n", "can't be negative"},
 		"overlap":    {"---\nschedule: hourly\noverlap: queue\n---\ndo it\n", "overlap \"queue\""},
 		"catch-up":   {"---\nschedule: hourly\ncatch_up: always\n---\ndo it\n", "catch_up \"always\""},
+		"runs-on":    {"---\nschedule: hourly\nruns_on: cloud\n---\ndo it\n", "runs_on \"cloud\""},
 		"unclosed":   {"---\nschedule: hourly\n", "ends the frontmatter"},
 		"no-newline": {"---\nschedule: hourly\n---", "workflow"},
 	} {

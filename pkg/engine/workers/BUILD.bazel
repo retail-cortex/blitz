@@ -39,7 +39,7 @@ go_library(
     deps = [
         "//pkg/api",
         "//pkg/config",
-        "@com_github_robfig_cron_v3//:cron",
+        "//pkg/jobspec",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

@@ -30,6 +30,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
+	"github.com/retail-cortex/blitz/pkg/jobspec"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/robfig/cron/v3"
 )
@@ -198,7 +199,8 @@ func (sc *scheduler) rescan(ctx context.Context) {
 			continue
 		}
 		for _, info := range list {
-			if info.State != api.StateEnabled {
+			// The organization's service runs its own (EN-40).
+			if info.State != api.StateEnabled || info.RunsOn == jobspec.Service {
 				continue
 			}
 			k := key(dir, info.Name)

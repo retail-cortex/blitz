@@ -108,6 +108,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		Workspace: w.Dir(), Name: wk.Name, Description: wk.Description, Path: wk.Path, Hash: wk.Hash,
 		State:    w.workerStore.State(w.Dir(), wk, loadErr),
 		Schedule: wk.Schedule.Text, Cron: wk.Schedule.Cron, Agent: wk.Agent, Model: wk.Model, Workflow: wk.Flow, CatchUp: wk.CatchUp,
+		RunsOn: wk.RunsOn,
 	}
 	if wk.Schedule.Location != nil {
 		info.Timezone = wk.Schedule.Location.String()

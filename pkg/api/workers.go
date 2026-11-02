@@ -40,6 +40,9 @@ type WorkerInfo struct {
 	// CatchUp is "once" when a run missed while nothing was running should
 	// happen as soon as possible, otherwise "none".
 	CatchUp string
+	// RunsOn is "here", or "service" when the organization's service runs
+	// it and this computer doesn't (spec_053_enterprise EN-40).
+	RunsOn string
 	// Permissions and Limits are what the worker gets after the host
 	// policy.
 	Permissions []string
@@ -143,6 +146,7 @@ type WorkerSpec struct {
 	Permissions        []string // "kind:pattern"
 	Limits             Limits   // TimeoutRaw, not Timeout
 	CatchUp            string   // "", "none" or "once"
+	RunsOn             string   // "", "here" or "service" (spec_053_enterprise EN-40)
 	Prompt             string
 }
 

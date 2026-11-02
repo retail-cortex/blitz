@@ -138,6 +138,9 @@ message Worker {
   WorkerRun last_run = 16;
   // The workflow it runs, its prompt the input (spec_043_workflows).
   string workflow = 17;
+  // Where it runs: "here", or "service" when the organization's service
+  // runs it and this computer doesn't.
+  string runs_on = 18;
 }
 
 // Request message for WorkerService.ListWorkers.
@@ -176,6 +179,8 @@ message CreateWorkerRequest {
   string prompt = 13;
   // The workflow it runs, its prompt the input.
   string workflow = 14;
+  // "", "here" or "service".
+  string runs_on = 15;
 }
 
 // WorkerDefinition is a WORKER.md as written: its frontmatter fields and
@@ -202,6 +207,8 @@ message WorkerDefinition {
   string prompt = 12;
   // The workflow it runs, its prompt the input.
   string workflow = 13;
+  // "", "here" or "service".
+  string runs_on = 14;
 }
 
 // Request message for WorkerService.GetWorkerSpec.

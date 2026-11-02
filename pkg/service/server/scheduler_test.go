@@ -69,11 +69,15 @@ func TestSchedulerRegistration(t *testing.T) {
 	// One enabled worker, one new one, and a workspace that's gone.
 	addWorker(t, dir, "on", "---\nschedule: Daily at 6 AM\n---\nGo.\n")
 	addWorker(t, dir, "new", "---\nschedule: Daily at 6 AM\n---\nGo.\n")
+	addWorker(t, dir, "theirs", "---\nschedule: Daily at 6 AM\nruns_on: service\n---\nGo.\n")
 	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
 	require.NoError(t, err)
 	for _, wk := range list.Msg.Workers {
-		if wk.Name == "on" {
-			_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "on", Hash: wk.Hash}))
+		if wk.Name == "theirs" {
+			assert.Equal(t, "service", wk.RunsOn)
+		}
+		if wk.Name == "on" || wk.Name == "theirs" {
+			_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: wk.Name, Hash: wk.Hash}))
 			require.NoError(t, err)
 		}
 	}
@@ -84,6 +88,8 @@ func TestSchedulerRegistration(t *testing.T) {
 	assert.True(t, ok, "the enabled worker")
 	_, ok = registered(sc, dir, "new")
 	assert.False(t, ok, "a worker never enabled")
+	_, ok = registered(sc, dir, "theirs")
+	assert.False(t, ok, "the organization's service runs it")
 	_, ok = registered(sc, dir, "stale")
 	assert.False(t, ok, "a worker no longer enabled")
 }
