@@ -81,3 +81,42 @@ func TestStrict(t *testing.T) {
 	s.Close()
 	s.Close() // closing twice is fine
 }
+
+// The service's jobs and names, as strict as the real one's: signed in
+// only, refused when the license has no jobs, JSON only, and a name asked
+// for its children or content.
+func TestStrictJobs(t *testing.T) {
+	p := NewProvider(t)
+	s := NewService(t, p.URL)
+	s.Access["tok"] = "s"
+	s.ServiceJobs = []ServiceJob{{ID: "j1", Name: "digest"}}
+	do := func(method, path, body string, signedIn bool) int {
+		req, err := http.NewRequest(method, s.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		if signedIn {
+			req.Header.Set("Authorization", "Bearer tok")
+		}
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		res.Body.Close()
+		return res.StatusCode
+	}
+	assert.Equal(t, http.StatusUnauthorized, do(http.MethodGet, "/api/v1/jobs", "", false))
+	assert.Equal(t, http.StatusUnauthorized, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs?children", "", false))
+	assert.Equal(t, http.StatusAccepted, do(http.MethodPost, "/api/v1/jobs/j1/run", "", true), "its first run")
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPut, "/api/v1/jobs/j1/enabled", "not JSON", true))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPut, "/api/v1/jobs/j1/enabled", "{}", true))
+	assert.Equal(t, http.StatusNotFound, do(http.MethodPut, "/api/v1/jobs/nope/enabled", `{"enabled":true}`, true))
+	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, "/api/v1/jobs/nope/runs", "", true))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs", "", true), "children or content")
+	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs?children", "", true))
+	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs?content", "", true))
+	s.JobsRefused = true
+	for _, c := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/jobs/j1/runs", ""},
+		{http.MethodPost, "/api/v1/jobs/j1/run", ""},
+		{http.MethodPut, "/api/v1/jobs/j1/enabled", `{"enabled":false}`},
+	} {
+		assert.Equal(t, http.StatusNotFound, do(c.method, c.path, c.body, true), c.path)
+	}
+}

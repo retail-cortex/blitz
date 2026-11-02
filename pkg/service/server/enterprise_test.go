@@ -614,3 +614,150 @@ func TestOrgWorkspacesFailures(t *testing.T) {
 	s.ent.gitHelper = ""
 	assert.Contains(t, s.gitHelper(), "git-credential", "this program's, by default")
 }
+
+// A job in an organization workspace with runs_on: service shows the
+// service's runs of it (EN-42): found by the clone's folder and the job's
+// name, run now, switched off, and a run's files listed and saved in
+// Downloads, a second copy beside the first.
+func TestServiceJobs(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	home, _ := os.UserHomeDir()
+	plans := filepath.Join(home, "Blitz", "Acme Assist", "plans")
+
+	_, err := c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	for _, call := range []func() error{
+		func() error {
+			_, err := c.RunServiceJob(ctx, connect.NewRequest(&pb.RunServiceJobRequest{JobId: "j1"}))
+			return err
+		},
+		func() error {
+			_, err := c.SetServiceJobEnabled(ctx, connect.NewRequest(&pb.SetServiceJobEnabledRequest{JobId: "j1"}))
+			return err
+		},
+		func() error {
+			_, err := c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: "urn:blitz:artifacts:" + strings.Repeat("9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:", 2) + "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b"}))
+			return err
+		},
+		func() error {
+			_, err := c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: "urn:blitz:artifacts:" + strings.Repeat("9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:", 2) + "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b/a.txt"}))
+			return err
+		},
+	} {
+		_, info := errorReason(t, call())
+		assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	}
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+
+	const (
+		ws  = "9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b"
+		job = "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e"
+		run = "e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01"
+	)
+	set := "urn:blitz:artifacts:" + ws + ":" + job + ":" + run
+	org.Mu.Lock()
+	org.ServiceJobs = []enterprisetest.ServiceJob{{ID: job, URN: "urn:blitz:jobs:" + job, Workspace: "plans", Name: "digest", Schedule: "Daily at 6 AM", Enabled: true},
+		{ID: "other", Workspace: "q4", Name: "digest"}}
+	org.ServiceRuns = map[string][]enterprisetest.ServiceRun{job: {{ID: run, Status: "succeeded", Trigger: "schedule", Branch: "blitz/jobs/digest/" + run, Artifacts: set, Output: "Done."}}}
+	org.Files = map[string][]enterprisetest.File{set: {
+		{URN: set + "/events.jsonl", Title: "events.jsonl", Size: 10},
+		{URN: set + "/out/sales%20by%20week.csv", Title: "out/sales by week.csv", MediaType: "text/csv", Size: 4},
+		{URN: "not a name", Title: "odd"},
+	}}
+	org.Contents = map[string]string{set + "/out/sales%20by%20week.csv": "w,s\n"}
+	org.Mu.Unlock()
+
+	got, err := c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
+	require.NoError(t, err)
+	require.True(t, got.Msg.Found)
+	assert.Equal(t, job, got.Msg.Job.Id)
+	require.Len(t, got.Msg.Runs, 1)
+	assert.Equal(t, "blitz/jobs/digest/"+run, got.Msg.Runs[0].Branch)
+	assert.Equal(t, set, got.Msg.Runs[0].Artifacts)
+
+	got, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "tidy"}))
+	require.NoError(t, err)
+	assert.False(t, got.Msg.Found, "not read from main yet")
+	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: t.TempDir(), Name: "digest"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_ORG_WORKSPACE", info.Reason)
+
+	started, err := c.RunServiceJob(ctx, connect.NewRequest(&pb.RunServiceJobRequest{JobId: job}))
+	require.NoError(t, err)
+	assert.Equal(t, "running", started.Msg.Run.Status)
+	_, err = c.RunServiceJob(ctx, connect.NewRequest(&pb.RunServiceJobRequest{JobId: "nope"}))
+	assert.Error(t, err)
+	_, err = c.SetServiceJobEnabled(ctx, connect.NewRequest(&pb.SetServiceJobEnabledRequest{JobId: job, Enabled: false}))
+	require.NoError(t, err)
+	_, err = c.SetServiceJobEnabled(ctx, connect.NewRequest(&pb.SetServiceJobEnabledRequest{JobId: "nope"}))
+	assert.Error(t, err)
+
+	files, err := c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: set}))
+	require.NoError(t, err)
+	require.Len(t, files.Msg.Files, 2, "never a name that isn't one")
+	assert.Equal(t, "out/sales by week.csv", files.Msg.Files[1].Path)
+	for range 2 {
+		_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: files.Msg.Files[1].Urn}))
+		require.NoError(t, err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, "Downloads", "sales by week (2).csv"))
+	require.NoError(t, err)
+	assert.Equal(t, "w,s\n", string(data))
+
+	for name, call := range map[string]func() error{
+		"a file's name for its run's files": func() error {
+			_, err := c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: files.Msg.Files[1].Urn}))
+			return err
+		},
+		"a run's files' name for a file": func() error {
+			_, err := c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: set}))
+			return err
+		},
+		"not a name": func() error {
+			_, err := c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: "x"}))
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
+		})
+	}
+	_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: set + "/gone.txt"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+	_, err = c.ListServiceRunFiles(ctx, connect.NewRequest(&pb.ListServiceRunFilesRequest{Artifacts: "urn:blitz:artifacts:" + ws + ":" + job + ":" + ws}))
+	assert.Error(t, err)
+
+	// A Downloads folder that can't be one.
+	require.NoError(t, os.RemoveAll(filepath.Join(home, "Downloads")))
+	require.NoError(t, os.WriteFile(filepath.Join(home, "Downloads"), nil, 0o600))
+	_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: files.Msg.Files[1].Urn}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "INTERNAL", info.Reason)
+
+	org.Mu.Lock()
+	org.JobsRefused = true
+	org.Mu.Unlock()
+	_, err = c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: plans, Name: "digest"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FEATURE_OFF", info.Reason)
+}

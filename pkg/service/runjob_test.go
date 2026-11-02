@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,6 +179,23 @@ func TestRunJob(t *testing.T) {
 		defer s.Mu.Unlock()
 		assert.Nil(t, s.Ends["r9"]["branch"], "no branch")
 		assert.Contains(t, s.Kept["r9"], "events.jsonl")
+	})
+
+	t.Run("more files than a run keeps, and one it can't read", func(t *testing.T) {
+		crowd := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+			out := cfg.Sandbox.AllowedPaths[len(cfg.Sandbox.AllowedPaths)-1]
+			for i := range maxKeep + 1 {
+				require.NoError(t, os.WriteFile(filepath.Join(out, fmt.Sprintf("f%04d.txt", i)), nil, 0o600))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(out, "a-secret.txt"), []byte("x"), 0o000))
+			return open(false)(ctx, cfg, o)
+		}
+		require.NoError(t, RunJob(ctx, job("r11", "digest"), JobOptions{Config: t.TempDir(), Open: crowd}), "its run still succeeds")
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		assert.Contains(t, s.Ends["r11"]["note"], "more than 999 files in out/")
+		assert.Contains(t, s.Ends["r11"]["note"], "permission denied")
+		assert.Contains(t, s.Kept["r11"], "events.jsonl", "its log still kept")
 	})
 
 	t.Run("a service that keeps no files", func(t *testing.T) {

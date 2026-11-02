@@ -1,0 +1,185 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
+import {
+  mdiCheckCircleOutline,
+  mdiCloseCircleOutline,
+  mdiDeleteOutline,
+  mdiDownload,
+  mdiFileOutline,
+  mdiPauseCircleOutline,
+  mdiPencilOutline,
+  mdiPlay,
+  mdiProgressClock,
+  mdiRefresh,
+  mdiSourceBranch,
+  mdiStopCircleOutline,
+} from "@mdi/js";
+import { config } from "./api";
+import { message } from "./errors";
+import { language, t } from "./i18n";
+import type { ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
+import type { Worker } from "./gen/blitz/v1/worker_pb";
+import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
+
+/** How often the view asks the service for the job's runs again. */
+const servicePollMs = 10000;
+
+const statusIcon: Record<string, string> = {
+  queued: mdiProgressClock,
+  running: mdiProgressClock,
+  succeeded: mdiCheckCircleOutline,
+  skipped: mdiPauseCircleOutline,
+  stopped: mdiStopCircleOutline,
+};
+
+/** A size in bytes, for people. */
+export function size(n: bigint | number): string {
+  const b = Number(n);
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * A job that runs on the organization's service (runs_on: service; spec
+ * 053 EN-42), in place of the local Run, Enable and runs: the service's
+ * runs of it, each with its branch and the files it left, and Run now and
+ * on or off there. Edit and Delete change WORKER.md here, as for any job.
+ */
+export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string; worker: Worker; onEdit: () => void; onDelete: () => void }) {
+  const snack = useSnackbar();
+  const [job, setJob] = useState<ServiceJob | null | undefined>(undefined);
+  const [runs, setRuns] = useState<ServiceRun[]>([]);
+  const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    try {
+      const r = await config.getServiceJob({ workspace: dir, name: worker.name });
+      setJob(r.found ? r.job! : null);
+      setRuns(r.runs);
+      setError("");
+    } catch (e) {
+      setError(message(e));
+    }
+  }, [dir, worker.name]);
+  useEffect(() => {
+    void refresh();
+    const timer = setInterval(refresh, servicePollMs);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  const act = async (f: () => Promise<unknown>) => {
+    setError("");
+    try {
+      await f();
+      await refresh();
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+  return (
+    <>
+      <p className="muted t-body-sm">{t("desktop.service_job.where")}</p>
+      {job === null && <p className="muted">{t("desktop.service_job.not_read")}</p>}
+      {job && !job.enabled && <p className="muted">{t("desktop.service_job.off")}</p>}
+      {job?.nextRun && <p className="t-body-sm muted">{t("desktop.worker.next", { time: timestampDate(job.nextRun).toLocaleString(language()) })}</p>}
+      <div className="row wrap">
+        {job?.enabled && (
+          <Button variant="filled" icon={mdiPlay} onClick={() => act(() => config.runServiceJob({ jobId: job.id }))}>
+            {t("desktop.worker.run_now")}
+          </Button>
+        )}
+        {job && (
+          <Button variant={job.enabled ? "outlined" : "filled"} onClick={() => act(() => config.setServiceJobEnabled({ jobId: job.id, enabled: !job.enabled }))}>
+            {t(job.enabled ? "desktop.service_job.turn_off" : "desktop.service_job.turn_on")}
+          </Button>
+        )}
+        <Button variant="outlined" icon={mdiPencilOutline} onClick={onEdit} title={worker.path}>
+          {t("desktop.worker.edit")}
+        </Button>
+        <Button danger icon={mdiDeleteOutline} onClick={onDelete}>
+          {t("desktop.workers.delete")}
+        </Button>
+        <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
+      </div>
+      {error && <p className="error-text">{error}</p>}
+      <h3 className="t-title">{t("desktop.worker.runs")}</h3>
+      {job !== undefined && runs.length === 0 && <p className="muted t-body-sm">{t("desktop.worker.no_runs")}</p>}
+      <div className="runs">
+        {runs.map((r) => (
+          <ServiceRunRow key={r.id} run={r} onSaved={(path) => snack(t("desktop.service_job.saved", { path }))} onError={(e) => snack(e, { error: true })} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** One of the service's runs: how it went, its branch, and its files on request. */
+function ServiceRunRow({ run, onSaved, onError }: { run: ServiceRun; onSaved: (path: string) => void; onError: (e: string) => void }) {
+  const [files, setFiles] = useState<ServiceRunFile[] | null>(null);
+  const failed = run.status === "failed";
+  const showFiles = async () => {
+    if (files) return setFiles(null);
+    try {
+      setFiles((await config.listServiceRunFiles({ artifacts: run.artifacts })).files);
+    } catch (e) {
+      onError(message(e));
+    }
+  };
+  const save = async (f: ServiceRunFile) => {
+    try {
+      onSaved((await config.saveServiceRunFile({ urn: f.urn })).path);
+    } catch (e) {
+      onError(message(e));
+    }
+  };
+  return (
+    <div className="run">
+      <Icon path={statusIcon[run.status] ?? mdiCloseCircleOutline} className={failed ? "error-text" : "muted"} />
+      <div className="stack" style={{ gap: 2 }}>
+        <span>
+          {t(`desktop.service_job.status.${run.status}`)} · {run.trigger === "now" ? t("desktop.worker.manual") : t("desktop.worker.scheduled")}
+          {run.costUsd > 0 ? ` · $${run.costUsd.toFixed(4)}` : ""}
+        </span>
+        {run.created && <span className="t-body-sm muted">{timestampDate(run.created).toLocaleString(language())}</span>}
+        {run.note && <span className={`t-body-sm ${failed ? "error-text" : "muted"}`}>{run.note}</span>}
+        {run.output && <span className="t-body-sm live-text">{run.output}</span>}
+        {run.branch && (
+          <span className="t-body-sm muted row" style={{ gap: 4 }}>
+            <Icon path={mdiSourceBranch} size="sm" /> {t("desktop.service_job.branch", { branch: run.branch })}
+          </span>
+        )}
+        {run.artifacts && run.status !== "queued" && (
+          <span>
+            <Button small icon={mdiFileOutline} onClick={() => void showFiles()}>
+              {t("desktop.service_job.files")}
+            </Button>
+          </span>
+        )}
+        {files?.length === 0 && <span className="t-body-sm muted">{t("desktop.service_job.no_files")}</span>}
+        {files?.map((f) => (
+          <span key={f.urn} className="row t-body-sm" style={{ gap: 4 }}>
+            <code className="ellipsis spacer">{f.path}</code>
+            <span className="muted">{size(f.size)}</span>
+            <IconButton icon={mdiDownload} label={t("desktop.service_job.save", { name: f.path })} small onClick={() => void save(f)} />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

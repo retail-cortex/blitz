@@ -20,6 +20,7 @@ go_library(
         "branding.go",
         "catalog.go",
         "enterprise.go",
+        "jobs.go",
         "models.go",
         "run.go",
         "signin.go",
@@ -39,6 +40,7 @@ go_test(
     srcs = [
         "enterprise_test.go",
         "files_test.go",
+        "jobs_test.go",
     ],
     embed = [":enterprise"],
     deps = [

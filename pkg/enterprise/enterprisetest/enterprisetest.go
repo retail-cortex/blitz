@@ -36,6 +36,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -221,6 +222,49 @@ type Service struct {
 	// refuses them all, as a service without a store does.
 	Kept        map[string]map[string]Artifact
 	KeepRefused bool
+	// ServiceJobs are the jobs the service runs (GET /api/v1/jobs);
+	// ServiceRuns their runs, by job ID, newest first; Files the files
+	// under each resource name, and Contents each file's, by its name.
+	// A job run now gets a running run; JobsRefused refuses every jobs
+	// call as a license without jobs does.
+	ServiceJobs []ServiceJob
+	ServiceRuns map[string][]ServiceRun
+	Files       map[string][]File
+	Contents    map[string]string
+	JobsRefused bool
+}
+
+// ServiceJob is a job the service runs, as GET /api/v1/jobs answers it.
+type ServiceJob struct {
+	ID        string `json:"id"`
+	URN       string `json:"urn"`
+	Workspace string `json:"workspace"`
+	Name      string `json:"name"`
+	Schedule  string `json:"schedule"`
+	Enabled   bool   `json:"enabled"`
+}
+
+// ServiceRun is one of its runs.
+type ServiceRun struct {
+	ID        string    `json:"id"`
+	URN       string    `json:"urn"`
+	Trigger   string    `json:"trigger"`
+	Status    string    `json:"status"`
+	Note      string    `json:"note,omitempty"`
+	Output    string    `json:"output,omitempty"`
+	CostUSD   float64   `json:"cost_usd"`
+	Created   time.Time `json:"created"`
+	Branch    string    `json:"branch,omitempty"`
+	Artifacts string    `json:"artifacts,omitempty"`
+}
+
+// File is a file under a resource name.
+type File struct {
+	URN       string `json:"urn"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	MediaType string `json:"media_type"`
+	Size      int64  `json:"size"`
 }
 
 // Artifact is one file a run kept.
@@ -584,6 +628,112 @@ func NewService(t testing.TB, issuer string) *Service {
 		s.Ends[r.PathValue("id")] = in
 		s.Runs[r.PathValue("id")] = ""
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// jobs checks the sign-in, then takes s.Mu (held when it answers true).
+	jobs := func(w http.ResponseWriter, r *http.Request) bool {
+		if !signedIn(w, r) {
+			return false
+		}
+		s.Mu.Lock()
+		if s.JobsRefused {
+			s.Mu.Unlock()
+			refuse(w, http.StatusNotFound, "feature_off", "This service's license doesn't carry jobs.")
+			return false
+		}
+		return true
+	}
+	job := func(w http.ResponseWriter, r *http.Request) (int, bool) {
+		for i, j := range s.ServiceJobs {
+			if j.ID == r.PathValue("id") {
+				return i, true
+			}
+		}
+		refuse(w, http.StatusNotFound, "not_found", "There's no such job.")
+		return 0, false
+	}
+	mux.HandleFunc("GET /api/v1/jobs", func(w http.ResponseWriter, r *http.Request) {
+		if jobs(w, r) {
+			defer s.Mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"jobs": append([]ServiceJob{}, s.ServiceJobs...)})
+		}
+	})
+	mux.HandleFunc("GET /api/v1/jobs/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		if _, ok := job(w, r); ok {
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]ServiceRun{}, s.ServiceRuns[r.PathValue("id")]...)})
+		}
+	})
+	mux.HandleFunc("POST /api/v1/jobs/{id}/run", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		if _, ok := job(w, r); ok {
+			s.n++
+			run := ServiceRun{ID: fmt.Sprintf("run-%d", s.n), Trigger: "now", Status: "running", Created: time.Now()}
+			if s.ServiceRuns == nil {
+				s.ServiceRuns = map[string][]ServiceRun{}
+			}
+			id := r.PathValue("id")
+			s.ServiceRuns[id] = append([]ServiceRun{run}, s.ServiceRuns[id]...)
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(run)
+		}
+	})
+	mux.HandleFunc("PUT /api/v1/jobs/{id}/enabled", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		var in struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Enabled == nil {
+			refuse(w, http.StatusBadRequest, "bad_request", "The request isn't the JSON expected.")
+			return
+		}
+		if i, ok := job(w, r); ok {
+			s.ServiceJobs[i].Enabled = *in.Enabled
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	mux.HandleFunc("GET /api/v1/resources/{urn...}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		name := strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/resources/")
+		switch q := r.URL.Query(); {
+		case q.Has("content"):
+			body, ok := s.Contents[name]
+			if !ok {
+				refuse(w, http.StatusNotFound, "not_found", "There's no such resource.")
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = io.WriteString(w, body)
+		case q.Has("children"):
+			files, ok := s.Files[name]
+			if !ok {
+				refuse(w, http.StatusNotFound, "not_found", "There's no such resource.")
+				return
+			}
+			// Two at a time, to page.
+			from, _ := strconv.Atoi(q.Get("next"))
+			from = min(from, len(files))
+			to := min(from+2, len(files))
+			out := map[string]any{"items": append([]File{}, files[from:to]...)}
+			if to < len(files) {
+				out["next"] = strconv.Itoa(to)
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		default:
+			refuse(w, http.StatusBadRequest, "bad_request", "Ask for children or content.")
+		}
 	})
 	mux.HandleFunc("PUT /api/v1/runs/{id}/artifacts/{path...}", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()

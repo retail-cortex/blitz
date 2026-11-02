@@ -866,6 +866,45 @@ const fakeWorkers: FakeWorker[] = [
     problems: ['schedule "whenever": use a cron expression, a descriptor or plain text like "Daily at 6 AM"'],
     spec: fakeSpec("broken-digest", { schedule: "whenever", prompt: "Write a digest of open issues." }),
   },
+  // Run by the organization's service (EN-42): its runs are the service's.
+  {
+    name: "sales-digest",
+    description: "Writes last week's sales by region, with a chart, every Monday.",
+    state: WorkerState.NEW,
+    schedule: "Mondays at 06:00",
+    cron: "0 6 * * 1",
+    timezone: "America/Chicago",
+    hash: "5e1d",
+    path: "workers/sales-digest/WORKER.md",
+    runsOn: "service",
+    limits: { maxTurns: 30, maxCostUsd: 1 },
+    spec: fakeSpec("sales-digest", { schedule: "Mondays at 06:00", timezone: "America/Chicago", prompt: "Write last week's sales by region to out/sales.csv, with a chart." }),
+  },
+];
+
+// The service's runs of sales-digest, newest first, and what each left.
+const fakeServiceSet = "urn:blitz:artifacts:9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e";
+const fakeServiceJob = { id: "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", urn: "urn:blitz:jobs:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", name: "sales-digest", schedule: "Mondays at 06:00", enabled: true };
+const fakeServiceRuns = [
+  {
+    id: "e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01",
+    trigger: "schedule",
+    status: "succeeded",
+    output: "Sales were up 4% on the week; the West led. The table and chart are in the run's files.",
+    costUsd: 0.0831,
+    created: timestampFromDate(new Date(Date.now() - 26 * 3600e3)),
+    branch: "blitz/jobs/sales-digest/e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01",
+    artifacts: `${fakeServiceSet}:e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01`,
+  },
+  {
+    id: "0c0ffee0-7b1c-4d2e-a3f4-5b6c7d8e9f02",
+    trigger: "schedule",
+    status: "failed",
+    note: "its owner is no longer a Runner of its workspace",
+    costUsd: 0,
+    created: timestampFromDate(new Date(Date.now() - 194 * 3600e3)),
+    artifacts: `${fakeServiceSet}:0c0ffee0-7b1c-4d2e-a3f4-5b6c7d8e9f02`,
+  },
 ];
 
 // What a model of provider takes, as the service says (runtime.AcceptedMedia).
@@ -2562,6 +2601,26 @@ export function installFake() {
           await sleep(800);
           return { dir: `/home/me/Blitz/Acme Assist/${handle}`, cloned: true };
         },
+        getServiceJob: ({ name }) => (name === "sales-digest" ? { found: true, job: fakeServiceJob, runs: fakeServiceRuns } : { found: false, runs: [] }),
+        runServiceJob: () => {
+          const run = { id: `run-${Date.now()}`, trigger: "now", status: "running", costUsd: 0, created: now(), artifacts: `${fakeServiceSet}:${Date.now()}` };
+          fakeServiceRuns.unshift(run as (typeof fakeServiceRuns)[number]);
+          return { run };
+        },
+        setServiceJobEnabled: ({ enabled }) => {
+          fakeServiceJob.enabled = enabled;
+          return {};
+        },
+        listServiceRunFiles: ({ artifacts }) => ({
+          files: artifacts.endsWith("9f01")
+            ? [
+                { urn: `${artifacts}/events.jsonl`, path: "events.jsonl", size: 48213n, mediaType: "application/jsonl" },
+                { urn: `${artifacts}/out/sales-by-region.csv`, path: "out/sales-by-region.csv", size: 1820n, mediaType: "text/csv" },
+                { urn: `${artifacts}/out/sales-by-region.png`, path: "out/sales-by-region.png", size: 64410n, mediaType: "image/png" },
+              ]
+            : [],
+        }),
+        saveServiceRunFile: ({ urn }) => ({ path: `/home/me/Downloads/${urn.split("/").pop()}` }),
         getOrgSync: ({ workspace }) =>
           workspace.includes("/Blitz/Acme Assist/")
             ? fakeParam("conflict")

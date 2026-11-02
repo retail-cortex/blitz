@@ -231,6 +231,19 @@ service ConfigService {
   // (saved, saving, offline, signed_out, conflicts; "" when it isn't one
   // kept in step) and the files with both versions kept.
   rpc GetOrgSync(GetOrgSyncRequest) returns (GetOrgSyncResponse);
+  // A job in an organization workspace as the organization's service runs
+  // it (EN-42; NOT_CONNECTED, NOT_SIGNED_IN, NOT_ORG_WORKSPACE): found is
+  // false until the service has read it from main.
+  rpc GetServiceJob(GetServiceJobRequest) returns (GetServiceJobResponse);
+  // Starts a run of a service job now (a Runner of its workspace).
+  rpc RunServiceJob(RunServiceJobRequest) returns (RunServiceJobResponse);
+  // Switches a service job on or off (an Editor of its workspace).
+  rpc SetServiceJobEnabled(SetServiceJobEnabledRequest) returns (SetServiceJobEnabledResponse);
+  // The files a service job's run left (spec_055_urns): its out/ folder's
+  // and its log.
+  rpc ListServiceRunFiles(ListServiceRunFilesRequest) returns (ListServiceRunFilesResponse);
+  // Saves one of a run's files in the Downloads folder, answering where.
+  rpc SaveServiceRunFile(SaveServiceRunFileRequest) returns (SaveServiceRunFileResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1416,4 +1429,105 @@ message OrgSyncPair {
 message GetOrgSyncResponse {
   string state = 1;
   repeated OrgSyncPair pairs = 2;
+}
+
+// A job the organization's service runs.
+message ServiceJob {
+  string id = 1;
+  // Its resource name (urn:blitz:jobs:<id>).
+  string urn = 2;
+  string name = 3;
+  string schedule = 4;
+  bool enabled = 5;
+  // Its next time, when it has one and is on.
+  google.protobuf.Timestamp next_run = 6;
+}
+
+// One of a service job's runs.
+message ServiceRun {
+  string id = 1;
+  // Its resource name (urn:blitz:runs:<id>).
+  string urn = 2;
+  // schedule, catch_up or now.
+  string trigger = 3;
+  // queued, running, succeeded, failed, skipped or stopped.
+  string status = 4;
+  // Why it failed, stopped or was skipped.
+  string note = 5;
+  // Its last message.
+  string output = 6;
+  double cost_usd = 7;
+  google.protobuf.Timestamp created = 8;
+  google.protobuf.Timestamp ended = 9;
+  // The branch its changes went to ("" for none).
+  string branch = 10;
+  // The name of the files it left (urn:blitz:artifacts:…).
+  string artifacts = 11;
+}
+
+// Request message for ConfigService.GetServiceJob.
+message GetServiceJobRequest {
+  // The workspace's folder: an organization workspace's clone.
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for ConfigService.GetServiceJob.
+message GetServiceJobResponse {
+  bool found = 1;
+  ServiceJob job = 2;
+  // Its latest runs, newest first.
+  repeated ServiceRun runs = 3;
+}
+
+// Request message for ConfigService.RunServiceJob.
+message RunServiceJobRequest {
+  string job_id = 1;
+}
+
+// Response message for ConfigService.RunServiceJob.
+message RunServiceJobResponse {
+  ServiceRun run = 1;
+}
+
+// Request message for ConfigService.SetServiceJobEnabled.
+message SetServiceJobEnabledRequest {
+  string job_id = 1;
+  bool enabled = 2;
+}
+
+// Response message for ConfigService.SetServiceJobEnabled.
+message SetServiceJobEnabledResponse {}
+
+// One file a service job's run left.
+message ServiceRunFile {
+  // Its resource name (urn:blitz:artifacts:…/<path>).
+  string urn = 1;
+  // Its path in the run's files (out/report.csv, events.jsonl).
+  string path = 2;
+  int64 size = 3;
+  string media_type = 4;
+}
+
+// Request message for ConfigService.ListServiceRunFiles.
+message ListServiceRunFilesRequest {
+  // The run's files' name (ServiceRun.artifacts).
+  string artifacts = 1;
+}
+
+// Response message for ConfigService.ListServiceRunFiles.
+message ListServiceRunFilesResponse {
+  repeated ServiceRunFile files = 1;
+}
+
+// Request message for ConfigService.SaveServiceRunFile.
+message SaveServiceRunFileRequest {
+  // The file's name (ServiceRunFile.urn).
+  string urn = 1;
+}
+
+// Response message for ConfigService.SaveServiceRunFile.
+message SaveServiceRunFileResponse {
+  // Where it was saved.
+  string path = 1;
 }
