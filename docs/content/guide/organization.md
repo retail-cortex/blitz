@@ -44,6 +44,10 @@ If your organization has its own name, logo and colours, Blitz wears them: in th
 
 If your organization has terms, Blitz shows them before anything else when you sign in, and again when they change. **Accept** records it with your organization; **Decline** signs you out of it.
 
+## Your usage and limits
+
+Settings › Providers & keys shows **Your usage** of your organization's models, today and this month, by model; each budget and token quota that applies to you, with what's left and when it starts again; and the models' rate limits. If your organization keeps full logs of what's sent to its models, and yours are among them, it says so. When you reach a limit, Blitz says which one and when it resets, rather than calling it a model failure. From the terminal: `blitz enterprise usage`.
+
 ## Your organization's workspaces
 
 Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. If you're only a Viewer of one, it's read-only on your computer: Blitz's file tools, its commands and the editor won't change it, and say why.

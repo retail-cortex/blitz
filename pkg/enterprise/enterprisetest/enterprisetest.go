@@ -245,6 +245,8 @@ type Service struct {
 	// answer given, by run.
 	Waiting []GoingRun
 	Answers map[string]map[string]any
+	// Usage is GET /api/v1/usage's answer, as JSON.
+	Usage map[string]any
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -712,6 +714,18 @@ func NewService(t testing.TB, issuer string) *Service {
 			defer s.Mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
 		}
+	})
+	mux.HandleFunc("GET /api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		u := s.Usage
+		if u == nil {
+			u = map[string]any{"today": map[string]any{}, "month": map[string]any{}, "limits": []any{}, "rate_limits": []any{}, "prompt_logs": false}
+		}
+		_ = json.NewEncoder(w).Encode(u)
 	})
 	mux.HandleFunc("GET /api/v1/runs/pending", func(w http.ResponseWriter, r *http.Request) {
 		if jobs(w, r) {

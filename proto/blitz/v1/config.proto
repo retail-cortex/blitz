@@ -261,6 +261,11 @@ service ConfigService {
   // (EN-42), with each one's workspace; the runs of one with
   // GetServiceJob.
   rpc ListServiceJobs(ListServiceJobsRequest) returns (ListServiceJobsResponse);
+  // The person's own use of the organization's models (EN-24): today's and
+  // this month's by model, each budget and quota that applies with what's
+  // left, the rate limits, and whether full prompt logs keep their
+  // requests.
+  rpc GetOrgUsage(GetOrgUsageRequest) returns (GetOrgUsageResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -1647,4 +1652,57 @@ message ListServiceJobsRequest {}
 // Response message for ConfigService.ListServiceJobs.
 message ListServiceJobsResponse {
   repeated ServiceJob jobs = 1;
+}
+
+// What was used of one of the organization's models (or of every model,
+// for a limit on them all).
+message OrgUsed {
+  // The model's ID ("" for every model together).
+  string model = 1;
+  int64 requests = 2;
+  int64 input_tokens = 3;
+  int64 cached_input_tokens = 4;
+  int64 output_tokens = 5;
+  double cost_usd = 6;
+}
+
+// A budget (dollars) or quota (tokens) that applies to the person.
+message OrgLimit {
+  // person, group or org: whose it is.
+  string scope_kind = 1;
+  // day or month.
+  string period = 2;
+  // usd or tokens.
+  string unit = 3;
+  // The model it limits ("" for every model together).
+  string model = 4;
+  double amount_usd = 5;
+  int64 tokens = 6;
+  int64 input_tokens = 7;
+  int64 output_tokens = 8;
+  OrgUsed used = 9;
+  google.protobuf.Timestamp resets = 10;
+}
+
+// A model's requests and tokens a minute: everyone's, and each person's.
+message OrgRateLimit {
+  string model = 1;
+  int32 person_rpm = 2;
+  int32 person_tpm = 3;
+  int32 rpm = 4;
+  int32 tpm = 5;
+}
+
+// Request message for ConfigService.GetOrgUsage.
+message GetOrgUsageRequest {}
+
+// Response message for ConfigService.GetOrgUsage.
+message GetOrgUsageResponse {
+  repeated OrgUsed today = 1;
+  repeated OrgUsed month = 2;
+  repeated OrgLimit limits = 3;
+  repeated OrgRateLimit rate_limits = 4;
+  // Whether the organization's full prompt logs keep any of the person's
+  // requests.
+  bool prompt_logs = 5;
 }

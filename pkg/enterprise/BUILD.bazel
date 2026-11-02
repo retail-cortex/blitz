@@ -24,6 +24,7 @@ go_library(
         "models.go",
         "run.go",
         "signin.go",
+        "usage.go",
         "workspaces.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/enterprise",

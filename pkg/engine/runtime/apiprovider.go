@@ -497,6 +497,12 @@ func apiError(err error, reply *errorReply) error {
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return fmt.Errorf("[llm.api] the API rejected the token (HTTP %d). Check the token script, sign in again if needed, then retry", status)
 	}
+	// An organization's limit is that, never a model failure (spec_053
+	// EN-24): the gateway says whose, what's left and when it resets.
+	switch errorCode(body) {
+	case "budget_exceeded", "quota_exceeded":
+		return maskedError{errorMessage(body) + " Settings › Models (or blitz enterprise usage) shows what's left of each limit; another model may still be within yours.", ErrOrgLimit}
+	}
 	text := fmt.Sprintf("[llm.api] HTTP %d", status)
 	if s := http.StatusText(status); s != "" {
 		text += " " + s
@@ -522,6 +528,21 @@ func errorMessage(body string) string {
 		return e.Error.Message
 	}
 	return body
+}
+
+// ErrOrgLimit is a request the organization's gateway refused for a
+// budget or quota (spec_053 EN-24).
+var ErrOrgLimit = errors.New("your organization's limit is reached")
+
+// errorCode is an error body's error.code (the gateway's), else "".
+func errorCode(body string) string {
+	var e struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal([]byte(body), &e)
+	return e.Error.Code
 }
 
 // adapterPrefix starts the openai adapter's errors.

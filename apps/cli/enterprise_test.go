@@ -321,8 +321,32 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "Nothing waits for your answer.")
 
+	// Usage and limits (EN-24).
+	out, err = runCLI(t, "enterprise", "usage")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Today:\n  nothing yet")
+	org.Mu.Lock()
+	org.Usage = map[string]any{
+		"today": map[string]any{"claude": map[string]any{"requests": 3, "input_tokens": 1200, "output_tokens": 300, "cost_usd": 0.05}},
+		"month": map[string]any{"claude": map[string]any{"requests": 30, "cost_usd": 1.5}},
+		"limits": []any{
+			map[string]any{"scope_kind": "person", "period": "day", "unit": "usd", "amount_usd": 5.0, "used": map[string]any{"cost_usd": 0.25}, "resets": "2026-11-03T00:00:00Z"},
+			map[string]any{"scope_kind": "group", "period": "month", "unit": "tokens", "model": "claude", "tokens": 1000000, "used": map[string]any{"input_tokens": 1200, "output_tokens": 300}},
+		},
+		"rate_limits": []any{map[string]any{"model": "claude", "person_rpm": 10, "tpm": 50000}},
+		"prompt_logs": true,
+	}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "usage")
+	require.NoError(t, err)
+	for _, want := range []string{"claude", "3 requests", "$0.0500", "person day budget on every model: $0.25 of $5.00 used ($4.75 left)",
+		"group month quota on claude: 1500 of 1000000 tokens used", "10 requests a minute for you, 50000 tokens a minute for everyone",
+		"Your organization keeps what's sent to its models"} {
+		assert.Contains(t, out, want)
+	}
+
 	org.Close()
-	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}} {
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}

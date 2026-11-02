@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -349,6 +350,47 @@ func (h configService) ListServiceJobs(ctx context.Context, _ req[pb.ListService
 			m.NextRun = stamp(j.NextRun)
 		}
 		out.Jobs = append(out.Jobs, m)
+	}
+	return ok(out)
+}
+
+// orgUsed is u, for model, as the API says it.
+func orgUsed(model string, u enterprise.Used) *pb.OrgUsed {
+	return &pb.OrgUsed{Model: model, Requests: u.Requests, InputTokens: u.InputTokens, CachedInputTokens: u.Cached, OutputTokens: u.OutputTokens, CostUsd: u.CostUSD}
+}
+
+// byModel is a usage map as a list, the costliest first.
+func byModel(m map[string]enterprise.Used) []*pb.OrgUsed {
+	out := make([]*pb.OrgUsed, 0, len(m))
+	for model, u := range m {
+		out = append(out, orgUsed(model, u))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CostUsd != out[j].CostUsd {
+			return out[i].CostUsd > out[j].CostUsd
+		}
+		return out[i].Model < out[j].Model
+	})
+	return out
+}
+
+func (h configService) GetOrgUsage(ctx context.Context, _ req[pb.GetOrgUsageRequest]) (*connect.Response[pb.GetOrgUsageResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	u, err := c.Usage(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	out := &pb.GetOrgUsageResponse{Today: byModel(u.Today), Month: byModel(u.Month), PromptLogs: u.PromptLogs}
+	for _, l := range u.Limits {
+		resets := l.Resets
+		out.Limits = append(out.Limits, &pb.OrgLimit{ScopeKind: l.ScopeKind, Period: l.Period, Unit: l.Unit, Model: l.Model, AmountUsd: l.AmountUSD,
+			Tokens: l.Tokens, InputTokens: l.InputTokens, OutputTokens: l.OutputTokens, Used: orgUsed(l.Model, l.Used), Resets: stamp(&resets)})
+	}
+	for _, r := range u.RateLimits {
+		out.RateLimits = append(out.RateLimits, &pb.OrgRateLimit{Model: r.Model, PersonRpm: int32(r.PersonRPM), PersonTpm: int32(r.PersonTPM), Rpm: int32(r.RPM), Tpm: int32(r.TPM)})
 	}
 	return ok(out)
 }

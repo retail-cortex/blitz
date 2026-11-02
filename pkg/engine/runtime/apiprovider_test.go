@@ -375,6 +375,23 @@ func TestAPIProviderErrorReason(t *testing.T) {
 	}
 }
 
+// An organization's budget or quota is said as the gateway says it, with
+// where to see what's left, never as a model's failure (spec_053 EN-24);
+// it's retried no more than any 429.
+func TestAPIProviderOrgLimit(t *testing.T) {
+	for _, code := range []string{"budget_exceeded", "quota_exceeded"} {
+		t.Run(code, func(t *testing.T) {
+			reply := `{"type":"error","code":"` + code + `","message":"Your daily budget of $5.00 is used up ($0.00 left). It resets Nov 3 00:00 UTC.","error":{"type":"` + code + `","code":"` + code + `","message":"Your daily budget of $5.00 is used up ($0.00 left). It resets Nov 3 00:00 UTC."}}`
+			g := newFakeGateway(t, [2]any{http.StatusTooManyRequests, reply})
+			_, _, err := callAPI(context.Background(), apiTestModel(t, g, "echo gw-token-limit-1", 0), helloRequest())
+			require.ErrorIs(t, err, ErrOrgLimit)
+			assert.Contains(t, err.Error(), "Your daily budget of $5.00 is used up ($0.00 left). It resets Nov 3 00:00 UTC.")
+			assert.Contains(t, err.Error(), "shows what's left")
+			assert.NotContains(t, err.Error(), "HTTP 429")
+		})
+	}
+}
+
 // Responses requests leave out what the model refuses: sampling for models
 // known to reject it (Claude's are the anthropic adapter's, below), and a field the gateway refused once, for that model from then
 // on; a refusal of a field the request needs isn't retried (MDL-104b).

@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
 // newEnterpriseJobsCommand is blitz enterprise jobs: the jobs your
@@ -282,4 +283,82 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 	}
 	cmd.AddCommand(runs, runNow, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
 	return cmd
+}
+
+// newEnterpriseUsageCommand is blitz enterprise usage: the person's own
+// use of the organization's models, and their limits (spec_053 EN-24).
+func newEnterpriseUsageCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "usage",
+		Short: "Your use of your organization's models today and this month, and what's left of each limit",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			u, err := client.AttachSettings(sock).OrgUsage(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			for _, period := range []struct {
+				name string
+				rows []*pb.OrgUsed
+			}{{"Today", u.Today}, {"This month", u.Month}} {
+				fmt.Fprintln(out, period.name+":")
+				if len(period.rows) == 0 {
+					fmt.Fprintln(out, "  nothing yet")
+					continue
+				}
+				tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+				for _, r := range period.rows {
+					fmt.Fprintf(tw, "  %s\t%d requests\t%d in\t%d out\t$%.4f\n", r.Model, r.Requests, r.InputTokens, r.OutputTokens, r.CostUsd)
+				}
+				_ = tw.Flush()
+			}
+			if len(u.Limits) > 0 {
+				fmt.Fprintln(out, "Limits:")
+			}
+			for _, l := range u.Limits {
+				on := "every model"
+				if l.Model != "" {
+					on = l.Model
+				}
+				resets := ""
+				if l.Resets != nil {
+					resets = ", resets " + l.Resets.AsTime().Local().Format("Jan 2 15:04")
+				}
+				if l.Unit == "tokens" {
+					limit := max(l.Tokens, l.InputTokens, l.OutputTokens)
+					used := l.Used.GetInputTokens() + l.Used.GetOutputTokens()
+					fmt.Fprintf(out, "  %s %s quota on %s: %d of %d tokens used%s\n", l.ScopeKind, l.Period, on, used, limit, resets)
+					continue
+				}
+				fmt.Fprintf(out, "  %s %s budget on %s: $%.2f of $%.2f used ($%.2f left)%s\n", l.ScopeKind, l.Period, on, l.Used.GetCostUsd(), l.AmountUsd,
+					max(0, l.AmountUsd-l.Used.GetCostUsd()), resets)
+			}
+			for _, r := range u.RateLimits {
+				fmt.Fprintf(out, "  %s: %s\n", r.Model, rateText(r))
+			}
+			if u.PromptLogs {
+				fmt.Fprintln(out, "Your organization keeps what's sent to its models (full prompt logs include your requests).")
+			}
+			return nil
+		},
+	}
+}
+
+// rateText is a model's rate limits, in words.
+func rateText(r *pb.OrgRateLimit) string {
+	var parts []string
+	for _, p := range []struct {
+		n    int32
+		what string
+	}{{r.PersonRpm, "requests a minute for you"}, {r.PersonTpm, "tokens a minute for you"}, {r.Rpm, "requests a minute for everyone"}, {r.Tpm, "tokens a minute for everyone"}} {
+		if p.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.what))
+		}
+	}
+	return strings.Join(parts, ", ")
 }

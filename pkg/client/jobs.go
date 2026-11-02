@@ -158,3 +158,16 @@ func (s *Settings) AnswerServiceRun(ctx context.Context, run string, approve boo
 	}
 	return serviceRun(res.Msg.Run), nil
 }
+
+// OrgUsage is the person's own use of the organization's models (spec_053
+// EN-24; ConfigService.GetOrgUsage), as blitzd gives it.
+type OrgUsage = *pb.GetOrgUsageResponse
+
+// OrgUsage asks blitzd for the person's usage and limits.
+func (s *Settings) OrgUsage(ctx context.Context) (OrgUsage, error) {
+	res, err := s.c.GetOrgUsage(ctx, connect.NewRequest(&pb.GetOrgUsageRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}

@@ -649,6 +649,10 @@ func TestServiceJobs(t *testing.T) {
 			return err
 		},
 		func() error {
+			_, err := c.GetOrgUsage(ctx, connect.NewRequest(&pb.GetOrgUsageRequest{}))
+			return err
+		},
+		func() error {
 			_, err := c.ListServiceApprovals(ctx, connect.NewRequest(&pb.ListServiceApprovalsRequest{}))
 			return err
 		},
@@ -811,6 +815,26 @@ func TestServiceJobs(t *testing.T) {
 	org.Waiting = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: run, Status: "paused",
 		Pending: map[string]string{"tool": "run_shell_command", "kind": "shell", "detail": "make deploy"}}, Job: job, JobName: "digest", Workspace: "plans"}}
 	org.Mu.Unlock()
+	// The person's usage and limits (EN-24).
+	org.Mu.Lock()
+	org.Usage = map[string]any{
+		"today": map[string]any{"claude": map[string]any{"requests": 3, "input_tokens": 1200, "output_tokens": 300, "cost_usd": 0.05},
+			"gemini": map[string]any{"requests": 9, "cost_usd": 0.20}},
+		"month":       map[string]any{"claude": map[string]any{"requests": 30, "cost_usd": 1.5}},
+		"limits":      []any{map[string]any{"scope_kind": "person", "period": "day", "unit": "usd", "amount_usd": 5.0, "used": map[string]any{"cost_usd": 0.25}, "resets": "2026-11-03T00:00:00Z"}},
+		"rate_limits": []any{map[string]any{"model": "claude", "person_rpm": 10}},
+		"prompt_logs": true,
+	}
+	org.Mu.Unlock()
+	usage, err := c.GetOrgUsage(ctx, connect.NewRequest(&pb.GetOrgUsageRequest{}))
+	require.NoError(t, err)
+	require.Len(t, usage.Msg.Today, 2)
+	assert.Equal(t, "gemini", usage.Msg.Today[0].Model, "the costliest first")
+	require.Len(t, usage.Msg.Limits, 1)
+	assert.InDelta(t, 0.25, usage.Msg.Limits[0].Used.CostUsd, 1e-9)
+	assert.Equal(t, int32(10), usage.Msg.RateLimits[0].PersonRpm)
+	assert.True(t, usage.Msg.PromptLogs)
+
 	jobs, err := c.ListServiceJobs(ctx, connect.NewRequest(&pb.ListServiceJobsRequest{}))
 	require.NoError(t, err)
 	require.Len(t, jobs.Msg.Jobs, 2)

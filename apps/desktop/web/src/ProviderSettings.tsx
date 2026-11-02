@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { OrgUsageCard } from "./OrgUsage";
 import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiLoading, mdiMinusCircleOutline, mdiLockOutline, mdiOpenInNew } from "@mdi/js";
 import { config } from "./api";
@@ -590,6 +591,7 @@ function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: stri
         ) : null}
         {error && <p className="error-text t-body-sm">{error}</p>}
       </section>
+      {org.signedIn && <OrgUsageCard />}
     </div>
   );
 }

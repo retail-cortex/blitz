@@ -2650,6 +2650,20 @@ export function installFake() {
             if (ctx?.signal.aborted) return;
           }
         },
+        // The person's usage and limits (EN-24): ?budget nearly spent.
+        getOrgUsage: () => ({
+          today: [
+            { model: "claude-sonnet-5-5", requests: 42n, inputTokens: 380_000n, outputTokens: 41_000n, costUsd: 1.84 },
+            { model: "gemini-4-flash", requests: 120n, inputTokens: 900_000n, outputTokens: 60_000n, costUsd: 0.31 },
+          ],
+          month: [{ model: "claude-sonnet-5-5", requests: 812n, inputTokens: 7_400_000n, outputTokens: 790_000n, costUsd: 36.2 }],
+          limits: [
+            { scopeKind: "person", period: "day", unit: "usd", model: "", amountUsd: 5, used: { costUsd: fakeParam("budget") ? 4.7 : 2.15 }, resets: timestampFromDate(new Date(Date.now() + 9 * 3600e3)) },
+            { scopeKind: "group", period: "month", unit: "tokens", model: "claude-sonnet-5-5", tokens: 20_000_000n, used: { inputTokens: 7_400_000n, outputTokens: 790_000n }, resets: timestampFromDate(new Date(Date.now() + 12 * 24 * 3600e3)) },
+          ],
+          rateLimits: [{ model: "claude-sonnet-5-5", personRpm: 20, tpm: 400_000 }],
+          promptLogs: true,
+        }),
         listServiceApprovals: () => ({
           runs: fakeServiceRuns
             .filter((r) => r.status === "paused")
