@@ -17,8 +17,10 @@ package enterprise
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -66,7 +68,9 @@ type RunEnd struct {
 	// Note says why it failed or stopped.
 	Note string `json:"note,omitempty"`
 	// Output is the run's last message.
-	Output  string  `json:"output,omitempty"`
+	Output string `json:"output,omitempty"`
+	// Branch is where its changes went ("" for none).
+	Branch  string  `json:"branch,omitempty"`
 	CostUSD float64 `json:"cost_usd"`
 }
 
@@ -81,4 +85,34 @@ func (c *Client) EndRun(ctx context.Context, end RunEnd) error {
 		RunEnd
 	}{c.run.secret, end}
 	return call(ctx, c.hc, http.MethodPost, c.runURL("end"), "", body, nil)
+}
+
+// KeepArtifact keeps one of the run's files at path (out/report.csv) as
+// its artifact, urn:blitz:artifacts:<workspace>:<job>:<run>/<path>
+// (spec_009_jobs JB-30): while the run goes, with its secret.
+func (c *Client) KeepArtifact(ctx context.Context, path string, body io.Reader, mediaType string) error {
+	if c.run == nil {
+		return errors.New("not a job's run")
+	}
+	segs := strings.Split(path, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.runURL("artifacts/"+strings.Join(segs, "/")), body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Blitz-Run-Secret", c.run.secret)
+	if mediaType != "" {
+		req.Header.Set("Content-Type", mediaType)
+	}
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode/100 != 2 {
+		return refusal(res)
+	}
+	return nil
 }

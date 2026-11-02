@@ -7,7 +7,7 @@ weight: 55
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-01, the owner: "by adopting and considering everything as a URN, it becomes both discoverable and unique", after asking how two people's workspaces named `home` would collide) |
+| Status | **Partly built** (2026-11-02: `pkg/urn`; the service answers `jobs`, `runs` and `artifacts`, keeps artifacts in the spaces bucket, and names runs, jobs and artifacts in its API; `users`, `groups`, `workspaces` and `content` are named but not answered yet. Drafted 2026-11-01, the owner: "by adopting and considering everything as a URN, it becomes both discoverable and unique", after asking how two people's workspaces named `home` would collide) |
 | Source | `pkg/urn` (`Name`, `Parse`, `New`, the kinds); blitz-enterprise `internal/resources` (`Locator`: a name to its store's location; `GET /api/v1/resources/{urn}`) |
 | Tests | `pkg/urn/urn_test.go`; blitz-enterprise `internal/resources` |
 | Depends on | [spec_053_enterprise](spec_053_enterprise.md) (Blitz and the organization's service), blitz-enterprise `spec_009_jobs` (runs and their artifacts), `spec_007_workspaces` (workspaces and their handles) |

@@ -22,11 +22,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 )
 
 // readOnly makes dir read-only until the test ends.
@@ -158,9 +161,20 @@ func TestRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, tok, renewed)
 
+	require.NoError(t, c.KeepArtifact(ctx, "out/sales by week.csv", strings.NewReader("week,sales\n"), "text/csv"))
+	assert.Equal(t, enterprisetest.Artifact{MediaType: "text/csv", Body: "week,sales\n"}, s.Kept["r1"]["out/sales by week.csv"])
+	s.KeepRefused = true
+	var refused *Refusal
+	require.ErrorAs(t, c.KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""), &refused)
+	assert.Equal(t, "no_store", refused.Code)
+	s.KeepRefused = false
+	assert.Error(t, NewRun(s.URL, "r1", "wrong", Options{}).KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""))
+	assert.Error(t, NewRun("http://127.0.0.1:1", "r1", "s3cret", Options{}).KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""))
+	assert.Error(t, New(s.URL, nil, Options{}).KeepArtifact(ctx, "x.txt", strings.NewReader("x"), ""), "not a run")
+
 	require.ErrorContains(t, c.EndRun(ctx, RunEnd{Status: "won"}), "succeeded, failed or stopped")
-	require.NoError(t, c.EndRun(ctx, RunEnd{Status: "succeeded", Output: "Done.", CostUSD: 0.25}))
-	assert.Equal(t, map[string]any{"status": "succeeded", "output": "Done.", "cost_usd": 0.25}, s.Ends["r1"])
+	require.NoError(t, c.EndRun(ctx, RunEnd{Status: "succeeded", Output: "Done.", Branch: "blitz/jobs/digest/r1", CostUSD: 0.25}))
+	assert.Equal(t, map[string]any{"status": "succeeded", "output": "Done.", "branch": "blitz/jobs/digest/r1", "cost_usd": 0.25}, s.Ends["r1"])
 	assert.Error(t, c.EndRun(ctx, RunEnd{Status: "succeeded"}), "once")
 	*now = now.Add(10 * time.Minute)
 	_, err = c.AccessToken(ctx)

@@ -156,17 +156,12 @@ func call(ctx context.Context, hc *http.Client, method, u, bearer string, in, ou
 		return fmt.Errorf("reaching the organization's service: %w", err)
 	}
 	defer res.Body.Close()
+	if res.StatusCode/100 != 2 {
+		return refusal(res)
+	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if err != nil {
 		return err
-	}
-	if res.StatusCode/100 != 2 {
-		var r struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		}
-		_ = json.Unmarshal(data, &r)
-		return &Refusal{Status: res.StatusCode, Code: r.Code, Message: r.Message}
 	}
 	if out == nil || res.StatusCode == http.StatusNoContent {
 		return nil
@@ -175,6 +170,17 @@ func call(ctx context.Context, hc *http.Client, method, u, bearer string, in, ou
 		return fmt.Errorf("the organization's service answered with something other than JSON: %w", err)
 	}
 	return nil
+}
+
+// refusal is the *Refusal a service's answer that isn't a success says.
+func refusal(res *http.Response) error {
+	var r struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	data, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+	_ = json.Unmarshal(data, &r)
+	return &Refusal{Status: res.StatusCode, Code: r.Code, Message: r.Message}
 }
 
 // Discover asks the service at u what it offers.

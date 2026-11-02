@@ -34,6 +34,7 @@ go_library(
         "//pkg/service/server",
         "//pkg/shellpath",
         "//pkg/socket",
+        "//pkg/urn",
     ],
 )
 
@@ -52,6 +53,7 @@ go_test(
         "//pkg/engine/runtime",
         "//pkg/enterprise/enterprisetest",
         "//pkg/socket",
+        "//pkg/urn",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",
         "@com_github_stretchr_testify//assert",

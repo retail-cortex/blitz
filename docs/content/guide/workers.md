@@ -151,7 +151,7 @@ notify_on = ["failed", "limited"]
 
 ## Jobs on the service
 
-When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: set `runs_on: service` and push it to the workspace's `main`. The service picks it up within a minute; this computer leaves it alone. Each run clones `main`, runs the job as the workspace's owner with the organization's models, and pushes what it changed to the branch `blitz/<job>`.
+When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: set `runs_on: service` and push it to the workspace's `main`. The service picks it up within a minute; this computer leaves it alone. Each run clones `main` and runs the job with the organization's models as the job's owner: whoever last pushed a change to its `WORKER.md` to `main`, as long as they're still a Runner of the workspace. Changes to the workspace's files go to a branch of the run's own, `blitz/jobs/<job>/<run>`, for you to review and merge. Files the job makes for people (reports, data, charts) go in the folder it's told of, `out/`: they're kept with the run for 30 days, with the run's log, and you can download them from the organization's service.
 
 ## Good to know
 

@@ -27,6 +27,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -216,6 +217,15 @@ type Service struct {
 	// runner said (the secret is no good after).
 	Runs map[string]string
 	Ends map[string]map[string]any
+	// Kept are the files each run kept, by run and path; KeepRefused
+	// refuses them all, as a service without a store does.
+	Kept        map[string]map[string]Artifact
+	KeepRefused bool
+}
+
+// Artifact is one file a run kept.
+type Artifact struct {
+	MediaType, Body string
 }
 
 // NewService is a service whose identity provider is issuer, taking the
@@ -574,6 +584,28 @@ func NewService(t testing.TB, issuer string) *Service {
 		s.Ends[r.PathValue("id")] = in
 		s.Runs[r.PathValue("id")] = ""
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("PUT /api/v1/runs/{id}/artifacts/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		id := r.PathValue("id")
+		if secret, ok := s.Runs[id]; !ok || secret == "" || r.Header.Get("Blitz-Run-Secret") != secret {
+			refuse(w, http.StatusUnauthorized, "unauthenticated", "That isn't this run's secret, or the run is over.")
+			return
+		}
+		if s.KeepRefused {
+			refuse(w, http.StatusNotImplemented, "no_store", "This service keeps no artifacts.")
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if s.Kept == nil {
+			s.Kept = map[string]map[string]Artifact{}
+		}
+		if s.Kept[id] == nil {
+			s.Kept[id] = map[string]Artifact{}
+		}
+		s.Kept[id][r.PathValue("path")] = Artifact{MediaType: r.Header.Get("Content-Type"), Body: string(body)}
+		w.WriteHeader(http.StatusCreated)
 	})
 	mux.HandleFunc("DELETE /api/v1/session", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()
