@@ -273,6 +273,9 @@ type EnterpriseConfig struct {
 	// for none. Set it with Settings › Organization or blitz enterprise
 	// connect.
 	URL string `toml:"url"`
+	// WorkspacesDir is where the organization's workspaces are cloned,
+	// each in <workspaces_dir>/<organization>/<handle>; ~/Blitz when unset.
+	WorkspacesDir string `toml:"workspaces_dir"`
 }
 
 // SetEnterpriseURL sets [enterprise] url in the global settings, or

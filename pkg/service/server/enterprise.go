@@ -47,6 +47,8 @@ type enterpriseConn struct {
 	// asking again; idle, how often it looks for a sign-in (tests shorten
 	// them).
 	retry, idle time.Duration
+	// gitHelper replaces the credential helper Git runs (tests).
+	gitHelper string
 	// HTTP is what the calls go through (tests set it); nil for the
 	// default client.
 	http *http.Client

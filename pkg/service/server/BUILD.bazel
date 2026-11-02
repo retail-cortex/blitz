@@ -37,6 +37,7 @@ go_library(
         "listen.go",
         "mcp.go",
         "models.go",
+        "orgworkspaces.go",
         "rules.go",
         "scheduler.go",
         "secrets.go",

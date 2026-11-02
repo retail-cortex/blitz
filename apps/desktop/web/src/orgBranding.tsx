@@ -27,7 +27,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { config } from "./api";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
-import type { Branding, EnterpriseState, OrgDocument } from "./gen/blitz/v1/config_pb";
+import type { Branding, EnterpriseState, OrgDocument, OrgWorkspace } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { Markdown } from "./Markdown";
 import { openURL } from "./desktop";
@@ -310,4 +310,32 @@ export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
     );
   }
   return null;
+}
+
+/** The organization's workspaces the person has a role in, and its name. */
+export interface OrgWorkspaces {
+  organization: string;
+  workspaces: OrgWorkspace[];
+}
+
+/**
+ * The organization's workspaces (EN-60), asked again when the settings
+ * change; null when Blitz isn't connected or signed in.
+ */
+export function useOrgWorkspaces(): OrgWorkspaces | null {
+  const [state, setState] = useState<OrgWorkspaces | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const r = await config.listOrgWorkspaces({});
+      setState({ organization: r.organization, workspaces: r.workspaces });
+    } catch {
+      setState(null);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    window.addEventListener(configChangedEvent, load);
+    return () => window.removeEventListener(configChangedEvent, load);
+  }, [load]);
+  return state;
 }

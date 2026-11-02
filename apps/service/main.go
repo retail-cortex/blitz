@@ -27,6 +27,8 @@ import (
 	"syscall"
 
 	"github.com/retail-cortex/blitz/apps/service/internal/doctor"
+	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/gitcred"
 	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"github.com/retail-cortex/blitz/pkg/service"
@@ -115,7 +117,7 @@ every login.`,
 	cmd.Flags().StringVar(&license, "license", "", "show the license and exit: the NOTICE, or =full (the Apache License) or =third-party (the notices of the software blitzd includes)")
 	cmd.Flags().Lookup("license").NoOptDefVal = "notice"
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %v", errUsage, err) })
-	cmd.AddCommand(newDoctorCommand())
+	cmd.AddCommand(newDoctorCommand(), newGitCredentialCommand())
 	cmd.SetArgs(args)
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		if errors.Is(err, errChecksFailed) {
@@ -185,3 +187,26 @@ func showLicense(cmd *cobra.Command, which string) error {
 
 // errUsage marks a bad flag or argument.
 var errUsage = errors.New("usage")
+
+// newGitCredentialCommand is blitzd git-credential: Git's credential helper
+// for the organization's service (spec_053_enterprise EN-61), set in each
+// organization clone's own Git settings. It asks the running service for
+// the access token, which only the service renews; with no service
+// running, it answers nothing.
+func newGitCredentialCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:    "git-credential <get|store|erase>",
+		Short:  "Git's credential helper for your organization's Blitz service",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gitcred.Run(cmd.Context(), args[0], cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, host string) (string, string, bool, error) {
+				sock := socket.DefaultSocket()
+				if !socket.Running(sock) {
+					return "", "", false, nil
+				}
+				return client.AttachSettings(sock).GitCredential(ctx, host)
+			})
+		},
+	}
+}

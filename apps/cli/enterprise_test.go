@@ -170,3 +170,38 @@ func TestEnterpriseTerms(t *testing.T) {
 	_, err = runCLI(t, "enterprise", "terms")
 	assert.Error(t, err, "signed out")
 }
+
+// blitz enterprise workspaces and create, and blitz git-credential
+// answering Git for the service's host (EN-60, EN-61).
+func TestEnterpriseWorkspacesCommand(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+
+	out, err := runCLI(t, "enterprise", "workspaces")
+	require.NoError(t, err)
+	assert.Contains(t, out, "You have no workspaces in Acme Assist yet")
+	out, err = runCLI(t, "enterprise", "create", "Q4 Launch")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ Made Q4 Launch (q4-launch). Open it: blitz enterprise open q4-launch")
+	out, err = runCLI(t, "enterprise", "workspaces")
+	require.NoError(t, err)
+	assert.Contains(t, out, "q4-launch")
+	assert.Contains(t, out, "not on this computer: blitz enterprise open q4-launch")
+	_, err = runCLI(t, "enterprise", "open", "nope")
+	assert.Error(t, err)
+
+	host := strings.TrimPrefix(org.URL, "http://")
+	out, err = runCLIWith(t, "protocol=http\nhost="+host+"\n\n", "git-credential", "get")
+	require.NoError(t, err)
+	assert.Contains(t, out, "username=blitz\npassword=")
+	out, err = runCLIWith(t, "protocol=https\nhost=github.com\n\n", "git-credential", "get")
+	require.NoError(t, err)
+	assert.Empty(t, out)
+}

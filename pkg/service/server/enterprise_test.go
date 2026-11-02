@@ -20,7 +20,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -381,4 +383,91 @@ func TestEnterpriseCatalogLoop(t *testing.T) {
 	cfg, err = config.Load("")
 	require.NoError(t, err)
 	assert.False(t, cfg.Org.Active())
+}
+
+// The organization's workspaces: listed with where each would be cloned,
+// cloned through the service with Blitz's credential helper set in the
+// clone, opened from the clone after, made anew, and Git's credential
+// answered for the service's host only (EN-60, EN-61, EN-65).
+func TestOrgWorkspaces(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.AddWorkspace(t, "plans", "Plans", "editor")
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	_, err = c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+
+	list, err := c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	require.NoError(t, err)
+	home, _ := os.UserHomeDir()
+	assert.Equal(t, "Acme Assist", list.Msg.Organization)
+	require.Len(t, list.Msg.Workspaces, 1)
+	ws := list.Msg.Workspaces[0]
+	assert.Equal(t, "editor", ws.Role)
+	assert.Equal(t, filepath.Join(home, "Blitz", "Acme Assist", "plans"), ws.Dir)
+	assert.False(t, ws.Cloned)
+
+	// Git asks the helper; here a script stands in for blitzd's.
+	token, err := s.ent.c.AccessToken(ctx)
+	require.NoError(t, err)
+	t.Setenv("BLITZ_TEST_TOKEN", token)
+	s.ent.gitHelper = `!f() { echo username=blitz; echo "password=$BLITZ_TEST_TOKEN"; }; f`
+	opened, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
+	require.NoError(t, err)
+	assert.True(t, opened.Msg.Cloned)
+	assert.FileExists(t, filepath.Join(ws.Dir, "README.md"))
+	helper, err := exec.Command("git", "-C", ws.Dir, "config", "credential."+org.URL+".helper").Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(helper), "BLITZ_TEST_TOKEN", "the clone's own settings name the helper")
+	again, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
+	require.NoError(t, err)
+	assert.False(t, again.Msg.Cloned, "opened from the clone")
+
+	_, err = c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "nope"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+
+	made, err := c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: "Q4 Launch"}))
+	require.NoError(t, err)
+	assert.Equal(t, "q4-launch", made.Msg.Workspace.Handle)
+	assert.Equal(t, "owner", made.Msg.Workspace.Role)
+
+	t.Setenv("BLITZ_TEST_TOKEN", "not-a-token")
+	_, err = c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "q4-launch"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "CLONE_FAILED", info.Reason)
+	assert.NoDirExists(t, filepath.Join(home, "Blitz", "Acme Assist", "q4-launch"), "nothing half-cloned left")
+
+	cred, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://")}))
+	require.NoError(t, err)
+	assert.True(t, cred.Msg.Ok)
+	assert.Equal(t, token, cred.Msg.Password)
+	other, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: "github.com"}))
+	require.NoError(t, err)
+	assert.False(t, other.Msg.Ok)
+	_, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
+	require.NoError(t, err)
+	out, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://")}))
+	require.NoError(t, err)
+	assert.False(t, out.Msg.Ok, "signed out: nothing, so Git says to sign in")
 }

@@ -214,6 +214,19 @@ service ConfigService {
   // Records that the person accepted a version of the terms (CONFLICT when
   // it isn't the one in force).
   rpc AcceptTerms(AcceptTermsRequest) returns (AcceptTermsResponse);
+  // The organization's workspaces the person has a role in, and where each
+  // is cloned on this computer (EN-60; NOT_CONNECTED, NOT_SIGNED_IN).
+  rpc ListOrgWorkspaces(ListOrgWorkspacesRequest) returns (ListOrgWorkspacesResponse);
+  // Makes a workspace of the organization's, the person its owner.
+  rpc CreateOrgWorkspace(CreateOrgWorkspaceRequest) returns (CreateOrgWorkspaceResponse);
+  // Clones an organization workspace through its service the first time
+  // (with Blitz's credential helper in the clone's own Git settings), and
+  // answers its folder to open (CLONE_FAILED).
+  rpc OpenOrgWorkspace(OpenOrgWorkspaceRequest) returns (OpenOrgWorkspaceResponse);
+  // Git's credential for a host (EN-61): the access token, renewed when
+  // due, for the organization's service; nothing for another host or when
+  // signed out.
+  rpc GitCredential(GitCredentialRequest) returns (GitCredentialResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1322,4 +1335,64 @@ message AcceptTermsRequest {
 // Response message for ConfigService.AcceptTerms.
 message AcceptTermsResponse {
   EnterpriseState state = 1;
+}
+
+// One of the organization's workspaces.
+message OrgWorkspace {
+  string handle = 1;
+  string name = 2;
+  // owner, editor, runner or viewer.
+  string role = 3;
+  bool sync = 4;
+  string clone_url = 5;
+  // Where it is, or would be, cloned on this computer.
+  string dir = 6;
+  bool cloned = 7;
+}
+
+// Request message for ConfigService.ListOrgWorkspaces.
+message ListOrgWorkspacesRequest {}
+
+// Response message for ConfigService.ListOrgWorkspaces.
+message ListOrgWorkspacesResponse {
+  repeated OrgWorkspace workspaces = 1;
+  // The organization's name, for the list's heading.
+  string organization = 2;
+}
+
+// Request message for ConfigService.CreateOrgWorkspace.
+message CreateOrgWorkspaceRequest {
+  string name = 1;
+  // "" to make one from the name.
+  string handle = 2;
+}
+
+// Response message for ConfigService.CreateOrgWorkspace.
+message CreateOrgWorkspaceResponse {
+  OrgWorkspace workspace = 1;
+}
+
+// Request message for ConfigService.OpenOrgWorkspace.
+message OpenOrgWorkspaceRequest {
+  string handle = 1;
+}
+
+// Response message for ConfigService.OpenOrgWorkspace.
+message OpenOrgWorkspaceResponse {
+  // The clone's folder, to open as a workspace.
+  string dir = 1;
+  // It was cloned just now.
+  bool cloned = 2;
+}
+
+// Request message for ConfigService.GitCredential.
+message GitCredentialRequest {
+  string host = 1;
+}
+
+// Response message for ConfigService.GitCredential.
+message GitCredentialResponse {
+  bool ok = 1;
+  string username = 2;
+  string password = 3;
 }

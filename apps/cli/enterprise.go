@@ -23,9 +23,11 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/gitcred"
 	"github.com/spf13/cobra"
 )
 
@@ -164,7 +166,74 @@ are the ones Blitz uses, under its limits.`,
 			return askTerms(cmd.Context(), cmd, s, orgName(o))
 		},
 	}
-	cmd.AddCommand(status, connect, disconnect, login, logout, terms)
+	workspaces := &cobra.Command{
+		Use:   "workspaces",
+		Short: "List your organization's workspaces you have a role in, and where each is cloned",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			list, org, err := s.OrgWorkspaces(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(list) == 0 {
+				fmt.Fprintf(out, "You have no workspaces in %s yet: blitz enterprise create <name>\n", org)
+				return nil
+			}
+			tw := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
+			for _, w := range list {
+				where := "not on this computer: blitz enterprise open " + w.Handle
+				if w.Cloned {
+					where = w.Dir
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", w.Handle, w.Name, w.Role, where)
+			}
+			return tw.Flush()
+		},
+	}
+	open := &cobra.Command{
+		Use:   "open <workspace>",
+		Short: "Clone one of your organization's workspaces, the first time, and say where it is",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			dir, cloned, err := s.OpenOrgWorkspace(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if cloned {
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ Cloned to %s\n", dir)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), dir)
+			}
+			return nil
+		},
+	}
+	create := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Make a workspace of your organization's, with you its owner",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			w, err := s.CreateOrgWorkspace(cmd.Context(), args[0], "")
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Made %s (%s). Open it: blitz enterprise open %s\n", w.Name, w.Handle, w.Handle)
+			return nil
+		},
+	}
+	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create)
 	return cmd
 }
 
@@ -244,4 +313,29 @@ func askTerms(ctx context.Context, cmd *cobra.Command, s *client.Settings, name 
 	}
 	fmt.Fprintf(out, "✓ Accepted %s's terms (version %s).\n", name, t.Version)
 	return nil
+}
+
+// newGitCredentialCommand is blitz git-credential: Git's credential helper
+// for the organization's service (EN-61), for setting in Git's own
+// settings to use Git's clients with it (Blitz sets blitzd's in each
+// organization clone). It asks the Blitz service, which renews the token.
+func newGitCredentialCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "git-credential <get|store|erase>",
+		Short: "Git's credential helper for your organization's Blitz service",
+		Long: `Git's credential helper for your organization's Blitz service, to use Git's own
+clients with its workspaces:
+
+  git config --global credential.https://blitz.acme.com.helper "!blitz git-credential"`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gitcred.Run(cmd.Context(), args[0], cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, host string) (string, string, bool, error) {
+				sock, err := ensureService(ctx)
+				if err != nil {
+					return "", "", false, err
+				}
+				return client.AttachSettings(sock).GitCredential(ctx, host)
+			})
+		},
+	}
 }

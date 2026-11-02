@@ -145,3 +145,60 @@ func (s *Settings) AcceptTerms(ctx context.Context, version string) (Organizatio
 	}
 	return organization(res.Msg.State), nil
 }
+
+// OrgWorkspace is one of the organization's workspaces (EN-60).
+type OrgWorkspace struct {
+	Handle, Name, Role string
+	Sync               bool
+	// Dir is where it is, or would be, cloned; Cloned whether it is.
+	Dir    string
+	Cloned bool
+}
+
+func orgWorkspace(m *pb.OrgWorkspace) OrgWorkspace {
+	return OrgWorkspace{Handle: m.GetHandle(), Name: m.GetName(), Role: m.GetRole(), Sync: m.GetSync(), Dir: m.GetDir(), Cloned: m.GetCloned()}
+}
+
+// OrgWorkspaces are the organization's workspaces the person has a role
+// in, and the organization's name (ConfigService.ListOrgWorkspaces).
+func (s *Settings) OrgWorkspaces(ctx context.Context) ([]OrgWorkspace, string, error) {
+	res, err := s.c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	if err != nil {
+		return nil, "", fromAPI(err)
+	}
+	out := make([]OrgWorkspace, len(res.Msg.Workspaces))
+	for i, w := range res.Msg.Workspaces {
+		out[i] = orgWorkspace(w)
+	}
+	return out, res.Msg.Organization, nil
+}
+
+// CreateOrgWorkspace makes a workspace of the organization's
+// (ConfigService.CreateOrgWorkspace).
+func (s *Settings) CreateOrgWorkspace(ctx context.Context, name, handle string) (OrgWorkspace, error) {
+	res, err := s.c.CreateOrgWorkspace(ctx, connect.NewRequest(&pb.CreateOrgWorkspaceRequest{Name: name, Handle: handle}))
+	if err != nil {
+		return OrgWorkspace{}, fromAPI(err)
+	}
+	return orgWorkspace(res.Msg.Workspace), nil
+}
+
+// OpenOrgWorkspace clones an organization workspace the first time, and
+// gives its folder (ConfigService.OpenOrgWorkspace).
+func (s *Settings) OpenOrgWorkspace(ctx context.Context, handle string) (dir string, cloned bool, err error) {
+	res, err := s.c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: handle}))
+	if err != nil {
+		return "", false, fromAPI(err)
+	}
+	return res.Msg.Dir, res.Msg.Cloned, nil
+}
+
+// GitCredential is Git's credential for host (ConfigService.GitCredential):
+// ok false when the service has none for it.
+func (s *Settings) GitCredential(ctx context.Context, host string) (user, password string, ok bool, err error) {
+	res, err := s.c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: host}))
+	if err != nil {
+		return "", "", false, fromAPI(err)
+	}
+	return res.Msg.Username, res.Msg.Password, res.Msg.Ok, nil
+}

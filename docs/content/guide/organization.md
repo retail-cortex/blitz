@@ -44,6 +44,16 @@ If your organization has its own name, logo and colours, Blitz wears them: in th
 
 If your organization has terms, Blitz shows them before anything else when you sign in, and again when they change. **Accept** records it with your organization; **Decline** signs you out of it.
 
+## Your organization's workspaces
+
+Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. From the terminal: `blitz enterprise workspaces`, `blitz enterprise open <workspace>`, and `blitz enterprise create <name>` for a new one.
+
+Blitz signs Git in for you in those folders, as you. To use Git's own clients elsewhere with your organization's service:
+
+```sh
+git config --global credential.https://blitz.acme.com.helper "!blitz git-credential"
+```
+
 ## Disconnect
 
 Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.

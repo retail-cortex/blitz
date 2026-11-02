@@ -103,4 +103,12 @@ func TestOrganizationUnreachable(t *testing.T) {
 	assert.Error(t, err)
 	_, err = c.AcceptTerms(ctx, "v1")
 	assert.Error(t, err)
+	_, _, err = c.OrgWorkspaces(ctx)
+	assert.Error(t, err)
+	_, err = c.CreateOrgWorkspace(ctx, "x", "")
+	assert.Error(t, err)
+	_, _, err = c.OpenOrgWorkspace(ctx, "x")
+	assert.Error(t, err)
+	_, _, _, err = c.GitCredential(ctx, "x")
+	assert.Error(t, err)
 }

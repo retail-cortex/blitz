@@ -22,6 +22,7 @@ import {
   mdiCogOutline,
   mdiDeleteOutline,
   mdiFolderOpenOutline,
+  mdiFolderAccountOutline,
   mdiFolderOutline,
   mdiGit,
   mdiHistory,
@@ -45,9 +46,12 @@ import { studioGroups, studioIcons, type StudioKind } from "./studio/StudioDrawe
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
-import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "@blitz/webui";
+import { Icon, IconButton, Menu, ToolbarSearch, useSnackbar, type MenuEntry } from "@blitz/webui";
+import { config } from "./api";
+import { message } from "./errors";
 import { useWorkerFailures } from "./workerFailures";
-import { appName, logoFor, useDarkTheme, useOrgBranding } from "./orgBranding";
+import { appName, logoFor, useDarkTheme, useOrgBranding, useOrgWorkspaces } from "./orgBranding";
+import type { OrgWorkspace } from "./gen/blitz/v1/config_pb";
 
 /** The app's name and mark, at the left of the top bar: the organization's when it has its own (EN-51). */
 export function Brand() {
@@ -109,6 +113,7 @@ export function MenuBar({
   onCloseWorkspace: (dir: string) => void;
 }) {
   const { prefs, update, activity, theme } = useApp();
+  const snack = useSnackbar();
   // Simple mode keeps Workspaces, Changes and Help (simpleMode.ts).
   const advanced = prefs.advanced;
   const menus = menuIds(advanced);
@@ -147,6 +152,16 @@ export function MenuBar({
     return a?.waiting ? t("desktop.switcher.waiting") : a?.running ? t("desktop.switcher.working") : n > 0 ? tn("desktop.switcher.failed_runs", n) : "";
   };
   const recent = recentWorkspaces(prefs).slice(0, 8);
+  const org = useOrgWorkspaces();
+  const openOrg = async (w: OrgWorkspace) => {
+    if (!w.cloned) snack(t("desktop.org.cloning", { name: w.name || w.handle }));
+    try {
+      const r = await config.openOrgWorkspace({ handle: w.handle });
+      update((p) => openWorkspace(p, r.dir));
+    } catch (e) {
+      snack(message(e));
+    }
+  };
   const workspaceItems: MenuEntry[] = [
     { label: t("desktop.menu.workspaces.add"), icon: mdiFolderOpenOutline, onSelect: onOpenWorkspace },
     "divider",
@@ -181,6 +196,20 @@ export function MenuBar({
         ]
       : []),
   ];
+  // The organization's workspaces, cloned the first time they're opened.
+  if (org && org.workspaces.length > 0) {
+    workspaceItems.push(
+      { heading: org.organization },
+      ...org.workspaces.map(
+        (w): MenuEntry => ({
+          label: w.name || w.handle,
+          detail: [t(`desktop.org.role.${w.role}`), w.cloned ? "" : t("desktop.org.not_cloned")].filter(Boolean).join(" · "),
+          icon: mdiFolderAccountOutline,
+          onSelect: () => void openOrg(w),
+        }),
+      ),
+    );
+  }
   const othersWaiting = openWorkspaces(prefs).some((w) => w.dir !== prefs.active && activity[w.dir]?.waiting);
 
   const help: MenuEntry[] = [

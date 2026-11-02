@@ -28,8 +28,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cgi"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -193,6 +197,11 @@ type Service struct {
 	CatalogExpiry time.Time
 	Announce      chan int
 	FileCalls     int
+	// Workspaces are the organization's workspaces, by handle, each a bare
+	// repository in repos served through Git's smart HTTP at /git/, which
+	// takes the access token as the password, as the service's proxy does.
+	Workspaces map[string]Workspace
+	repos      string
 	// quit ends the watch streams when the service closes, as a real
 	// one's do when it shuts down.
 	quit       chan struct{}
@@ -206,7 +215,7 @@ type Service struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, repos: t.TempDir(), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -401,6 +410,64 @@ func NewService(t testing.TB, issuer string) *Service {
 			}
 		}
 	})
+	view := func(handle string, ws Workspace) map[string]any {
+		return map[string]any{"workspace": map[string]any{"handle": handle, "name": ws.Name, "role": ws.Role, "sync": ws.Sync}, "clone_url": s.URL + "/git/" + handle + ".git"}
+	}
+	mux.HandleFunc("GET /api/v1/workspaces", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		handles := make([]string, 0, len(s.Workspaces))
+		for h := range s.Workspaces {
+			handles = append(handles, h)
+		}
+		sort.Strings(handles)
+		out := []map[string]any{}
+		for _, h := range handles {
+			out = append(out, view(h, s.Workspaces[h]))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"workspaces": out})
+	})
+	mux.HandleFunc("POST /api/v1/workspaces", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var in struct{ Name, Handle string }
+		_ = json.NewDecoder(r.Body).Decode(&struct {
+			Name   *string `json:"name"`
+			Handle *string `json:"handle"`
+		}{&in.Name, &in.Handle})
+		if in.Handle == "" {
+			in.Handle = strings.ToLower(strings.ReplaceAll(in.Name, " ", "-"))
+		}
+		ws := Workspace{Name: in.Name, Role: "owner", Sync: true}
+		if err := s.addRepo(in.Handle); err != nil {
+			refuse(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+		s.Mu.Lock()
+		s.Workspaces[in.Handle] = ws
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(view(in.Handle, ws))
+	})
+	if git, err := exec.LookPath("git"); err == nil {
+		backend := &cgi.Handler{Path: git, Args: []string{"http-backend"}, Root: "/git", Env: []string{"GIT_PROJECT_ROOT=" + s.repos, "GIT_HTTP_EXPORT_ALL=1"}}
+		mux.HandleFunc("/git/", func(w http.ResponseWriter, r *http.Request) {
+			_, pass, _ := r.BasicAuth()
+			s.Mu.Lock()
+			_, ok := s.Access[pass]
+			s.Mu.Unlock()
+			if !ok {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Blitz"`)
+				http.Error(w, "sign in", http.StatusUnauthorized)
+				return
+			}
+			backend.ServeHTTP(w, r)
+		})
+	}
 	mux.HandleFunc("GET /api/v1/terms", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
@@ -482,4 +549,52 @@ type CatalogFile struct {
 func (s *Service) Close() {
 	s.quitOnce.Do(func() { close(s.quit) })
 	s.Server.Close()
+}
+
+// Workspace is one of the fake service's workspaces.
+type Workspace struct {
+	Name, Role string
+	Sync       bool
+}
+
+// AddWorkspace makes a workspace with a first commit (README.md), with
+// the person in role.
+func (s *Service) AddWorkspace(t testing.TB, handle, name, role string) {
+	t.Helper()
+	if err := s.addRepo(handle); err != nil {
+		t.Fatal(err)
+	}
+	s.Mu.Lock()
+	s.Workspaces[handle] = Workspace{Name: name, Role: role, Sync: true}
+	s.Mu.Unlock()
+}
+
+// addRepo makes handle's bare repository, with a first commit.
+func (s *Service) addRepo(handle string) error {
+	bare := filepath.Join(s.repos, handle+".git")
+	work, err := os.MkdirTemp("", "ws")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(work)
+	git := func(dir string, args ...string) error {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, args...)...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %v: %v: %s", args, err, out)
+		}
+		return nil
+	}
+	if err := git(s.repos, "init", "--bare", bare); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("# "+handle+"\n"), 0o600); err != nil {
+		return err
+	}
+	for _, args := range [][]string{{"init"}, {"add", "-A"}, {"commit", "-m", "First"}, {"push", bare, "HEAD:main"}} {
+		if err := git(work, args...); err != nil {
+			return err
+		}
+	}
+	return git(bare, "symbolic-ref", "HEAD", "refs/heads/main")
 }

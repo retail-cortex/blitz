@@ -2548,6 +2548,20 @@ export function installFake() {
           fakeOrg.termsAccepted = true;
           return { state: fakeOrgState(false) };
         },
+        listOrgWorkspaces: () => {
+          if (!fakeOrg.url) throw new ConnectError("connect to your organization's service first", Code.FailedPrecondition);
+          return {
+            organization: "Acme Assist",
+            workspaces: [
+              { handle: "plans", name: "Plans", role: "editor", sync: true, dir: "/home/me/Blitz/Acme Assist/plans", cloned: true },
+              { handle: "q4-launch", name: "Q4 Launch", role: "owner", sync: true, dir: "/home/me/Blitz/Acme Assist/q4-launch", cloned: false },
+            ],
+          };
+        },
+        openOrgWorkspace: async ({ handle }) => {
+          await sleep(800);
+          return { dir: `/home/me/Blitz/Acme Assist/${handle}`, cloned: true };
+        },
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };
