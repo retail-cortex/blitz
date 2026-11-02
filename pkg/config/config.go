@@ -981,8 +981,10 @@ func load(prefixDir, workspace string) (*Config, error) {
 			cfg.Project.ApplyTightening(cfg)
 		}
 	}
-	// The organization's last: its locked items and policy apply over the
-	// workspace's and the person's.
+	// Device management's machine-wide settings over the person's (EN-10),
+	// then the organization's last: its locked items and policy apply over
+	// the workspace's and the person's.
+	applyManaged(cfg)
 	applyOrg(cfg, prefixDir)
 	return cfg, nil
 }

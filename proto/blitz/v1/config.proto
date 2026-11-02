@@ -1302,6 +1302,9 @@ message EnterpriseState {
   bool checked = 11;
   bool reachable = 12;
   string error = 13;
+  // The machine-wide settings set the organization (EN-10): the person
+  // can't change or disconnect it.
+  bool managed = 14;
 }
 
 // Request message for ConfigService.GetEnterprise.

@@ -298,6 +298,9 @@ func describeOrganization(w io.Writer, o client.Organization) {
 		return
 	}
 	fmt.Fprintf(w, "Organization  %s (%s)\n", orgName(o), o.URL)
+	if o.Managed {
+		fmt.Fprintln(w, "              set by your organization's device management")
+	}
 	switch {
 	case o.Checked && !o.Reachable:
 		fmt.Fprintf(w, "Service       not reached: %s\n", o.Error)

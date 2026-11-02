@@ -1501,6 +1501,7 @@
     "desktop.org.terms": "Votre organisation vous demande d'accepter ses conditions (version {version}).",
     "desktop.org.roles": "Vos rôles : {roles}",
     "desktop.org.disconnect": "Déconnecter",
+    "desktop.org.managed": "Défini par la gestion des appareils de votre organisation : demandez à votre équipe TI de le modifier.",
     "desktop.org.sync.saved": "Enregistré",
     "desktop.org.sync.saving": "Enregistrement…",
     "desktop.org.sync.offline": "Hors ligne : enregistré sur cet ordinateur",

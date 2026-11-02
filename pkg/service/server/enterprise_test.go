@@ -1251,3 +1251,30 @@ func TestOrgItems(t *testing.T) {
 	_, info = errorReason(t, err)
 	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
 }
+
+// Device management's organization (EN-10): connected from the start,
+// said to be managed, and neither changed nor disconnected here.
+func TestManagedOrganization(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	managed := filepath.Join(t.TempDir(), "managed.toml")
+	require.NoError(t, os.WriteFile(managed, []byte("[enterprise]\nurl = \""+org.URL+"\"\n"), 0o644))
+	t.Setenv(config.ManagedEnv, managed)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	got, err := c.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, org.URL, got.Msg.State.Url)
+	assert.True(t, got.Msg.State.Managed)
+	for _, u := range []string{"", "https://other.example"} {
+		_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: u}))
+		_, info := errorReason(t, err)
+		assert.Equal(t, "MANAGED", info.Reason, u)
+	}
+}

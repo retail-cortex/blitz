@@ -55,6 +55,8 @@ function fakeOrgState(checked: boolean) {
     renewsUnix: fakeOrg.signedIn ? BigInt(Math.floor(Date.now() / 1000) + 540) : 0n,
     checked,
     reachable: checked,
+    // ?managed: device management set it (EN-10).
+    managed: fakeParam("managed"),
   };
 }
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };

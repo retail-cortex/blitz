@@ -1501,6 +1501,7 @@
     "desktop.org.terms": "Your organization asks you to accept its terms (version {version}).",
     "desktop.org.roles": "Your roles: {roles}",
     "desktop.org.disconnect": "Disconnect",
+    "desktop.org.managed": "Set by your organization's device management: ask your IT team to change it.",
     "desktop.org.sync.saved": "Saved",
     "desktop.org.sync.saving": "Saving…",
     "desktop.org.sync.offline": "Offline: saved on this computer",

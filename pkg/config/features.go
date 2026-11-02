@@ -276,12 +276,19 @@ type EnterpriseConfig struct {
 	// WorkspacesDir is where the organization's workspaces are cloned,
 	// each in <workspaces_dir>/<organization>/<handle>; ~/Blitz when unset.
 	WorkspacesDir string `toml:"workspaces_dir"`
+	// Managed says the machine-wide settings set URL (EN-10): the person
+	// can't change or remove it.
+	Managed bool `toml:"-"`
 }
 
 // SetEnterpriseURL sets [enterprise] url in the global settings, or
-// removes it when u is empty; it's never a workspace's. u is the
+// removes it when u is empty; it's never a workspace's. ErrManaged when
+// the machine-wide settings set it (EN-10). u is the
 // service's address as the caller checked it. It returns the file's path.
 func SetEnterpriseURL(prefixDir, u string) (string, error) {
+	if ManagedURL() != "" {
+		return "", ErrManaged
+	}
 	return editConfigFile(scopeDir(prefixDir, ""),
 		func(doc string) string {
 			if u == "" {

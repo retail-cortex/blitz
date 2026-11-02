@@ -113,6 +113,8 @@ func TestDescribeOrganization(t *testing.T) {
 			[]string{"Organization  https://b.acme.com (https://b.acme.com)", "Service       not reached: reaching"}},
 		"terms": {client.Organization{URL: "https://b.acme.com", Name: "Acme", SignedIn: true, Email: "ana@acme.com", Terms: "v2", Renews: time.Now()},
 			[]string{"Signed in     ana@acme.com\n", "Terms         version v2 to accept"}},
+		"managed": {client.Organization{URL: "https://b.acme.com", Name: "Acme", Managed: true},
+			[]string{"Organization  Acme (https://b.acme.com)\n              set by your organization's device management"}},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

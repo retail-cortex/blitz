@@ -194,7 +194,7 @@ func (s *Server) enterpriseState(ctx context.Context, c *enterprise.Client, chec
 		return &pb.EnterpriseState{}
 	}
 	st := c.Status()
-	out := &pb.EnterpriseState{Url: st.URL, SignedIn: st.SignedIn, TermsVersion: st.Terms}
+	out := &pb.EnterpriseState{Url: st.URL, SignedIn: st.SignedIn, TermsVersion: st.Terms, Managed: config.ManagedURL() != ""}
 	info := st.Info
 	if check {
 		cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
@@ -233,6 +233,9 @@ func (h configService) GetEnterprise(ctx context.Context, r req[pb.GetEnterprise
 }
 
 func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEnterpriseRequest]) (*connect.Response[pb.ConnectEnterpriseResponse], error) {
+	if config.ManagedURL() != "" {
+		return nil, apiError(connect.CodeFailedPrecondition, "MANAGED", config.ErrManaged)
+	}
 	previous, _ := h.s.enterpriseClient()
 	var next *enterprise.Client
 	if r.Msg.Url != "" {

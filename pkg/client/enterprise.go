@@ -45,6 +45,9 @@ type Organization struct {
 	Checked   bool
 	Reachable bool
 	Error     string
+	// Managed says the machine-wide settings set it (EN-10): it can't be
+	// changed or disconnected here.
+	Managed bool
 }
 
 func organization(m *pb.EnterpriseState) Organization {
@@ -53,7 +56,7 @@ func organization(m *pb.EnterpriseState) Organization {
 	}
 	o := Organization{URL: m.Url, Name: m.Name, Version: m.Version, Capabilities: m.Capabilities, SignedIn: m.SignedIn,
 		Email: m.Email, PersonName: m.PersonName, Roles: m.Roles, Terms: m.TermsVersion,
-		Checked: m.Checked, Reachable: m.Reachable, Error: m.Error}
+		Checked: m.Checked, Reachable: m.Reachable, Error: m.Error, Managed: m.Managed}
 	if m.RenewsUnix != 0 {
 		o.Renews = time.Unix(m.RenewsUnix, 0)
 	}

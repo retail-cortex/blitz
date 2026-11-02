@@ -169,11 +169,16 @@ export function OrganizationSettings() {
           )}
           {state.termsVersion && <p className="t-body-sm signin-note">{t("desktop.org.terms", { version: state.termsVersion })}</p>}
           {state.signedIn && state.roles.length > 0 && <p className="t-body-sm muted signin-note">{t("desktop.org.roles", { roles: state.roles.join(", ") })}</p>}
-          <div className="row">
-            <Button small variant="text" icon={mdiLinkVariantOff} disabled={busy || signingIn} onClick={() => void connect("")}>
-              {t("desktop.org.disconnect")}
-            </Button>
-          </div>
+          {state.managed ? (
+            // Device management set it (EN-10): it's not the person's to change.
+            <p className="t-body-sm muted signin-note">{t("desktop.org.managed")}</p>
+          ) : (
+            <div className="row">
+              <Button small variant="text" icon={mdiLinkVariantOff} disabled={busy || signingIn} onClick={() => void connect("")}>
+                {t("desktop.org.disconnect")}
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {error && <p className="error-text t-body-sm">{error}</p>}

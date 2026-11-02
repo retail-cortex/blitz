@@ -21,6 +21,24 @@ blitz enterprise status       # who's signed in, and whether the service answers
 
 `blitz enterprise login --browser` signs in in a browser on this computer instead of with a code.
 
+### Set by your IT team
+
+A company's device management (Jamf, Intune and the like) can connect every computer for you, with a machine-wide settings file:
+
+| System | File |
+|---|---|
+| macOS | `/Library/Application Support/Blitz/managed.toml` |
+| Windows | `%ProgramData%\Blitz\managed.toml` |
+| Linux | `/etc/blitz/managed.toml` |
+
+```toml
+[enterprise]
+url = "https://blitz.acme.com"
+workspaces_dir = "/Users/Shared/Acme"   # optional: where the organization's workspaces are cloned
+```
+
+Blitz is then connected to that organization from the start, and Settings › Organization and `blitz enterprise status` say it's set by device management: it can't be changed or disconnected there. Each person still signs in as themselves. To try a file before sending it out, name it in `BLITZ_MANAGED_SETTINGS`.
+
 The desktop app, the CLI and the tray share one sign-in: the Blitz service on your computer keeps it. Your sign-in lasts as long as your organization allows (often a working day); Blitz renews it on its own until then, and asks you to sign in again after.
 
 ## What changes while you're connected
