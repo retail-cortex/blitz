@@ -277,6 +277,14 @@ service ConfigService {
   rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse);
   // The catalog's reviews, the newest first (an Admin's).
   rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse);
+  // The organization's catalog items this person gets (EN-34): each with
+  // its lock and groups, and whether the workspace has its own of that
+  // name (which a default gives way to).
+  rpc ListOrgItems(ListOrgItemsRequest) returns (ListOrgItemsResponse);
+  // Copies one of the organization's default items into the workspace's
+  // .agents folder, to change there (EN-34; FAILED_PRECONDITION LOCKED for
+  // a locked one, ALREADY_EXISTS when the workspace has its own).
+  rpc CopyOrgItem(CopyOrgItemRequest) returns (CopyOrgItemResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -1788,4 +1796,45 @@ message ListCatalogReviewsRequest {
 // Response message for ConfigService.ListCatalogReviews.
 message ListCatalogReviewsResponse {
   repeated CatalogReview reviews = 1;
+}
+
+// One of the organization's catalog items.
+message OrgItem {
+  // agent, skill, rule, guardrail, command, mcp or connector.
+  string kind = 1;
+  string name = 2;
+  // Its path in the catalog.
+  string path = 3;
+  // locked or default.
+  string lock = 4;
+  repeated string groups = 5;
+  // The workspace has its own of this name (a default gives way to it).
+  bool overridden = 6;
+}
+
+// Request message for ConfigService.ListOrgItems.
+message ListOrgItemsRequest {
+  string workspace = 1;
+  // One kind ("" for every one).
+  string kind = 2;
+}
+
+// Response message for ConfigService.ListOrgItems.
+message ListOrgItemsResponse {
+  repeated OrgItem items = 1;
+  // The catalog's version ("" before the first).
+  int32 version = 2;
+}
+
+// Request message for ConfigService.CopyOrgItem.
+message CopyOrgItemRequest {
+  string workspace = 1;
+  string kind = 2;
+  string name = 3;
+}
+
+// Response message for ConfigService.CopyOrgItem.
+message CopyOrgItemResponse {
+  // The files written, in the workspace.
+  repeated string paths = 1;
 }

@@ -451,7 +451,7 @@ func NewService(t testing.TB, issuer string) *Service {
 		for _, p := range paths {
 			f := s.Catalog[p]
 			sum := sha256.Sum256([]byte(f.Data))
-			files = append(files, map[string]any{"kind": f.Kind, "name": f.Name, "path": p, "lock": f.Lock, "sha256": hex.EncodeToString(sum[:]), "size": len(f.Data)})
+			files = append(files, map[string]any{"kind": f.Kind, "name": f.Name, "path": p, "lock": f.Lock, "groups": f.Groups, "sha256": hex.EncodeToString(sum[:]), "size": len(f.Data)})
 		}
 		m := map[string]any{"version": len(paths), "files": files, "policy": s.CatalogPolicy, "expires": s.CatalogExpiry}
 		key := s.Key
@@ -984,6 +984,8 @@ func Seal(kid string, key ed25519.PrivateKey, v any) []byte {
 // CatalogFile is a file of the fake service's catalog.
 type CatalogFile struct {
 	Kind, Name, Lock, Data string
+	// Groups are who it's for (everyone when none).
+	Groups []string
 	// Corrupt serves contents that don't match the file's hash; Missing
 	// doesn't serve them at all.
 	Corrupt, Missing bool

@@ -279,7 +279,7 @@ origin stays as it was; the organization's is the remote "organization".`,
 	share.Flags().StringVar(&shareName, "name", "", "the workspace's name (default: the folder's)")
 	share.Flags().StringVar(&shareHandle, "handle", "", "its handle (default: made from the name)")
 	share.Flags().BoolVar(&sharePersonal, "personal", false, "make it yours alone (~<you>/<name>)")
-	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create, share, newEnterpriseJobsCommand(), newEnterpriseUsageCommand(), newEnterprisePublishCommand(), newEnterpriseReviewsCommand())
+	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create, share, newEnterpriseJobsCommand(), newEnterpriseUsageCommand(), newEnterprisePublishCommand(), newEnterpriseReviewsCommand(), newEnterpriseCatalogCommand())
 	return cmd
 }
 

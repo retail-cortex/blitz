@@ -381,3 +381,47 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 		assert.Error(t, err, args)
 	}
 }
+
+// blitz enterprise catalog (EN-34): the organization's items with their
+// lock and groups, a default one copied into the workspace and then shown
+// as the workspace's own, a locked one refused, and a malformed name.
+func TestEnterpriseCatalogCommand(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Catalog = map[string]enterprisetest.CatalogFile{
+		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
+		"rules/style.md":     {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+	}
+	ws := t.TempDir()
+	_, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	out, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "nothing for you yet")
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		out, err = runCLI(t, "enterprise", "catalog", "-d", ws)
+		return err == nil && strings.Contains(out, "rule/style")
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Contains(t, out, "agent/reviewer  (locked, for eng)")
+	assert.Contains(t, out, "rule/style  (default)\n")
+
+	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "agent/reviewer")
+	assert.ErrorContains(t, err, "locked")
+	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "style")
+	assert.ErrorContains(t, err, "<kind>/<name>")
+	out, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "rule/style")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ Copied to .agents/rules/style.md")
+	assert.FileExists(t, filepath.Join(ws, ".agents", "rules", "style.md"))
+	out, err = runCLI(t, "enterprise", "catalog", "-d", ws, "--kind", "rule")
+	require.NoError(t, err)
+	assert.Contains(t, out, "rule/style  (default)  this workspace has its own")
+	assert.NotContains(t, out, "reviewer")
+}

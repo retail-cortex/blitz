@@ -471,3 +471,81 @@ func newEnterpriseReviewsCommand() *cobra.Command {
 	cmd.Flags().StringVar(&state, "state", "", "open, approved or rejected")
 	return cmd
 }
+
+// newEnterpriseCatalogCommand is blitz enterprise catalog: the
+// organization's items a workspace gets, and copying a default one in to
+// change (spec_053 EN-34).
+func newEnterpriseCatalogCommand() *cobra.Command {
+	var dir, kind string
+	cmd := &cobra.Command{
+		Use:   "catalog",
+		Short: "The agents, skills, rules… your organization gives this workspace",
+		Long: `Lists the organization's catalog items this workspace gets, each locked
+(its Admins change it, through a review) or default (the workspace may
+have its own instead: "blitz enterprise catalog copy <kind>/<name>"
+copies it into .agents to change).`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			res, err := client.AttachSettings(sock).OrgItems(cmd.Context(), abs, kind)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(res.Items) == 0 {
+				fmt.Fprintln(out, "Your organization's catalog has nothing for you yet.")
+				return nil
+			}
+			fmt.Fprintf(out, "Catalog version %d:\n", res.Version)
+			for _, it := range res.Items {
+				line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
+				if len(it.Groups) > 0 {
+					line += ", for " + strings.Join(it.Groups, ", ")
+				}
+				line += ")"
+				if it.Overridden {
+					line += "  this workspace has its own"
+				}
+				fmt.Fprintln(out, line)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
+	cmd.Flags().StringVar(&kind, "kind", "", "one kind: agent, skill, rule, guardrail, command, mcp or connector")
+	copyCmd := &cobra.Command{
+		Use:   "copy <kind>/<name>",
+		Short: "Copy one of the organization's default items into this workspace, to change there",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			k, name, ok := strings.Cut(args[0], "/")
+			if !ok {
+				return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", args[0]))
+			}
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			paths, err := client.AttachSettings(sock).CopyOrgItem(cmd.Context(), abs, k, name)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Copied to %s. This workspace's copy now takes the place of the organization's.\n", strings.Join(paths, ", "))
+			return nil
+		},
+	}
+	copyCmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
+	cmd.AddCommand(copyCmd)
+	return cmd
+}

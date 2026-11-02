@@ -1166,3 +1166,81 @@ func TestPublishToOrganization(t *testing.T) {
 	_, info = errorReason(t, err)
 	assert.Equal(t, "FORBIDDEN", info.Reason)
 }
+
+// The organization's items in a workspace (EN-34): listed with their lock
+// and groups and whether the workspace has its own, a skill as one item;
+// a default one copied into .agents (a skill's whole folder), a locked one
+// and one the workspace has already refused, and nothing before a catalog.
+func TestOrgItems(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Catalog = map[string]enterprisetest.CatalogFile{
+		"agents/reviewer.md":     {Kind: "agent", Name: "reviewer", Lock: "locked", Data: "---\nname: reviewer\n---\nReview."},
+		"rules/style.md":         {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+		"skills/deploy/SKILL.md": {Kind: "skill", Name: "deploy", Lock: "default", Data: "---\nname: deploy\n---\nDeploy."},
+		"skills/deploy/run.sh":   {Kind: "skill_file", Name: "deploy", Lock: "default", Data: "echo hi"},
+	}
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	ws := t.TempDir()
+	list := func(kind string) *pb.ListOrgItemsResponse {
+		res, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: ws, Kind: kind}))
+		require.NoError(t, err)
+		return res.Msg
+	}
+	copyItem := func(kind, name string) (*connect.Response[pb.CopyOrgItemResponse], error) {
+		return c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: ws, Kind: kind, Name: name}))
+	}
+
+	_, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: ws}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	assert.Empty(t, list("").Items, "no catalog yet")
+	_, err = copyItem("rule", "style")
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	require.Eventually(t, func() bool { return len(list("").Items) == 3 }, 5*time.Second, 20*time.Millisecond)
+
+	all := list("")
+	assert.Equal(t, int32(4), all.Version)
+	assert.Equal(t, []string{"agents/reviewer.md", "rules/style.md", "skills/deploy/SKILL.md"}, []string{all.Items[0].Path, all.Items[1].Path, all.Items[2].Path})
+	assert.Equal(t, "locked", all.Items[0].Lock)
+	rules := list("rule")
+	require.Len(t, rules.Items, 1)
+	assert.False(t, rules.Items[0].Overridden)
+
+	_, err = copyItem("agent", "reviewer")
+	_, info = errorReason(t, err)
+	assert.Equal(t, "LOCKED", info.Reason)
+	_, err = copyItem("agent", "nope")
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+
+	got, err := copyItem("skill", "deploy")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{".agents/skills/deploy/SKILL.md", ".agents/skills/deploy/run.sh"}, got.Msg.Paths)
+	data, err := os.ReadFile(filepath.Join(ws, ".agents", "skills", "deploy", "run.sh"))
+	require.NoError(t, err)
+	assert.Equal(t, "echo hi", string(data))
+	_, err = copyItem("rule", "style")
+	require.NoError(t, err)
+	assert.True(t, list("rule").Items[0].Overridden, "the workspace has its own now")
+	_, err = copyItem("rule", "style")
+	_, info = errorReason(t, err)
+	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
+}

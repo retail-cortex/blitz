@@ -883,6 +883,14 @@ const fakeWorkers: FakeWorker[] = [
 ];
 
 // The catalog's reviews (EN-36).
+const fakeOrgItems = [
+  { kind: "agent", name: "brand-voice", path: "agents/brand-voice.md", lock: "locked", groups: [], overridden: false },
+  { kind: "agent", name: "analyst", path: "agents/analyst.md", lock: "default", groups: ["sales"], overridden: false },
+  { kind: "skill", name: "quarterly-report", path: "skills/quarterly-report/SKILL.md", lock: "default", groups: [], overridden: false },
+  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false },
+  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "default", groups: [], overridden: false },
+  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: ["eng", "sales"], overridden: false },
+];
 const fakeReviews: { id: string; title: string; byEmail: string; paths: string[]; problems: string[]; state: string; note: string; version: number; created: ReturnType<typeof now> }[] = [
   { id: "rev-1", title: "Publish agent writer", byEmail: "ana@acme.com", paths: ["agents/writer.md"], problems: [], state: "approved", note: "", version: 7, created: timestampFromDate(new Date(Date.now() - 50 * 3600e3)) },
   { id: "rev-2", title: "Publish rule short-answers", byEmail: "bo@acme.com", paths: ["rules/short-answers.md"], problems: [], state: "rejected", note: "Too strict for support.", version: 0, created: timestampFromDate(new Date(Date.now() - 120 * 3600e3)) },
@@ -2673,6 +2681,18 @@ export function installFake() {
           return { review };
         },
         listCatalogReviews: () => ({ reviews: fakeReviews }),
+        // The organization's items in Studio's lists (EN-34): ?org&signedin.
+        listOrgItems: ({ kind }) => ({
+          version: 7,
+          items: fakeOrg.signedIn ? fakeOrgItems.filter((i) => !kind || i.kind === kind) : [],
+        }),
+        copyOrgItem: async ({ kind, name }) => {
+          await sleep(400);
+          const it = fakeOrgItems.find((i) => i.kind === kind && i.name === name);
+          if (!it || it.lock === "locked") throw new ConnectError(`the organization's ${kind} ${name} is locked: its Admins change it, through a review`, Code.FailedPrecondition);
+          it.overridden = true;
+          return { paths: [`.agents/${it.path}`] };
+        },
         getOrgUsage: () => ({
           today: [
             { model: "claude-sonnet-5-5", requests: 42n, inputTokens: 380_000n, outputTokens: 41_000n, costUsd: 1.84 },

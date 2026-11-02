@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { OrgItems } from "./OrgItems";
 import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -237,6 +238,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
             );
           })}
         </div>
+        <OrgItems workspace={workspace} kind="skill" onCopied={() => void refresh()} />
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (

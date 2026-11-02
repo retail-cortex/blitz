@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { OrgItems } from "./OrgItems";
 import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -242,6 +243,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
             ))}
           </div>
         </section>
+        <OrgItems workspace={workspace} kind="guardrail" onCopied={() => void refresh()} />
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (

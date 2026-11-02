@@ -172,3 +172,82 @@ func (h configService) ListCatalogReviews(ctx context.Context, r req[pb.ListCata
 	}
 	return ok(out)
 }
+
+// orgCatalog is the organization's catalog as this computer keeps it: its
+// manifest and its layers' folders (EN-31).
+func (h configService) orgCatalog() (*enterprise.Manifest, string, string, error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, "", "", err
+	}
+	dir := h.s.brandingDir(c)
+	defaults, locked := enterprise.LayerDirs(dir)
+	return enterprise.LoadCatalog(dir), defaults, locked, nil
+}
+
+func (h configService) ListOrgItems(_ context.Context, r req[pb.ListOrgItemsRequest]) (*connect.Response[pb.ListOrgItemsResponse], error) {
+	m, _, _, err := h.orgCatalog()
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListOrgItemsResponse{}
+	if m == nil {
+		return ok(out)
+	}
+	out.Version = int32(m.Version)
+	own, _ := itemFiles(r.Msg.Workspace)
+	for _, f := range m.Files {
+		if f.Kind == catalog.SkillFile || (r.Msg.Kind != "" && f.Kind != r.Msg.Kind) {
+			continue
+		}
+		_, overridden := own[f.Path]
+		out.Items = append(out.Items, &pb.OrgItem{Kind: f.Kind, Name: f.Name, Path: f.Path, Lock: f.Lock, Groups: f.Groups, Overridden: overridden})
+	}
+	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Path < out.Items[j].Path })
+	return ok(out)
+}
+
+func (h configService) CopyOrgItem(_ context.Context, r req[pb.CopyOrgItemRequest]) (*connect.Response[pb.CopyOrgItemResponse], error) {
+	m, defaults, _, err := h.orgCatalog()
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", errors.New("this computer has no copy of the organization's catalog yet"))
+	}
+	var paths []string
+	for _, f := range m.Files {
+		if f.Name != r.Msg.Name || (f.Kind != r.Msg.Kind && !(r.Msg.Kind == catalog.Skill && f.Kind == catalog.SkillFile)) {
+			continue
+		}
+		if f.Lock == catalog.Locked {
+			return nil, apiError(connect.CodeFailedPrecondition, "LOCKED", fmt.Errorf("the organization's %s %s is locked: its Admins change it, through a review", f.Kind, f.Name))
+		}
+		paths = append(paths, f.Path)
+	}
+	if len(paths) == 0 {
+		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", fmt.Errorf("the organization's catalog has no %s %q for you", r.Msg.Kind, r.Msg.Name))
+	}
+	root := agentsDir(r.Msg.Workspace)
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil {
+			return nil, apiError(connect.CodeAlreadyExists, "ALREADY_EXISTS", fmt.Errorf("the workspace has its own %s already", p))
+		}
+	}
+	var wrote []string
+	for _, p := range paths {
+		data, err := os.ReadFile(filepath.Join(defaults, filepath.FromSlash(p)))
+		if err != nil {
+			return nil, apiError(connect.CodeInternal, "INTERNAL", err)
+		}
+		to := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			return nil, invalid(err)
+		}
+		if err := os.WriteFile(to, data, 0o644); err != nil {
+			return nil, invalid(err)
+		}
+		wrote = append(wrote, filepath.ToSlash(filepath.Join(".agents", p)))
+	}
+	return ok(&pb.CopyOrgItemResponse{Paths: wrote})
+}

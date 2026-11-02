@@ -43,6 +43,7 @@ import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } 
 import { DraftButton } from "./Draft";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
+import { OrgItems } from "./OrgItems";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 /** Each action's icon. */
@@ -263,6 +264,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
             ))}
           </div>
         </section>
+        <OrgItems workspace={workspace} kind="rule" onCopied={() => void refresh()} />
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (

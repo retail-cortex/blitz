@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { OrgItems } from "./studio/OrgItems";
 import { GradeBadge } from "./studio/GradeBadge";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -328,6 +329,7 @@ export function AgentEditor({
             );
           })}
         </div>
+        {scope === AgentScope.WORKSPACE && <OrgItems workspace={workspace} kind="agent" onCopied={() => void refresh()} />}
       </aside>
       )}
       <section className={`split-main ${slide ? "slide-detail" : ""}`} inert={slide && open === null}>

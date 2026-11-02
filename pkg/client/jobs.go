@@ -200,3 +200,23 @@ func (s *Settings) CatalogReviews(ctx context.Context, state string) ([]*pb.Cata
 	}
 	return res.Msg.Reviews, nil
 }
+
+// OrgItems are the organization's catalog items for a workspace, of one
+// kind or every one (ConfigService.ListOrgItems).
+func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgItemsResponse, error) {
+	res, err := s.c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: dir, Kind: kind}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}
+
+// CopyOrgItem copies one of the organization's default items into the
+// workspace's .agents folder (ConfigService.CopyOrgItem).
+func (s *Settings) CopyOrgItem(ctx context.Context, dir, kind, name string) ([]string, error) {
+	res, err := s.c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: dir, Kind: kind, Name: name}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Paths, nil
+}
