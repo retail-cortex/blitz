@@ -79,7 +79,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 
 ## 7. Branding and terms
 
-- **EN-50** With `branding` listed, `GET <url>/api/v1/branding` (with `If-None-Match`) gives:
+- **EN-50** *Built (2026-11-02; `pkg/enterprise`, its `RefreshBranding`; blitzd's `GetBranding`). The envelope is `{"kid", "payload", "signature"}`: the payload's JSON in base64url, and an Ed25519 signature, base64url, of `blitz-enterprise/v1`, NUL, the key ID, NUL and the payload, checked against `/api/v1/info`'s `catalog_keys` (base64), asked again once for a key published since. The desktop app asks for it at start, every 10 minutes and when the settings change.* With `branding` listed, `GET <url>/api/v1/branding` (with `If-None-Match`) gives:
   - the app's name and short name;
   - a logo and an icon, each for light and dark;
   - two accent colours, one for the light theme and one for the dark (no one colour reads well on both);
@@ -87,7 +87,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
   - the terms of service and privacy notice, each as text or a link, with a version.
 
   It needs no sign-in, so the sign-in screen is branded too. It comes signed with the catalog bundle's key (EN-32), the images inside it rather than linked, so one signature covers everything the window shows and an offline start has all of it. A copy whose signature doesn't check is refused and the last one kept. It's kept on disk (EN-54), so the window is branded before it reaches the service.
-- **EN-51** The name replaces "Blitz" wherever the app says it at run time:
+- **EN-51** *Built in the desktop app for the window's title, the top bar (the short name, the logo for the theme) and the welcome page, and the accents (checked at 4.5:1 against each theme's background); menus, dialogs, notifications, the tray and the CLI are to come.* The name replaces "Blitz" wherever the app says it at run time:
   - the window's title;
   - the page's menus, the welcome page and dialogs;
   - notifications;
@@ -95,9 +95,9 @@ The line: open source holds the interfaces, their open-source defaults and the c
   - the CLI's banner and help.
 
   The logo replaces the mark in the title bar and on the welcome page. Each accent replaces its theme's accent tokens, and is refused, keeping Blitz's, when it doesn't meet WCAG AA contrast (4.5:1) against that theme's background. What the system names from the app's bundle can't change at run time: the macOS Dock and menu bar, the installer, the Start menu and file names. Those need a rebranded build, which is out of scope here.
-- **EN-52** **About** shows the organization's name, logo, about text, terms of service, privacy notice and support link. It always ends with "Built on Blitz <version>", plus Blitz's license and notices (the Apache License's NOTICE must stay with the program).
-- **EN-53** **The user agreement:** after sign-in, and whenever the terms' version changes, the window shows the terms with **Accept** and **Decline** before anything else. The CLI shows them, or their link, and asks `[y/N]`. Accept is recorded on the service with the version and the time (`POST <url>/api/v1/terms/accept` with `{"version"}`; `GET <url>/api/v1/terms` is the version in force and whether it's accepted). Decline signs out. Until the current version is accepted, the service answers every other request with `403 terms_required`, so no client can skip it.
-- **EN-54** **Offline** *(the owner's question, 2026-10-29: "how it will be persisted when the user is offline")*:
+- **EN-52** *Built in the desktop app.* **About** shows the organization's name, logo, about text, terms of service, privacy notice and support link. It always ends with "Built on Blitz <version>", plus Blitz's license and notices (the Apache License's NOTICE must stay with the program).
+- **EN-53** *Built in the desktop app (a dialog before anything else, checked at start, every 10 minutes and when the settings change; Decline signs out) and blitzd (`GetTerms`, `AcceptTerms`); the CLI's `[y/N]` is to come.* **The user agreement:** after sign-in, and whenever the terms' version changes, the window shows the terms with **Accept** and **Decline** before anything else. The CLI shows them, or their link, and asks `[y/N]`. Accept is recorded on the service with the version and the time (`POST <url>/api/v1/terms/accept` with `{"version"}`; `GET <url>/api/v1/terms` is the version in force and whether it's accepted). Decline signs out. Until the current version is accepted, the service answers every other request with `403 terms_required`, so no client can skip it.
+- **EN-54** *Built for the branding: kept in `~/.blitz/enterprise/<host>/` with the keys it was checked with, read back and checked again offline, removed on disconnecting or moving to another organization.* **Offline** *(the owner's question, 2026-10-29: "how it will be persisted when the user is offline")*:
   - **Where.** The last good bundle and branding, each as the signed copy the service sent, are kept in the service's own folder, `~/.blitz/enterprise/<the service's host>/` (0700, files 0600, each written to a temporary file and renamed into place), so another service's never mixes in. At start the window reads the branding from there and checks its signature again before it shows it; a copy that doesn't check is ignored (Blitz's own look until the service answers).
   - **No expiry.** The branding is how the app looks, not a rule, so it stays until a newer one replaces it. Past the bundle's expiry (EN-33) the organization's workspaces stop, but the window keeps the organization's name and logo. A service that stops listing `branding` returns the app to Blitz's.
   - **Signed out.** Signing out, or a token that can't be renewed, keeps the branding and the terms: it's still the organization's computer, and the sign-in screen (EN-13) wears its name.

@@ -32,6 +32,12 @@ The desktop app, the CLI and the tray share one sign-in: the Blitz service on yo
 
 A workspace's settings can't connect Blitz to an organization, or change which one: only you can, in your own settings (`[enterprise] url`).
 
+## Your organization's look and terms
+
+If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page and About, which ends with "Built on Blitz". They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.
+
+If your organization has terms, Blitz shows them before anything else when you sign in, and again when they change. **Accept** records it with your organization; **Decline** signs you out of it.
+
 ## Disconnect
 
 Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.

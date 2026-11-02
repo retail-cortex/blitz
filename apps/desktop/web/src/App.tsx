@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
 import { useCountUse } from "./activity";
+import { appName, OrgDocumentDialog, startBranding, TermsGate, useOrgBranding } from "./orgBranding";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
@@ -168,6 +169,9 @@ function Shell() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
+  // The organization's look, kept current while the service is up (EN-50).
+  const up = service.state === "up";
+  useEffect(() => (up ? startBranding() : undefined), [up]);
   // The terminal's language setting and the user's catalogs (BL-DSK-41).
   useEffect(() => {
     if (service.state !== "up") return;
@@ -403,6 +407,8 @@ function Shell() {
         {/* The pinned composer's bar, across every panel. */}
         {pinned && <div className="composer-dock" ref={setDockEl} />}
         <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onWorkspaceSettings={(dir) => openSettings("workspaces", dir)} />
+        {service.state === "up" && <TermsGate />}
+        <OrgDocumentDialog />
         {unsavedClose && (
           <UnsavedDialog
             names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}
@@ -502,6 +508,7 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
 }
 
 function Welcome({ onOpen, onClose, onSettings, onSearch }: { onOpen: () => void; onClose: (dir: string) => void; onSettings: (section: Section, scope?: string) => void; onSearch: () => void }) {
+  const org = useOrgBranding();
   const { prefs, update } = useApp();
   const recent = recentWorkspaces(prefs).slice(0, 6);
   return (
@@ -513,7 +520,7 @@ function Welcome({ onOpen, onClose, onSettings, onSearch }: { onOpen: () => void
         <MenuBar onSearch={onSearch} onSettings={onSettings} onOpenWorkspace={onOpen} onCloseWorkspace={onClose} />
       </header>
       <div className="welcome-body">
-        <h1 className="t-display">{t("desktop.welcome.title")}</h1>
+        <h1 className="t-display">{t("desktop.welcome.title", { app: appName(org) })}</h1>
         <p className="t-title muted">{t("desktop.welcome.body")}</p>
         <ConnectModelCard onSetUp={() => onSettings("providers")} />
         <Button variant="filled" icon={mdiFolderOpenOutline} onClick={onOpen}>

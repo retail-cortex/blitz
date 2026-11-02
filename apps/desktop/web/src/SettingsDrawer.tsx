@@ -23,6 +23,7 @@ import {
   mdiCogOutline,
   mdiFolderMultipleOutline,
   mdiDomain,
+  mdiOpenInNew,
   mdiKeyChainVariant,
   mdiKeyVariant,
   mdiProgressClock,
@@ -81,6 +82,8 @@ import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSna
 import { Drawer } from "@blitz/webui";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { OrganizationSettings } from "./OrganizationSettings";
+import { logoFor, showOrgDocument, useDarkTheme, useOrgBranding } from "./orgBranding";
+import type { Branding } from "./gen/blitz/v1/config_pb";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
 /**
@@ -815,14 +818,45 @@ function Updates() {
   );
 }
 
+/**
+ * The organization's part of About (EN-52): its name and logo, about
+ * text, documents and support link, above Blitz's own.
+ */
+function OrgAbout({ org, logo }: { org: Branding; logo: string }) {
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="row">
+        {logo && <img src={logo} alt="" className="icon lg brand-mark" />}
+        <span className="t-title-lg">{org.name}</span>
+      </div>
+      {org.about && <p className="t-body-sm">{org.about}</p>}
+      <div className="row wrap">
+        {org.documents.map((d) => (
+          <Button key={d.document + d.version} small onClick={() => (d.url ? void openURL(d.url) : showOrgDocument(d))}>
+            {t(d.document === "privacy" ? "desktop.org.privacy" : "desktop.org.terms_doc", { version: d.version })}
+          </Button>
+        ))}
+        {org.support && (
+          <Button small icon={mdiOpenInNew} onClick={() => void openURL(org.support)}>
+            {t("desktop.org.support")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function About() {
   const [version, setVersion] = useState("");
   useEffect(() => {
     appVersion().then(setVersion, () => setVersion("?"));
   }, []);
+  const org = useOrgBranding();
+  const dark = useDarkTheme();
   return (
     <div className="stack">
-      <span className="t-title-lg">{t("desktop.brand")}</span>
+      {org && <OrgAbout org={org} logo={logoFor(org, dark)} />}
+      <span className="t-title-lg">{org ? t("desktop.org.built_on") : t("desktop.brand")}</span>
       <span className="muted">{t("desktop.about.version", { version: shownVersion(version) })}</span>
       {canUpdate() && <Updates />}
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>

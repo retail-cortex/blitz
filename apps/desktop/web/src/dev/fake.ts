@@ -40,7 +40,7 @@ const fakeParam = (name: string) => new URLSearchParams(location.search).has(nam
 
 // The organization's service this computer is connected to (?org starts
 // connected), and whether the person is signed in to it.
-const fakeOrg = { url: fakeParam("org") ? "https://blitz.acme.com" : "", signedIn: false };
+const fakeOrg = { url: fakeParam("org") ? "https://blitz.acme.com" : "", signedIn: fakeParam("signedin"), termsAccepted: false };
 function fakeOrgState(checked: boolean) {
   if (!fakeOrg.url) return {};
   return {
@@ -2519,6 +2519,34 @@ export function installFake() {
           await sleep(1500);
           fakeOrg.signedIn = true;
           yield { done: true, state: fakeOrgState(false) };
+        },
+        // ?org&brand: the organization has its own look; ?terms: a version
+        // of its terms waits to be accepted.
+        getBranding: () =>
+          fakeOrg.url && fakeParam("brand")
+            ? {
+                branding: {
+                  name: "Acme Assist",
+                  shortName: "Acme",
+                  accent: "#7b3fe4",
+                  accentDark: "#c4a5ff",
+                  support: "https://acme.example/help",
+                  about: "Acme's assistant for its engineers, with Acme's models and rules.",
+                  images: { "logo.svg": "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#7b3fe4"/><path d="M8 16l4-9 4 9" stroke="#fff" stroke-width="2" fill="none"/></svg>') },
+                  documents: [
+                    { document: "terms", version: "2026-11", text: "## Acceptable use\n\nUse Acme Assist for Acme's work only. Don't paste customers' personal data." },
+                    { document: "privacy", version: "1", url: "https://acme.example/privacy" },
+                  ],
+                },
+              }
+            : {},
+        getTerms: () =>
+          fakeOrg.termsAccepted || !fakeParam("terms")
+            ? { version: fakeParam("terms") ? "2026-11" : "", accepted: true }
+            : { version: "2026-11", accepted: false, text: "## Acceptable use\n\nUse Acme Assist for Acme's work only. Don't paste customers' personal data.\n\n- Keep secrets out of prompts.\n- Check what the agent changes before you ship it." },
+        acceptTerms: () => {
+          fakeOrg.termsAccepted = true;
+          return { state: fakeOrgState(false) };
         },
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;

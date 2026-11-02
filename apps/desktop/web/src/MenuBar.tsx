@@ -47,13 +47,17 @@ import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
 import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
+import { appName, logoFor, useDarkTheme, useOrgBranding } from "./orgBranding";
 
-/** The app's name and mark, at the left of the top bar. */
+/** The app's name and mark, at the left of the top bar: the organization's when it has its own (EN-51). */
 export function Brand() {
+  const org = useOrgBranding();
+  const dark = useDarkTheme();
+  const logo = logoFor(org, dark);
   return (
     <span className="brand">
-      <Icon path={mdiLightningBolt} className="brand-mark" />
-      <span className="brand-name">{t("desktop.brand")}</span>
+      {logo ? <img src={logo} alt="" className="icon brand-mark" /> : <Icon path={mdiLightningBolt} className="brand-mark" />}
+      <span className="brand-name ellipsis">{org?.shortName || appName(org)}</span>
     </span>
   );
 }
