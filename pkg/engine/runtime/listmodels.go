@@ -42,6 +42,9 @@ type ProviderModels struct {
 type ListedModel struct {
 	ID    string
 	Price *config.ModelPrice
+	// DisplayName and Default are the organization's, for its models.
+	DisplayName string
+	Default     bool
 }
 
 // listTimeout bounds each provider's listing.
@@ -219,7 +222,7 @@ func listEnterprise(ctx context.Context, cfg *config.Config) ProviderModels {
 		return pm
 	}
 	for _, m := range list {
-		lm := ListedModel{ID: m.ID}
+		lm := ListedModel{ID: m.ID, DisplayName: m.DisplayName, Default: m.Default}
 		if m.Price != nil {
 			lm.Price = &config.ModelPrice{InputPerMTok: m.Price.InputPerMTok, OutputPerMTok: m.Price.OutputPerMTok}
 		}

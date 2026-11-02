@@ -20,7 +20,7 @@ import { config } from "./api";
 import { openURL } from "./desktop";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
-import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
+import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ListedModel, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
@@ -520,7 +520,7 @@ function ProviderRow({
  */
 function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: string; org: EnterpriseState; desc: DescribeConfigResponse; onSaved: () => void }) {
   const snack = useSnackbar();
-  const [models, setModels] = useState<string[] | null>(null);
+  const [models, setModels] = useState<ListedModel[] | null>(null);
   const [listError, setListError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -528,7 +528,7 @@ function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: stri
     config.listModels({ workspace, providers: ["enterprise"] }).then(
       (r) => {
         const p = r.providers.find((x) => x.provider === "enterprise");
-        setModels(p?.ids ?? []);
+        setModels(p?.models ?? []);
         setListError(p?.error ?? "");
       },
       (e) => setListError(message(e)),
@@ -573,10 +573,10 @@ function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: stri
           <span className="t-label">{t("desktop.keys.default_model")}</span>
           <select className="select" value={current} disabled={busy || !org.signedIn || models === null} onChange={(e) => void choose(e.target.value)}>
             <option value="">{t("desktop.org.model_default")}</option>
-            {current && !models?.includes(current) && <option value={current}>{current}</option>}
-            {models?.map((id) => (
-              <option key={id} value={id}>
-                {id}
+            {current && !models?.some((m) => m.id === current) && <option value={current}>{current}</option>}
+            {models?.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.isDefault ? t("desktop.org.model_is_default", { name: m.displayName || m.id }) : m.displayName || m.id}
               </option>
             ))}
           </select>

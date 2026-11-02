@@ -39,6 +39,9 @@ type Status struct {
 	// Version and PID are what the running service says (GetServiceInfo).
 	Version string
 	PID     int
+	// Org is the organization Blitz is connected to: its branding's name,
+	// else its service's (spec_053_enterprise EN-51); "" for none.
+	Org string
 }
 
 // Item is a menu item's state.
@@ -71,6 +74,9 @@ func MenuFor(s Status) Menu {
 		m.State = Item{Title: i18n.T("tray.state.not_running")}
 	}
 	m.Tooltip = m.State.Title
+	if s.Org != "" {
+		m.Tooltip = s.Org + " — " + m.State.Title
+	}
 	m.Start.Enabled = !s.Running
 	m.Stop.Enabled = s.Running
 	m.Restart.Enabled = s.Running
@@ -112,7 +118,25 @@ func Probe(ctx context.Context, sock string, installed func() bool) Status {
 	if res, err := c.GetServiceInfo(ctx, connect.NewRequest(&pb.GetServiceInfoRequest{})); err == nil {
 		st.Version, st.PID = res.Msg.Version, int(res.Msg.Pid)
 	}
+	st.Org = orgName(ctx, sock)
 	return st
+}
+
+// orgName is the organization's name, from the branding the service keeps
+// (it asks nothing of the organization's service), else the name its
+// service gave; "" when not connected, or from an older service.
+func orgName(ctx context.Context, sock string) string {
+	cc := pb.NewConfigServiceClient(clientFor(sock), socket.BaseURL)
+	if b, err := cc.GetBranding(ctx, connect.NewRequest(&pb.GetBrandingRequest{})); err == nil && b.Msg.Branding.GetName() != "" {
+		return b.Msg.Branding.GetName()
+	}
+	if e, err := cc.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{})); err == nil && e.Msg.State.GetUrl() != "" {
+		if e.Msg.State.GetName() != "" {
+			return e.Msg.State.GetName()
+		}
+		return e.Msg.State.GetUrl()
+	}
+	return ""
 }
 
 // Shutdown asks the service at sock to stop (WorkspaceService.Shutdown):

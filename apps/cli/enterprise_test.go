@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,4 +122,51 @@ func TestDescribeOrganization(t *testing.T) {
 			}
 		})
 	}
+}
+
+// runCLIWith is runCLI with input on stdin.
+func runCLIWith(t *testing.T, input string, args ...string) (string, error) {
+	t.Helper()
+	cmd := newRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetIn(strings.NewReader(input))
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	stopPrivate()
+	return out.String(), err
+}
+
+// The organization's terms in the CLI: shown after sign-in when a version
+// waits, accepted with y, and declined with anything else, which signs
+// out (EN-53).
+func TestEnterpriseTerms(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Version = "v3"
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+
+	out, err := runCLIWith(t, "n\n", "enterprise", "login")
+	assert.Equal(t, exitFailure, exitCodeFor(err), out)
+	assert.Contains(t, out, "Acme Assist asks you to accept its terms (version v3):")
+	assert.Contains(t, out, "Be kind.")
+	assert.Contains(t, out, "Not accepted: signed out of Acme Assist.")
+
+	out, err = runCLIWith(t, "y\n", "enterprise", "login")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "✓ Accepted Acme Assist's terms (version v3).")
+
+	out, err = runCLI(t, "enterprise", "terms")
+	require.NoError(t, err)
+	assert.Contains(t, out, "nothing to accept")
+
+	_, err = runCLI(t, "enterprise", "logout")
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "terms")
+	assert.Error(t, err, "signed out")
 }

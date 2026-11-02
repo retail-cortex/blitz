@@ -15,6 +15,9 @@
 package main
 
 import (
+	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -120,10 +123,7 @@ are the ones Blitz uses, under its limits.`,
 				return withCode(exitFailure, err)
 			}
 			fmt.Fprintf(out, "✓ Signed in to %s as %s\n", orgName(o), o.Email)
-			if o.Terms != "" {
-				fmt.Fprintf(out, "  Your organization asks you to accept its terms (version %s) in the desktop app.\n", o.Terms)
-			}
-			return nil
+			return askTerms(ctx, cmd, s, orgName(o))
 		},
 	}
 	login.Flags().BoolVar(&browser, "browser", false, "Sign in in a browser on this computer instead of with a code")
@@ -148,7 +148,23 @@ are the ones Blitz uses, under its limits.`,
 			return nil
 		},
 	}
-	cmd.AddCommand(status, connect, disconnect, login, logout)
+	terms := &cobra.Command{
+		Use:   "terms",
+		Short: "Read your organization's terms and accept them, if a version waits",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			o, err := s.Organization(cmd.Context(), false)
+			if err != nil {
+				return err
+			}
+			return askTerms(cmd.Context(), cmd, s, orgName(o))
+		},
+	}
+	cmd.AddCommand(status, connect, disconnect, login, logout, terms)
 	return cmd
 }
 
@@ -192,4 +208,40 @@ func describeOrganization(w io.Writer, o client.Organization) {
 	if o.Terms != "" {
 		fmt.Fprintf(w, "Terms         version %s to accept\n", o.Terms)
 	}
+}
+
+// askTerms shows the organization's terms when a version waits to be
+// accepted, and asks [y/N] (spec_053_enterprise EN-53): yes records it
+// with the organization, anything else signs out of it, since its service
+// refuses everything else until they're accepted.
+func askTerms(ctx context.Context, cmd *cobra.Command, s *client.Settings, name string) error {
+	out := cmd.OutOrStdout()
+	t, err := s.Terms(ctx)
+	if err != nil {
+		return err
+	}
+	if t.Version == "" || t.Accepted {
+		fmt.Fprintf(out, "%s's terms: nothing to accept.\n", name)
+		return nil
+	}
+	fmt.Fprintf(out, "\n%s asks you to accept its terms (version %s):\n\n", name, t.Version)
+	if t.Text != "" {
+		fmt.Fprintln(out, t.Text)
+	} else {
+		fmt.Fprintf(out, "  Read them at %s\n", t.URL)
+	}
+	fmt.Fprint(out, "\nAccept them? [y/N] ")
+	answer, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		if _, err := s.SignOutOrganization(ctx); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Not accepted: signed out of %s.\n", name)
+		return withCode(exitFailure, errors.New("the organization's terms weren't accepted"))
+	}
+	if _, err := s.AcceptTerms(ctx, t.Version); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "✓ Accepted %s's terms (version %s).\n", name, t.Version)
+	return nil
 }

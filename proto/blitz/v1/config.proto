@@ -507,6 +507,11 @@ message ListedModel {
   bool has_price = 2;
   double input_per_mtok = 3;
   double output_per_mtok = 4;
+  // What people call it, when the provider says (the organization's
+  // models); "" to show the ID.
+  string display_name = 5;
+  // The organization's default model.
+  bool is_default = 6;
 }
 
 // Request message for ConfigService.GetSignIn.

@@ -22,16 +22,16 @@
 // mark, and each theme's accent Blitz's, where it reads well enough on
 // that theme. While the organization's terms wait to be accepted, they
 // show before anything else.
-import { mdiFileDocumentCheckOutline } from "@mdi/js";
+import { mdiAccountAlertOutline, mdiCloudOffOutline, mdiFileDocumentCheckOutline } from "@mdi/js";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { config } from "./api";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
-import type { Branding, OrgDocument } from "./gen/blitz/v1/config_pb";
+import type { Branding, EnterpriseState, OrgDocument } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { Markdown } from "./Markdown";
 import { openURL } from "./desktop";
-import { Button, Dialog } from "@blitz/webui";
+import { Button, Dialog, Icon } from "@blitz/webui";
 
 let current: Branding | null = null;
 const listeners = new Set<() => void>();
@@ -253,4 +253,61 @@ export function OrgDocumentDialog() {
       <Markdown text={d.text} />
     </Dialog>
   );
+}
+
+/** How often the banner asks whether the organization's service answers. */
+const checkEvery = 2 * 60_000;
+
+/**
+ * The window's word on the organization (EN-13): signed out, with Sign in
+ * (Settings › Organization), or its service not answering, with Retry.
+ * Work that needs the service waits; local work goes on.
+ */
+export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
+  const [state, setState] = useState<EnterpriseState | null>(null);
+  const [checking, setChecking] = useState(false);
+  const check = useCallback(async () => {
+    setChecking(true);
+    try {
+      setState((await config.getEnterprise({ check: true })).state ?? null);
+    } catch {
+      setState(null);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+  useEffect(() => {
+    void check();
+    window.addEventListener(configChangedEvent, check);
+    const timer = setInterval(() => void check(), checkEvery);
+    return () => {
+      window.removeEventListener(configChangedEvent, check);
+      clearInterval(timer);
+    };
+  }, [check]);
+  if (!state?.url) return null;
+  const name = appName(current) === t("desktop.brand") ? state.name || state.url : appName(current);
+  if (state.checked && !state.reachable) {
+    return (
+      <div className="banner">
+        <Icon path={mdiCloudOffOutline} />
+        <span className="spacer">{t("desktop.org.banner_unreachable", { org: name })}</span>
+        <Button variant="tonal" small disabled={checking} onClick={() => void check()}>
+          {t("desktop.org.retry")}
+        </Button>
+      </div>
+    );
+  }
+  if (!state.signedIn) {
+    return (
+      <div className="banner">
+        <Icon path={mdiAccountAlertOutline} />
+        <span className="spacer">{t("desktop.org.banner_signed_out", { org: name })}</span>
+        <Button variant="tonal" small onClick={onSignIn}>
+          {t("desktop.org.sign_in")}
+        </Button>
+      </div>
+    );
+  }
+  return null;
 }

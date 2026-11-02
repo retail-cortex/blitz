@@ -90,7 +90,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		}
 		for _, m := range pm.Models {
 			p.Ids = append(p.Ids, m.ID)
-			lm := &pb.ListedModel{Id: m.ID}
+			lm := &pb.ListedModel{Id: m.ID, DisplayName: m.DisplayName, IsDefault: m.Default}
 			if m.Price != nil {
 				lm.HasPrice, lm.InputPerMtok, lm.OutputPerMtok = true, m.Price.InputPerMTok, m.Price.OutputPerMTok
 			}

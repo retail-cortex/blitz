@@ -45,6 +45,11 @@ func TestMenuFor(t *testing.T) {
 		{"stopped login item", Status{Installed: true}, "Blitz service: stopped", true, false, false},
 		{"not installed, not running", Status{}, "Blitz service: not running", true, false, false},
 	}
+	t.Run("connected to an organization", func(t *testing.T) {
+		m := MenuFor(Status{Running: true, Org: "Acme Assist"})
+		assert.Equal(t, "Acme Assist — Blitz service: running", m.Tooltip)
+		assert.Equal(t, "Blitz service: running", m.State.Title)
+	})
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			m := MenuFor(c.s)

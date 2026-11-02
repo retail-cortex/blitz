@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
 import { useCountUse } from "./activity";
-import { appName, OrgDocumentDialog, startBranding, TermsGate, useOrgBranding } from "./orgBranding";
+import { appName, OrgBanner, OrgDocumentDialog, startBranding, TermsGate, useOrgBranding } from "./orgBranding";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
@@ -383,6 +383,7 @@ function Shell() {
             </div>
           )}
           {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
+          {service.state === "up" && <OrgBanner onSignIn={() => openSettings("organization")} />}
           <div className="main-row">
             <div className="main-col">
               {open_.length === 0 && <Welcome onOpen={open} onClose={close} onSettings={openSettings} onSearch={() => setPaletteOpen(true)} />}

@@ -235,7 +235,7 @@ func TestEnterpriseListModels(t *testing.T) {
 	got := ListModels(context.Background(), cfg)
 	require.Len(t, got, 1)
 	require.NoError(t, got[0].Err)
-	assert.Equal(t, []ListedModel{{ID: "fast"}, {ID: "smart"}}, got[0].Models)
+	assert.Equal(t, []ListedModel{{ID: "fast"}, {ID: "smart", Default: true}}, got[0].Models)
 
 	priced := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/models") {

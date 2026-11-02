@@ -65,6 +65,16 @@ func TestOrganization(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, o.Checked && o.Reachable)
 
+	org.Version = "v1"
+	terms, err := c.Terms(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, OrganizationTerms{Version: "v1", Text: "Be kind."}, terms)
+	_, err = c.AcceptTerms(ctx, "v0")
+	assert.Error(t, err, "not the version in force")
+	o, err = c.AcceptTerms(ctx, "v1")
+	require.NoError(t, err)
+	assert.Empty(t, o.Terms)
+
 	o, err = c.SignOutOrganization(ctx)
 	require.NoError(t, err)
 	assert.False(t, o.SignedIn)
@@ -88,4 +98,8 @@ func TestOrganizationUnreachable(t *testing.T) {
 	_, err = c.SignOutOrganization(ctx)
 	assert.Error(t, err)
 	assert.Equal(t, Organization{}, organization(nil))
+	_, err = c.Terms(ctx)
+	assert.Error(t, err)
+	_, err = c.AcceptTerms(ctx, "v1")
+	assert.Error(t, err)
 }

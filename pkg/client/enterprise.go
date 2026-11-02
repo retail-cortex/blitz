@@ -118,3 +118,30 @@ func (s *Settings) SignOutOrganization(ctx context.Context) (Organization, error
 	}
 	return organization(res.Msg.State), nil
 }
+
+// OrganizationTerms are the organization's terms in force: their version
+// ("" for none), whether they're accepted, and the text or its link.
+type OrganizationTerms struct {
+	Version   string
+	Accepted  bool
+	Text, URL string
+}
+
+// Terms are the organization's terms in force (ConfigService.GetTerms).
+func (s *Settings) Terms(ctx context.Context) (OrganizationTerms, error) {
+	res, err := s.c.GetTerms(ctx, connect.NewRequest(&pb.GetTermsRequest{}))
+	if err != nil {
+		return OrganizationTerms{}, fromAPI(err)
+	}
+	return OrganizationTerms{Version: res.Msg.Version, Accepted: res.Msg.Accepted, Text: res.Msg.Text, URL: res.Msg.Url}, nil
+}
+
+// AcceptTerms records that the person accepted version of the terms
+// (ConfigService.AcceptTerms).
+func (s *Settings) AcceptTerms(ctx context.Context, version string) (Organization, error) {
+	res, err := s.c.AcceptTerms(ctx, connect.NewRequest(&pb.AcceptTermsRequest{Version: version}))
+	if err != nil {
+		return Organization{}, fromAPI(err)
+	}
+	return organization(res.Msg.State), nil
+}

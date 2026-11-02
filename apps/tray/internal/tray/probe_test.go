@@ -15,6 +15,7 @@
 package tray
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"net/http"
 	"path/filepath"
@@ -52,4 +53,53 @@ func TestProbeLeavesNothingBehind(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	assert.LessOrEqual(t, runtime.NumGoroutine(), before+5, "goroutines grew with each probe")
+}
+
+// orgConfig answers the tray's questions about the organization.
+type orgConfig struct {
+	pb.UnimplementedConfigServiceHandler
+	branding string
+	state    *pb.EnterpriseState
+}
+
+func (o orgConfig) GetBranding(context.Context, *connect.Request[pb.GetBrandingRequest]) (*connect.Response[pb.GetBrandingResponse], error) {
+	res := &pb.GetBrandingResponse{}
+	if o.branding != "" {
+		res.Branding = &pb.Branding{Name: o.branding}
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (o orgConfig) GetEnterprise(context.Context, *connect.Request[pb.GetEnterpriseRequest]) (*connect.Response[pb.GetEnterpriseResponse], error) {
+	return connect.NewResponse(&pb.GetEnterpriseResponse{State: o.state}), nil
+}
+
+// The tray names the organization from the kept branding, else from what
+// its service says, else its address; none when not connected or from a
+// service too old to say.
+func TestProbeOrg(t *testing.T) {
+	cases := map[string]struct {
+		cfg  pb.ConfigServiceHandler
+		want string
+	}{
+		"its branding":     {orgConfig{branding: "Acme Assist", state: &pb.EnterpriseState{Url: "https://b.acme.com"}}, "Acme Assist"},
+		"its service":      {orgConfig{state: &pb.EnterpriseState{Url: "https://b.acme.com", Name: "Acme"}}, "Acme"},
+		"its address":      {orgConfig{state: &pb.EnterpriseState{Url: "https://b.acme.com"}}, "https://b.acme.com"},
+		"not connected":    {orgConfig{state: &pb.EnterpriseState{}}, ""},
+		"an older service": {pb.UnimplementedConfigServiceHandler{}, ""},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			sock := filepath.Join(shortTemp(t), "blitz.sock")
+			ln, err := socket.Listen(sock)
+			require.NoError(t, err)
+			mux := http.NewServeMux()
+			mux.Handle(pb.NewWorkspaceServiceHandler(pb.UnimplementedWorkspaceServiceHandler{}))
+			mux.Handle(pb.NewConfigServiceHandler(c.cfg))
+			srv := &http.Server{Handler: mux}
+			go func() { _ = srv.Serve(ln) }()
+			t.Cleanup(func() { srv.Close() })
+			assert.Equal(t, c.want, Probe(context.Background(), sock, func() bool { return true }).Org)
+		})
+	}
 }
