@@ -86,6 +86,19 @@ func TestRunEval(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runs, 1)
 	assert.Equal(t, run.ID, runs[0].ID)
+
+	// Studio's health sees the eval, its skill and its run, case by case
+	// (spec_045).
+	in := w.healthInputs(context.Background())
+	require.Len(t, in.Evals, 1)
+	assert.Equal(t, 3, in.Evals[0].Cases)
+	require.Len(t, in.Evals[0].EvalRuns, 1)
+	assert.Len(t, in.Evals[0].EvalRuns[0].Results, 3)
+	var skills []string
+	for _, sk := range in.Skills {
+		skills = append(skills, sk.Name+":"+sk.Detail)
+	}
+	assert.Contains(t, skills, "terse:simple")
 }
 
 func TestRunEvalRefusals(t *testing.T) {

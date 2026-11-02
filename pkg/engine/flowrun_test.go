@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
+	"github.com/retail-cortex/blitz/pkg/engine/health"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -495,4 +496,26 @@ func TestWorkerRunsWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RunFailed, run.Status, "no write permission: %+v", run)
 	assert.NoFileExists(t, filepath.Join(w.Dir(), "reports", "secret.md"))
+
+	// Studio's health sees each job's runs and its workflow's (spec_045).
+	in := w.healthInputs(context.Background())
+	runs := map[string][]health.Run{}
+	for _, s := range in.Workers {
+		runs["job/"+s.Name] = s.Runs
+	}
+	for _, s := range in.Workflows {
+		runs["workflow/"+s.Name] = s.Runs
+	}
+	require.Len(t, runs["job/night"], 1)
+	assert.Equal(t, health.RunDone, runs["job/night"][0].Status)
+	require.Len(t, runs["job/denied"], 1)
+	assert.Equal(t, health.RunFailed, runs["job/denied"][0].Status)
+	require.Len(t, runs["workflow/nightly"], 2, "both jobs ran it")
+	statuses := []string{runs["workflow/nightly"][0].Status, runs["workflow/nightly"][1].Status}
+	assert.ElementsMatch(t, []string{health.RunDone, health.RunFailed}, statuses)
+	for _, r := range runs["workflow/nightly"] {
+		if r.Status == health.RunFailed {
+			assert.Equal(t, "save", r.FailedStep)
+		}
+	}
 }

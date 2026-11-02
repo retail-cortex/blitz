@@ -111,11 +111,19 @@ func TestStrictJobs(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs", "", true), "children or content")
 	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs?children", "", true))
 	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, "/api/v1/resources/urn:blitz:jobs?content", "", true))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/api/v1/runs/r1/answer", "not JSON", true))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/api/v1/runs/r1/answer", `{"note":"?"}`, true))
+	assert.Equal(t, http.StatusConflict, do(http.MethodPost, "/api/v1/runs/r1/answer", `{"approve":true}`, true), "not waiting")
+	assert.Equal(t, http.StatusUnauthorized, do(http.MethodGet, "/api/v1/usage", "", false))
+	assert.Equal(t, http.StatusOK, do(http.MethodGet, "/api/v1/usage", "", true))
 	s.JobsRefused = true
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/jobs/j1/runs", ""},
 		{http.MethodPost, "/api/v1/jobs/j1/run", ""},
 		{http.MethodPut, "/api/v1/jobs/j1/enabled", `{"enabled":false}`},
+		{http.MethodGet, "/api/v1/runs/pending", ""},
+		{http.MethodGet, "/api/v1/runs/watch", ""},
+		{http.MethodPost, "/api/v1/runs/r1/answer", `{"approve":true}`},
 	} {
 		assert.Equal(t, http.StatusNotFound, do(c.method, c.path, c.body, true), c.path)
 	}
