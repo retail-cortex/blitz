@@ -278,6 +278,8 @@ type ServiceJob struct {
 	Name      string `json:"name"`
 	Schedule  string `json:"schedule"`
 	Enabled   bool   `json:"enabled"`
+	// NextRun is when it runs next (nil: not scheduled).
+	NextRun *time.Time `json:"next_run,omitempty"`
 }
 
 // ServiceRun is one of its runs.

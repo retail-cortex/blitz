@@ -1147,7 +1147,7 @@ func TestPublishToOrganization(t *testing.T) {
 	_, err = publish()
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
-	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go", Lock: "default"})
+	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go"})
 	require.NoError(t, err)
 	assert.Equal(t, "open", made.Msg.Review.State)
 	assert.Equal(t, []string{"agents/writer.md", "skills/go/SKILL.md", "skills/go/lint.sh"}, made.Msg.Review.Paths)
@@ -1155,6 +1155,7 @@ func TestPublishToOrganization(t *testing.T) {
 	org.Mu.Lock()
 	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales]")
 	assert.Equal(t, "#!/bin/sh\ngolangci-lint run\n", org.Published["skills/go/lint.sh"])
+	assert.Contains(t, org.Published["skills/go/SKILL.md"], "lock: default", "none named: a default")
 	org.Mu.Unlock()
 	data, err := os.ReadFile(filepath.Join(ws, ".agents", "agents", "writer.md"))
 	require.NoError(t, err)
@@ -1207,6 +1208,9 @@ func TestOrgItems(t *testing.T) {
 
 	_, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: ws}))
 	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = copyItem("rule", "style")
+	_, info = errorReason(t, err)
 	assert.Equal(t, "NOT_CONNECTED", info.Reason)
 	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
 	require.NoError(t, err)

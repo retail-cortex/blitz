@@ -113,4 +113,25 @@ func TestOrganizationUnreachable(t *testing.T) {
 	assert.Error(t, err)
 	_, _, _, err = c.GitCredential(ctx, "x")
 	assert.Error(t, err)
+
+	// The organization's jobs, usage and catalog (EN-24, EN-34, EN-36, EN-42, EN-43).
+	for name, call := range map[string]func() error{
+		"ServiceJobs":           func() error { _, err := c.ServiceJobs(ctx); return err },
+		"ServiceJobRuns":        func() error { _, err := c.ServiceJobRuns(ctx, "/x", "digest"); return err },
+		"RunServiceJob":         func() error { _, err := c.RunServiceJob(ctx, "j"); return err },
+		"SetServiceJobEnabled":  func() error { return c.SetServiceJobEnabled(ctx, "j", true) },
+		"ServiceRunFiles":       func() error { _, err := c.ServiceRunFiles(ctx, "urn:blitz:artifacts:a:b:c"); return err },
+		"SaveServiceRunFile":    func() error { _, err := c.SaveServiceRunFile(ctx, "urn:blitz:artifacts:a:b:c/f"); return err },
+		"ServiceApprovals":      func() error { _, err := c.ServiceApprovals(ctx); return err },
+		"AnswerServiceRun":      func() error { _, err := c.AnswerServiceRun(ctx, "r", true, ""); return err },
+		"OrgUsage":              func() error { _, err := c.OrgUsage(ctx); return err },
+		"Publishable":           func() error { _, err := c.Publishable(ctx, "/x"); return err },
+		"PublishToOrganization": func() error { _, err := c.PublishToOrganization(ctx, "/x", "", nil); return err },
+		"CatalogReviews":        func() error { _, err := c.CatalogReviews(ctx, ""); return err },
+		"OrgItems":              func() error { _, err := c.OrgItems(ctx, "/x", ""); return err },
+		"CopyOrgItem":           func() error { _, err := c.CopyOrgItem(ctx, "/x", "rule", "style"); return err },
+		"ListModels":            func() error { _, err := c.ListModels(ctx, "/x"); return err },
+	} {
+		assert.Error(t, call(), name)
+	}
 }

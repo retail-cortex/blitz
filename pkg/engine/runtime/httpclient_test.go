@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -294,6 +295,37 @@ func TestBusyNote(t *testing.T) {
 	assert.Empty(t, ask(0, "/v1/messages", `{"model":"claude"}`), "not retried: the error says it")
 	status = http.StatusBadRequest
 	assert.Empty(t, ask(2, "/v1/messages", `{"model":"claude"}`))
+}
+
+// The model a request asks for: Gemini's from its path, the others' from
+// the body's "model", wherever it is; "" when neither says.
+func TestModelOf(t *testing.T) {
+	cases := map[string]struct{ path, body, want string }{
+		"gemini":          {"/v1beta/models/gemini-4-flash:streamGenerateContent", "", "gemini-4-flash"},
+		"first":           {"/v1/responses", `{"model":"fast","input":[]}`, "fast"},
+		"after the rest":  {"/v1/messages", `{"max_tokens":5,"messages":[{"role":"user"}],"model":"smart"}`, "smart"},
+		"none":            {"/v1/messages", `{"max_tokens":5}`, ""},
+		"not a name":      {"/v1/messages", `{"model":5}`, ""},
+		"cut short":       {"/v1/messages", `{"max_tokens":`, ""},
+		"not an object":   {"/v1/messages", `[1]`, ""},
+		"not JSON at all": {"/v1/messages", `}`, ""},
+		"a key cut short": {"/v1/messages", `{"mod`, ""},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var body io.Reader
+			if c.body != "" {
+				body = strings.NewReader(c.body)
+			}
+			req, err := http.NewRequest(http.MethodPost, "https://api.example"+c.path, body)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, modelOf(req))
+		})
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://api.example/v1/messages", strings.NewReader(`{"model":"x"}`))
+	require.NoError(t, err)
+	req.GetBody = func() (io.ReadCloser, error) { return nil, errors.New("gone") }
+	assert.Empty(t, modelOf(req), "a body that can't be read again")
 }
 
 // freezer is a TCP proxy whose connections can go silent, as a VPN or NAT

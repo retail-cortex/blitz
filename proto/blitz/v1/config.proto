@@ -1769,7 +1769,7 @@ message ListPublishableResponse {
 message PublishItem {
   string kind = 1;
   string name = 2;
-  // locked or default.
+  // locked or default ("" is default).
   string lock = 3;
   // Who it's for; everyone when none.
   repeated string groups = 4;

@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -126,7 +127,8 @@ func (h configService) PublishToOrganization(ctx context.Context, r req[pb.Publi
 			data := files[p]
 			if kind != catalog.SkillFile {
 				found = true
-				if data, err = catalog.Place(p, data, it.Lock, it.Groups); err != nil {
+				// None named is a default, as the list says.
+				if data, err = catalog.Place(p, data, cmp.Or(it.Lock, catalog.Default), it.Groups); err != nil {
 					return nil, invalid(fmt.Errorf("%s: %w", p, err))
 				}
 				_, bad := catalog.Check(p, data)

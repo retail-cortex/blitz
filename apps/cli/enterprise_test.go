@@ -265,9 +265,11 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	)
 	set := "urn:blitz:artifacts:" + ws + ":" + job + ":" + run
 	org.Mu.Lock()
-	org.ServiceJobs = []enterprisetest.ServiceJob{{ID: job, Workspace: "plans", Name: "digest", Schedule: "Daily at 6 AM", Enabled: true},
+	next := time.Date(2026, 11, 3, 6, 0, 0, 0, time.Local)
+	org.ServiceJobs = []enterprisetest.ServiceJob{{ID: job, Workspace: "plans", Name: "digest", Schedule: "Daily at 6 AM", Enabled: true, NextRun: &next},
 		{ID: "other", Workspace: "q4", Name: "digest"}, {ID: "lone", Workspace: "q4", Name: "tidy"}}
-	org.ServiceRuns = map[string][]enterprisetest.ServiceRun{job: {{ID: run, Status: "succeeded", Trigger: "schedule", Output: "Done.", Branch: "blitz/jobs/digest/" + run, Artifacts: set, CostUSD: 0.05}}}
+	org.ServiceRuns = map[string][]enterprisetest.ServiceRun{job: {{ID: run, Status: "succeeded", Trigger: "schedule", Output: "Done.", Branch: "blitz/jobs/digest/" + run, Artifacts: set, CostUSD: 0.05},
+		{ID: "paused-1", Status: "paused", Trigger: "manual", Pending: map[string]string{"tool": "run_shell_command", "detail": "make deploy"}}}}
 	org.Files = map[string][]enterprisetest.File{set: {{URN: set + "/out/report.csv", Title: "out/report.csv", Size: 4}}}
 	org.Contents = map[string]string{set + "/out/report.csv": "a,b\n"}
 	org.Waiting = []enterprisetest.GoingRun{{ServiceRun: enterprisetest.ServiceRun{ID: run, Status: "paused", Output: "Ready to deploy.",
@@ -278,6 +280,7 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "plans")
 	assert.Contains(t, out, "Daily at 6 AM")
+	assert.Contains(t, out, "Nov 3 06:00", "when it runs next")
 	_, err = runCLI(t, "enterprise", "jobs", "runs", "digest")
 	assert.ErrorContains(t, err, "say which with --workspace")
 	_, err = runCLI(t, "enterprise", "jobs", "runs", "nope")
@@ -287,6 +290,7 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	assert.Contains(t, out, "succeeded (schedule)  $0.0500")
 	assert.Contains(t, out, "branch: blitz/jobs/digest/"+run)
 	assert.Contains(t, out, "files: blitz enterprise jobs files "+set)
+	assert.Contains(t, out, "waits for an answer: run_shell_command make deploy (blitz enterprise jobs approve|deny paused-1)")
 	out, err = runCLI(t, "enterprise", "jobs", "runs", "tidy")
 	require.NoError(t, err)
 	assert.Contains(t, out, "It hasn't run yet.")
@@ -352,10 +356,12 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(pubWS, ".agents", "agents"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "writer.md"), []byte("---\nname: writer\ndescription: Writes briefs\n---\nWrite.\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "broken.md"), []byte("no front matter"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "helper.md"), []byte("---\nname: helper\ndescription: Helps\ngroups: [eng]\n---\nHelp.\n"), 0o644))
 	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS)
 	require.NoError(t, err)
 	assert.Contains(t, out, "agent/writer  (default)")
 	assert.Contains(t, out, "agent/broken  (default)\n    ! ")
+	assert.Contains(t, out, "agent/helper  (default, for eng)")
 	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/writer", "--lock", "locked", "--groups", "sales,eng")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ In review: Publish agent writer")
@@ -372,6 +378,13 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "reviews", "--state", "approved")
 	require.NoError(t, err)
 	assert.Contains(t, out, "No reviews.")
+	org.Mu.Lock()
+	org.Reviews = append(org.Reviews, map[string]any{"id": "rev-9", "title": "Publish rule style", "by_email": "bo@acme.com", "paths": []string{"rules/style.md"},
+		"problems": []string{"rules/style.md: no front matter"}, "state": "approved", "version": 7, "note": "Looks good.", "created": time.Now()})
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "reviews")
+	require.NoError(t, err)
+	assert.Contains(t, out, "rev-9  published in version 7  by bo@acme.com: Publish rule style\n    ! rules/style.md: no front matter\n    Looks good.")
 	empty := t.TempDir()
 	out, err = runCLI(t, "enterprise", "publish", "-d", empty)
 	require.NoError(t, err)
