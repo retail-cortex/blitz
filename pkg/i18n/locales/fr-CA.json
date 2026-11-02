@@ -1501,6 +1501,8 @@
     "desktop.org.terms": "Votre organisation vous demande d'accepter ses conditions (version {version}).",
     "desktop.org.roles": "Vos rôles : {roles}",
     "desktop.org.disconnect": "Déconnecter",
+    "desktop.org.item_locked": "De votre organisation, verrouillé",
+    "desktop.org.item_default": "De votre organisation",
     "desktop.org.banner_signed_out": "Votre session sur {org} est fermée : ses modèles attendent que vous vous reconnectiez.",
     "desktop.org.banner_unreachable": "{org} ne répond pas : ses modèles attendent. Votre travail local continue.",
     "desktop.org.terms_title": "Conditions de {org}",

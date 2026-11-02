@@ -43,6 +43,10 @@ type AgentInfo struct {
 	// PinnedModel is the model the agent is pinned to ("" when it runs on
 	// the configured model).
 	PinnedModel string
+	// OrgLock is how the organization's catalog applies it: "locked",
+	// "default", or "" for an agent of the person's, the workspace's or
+	// Blitz's own (spec_053_enterprise EN-34).
+	OrgLock string
 }
 
 // ModelInfo names the model the active agent runs on.

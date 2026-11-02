@@ -57,6 +57,7 @@ func (w *Workspace) agentInfo(name string) api.AgentInfo {
 	info := api.AgentInfo{Name: name, Active: name == w.engine.ActiveAgent()}
 	if spec, ok := w.agents.Get(name); ok {
 		info.DisplayName, info.Description = spec.DisplayName, spec.Description
+		info.OrgLock = w.cfg.Org.LockOf(spec.Path)
 	}
 	if m, pinned := w.engine.AgentModel(name); pinned {
 		info.PinnedModel = m

@@ -54,14 +54,14 @@ func TestOrgLayer(t *testing.T) {
 
 	f, err := os.OpenFile(filepath.Join(home, ".blitz", ".env.toml"), os.O_APPEND|os.O_WRONLY, 0o600)
 	require.NoError(t, err)
-	_, err = f.WriteString("\n[[mcp.servers]]\nname = \"github\"\ncommand = [\"mine\"]\n\n[[mcp.servers]]\nname = \"notes\"\ncommand = [\"notes\"]\n")
+	_, err = f.WriteString("\n[[mcp.servers]]\nname = \"github\"\ncommand = \"mine\"\n\n[[mcp.servers]]\nname = \"notes\"\ncommand = \"notes\"\n")
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
 	expires := time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
 	dir := writeOrg(t, home, `{"policy":{"tools":{"off":["web_fetch"]},"mcp":{"own":false}},"expires":"2026-11-09T00:00:00Z"}`, map[string]string{
-		"locked/mcp/github.toml": "command = [\"theirs\"]\n",
-		"default/mcp/jira.toml":  "command = [\"jira\"]\n",
+		"locked/mcp/github.toml": "command = \"theirs\"\n",
+		"default/mcp/jira.toml":  "command = \"jira\"\n",
 	})
 	cfg, err = Load("")
 	require.NoError(t, err)
@@ -80,26 +80,30 @@ func TestOrgLayer(t *testing.T) {
 	rules := cfg.Org.LockedFirst([]string{"ws"}, "rules", "guardrails")
 	assert.Equal(t, []string{filepath.Join(dir, "catalog", "locked", "rules"), filepath.Join(dir, "catalog", "locked", "guardrails"), "ws",
 		filepath.Join(dir, "catalog", "default", "rules"), filepath.Join(dir, "catalog", "default", "guardrails")}, rules)
+	assert.Equal(t, "locked", cfg.Org.LockOf(filepath.Join(dir, "catalog", "locked", "agents", "a.md")))
+	assert.Equal(t, "default", cfg.Org.LockOf(filepath.Join(dir, "catalog", "default", "agents", "a.md")))
+	assert.Equal(t, "", cfg.Org.LockOf(filepath.Join(home, ".blitz", "agents", "a.md")))
+	assert.Equal(t, "", OrgLayer{}.LockOf("/x"))
 	cmds := cfg.Org.Around("commands", []string{"mine"})
 	assert.Equal(t, "mine", cmds[1])
 
-	names := map[string][]string{}
+	names := map[string]string{}
 	for _, s := range cfg.MCP.Servers {
 		names[s.Name] = s.Command
 	}
-	assert.Equal(t, map[string][]string{"github": {"theirs"}, "jira": {"jira"}}, names, "the person's own dropped; the locked one; the default one")
+	assert.Equal(t, map[string]string{"github": "theirs", "jira": "jira"}, names, "the person's own dropped; the locked one; the default one")
 
 	t.Run("the person's own allowed", func(t *testing.T) {
 		writeOrg(t, home, `{"policy":{"mcp":{"own":true}}}`, nil)
 		cfg, err := Load("")
 		require.NoError(t, err)
-		names := map[string][]string{}
+		names := map[string]string{}
 		for _, s := range cfg.MCP.Servers {
 			names[s.Name] = s.Command
 		}
-		assert.Equal(t, []string{"theirs"}, names["github"], "locked wins over theirs")
-		assert.Equal(t, []string{"notes"}, names["notes"])
-		assert.Equal(t, []string{"jira"}, names["jira"])
+		assert.Equal(t, "theirs", names["github"], "locked wins over theirs")
+		assert.Equal(t, "notes", names["notes"])
+		assert.Equal(t, "jira", names["jira"])
 		assert.False(t, cfg.Org.Expired(time.Now()), "no expiry")
 	})
 	t.Run("a policy file that isn't JSON", func(t *testing.T) {

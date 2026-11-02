@@ -41,6 +41,20 @@ type OrgLayer struct {
 	Expires time.Time
 }
 
+// LockOf is how the catalog applies the item at path: "locked" or
+// "default" for one of its files, "" for any other.
+func (o OrgLayer) LockOf(path string) string {
+	switch {
+	case !o.Active() || path == "":
+		return ""
+	case strings.HasPrefix(path, o.Locked+string(filepath.Separator)):
+		return "locked"
+	case strings.HasPrefix(path, o.Defaults+string(filepath.Separator)):
+		return "default"
+	}
+	return ""
+}
+
 // Active reports whether a catalog applies.
 func (o OrgLayer) Active() bool { return o.Defaults != "" || o.Locked != "" }
 

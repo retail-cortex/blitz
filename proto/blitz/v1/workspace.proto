@@ -673,6 +673,9 @@ message AgentInfo {
   bool active = 4;
   // The model it is pinned to; empty when it runs on the configured model.
   string pinned_model = 5;
+  // From the organization's catalog: "locked" (it applies, and can't be
+  // changed) or "default"; "" for any other (spec_053_enterprise EN-34).
+  string org_lock = 6;
 }
 
 // Request message for WorkspaceService.ListAgents.

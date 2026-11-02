@@ -386,7 +386,13 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
             { heading: t("desktop.status.agent_heading") },
             ...agents.map((a) => ({
               label: a.displayName || a.name,
-              detail: [a.description, a.pinnedModel && t("desktop.status.agent_pinned", { model: a.pinnedModel })].filter(Boolean).join(" · "),
+              detail: [
+                a.orgLock && t(a.orgLock === "locked" ? "desktop.org.item_locked" : "desktop.org.item_default"),
+                a.description,
+                a.pinnedModel && t("desktop.status.agent_pinned", { model: a.pinnedModel }),
+              ]
+                .filter(Boolean)
+                .join(" · "),
               icon: mdiRobotOutline,
               on: a.active,
               onSelect: () => void setAgent(a.name, a.displayName || a.name),

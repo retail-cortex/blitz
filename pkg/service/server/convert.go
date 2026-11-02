@@ -74,7 +74,7 @@ func savedMsg(s api.Saved) *pb.Saved {
 }
 
 func agentMsg(a api.AgentInfo) *pb.AgentInfo {
-	return &pb.AgentInfo{Name: a.Name, DisplayName: a.DisplayName, Description: a.Description, Active: a.Active, PinnedModel: a.PinnedModel}
+	return &pb.AgentInfo{Name: a.Name, DisplayName: a.DisplayName, Description: a.Description, Active: a.Active, PinnedModel: a.PinnedModel, OrgLock: a.OrgLock}
 }
 
 func modelSettingsMsg(s config.ModelSettings) *pb.ModelSettings {
