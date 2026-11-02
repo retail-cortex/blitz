@@ -394,3 +394,32 @@ func (h configService) GetOrgUsage(ctx context.Context, _ req[pb.GetOrgUsageRequ
 	}
 	return ok(out)
 }
+
+func noticesMsg(n enterprise.Notices) *pb.OrgNotices {
+	return &pb.OrgNotices{Email: n.Email, Webhook: n.Webhook, EveryRun: n.EveryRun, EmailAvailable: n.EmailAvailable}
+}
+
+func (h configService) GetOrgNotices(ctx context.Context, _ req[pb.GetOrgNoticesRequest]) (*connect.Response[pb.GetOrgNoticesResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	n, err := c.Notices(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.GetOrgNoticesResponse{Notices: noticesMsg(n)})
+}
+
+func (h configService) SetOrgNotices(ctx context.Context, r req[pb.SetOrgNoticesRequest]) (*connect.Response[pb.SetOrgNoticesResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	in := r.Msg.GetNotices()
+	n, err := c.SetNotices(ctx, enterprise.Notices{Email: in.GetEmail(), Webhook: in.GetWebhook(), EveryRun: in.GetEveryRun()})
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.SetOrgNoticesResponse{Notices: noticesMsg(n)})
+}

@@ -266,6 +266,10 @@ service ConfigService {
   // left, the rate limits, and whether full prompt logs keep their
   // requests.
   rpc GetOrgUsage(GetOrgUsageRequest) returns (GetOrgUsageResponse);
+  // How the person hears of their jobs' runs on the organization's
+  // service (the enterprise spec's JB-31), and setting it.
+  rpc GetOrgNotices(GetOrgNoticesRequest) returns (GetOrgNoticesResponse);
+  rpc SetOrgNotices(SetOrgNoticesRequest) returns (SetOrgNoticesResponse);
   // The workspace's items that can be published to the organization's
   // catalog (EN-36): its .agents folder's agents, skills, rules,
   // guardrails, commands and connectors, each with how it applies now and
@@ -1852,4 +1856,33 @@ message CopyOrgItemRequest {
 message CopyOrgItemResponse {
   // The files written, in the workspace.
   repeated string paths = 1;
+}
+
+// How the person hears of their jobs' runs on the organization's service.
+message OrgNotices {
+  // By email (when the service sends email: email_available).
+  bool email = 1;
+  // An https address the notices are POSTed to ("": none).
+  string webhook = 2;
+  // Every run's end, not only failures and runs waiting for an answer.
+  bool every_run = 3;
+  bool email_available = 4;
+}
+
+// Request message for ConfigService.GetOrgNotices.
+message GetOrgNoticesRequest {}
+
+// Response message for ConfigService.GetOrgNotices.
+message GetOrgNoticesResponse {
+  OrgNotices notices = 1;
+}
+
+// Request message for ConfigService.SetOrgNotices.
+message SetOrgNoticesRequest {
+  OrgNotices notices = 1;
+}
+
+// Response message for ConfigService.SetOrgNotices.
+message SetOrgNoticesResponse {
+  OrgNotices notices = 1;
 }

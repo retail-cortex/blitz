@@ -1254,6 +1254,17 @@ func TestOrgItems(t *testing.T) {
 	_, err = copyItem("rule", "style")
 	_, info = errorReason(t, err)
 	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
+
+	// How the person hears of their jobs' runs (JB-31).
+	notices, err := c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))
+	require.NoError(t, err)
+	assert.True(t, notices.Msg.Notices.Email)
+	set, err := c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: &pb.OrgNotices{Webhook: "https://hooks.example/x", EveryRun: true}}))
+	require.NoError(t, err)
+	assert.Equal(t, "https://hooks.example/x", set.Msg.Notices.Webhook)
+	assert.False(t, set.Msg.Notices.Email)
+	_, err = c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: &pb.OrgNotices{Webhook: "http://x"}}))
+	assert.Error(t, err)
 }
 
 // Device management's organization (EN-10): connected from the start,

@@ -72,6 +72,10 @@ Settings › Providers & keys shows **Your usage** of your organization's models
 
 If you're one of your organization's Admins, Studio's **Publish to organization…** (the cloud button at the top) sends the workspace's agents, skills, rules, guardrails, commands and connectors to its catalog. Choose each one, say whether it's **Locked** (nobody changes or switches it off) or a **Default** (a workspace or person may), and which groups it's for. They go as one review: another Admin approves it in the admin console's **Catalog › Reviews**, and everyone's Blitz gets them with the next version. Anything the catalog would refuse is marked before you send it. From the terminal: `blitz enterprise publish` lists what can go; `blitz enterprise publish agent/writer --lock locked --groups sales` sends it; `blitz enterprise reviews` shows how they stand.
 
+## Job notices
+
+When a job of yours runs on your organization's service, Settings › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to change them. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
+
 ## Your organization's workspaces
 
 Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. If you're only a Viewer of one, it's read-only on your computer: Blitz's file tools, its commands and the editor won't change it, and say why.

@@ -893,6 +893,7 @@ const fakeOrgItems = [
   { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "default", groups: [], overridden: false },
   { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: ["eng", "sales"], overridden: false },
 ];
+const fakeNotices = { email: true, webhook: "", everyRun: false, emailAvailable: true };
 const fakeReviews: { id: string; title: string; byEmail: string; paths: string[]; problems: string[]; state: string; note: string; version: number; created: ReturnType<typeof now> }[] = [
   { id: "rev-1", title: "Publish agent writer", byEmail: "ana@acme.com", paths: ["agents/writer.md"], problems: [], state: "approved", note: "", version: 7, created: timestampFromDate(new Date(Date.now() - 50 * 3600e3)) },
   { id: "rev-2", title: "Publish rule short-answers", byEmail: "bo@acme.com", paths: ["rules/short-answers.md"], problems: [], state: "rejected", note: "Too strict for support.", version: 0, created: timestampFromDate(new Date(Date.now() - 120 * 3600e3)) },
@@ -2689,6 +2690,14 @@ export function installFake() {
           return { review };
         },
         listCatalogReviews: () => ({ reviews: fakeReviews }),
+        // Job notices (JB-31): ?org&signedin.
+        getOrgNotices: () => ({ notices: fakeNotices }),
+        setOrgNotices: async ({ notices }) => {
+          await sleep(300);
+          if (notices?.webhook && !notices.webhook.startsWith("https://")) throw new ConnectError("a webhook is an https:// address", Code.InvalidArgument);
+          Object.assign(fakeNotices, notices);
+          return { notices: fakeNotices };
+        },
         // The organization's items in Studio's lists (EN-34): ?org&signedin.
         listOrgItems: ({ kind }) => ({
           version: 7,

@@ -220,3 +220,22 @@ func (s *Settings) CopyOrgItem(ctx context.Context, dir, kind, name string) ([]s
 	}
 	return res.Msg.Paths, nil
 }
+
+// OrgNotices are how the person hears of their jobs' runs on the
+// organization's service (ConfigService.GetOrgNotices).
+func (s *Settings) OrgNotices(ctx context.Context) (*pb.OrgNotices, error) {
+	res, err := s.c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Notices, nil
+}
+
+// SetOrgNotices keeps them (ConfigService.SetOrgNotices).
+func (s *Settings) SetOrgNotices(ctx context.Context, n *pb.OrgNotices) (*pb.OrgNotices, error) {
+	res, err := s.c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: n}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Notices, nil
+}

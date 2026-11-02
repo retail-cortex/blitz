@@ -75,3 +75,28 @@ func (c *Client) Usage(ctx context.Context) (Usage, error) {
 	err := c.signedCall(ctx, http.MethodGet, "/api/v1/usage", nil, &u)
 	return u, err
 }
+
+// Notices are how the person hears of their jobs' runs on the service
+// (the enterprise spec's JB-31): by email, by a webhook (https), and for
+// every run or only failures and runs waiting for their answer.
+type Notices struct {
+	Email    bool   `json:"email"`
+	Webhook  string `json:"webhook"`
+	EveryRun bool   `json:"every_run"`
+	// EmailAvailable says the service sends email at all.
+	EmailAvailable bool `json:"email_available,omitempty"`
+}
+
+// Notices are the person's notice settings.
+func (c *Client) Notices(ctx context.Context) (Notices, error) {
+	var n Notices
+	err := c.signedCall(ctx, http.MethodGet, "/api/v1/notices", nil, &n)
+	return n, err
+}
+
+// SetNotices keeps the person's notice settings, answered as kept.
+func (c *Client) SetNotices(ctx context.Context, n Notices) (Notices, error) {
+	var out Notices
+	err := c.signedCall(ctx, http.MethodPut, "/api/v1/notices", map[string]any{"email": n.Email, "webhook": n.Webhook, "every_run": n.EveryRun}, &out)
+	return out, err
+}

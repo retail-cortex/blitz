@@ -28,6 +28,7 @@ import { message } from "./errors";
 import { configChanged } from "./events";
 import type { EnterpriseState } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
+import { OrgNoticesCard } from "./OrgNotices";
 import { Button, Field, Icon, useSnackbar } from "@blitz/webui";
 
 /** The organization's service and the sign-in to it. */
@@ -182,6 +183,7 @@ export function OrganizationSettings() {
         </div>
       )}
       {error && <p className="error-text t-body-sm">{error}</p>}
+      {state?.signedIn && <OrgNoticesCard key={state.email} />}
     </div>
   );
 }

@@ -440,6 +440,19 @@ func TestEnterpriseCatalogCommand(t *testing.T) {
 	assert.Contains(t, out, "rule/style  (default)  this workspace has its own")
 	assert.NotContains(t, out, "reviewer")
 
+	// How one hears of one's jobs' runs (JB-31).
+	out, err = runCLI(t, "enterprise", "notices")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Email     on\nWebhook   none\nFor       failures and runs waiting for your answer")
+	_, err = runCLI(t, "enterprise", "notices", "--webhook", "http://hooks.example/x")
+	assert.ErrorContains(t, err, "https://")
+	out, err = runCLI(t, "enterprise", "notices", "--email=false", "--webhook", "https://hooks.example/x", "--every-run")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Email     off\nWebhook   https://hooks.example/x\nFor       every run")
+	org.Mu.Lock()
+	assert.Equal(t, map[string]any{"email": false, "webhook": "https://hooks.example/x", "every_run": true}, org.Notices)
+	org.Mu.Unlock()
+
 	// The organization's models, with what each can do (EN-21).
 	out, err = runCLI(t, "models")
 	require.NoError(t, err)

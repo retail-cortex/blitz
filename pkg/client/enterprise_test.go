@@ -25,6 +25,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/service/servicetest"
 	"github.com/stretchr/testify/assert"
+
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,6 +133,8 @@ func TestOrganizationUnreachable(t *testing.T) {
 		"OrgItems":              func() error { _, err := c.OrgItems(ctx, "/x", ""); return err },
 		"CopyOrgItem":           func() error { _, err := c.CopyOrgItem(ctx, "/x", "rule", "style"); return err },
 		"ListModels":            func() error { _, err := c.ListModels(ctx, "/x"); return err },
+		"OrgNotices":            func() error { _, err := c.OrgNotices(ctx); return err },
+		"SetOrgNotices":         func() error { _, err := c.SetOrgNotices(ctx, &pb.OrgNotices{}); return err },
 	} {
 		assert.Error(t, call(), name)
 	}

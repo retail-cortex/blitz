@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -247,6 +248,8 @@ type Service struct {
 	Answers map[string]map[string]any
 	// Usage is GET /api/v1/usage's answer, as JSON.
 	Usage map[string]any
+	// Notices are the person's notice settings (JB-31).
+	Notices map[string]any
 	// Reviews are the catalog's reviews (POST makes one, open, with each
 	// file kept in Published); NotAdmin refuses them as to a member.
 	Reviews   []map[string]any
@@ -788,6 +791,37 @@ func NewService(t testing.TB, issuer string) *Service {
 			u = map[string]any{"today": map[string]any{}, "month": map[string]any{}, "limits": []any{}, "rate_limits": []any{}, "prompt_logs": false}
 		}
 		_ = json.NewEncoder(w).Encode(u)
+	})
+	mux.HandleFunc("GET /api/v1/notices", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		n := s.Notices
+		if n == nil {
+			n = map[string]any{"email": true, "webhook": "", "every_run": false}
+		}
+		out := maps.Clone(n)
+		out["email_available"] = true
+		_ = json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("PUT /api/v1/notices", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if hook, _ := in["webhook"].(string); hook != "" && !strings.HasPrefix(hook, "https://") {
+			refuse(w, http.StatusBadRequest, "bad_request", "a webhook is an https:// address")
+			return
+		}
+		s.Mu.Lock()
+		s.Notices = in
+		s.Mu.Unlock()
+		out := maps.Clone(in)
+		out["email_available"] = true
+		_ = json.NewEncoder(w).Encode(out)
 	})
 	mux.HandleFunc("GET /api/v1/runs/pending", func(w http.ResponseWriter, r *http.Request) {
 		if jobs(w, r) {

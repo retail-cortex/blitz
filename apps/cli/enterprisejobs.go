@@ -549,3 +549,69 @@ copies it into .agents to change).`,
 	cmd.AddCommand(copyCmd)
 	return cmd
 }
+
+// newEnterpriseNoticesCommand is blitz enterprise notices: how the person
+// hears of their jobs' runs on the service (the enterprise spec's JB-31).
+func newEnterpriseNoticesCommand() *cobra.Command {
+	var email, everyRun bool
+	var webhook string
+	cmd := &cobra.Command{
+		Use:   "notices",
+		Short: "How you hear of your jobs' runs on your organization's service: email, a webhook, every run or not",
+		Long: `Shows how you hear of your jobs' runs on your organization's service, or
+changes it: --email on|off, --webhook <https address> ("" for none; a
+Slack or Teams incoming webhook shows the notice as it is), and
+--every-run on|off (off: failures and runs waiting for your answer only).`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			s := client.AttachSettings(sock)
+			n, err := s.OrgNotices(cmd.Context())
+			if err != nil {
+				return err
+			}
+			f := cmd.Flags()
+			if f.Changed("email") || f.Changed("webhook") || f.Changed("every-run") {
+				if f.Changed("email") {
+					n.Email = email
+				}
+				if f.Changed("webhook") {
+					n.Webhook = webhook
+				}
+				if f.Changed("every-run") {
+					n.EveryRun = everyRun
+				}
+				if n, err = s.SetOrgNotices(cmd.Context(), n); err != nil {
+					return err
+				}
+			}
+			out := cmd.OutOrStdout()
+			switch {
+			case !n.Email:
+				fmt.Fprintln(out, "Email     off")
+			case n.EmailAvailable:
+				fmt.Fprintln(out, "Email     on")
+			default:
+				fmt.Fprintln(out, "Email     on, but your organization's service sends no email: add a webhook to hear of runs")
+			}
+			hook := n.Webhook
+			if hook == "" {
+				hook = "none"
+			}
+			fmt.Fprintln(out, "Webhook   "+hook)
+			if n.EveryRun {
+				fmt.Fprintln(out, "For       every run")
+			} else {
+				fmt.Fprintln(out, "For       failures and runs waiting for your answer")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&email, "email", true, "email them to you")
+	cmd.Flags().StringVar(&webhook, "webhook", "", `an https address to POST them to ("" for none)`)
+	cmd.Flags().BoolVar(&everyRun, "every-run", false, "every run's end, not only failures and runs waiting for your answer")
+	return cmd
+}
