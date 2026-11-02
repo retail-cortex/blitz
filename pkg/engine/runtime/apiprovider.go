@@ -154,6 +154,9 @@ func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPo
 	if err != nil {
 		return nil, err
 	}
+	if t, ok := inner.(*toolCallParsingModel); ok {
+		t.streams = true // a gateway's models make real function calls
+	}
 	return &apiModel{inner: inner, p: p}, nil
 }
 
@@ -227,8 +230,21 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 		res, err = next(p.sign(req, body, token))
 	}
 	if err == nil && responses && res.StatusCode/100 == 2 {
-		if err = foldStream(res); err == nil {
-			err = fixResponse(res)
+		switch {
+		case streamRequested(body) && isEventStream(res):
+			// The adapter asked for a stream (the service's turns do): the
+			// events go to it as they come, so the reply shows as it's
+			// written rather than when it's whole.
+		case streamRequested(body):
+			// A gateway that sends replies whole: the adapter reads it as
+			// a stream's last event.
+			if err = fixResponse(res); err == nil {
+				err = asEventStream(res)
+			}
+		default:
+			if err = foldStream(res); err == nil {
+				err = fixResponse(res)
+			}
 		}
 	}
 	keepErrorBody(ctx, res, err)

@@ -172,6 +172,48 @@ func foldStream(res *http.Response) error {
 	return nil
 }
 
+// streamRequested reports whether a /responses request body asks for a
+// stream: the adapter's streaming call does, its one-shot call doesn't.
+func streamRequested(body []byte) bool {
+	var m struct {
+		Stream bool `json:"stream"`
+	}
+	return json.Unmarshal(body, &m) == nil && m.Stream
+}
+
+// isEventStream reports whether res is server-sent events.
+func isEventStream(res *http.Response) bool {
+	return strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream")
+}
+
+// asEventStream makes a whole /responses answer the one event of a stream,
+// response.completed (or response.failed), for an adapter reading a
+// stream from a gateway that doesn't send one.
+func asEventStream(res *http.Response) error {
+	body, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if err != nil {
+		return err
+	}
+	var r struct {
+		Status string `json:"status"`
+	}
+	event := "response.completed"
+	if json.Unmarshal(body, &r) == nil && r.Status == "failed" {
+		event = "response.failed"
+	}
+	data, err := json.Marshal(map[string]json.RawMessage{"type": json.RawMessage(strconv.Quote(event)), "response": body})
+	if err != nil {
+		return err
+	}
+	out := "event: " + event + "\ndata: " + string(data) + "\n\n"
+	res.Body = io.NopCloser(strings.NewReader(out))
+	res.ContentLength = int64(len(out))
+	res.Header.Set("Content-Type", "text/event-stream")
+	res.Header.Set("Content-Length", strconv.Itoa(len(out)))
+	return nil
+}
+
 // fixResponse makes a successful /responses answer what the adapter
 // reads: an error message under any status is a failure, and a message's
 // "text" content is "output_text". A body that isn't JSON is left alone.

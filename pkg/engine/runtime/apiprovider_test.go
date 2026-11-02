@@ -572,6 +572,55 @@ func TestAPIProviderStreams(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "reply broke off")
 	})
+	t.Run("streamed to a streaming turn as it comes", func(t *testing.T) {
+		g := newFakeGateway(t, [2]any{http.StatusOK, stream})
+		m := apiTestModel(t, g, "", 0, noToken)
+		var partial, final []string
+		for resp, err := range m.GenerateContent(context.Background(), helloRequest(), true) {
+			require.NoError(t, err)
+			if resp == nil || resp.Content == nil {
+				continue
+			}
+			text := ""
+			for _, p := range resp.Content.Parts {
+				text += p.Text
+			}
+			if resp.Partial {
+				partial = append(partial, text)
+			} else {
+				final = append(final, text)
+			}
+		}
+		assert.Contains(t, partial, "Streamed", "the delta before the end")
+		assert.Equal(t, []string{"Streamed, then folded."}, final)
+		assert.Equal(t, true, g.requests()[0].Body["stream"])
+	})
+	t.Run("a whole reply to a streaming turn", func(t *testing.T) {
+		g := newFakeGateway(t, [2]any{http.StatusOK, gwText})
+		m := apiTestModel(t, g, "", 0, noToken)
+		var final string
+		for resp, err := range m.GenerateContent(context.Background(), helloRequest(), true) {
+			require.NoError(t, err)
+			if resp != nil && !resp.Partial && resp.Content != nil {
+				for _, p := range resp.Content.Parts {
+					final += p.Text
+				}
+			}
+		}
+		assert.Equal(t, "One cell, c1, alive.", final)
+	})
+	t.Run("a failed whole reply to a streaming turn", func(t *testing.T) {
+		g := newFakeGateway(t, [2]any{http.StatusOK, gwFailed})
+		m := apiTestModel(t, g, "", 0, noToken)
+		var got error
+		for _, err := range m.GenerateContent(context.Background(), helloRequest(), true) {
+			if err != nil {
+				got = err
+			}
+		}
+		require.Error(t, got)
+		assert.Contains(t, got.Error(), "quota exceeded")
+	})
 	t.Run("a gateway that won't stream", func(t *testing.T) {
 		refusal := `{"error":{"type":"invalid_request_error","code":"unsupported_parameter","param":"stream","message":"Streaming isn't offered."}}`
 		g := newFakeGateway(t, [2]any{http.StatusBadRequest, refusal})

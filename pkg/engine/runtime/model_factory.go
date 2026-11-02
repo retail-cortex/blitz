@@ -455,6 +455,11 @@ type toolCallParsingModel struct {
 	// provider and key, when set, let a failed call say what the provider
 	// said (providerError), with the key masked.
 	provider, key string
+	// streams passes a streaming call's partial replies on, parsing only
+	// the whole one: for a gateway whose models make real function calls
+	// (the api and enterprise providers), so its reply shows as it's
+	// written.
+	streams bool
 }
 
 func (m *toolCallParsingModel) Name() string {
@@ -464,16 +469,16 @@ func (m *toolCallParsingModel) Name() string {
 func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		// Text-encoded tool calls can only be recognised in complete responses,
-		// so this wrapper never streams.
+		// so this wrapper streams only when told to, parsing the whole reply.
 		ctx, req := replaceImagesWithMarkers(ctx, req)
-		for resp, err := range m.inner.GenerateContent(ctx, req, false) {
+		for resp, err := range m.inner.GenerateContent(ctx, req, stream && m.streams) {
 			if err != nil {
 				if !yield(nil, providerError(err, m.provider, m.inner.Name(), m.key)) {
 					return
 				}
 				continue
 			}
-			if resp != nil && resp.Content != nil {
+			if resp != nil && resp.Content != nil && !resp.Partial {
 				parseTextToolCalls(resp.Content, offeredTools(req))
 			}
 			if !yield(resp, nil) {
