@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
@@ -267,4 +268,35 @@ func TestEnterpriseListModels(t *testing.T) {
 		bad.Enterprise.URL = "ftp://acme"
 		assert.Error(t, ListModels(context.Background(), bad)[0].Err)
 	})
+}
+
+// The organization's policy and its catalog's expiry: a model named with
+// a provider of the person's own uses it when the policy allows (bare
+// names stay the organization's), and the organization's models wait
+// once its catalog is out of date (EN-33, EN-35).
+func TestEnterprisePolicy(t *testing.T) {
+	s := newOrgService(t)
+	cfg := signedIn(t, s)
+	cfg.LLM.Provider, cfg.LLM.Gemini.APIKey = "gemini", "a key of my own"
+	cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
+
+	stood, err := NewModel(context.Background(), cfg, "openai/gpt-x")
+	require.NoError(t, err)
+	assert.Equal(t, "smart", stood.Name(), "not allowed: the organization's default stands in")
+	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
+
+	cfg.Org.Policy.Models.OwnProviders = true
+	assert.Equal(t, []string{"enterprise", "gemini"}, ConfiguredProviders(cfg))
+	own, err := NewModel(context.Background(), cfg, "openai/gpt-x")
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-x", own.Name(), "allowed: the person's own provider (the organization's would stand its default, smart, in)")
+	m, err := NewModel(context.Background(), cfg, "fast")
+	require.NoError(t, err)
+	_, _, err = callAPI(inSession("s"), m, helloRequest())
+	require.NoError(t, err)
+	assert.Equal(t, "/api/v1/responses", s.g.requests()[0].Path, "a bare name is the organization's")
+
+	cfg.Org.Expires = time.Now().Add(-time.Minute)
+	_, err = NewModel(context.Background(), cfg, "fast")
+	assert.ErrorContains(t, err, "catalog is out of date")
 }

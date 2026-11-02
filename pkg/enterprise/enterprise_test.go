@@ -655,3 +655,126 @@ func TestTerms(t *testing.T) {
 	assert.Error(t, err)
 	assert.Error(t, c.AcceptTerms(ctx, "v2"))
 }
+
+// The organization's catalog: fetched once signed in, checked, its files
+// fetched by hash and laid out as default and locked layers with the
+// policy beside them, asked again with its ETag, files kept across
+// versions, a file that doesn't match its hash refused (the last catalog
+// kept), and removed when the service withdraws it (EN-30 to EN-33).
+func TestCatalog(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	_, _, err := c.RefreshCatalog(ctx, dir)
+	assert.ErrorIs(t, err, ErrNotSignedIn)
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	m, changed, err := c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.Nil(t, m, "none published")
+	assert.False(t, changed)
+
+	s.Catalog = map[string]enterprisetest.CatalogFile{
+		"agents/reviewer.md":     {Kind: "agent", Name: "reviewer", Lock: "locked", Data: "---\nname: reviewer\n---\nReview."},
+		"rules/style.md":         {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+		"skills/deploy/SKILL.md": {Kind: "skill", Name: "deploy", Lock: "default", Data: "---\nname: deploy\n---\nDeploy."},
+		"skills/deploy/run.sh":   {Kind: "skill_file", Name: "deploy", Lock: "default", Data: "echo hi"},
+	}
+	s.CatalogPolicy = map[string]any{"models": map[string]any{"own_providers": true}, "tools": map[string]any{"off": []string{"web_fetch"}}}
+	s.CatalogExpiry = time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
+	m, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	require.NotNil(t, m)
+	assert.True(t, changed)
+	assert.Len(t, m.Files, 4)
+	assert.True(t, m.Policy.Models.OwnProviders)
+	assert.Equal(t, []string{"web_fetch"}, m.Policy.Tools.Off)
+	assert.Equal(t, s.CatalogExpiry, m.Expires.UTC())
+	defaults, locked := LayerDirs(dir)
+	data, err := os.ReadFile(filepath.Join(locked, "agents", "reviewer.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "Review.")
+	assert.FileExists(t, filepath.Join(defaults, "rules", "style.md"))
+	assert.FileExists(t, filepath.Join(defaults, "skills", "deploy", "run.sh"))
+	assert.NoFileExists(t, filepath.Join(defaults, "agents", "reviewer.md"))
+	policy, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	require.NoError(t, err)
+	assert.Contains(t, string(policy), `"own_providers":true`)
+	assert.Equal(t, m, LoadCatalog(dir))
+
+	again, changed, err := c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed, "unchanged: 304")
+	assert.Equal(t, m, again)
+
+	t.Run("a new version: only its new files fetched", func(t *testing.T) {
+		calls := s.FileCalls
+		s.Catalog["commands/ship.md"] = enterprisetest.CatalogFile{Kind: "command", Name: "ship", Lock: "default", Data: "Ship it."}
+		delete(s.Catalog, "rules/style.md")
+		m, changed, err := c.RefreshCatalog(ctx, dir)
+		require.NoError(t, err)
+		assert.True(t, changed)
+		assert.Len(t, m.Files, 4)
+		assert.Equal(t, calls+1, s.FileCalls)
+		assert.NoFileExists(t, filepath.Join(defaults, "rules", "style.md"), "gone from the layers")
+		assert.FileExists(t, filepath.Join(defaults, "commands", "ship.md"))
+	})
+	t.Run("a file that doesn't match its hash: the last catalog kept", func(t *testing.T) {
+		s.Catalog["rules/bad.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "bad", Lock: "default", Data: "Bad.", Corrupt: true}
+		got, _, err := c.RefreshCatalog(ctx, dir)
+		assert.ErrorIs(t, err, ErrSignature)
+		assert.Len(t, got.Files, 4)
+		assert.NoFileExists(t, filepath.Join(defaults, "rules", "bad.md"))
+		delete(s.Catalog, "rules/bad.md")
+	})
+	t.Run("a path outside the catalog is refused", func(t *testing.T) {
+		s.Catalog["../escape.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "escape", Lock: "default", Data: "Out."}
+		_, _, err := c.RefreshCatalog(ctx, dir)
+		assert.ErrorContains(t, err, "outside it")
+		assert.NoFileExists(t, filepath.Join(dir, "catalog", "escape.md"))
+		delete(s.Catalog, "../escape.md")
+	})
+	t.Run("forged: the last catalog kept", func(t *testing.T) {
+		s.Forged = true
+		s.Catalog["rules/evil.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "evil", Lock: "locked", Data: "Evil."}
+		got, _, err := c.RefreshCatalog(ctx, dir)
+		assert.ErrorIs(t, err, ErrSignature)
+		assert.Len(t, got.Files, 4)
+		s.Forged = false
+		delete(s.Catalog, "rules/evil.md")
+	})
+	t.Run("the stream announces a version", func(t *testing.T) {
+		wctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		seen := make(chan struct{}, 1)
+		done := make(chan error, 1)
+		go func() { done <- c.WatchCatalog(wctx, func() { seen <- struct{}{} }) }()
+		s.Announce <- 7
+		select {
+		case <-seen:
+		case <-time.After(5 * time.Second):
+			t.Fatal("no event")
+		}
+		cancel()
+		assert.Error(t, <-done)
+	})
+
+	s.Catalog = nil
+	m, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.Nil(t, m, "withdrawn")
+	assert.True(t, changed)
+	assert.Nil(t, LoadCatalog(dir))
+	assert.NoDirExists(t, filepath.Join(dir, "catalog"))
+
+	t.Run("signed out of the stream", func(t *testing.T) {
+		_, _, c2, _, _ := setup(t)
+		assert.ErrorIs(t, c2.WatchCatalog(ctx, func() {}), ErrNotSignedIn)
+	})
+	t.Run("the service down: the kept catalog", func(t *testing.T) {
+		s.Close()
+		_, _, err := c.RefreshCatalog(ctx, dir)
+		assert.Error(t, err)
+		assert.Error(t, c.WatchCatalog(ctx, func() {}))
+	})
+}

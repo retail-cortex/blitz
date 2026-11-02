@@ -130,6 +130,9 @@ func (s *Server) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 	s.opens.Wait()
+	s.ent.mu.Lock()
+	s.ent.stopCatalog()
+	s.ent.mu.Unlock()
 	s.stopRuns()
 	s.stopEvals()
 	s.mu.Lock()

@@ -49,7 +49,7 @@ func NewModel(ctx context.Context, cfg *config.Config, overrideModel string) (mo
 	if overrideModel != "" {
 		ref = overrideModel
 	}
-	provider := strings.ToLower(cfg.LLM.Provider)
+	provider := defaultProvider(cfg)
 	p, modelName := ParseModelRef(ref, provider)
 	primary, err := newProviderModel(ctx, cfg, p, modelName)
 	if err != nil || len(cfg.LLM.FallbackModels) == 0 {
@@ -72,8 +72,17 @@ func NewModel(ctx context.Context, cfg *config.Config, overrideModel string) (mo
 // NewModelRef builds the single model a fallback reference names (no
 // chain), e.g. for `doctor` to check each fallback on its own.
 func NewModelRef(ctx context.Context, cfg *config.Config, ref string) (model.LLM, error) {
-	p, name := ParseModelRef(ref, cfg.LLM.Provider)
+	p, name := ParseModelRef(ref, defaultProvider(cfg))
 	return newProviderModel(ctx, cfg, p, name)
+}
+
+// defaultProvider is the provider a bare model name is: the
+// organization's while Blitz is connected to one, else llm.provider.
+func defaultProvider(cfg *config.Config) string {
+	if cfg.Enterprise.URL != "" {
+		return "enterprise"
+	}
+	return strings.ToLower(cfg.LLM.Provider)
 }
 
 // knownProviders are the provider prefixes recognised in model references.
@@ -159,9 +168,10 @@ func openAIKey(ctx context.Context, llm config.LLMConfig, provider string, pol r
 // newProviderModel builds one model of the given provider, applying its
 // [model_settings] on each call.
 func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelName string) (model.LLM, error) {
-	if cfg.Enterprise.URL != "" {
+	if cfg.Enterprise.URL != "" && !(cfg.Org.Policy.Models.OwnProviders && provider != "") {
 		// Connected to an organization, its models are the models
-		// (spec_053_enterprise EN-20).
+		// (spec_053_enterprise EN-20), unless its policy lets the person
+		// name one of their own (EN-35).
 		provider = "enterprise"
 	}
 	m, err := buildProviderModel(ctx, cfg, provider, modelName)

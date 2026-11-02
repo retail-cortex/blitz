@@ -37,6 +37,7 @@ func TestOrganization(t *testing.T) {
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
 	s := servicetest.New(func(context.Context, string) (*engine.Workspace, error) { return nil, nil })
+	t.Cleanup(func() { s.Close() }) // its catalog's loop with it
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	c := AttachSettingsHTTP(http.DefaultClient, srv.URL)

@@ -17,6 +17,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
@@ -43,6 +44,10 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	c, err := enterpriseClient(cfg)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Org.Expired(time.Now()) {
+		// Never without the organization's rules (EN-33).
+		return nil, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
 	}
 	st := c.Status()
 	if !st.SignedIn {

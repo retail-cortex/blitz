@@ -24,14 +24,17 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -178,8 +181,22 @@ type Service struct {
 	Branding map[string]any
 	Version  string
 	Accepts  map[string]bool
-	// Forged signs the branding with a key the service doesn't publish.
-	Forged     bool
+	// Forged signs the branding and catalog with a key the service
+	// doesn't publish.
+	Forged bool
+	// Catalog is the catalog it serves, by path (none when nil): each
+	// file's lock and contents, under CatalogPolicy; CatalogExpiry is what
+	// it says the catalog's expiry is. Announce publishes a version on the
+	// watch stream.
+	Catalog       map[string]CatalogFile
+	CatalogPolicy map[string]any
+	CatalogExpiry time.Time
+	Announce      chan int
+	FileCalls     int
+	// quit ends the watch streams when the service closes, as a real
+	// one's do when it shuts down.
+	quit       chan struct{}
+	quitOnce   sync.Once
 	ModelCalls int
 	ModelsFail bool
 }
@@ -189,7 +206,7 @@ type Service struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -298,6 +315,92 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		_, _ = w.Write(env)
 	})
+	signedIn := func(w http.ResponseWriter, r *http.Request) bool {
+		s.Mu.Lock()
+		_, ok := s.Access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		s.Mu.Unlock()
+		if !ok {
+			refuse(w, http.StatusUnauthorized, "unauthenticated", "Sign in first.")
+		}
+		return ok
+	}
+	mux.HandleFunc("GET /api/v1/catalog", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.Catalog == nil {
+			refuse(w, http.StatusNotFound, "not_found", "The organization hasn't published a catalog yet.")
+			return
+		}
+		var files []map[string]any
+		paths := make([]string, 0, len(s.Catalog))
+		for p := range s.Catalog {
+			paths = append(paths, p)
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			f := s.Catalog[p]
+			sum := sha256.Sum256([]byte(f.Data))
+			files = append(files, map[string]any{"kind": f.Kind, "name": f.Name, "path": p, "lock": f.Lock, "sha256": hex.EncodeToString(sum[:]), "size": len(f.Data)})
+		}
+		m := map[string]any{"version": len(paths), "files": files, "policy": s.CatalogPolicy, "expires": s.CatalogExpiry}
+		key := s.Key
+		if s.Forged {
+			_, key, _ = ed25519.GenerateKey(nil)
+		}
+		env := Seal(s.KeyID, key, m)
+		sum := sha256.Sum256(env)
+		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = w.Write(env)
+	})
+	mux.HandleFunc("GET /api/v1/catalog/files/{sha}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		s.FileCalls++
+		for _, f := range s.Catalog {
+			if sum := sha256.Sum256([]byte(f.Data)); hex.EncodeToString(sum[:]) == r.PathValue("sha") {
+				data := f.Data
+				if f.Corrupt {
+					data += "!"
+				}
+				_, _ = w.Write([]byte(data))
+				return
+			}
+		}
+		refuse(w, http.StatusNotFound, "not_found", "There's no such file in your catalog.")
+	})
+	mux.HandleFunc("GET /api/v1/catalog/watch", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(": watching\n\n"))
+		w.(http.Flusher).Flush()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-s.quit:
+				return
+			case v, ok := <-s.Announce:
+				if !ok {
+					return
+				}
+				fmt.Fprintf(w, "event: catalog\ndata: {\"version\":%d}\n\n", v)
+				w.(http.Flusher).Flush()
+			}
+		}
+	})
 	mux.HandleFunc("GET /api/v1/terms", func(w http.ResponseWriter, r *http.Request) {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
@@ -366,4 +469,17 @@ func Seal(kid string, key ed25519.PrivateKey, v any) []byte {
 	env, _ := json.Marshal(map[string]string{"kid": kid, "payload": base64.RawURLEncoding.EncodeToString(payload),
 		"signature": base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, signed))})
 	return env
+}
+
+// CatalogFile is a file of the fake service's catalog.
+type CatalogFile struct {
+	Kind, Name, Lock, Data string
+	// Corrupt serves contents that don't match the file's hash.
+	Corrupt bool
+}
+
+// Close ends the watch streams, then the server.
+func (s *Service) Close() {
+	s.quitOnce.Do(func() { close(s.quit) })
+	s.Server.Close()
 }

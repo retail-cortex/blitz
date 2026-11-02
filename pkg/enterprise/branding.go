@@ -53,9 +53,9 @@ type Branding struct {
 	Terms      []Document        `json:"terms"`
 }
 
-// ErrSignature means a signed envelope doesn't check against the keys the
-// service published.
-var ErrSignature = errors.New("the organization's branding isn't signed by its service")
+// ErrSignature means what the service sent (its branding, its catalog)
+// doesn't check against the keys it published.
+var ErrSignature = errors.New("this didn't come signed by the organization's service")
 
 // envelope is a signed payload, as the service seals it: the payload's
 // JSON in base64url, and an Ed25519 signature of "blitz-enterprise/v1",

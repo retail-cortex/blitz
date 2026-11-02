@@ -46,9 +46,10 @@ const ruleSubjectLimit = 12 << 10
 // .agents/rules.
 func (w *Workspace) ProjectRulesDir() string { return filepath.Join(w.Dir(), ".agents", "rules") }
 
-// ruleDirs are the folders rules are read from: the workspace's rule
-// folders (.blitz/rules, .agents/rules, .claude/rules), then the global
-// one; a name in an earlier folder wins.
+// ruleDirs are the folders rules are read from: the organization's locked
+// ones, the workspace's rule folders (.blitz/rules, .agents/rules,
+// .claude/rules), the global one, then the organization's defaults; a
+// name in an earlier folder wins.
 func (w *Workspace) ruleDirs() []string {
 	var out []string
 	for _, rd := range w.cfg.Memory.RuleDirs {
@@ -57,7 +58,9 @@ func (w *Workspace) ruleDirs() []string {
 	if w.cfg.Memory.GlobalRules != "" {
 		out = append(out, config.ExpandHome(w.cfg.Memory.GlobalRules))
 	}
-	return out
+	// The organization's locked rules and guardrails before them, its
+	// defaults after (spec_053_enterprise EN-31).
+	return w.cfg.Org.LockedFirst(out, "rules", "guardrails")
 }
 
 // Rules are the workspace's rules, gates first (in the order they run),

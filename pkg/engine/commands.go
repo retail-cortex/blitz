@@ -45,6 +45,12 @@ func (w *Workspace) commandDirs() []struct{ dir, source string } {
 	for _, d := range []string{".blitz/commands", ".claude/commands", ".agents/workflows"} {
 		out = append(out, struct{ dir, source string }{filepath.Join(w.Dir(), filepath.FromSlash(d)), "project"})
 	}
+	// The organization's defaults before everyone's, its locked ones after
+	// (spec_053_enterprise EN-31).
+	if o := w.cfg.Org; o.Active() {
+		out = append([]struct{ dir, source string }{{filepath.Join(o.Defaults, "commands"), "organization"}}, out...)
+		out = append(out, struct{ dir, source string }{filepath.Join(o.Locked, "commands"), "organization"})
+	}
 	return out
 }
 

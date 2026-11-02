@@ -32,6 +32,12 @@ The desktop app, the CLI and the tray share one sign-in: the Blitz service on yo
 
 A workspace's settings can't connect Blitz to an organization, or change which one: only you can, in your own settings (`[enterprise] url`).
 
+## Your organization's agents, rules and policy
+
+If your organization publishes a catalog, Blitz works under it: its agents, skills, commands, rules, guardrails and MCP servers join yours. Each is either a **default**, which your own or a workspace's of the same name replaces, or **locked**, which applies over them. Blitz fetches it when you sign in, follows changes as your admins publish them, and keeps it for offline work until it expires; past that, the organization's models wait until Blitz reaches it again.
+
+Its policy may also turn off tools for every agent, your own `!` commands, your own MCP servers, or your own model providers. Where it allows your own providers, name one with its prefix (`anthropic/claude-…`) to use it; bare model names are your organization's.
+
 ## Your organization's look and terms
 
 If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page and About, which ends with "Built on Blitz". They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.

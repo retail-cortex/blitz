@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -328,4 +329,56 @@ func TestEnterpriseBrandingAndTerms(t *testing.T) {
 		assert.Equal(t, "UNREACHABLE", errorInfo(enterpriseError(errors.New("connection refused"))).GetReason())
 		assert.Equal(t, "TERMS_REQUIRED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden, Code: "terms_required"})).GetReason())
 	})
+}
+
+// The service keeps the organization's catalog current: fetched once
+// signed in, again for each version its stream announces, loaded into
+// the settings, and removed on disconnecting (EN-30 to EN-33).
+func TestEnterpriseCatalogLoop(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Catalog = map[string]enterprisetest.CatalogFile{
+		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Data: "---\nname: reviewer\n---\nReview."},
+	}
+	org.CatalogPolicy = map[string]any{"tools": map[string]any{"off": []string{"web_fetch"}}}
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	dir := config.EnterpriseDir("", org.URL)
+	time.Sleep(100 * time.Millisecond)
+	assert.NoFileExists(t, filepath.Join(dir, "policy.json"), "not signed in: nothing fetched")
+
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	locked := filepath.Join(dir, "catalog", "locked")
+	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(locked, "agents", "reviewer.md")); return err == nil }, 5*time.Second, 20*time.Millisecond)
+	cfg, err := config.Load("")
+	require.NoError(t, err)
+	assert.True(t, cfg.Org.Active())
+	assert.Contains(t, cfg.Permissions.Deny, "web_fetch")
+
+	org.Mu.Lock()
+	org.Catalog["rules/style.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."}
+	org.Mu.Unlock()
+	org.Announce <- 2
+	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(locked, "rules", "style.md")); return err == nil }, 5*time.Second, 20*time.Millisecond)
+
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{}))
+	require.NoError(t, err)
+	assert.NoDirExists(t, dir)
+	cfg, err = config.Load("")
+	require.NoError(t, err)
+	assert.False(t, cfg.Org.Active())
 }

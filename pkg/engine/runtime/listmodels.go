@@ -51,13 +51,17 @@ type ListedModel struct {
 const listTimeout = 20 * time.Second
 
 // ConfiguredProviders are the providers cfg has credentials (or, for
-// Ollama, a choice) for: only the organization's service when Blitz is
-// connected to one (spec_053_enterprise EN-20).
+// Ollama, a choice) for. Connected to an organization, its service first,
+// alone unless its policy allows the person's own beside it
+// (spec_053_enterprise EN-20, EN-35).
 func ConfiguredProviders(cfg *config.Config) []string {
-	if cfg.Enterprise.URL != "" {
-		return []string{"enterprise"}
-	}
 	var out []string
+	if cfg.Enterprise.URL != "" {
+		out = []string{"enterprise"}
+		if !cfg.Org.Policy.Models.OwnProviders {
+			return out
+		}
+	}
 	if cfg.LLM.Gemini.APIKey != "" || cfg.LLM.Gemini.APIKeyCommand != "" || cfg.LLM.Gemini.UsesADC() {
 		out = append(out, "gemini")
 	}

@@ -19,8 +19,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +38,15 @@ type enterpriseConn struct {
 	mu        sync.Mutex
 	c         *enterprise.Client
 	signingIn sync.Mutex
+	// stop ends the catalog's loop for c; kick asks it to fetch now (a
+	// sign-in, a connection); done is closed when it has ended.
+	stop func()
+	kick chan struct{}
+	done chan struct{}
+	// retry is how long the loop waits after the stream fails, before
+	// asking again; idle, how often it looks for a sign-in (tests shorten
+	// them).
+	retry, idle time.Duration
 	// HTTP is what the calls go through (tests set it); nil for the
 	// default client.
 	http *http.Client
@@ -69,10 +76,100 @@ func (s *Server) enterpriseFor(raw string) (*enterprise.Client, error) {
 	s.ent.mu.Lock()
 	defer s.ent.mu.Unlock()
 	if s.ent.c == nil || s.ent.c.URL() != u {
+		s.ent.stopCatalog()
 		s.ent.c = enterprise.New(u, secrets.Default(s.configDir), enterprise.Options{HTTP: s.ent.http, Client: "blitz " + s.version})
 		enterprise.Register(s.ent.c)
+		s.startCatalog(s.ent.c)
 	}
 	return s.ent.c, nil
+}
+
+// startCatalog keeps the organization's catalog current for c while it's
+// the connection (spec_053_enterprise EN-32): fetched once signed in,
+// again on each version its service's stream announces, and on the
+// policy's refresh while the stream is down; open workspaces load each
+// change. Called with s.ent.mu held.
+func (s *Server) startCatalog(c *enterprise.Client) {
+	ctx, cancel := context.WithCancel(context.Background())
+	kick, done := make(chan struct{}, 1), make(chan struct{})
+	s.ent.stop, s.ent.kick, s.ent.done = cancel, kick, done
+	retry, idle := s.ent.retry, s.ent.idle
+	if retry == 0 {
+		retry = 30 * time.Second
+	}
+	if idle == 0 {
+		idle = time.Minute
+	}
+	dir := s.brandingDir(c)
+	go func() {
+		defer close(done)
+		wait := func(d time.Duration) bool {
+			t := time.NewTimer(d)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return false
+			case <-kick:
+			case <-t.C:
+			}
+			return true
+		}
+		refresh := func() time.Duration {
+			m, changed, err := c.RefreshCatalog(ctx, dir)
+			if err != nil && ctx.Err() == nil {
+				slog.Warn("the organization's catalog", "error", err)
+			}
+			if changed {
+				configService{s}.changed(ctx, "", "")
+			}
+			every := 15 * time.Minute
+			if m != nil {
+				if d, err := time.ParseDuration(m.Policy.Refresh); err == nil && d > 0 {
+					every = d
+				}
+			}
+			return every
+		}
+		for ctx.Err() == nil {
+			if !c.Status().SignedIn {
+				if !wait(idle) {
+					return
+				}
+				continue
+			}
+			every := refresh()
+			// Each version the stream announces is fetched as it comes;
+			// a stream that ends or can't start is tried again later.
+			if err := c.WatchCatalog(ctx, func() { refresh() }); err != nil && ctx.Err() == nil {
+				if !wait(min(retry, every)) {
+					return
+				}
+			}
+		}
+	}()
+}
+
+// stopCatalog ends the catalog's loop, if one runs, and waits for it.
+// Called with mu held.
+func (e *enterpriseConn) stopCatalog() {
+	if e.stop == nil {
+		return
+	}
+	e.stop()
+	<-e.done
+	e.stop = nil
+}
+
+// kickCatalog asks the catalog's loop to fetch now.
+func (e *enterpriseConn) kickCatalog() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.kick != nil {
+		select {
+		case e.kick <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // enterpriseState is c's state; with check, after asking the service.
@@ -180,6 +277,7 @@ func (h configService) EnterpriseSignIn(ctx context.Context, r req[pb.Enterprise
 		return apiError(connect.CodeUnauthenticated, "SIGN_IN_FAILED", err)
 	}
 	h.changed(ctx, "", "")
+	h.s.ent.kickCatalog() // the catalog, now there's a sign-in
 	return stream.Send(&pb.EnterpriseSignInResponse{Done: true, State: h.s.enterpriseState(ctx, c, false)})
 }
 
@@ -201,11 +299,7 @@ func (h configService) EnterpriseSignOut(ctx context.Context, _ req[pb.Enterpris
 // brandingDir is the organization's folder (spec_053_enterprise EN-54):
 // ~/.blitz/enterprise/<the service's host>, so another's never mixes in.
 func (s *Server) brandingDir(c *enterprise.Client) string {
-	u, err := url.Parse(c.URL())
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	return filepath.Join(config.ConfigDir(s.configDir), "enterprise", strings.ReplaceAll(u.Host, ":", "_"))
+	return config.EnterpriseDir(s.configDir, c.URL())
 }
 
 func brandingMsg(b *enterprise.Branding) *pb.Branding {
