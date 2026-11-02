@@ -107,6 +107,48 @@ let current = "en-US";
 let lookup = chain(current);
 const listeners = new Set<() => void>();
 
+// The organization's name, said in place of Blitz's (spec_053 EN-51); ""
+// for Blitz's own.
+let appName = "";
+
+/**
+ * The keys that name the program itself, never the organization's app
+ * (EN-51): "Built on Blitz", Blitz's releases, license, themes and its
+ * reinstall hints. pkg/i18n's fixedKeys is the same list.
+ */
+const fixedKeys = [
+  "desktop.brand",
+  "desktop.org.built_on",
+  "desktop.update.",
+  "desktop.cli.",
+  "desktop.service.no_blitzd",
+  "desktop.service.tray.none",
+  "desktop.settings.light_theme.detail",
+  "desktop.settings.dark_theme.detail",
+  "desktop.settings.transparency.blitz_only",
+  "desktop.settings.doc_css.sample_text",
+  "desktop.cmd.license",
+  "help.license",
+  "rewind.old_prompt",
+];
+
+/** Whether key names the program itself, so keeps "Blitz" under an organization's name. */
+export const fixedName = (key: string) => fixedKeys.some((k) => (k.endsWith(".") ? key.startsWith(k) : key === k));
+
+/**
+ * Says name in place of "Blitz" in the window's words, but where they name
+ * the program itself ("" for Blitz's own).
+ */
+export function setAppName(name: string) {
+  if (name === appName) return;
+  appName = name;
+  listeners.forEach((f) => f());
+}
+
+function rename(key: string, text: string): string {
+  return appName && !fixedName(key) ? text.replace(/\bBlitz\b/g, () => appName) : text;
+}
+
 /**
  * Shows the window in tag's language ("system" follows the terminal's
  * language setting when there is one, else the system's).
@@ -140,7 +182,7 @@ export function pseudo(text: string): string {
 export function t(key: string, params?: Record<string, string | number>): string {
   for (const c of lookup) {
     const text = c.messages[key];
-    if (text !== undefined) return fill(current === pseudoLocale ? pseudo(text) : text, params);
+    if (text !== undefined) return fill(current === pseudoLocale ? pseudo(rename(key, text)) : rename(key, text), params);
   }
   return key;
 }
@@ -151,14 +193,18 @@ export function tn(key: string, count: number, params?: Record<string, string | 
   return t(`${key}.${form}`, { count: count.toLocaleString(language()), ...params });
 }
 
-/** Re-renders the component when the language changes; returns the language. */
+/**
+ * Re-renders the component when the language or the organization's name
+ * changes; returns the language, with the name after a "+" while there is
+ * one, so an effect that says words can depend on it.
+ */
 export function useLanguage(): string {
   return useSyncExternalStore(
     (f) => {
       listeners.add(f);
       return () => listeners.delete(f);
     },
-    () => current,
+    () => (appName ? `${current}+${appName}` : current),
   );
 }
 

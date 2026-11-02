@@ -141,6 +141,18 @@ func LoadBranding(dir string) *Branding {
 	return &b
 }
 
+// KeptName is the organization's name from the branding kept in dir; ""
+// for none (Blitz's own name).
+func KeptName(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if b := LoadBranding(dir); b != nil {
+		return b.Name
+	}
+	return ""
+}
+
 // ForgetBranding removes dir, the service's folder: on disconnecting, the
 // app is Blitz again (EN-54).
 func ForgetBranding(dir string) error {

@@ -40,14 +40,11 @@ const (
 	BgBlue  = "\033[44m"
 )
 
-// PrintBanner renders the Blitz ASCII splash banner.
-// Product is the product's name, which isn't translated.
-const Product = "Blitz"
-
-// PrintBanner prints the session's first lines: Blitz's name and version,
-// the agent and model in use, and how to get help or stop.
+// PrintBanner prints the session's first lines: the app's name (the
+// organization's, spec_053 EN-51) and Blitz's version, the agent and model
+// in use, and how to get help or stop.
 func PrintBanner(version, agent, model string) {
-	fmt.Printf("%s%s%s %s  %s%s %s · %s %s%s\n", Bold, Product, Reset, version, Dim, i18n.T("banner.agent"), agent, i18n.T("banner.model"), model, Reset)
+	fmt.Printf("%s%s%s %s  %s%s %s · %s %s%s\n", Bold, i18n.AppName(), Reset, version, Dim, i18n.T("banner.agent"), agent, i18n.T("banner.model"), model, Reset)
 	fmt.Printf("%s%s%s\n\n", Dim, i18n.T("banner.hint", "help", "/help", "key", "Ctrl+C"), Reset)
 }
 

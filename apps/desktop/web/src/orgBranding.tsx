@@ -28,7 +28,7 @@ import { config } from "./api";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
 import type { Branding, EnterpriseState, OrgDocument, OrgWorkspace } from "./gen/blitz/v1/config_pb";
-import { t } from "./i18n";
+import { setAppName, t } from "./i18n";
 import { Markdown } from "./Markdown";
 import { openURL } from "./desktop";
 import { Button, Dialog, Icon } from "@blitz/webui";
@@ -133,6 +133,7 @@ export function accentRules(accent: string, theme: "light" | "dark"): string {
 }
 
 function applyBranding(b: Branding | null) {
+  setAppName(b?.name ?? "");
   document.title = appName(b);
   let style = document.getElementById("org-accent");
   const css = b ? [accentRules(b.accent, "light"), accentRules(b.accentDark || b.accent, "dark")].filter(Boolean).join("\n") : "";

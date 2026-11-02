@@ -26,6 +26,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -252,6 +253,7 @@ func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEn
 			slog.Warn("signing out of the organization's service", "error", err)
 		}
 		// And how it looked: the app is Blitz again (EN-54).
+		i18n.SetAppName("")
 		if err := enterprise.ForgetBranding(h.s.brandingDir(previous)); err != nil {
 			slog.Warn("removing the organization's branding", "error", err)
 		}
@@ -343,6 +345,10 @@ func (h configService) GetBranding(ctx context.Context, r req[pb.GetBrandingRequ
 	cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
 	defer cancel()
 	b, err := c.RefreshBranding(cctx, dir)
+	if b != nil {
+		// The service's own words (notifications) say the organization's name too (EN-51).
+		i18n.SetAppName(b.Name)
+	}
 	res := &pb.GetBrandingResponse{Branding: brandingMsg(b)}
 	if err != nil {
 		res.Error = err.Error()

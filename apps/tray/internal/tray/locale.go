@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"golang.org/x/text/language"
 )
@@ -32,6 +33,9 @@ func SetupLocale() {
 	var dirs []string
 	if cfg, err := config.Load(""); err == nil && cfg.UI.LocalesDir != "" {
 		dirs = append(dirs, config.ExpandHome(cfg.UI.LocalesDir))
+	}
+	if cfg, err := config.Load(""); err == nil {
+		i18n.SetAppName(enterprise.KeptName(config.EnterpriseDir("", cfg.Enterprise.URL)))
 	}
 	b, _ := i18n.NewBundle(dirs...)
 	prefs, _ := os.ReadFile(config.ExpandHome("~/.blitz/desktop.json"))

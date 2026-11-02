@@ -335,7 +335,7 @@ func RunREPL(ctx context.Context, app *App) error {
 	for {
 		if app.TerminalTitle {
 			active, _ := app.Workspace.ActiveSession()
-			if t := Product + " · " + sessionTitle(active); t != shownTitle {
+			if t := i18n.AppName() + " · " + sessionTitle(active); t != shownTitle {
 				fmt.Printf("\033]0;%s\007", safe(t))
 				shownTitle = t
 			}

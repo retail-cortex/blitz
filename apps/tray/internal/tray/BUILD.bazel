@@ -45,6 +45,7 @@ go_library(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/enterprise",
         "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/pageserver",

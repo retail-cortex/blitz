@@ -368,6 +368,7 @@ func (l *Localizer) T(key string, args ...any) string {
 	if !ok {
 		return key
 	}
+	msg = rename(key, msg)
 	if l.pseudo {
 		msg = pseudoize(msg)
 	}
@@ -544,4 +545,64 @@ func ReplyInstruction(l *Localizer) string {
 	name := l.LanguageName()
 	return fmt.Sprintf("\n\n## Response Language\nThe user's interface language is %s (%s). Write your replies to the user in %s unless they ask for another language. Keep code, identifiers, file paths, commands, and tool output exactly as they are.",
 		name, l.tag, name)
+}
+
+// Product is the program's own name, said where no organization's is.
+const Product = "Blitz"
+
+// appName is the organization's name, said in place of Blitz's (spec_053
+// EN-51); empty for Blitz's own.
+var appName atomic.Pointer[string]
+
+// fixedKeys name the program itself, never the organization's app (EN-51):
+// "Built on Blitz", Blitz's releases, license, themes and its reinstall
+// hints. A key ending in "." covers every key under it. The desktop
+// window's i18n.ts has the same list.
+var fixedKeys = []string{
+	"desktop.brand",
+	"desktop.org.built_on",
+	"desktop.update.",
+	"desktop.cli.",
+	"desktop.service.no_blitzd",
+	"desktop.service.tray.none",
+	"desktop.settings.light_theme.detail",
+	"desktop.settings.dark_theme.detail",
+	"desktop.settings.transparency.blitz_only",
+	"desktop.settings.doc_css.sample_text",
+	"desktop.cmd.license",
+	"help.license",
+	"rewind.old_prompt",
+}
+
+// FixedName reports whether key names the program itself, so keeps
+// "Blitz" under an organization's name.
+func FixedName(key string) bool {
+	for _, k := range fixedKeys {
+		if key == k || (strings.HasSuffix(k, ".") && strings.HasPrefix(key, k)) {
+			return true
+		}
+	}
+	return false
+}
+
+// SetAppName says name in place of "Blitz" in the words T and N return,
+// but where they name the program itself ("" for Blitz's own).
+func SetAppName(name string) { appName.Store(&name) }
+
+// AppName is the name the program goes by: the organization's, else Blitz.
+func AppName() string {
+	if p := appName.Load(); p != nil && *p != "" {
+		return *p
+	}
+	return Product
+}
+
+var blitzRE = regexp.MustCompile(`\bBlitz\b`)
+
+func rename(key, msg string) string {
+	name := AppName()
+	if name == Product || FixedName(key) || !strings.Contains(msg, Product) {
+		return msg
+	}
+	return blitzRE.ReplaceAllLiteralString(msg, name)
 }

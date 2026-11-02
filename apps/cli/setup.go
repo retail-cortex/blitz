@@ -26,6 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
@@ -160,6 +161,7 @@ func (o backendOptions) serviceOptions(cfg *config.Config) serviceOptions {
 // answer.
 func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
 	locales := i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, warn)
+	i18n.SetAppName(enterprise.KeptName(config.EnterpriseDir("", cfg.Enterprise.URL)))
 	private := o.private()
 	var sock string
 	var err error

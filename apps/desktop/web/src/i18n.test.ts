@@ -16,9 +16,12 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import enUS from "../../../../pkg/i18n/locales/en-US.json";
-import { chain, language, pseudo, resolveLanguage, setLanguage, t, tn } from "./i18n";
+import { chain, fixedName, language, pseudo, resolveLanguage, setAppName, setLanguage, t, tn } from "./i18n";
 
-afterEach(() => setLanguage("en-US"));
+afterEach(() => {
+  setLanguage("en-US");
+  setAppName("");
+});
 
 describe("i18n", () => {
   it("looks from the most specific catalog to English", () => {
@@ -53,5 +56,26 @@ describe("i18n", () => {
   it("has one and other forms for every plural the page uses", () => {
     const keys = Object.keys((enUS as { messages: Record<string, string> }).messages).filter((k) => k.startsWith("desktop."));
     for (const k of keys.filter((k) => k.endsWith(".one"))) expect(keys).toContain(k.replace(/\.one$/, ".other"));
+  });
+
+  // EN-51: the organization's name in place of Blitz's, but where the
+  // words name the program itself; a name's "$" kept as it is.
+  it("says the organization's name in place of Blitz's", () => {
+    expect(t("desktop.appmenu.quit")).toBe("Quit Blitz");
+    setAppName("Acme $1 Assist");
+    expect(t("desktop.appmenu.quit")).toBe("Quit Acme $1 Assist");
+    expect(t("desktop.update.latest", { version: "1.0" })).toBe("Blitz 1.0 is the latest release.");
+    expect(t("desktop.org.built_on")).toBe("Built on Blitz");
+    expect(t("desktop.files.rule.blocked.detail", {})).not.toContain("Blitz");
+    expect(t("desktop.app.lost")).toContain("Acme $1 Assist service");
+    setAppName("");
+    expect(t("desktop.appmenu.quit")).toBe("Quit Blitz");
+  });
+
+  it("names only keys the catalog has as the program's", () => {
+    const messages = (enUS as { messages: Record<string, string> }).messages;
+    const fixed = Object.keys(messages).filter(fixedName);
+    expect(fixed.length).toBeGreaterThan(10);
+    for (const k of ["desktop.brand", "desktop.org.built_on", "help.license", "rewind.old_prompt"]) expect(fixed).toContain(k);
   });
 });

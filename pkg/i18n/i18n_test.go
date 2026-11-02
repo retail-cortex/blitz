@@ -328,3 +328,33 @@ func TestSetup(t *testing.T) {
 	require.Len(t, warned, 1)
 	assert.Contains(t, warned[0], "not a language code")
 }
+
+// The organization's name in place of Blitz's (spec_053 EN-51), but where
+// the words name the program itself; a name's "$" kept as it is, and
+// pseudo-locale text renamed before it's accented.
+func TestAppName(t *testing.T) {
+	t.Cleanup(func() { SetAppName("") })
+	l := Default().Localizer(language.MustParse(DefaultLocale))
+	assert.Equal(t, "Blitz", AppName())
+	assert.Equal(t, "Quit Blitz", l.T("desktop.appmenu.quit"))
+
+	SetAppName("Acme $1 Assist")
+	assert.Equal(t, "Acme $1 Assist", AppName())
+	for _, tc := range []struct{ key, want string }{
+		{"desktop.appmenu.quit", "Quit Acme $1 Assist"},
+		{"tray.open_app", "Open Acme $1 Assist"},
+		{"notify.question", "Acme $1 Assist has a question for you"},
+		{"desktop.org.built_on", "Built on Blitz"},
+		{"desktop.update.latest", "Blitz {version} is the latest release."},
+		{"help.license", "Blitz's license, or its full text or the third-party notices"},
+	} {
+		t.Run(tc.key, func(t *testing.T) { assert.Equal(t, tc.want, l.T(tc.key)) })
+	}
+	p := Default().Localizer(language.MustParse(PseudoLocale))
+	assert.Contains(t, p.T("tray.open_app"), "Åçmé")
+
+	SetAppName("")
+	assert.Equal(t, "Quit Blitz", l.T("desktop.appmenu.quit"))
+	assert.True(t, FixedName("desktop.update.ready"))
+	assert.False(t, FixedName("desktop.updates"), "a prefix covers only keys under it")
+}
