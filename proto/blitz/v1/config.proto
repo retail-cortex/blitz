@@ -227,6 +227,10 @@ service ConfigService {
   // due, for the organization's service; nothing for another host or when
   // signed out.
   rpc GitCredential(GitCredentialRequest) returns (GitCredentialResponse);
+  // An organization workspace's sync on this computer (EN-64): its state
+  // (saved, saving, offline, signed_out, conflicts; "" when it isn't one
+  // kept in step) and the files with both versions kept.
+  rpc GetOrgSync(GetOrgSyncRequest) returns (GetOrgSyncResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -1395,4 +1399,21 @@ message GitCredentialResponse {
   bool ok = 1;
   string username = 2;
   string password = 3;
+}
+
+// Request message for ConfigService.GetOrgSync.
+message GetOrgSyncRequest {
+  string workspace = 1;
+}
+
+// A file with both versions kept: the shared one and this person's copy.
+message OrgSyncPair {
+  string shared = 1;
+  string mine = 2;
+}
+
+// Response message for ConfigService.GetOrgSync.
+message GetOrgSyncResponse {
+  string state = 1;
+  repeated OrgSyncPair pairs = 2;
 }

@@ -15,9 +15,14 @@
 package enterprise
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Workspace is one of the organization's workspaces the person has a role
@@ -90,4 +95,43 @@ func (c *Client) Host() string {
 		return ""
 	}
 	return u.Host
+}
+
+// WatchWorkspace follows a workspace's stream of pushes (the enterprise
+// service's WS-06), calling on with each pushed ref's new commit, until ctx
+// ends or the stream does (the error says why).
+func (c *Client) WatchWorkspace(ctx context.Context, handle string, on func(ref, commit, by string)) error {
+	token, err := c.AccessToken(ctx)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"/api/v1/workspaces/"+url.PathEscape(handle)+"/watch", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "text/event-stream")
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return fmt.Errorf("reaching the organization's service: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return &Refusal{Status: res.StatusCode}
+	}
+	sc := bufio.NewScanner(res.Body)
+	for sc.Scan() {
+		data, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok {
+			continue
+		}
+		var p struct{ Ref, Commit, By string }
+		if json.Unmarshal([]byte(data), &p) == nil {
+			on(p.Ref, p.Commit, p.By)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	return errors.New("the organization's service ended the workspace's stream")
 }

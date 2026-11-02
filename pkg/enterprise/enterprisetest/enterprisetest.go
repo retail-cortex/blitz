@@ -202,6 +202,9 @@ type Service struct {
 	// takes the access token as the password, as the service's proxy does.
 	Workspaces map[string]Workspace
 	repos      string
+	// Pushes announces a push to a workspace, by handle, on its watch
+	// stream.
+	Pushes chan string
 	// quit ends the watch streams when the service closes, as a real
 	// one's do when it shuts down.
 	quit       chan struct{}
@@ -215,7 +218,7 @@ type Service struct {
 // gateway and jobs, and signs Ana (ana@acme.com) in.
 func NewService(t testing.TB, issuer string) *Service {
 	_, key, _ := ed25519.GenerateKey(nil)
-	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, repos: t.TempDir(), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
+	s := &Service{Key: key, KeyID: "catalog-test", Accepts: map[string]bool{}, Announce: make(chan int, 4), quit: make(chan struct{}), Workspaces: map[string]Workspace{}, repos: t.TempDir(), Pushes: make(chan string, 4), issuer: issuer, sessions: map[string]string{}, Ended: map[string]bool{}, Access: map[string]string{}, ExpiresIn: 600}
 	refuse := func(w http.ResponseWriter, status int, code, msg string) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": msg})
@@ -453,6 +456,27 @@ func NewService(t testing.TB, issuer string) *Service {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(view(in.Handle, ws))
 	})
+	mux.HandleFunc("GET /api/v1/workspaces/{handle}/watch", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(": watching\n\n"))
+		w.(http.Flusher).Flush()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-s.quit:
+				return
+			case h := <-s.Pushes:
+				if h == r.PathValue("handle") {
+					fmt.Fprintf(w, "event: push\ndata: {\"ref\":\"refs/heads/main\",\"commit\":\"c\",\"by\":\"bo@acme.com\"}\n\n")
+					w.(http.Flusher).Flush()
+				}
+			}
+		}
+	})
 	if git, err := exec.LookPath("git"); err == nil {
 		backend := &cgi.Handler{Path: git, Args: []string{"http-backend"}, Root: "/git", Env: []string{"GIT_PROJECT_ROOT=" + s.repos, "GIT_HTTP_EXPORT_ALL=1"}}
 		mux.HandleFunc("/git/", func(w http.ResponseWriter, r *http.Request) {
@@ -596,5 +620,11 @@ func (s *Service) addRepo(handle string) error {
 			return err
 		}
 	}
+	if err := git(bare, "config", "http.receivepack", "true"); err != nil {
+		return err
+	}
 	return git(bare, "symbolic-ref", "HEAD", "refs/heads/main")
 }
+
+// Repo is the bare repository of a workspace, for a test to look in.
+func (s *Service) Repo(handle string) string { return filepath.Join(s.repos, handle+".git") }

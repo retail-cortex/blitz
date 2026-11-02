@@ -18,9 +18,14 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  mdiAccountAlertOutline,
   mdiAccountCheckOutline,
   mdiAlertCircleOutline,
   mdiAlertOutline,
+  mdiFileCompare,
+  mdiCloudSyncOutline,
+  mdiCloudOffOutline,
+  mdiCloudCheckOutline,
   mdiCircleMedium,
   mdiCloseCircleOutline,
   mdiCreationOutline,
@@ -35,13 +40,14 @@ import {
   mdiTuneVariant,
   mdiVectorPolyline,
 } from "@mdi/js";
-import { workspaces } from "./api";
+import { config, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import { FlowRunsItem } from "./FlowRunAlerts";
 import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
 import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
 import type { AgentInfo, GetGitStatusResponse, WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
+import type { GetOrgSyncResponse } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
@@ -68,6 +74,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const { prefs, activity, theme } = useApp();
   const ws = prefs.workspaces.find((w) => w.dir === prefs.active && w.open);
   const dir = ws?.dir ?? "";
+  const orgSync = useOrgSync(serviceUp ? dir : "");
   return (
     <footer className="status-bar t-label-sm" role="contentinfo" aria-label={t("desktop.status.label")}>
       {/* The service: an icon, green while it answers and red while it's
@@ -88,7 +95,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
             <span className="sb-swatch" style={{ background: workspaceColor(ws.color, theme) }} />
             <span className="ellipsis">{displayName(ws)}</span>
           </span>
-          {serviceUp && <GitItem dir={dir} />}
+          {serviceUp && (orgSync ? <OrgSyncItem state={orgSync} /> : <GitItem dir={dir} />)}
         </>
       )}
       <span className="spacer" />
@@ -99,6 +106,54 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
     </footer>
+  );
+}
+
+/** How often an organization workspace's sync state is asked for. */
+const orgSyncPollMs = 3_000;
+
+/**
+ * An organization workspace's sync, while the service keeps it in step
+ * (spec_053_enterprise EN-64); undefined for any other workspace.
+ */
+function useOrgSync(dir: string): GetOrgSyncResponse | undefined {
+  const [state, setState] = useState<GetOrgSyncResponse>();
+  useEffect(() => {
+    setState(undefined);
+    if (!dir) return;
+    let live = true;
+    const ask = () =>
+      config.getOrgSync({ workspace: dir }).then(
+        (r) => live && setState(r.state ? r : undefined),
+        () => live && setState(undefined),
+      );
+    void ask();
+    const timer = setInterval(() => void ask(), orgSyncPollMs);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [dir]);
+  return state;
+}
+
+const orgSyncIcons: Record<string, string> = {
+  saved: mdiCloudCheckOutline,
+  saving: mdiCloudSyncOutline,
+  offline: mdiCloudOffOutline,
+  signed_out: mdiAccountAlertOutline,
+  conflicts: mdiFileCompare,
+};
+
+/** The sync's state in words, never Git's: Saved, Saving…, Offline, Signed out, Both versions kept. */
+function OrgSyncItem({ state }: { state: GetOrgSyncResponse }) {
+  const label = state.state === "conflicts" ? tn("desktop.org.sync.conflicts", state.pairs.length) : t(`desktop.org.sync.${state.state}`);
+  const detail = state.pairs.map((p) => t("desktop.org.sync.pair", { shared: p.shared, mine: p.mine })).join("\n");
+  return (
+    <span className={`sb-item ${state.state === "conflicts" || state.state === "signed_out" ? "warn-text" : ""}`} role="status" title={detail || label}>
+      <Icon path={orgSyncIcons[state.state] ?? mdiCloudCheckOutline} size="sm" />
+      <span className="ellipsis">{label}</span>
+    </span>
   );
 }
 

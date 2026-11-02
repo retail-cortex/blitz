@@ -48,6 +48,8 @@ If your organization has terms, Blitz shows them before anything else when you s
 
 Signed in, the **Workspaces** menu lists your organization's workspaces you have a role in, under its name. Open one, and Blitz gets it the first time into `~/Blitz/<organization>/<workspace>` (`[enterprise] workspaces_dir` moves it), then opens it from there. From the terminal: `blitz enterprise workspaces`, `blitz enterprise open <workspace>`, and `blitz enterprise create <name>` for a new one.
 
+A workspace with sync on saves and shares itself: a few seconds after you or an agent stop changing it (never mid-turn), Blitz saves it and sends it to your organization, and brings in others' changes between turns. If you and someone else changed the same file, both versions are kept: theirs under the file's name, yours beside it as `name (conflict, You).ext`. The status bar says how it stands: **Saved**, **Saving…**, **Offline: saved on this computer**, **Signed out: sign in to sync**, or how many files have both versions. Blitz's service does this, so it goes on with the window closed.
+
 Blitz signs Git in for you in those folders, as you. To use Git's own clients elsewhere with your organization's service:
 
 ```sh

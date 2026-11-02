@@ -471,3 +471,73 @@ func TestOrgWorkspaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, out.Msg.Ok, "signed out: nothing, so Git says to sign in")
 }
+
+// A cloned workspace with sync on is kept in step by the service: an edit
+// is saved and shared, and a push announced on its stream comes in
+// (EN-62, EN-64).
+func TestOrgSync(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	s.ent.syncEvery, s.ent.syncQuiet, s.ent.syncPoll = 50*time.Millisecond, 50*time.Millisecond, 20*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.AddWorkspace(t, "plans", "Plans", "editor")
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	token, err := s.ent.c.AccessToken(ctx)
+	require.NoError(t, err)
+	t.Setenv("BLITZ_TEST_TOKEN", token)
+	s.ent.gitHelper = `!f() { echo username=blitz; echo "password=$BLITZ_TEST_TOKEN"; }; f`
+
+	opened, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
+	require.NoError(t, err)
+	dir := opened.Msg.Dir
+	for _, args := range [][]string{{"config", "user.name", "Ana"}, {"config", "user.email", "ana@acme.com"}} {
+		require.NoError(t, exec.Command("git", append([]string{"-C", dir}, args...)...).Run())
+	}
+	state := func() string {
+		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: dir}))
+		require.NoError(t, err)
+		return st.Msg.State
+	}
+	require.Eventually(t, func() bool { return state() == "saved" }, 10*time.Second, 20*time.Millisecond, "kept in step once cloned")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("Ship it."), 0o644))
+	bare := org.Repo("plans")
+	lastSave := func() string {
+		out, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%s", "main").Output()
+		return strings.TrimSpace(string(out))
+	}
+	require.Eventually(t, func() bool { return lastSave() == "Ana: edited plan.md" }, 10*time.Second, 20*time.Millisecond, "saved and shared")
+
+	// Bo pushes; the stream says so; it comes in.
+	other := t.TempDir()
+	run := func(dir string, args ...string) {
+		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Bo", "-c", "user.email=bo@acme.com"}, args...)...).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	run(other, "clone", "-q", bare, "bo")
+	require.NoError(t, os.WriteFile(filepath.Join(other, "bo", "bo.md"), []byte("Bo's"), 0o644))
+	run(filepath.Join(other, "bo"), "add", "-A")
+	run(filepath.Join(other, "bo"), "commit", "-q", "-m", "Bo: edited bo.md")
+	run(filepath.Join(other, "bo"), "push", "-q", "origin", "main")
+	org.Pushes <- "plans"
+	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "bo.md")); return err == nil }, 10*time.Second, 20*time.Millisecond, "Bo's change came in")
+
+	none, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: t.TempDir()}))
+	require.NoError(t, err)
+	assert.Empty(t, none.Msg.State, "not one kept in step")
+}

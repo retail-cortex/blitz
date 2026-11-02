@@ -2562,6 +2562,12 @@ export function installFake() {
           await sleep(800);
           return { dir: `/home/me/Blitz/Acme Assist/${handle}`, cloned: true };
         },
+        getOrgSync: ({ workspace }) =>
+          workspace.includes("/Blitz/Acme Assist/")
+            ? fakeParam("conflict")
+              ? { state: "conflicts", pairs: [{ shared: "plan.md", mine: "plan (conflict, Ana).md" }] }
+              : { state: "saved", pairs: [] }
+            : { state: "", pairs: [] },
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };

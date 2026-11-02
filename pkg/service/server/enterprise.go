@@ -49,6 +49,11 @@ type enterpriseConn struct {
 	retry, idle time.Duration
 	// gitHelper replaces the credential helper Git runs (tests).
 	gitHelper string
+	// syncs are the organization workspaces kept in step; syncEvery how
+	// often it looks for clones to keep, syncQuiet and syncPoll the
+	// syncers' (tests shorten them).
+	syncs                          orgSyncs
+	syncEvery, syncQuiet, syncPoll time.Duration
 	// HTTP is what the calls go through (tests set it); nil for the
 	// default client.
 	http *http.Client
@@ -103,8 +108,13 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 		idle = time.Minute
 	}
 	dir := s.brandingDir(c)
+	syncKick := make(chan struct{}, 1)
+	s.ent.syncs.kick = syncKick
+	var loops sync.WaitGroup
+	loops.Go(func() { s.runSyncs(ctx, c, syncKick) })
 	go func() {
 		defer close(done)
+		defer loops.Wait()
 		wait := func(d time.Duration) bool {
 			t := time.NewTimer(d)
 			defer t.Stop()
@@ -162,14 +172,17 @@ func (e *enterpriseConn) stopCatalog() {
 	e.stop = nil
 }
 
-// kickCatalog asks the catalog's loop to fetch now.
+// kickCatalog asks the catalog's loop to fetch now, and the syncs to look
+// again for clones to keep in step.
 func (e *enterpriseConn) kickCatalog() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.kick != nil {
-		select {
-		case e.kick <- struct{}{}:
-		default:
+	for _, k := range []chan struct{}{e.kick, e.syncs.kick} {
+		if k != nil {
+			select {
+			case k <- struct{}{}:
+			default:
+			}
 		}
 	}
 }

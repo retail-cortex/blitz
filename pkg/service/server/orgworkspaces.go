@@ -165,6 +165,7 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 	if err := h.s.git(ctx, w.Dir, "config", "credential."+c.URL()+".helper", h.s.gitHelper()); err != nil {
 		return nil, invalid(err)
 	}
+	h.s.ent.kickCatalog() // a new clone to keep in step
 	return ok(&pb.OpenOrgWorkspaceResponse{Dir: w.Dir, Cloned: true})
 }
 
