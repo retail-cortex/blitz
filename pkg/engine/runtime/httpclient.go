@@ -16,12 +16,15 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -141,6 +144,12 @@ func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		return nil, err
 	}
+	if busy(resp.StatusCode) && t.retries {
+		// The SDK waits and asks again: the window says so (spec_053 EN-24).
+		if f := statusTo(req.Context()); f != nil {
+			f(busyNote(req, resp))
+		}
+	}
 	b := &stallBody{rc: resp.Body, ctx: ctx, cancel: cancel, stall: t.stall}
 	b.timer = time.AfterFunc(t.stall, func() { cancel(ErrStalled) })
 	resp.Body = b
@@ -218,4 +227,65 @@ func (p retryPolicy) openAIOptions() []openaioption.RequestOption {
 		openaioption.WithHTTPClient(p.httpClient()),
 		openaioption.WithMaxRetries(p.maxRetries),
 	}
+}
+
+// busy says a status is a model too busy to answer now, which the SDKs
+// ask again after: rate limited (429), unavailable (503) or Anthropic's
+// overloaded (529).
+func busy(status int) bool {
+	return status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable || status == 529
+}
+
+// busyNote is what the window says while a busy model is asked again:
+// which model, and when, from Retry-After, when it says.
+func busyNote(req *http.Request, resp *http.Response) string {
+	name := modelOf(req)
+	if name == "" {
+		name = i18n.T("model.the_model")
+	}
+	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s > 0 {
+		return i18n.T("model.busy_in", "model", name, "seconds", s)
+	}
+	return i18n.T("model.busy", "model", name)
+}
+
+// geminiModelRE is a Gemini request's model, in its path.
+var geminiModelRE = regexp.MustCompile(`/models/([^/:]+)`)
+
+// modelOf is the model a request asks: Gemini's names it in its path, the
+// others in the body's "model" ("" when neither says).
+func modelOf(req *http.Request) string {
+	if m := geminiModelRE.FindStringSubmatch(req.URL.Path); m != nil {
+		return m[1]
+	}
+	if req.GetBody == nil {
+		return ""
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return ""
+	}
+	defer body.Close()
+	dec := json.NewDecoder(body)
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return ""
+	}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		if key == "model" {
+			var name string
+			if dec.Decode(&name) != nil {
+				return ""
+			}
+			return name
+		}
+		var skip json.RawMessage
+		if dec.Decode(&skip) != nil {
+			return ""
+		}
+	}
+	return ""
 }

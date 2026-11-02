@@ -97,6 +97,16 @@ func (f *fakeExtras) KillProcess(_ context.Context, r *connect.Request[pb.KillPr
 	return connect.NewResponse(&pb.KillProcessResponse{}), nil
 }
 
+func (f *fakeExtras) ListServiceApprovals(context.Context, *connect.Request[pb.ListServiceApprovalsRequest]) (*connect.Response[pb.ListServiceApprovalsResponse], error) {
+	run := &pb.ServiceRun{Id: "sr1", Status: "paused", Pending: &pb.ServiceRequest{Tool: "run_shell_command", Detail: "make deploy"}}
+	return connect.NewResponse(&pb.ListServiceApprovalsResponse{Runs: []*pb.GoingServiceRun{{Run: run, JobName: "digest", Workspace: "plans", Dir: "/w"}}}), nil
+}
+
+func (f *fakeExtras) AnswerServiceRun(_ context.Context, r *connect.Request[pb.AnswerServiceRunRequest]) (*connect.Response[pb.AnswerServiceRunResponse], error) {
+	f.note("answer " + r.Msg.RunId + map[bool]string{true: " approve", false: " deny"}[r.Msg.Approve])
+	return connect.NewResponse(&pb.AnswerServiceRunResponse{}), nil
+}
+
 func (f *fakeExtras) note(s string) { f.mu.Lock(); f.asked = append(f.asked, s); f.mu.Unlock() }
 
 func (f *fakeExtras) ListMCPServerConfigs(context.Context, *connect.Request[pb.ListMCPServerConfigsRequest]) (*connect.Response[pb.ListMCPServerConfigsResponse], error) {
@@ -192,11 +202,27 @@ func TestFetchExtrasAndDo(t *testing.T) {
 		{Kind: StopWorkflow, Workspace: "/w", RunID: "f1"},
 		{Kind: SetConnector, Workspace: "/w", Category: "databases", Scope: "global", Name: "sales", On: false},
 		{Kind: StopProcess, Workspace: "/w", ID: 3},
+		{Kind: AnswerServiceRun, RunID: "sr1", On: true},
+		{Kind: AnswerServiceRun, RunID: "sr1"},
 		{Kind: NoAction},
 	} {
 		require.NoError(t, Do(ctx, sock, a, open), "%+v", a)
 	}
-	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1", "connector /w global/databases/sales off", "kill /w 3 any=true"}, f.asked)
+	assert.Equal(t, []string{"mcp github off", "stop r1", "run nightly", "enable nightly@h", "disable nightly", "start /w /brief", "stop flow f1", "connector /w global/databases/sales off", "kill /w 3 any=true",
+		"answer sr1 approve", "answer sr1 deny"}, f.asked)
+
+	// The organization's runs waiting for an answer (EN-43): what each
+	// asks, with Approve, Deny and Show in Blitz.
+	waiting := FetchApprovals(ctx, sock)
+	require.Len(t, waiting, 1)
+	assert.Equal(t, "Jobs: 1 waiting for your answer", ApprovalsTitle(len(waiting)))
+	entries := ApprovalEntries(waiting)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "digest asks to run_shell_command: make deploy", entries[0].Title)
+	require.Len(t, entries[0].Children, 4)
+	assert.Equal(t, "In plans, on your organization's service", entries[0].Children[0].Title)
+	assert.Equal(t, Action{Kind: AnswerServiceRun, RunID: "sr1", On: true}, entries[0].Children[1].Action)
+	assert.Equal(t, Action{Kind: ShowProcess, Workspace: "/w"}, entries[0].Children[3].Action)
 	assert.Equal(t, "blitz://workers?dir=%2Fw", opened)
 	require.NoError(t, Do(ctx, sock, Action{Kind: ShowWorkflow, Workspace: "/w", Name: "brief", RunID: "f1"}, open))
 	assert.Equal(t, "blitz://workflow?dir=%2Fw&run=f1&workflow=brief", opened)
@@ -217,6 +243,7 @@ func TestFetchExtrasAndDo(t *testing.T) {
 	srv.Close()
 	_, err = FetchExtras(ctx, sock)
 	assert.Error(t, err, "nobody answers")
+	assert.Empty(t, FetchApprovals(ctx, sock), "nobody answers: none waiting")
 }
 
 // Links open with the system's opener; the app is found in the Electron

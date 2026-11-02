@@ -322,6 +322,10 @@ func onReady() {
 	// The agents' background processes still running, each with Stop
 	// (spec_038_electron EL-112).
 	procMenu := &submenu{parent: systray.AddMenuItem(tray.ProcessesTitle(nil), "")}
+	// The organization's runs waiting for an answer, each with Approve
+	// and Deny (spec_053 EN-43): shown while there are some.
+	approvalsMenu := &submenu{parent: systray.AddMenuItem(tray.ApprovalsTitle(0), "")}
+	approvalsMenu.parent.Hide()
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	// Workflows' human tasks waiting (spec_038_electron EL-110): shown while there are some.
@@ -447,6 +451,13 @@ func onReady() {
 				procMenu.parent.SetTitle(title)
 			}
 			procMenu.show(tray.ProcessEntries(extras.Processes, spaces), click)
+			if waiting := tray.FetchApprovals(context.Background(), sock); len(waiting) > 0 {
+				approvalsMenu.parent.SetTitle(tray.ApprovalsTitle(len(waiting)))
+				approvalsMenu.parent.Show()
+				approvalsMenu.show(tray.ApprovalEntries(waiting), click)
+			} else {
+				approvalsMenu.parent.Hide()
+			}
 			going := tray.Going(live, spaces, time.Now())
 			runSlots.show(going, click)
 			if len(going) > 0 {
@@ -470,6 +481,7 @@ func onReady() {
 		} else {
 			mcpMenu.parent.Hide()
 			procMenu.parent.Hide()
+			approvalsMenu.parent.Hide()
 			runningHead.Hide()
 			spacesHead.Hide()
 			runSlots.show(nil, click)

@@ -21,12 +21,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
@@ -258,6 +260,40 @@ func TestDroppedConnectionTellsTheTurn(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A busy model's answer, which the SDK asks again after, says so in the
+// window while it waits (spec_053 EN-24): which model, from Gemini's path
+// or the body's "model", and when, from Retry-After; not when the request
+// isn't retried, nor for an answer that isn't busy.
+func TestBusyNote(t *testing.T) {
+	status, after := http.StatusTooManyRequests, "7"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if after != "" {
+			w.Header().Set("Retry-After", after)
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(srv.Close)
+	ask := func(retries int, path, body string) []string {
+		var said []string
+		ctx := WithTurnStatus(t.Context(), func(s string) { said = append(said, s) })
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		res, err := retryPolicy{stall: 5 * time.Second, maxRetries: retries}.httpClient().Do(req)
+		require.NoError(t, err)
+		res.Body.Close()
+		return said
+	}
+	assert.Equal(t, []string{"Waiting for claude-opus-5-5: busy. Trying again in 7s…"}, ask(2, "/v1/messages", `{"max_tokens":10,"messages":[{"role":"user","content":"hi"}],"model":"claude-opus-5-5"}`))
+	assert.Equal(t, []string{"Waiting for gemini-4-flash: busy. Trying again in 7s…"}, ask(2, "/v1beta/models/gemini-4-flash:generateContent", `{}`))
+	after = ""
+	assert.Equal(t, []string{"Waiting for the model: busy. Trying again…"}, ask(2, "/v1/responses", `["not an object"]`))
+	status = 529
+	assert.Len(t, ask(2, "/v1/messages", `{"model":"claude"}`), 1, "Anthropic's overloaded")
+	assert.Empty(t, ask(0, "/v1/messages", `{"model":"claude"}`), "not retried: the error says it")
+	status = http.StatusBadRequest
+	assert.Empty(t, ask(2, "/v1/messages", `{"model":"claude"}`))
 }
 
 // freezer is a TCP proxy whose connections can go silent, as a VPN or NAT

@@ -76,19 +76,20 @@ type ActionKind int
 
 // What an entry does.
 const (
-	NoAction      ActionKind = iota
-	SetMCP                   // turn an MCP server on or off (On)
-	StopRun                  // stop a worker's run (RunID)
-	RunWorker                // run a worker now
-	EnableWorker             // enable a worker at the hash reviewed (Hash)
-	DisableWorker            // disable a worker
-	ShowWorkers              // open the app on a workspace's workers
-	RunWorkflow              // run a workflow in the background (Name)
-	StopWorkflow             // stop a workflow's run (RunID)
-	ShowWorkflow             // open the app on a workflow's canvas (Name), on a run (RunID)
-	SetConnector             // turn a connection on or off in a workspace (Category, Scope, Name, On)
-	StopProcess              // stop an agent's background process (Workspace, ID)
-	ShowProcess              // open the app's processes view on one (Workspace, ID)
+	NoAction         ActionKind = iota
+	SetMCP                      // turn an MCP server on or off (On)
+	StopRun                     // stop a worker's run (RunID)
+	RunWorker                   // run a worker now
+	EnableWorker                // enable a worker at the hash reviewed (Hash)
+	DisableWorker               // disable a worker
+	ShowWorkers                 // open the app on a workspace's workers
+	RunWorkflow                 // run a workflow in the background (Name)
+	StopWorkflow                // stop a workflow's run (RunID)
+	ShowWorkflow                // open the app on a workflow's canvas (Name), on a run (RunID)
+	SetConnector                // turn a connection on or off in a workspace (Category, Scope, Name, On)
+	StopProcess                 // stop an agent's background process (Workspace, ID)
+	ShowProcess                 // open the app's processes view on one (Workspace, ID)
+	AnswerServiceRun            // approve (On) or deny an organization's run waiting (RunID, EN-43)
 )
 
 // Action is an entry's click.
@@ -177,6 +178,8 @@ func Do(ctx context.Context, sock string, a Action, open func(link string) error
 		_, err = pb.NewWorkspaceServiceClient(hc, socket.BaseURL).KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: a.Workspace, Id: int32(a.ID), AnySession: true}))
 	case ShowProcess:
 		err = open(ProcessesLink(a.Workspace, a.ID))
+	case AnswerServiceRun:
+		_, err = pb.NewConfigServiceClient(hc, socket.BaseURL).AnswerServiceRun(ctx, connect.NewRequest(&pb.AnswerServiceRunRequest{RunId: a.RunID, Approve: a.On}))
 	case NoAction:
 	default:
 		err = errors.New("no such action")
