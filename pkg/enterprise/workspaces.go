@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -36,6 +37,17 @@ type Workspace struct {
 	CloneURL string
 	Archived bool
 }
+
+// handleRE is a workspace's handle: a team's one word, or a person's
+// ~<person>/<name> (blitz-enterprise spec_007_workspaces WS-01). It
+// becomes a folder under the organization's, so nothing else is taken.
+var handleRE = regexp.MustCompile(`^(~[a-z0-9][a-z0-9-]{0,62}/)?[a-z0-9][a-z0-9-]{0,62}$`)
+
+// ValidHandle is whether h can be a workspace's handle.
+func ValidHandle(h string) bool { return handleRE.MatchString(h) }
+
+// errHandle is a service's answer naming a workspace no handle could.
+var errHandle = errors.New("the organization's service named a workspace with a handle that isn't one")
 
 // workspaceView is how the service answers for a workspace.
 type workspaceView struct {
@@ -68,7 +80,9 @@ func (c *Client) Workspaces(ctx context.Context) ([]Workspace, error) {
 	}
 	list := make([]Workspace, 0, len(out.Workspaces))
 	for _, v := range out.Workspaces {
-		list = append(list, v.workspace())
+		if ValidHandle(v.Workspace.Handle) { // never a folder outside the organization's
+			list = append(list, v.workspace())
+		}
 	}
 	return list, nil
 }
@@ -83,6 +97,9 @@ func (c *Client) CreateWorkspace(ctx context.Context, name, handle string) (Work
 	var v workspaceView
 	if err := call(ctx, c.hc, http.MethodPost, c.url+"/api/v1/workspaces", token, map[string]string{"name": name, "handle": handle}, &v); err != nil {
 		return Workspace{}, err
+	}
+	if !ValidHandle(v.Workspace.Handle) {
+		return Workspace{}, errHandle
 	}
 	return v.workspace(), nil
 }

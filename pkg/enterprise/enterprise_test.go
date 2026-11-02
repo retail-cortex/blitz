@@ -854,8 +854,12 @@ func TestCatalogFailures(t *testing.T) {
 		}
 		cancel()
 		assert.Error(t, <-done)
+		s.Mu.Lock()
+		s.Workspaces["../escape"] = enterprisetest.Workspace{Name: "Escape", Role: "owner"}
+		s.Mu.Unlock()
 		list, err := c.Workspaces(ctx)
 		require.NoError(t, err)
+		require.Len(t, list, 1, "never a handle that isn't one")
 		assert.Equal(t, "plans", list[0].Handle)
 		made, err := c.CreateWorkspace(ctx, "Q4", "q4")
 		require.NoError(t, err)
@@ -868,6 +872,15 @@ func TestCatalogFailures(t *testing.T) {
 		assert.Error(t, err)
 		assert.Error(t, c.WatchWorkspace(ctx, "plans", func(string, string, string) {}))
 	})
+}
+
+// A handle is a team's word or a person's ~<person>/<name>, nothing that
+// could be a folder elsewhere.
+func TestValidHandle(t *testing.T) {
+	for h, want := range map[string]bool{"plans": true, "~ana/home": true, "~ana-2/q4-plan": true,
+		"": false, "../escape": false, "~ana/../x": false, "~ana/home/more": false, "Plans": false, "/abs": false, "~/home": false} {
+		assert.Equal(t, want, ValidHandle(h), h)
+	}
 }
 
 // A folder that can't be written: the branding and catalog say so.
