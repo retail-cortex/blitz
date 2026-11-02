@@ -96,6 +96,11 @@ func TestEnterpriseJourney(t *testing.T) {
 	cfg, err := config.Load("")
 	require.NoError(t, err)
 	assert.Equal(t, org.URL, cfg.Enterprise.URL, "kept in the global settings")
+	models, err := c.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "enterprise", models.Msg.DefaultProvider, "the organization's models are the models")
+	require.Len(t, models.Msg.Providers, 1)
+	assert.Equal(t, "enterprise", models.Msg.Providers[0].Provider)
 
 	done, seen, err := signIn(false)
 	require.NoError(t, err)

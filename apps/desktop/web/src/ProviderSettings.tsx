@@ -20,7 +20,7 @@ import { config } from "./api";
 import { openURL } from "./desktop";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
-import { KeySource, type ConfigChange, type DescribeConfigResponse, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
+import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
@@ -199,6 +199,16 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const catalog = useModelCatalog(workspace, choice.provider);
   const [facts, refreshFacts] = useProviderFacts(workspace, desc);
   const keyCheck = useKeyCheck(workspace, choice.provider, choice.method, choice.key);
+  // Connected to an organization, its models are the models (spec_053
+  // EN-20): the page offers its models, and the person's own providers
+  // wait, kept, until they disconnect.
+  const [org, setOrg] = useState<EnterpriseState | null>(null);
+  useEffect(() => {
+    config.getEnterprise({ check: false }).then(
+      (r) => setOrg(r.state ?? null),
+      () => setOrg(null),
+    );
+  }, [workspace]);
 
   // Reads the scope; fresh also starts the choice over from what's saved.
   const load = useCallback(
@@ -241,6 +251,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   };
 
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
+  if (org?.url) return <OrganizationModels workspace={workspace} org={org} desc={desc} onSaved={() => void load()} />;
   const keyed = desc.providers.find((p) => p.name === choice.provider);
   const others = authMethods[choice.provider] ?? [];
   const saved = savedChoice(desc, effectiveProvider(desc.provider, workspace));
@@ -498,6 +509,87 @@ function ProviderRow({
           </Button>
         ) : null}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The organization's models, while Blitz is connected to its service: the
+ * organization as the one provider, and its models to choose the default
+ * from ("" for the organization's own default).
+ */
+function OrganizationModels({ workspace, org, desc, onSaved }: { workspace: string; org: EnterpriseState; desc: DescribeConfigResponse; onSaved: () => void }) {
+  const snack = useSnackbar();
+  const [models, setModels] = useState<string[] | null>(null);
+  const [listError, setListError] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    config.listModels({ workspace, providers: ["enterprise"] }).then(
+      (r) => {
+        const p = r.providers.find((x) => x.provider === "enterprise");
+        setModels(p?.ids ?? []);
+        setListError(p?.error ?? "");
+      },
+      (e) => setListError(message(e)),
+    );
+  }, [workspace, org.signedIn]);
+  const name = org.name || org.url;
+  const current = desc.defaultModel.startsWith("enterprise/") ? desc.defaultModel.slice("enterprise/".length) : "";
+  const choose = async (id: string) => {
+    setBusy(true);
+    setError("");
+    try {
+      const { change } = await config.setConfigValue({ workspace, key: "blitz.default_model", value: id ? `enterprise/${id}` : "" });
+      if (change?.modelError) setError(change.modelError);
+      else snack(t("desktop.keys.provider_saved"));
+      configChanged({ dir: workspace });
+      onSaved();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="stack provider-settings" style={{ gap: 12 }}>
+      <p className="t-body-sm muted">
+        <Icon path={mdiLockOutline} size="sm" /> {t("desktop.org.models_intro", { org: name })}
+      </p>
+      <div className="list provider-list" role="radiogroup" aria-label={t("desktop.keys.provider")}>
+        <ProviderRow
+          name={name}
+          state={org.signedIn ? { key: "org_signed_in", params: { email: org.email }, tone: "ok", ready: true } : { key: "org_signed_out", tone: "warn", ready: false }}
+          selected
+          inUse
+          busy={busy}
+          onSelect={() => {}}
+          onUse={() => {}}
+        />
+      </div>
+      <section className="card provider-choice">
+        <span className="t-title-sm">{name}</span>
+        <label className="field single">
+          <span className="t-label">{t("desktop.keys.default_model")}</span>
+          <select className="select" value={current} disabled={busy || !org.signedIn || models === null} onChange={(e) => void choose(e.target.value)}>
+            <option value="">{t("desktop.org.model_default")}</option>
+            {current && !models?.includes(current) && <option value={current}>{current}</option>}
+            {models?.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!org.signedIn ? (
+          <p className="t-body-sm muted">{t("desktop.org.models_sign_in")}</p>
+        ) : listError ? (
+          <p className="error-text t-body-sm">{listError}</p>
+        ) : models?.length === 0 ? (
+          <p className="t-body-sm muted">{t("desktop.org.no_models")}</p>
+        ) : null}
+        {error && <p className="error-text t-body-sm">{error}</p>}
+      </section>
     </div>
   );
 }

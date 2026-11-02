@@ -2525,7 +2525,17 @@ export function installFake() {
           return { state: fakeOrgState(false) };
         },
         listModels: ({ providers }) =>
-          // Ollama answers with ?ollama (it runs on the machine), else it isn't there.
+          // Connected to an organization, its models are the models.
+          fakeOrg.url && (providers.length === 0 || providers.includes("enterprise"))
+            ? {
+                defaultProvider: "enterprise",
+                providers: [
+                  fakeOrg.signedIn
+                    ? { provider: "enterprise", ids: ["fast", "smart"], models: [{ id: "fast", hasPrice: true, inputPerMtok: 0.75, outputPerMtok: 3.75 }, { id: "smart" }] }
+                    : { provider: "enterprise", error: "sign in to your organization to use its models" },
+                ],
+              }
+            : // Ollama answers with ?ollama (it runs on the machine), else it isn't there.
           providers.length === 1 && providers[0] === "ollama"
             ? { defaultProvider: "gemini", providers: [fakeParam("ollama") ? { provider: "ollama", ids: ["llama4:8b", "qwen3:14b"] } : { provider: "ollama", error: "connection refused" }] }
             : {

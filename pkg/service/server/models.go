@@ -78,6 +78,9 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		return nil, invalid(err)
 	}
 	res := &pb.ListModelsResponse{DefaultProvider: strings.ToLower(cfg.LLM.Provider)}
+	if cfg.Enterprise.URL != "" {
+		res.DefaultProvider = "enterprise" // its models are the models (spec_053_enterprise EN-20)
+	}
 	fresh := modelsFresh
 	for _, pm := range listModels(ctx, cfg, r.Msg.Providers...) {
 		p := &pb.ProviderModels{Provider: pm.Provider, Note: pm.Note}
