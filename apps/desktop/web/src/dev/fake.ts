@@ -907,6 +907,7 @@ const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boo
 
 // The service's runs of sales-digest, newest first, and what each left.
 const fakeServiceSet = "urn:blitz:artifacts:9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e";
+const fakeServicePushed = new Set<string>();
 const fakeServiceJob = { id: "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", urn: "urn:blitz:jobs:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", name: "sales-digest", schedule: "Mondays at 06:00", enabled: true };
 const fakeServiceRuns: { id: string; trigger: string; status: string; output?: string; note?: string; costUsd: number; created: ReturnType<typeof now>; branch?: string; artifacts: string; pending?: { tool: string; kind: string; detail: string } }[] = [
   {
@@ -2735,7 +2736,18 @@ export function installFake() {
           run.pending = undefined;
           return { run };
         },
-        getServiceJob: ({ name }) => (name === "sales-digest" ? { found: true, job: fakeServiceJob, runs: fakeServiceRuns } : { found: false, runs: [] }),
+        // A job the service hasn't got says why: ?unpushed for one not on
+        // main (until Push to main), ?notservice for one it doesn't run.
+        getServiceJob: ({ name }) => {
+          if (fakeParam("unpushed") && !fakeServicePushed.has(name)) return { found: false, runs: [], reason: "not_pushed" };
+          if (fakeParam("notservice")) return { found: false, runs: [], reason: "not_service", detail: "its WORKER.md doesn't read: schedule \"whenever\" isn't a schedule" };
+          if (name === "sales-digest" || fakeServicePushed.has(name)) return { found: true, job: { ...fakeServiceJob, name }, runs: name === "sales-digest" && !fakeServicePushed.has(name) ? fakeServiceRuns : [] };
+          return { found: false, runs: [], reason: "not_read" };
+        },
+        pushServiceJob: ({ name }) => {
+          fakeServicePushed.add(name);
+          return { job: { found: true, job: { ...fakeServiceJob, name }, runs: [] } };
+        },
         runServiceJob: () => {
           const run = { id: `run-${Date.now()}`, trigger: "now", status: "running", costUsd: 0, created: now(), artifacts: `${fakeServiceSet}:${Date.now()}` };
           fakeServiceRuns.unshift(run as (typeof fakeServiceRuns)[number]);

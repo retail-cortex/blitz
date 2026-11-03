@@ -32,12 +32,13 @@ import {
   mdiRefresh,
   mdiSourceBranch,
   mdiStopCircleOutline,
+  mdiUploadOutline,
 } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
 import { useServiceRuns } from "./serviceRuns";
 import { language, t } from "./i18n";
-import type { ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
+import type { GetServiceJobResponse, ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
 import type { Worker } from "./gen/blitz/v1/worker_pb";
 import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
@@ -59,6 +60,22 @@ export function size(n: bigint | number): string {
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** whyNot is what Studio says of a job the service hasn't got, by its reason (GetServiceJob's). */
+export function whyNot(r: Pick<GetServiceJobResponse, "reason" | "detail" | "syncState">): string {
+  switch (r.reason) {
+    case "outside":
+      return t("desktop.service_job.outside", { path: r.detail });
+    case "not_pushed":
+      return t("desktop.service_job.not_pushed");
+    case "saving":
+      return ["offline", "signed_out", "conflicts"].includes(r.syncState) ? t(`desktop.service_job.saving.${r.syncState}`) : t("desktop.service_job.saving");
+    case "not_service":
+      return t("desktop.service_job.not_service", { why: r.detail });
+    default:
+      return r.detail ? `${t("desktop.service_job.not_read")} ${t("desktop.service_job.not_read_why", { detail: r.detail })}` : t("desktop.service_job.not_read");
+  }
+}
+
 /**
  * A job that runs on the organization's service (runs_on: service; spec
  * 053 EN-42), in place of the local Run, Enable and runs: the service's
@@ -69,17 +86,41 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
   const snack = useSnackbar();
   const [job, setJob] = useState<ServiceJob | null | undefined>(undefined);
   const [runs, setRuns] = useState<ServiceRun[]>([]);
+  // Why the service hasn't got it, while it hasn't.
+  const [missing, setMissing] = useState<Pick<GetServiceJobResponse, "reason" | "detail" | "syncState"> | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const show = (r: GetServiceJobResponse) => {
+    setJob(r.found ? r.job! : null);
+    setRuns(r.runs);
+    setMissing(r.found ? null : r);
+  };
   const refresh = useCallback(async () => {
     try {
-      const r = await config.getServiceJob({ workspace: dir, name: worker.name });
-      setJob(r.found ? r.job! : null);
-      setRuns(r.runs);
+      show(await config.getServiceJob({ workspace: dir, name: worker.name, path: worker.path }));
       setError("");
     } catch (e) {
       setError(message(e));
     }
-  }, [dir, worker.name]);
+  }, [dir, worker.name, worker.path]);
+  // While sync puts it on main, look again until the service has it.
+  useEffect(() => {
+    if (missing?.reason !== "saving") return;
+    const id = window.setTimeout(() => void refresh(), 5000);
+    return () => window.clearTimeout(id);
+  }, [missing, refresh]);
+  const push = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await config.pushServiceJob({ workspace: dir, name: worker.name });
+      if (r.job) show(r.job);
+      if (r.job?.found) snack(t("desktop.service_job.pushed"));
+    } catch (e) {
+      setError(message(e));
+    }
+    setBusy(false);
+  };
   useEffect(() => void refresh(), [refresh]);
   // Asked again as a run of this job changes, as the service's stream says.
   const { change, changes } = useServiceRuns();
@@ -100,7 +141,26 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
   return (
     <>
       <p className="muted t-body-sm">{t("desktop.service_job.where")}</p>
-      {job === null && <p className="muted">{t("desktop.service_job.not_read")}</p>}
+      {job === null && missing && (
+        <div className="stack" style={{ gap: 8 }}>
+          <p className={missing.reason === "not_service" || missing.reason === "outside" ? "warning-text" : "muted"}>{whyNot(missing)}</p>
+          {missing.reason === "not_pushed" ? (
+            <span>
+              <Button variant="filled" icon={mdiUploadOutline} disabled={busy} onClick={() => void push()}>
+                {t("desktop.service_job.push")}
+              </Button>
+            </span>
+          ) : (
+            missing.reason !== "outside" && (
+              <span>
+                <Button icon={mdiRefresh} disabled={busy} onClick={() => void refresh()}>
+                  {t("desktop.service_job.check")}
+                </Button>
+              </span>
+            )
+          )}
+        </div>
+      )}
       {job && !job.enabled && <p className="muted">{t("desktop.service_job.off")}</p>}
       {job?.nextRun && <p className="t-body-sm muted">{t("desktop.worker.next", { time: timestampDate(job.nextRun).toLocaleString(language()) })}</p>}
       <div className="row wrap">

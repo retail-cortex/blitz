@@ -298,6 +298,49 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "jobs", "run", "tidy")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ tidy: run")
+
+	// A job of a folder that isn't the organization's: push says so.
+	here := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(here, ".agents", "workers", "ghost"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(here, ".agents", "workers", "ghost", "WORKER.md"), []byte("---\nruns_on: service\n---\n"), 0o644))
+	t.Chdir(here)
+	_, err = runCLI(t, "enterprise", "jobs", "runs", "ghost")
+	assert.ErrorContains(t, err, `runs no job "ghost"`)
+	_, err = runCLI(t, "enterprise", "jobs", "push", "ghost")
+	assert.ErrorContains(t, err, "isn't one of the organization's workspaces")
+
+	// A job in a clone of the organization's workspace, not on main yet:
+	// the CLI says so, and push puts it there for the service to read.
+	org.AddWorkspace(t, "plans", "Plans", "editor")
+	org.Mu.Lock()
+	pw := org.Workspaces["plans"]
+	pw.Sync = false
+	org.Workspaces["plans"] = pw
+	org.Mu.Unlock()
+	home, _ := os.UserHomeDir()
+	clone := filepath.Join(home, "Blitz", "Acme Assist", "plans")
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	git("clone", "-q", org.Repo("plans"), clone)
+	git("-C", clone, "config", "user.name", "Ana")
+	git("-C", clone, "config", "user.email", "ana@acme.com")
+	worker := func(name, front string) {
+		require.NoError(t, os.MkdirAll(filepath.Join(clone, ".agents", "workers", name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(clone, ".agents", "workers", name, "WORKER.md"), []byte("---\n"+front+"\n---\nDo it.\n"), 0o644))
+	}
+	worker("fresh", "runs_on: service")
+	t.Chdir(clone)
+	_, err = runCLI(t, "enterprise", "jobs", "runs", "fresh")
+	assert.ErrorContains(t, err, "blitz enterprise jobs push fresh")
+	out, err = runCLI(t, "enterprise", "jobs", "push", "fresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ fresh is on main and the service has it")
+	worker("laptop", "schedule: hourly")
+	_, err = runCLI(t, "enterprise", "jobs", "push", "laptop")
+	assert.ErrorContains(t, err, "doesn't run it: its WORKER.md doesn't say runs_on: service")
 	out, err = runCLI(t, "enterprise", "jobs", "off", "tidy")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ tidy is off.")
@@ -313,6 +356,17 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	assert.Contains(t, out, "✓ out/report.csv → ")
 	_, err = runCLI(t, "enterprise", "jobs", "files", "urn:blitz:artifacts:"+ws+":"+job+":"+job)
 	assert.Error(t, err)
+	bare := "urn:blitz:artifacts:" + ws + ":" + job + ":" + ws
+	gone := "urn:blitz:artifacts:" + ws + ":" + run + ":" + run
+	org.Mu.Lock()
+	org.Files[bare] = []enterprisetest.File{}
+	org.Files[gone] = []enterprisetest.File{{URN: gone + "/lost.txt", Title: "lost.txt", Size: 1}}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "jobs", "files", bare)
+	require.NoError(t, err)
+	assert.Contains(t, out, "It left no files.")
+	_, err = runCLI(t, "enterprise", "jobs", "files", gone, "--save")
+	assert.Error(t, err, "its content is gone")
 
 	out, err = runCLI(t, "enterprise", "jobs", "pending")
 	require.NoError(t, err)
@@ -391,7 +445,8 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	assert.Contains(t, out, "Nothing to publish")
 
 	org.Close()
-	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"}} {
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"},
+		{"jobs", "runs", "tidy"}, {"jobs", "run", "tidy"}, {"jobs", "on", "tidy"}, {"jobs", "push", "fresh"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}
@@ -458,4 +513,27 @@ func TestEnterpriseCatalogCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "Smart · the default · tools, images, thinking, 200K context")
 	assert.Regexp(t, `enterprise/fast +\$0\.75 in, \$3\.75 out per million tokens +Fast\n`, out)
+}
+
+// Why the service hasn't got a job, and what to do, as Studio says it
+// (spec_053 EN-42).
+func TestMissingText(t *testing.T) {
+	for name, c := range map[string]struct {
+		m    client.ServiceJobMissing
+		want string
+	}{
+		"outside":     {client.ServiceJobMissing{Reason: "outside", Detail: ".agents/workers/d/WORKER.md"}, "runs jobs from .agents/workers/d/WORKER.md"},
+		"not pushed":  {client.ServiceJobMissing{Reason: "not_pushed"}, "blitz enterprise jobs push d"},
+		"saving":      {client.ServiceJobMissing{Reason: "saving", SyncState: "saving"}, "sync is putting d"},
+		"offline":     {client.ServiceJobMissing{Reason: "saving", SyncState: "offline"}, "can't reach"},
+		"signed out":  {client.ServiceJobMissing{Reason: "saving", SyncState: "signed_out"}, "blitz enterprise login"},
+		"conflicts":   {client.ServiceJobMissing{Reason: "saving", SyncState: "conflicts"}, "both versions"},
+		"not service": {client.ServiceJobMissing{Reason: "not_service", Detail: "it runs on people's computers"}, "doesn't run it: it runs on people's computers"},
+		"not read":    {client.ServiceJobMissing{Reason: "not_read"}, "Try again shortly"},
+		"unreadable":  {client.ServiceJobMissing{Reason: "not_read", Detail: "the service is down"}, "yet: the service is down"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, missingText("d", &c.m), c.want)
+		})
+	}
 }

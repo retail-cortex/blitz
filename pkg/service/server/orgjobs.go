@@ -15,10 +15,12 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -29,7 +31,9 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/orgsync"
 	"github.com/retail-cortex/blitz/pkg/urn"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -85,8 +89,31 @@ func (h configService) GetServiceJob(ctx context.Context, r req[pb.GetServiceJob
 	if err != nil {
 		return nil, enterpriseError(err)
 	}
+	out, err := h.serviceJob(ctx, c, jobs, handle, r.Msg.Name)
+	if err != nil || out != nil {
+		return ok2(out, err)
+	}
+	why, read := h.s.whyNotServiceJob(ctx, c, r.Msg.Workspace, handle, r.Msg.Name, r.Msg.Path)
+	// Read just now: it's there, with its runs.
+	if out, err := h.serviceJob(ctx, c, read, handle, r.Msg.Name); err != nil || out != nil {
+		return ok2(out, err)
+	}
+	return ok(why)
+}
+
+// ok2 is out's response, or err.
+func ok2[T any](out *T, err error) (*connect.Response[T], error) {
+	if err != nil {
+		return nil, err
+	}
+	return ok(out)
+}
+
+// serviceJob is the job name in handle's workspace among jobs, with its
+// runs (nil when it isn't there).
+func (h configService) serviceJob(ctx context.Context, c *enterprise.Client, jobs []enterprise.ServiceJob, handle, name string) (*pb.GetServiceJobResponse, error) {
 	for _, j := range jobs {
-		if j.Workspace != handle || j.Name != r.Msg.Name {
+		if j.Workspace != handle || j.Name != name {
 			continue
 		}
 		runs, err := c.JobRuns(ctx, j.ID)
@@ -100,9 +127,114 @@ func (h configService) GetServiceJob(ctx context.Context, r req[pb.GetServiceJob
 		for _, run := range runs {
 			out.Runs = append(out.Runs, serviceRunMsg(run))
 		}
-		return ok(out)
+		return out, nil
 	}
-	return ok(&pb.GetServiceJobResponse{})
+	return nil, nil
+}
+
+// jobDir is where the service reads a job from (its WORKER.md's folder),
+// relative to its workspace.
+func jobDir(name string) string { return path.Join(".agents", "workers", name) }
+
+// syncState is the sync's state for the workspace at dir ("" when no
+// syncer keeps it in step).
+func (s *Server) syncState(dir string) string {
+	key, err := canonical(dir)
+	if err != nil {
+		return ""
+	}
+	s.ent.syncs.mu.Lock()
+	defer s.ent.syncs.mu.Unlock()
+	for d, rs := range s.ent.syncs.running {
+		if k, err := canonical(d); err == nil && k == key {
+			// One just started hasn't saved yet: it's about to.
+			return cmp.Or(rs.s.State().State, orgsync.Saving)
+		}
+	}
+	return ""
+}
+
+// whyNotServiceJob says why the service has no job name in the workspace
+// at dir: its WORKER.md isn't where the service reads, its changes aren't
+// on main (sync is putting them there, or nothing is), or main has it and
+// the service, made to read main now, doesn't run it. read are the jobs
+// the service has after reading main now (nil when it didn't).
+func (s *Server) whyNotServiceJob(ctx context.Context, c *enterprise.Client, dir, handle, name, file string) (_ *pb.GetServiceJobResponse, read []enterprise.ServiceJob) {
+	rel := jobDir(name)
+	if file != "" && filepath.Clean(file) != filepath.Join(dir, filepath.FromSlash(rel), "WORKER.md") {
+		return &pb.GetServiceJobResponse{Reason: "outside", Detail: rel + "/WORKER.md"}, nil
+	}
+	_, remote := s.orgRemote(c, handle)
+	changed, _ := s.gitOut(ctx, dir, "status", "--porcelain", "--untracked-files=all", "--", rel)
+	if len(strings.TrimSpace(string(changed))) == 0 {
+		// Committed here: is it on main as the service has it?
+		_, err := s.gitOut(ctx, dir, "diff", "--quiet", remote+"/main", "HEAD", "--", rel)
+		if err != nil {
+			changed = []byte("ahead")
+		}
+	}
+	if len(strings.TrimSpace(string(changed))) > 0 {
+		if st := s.syncState(dir); st != "" {
+			return &pb.GetServiceJobResponse{Reason: "saving", SyncState: st}, nil
+		}
+		return &pb.GetServiceJobResponse{Reason: "not_pushed"}, nil
+	}
+	jobs, unrun, err := c.ReadJobs(ctx, handle)
+	if err != nil {
+		return &pb.GetServiceJobResponse{Reason: "not_read", Detail: err.Error()}, nil
+	}
+	if why, ok := unrun[name]; ok {
+		return &pb.GetServiceJobResponse{Reason: "not_service", Detail: why}, jobs
+	}
+	return &pb.GetServiceJobResponse{Reason: "not_read"}, jobs
+}
+
+// orgRemote is the clone of handle's workspace on this computer and the
+// Git remote that's the organization's there.
+func (s *Server) orgRemote(c *enterprise.Client, handle string) (string, string) {
+	cfg, err := config.Load(s.configDir)
+	if err != nil {
+		cfg = &config.Config{}
+	}
+	return orgDir(sharedFor(c.URL()), s.orgFolder(c, cfg), handle)
+}
+
+func (h configService) PushServiceJob(ctx context.Context, r req[pb.PushServiceJobRequest]) (*connect.Response[pb.PushServiceJobResponse], error) {
+	c, handle, err := h.s.orgHandle(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if n := r.Msg.Name; n == "" || n == "." || n == ".." || strings.ContainsAny(n, `/\`) {
+		return nil, invalid(fmt.Errorf("%q isn't a job's name", r.Msg.Name))
+	}
+	dir, rel := r.Msg.Workspace, jobDir(r.Msg.Name)
+	_, remote := h.s.orgRemote(c, handle)
+	failed := func(err error) error {
+		return apiError(connect.CodeFailedPrecondition, "PUSH_FAILED", fmt.Errorf("couldn't put the job on the workspace's main: %w", err))
+	}
+	if _, err := h.s.gitOut(ctx, dir, "add", "-A", "--", rel); err != nil {
+		return nil, failed(err)
+	}
+	if _, err := h.s.gitOut(ctx, dir, "diff", "--cached", "--quiet", "--", rel); err != nil {
+		who := c.Status().Person.Name
+		if who == "" {
+			who, _, _ = strings.Cut(c.Status().Person.Email, "@")
+		}
+		if _, err := h.s.gitOut(ctx, dir, "commit", "-q", "-m", who+": the job "+r.Msg.Name, "--", rel); err != nil {
+			return nil, failed(err)
+		}
+	}
+	if _, err := h.s.gitOut(ctx, dir, "push", "-q", remote, "HEAD:main"); err != nil {
+		return nil, failed(err)
+	}
+	if _, _, err := c.ReadJobs(ctx, handle); err != nil {
+		slog.Debug("reading a workspace's jobs", "workspace", handle, "error", err)
+	}
+	got, err := h.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: dir, Name: r.Msg.Name}))
+	if err != nil {
+		return nil, err
+	}
+	return ok(&pb.PushServiceJobResponse{Job: got.Msg})
 }
 
 func (h configService) RunServiceJob(ctx context.Context, r req[pb.RunServiceJobRequest]) (*connect.Response[pb.RunServiceJobResponse], error) {

@@ -86,6 +86,18 @@ func (c *Client) Jobs(ctx context.Context) ([]ServiceJob, error) {
 	return out.Jobs, err
 }
 
+// ReadJobs has the service read a workspace's main now, not at its next
+// scan, and gives its jobs there, and the jobs main defines that the
+// service doesn't run, each with why (a Viewer of it may).
+func (c *Client) ReadJobs(ctx context.Context, handle string) ([]ServiceJob, map[string]string, error) {
+	var out struct {
+		Jobs    []ServiceJob      `json:"jobs"`
+		Skipped map[string]string `json:"skipped"`
+	}
+	err := c.signedCall(ctx, http.MethodPost, "/api/v1/workspaces/"+url.PathEscape(handle)+"/jobs/read", nil, &out)
+	return out.Jobs, out.Skipped, err
+}
+
 // JobRuns are a service job's latest runs, newest first.
 func (c *Client) JobRuns(ctx context.Context, job string) ([]ServiceRun, error) {
 	var out struct {

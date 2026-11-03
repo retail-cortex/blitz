@@ -70,7 +70,7 @@ Settings › Providers & keys shows **Your usage** of your organization's models
 
 ## Publishing to your organization
 
-If you're one of your organization's Admins, Studio's **Publish to organization…** (the cloud button at the top) sends the workspace's agents, skills, rules, guardrails, commands and connectors to its catalog. Choose each one, say whether it's **Locked** (nobody changes or switches it off) or a **Default** (a workspace or person may), and which groups it's for. They go as one review: another Admin approves it in the admin console's **Catalog › Reviews**, and everyone's Blitz gets them with the next version. Anything the catalog would refuse is marked before you send it. From the terminal: `blitz enterprise publish` lists what can go; `blitz enterprise publish agent/writer --lock locked --groups sales` sends it; `blitz enterprise reviews` shows how they stand.
+If you're one of your organization's Admins, Studio's **Publish to organization…** (the cloud button at the top) sends the workspace's agents, skills, rules, guardrails, commands and connectors to its catalog. Choose each one, say whether it's **Locked** (nobody changes or switches it off) or a **Default** (a workspace or person may), and which groups it's for. They go as one review: an Admin approves it in the admin console's **Catalog › Reviews** (you may approve your own; the audit log says so), and everyone's Blitz gets them with the next version. Anything the catalog would refuse is marked before you send it. From the terminal: `blitz enterprise publish` lists what can go; `blitz enterprise publish agent/writer --lock locked --groups sales` sends it; `blitz enterprise reviews` shows how they stand.
 
 ## Job notices
 

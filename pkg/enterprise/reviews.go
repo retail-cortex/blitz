@@ -22,7 +22,7 @@ import (
 )
 
 // Review is a change to the organization's catalog an Admin published,
-// waiting for another Admin, or answered (spec_053 EN-36; the service's
+// waiting for an Admin (its author too), or answered (spec_053 EN-36; the service's
 // CA-03, CA-04).
 type Review struct {
 	ID       string    `json:"id"`
@@ -38,7 +38,7 @@ type Review struct {
 }
 
 // PublishCatalog sends files (by their paths in the catalog) to the
-// service as a review, for another Admin to approve.
+// service as a review, for an Admin (its author too) to approve.
 func (c *Client) PublishCatalog(ctx context.Context, title string, files map[string][]byte) (Review, error) {
 	type file struct {
 		Path    string `json:"path"`

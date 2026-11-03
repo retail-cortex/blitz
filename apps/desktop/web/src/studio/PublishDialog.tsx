@@ -50,7 +50,7 @@ const key = (it: PublishableItem) => `${it.kind}/${it.name}`;
 /**
  * Publish to organization (spec_053 EN-36): the workspace's items, each
  * with how it'll apply (Default or Locked, and its groups), sent as one
- * review another Admin approves in the admin console; and the catalog's
+ * review an Admin (its author too) approves in the admin console; and the catalog's
  * reviews, with their state.
  */
 export function PublishDialog({ dir, org, onClose }: { dir: string; org: string; onClose: () => void }) {

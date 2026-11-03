@@ -15,7 +15,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -26,6 +28,33 @@ import (
 	"github.com/retail-cortex/blitz/pkg/client"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
+
+// missingText says why the service hasn't got the job name, and what to
+// do, as Studio does.
+func missingText(name string, m *client.ServiceJobMissing) string {
+	switch m.Reason {
+	case "outside":
+		return fmt.Sprintf("the service runs jobs from %s; %s's WORKER.md is somewhere else, so the service doesn't see it: move it there", m.Detail, name)
+	case "not_pushed":
+		return fmt.Sprintf("%s's changes aren't on the workspace's main yet, so the service doesn't have them. Put them there: blitz enterprise jobs push %s", name, name)
+	case "saving":
+		switch m.SyncState {
+		case "offline":
+			return fmt.Sprintf("sync can't reach the organization's service, so %s waits on this computer; it goes when the service is back", name)
+		case "signed_out":
+			return fmt.Sprintf("sign in to your organization to put %s on its service: blitz enterprise login", name)
+		case "conflicts":
+			return fmt.Sprintf("sync kept both versions of a file in this workspace; settle them and %s goes to the service", name)
+		}
+		return fmt.Sprintf("sync is putting %s on the organization's service: it goes a few seconds after the last change, between agent turns. Try again shortly", name)
+	case "not_service":
+		return fmt.Sprintf("the service read %s from main but doesn't run it: %s", name, m.Detail)
+	}
+	if m.Detail != "" {
+		return fmt.Sprintf("the service hasn't read %s from the workspace's main yet: %s", name, m.Detail)
+	}
+	return fmt.Sprintf("the service hasn't read %s from the workspace's main yet. Try again shortly", name)
+}
 
 // newEnterpriseJobsCommand is blitz enterprise jobs: the jobs your
 // organization's service runs (spec_053 EN-42, EN-43), as Studio › Jobs
@@ -93,6 +122,14 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 		}
 		switch len(found) {
 		case 0:
+			// A job of this workspace's: say why the service hasn't got it.
+			if dir, err := os.Getwd(); err == nil && workspace == "" {
+				if _, err := os.Stat(filepath.Join(dir, ".agents", "workers", name, "WORKER.md")); err == nil {
+					if m, err := s.WhyNotServiceJob(cmd.Context(), dir, name); err == nil && m != nil {
+						return nil, client.ServiceJob{}, withCode(exitUsage, errors.New(missingText(name, m)))
+					}
+				}
+			}
 			return nil, client.ServiceJob{}, withCode(exitUsage, fmt.Errorf("your organization's service runs no job %q in your workspaces", name))
 		case 1:
 			return s, found[0], nil
@@ -141,6 +178,33 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 					fmt.Fprintln(out, "    files: blitz enterprise jobs files "+r.Artifacts)
 				}
 			}
+			return nil
+		},
+	}
+	push := &cobra.Command{
+		Use:   "push <job>",
+		Short: "Put a job of this workspace's on its main, for the service to run (a workspace sync doesn't keep in step)",
+		Long: `Commits the job's folder (.agents/workers/<job>/) in the workspace you're
+in, pushes the workspace to its main on your organization's service, and has
+the service read it now.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := settings(cmd)
+			if err != nil {
+				return err
+			}
+			dir, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			m, err := s.PushServiceJob(cmd.Context(), dir, args[0])
+			if err != nil {
+				return err
+			}
+			if m != nil {
+				return withCode(exitUsage, errors.New(missingText(args[0], m)))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ %s is on main and the service has it. Run it: blitz enterprise jobs run %s\n", args[0], args[0])
 			return nil
 		},
 	}
@@ -282,7 +346,7 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 		c.Flags().StringVar(&note, "note", "", "a note for the job's agent")
 		return c
 	}
-	cmd.AddCommand(runs, runNow, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
+	cmd.AddCommand(runs, push, runNow, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
 	return cmd
 }
 
@@ -371,10 +435,10 @@ func newEnterprisePublishCommand() *cobra.Command {
 	var groups []string
 	cmd := &cobra.Command{
 		Use:   "publish [<kind>/<name>...]",
-		Short: "Publish a workspace's agents, skills, rules… to your organization's catalog, for another Admin to approve",
+		Short: "Publish a workspace's agents, skills, rules… to your organization's catalog, for an Admin (you too) to approve",
 		Long: `Publishes items from a workspace's .agents folder (agent/<name>, skill/<name>,
 rule/<name>, guardrail/<name>, command/<name>, connector/<name>) to your
-organization's catalog as a review: another Admin approves it in the admin
+organization's catalog as a review: an Admin (you too) approves it in the admin
 console, and the next version carries it. With none named, lists what
 can be published and how each applies now. For the organization's Admins.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -420,7 +484,7 @@ can be published and how each applies now. For the organization's Admins.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "✓ In review: %s (%s). Another Admin approves it in the admin console; the next version carries it.\n", rv.Title, strings.Join(rv.Paths, ", "))
+			fmt.Fprintf(out, "✓ In review: %s (%s). An Admin (you too) approves it in the admin console; the next version carries it.\n", rv.Title, strings.Join(rv.Paths, ", "))
 			return nil
 		},
 	}

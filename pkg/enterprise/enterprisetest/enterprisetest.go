@@ -36,6 +36,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +46,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/retail-cortex/blitz/pkg/jobspec"
 	"github.com/retail-cortex/blitz/pkg/urn"
 )
 
@@ -231,6 +233,9 @@ type Service struct {
 	// A job run now gets a running run; JobsRefused refuses every jobs
 	// call as a license without jobs does.
 	ServiceJobs []ServiceJob
+	// Reads are the workspaces whose main was read on request, in order
+	// (POST /api/v1/workspaces/{handle}/jobs/read).
+	Reads       []string
 	ServiceRuns map[string][]ServiceRun
 	Files       map[string][]File
 	Contents    map[string]string
@@ -720,6 +725,47 @@ func NewService(t testing.TB, issuer string) *Service {
 			_ = json.NewEncoder(w).Encode(map[string]any{"jobs": append([]ServiceJob{}, s.ServiceJobs...)})
 		}
 	})
+	// Read a workspace's main now, as the service does: its WORKER.md files
+	// with runs_on: service become jobs; the others are said, with why.
+	mux.HandleFunc("POST /api/v1/workspaces/{handle}/jobs/read", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		handle := r.PathValue("handle")
+		if _, ok := s.Workspaces[handle]; !ok {
+			refuse(w, http.StatusNotFound, "not_found", "There's no such workspace.")
+			return
+		}
+		files, err := mainJobs(s.Repo(handle))
+		if err != nil {
+			refuse(w, http.StatusBadGateway, "unreadable", "The service couldn't read the workspace's main: "+err.Error())
+			return
+		}
+		s.Reads = append(s.Reads, handle)
+		unrun, out := map[string]string{}, []ServiceJob{}
+		for name, data := range files {
+			spec, err := jobspec.Parse(data)
+			switch {
+			case err != nil:
+				unrun[name] = "its WORKER.md doesn't read: " + err.Error()
+				continue
+			case spec.RunsOn != jobspec.Service:
+				unrun[name] = "its WORKER.md doesn't say runs_on: service, so it runs on people's computers"
+				continue
+			}
+			if !slices.ContainsFunc(s.ServiceJobs, func(j ServiceJob) bool { return j.Workspace == handle && j.Name == name }) {
+				id := "job-" + name
+				s.ServiceJobs = append(s.ServiceJobs, ServiceJob{ID: id, URN: "urn:blitz:jobs:" + id, Workspace: handle, Name: name, Schedule: spec.Schedule, Enabled: true})
+			}
+		}
+		for _, j := range s.ServiceJobs {
+			if j.Workspace == handle {
+				out = append(out, j)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"jobs": out, "skipped": unrun})
+	})
 	mux.HandleFunc("GET /api/v1/runs", func(w http.ResponseWriter, r *http.Request) {
 		if jobs(w, r) {
 			defer s.Mu.Unlock()
@@ -1097,6 +1143,29 @@ func (s *Service) makeRepo(handle string, first bool) error {
 		return err
 	}
 	return git(bare, "symbolic-ref", "HEAD", "refs/heads/main")
+}
+
+// mainJobs are the WORKER.md files on main in the bare repository, by
+// their jobs' names.
+func mainJobs(bare string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	list, err := exec.Command("git", "--git-dir", bare, "ls-tree", "-r", "--name-only", "main", "--", ".agents/workers").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-tree: %w", err)
+	}
+	for _, p := range strings.Fields(string(list)) {
+		rest, ok := strings.CutPrefix(p, ".agents/workers/")
+		name, file, _ := strings.Cut(rest, "/")
+		if !ok || file != "WORKER.md" {
+			continue
+		}
+		data, err := exec.Command("git", "--git-dir", bare, "show", "main:"+p).Output()
+		if err != nil {
+			return nil, fmt.Errorf("git show: %w", err)
+		}
+		out[name] = data
+	}
+	return out, nil
 }
 
 // Repo is the bare repository of a workspace, for a test to look in.

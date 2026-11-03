@@ -235,6 +235,10 @@ service ConfigService {
   // it (EN-42; NOT_CONNECTED, NOT_SIGNED_IN, NOT_ORG_WORKSPACE): found is
   // false until the service has read it from main.
   rpc GetServiceJob(GetServiceJobRequest) returns (GetServiceJobResponse);
+  // Commits a job's folder and pushes the workspace to its main on the
+  // service, then has the service read it (for a workspace not kept in
+  // step; PUSH_FAILED with Git's reason, NOT_ORG_WORKSPACE).
+  rpc PushServiceJob(PushServiceJobRequest) returns (PushServiceJobResponse);
   // Starts a run of a service job now (a Runner of its workspace).
   rpc RunServiceJob(RunServiceJobRequest) returns (RunServiceJobResponse);
   // Switches a service job on or off (an Editor of its workspace).
@@ -1552,6 +1556,8 @@ message GetServiceJobRequest {
   // The workspace's folder: an organization workspace's clone.
   string workspace = 1;
   string name = 2;
+  // Its WORKER.md's path, to say when it's where the service doesn't look.
+  string path = 3;
 }
 
 // Response message for ConfigService.GetServiceJob.
@@ -1560,6 +1566,29 @@ message GetServiceJobResponse {
   ServiceJob job = 2;
   // Its latest runs, newest first.
   repeated ServiceRun runs = 3;
+  // Why it isn't found: "outside" (its WORKER.md isn't in
+  // .agents/workers/<name>/, where the service looks), "not_pushed" (its
+  // changes aren't on main: PushServiceJob), "saving" (sync is putting
+  // them there; sync_state says how it stands), "not_service" (on main,
+  // but the service doesn't run it: detail says why), or "not_read" (the
+  // service hasn't read it yet).
+  string reason = 4;
+  string detail = 5;
+  // The workspace's sync state, for "saving" (GetOrgSync's).
+  string sync_state = 6;
+}
+
+// Request message for ConfigService.PushServiceJob.
+message PushServiceJobRequest {
+  // The workspace's folder: an organization workspace's clone.
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for ConfigService.PushServiceJob: the job as the
+// service has it after reading main.
+message PushServiceJobResponse {
+  GetServiceJobResponse job = 1;
 }
 
 // Request message for ConfigService.RunServiceJob.
@@ -1780,7 +1809,7 @@ message PublishItem {
   repeated string groups = 4;
 }
 
-// A change to the catalog, waiting for another Admin or answered.
+// A change to the catalog, waiting for an Admin (its author too) or answered.
 message CatalogReview {
   string id = 1;
   string title = 2;

@@ -98,6 +98,41 @@ func (s *Settings) ServiceJobRuns(ctx context.Context, dir, name string) ([]Serv
 	return out, nil
 }
 
+// ServiceJobMissing is why the organization's service hasn't got a job:
+// Reason is outside, not_pushed, saving (SyncState says how sync stands),
+// not_service or not_read; Detail says more (the path the service reads,
+// or the service's why).
+type ServiceJobMissing struct {
+	Reason, Detail, SyncState string
+}
+
+func missing(r *pb.GetServiceJobResponse) *ServiceJobMissing {
+	if r.GetFound() {
+		return nil
+	}
+	return &ServiceJobMissing{Reason: r.GetReason(), Detail: r.GetDetail(), SyncState: r.GetSyncState()}
+}
+
+// WhyNotServiceJob says why the service hasn't got the job name in the
+// workspace cloned at dir (nil when it has it), having it read main.
+func (s *Settings) WhyNotServiceJob(ctx context.Context, dir, name string) (*ServiceJobMissing, error) {
+	res, err := s.c.GetServiceJob(ctx, connect.NewRequest(&pb.GetServiceJobRequest{Workspace: dir, Name: name}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return missing(res.Msg), nil
+}
+
+// PushServiceJob commits the job's folder, pushes the workspace at dir to
+// its main and has the service read it; nil when the service has it now.
+func (s *Settings) PushServiceJob(ctx context.Context, dir, name string) (*ServiceJobMissing, error) {
+	res, err := s.c.PushServiceJob(ctx, connect.NewRequest(&pb.PushServiceJobRequest{Workspace: dir, Name: name}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return missing(res.Msg.GetJob()), nil
+}
+
 // RunServiceJob starts a run of a service job now.
 func (s *Settings) RunServiceJob(ctx context.Context, id string) (ServiceRun, error) {
 	res, err := s.c.RunServiceJob(ctx, connect.NewRequest(&pb.RunServiceJobRequest{JobId: id}))
