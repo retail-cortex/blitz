@@ -338,6 +338,30 @@ func TestRepoConfigThatRunsCommandsIsRefused(t *testing.T) {
 	}
 }
 
+// Blitz's own credential helper, which it sets in a folder shared with the
+// organization, doesn't stop a pull; any other command still does.
+func TestTrustedCredentialHelper(t *testing.T) {
+	ctx := context.Background()
+	helper := `!"/Applications/Blitz.app/blitzd" git-credential`
+	TrustCredentialHelper(helper)
+	TrustCredentialHelper("")
+	w, _ := remoteRepos(t)
+	gitOut(t, w.Dir(), "config", "credential.https://blitz.example.com.helper", helper)
+	_, err := w.Fetch(ctx)
+	require.NoError(t, err)
+
+	gitOut(t, w.Dir(), "config", "--add", "credential.https://blitz.example.com.helper", "!touch pwned")
+	_, err = w.Fetch(ctx)
+	var rc *RepoConfigError
+	require.True(t, errors.As(err, &rc), "got %v", err)
+	assert.Equal(t, "credential.https://blitz.example.com.helper", rc.Key)
+
+	w, _ = remoteRepos(t)
+	gitOut(t, w.Dir(), "config", "core.sshCommand", helper)
+	_, err = w.Fetch(ctx)
+	require.True(t, errors.As(err, &rc), "only as a credential helper: got %v", err)
+}
+
 func TestRemoteError(t *testing.T) {
 	base := errors.New("exit status 128")
 	tests := []struct {

@@ -176,6 +176,11 @@ func trackShared(ctx context.Context, dir, remote string) {
 // stream so others' pushes come in as they happen.
 func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, handle, remote string) *orgSync {
 	trackShared(parent, dir, remote)
+	// The folder's helper is this Blitz's, as Changes trusts: a folder
+	// shared by a Blitz since moved has another's.
+	if err := s.git(parent, dir, "config", "credential."+c.URL()+".helper", s.gitHelper()); err != nil {
+		slog.Debug("a shared folder's credential helper", "dir", dir, "error", err)
+	}
 	ctx, cancel := context.WithCancel(parent)
 	who := c.Status().Person.Name
 	if who == "" {

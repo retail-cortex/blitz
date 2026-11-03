@@ -26,6 +26,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -108,14 +109,18 @@ func (h configService) CreateOrgWorkspace(ctx context.Context, r req[pb.CreateOr
 // gitHelper is the credential helper Git runs for the organization's
 // service (EN-61): this program's git-credential, unless set (tests).
 func (s *Server) gitHelper() string {
-	if s.ent.gitHelper != "" {
-		return s.ent.gitHelper
+	h := s.ent.gitHelper
+	if h == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return ""
+		}
+		h = fmt.Sprintf("!%q git-credential", exe)
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("!%q git-credential", exe)
+	// Set in a folder's own config, it's the one command there Changes'
+	// pull and push still run.
+	engine.TrustCredentialHelper(h)
+	return h
 }
 
 // git runs git in dir with the organization's credential helper alone,
