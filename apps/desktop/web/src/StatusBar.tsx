@@ -33,6 +33,7 @@ import {
   mdiCloudSyncOutline,
   mdiCloudOffOutline,
   mdiCloudAlertOutline,
+  mdiCloudUploadOutline,
   mdiCloudCheckOutline,
   mdiCloudOutline,
   mdiCircleMedium,
@@ -83,7 +84,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const { prefs, activity, theme } = useApp();
   const ws = prefs.workspaces.find((w) => w.dir === prefs.active && w.open);
   const dir = ws?.dir ?? "";
-  const orgSync = useOrgSync(serviceUp ? dir : "");
+  const [orgSync, setOrgSync] = useOrgSync(serviceUp ? dir : "");
   // A workspace kept in step shows its sync; Git's branch beside it in
   // advanced mode, where Changes' Git work is.
   const advanced = useAdvanced();
@@ -107,7 +108,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
             <span className="sb-swatch" style={{ background: workspaceColor(ws.color, theme) }} />
             <span className="ellipsis">{displayName(ws)}</span>
           </span>
-          {serviceUp && orgSync && <OrgSyncItem state={orgSync} />}
+          {serviceUp && orgSync && <OrgSyncItem dir={dir} state={orgSync} onState={setOrgSync} />}
           {serviceUp && (!orgSync || advanced) && <GitItem dir={dir} />}
         </>
       )}
@@ -130,7 +131,7 @@ const orgSyncPollMs = 3_000;
  * An organization workspace's sync, while the service keeps it in step
  * (spec_053_enterprise EN-64); undefined for any other workspace.
  */
-function useOrgSync(dir: string): GetOrgSyncResponse | undefined {
+function useOrgSync(dir: string): [GetOrgSyncResponse | undefined, (s: GetOrgSyncResponse) => void] {
   const [state, setState] = useState<GetOrgSyncResponse>();
   useEffect(() => {
     setState(undefined);
@@ -148,7 +149,7 @@ function useOrgSync(dir: string): GetOrgSyncResponse | undefined {
       clearInterval(timer);
     };
   }, [dir]);
-  return state;
+  return [state, setState];
 }
 
 const orgSyncIcons: Record<string, string> = {
@@ -160,17 +161,51 @@ const orgSyncIcons: Record<string, string> = {
   refused: mdiCloudAlertOutline,
 };
 
-/** The sync's state in words, never Git's: Saved, Saving…, Offline, Signed out, Both versions kept. */
-function OrgSyncItem({ state }: { state: GetOrgSyncResponse }) {
+/**
+ * The sync's state in words, never Git's: Saved, Saving…, Offline, Signed
+ * out, Both versions kept. Its menu has Save now, which saves and sends
+ * what waits at once, and says why it isn't saved.
+ */
+function OrgSyncItem({ dir, state, onState }: { dir: string; state: GetOrgSyncResponse; onState: (s: GetOrgSyncResponse) => void }) {
+  const snack = useSnackbar();
+  const [saving, setSaving] = useState(false);
   const label = state.state === "conflicts" ? tn("desktop.org.sync.conflicts", state.pairs.length) : t(`desktop.org.sync.${state.state}`);
   const detail = [state.error, ...state.pairs.map((p) => t("desktop.org.sync.pair", { shared: p.shared, mine: p.mine }))].filter(Boolean).join("\n");
   const warn = ["conflicts", "signed_out", "refused"].includes(state.state);
+  const saveNow = async () => {
+    setSaving(true);
+    try {
+      const r = await config.saveOrgSync({ workspace: dir });
+      onState({ ...state, state: r.state, error: r.error, pairs: r.pairs });
+      snack(r.state === "saved" || r.state === "conflicts" ? t("desktop.org.sync.saved_now") : t(`desktop.org.sync.${r.state}`), { error: orgSyncFailed(r.state) });
+    } catch (e) {
+      snack(reason(e) === "GIT_BUSY" ? t("desktop.org.sync.busy") : message(e), { error: reason(e) !== "GIT_BUSY" });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const items: MenuEntry[] = [
+    { heading: label },
+    { label: t("desktop.org.sync.save_now"), detail: detail || undefined, icon: mdiCloudUploadOutline, disabled: saving, onSelect: () => void saveNow() },
+  ];
   return (
-    <span className={`sb-item ${warn ? "warn-text" : ""}`} role="status" title={detail || label}>
-      <Icon path={orgSyncIcons[state.state] ?? mdiCloudCheckOutline} size="sm" />
-      <span className="ellipsis">{label}</span>
-    </span>
+    <Menu
+      placement="up start"
+      className="wide-menu"
+      trigger={(p) => (
+        <button className={`sb-item sb-button ${warn ? "warn-text" : ""}`} title={detail || label} aria-label={label} {...p}>
+          <Icon path={orgSyncIcons[saving ? "saving" : state.state] ?? mdiCloudCheckOutline} size="sm" />
+          <span className="ellipsis">{saving ? t("desktop.org.sync.saving") : label}</span>
+        </button>
+      )}
+      items={items}
+    />
   );
+}
+
+/** Whether a sync's state means the service hasn't got this computer's saves. */
+export function orgSyncFailed(state: string): boolean {
+  return state === "offline" || state === "signed_out" || state === "refused";
 }
 
 function GitItem({ dir }: { dir: string }) {

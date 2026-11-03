@@ -96,8 +96,9 @@ type Syncer struct {
 	mu      sync.Mutex
 	state   State
 	remote  chan struct{}
-	status  string    // git status as last seen
-	changed time.Time // when it last changed
+	asked   chan chan State // SaveNow's, answered with the state after
+	status  string          // git status as last seen
+	changed time.Time       // when it last changed
 }
 
 func (s *Syncer) upstream() string {
@@ -152,12 +153,68 @@ func (s *Syncer) Remote() {
 	}
 }
 
+// ErrNotRunning is SaveNow before Run, or after it ended.
+var ErrNotRunning = errors.New("this workspace's sync isn't running")
+
+// ErrBusy is SaveNow while a turn runs: what the agent is changing saves
+// when it ends.
+var ErrBusy = errors.New("a turn is running in the workspace: its changes save when it ends")
+
+// SaveNow saves what's changed and sends what's waiting at once, rather
+// than after the quiet spell or the next minute's try, taking others'
+// changes first, and is the state after.
+func (s *Syncer) SaveNow(ctx context.Context) (State, error) {
+	s.mu.Lock()
+	asked := s.asked
+	s.mu.Unlock()
+	if asked == nil {
+		return State{}, ErrNotRunning
+	}
+	if s.busy() {
+		return s.State(), ErrBusy
+	}
+	done := make(chan State, 1)
+	select {
+	case asked <- done:
+	case <-ctx.Done():
+		return State{}, ctx.Err()
+	}
+	select {
+	case st := <-done:
+		return st, nil
+	case <-ctx.Done():
+		return State{}, ctx.Err()
+	}
+}
+
+// saveNow is SaveNow's save, in Run.
+func (s *Syncer) saveNow(ctx context.Context) State {
+	s.set(State{State: Saving, Pairs: s.State().Pairs})
+	if !s.take(ctx) {
+		return s.State()
+	}
+	_, shared := s.Git(ctx, s.Dir, "rev-parse", "--verify", "-q", s.upstream()+"/main")
+	if shared != nil || s.ahead(ctx) {
+		s.push(ctx)
+	} else if s.State().State == Saving {
+		s.settle()
+	}
+	return s.State()
+}
+
 // Run keeps the workspace in step until ctx ends.
 func (s *Syncer) Run(ctx context.Context) {
 	s.mu.Lock()
 	s.remote = make(chan struct{}, 1)
 	remote := s.remote
+	s.asked = make(chan chan State)
+	asked := s.asked
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.asked = nil
+		s.mu.Unlock()
+	}()
 	poll := time.NewTicker(or(s.Poll, 2*time.Second))
 	defer poll.Stop()
 	fetch := time.NewTicker(or(s.Fetch, time.Minute))
@@ -179,6 +236,8 @@ func (s *Syncer) Run(ctx context.Context) {
 			return
 		case <-remote:
 			want = true
+		case done := <-asked:
+			done <- s.saveNow(ctx)
 		case <-fetch.C:
 			want = true
 		case <-poll.C:

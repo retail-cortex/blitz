@@ -307,3 +307,53 @@ func TestFailed(t *testing.T) {
 	s.failed(errors.New("remote unpack failed"))
 	assert.Equal(t, SignedOut, s.State().State, "signed out first")
 }
+
+// Save now sends what's changed at once, not after the quiet spell, and
+// what waited on this computer while the service was away; never mid-turn.
+func TestSaveNow(t *testing.T) {
+	ctx := context.Background()
+	bare, ana, _ := shared(t)
+	_, err := (&Syncer{Dir: ana}).SaveNow(ctx)
+	require.ErrorIs(t, err, ErrNotRunning)
+
+	var busy atomic.Bool
+	s := &Syncer{Dir: ana, Git: gitAs("Ana", nil), Who: "Ana", Quiet: time.Hour, Poll: 20 * time.Millisecond, Fetch: time.Hour,
+		Busy: busy.Load}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { s.Run(runCtx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	eventually(t, func() bool { return s.State().State == Saved }, "started")
+
+	require.NoError(t, os.WriteFile(filepath.Join(ana, "plan.md"), []byte("now"), 0o644))
+	busy.Store(true)
+	_, err = s.SaveNow(ctx)
+	require.ErrorIs(t, err, ErrBusy)
+	busy.Store(false)
+	st, err := s.SaveNow(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Saved, st.State)
+	assert.Equal(t, "Ana: edited plan.md", strings.TrimSpace(run(t, bare, "log", "-1", "--format=%s", "main")), "an hour's quiet not waited for")
+
+	// Saved here while the service was away: sent now it's back.
+	require.NoError(t, os.Rename(bare, bare+".gone"))
+	require.NoError(t, os.WriteFile(filepath.Join(ana, "plan.md"), []byte("away"), 0o644))
+	st, err = s.SaveNow(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Offline, st.State)
+	assert.NotEmpty(t, st.Err)
+	require.NoError(t, os.Rename(bare+".gone", bare))
+	st, err = s.SaveNow(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Saved, st.State)
+	assert.Equal(t, strings.TrimSpace(run(t, ana, "rev-parse", "HEAD")), strings.TrimSpace(run(t, bare, "rev-parse", "main")))
+
+	st, err = s.SaveNow(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Saved, st.State, "nothing to send")
+
+	gone, stop := context.WithCancel(ctx)
+	stop()
+	_, err = s.SaveNow(gone)
+	assert.ErrorIs(t, err, context.Canceled)
+}

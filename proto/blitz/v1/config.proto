@@ -232,6 +232,11 @@ service ConfigService {
   // isn't one kept in step), why it failed, and the files with both
   // versions kept.
   rpc GetOrgSync(GetOrgSyncRequest) returns (GetOrgSyncResponse);
+  // Saves an organization workspace's changes and sends what waits at
+  // once (EN-64): Save now, rather than after the quiet spell or the next
+  // minute's try; the sync's state after (NOT_SYNCED when no sync keeps it
+  // in step, GIT_BUSY while a turn runs in it).
+  rpc SaveOrgSync(SaveOrgSyncRequest) returns (SaveOrgSyncResponse);
   // A job in an organization workspace as the organization's service runs
   // it (EN-42; NOT_CONNECTED, NOT_SIGNED_IN, NOT_ORG_WORKSPACE): found is
   // false until the service has read it from main.
@@ -1498,6 +1503,20 @@ message OrgSyncPair {
 
 // Response message for ConfigService.GetOrgSync.
 message GetOrgSyncResponse {
+  string state = 1;
+  repeated OrgSyncPair pairs = 2;
+  // Why it's offline or refused, in Git's words ("" otherwise).
+  string error = 3;
+}
+
+// Request message for ConfigService.SaveOrgSync.
+message SaveOrgSyncRequest {
+  string workspace = 1;
+}
+
+// Response message for ConfigService.SaveOrgSync: the sync's state after,
+// as GetOrgSync says it.
+message SaveOrgSyncResponse {
   string state = 1;
   repeated OrgSyncPair pairs = 2;
   // Why it's offline or refused, in Git's words ("" otherwise).

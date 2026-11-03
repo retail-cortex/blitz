@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -225,26 +226,59 @@ func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, ha
 }
 
 func (h configService) GetOrgSync(_ context.Context, r req[pb.GetOrgSyncRequest]) (*connect.Response[pb.GetOrgSyncResponse], error) {
-	key, err := canonical(r.Msg.Workspace)
-	if err != nil {
+	sy := h.s.syncer(r.Msg.Workspace)
+	if sy == nil {
 		return ok(&pb.GetOrgSyncResponse{})
 	}
-	h.s.ent.syncs.mu.Lock()
-	defer h.s.ent.syncs.mu.Unlock()
-	for dir, rs := range h.s.ent.syncs.running {
-		if k, err := canonical(dir); err == nil && k == key {
-			st := rs.s.State()
-			out := &pb.GetOrgSyncResponse{State: st.State}
-			if st.State == orgsync.Offline || st.State == orgsync.Refused {
-				out.Error = st.Err
-			}
-			for _, p := range st.Pairs {
-				out.Pairs = append(out.Pairs, &pb.OrgSyncPair{Shared: p[0], Mine: p[1]})
-			}
-			return ok(out)
+	state, why, pairs := syncMsg(sy.State())
+	return ok(&pb.GetOrgSyncResponse{State: state, Error: why, Pairs: pairs})
+}
+
+func (h configService) SaveOrgSync(ctx context.Context, r req[pb.SaveOrgSyncRequest]) (*connect.Response[pb.SaveOrgSyncResponse], error) {
+	sy := h.s.syncer(r.Msg.Workspace)
+	if sy == nil {
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_SYNCED", errors.New("no sync keeps this workspace in step with an organization"))
+	}
+	st, err := sy.SaveNow(ctx)
+	switch {
+	case errors.Is(err, orgsync.ErrBusy):
+		return nil, apiError(connect.CodeFailedPrecondition, "GIT_BUSY", err)
+	case errors.Is(err, orgsync.ErrNotRunning):
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_SYNCED", err)
+	case err != nil:
+		return nil, err
+	}
+	state, why, pairs := syncMsg(st)
+	return ok(&pb.SaveOrgSyncResponse{State: state, Error: why, Pairs: pairs})
+}
+
+// syncMsg is a sync's state for the window: why it isn't saved, in Git's
+// words, only when it isn't.
+func syncMsg(st orgsync.State) (state, why string, pairs []*pb.OrgSyncPair) {
+	if st.State == orgsync.Offline || st.State == orgsync.Refused || st.State == orgsync.SignedOut {
+		why = st.Err
+	}
+	for _, p := range st.Pairs {
+		pairs = append(pairs, &pb.OrgSyncPair{Shared: p[0], Mine: p[1]})
+	}
+	return st.State, why, pairs
+}
+
+// syncer is the syncer keeping the workspace at dir in step (nil when
+// none does).
+func (s *Server) syncer(dir string) *orgsync.Syncer {
+	key, err := canonical(dir)
+	if err != nil {
+		return nil
+	}
+	s.ent.syncs.mu.Lock()
+	defer s.ent.syncs.mu.Unlock()
+	for d, rs := range s.ent.syncs.running {
+		if k, err := canonical(d); err == nil && k == key {
+			return rs.s
 		}
 	}
-	return ok(&pb.GetOrgSyncResponse{})
+	return nil
 }
 
 // conflictNote is what the next turn's agent in dir is told of the files

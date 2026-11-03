@@ -234,6 +234,13 @@ func TestEnterpriseWorkspacesCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, out)
 
+	// Save now, in a folder no sync keeps in step.
+	t.Chdir(t.TempDir())
+	for _, args := range [][]string{{"sync"}, {"sync", "status"}} {
+		_, err = runCLI(t, append([]string{"enterprise"}, args...)...)
+		assert.ErrorContains(t, err, "isn't kept in step with your organization", args)
+	}
+
 	org.Close()
 	for _, args := range [][]string{{"workspaces"}, {"create", "y"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
@@ -535,6 +542,30 @@ func TestMissingText(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Contains(t, missingText("d", &c.m), c.want)
+		})
+	}
+}
+
+// How a sync stands, in words: never Git's alone.
+func TestPrintOrgSync(t *testing.T) {
+	for _, tt := range []struct {
+		st     client.OrgSync
+		want   string
+		failed bool
+	}{
+		{client.OrgSync{State: "saved"}, "✓ Saved: the service has everything\n", false},
+		{client.OrgSync{State: "saving"}, "Saving…\n", false},
+		{client.OrgSync{State: "offline", Error: "could not resolve host"}, "Not saved: the service can't be reached, so the changes wait on this computer\n  could not resolve host\n", true},
+		{client.OrgSync{State: "signed_out"}, "Not saved: signed out (blitz enterprise login)\n", true},
+		{client.OrgSync{State: "refused", Error: "remote unpack failed"}, "Not saved: the service refused it\n  remote unpack failed\n", true},
+		{client.OrgSync{State: "conflicts", Pairs: [][2]string{{"plan.md", "plan (conflict, Ana).md"}}}, "Saved, with both versions of these files kept:\n  plan.md (yours: plan (conflict, Ana).md)\n", false},
+		{client.OrgSync{State: "later"}, "later\n", false},
+	} {
+		t.Run(tt.st.State, func(t *testing.T) {
+			var b strings.Builder
+			printOrgSync(&b, tt.st)
+			assert.Equal(t, tt.want, b.String())
+			assert.Equal(t, tt.failed, failedSync(tt.st.State))
 		})
 	}
 }

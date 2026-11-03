@@ -1012,6 +1012,16 @@ func TestShareWithOrganization(t *testing.T) {
 		return strings.Contains(string(out), "more.md")
 	}, 10*time.Second, 20*time.Millisecond, "its change saved and shared")
 
+	// Save now: at once, and the state after.
+	require.NoError(t, os.WriteFile(filepath.Join(notes, "now.md"), []byte("Now."), 0o644))
+	saved, err := c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: notes}))
+	require.NoError(t, err)
+	assert.Equal(t, "saved", saved.Msg.State)
+	assert.Equal(t, git(notes, "rev-parse", "HEAD"), git(bare, "rev-parse", "main"), "on the service's main")
+	_, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: t.TempDir()}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SYNCED", info.Reason)
+
 	// A repository with an origin of its own keeps it.
 	code := t.TempDir()
 	git(code, "init", "-q")

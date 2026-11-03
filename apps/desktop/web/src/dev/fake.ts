@@ -2775,6 +2775,8 @@ export function installFake() {
                 ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" }
                 : { state: "saved", pairs: [] }
             : { state: "", pairs: [] },
+        // Save now: the refused one stays refused, as the dev service did.
+        saveOrgSync: () => (fakeParam("refused") ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" } : { state: "saved", pairs: [] }),
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };

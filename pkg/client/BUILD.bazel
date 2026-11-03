@@ -22,6 +22,7 @@ go_library(
         "convert.go",
         "enterprise.go",
         "jobs.go",
+        "orgsync.go",
         "processes.go",
         "project.go",
         "settings.go",

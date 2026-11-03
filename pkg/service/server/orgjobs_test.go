@@ -279,3 +279,84 @@ func TestTrackShared(t *testing.T) {
 	trackShared(ctx, dir, "organization")
 	assert.Equal(t, "upstream/main\n", upstream(dir))
 }
+
+// Save now refuses while a turn runs, and when the workspace's sync isn't
+// running (EN-64).
+func TestSaveOrgSyncRefusals(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	idle := &orgsync.Syncer{Dir: dir}
+	busy := &orgsync.Syncer{Dir: dir, Git: func(context.Context, string, ...string) ([]byte, error) { return nil, nil },
+		Busy: func() bool { return true }, Poll: time.Hour, Fetch: time.Hour}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { busy.Run(runCtx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	for _, tt := range []struct {
+		name   string
+		sy     *orgsync.Syncer
+		reason string
+	}{
+		{"not running", idle, "NOT_SYNCED"},
+		{"a turn running", busy, "GIT_BUSY"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s.ent.syncs.mu.Lock()
+			was := s.ent.syncs.running
+			s.ent.syncs.running = map[string]*orgSync{dir: {s: tt.sy}}
+			s.ent.syncs.mu.Unlock()
+			defer func() {
+				s.ent.syncs.mu.Lock()
+				s.ent.syncs.running = was
+				s.ent.syncs.mu.Unlock()
+			}()
+			require.Eventually(t, func() bool {
+				_, err := c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: dir}))
+				_, info := errorReason(t, err)
+				return info.Reason == tt.reason
+			}, 5*time.Second, 20*time.Millisecond)
+		})
+	}
+
+	// The service away: the state says so, with Git's words.
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", filepath.Join(t.TempDir(), "gone.git")}} {
+		out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	away := &orgsync.Syncer{Dir: repo, Who: "Ana", Poll: time.Hour, Fetch: time.Hour, Quiet: time.Hour,
+		Git: func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, "git", append([]string{"-C", dir, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...).Output()
+		}}
+	go func() { away.Run(runCtx) }()
+	s.ent.syncs.mu.Lock()
+	was := s.ent.syncs.running
+	s.ent.syncs.running = map[string]*orgSync{repo: {s: away}}
+	s.ent.syncs.mu.Unlock()
+	t.Cleanup(func() {
+		s.ent.syncs.mu.Lock()
+		s.ent.syncs.running = was
+		s.ent.syncs.mu.Unlock()
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "plan.md"), []byte("Plan."), 0o644))
+	var saved *connect.Response[pb.SaveOrgSyncResponse]
+	require.Eventually(t, func() bool {
+		var err error
+		saved, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: repo}))
+		return err == nil
+	}, 5*time.Second, 20*time.Millisecond)
+	assert.Equal(t, "offline", saved.Msg.State)
+	assert.NotEmpty(t, saved.Msg.Error, "Git's words")
+	st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: repo}))
+	require.NoError(t, err)
+	assert.Equal(t, "offline", st.Msg.State)
+
+	_, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: "relative/nowhere\x00"}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOT_SYNCED", info.Reason)
+}
