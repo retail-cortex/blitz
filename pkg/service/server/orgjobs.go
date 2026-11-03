@@ -137,21 +137,22 @@ func (h configService) serviceJob(ctx context.Context, c *enterprise.Client, job
 func jobDir(name string) string { return path.Join(".agents", "workers", name) }
 
 // syncState is the sync's state for the workspace at dir ("" when no
-// syncer keeps it in step).
-func (s *Server) syncState(dir string) string {
+// syncer keeps it in step), and its last failure in Git's words.
+func (s *Server) syncState(dir string) (string, string) {
 	key, err := canonical(dir)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	s.ent.syncs.mu.Lock()
 	defer s.ent.syncs.mu.Unlock()
 	for d, rs := range s.ent.syncs.running {
 		if k, err := canonical(d); err == nil && k == key {
+			st := rs.s.State()
 			// One just started hasn't saved yet: it's about to.
-			return cmp.Or(rs.s.State().State, orgsync.Saving)
+			return cmp.Or(st.State, orgsync.Saving), st.Err
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // whyNotServiceJob says why the service has no job name in the workspace
@@ -174,8 +175,8 @@ func (s *Server) whyNotServiceJob(ctx context.Context, c *enterprise.Client, dir
 		}
 	}
 	if len(strings.TrimSpace(string(changed))) > 0 {
-		if st := s.syncState(dir); st != "" {
-			return &pb.GetServiceJobResponse{Reason: "saving", SyncState: st}, nil
+		if st, why := s.syncState(dir); st != "" {
+			return &pb.GetServiceJobResponse{Reason: "saving", SyncState: st, Detail: why}, nil
 		}
 		return &pb.GetServiceJobResponse{Reason: "not_pushed"}, nil
 	}

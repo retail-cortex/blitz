@@ -983,6 +983,8 @@ func TestShareWithOrganization(t *testing.T) {
 	bare := org.Repo("~ana/home")
 	assert.Equal(t, "Ship it.", git(bare, "show", "main:plan.md"))
 	assert.Equal(t, org.URL+"/git/~ana/home.git", git(notes, "remote", "get-url", "organization"))
+	assert.Equal(t, "organization/main", git(notes, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
+		"main follows the organization's, so Changes can pull and count")
 
 	_, err = share(notes, "Home", true)
 	_, info = errorReason(t, err)

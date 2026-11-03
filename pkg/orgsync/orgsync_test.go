@@ -16,6 +16,7 @@ package orgsync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -287,4 +288,22 @@ func TestConflictCases(t *testing.T) {
 			assert.Equal(t, "Bo's", read(bo, "plan.md"), "the merge undone: Bo's as it was")
 		})
 	}
+}
+
+// A push the service reached and turned down is Refused, with Git's
+// words, not Offline: the window says the service refused it.
+func TestFailed(t *testing.T) {
+	for msg, want := range map[string]string{
+		"exit status 1: error: remote unpack failed: reference delta not found":                  Refused,
+		"exit status 1: ! [remote rejected] HEAD -> main (pre-receive hook declined)":            Refused,
+		"exit status 128: fatal: unable to access 'https://b.acme.com/': Could not resolve host": Offline,
+	} {
+		s := &Syncer{SignedIn: func() bool { return true }}
+		s.failed(errors.New(msg))
+		assert.Equal(t, want, s.State().State, msg)
+		assert.Equal(t, msg, s.State().Err)
+	}
+	s := &Syncer{SignedIn: func() bool { return false }}
+	s.failed(errors.New("remote unpack failed"))
+	assert.Equal(t, SignedOut, s.State().State, "signed out first")
 }

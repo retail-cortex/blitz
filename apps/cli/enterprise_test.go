@@ -528,6 +528,7 @@ func TestMissingText(t *testing.T) {
 		"offline":     {client.ServiceJobMissing{Reason: "saving", SyncState: "offline"}, "can't reach"},
 		"signed out":  {client.ServiceJobMissing{Reason: "saving", SyncState: "signed_out"}, "blitz enterprise login"},
 		"conflicts":   {client.ServiceJobMissing{Reason: "saving", SyncState: "conflicts"}, "both versions"},
+		"refused":     {client.ServiceJobMissing{Reason: "saving", SyncState: "refused", Detail: "remote unpack failed"}, "turned down this workspace's changes, so d isn't on its main: remote unpack failed"},
 		"not service": {client.ServiceJobMissing{Reason: "not_service", Detail: "it runs on people's computers"}, "doesn't run it: it runs on people's computers"},
 		"not read":    {client.ServiceJobMissing{Reason: "not_read"}, "Try again shortly"},
 		"unreadable":  {client.ServiceJobMissing{Reason: "not_read", Detail: "the service is down"}, "yet: the service is down"},

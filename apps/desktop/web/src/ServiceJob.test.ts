@@ -29,6 +29,7 @@ describe("why the service hasn't got a job", () => {
     expect(r("saving", "", "signed_out")).toContain("Sign in");
     expect(r("saving", "", "conflicts")).toContain("both versions");
     expect(r("saving", "", "saved")).toBe(r("saving"));
+    expect(r("saving", "remote unpack failed", "refused")).toContain("remote unpack failed");
   });
   it("says why the service doesn't run it", () => {
     expect(r("not_service", "", "")).toContain("doesn't run it");

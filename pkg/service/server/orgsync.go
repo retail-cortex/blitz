@@ -152,9 +152,30 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 	}
 }
 
+// trackShared has the branch checked out in a folder shared in place
+// follow the organization's main, when it follows nothing: so Changes can
+// pull from it and count what's ahead and behind (a folder shared before
+// this was done gets it as its sync starts). A branch that follows another
+// remote is left as it is.
+func trackShared(ctx context.Context, dir, remote string) {
+	if remote == "" || remote == "origin" {
+		return
+	}
+	if _, err := gitText(ctx, dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err == nil {
+		return
+	}
+	if _, err := gitText(ctx, dir, "rev-parse", "--verify", "-q", remote+"/main"); err != nil {
+		return
+	}
+	if _, err := gitText(ctx, dir, "branch", "--set-upstream-to="+remote+"/main"); err != nil {
+		slog.Debug("a shared folder's branch following the organization's main", "dir", dir, "error", err)
+	}
+}
+
 // startSync runs a syncer for the clone at dir, and follows its watch
 // stream so others' pushes come in as they happen.
 func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, handle, remote string) *orgSync {
+	trackShared(parent, dir, remote)
 	ctx, cancel := context.WithCancel(parent)
 	who := c.Status().Person.Name
 	if who == "" {
@@ -164,6 +185,15 @@ func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, ha
 		Busy:     func() bool { return s.busyIn(dir) },
 		SignedIn: func() bool { return c.Status().SignedIn },
 		Quiet:    s.ent.syncQuiet, Poll: s.ent.syncPoll,
+		// Each change of state is logged, a failure with Git's words: the
+		// window says it in short.
+		OnState: func(st orgsync.State) {
+			if st.Err != "" {
+				slog.Warn("an organization workspace's sync", "workspace", handle, "dir", dir, "state", st.State, "error", st.Err)
+			} else {
+				slog.Debug("an organization workspace's sync", "workspace", handle, "state", st.State)
+			}
+		},
 	}
 	r := &orgSync{s: sy, cancel: cancel, done: make(chan struct{})}
 	var wg sync.WaitGroup
@@ -200,6 +230,9 @@ func (h configService) GetOrgSync(_ context.Context, r req[pb.GetOrgSyncRequest]
 		if k, err := canonical(dir); err == nil && k == key {
 			st := rs.s.State()
 			out := &pb.GetOrgSyncResponse{State: st.State}
+			if st.State == orgsync.Offline || st.State == orgsync.Refused {
+				out.Error = st.Err
+			}
 			for _, p := range st.Pairs {
 				out.Pairs = append(out.Pairs, &pb.OrgSyncPair{Shared: p[0], Mine: p[1]})
 			}

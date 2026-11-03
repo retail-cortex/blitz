@@ -68,6 +68,7 @@ export function whyNot(r: Pick<GetServiceJobResponse, "reason" | "detail" | "syn
     case "not_pushed":
       return t("desktop.service_job.not_pushed");
     case "saving":
+      if (r.syncState === "refused") return t("desktop.service_job.saving.refused", { why: r.detail });
       return ["offline", "signed_out", "conflicts"].includes(r.syncState) ? t(`desktop.service_job.saving.${r.syncState}`) : t("desktop.service_job.saving");
     case "not_service":
       return t("desktop.service_job.not_service", { why: r.detail });

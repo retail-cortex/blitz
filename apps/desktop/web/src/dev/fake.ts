@@ -2771,7 +2771,9 @@ export function installFake() {
           workspace.includes("/Blitz/Acme Assist/")
             ? fakeParam("conflict")
               ? { state: "conflicts", pairs: [{ shared: "plan.md", mine: "plan (conflict, Ana).md" }] }
-              : { state: "saved", pairs: [] }
+              : fakeParam("refused")
+                ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" }
+                : { state: "saved", pairs: [] }
             : { state: "", pairs: [] },
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;

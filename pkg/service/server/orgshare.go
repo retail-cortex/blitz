@@ -167,6 +167,7 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		return nil, apiError(connect.CodeUnavailable, "PUSH_FAILED",
 			fmt.Errorf("the workspace %s was made, but the folder couldn't be sent to it: %w", w.Handle, err))
 	}
+	trackShared(ctx, dir, sharedRemote)
 	if err := addShared(c.URL(), w.Handle, sharedFolder{Dir: dir, Remote: sharedRemote}); err != nil {
 		return nil, apiError(connect.CodeInternal, "INTERNAL", err)
 	}

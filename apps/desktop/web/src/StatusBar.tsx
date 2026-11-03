@@ -32,6 +32,7 @@ import {
   mdiFileCompare,
   mdiCloudSyncOutline,
   mdiCloudOffOutline,
+  mdiCloudAlertOutline,
   mdiCloudCheckOutline,
   mdiCloudOutline,
   mdiCircleMedium,
@@ -83,6 +84,9 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const ws = prefs.workspaces.find((w) => w.dir === prefs.active && w.open);
   const dir = ws?.dir ?? "";
   const orgSync = useOrgSync(serviceUp ? dir : "");
+  // A workspace kept in step shows its sync; Git's branch beside it in
+  // advanced mode, where Changes' Git work is.
+  const advanced = useAdvanced();
   return (
     <footer className="status-bar t-label-sm" role="contentinfo" aria-label={t("desktop.status.label")}>
       {/* The service: an icon, green while it answers and red while it's
@@ -103,7 +107,8 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
             <span className="sb-swatch" style={{ background: workspaceColor(ws.color, theme) }} />
             <span className="ellipsis">{displayName(ws)}</span>
           </span>
-          {serviceUp && (orgSync ? <OrgSyncItem state={orgSync} /> : <GitItem dir={dir} />)}
+          {serviceUp && orgSync && <OrgSyncItem state={orgSync} />}
+          {serviceUp && (!orgSync || advanced) && <GitItem dir={dir} />}
         </>
       )}
       <span className="spacer" />
@@ -152,14 +157,16 @@ const orgSyncIcons: Record<string, string> = {
   offline: mdiCloudOffOutline,
   signed_out: mdiAccountAlertOutline,
   conflicts: mdiFileCompare,
+  refused: mdiCloudAlertOutline,
 };
 
 /** The sync's state in words, never Git's: Saved, Saving…, Offline, Signed out, Both versions kept. */
 function OrgSyncItem({ state }: { state: GetOrgSyncResponse }) {
   const label = state.state === "conflicts" ? tn("desktop.org.sync.conflicts", state.pairs.length) : t(`desktop.org.sync.${state.state}`);
-  const detail = state.pairs.map((p) => t("desktop.org.sync.pair", { shared: p.shared, mine: p.mine })).join("\n");
+  const detail = [state.error, ...state.pairs.map((p) => t("desktop.org.sync.pair", { shared: p.shared, mine: p.mine }))].filter(Boolean).join("\n");
+  const warn = ["conflicts", "signed_out", "refused"].includes(state.state);
   return (
-    <span className={`sb-item ${state.state === "conflicts" || state.state === "signed_out" ? "warn-text" : ""}`} role="status" title={detail || label}>
+    <span className={`sb-item ${warn ? "warn-text" : ""}`} role="status" title={detail || label}>
       <Icon path={orgSyncIcons[state.state] ?? mdiCloudCheckOutline} size="sm" />
       <span className="ellipsis">{label}</span>
     </span>

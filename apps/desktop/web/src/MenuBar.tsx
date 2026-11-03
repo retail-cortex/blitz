@@ -143,14 +143,16 @@ export function MenuBar({
 
   const orgWs = useOrgWorkspaces();
   // A workspace kept in step with the organization saves itself: its
-  // Changes are this session's and its History, never Git's words (EN-64).
+  // Changes are this session's and its History, never Git's words (EN-64),
+  // but in advanced mode, where Git's items stay beside them.
   const synced = !!dir && !!orgWs?.workspaces.some((w) => w.dir === dir && w.sync && w.role !== "viewer");
+  const gitItems = !synced || advanced;
   const changes: MenuEntry[] = [
     { label: t("desktop.menu.changes.session"), detail: t("desktop.changes.session"), icon: mdiHistory, onSelect: () => onChanges?.("session") },
   ];
-  if (!synced) changes.push({ label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") });
+  if (gitItems) changes.push({ label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") });
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), detail: synced ? t("desktop.menu.changes.history_synced") : undefined, icon: mdiSourceBranch, onSelect: onHistory });
-  if (!synced) {
+  if (gitItems) {
     if (onCommit) changes.push("divider");
     if (onIncludeAll) changes.push({ label: t("desktop.commit.stage_all"), icon: mdiPlusBoxMultipleOutline, onSelect: onIncludeAll });
     if (onProtect) changes.push({ label: t("desktop.secrethook.menu"), detail: t("desktop.secrethook.menu_detail"), icon: mdiShieldKeyOutline, onSelect: onProtect });

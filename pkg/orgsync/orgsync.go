@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +44,14 @@ const (
 	Offline   = "offline"    // its saves wait on this computer
 	SignedOut = "signed_out" // sign in to sync
 	Conflicts = "conflicts"  // both versions kept
+	// Refused is the service turning this person's saves down: it was
+	// reached, so it isn't Offline; Err says why, in Git's words.
+	Refused = "refused"
 )
+
+// refusals are what Git says when the remote was reached and turned a
+// push down (beside a push behind others', which sync takes first).
+var refusals = []string{"remote unpack failed", "remote rejected", "remote failure", "pre-receive hook declined", "protected branch"}
 
 // State is a workspace's sync now.
 type State struct {
@@ -195,12 +203,15 @@ func (s *Syncer) due() bool {
 	return st != "" && s.now().Sub(s.changed) >= or(s.Quiet, 5*time.Second)
 }
 
-// failed sets the state for err: signed out, else offline (its saves wait
-// on this computer).
+// failed sets the state for err: signed out, refused by the service, else
+// offline (its saves wait on this computer).
 func (s *Syncer) failed(err error) {
 	st := Offline
-	if (s.SignedIn != nil && !s.SignedIn()) || errors.Is(err, ErrSignedOut) {
+	switch {
+	case (s.SignedIn != nil && !s.SignedIn()) || errors.Is(err, ErrSignedOut):
 		st = SignedOut
+	case slices.ContainsFunc(refusals, func(r string) bool { return strings.Contains(err.Error(), r) }):
+		st = Refused
 	}
 	s.set(State{State: st, Pairs: s.State().Pairs, Err: err.Error()})
 }

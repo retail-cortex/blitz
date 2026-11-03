@@ -45,6 +45,8 @@ func missingText(name string, m *client.ServiceJobMissing) string {
 			return fmt.Sprintf("sign in to your organization to put %s on its service: blitz enterprise login", name)
 		case "conflicts":
 			return fmt.Sprintf("sync kept both versions of a file in this workspace; settle them and %s goes to the service", name)
+		case "refused":
+			return fmt.Sprintf("the organization's service turned down this workspace's changes, so %s isn't on its main: %s", name, m.Detail)
 		}
 		return fmt.Sprintf("sync is putting %s on the organization's service: it goes a few seconds after the last change, between agent turns. Try again shortly", name)
 	case "not_service":

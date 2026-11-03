@@ -228,8 +228,9 @@ service ConfigService {
   // signed out.
   rpc GitCredential(GitCredentialRequest) returns (GitCredentialResponse);
   // An organization workspace's sync on this computer (EN-64): its state
-  // (saved, saving, offline, signed_out, conflicts; "" when it isn't one
-  // kept in step) and the files with both versions kept.
+  // (saved, saving, offline, signed_out, conflicts, refused; "" when it
+  // isn't one kept in step), why it failed, and the files with both
+  // versions kept.
   rpc GetOrgSync(GetOrgSyncRequest) returns (GetOrgSyncResponse);
   // A job in an organization workspace as the organization's service runs
   // it (EN-42; NOT_CONNECTED, NOT_SIGNED_IN, NOT_ORG_WORKSPACE): found is
@@ -1499,6 +1500,8 @@ message OrgSyncPair {
 message GetOrgSyncResponse {
   string state = 1;
   repeated OrgSyncPair pairs = 2;
+  // Why it's offline or refused, in Git's words ("" otherwise).
+  string error = 3;
 }
 
 // A job the organization's service runs.
@@ -1569,7 +1572,7 @@ message GetServiceJobResponse {
   // Why it isn't found: "outside" (its WORKER.md isn't in
   // .agents/workers/<name>/, where the service looks), "not_pushed" (its
   // changes aren't on main: PushServiceJob), "saving" (sync is putting
-  // them there; sync_state says how it stands), "not_service" (on main,
+  // them there; sync_state says how it stands, detail why it failed), "not_service" (on main,
   // but the service doesn't run it: detail says why), or "not_read" (the
   // service hasn't read it yet).
   string reason = 4;

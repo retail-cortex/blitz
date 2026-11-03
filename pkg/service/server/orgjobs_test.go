@@ -16,12 +16,14 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
@@ -131,6 +133,37 @@ func TestWhyNotServiceJob(t *testing.T) {
 		assert.Equal(t, orgsync.Saving, got.SyncState)
 	})
 
+	t.Run("sync refused by the service", func(t *testing.T) {
+		// A syncer whose pushes the service turns down, as go-git's thin
+		// packs did: the window and the job say why, never offline.
+		refused := func(context.Context, string, ...string) ([]byte, error) {
+			return nil, errors.New("exit status 1: error: remote unpack failed: reference delta not found")
+		}
+		sy := &orgsync.Syncer{Dir: dir, Git: refused, SignedIn: func() bool { return true }, Poll: 10 * time.Millisecond}
+		rctx, stop := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() { sy.Run(rctx); close(done) }()
+		defer func() { stop(); <-done }()
+		require.Eventually(t, func() bool { return sy.State().State == orgsync.Refused }, 5*time.Second, 10*time.Millisecond)
+		s.ent.syncs.mu.Lock()
+		was := s.ent.syncs.running
+		s.ent.syncs.running = map[string]*orgSync{dir: {s: sy}}
+		s.ent.syncs.mu.Unlock()
+		defer func() {
+			s.ent.syncs.mu.Lock()
+			s.ent.syncs.running = was
+			s.ent.syncs.mu.Unlock()
+		}()
+		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: dir}))
+		require.NoError(t, err)
+		assert.Equal(t, orgsync.Refused, st.Msg.State)
+		assert.Contains(t, st.Msg.Error, "reference delta not found")
+		got := why("tidy", "")
+		assert.Equal(t, "saving", got.Reason)
+		assert.Equal(t, orgsync.Refused, got.SyncState)
+		assert.Contains(t, got.Detail, "remote unpack failed")
+	})
+
 	t.Run("on main, but not the service's", func(t *testing.T) {
 		write("mine", "schedule: hourly")
 		_, err := c.PushServiceJob(ctx, connect.NewRequest(&pb.PushServiceJobRequest{Workspace: dir, Name: "mine"}))
@@ -198,4 +231,51 @@ func TestWhyNotServiceJob(t *testing.T) {
 		_, info = errorReason(t, err)
 		assert.Equal(t, "PUSH_FAILED", info.Reason)
 	})
+}
+
+// A folder shared in place follows the organization's main (Changes'
+// Pull and its counts need an upstream), unless it follows another.
+func TestTrackShared(t *testing.T) {
+	ctx := context.Background()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, args...)...).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return string(out)
+	}
+	upstream := func(dir string) string {
+		out, _ := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}").Output()
+		return string(out)
+	}
+	bare, other, dir := t.TempDir(), t.TempDir(), t.TempDir()
+	git(bare, "init", "-q", "--bare")
+	git(other, "init", "-q", "--bare")
+	git(dir, "init", "-q")
+	git(dir, "commit", "-q", "--allow-empty", "-m", "first")
+
+	trackShared(ctx, dir, "organization")
+	assert.Empty(t, upstream(dir), "no such remote")
+	git(dir, "remote", "add", "organization", bare)
+	trackShared(ctx, dir, "organization")
+	assert.Empty(t, upstream(dir), "nothing on its main yet")
+	git(dir, "push", "-q", "organization", "HEAD:main")
+	trackShared(ctx, dir, "origin")
+	assert.Empty(t, upstream(dir), "a clone's origin is Git's own business")
+	trackShared(ctx, dir, "organization")
+	assert.Equal(t, "organization/main\n", upstream(dir))
+
+	// A detached HEAD has no branch to follow anything: left as it is.
+	git(dir, "checkout", "-q", "--detach")
+	git(dir, "branch", "-q", "--unset-upstream", "main")
+	trackShared(ctx, dir, "organization")
+	git(dir, "checkout", "-q", "main")
+	assert.Empty(t, upstream(dir))
+	trackShared(ctx, dir, "organization")
+	assert.Equal(t, "organization/main\n", upstream(dir))
+
+	// One that follows another remote keeps it.
+	git(dir, "remote", "add", "upstream", other)
+	git(dir, "push", "-q", "-u", "upstream", "HEAD:main")
+	trackShared(ctx, dir, "organization")
+	assert.Equal(t, "upstream/main\n", upstream(dir))
 }
