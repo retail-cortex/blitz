@@ -277,6 +277,9 @@ func (c *Client) load() *record {
 		return c.rec
 	}
 	c.loaded = true
+	if c.store == nil {
+		return nil // a run's, signed in by its secret (NewRun)
+	}
 	v, err := c.store.Get(secretName)
 	if err != nil {
 		return nil
@@ -336,6 +339,12 @@ func (c *Client) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	st := Status{URL: c.url, Terms: c.terms}
+	if c.run != nil {
+		// A run on the service is signed in as the job's owner, by its
+		// secret, for as long as it runs.
+		st.SignedIn = true
+		return st
+	}
 	r := c.load()
 	st.Info = c.info
 	if r != nil {

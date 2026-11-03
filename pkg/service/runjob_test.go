@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -241,6 +242,29 @@ func TestRunJob(t *testing.T) {
 	t.Run("a job that doesn't read", func(t *testing.T) {
 		assert.ErrorContains(t, RunJob(ctx, job("r5", "odd"), JobOptions{Config: t.TempDir(), Open: open(false)}), `runs_on "moon"`)
 		assert.Equal(t, "failed", ended("r5")["status"])
+	})
+
+	t.Run("the organization's models, signed in as the run", func(t *testing.T) {
+		built := errors.New("it never got there")
+		real := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+			_, built = runtime.NewModel(ctx, cfg, "enterprise/default")
+			return nil, os.ErrPermission
+		}
+		_ = RunJob(ctx, job("r12", "digest"), JobOptions{Config: t.TempDir(), Open: real})
+		assert.NotContains(t, fmt.Sprint(built), "sign in", "a run has no keychain: its secret signs it in")
+		assert.NotContains(t, fmt.Sprint(built), "never got there")
+	})
+
+	t.Run("a panic", func(t *testing.T) {
+		boom := func(context.Context, *config.Config, engine.Options) (*engine.Workspace, error) {
+			panic("nil map")
+		}
+		err := RunJob(ctx, job("r13", "digest"), JobOptions{Config: t.TempDir(), Open: boom})
+		require.ErrorContains(t, err, "nil map")
+		s.Mu.Lock()
+		end := s.Ends["r13"]
+		s.Mu.Unlock()
+		assert.Equal(t, "failed", end["status"], "told at once, not at the deadline")
 	})
 
 	t.Run("a workspace that doesn't open", func(t *testing.T) {

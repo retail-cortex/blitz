@@ -151,6 +151,8 @@ func TestRun(t *testing.T) {
 	_, s, _, _, now := setup(t)
 	s.Runs["r1"] = "s3cret"
 	c := NewRun(s.URL, "r1", "s3cret", Options{Now: func() time.Time { return *now }})
+	assert.True(t, c.Status().SignedIn, "as the job's owner, by its secret")
+	assert.False(t, New(s.URL, nil, Options{}).Status().SignedIn, "no keychain: not signed in")
 	tok, err := c.AccessToken(ctx)
 	require.NoError(t, err)
 	again, err := c.AccessToken(ctx)

@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -167,7 +168,7 @@ func RunJob(ctx context.Context, j Job, o JobOptions) error {
 	c := enterprise.NewRun(j.Service, j.Run, j.Secret, enterprise.Options{Client: o.Client})
 	enterprise.Register(c) // the organization's models find it by the service's address
 	run := &jobRun{j: j, o: o, c: c}
-	end := run.run(ctx)
+	end := run.safeRun(ctx)
 	// The run's end is told even when its time is up.
 	tell, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
@@ -178,6 +179,18 @@ func RunJob(ctx context.Context, j Job, o JobOptions) error {
 		return fmt.Errorf("the run %s: %s", end.Status, end.Note)
 	}
 	return nil
+}
+
+// safeRun is run, a panic in it a failed run the service hears of now,
+// not when its deadline passes, with the stack in the runner's log.
+func (r *jobRun) safeRun(ctx context.Context) (end enterprise.RunEnd) {
+	defer func() {
+		if p := recover(); p != nil {
+			fmt.Fprintf(os.Stderr, "panic: %v\n%s", p, debug.Stack())
+			end = failed("Blitz stopped with an error: %v", p)
+		}
+	}()
+	return r.run(ctx)
 }
 
 type jobRun struct {
