@@ -985,6 +985,8 @@ func TestShareWithOrganization(t *testing.T) {
 	assert.Equal(t, org.URL+"/git/~ana/home.git", git(notes, "remote", "get-url", "organization"))
 	assert.Equal(t, "organization/main", git(notes, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
 		"main follows the organization's, so Changes can pull and count")
+	assert.Equal(t, "\x00"+s.gitHelper()+"\x00", git(notes, "config", "-z", "--get-all", "credential."+org.URL+".helper"),
+		"Blitz's helper alone: an empty one first clears the person's own")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull) // this computer's helpers (a keychain's) aren't asked
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	w := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)

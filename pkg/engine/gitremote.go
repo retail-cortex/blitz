@@ -222,8 +222,8 @@ func (w *Workspace) checkRepoConfig(ctx context.Context) error {
 			if key = strings.ToLower(strings.TrimSpace(key)); key == "" || !commandKeys.MatchString(key) {
 				continue
 			}
-			if _, ok := trustedHelpers.Load(value); ok && strings.HasPrefix(key, "credential.") && strings.HasSuffix(key, ".helper") {
-				continue
+			if _, ok := trustedHelpers.Load(value); (ok || value == "") && strings.HasPrefix(key, "credential.") && strings.HasSuffix(key, ".helper") {
+				continue // Blitz's own, or none: an empty one clears those before it
 			}
 			return &RepoConfigError{Key: key}
 		}

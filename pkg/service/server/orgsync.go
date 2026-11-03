@@ -179,7 +179,7 @@ func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, ha
 	trackShared(parent, dir, remote)
 	// The folder's helper is this Blitz's, as Changes trusts: a folder
 	// shared by a Blitz since moved has another's.
-	if err := s.git(parent, dir, "config", "credential."+c.URL()+".helper", s.gitHelper()); err != nil {
+	if err := s.setHelper(parent, dir, c.URL()); err != nil {
 		slog.Debug("a shared folder's credential helper", "dir", dir, "error", err)
 	}
 	ctx, cancel := context.WithCancel(parent)

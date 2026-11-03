@@ -123,6 +123,22 @@ func (s *Server) gitHelper() string {
 	return h
 }
 
+// setHelper sets the clone at dir's credential helper for the service at
+// url: Blitz's alone, an empty one first so the person's own (a keychain
+// with an old sign-in, say) aren't asked, for Git run there by Changes,
+// the person or an agent.
+func (s *Server) setHelper(ctx context.Context, dir, url string) error {
+	key := "credential." + url + ".helper"
+	if out, err := s.gitOut(ctx, dir, "config", "-z", "--get-all", key); err == nil && string(out) == "\x00"+s.gitHelper()+"\x00" {
+		return nil // as it should be: sharing and its sync's start both set it
+	}
+	_ = s.git(ctx, dir, "config", "--unset-all", key) // none set yet is fine
+	if err := s.git(ctx, dir, "config", "--add", key, ""); err != nil {
+		return err
+	}
+	return s.git(ctx, dir, "config", "--add", key, s.gitHelper())
+}
+
 // git runs git in dir with the organization's credential helper alone,
 // never asking at a terminal.
 func (s *Server) git(ctx context.Context, dir string, args ...string) error {
@@ -168,7 +184,7 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 	}
 	// The helper in the clone's own settings, for the service only: Git
 	// run there by the person, or by an agent, signs in as Blitz does.
-	if err := h.s.git(ctx, w.Dir, "config", "credential."+c.URL()+".helper", h.s.gitHelper()); err != nil {
+	if err := h.s.setHelper(ctx, w.Dir, c.URL()); err != nil {
 		return nil, invalid(err)
 	}
 	h.s.ent.kickCatalog() // a new clone to keep in step

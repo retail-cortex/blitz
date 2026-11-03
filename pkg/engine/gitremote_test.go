@@ -346,7 +346,8 @@ func TestTrustedCredentialHelper(t *testing.T) {
 	TrustCredentialHelper(helper)
 	TrustCredentialHelper("")
 	w, _ := remoteRepos(t)
-	gitOut(t, w.Dir(), "config", "credential.https://blitz.example.com.helper", helper)
+	gitOut(t, w.Dir(), "config", "--add", "credential.https://blitz.example.com.helper", "")
+	gitOut(t, w.Dir(), "config", "--add", "credential.https://blitz.example.com.helper", helper)
 	_, err := w.Fetch(ctx)
 	require.NoError(t, err)
 

@@ -160,7 +160,7 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 	} else if _, err := gitText(ctx, dir, "remote", "add", sharedRemote, w.CloneURL); err != nil {
 		return nil, invalid(err)
 	}
-	if err := h.s.git(ctx, dir, "config", "credential."+c.URL()+".helper", h.s.gitHelper()); err != nil {
+	if err := h.s.setHelper(ctx, dir, c.URL()); err != nil {
 		return nil, invalid(err)
 	}
 	if err := h.s.git(ctx, dir, "push", "-q", sharedRemote, "HEAD:main"); err != nil {
