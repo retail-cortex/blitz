@@ -49,6 +49,11 @@ jobs:
           cpu="$(lscpu | sed -n 's/^Model name: *//p')"
           echo "::notice::$cpu"
           case "$cpu" in *Intel*) echo intel=true >> "$GITHUB_OUTPUT";; esac
+      # As ci.yml: the runner's toolchains Blitz doesn't use, removed for
+      # room (a try ran out of disk).
+      - name: Free disk space
+        if: steps.cpu.outputs.intel
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
       - name: Check out
         if: steps.cpu.outputs.intel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,9 +62,19 @@ jobs:
         uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
         with:
           bazelisk-cache: true
-          disk-cache: ci-ubuntu-latest
           repository-cache: true
           cache-save: false
+      # The modules first, tried again on a proxy's dropped stream (a try's
+      # build stopped on one).
+      - name: Fetch
+        id: fetch
+        if: steps.cpu.outputs.intel
+        run: |
+          for i in 1 2 3; do
+            bazel fetch //third_party/mcp-toolbox/embed:embed_test && exit 0
+            sleep 10
+          done
+          exit 1
       - name: TestSQLiteVec 500 times in one process
         if: steps.cpu.outputs.intel
         run: |
@@ -67,7 +82,7 @@ jobs:
             --test_arg=-test.count=500 --test_arg=-test.failfast --test_timeout=1800 \
             //third_party/mcp-toolbox/embed:embed_test
       - name: The same with the race detector
-        if: always() && steps.cpu.outputs.intel
+        if: always() && steps.cpu.outputs.intel && steps.fetch.outcome == 'success'
         run: |
           bazel test --config=race --nocache_test_results --test_output=errors --test_filter=TestSQLiteVec \
             --test_arg=-test.count=500 --test_arg=-test.failfast --test_timeout=1800 \
