@@ -32,6 +32,7 @@ import {
   mdiFolderOutline,
   mdiFolderPlusOutline,
   mdiLinkVariant,
+  mdiLoading,
   mdiLockOutline,
   mdiRefresh,
   mdiRenameOutline,
@@ -61,6 +62,10 @@ import { fileIcon } from "./icons";
 import { dropEntries, importDrop, readDrop, someNames, type DropItem, type OnConflict } from "./upload";
 import { ancestors, dragType, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 import { useAdvanced } from "../state";
+import { useOrgBranding } from "../orgBranding";
+
+/** slowOpen is how long opening goes before the list says what it waits for. */
+const slowOpen = 1500;
 
 const gitIcons: Record<GitAction, string> = {
   [GitAction.UNSPECIFIED]: mdiSourceBranch,
@@ -155,6 +160,19 @@ export function FilesShelf({
   // The workspace is a git repository (from its listing): git actions are offered.
   const [repo, setRepo] = useState(false);
   const [error, setError] = useState("");
+  // Until the workspace has opened (the service opens it on the first
+  // call, its model included), the list says so, and after a moment what
+  // it's waiting for (EN-37): never an empty list that isn't.
+  const [opened, setOpened] = useState(false);
+  const [waiting, setWaiting] = useState<"" | "opening" | "slow">("");
+  const org = useOrgBranding();
+  useEffect(() => {
+    setOpened(false);
+    setWaiting("");
+    // Shown only when opening takes a while, so a quick one doesn't flash.
+    const ids = [window.setTimeout(() => setWaiting("opening"), 300), window.setTimeout(() => setWaiting("slow"), slowOpen)];
+    return () => ids.forEach((id) => window.clearTimeout(id));
+  }, [dir]);
   const list = useRef<HTMLDivElement>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
@@ -178,6 +196,8 @@ export function FilesShelf({
     } catch (e) {
       setError(message(e));
       return;
+    } finally {
+      setOpened(true);
     }
     await Promise.all(rest.map((f) => load(f).catch(() => undefined)));
   }, [load]);
@@ -652,7 +672,13 @@ export function FilesShelf({
             </div>
           );
         })}
-        {shown.length === 0 && !error && !naming && <p className="muted t-body-sm files-note">{t("desktop.files.empty")}</p>}
+        {!opened && !error && waiting && (
+          <p className="muted t-body-sm files-note row" role="status">
+            <Icon path={mdiLoading} size="sm" spin />
+            {waiting === "slow" ? (org?.name ? t("desktop.files.opening_org", { org: org.name }) : t("desktop.files.opening_slow")) : t("desktop.files.opening")}
+          </p>
+        )}
+        {opened && shown.length === 0 && !error && !naming && <p className="muted t-body-sm files-note">{t("desktop.files.empty")}</p>}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
       {/* At the page's level: the shelf's glass blur would otherwise be the
