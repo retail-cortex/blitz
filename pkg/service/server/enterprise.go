@@ -85,7 +85,8 @@ func (s *Server) enterpriseFor(raw string) (*enterprise.Client, error) {
 	defer s.ent.mu.Unlock()
 	if s.ent.c == nil || s.ent.c.URL() != u {
 		s.ent.stopCatalog()
-		s.ent.c = enterprise.New(u, secrets.Default(s.configDir), enterprise.Options{HTTP: s.ent.http, Client: "blitz " + s.version})
+		s.ent.c = enterprise.New(u, secrets.Default(s.configDir), enterprise.Options{HTTP: s.ent.http, Client: "blitz " + s.version,
+			BrandingDir: config.EnterpriseDir(s.configDir, u)})
 		enterprise.Register(s.ent.c)
 		s.startCatalog(s.ent.c)
 	}

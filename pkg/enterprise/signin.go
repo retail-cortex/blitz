@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -101,6 +102,20 @@ func (c *Client) finish(ctx context.Context, info Info, t *oauth2.Token) error {
 	return c.exchange(ctx, info, id)
 }
 
+// signInBrand is the organization's look for the sign-in's page, from
+// the branding kept; nil for Blitz's own.
+func (c *Client) signInBrand() *signedin.Brand {
+	if c.brand == "" {
+		return nil
+	}
+	b := LoadBranding(c.brand)
+	if b == nil {
+		return nil
+	}
+	return &signedin.Brand{Name: b.Name, Accent: b.Accent, AccentDark: b.AccentDark,
+		Logo: cmp.Or(b.Images["logo.svg"], b.Images["logo.png"], b.Images["icon.png"]), LogoDark: b.Images["logo-dark.svg"]}
+}
+
 // SignInBrowser signs in through a browser, for the desktop app and the
 // tray: the authorization code with PKCE, received on a redirect to this
 // computer (EN-12). show gets the address to open; pasted takes the
@@ -126,13 +141,16 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 			http.NotFound(w, r)
 			return
 		}
-		if e := r.URL.Query().Get("error"); e != "" {
-			signedin.Write(w, http.StatusOK, signedin.Page{Title: "The sign-in didn't go through", Failed: true, Open: true,
-				Message: "Your organization's sign-in refused it (" + e + "). Try again from Blitz."})
-		} else {
-			signedin.Write(w, http.StatusOK, signedin.Page{Title: "You're signed in", Open: true,
-				Message: "Blitz is signed in to your organization. Go back to Blitz to carry on."})
+		page := signedin.Page{Title: "You're signed in", Open: true, Brand: c.signInBrand(),
+			Message: "Blitz is signed in to your organization. Go back to Blitz to carry on."}
+		if page.Brand != nil && page.Brand.Name != "" {
+			page.Message = "Blitz is signed in to " + page.Brand.Name + ". Go back to Blitz to carry on."
 		}
+		if e := r.URL.Query().Get("error"); e != "" {
+			page.Title, page.Failed = "The sign-in didn't go through", true
+			page.Message = "Your organization's sign-in refused it (" + e + "). Try again from Blitz."
+		}
+		signedin.Write(w, http.StatusOK, page)
 		select {
 		case codes <- r.URL.Query():
 		default:

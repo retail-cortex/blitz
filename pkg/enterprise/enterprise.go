@@ -227,6 +227,7 @@ type Client struct {
 	hc     *http.Client
 	now    func() time.Time
 	client string // what the service records the sessions as from
+	brand  string // the folder its branding is kept in, for the sign-in page
 
 	mu      sync.Mutex
 	rec     *record
@@ -250,6 +251,9 @@ type Options struct {
 	// Client names the app and its version for the service's sessions,
 	// such as "blitz 0.9.0 (desktop)".
 	Client string
+	// BrandingDir is the folder the service's branding is kept in
+	// (RefreshBranding's): the browser sign-in's page shows it.
+	BrandingDir string
 }
 
 // New is the connection to the service at u (already normalized),
@@ -264,7 +268,7 @@ func New(u string, store secrets.Store, o Options) *Client {
 	if o.Client == "" {
 		o.Client = "blitz"
 	}
-	return &Client{url: u, store: store, hc: o.HTTP, now: o.Now, client: o.Client}
+	return &Client{url: u, store: store, hc: o.HTTP, now: o.Now, client: o.Client, brand: o.BrandingDir}
 }
 
 // URL is the service's address.

@@ -36,6 +36,17 @@ func TestWrite(t *testing.T) {
 			[]string{"Go back to your terminal."}, []string{"blitz://show"}},
 		"refused": {http.StatusBadRequest, Page{Title: "Not this time", Message: "<script>x</script>", Failed: true},
 			[]string{`class="card failed"`, "Not signed in", "&lt;script&gt;"}, []string{"<script>"}},
+		"an organization's": {http.StatusOK, Page{Title: "Hi", Brand: &Brand{Name: "Acme", Logo: "data:image/png;base64,AAAA",
+			LogoDark: "data:image/svg+xml;base64,BBBB", Accent: "#1a56db", AccentDark: "#7aa7ff"}},
+			[]string{"<title>Hi · Acme</title>", `src="data:image/png;base64,AAAA"`, `class="org-logo light-only"`, `src="data:image/svg&#43;xml;base64,BBBB"`,
+				"(prefers-color-scheme: light) { :root { --primary: #1a56db; --on-primary: #ffffff; } }",
+				"(prefers-color-scheme: dark) { :root { --primary: #7aa7ff; --on-primary: #000000; } }", `class="by"`},
+			[]string{`class="logo"`}},
+		"an organization's name alone": {http.StatusOK, Page{Title: "Hi", Brand: &Brand{Name: "Acme", Logo: "javascript:alert(1)", LogoDark: "data:text/html,x", Accent: "#ffff00"}},
+			[]string{`<p class="org-name">Acme</p>`, "(prefers-color-scheme: dark) { :root { --primary: #ffff00"},
+			[]string{"javascript", "text/html", "light) { :root { --primary: #ffff00"}},
+		"only a dark logo": {http.StatusOK, Page{Title: "Hi", Brand: &Brand{Name: "Acme", LogoDark: "data:image/png;base64,DDDD", Accent: "red"}},
+			[]string{`class="org-logo"`, "DDDD"}, []string{"dark-only\" src", "red;"}},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

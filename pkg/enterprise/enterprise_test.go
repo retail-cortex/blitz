@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -577,6 +578,27 @@ func TestBranding(t *testing.T) {
 	again, err := c.RefreshBranding(ctx, dir)
 	require.NoError(t, err)
 	assert.Equal(t, b, again, "unchanged: 304")
+
+	t.Run("the sign-in's page shows it", func(t *testing.T) {
+		signIn := New(s.URL, &secrets.Memory{}, Options{BrandingDir: dir})
+		pages := make(chan string, 1)
+		show := func(p Prompt) {
+			go func() {
+				res, err := http.Get(p.URL)
+				if assert.NoError(t, err) {
+					defer res.Body.Close()
+					body, _ := io.ReadAll(res.Body)
+					pages <- string(body)
+				}
+			}()
+		}
+		require.NoError(t, signIn.SignInBrowser(ctx, show, nil))
+		page := <-pages
+		assert.Contains(t, page, "Blitz is signed in to Acme Assist.")
+		assert.Contains(t, page, `src="data:image/svg&#43;xml;base64,PHN2Zy8&#43;"`)
+		assert.Contains(t, page, "--primary: #1a56db")
+		assert.Contains(t, page, `href="blitz://show"`)
+	})
 
 	t.Run("a copy changed on disk isn't shown", func(t *testing.T) {
 		other := t.TempDir()
