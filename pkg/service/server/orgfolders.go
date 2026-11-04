@@ -114,23 +114,36 @@ func orgDir(shared map[string]sharedFolder, folder, handle string) (string, stri
 // workspace opens: its ID ("" when dir isn't one; each model call carries
 // it, spec_053 EN-22), and why it's read-only ("" when it isn't): it's a
 // clone the person is only a Viewer of (EN-60). When the service can't be
-// reached it's neither (a Viewer's push is refused there anyway).
+// reached it's what the service last said for dir (EN-37), else neither
+// (a Viewer's push is refused there anyway).
 func (s *Server) OrgWorkspaceFor(ctx context.Context, dir string) (id, readOnly string) {
 	c, cfg, err := s.orgClient()
 	if err != nil || !c.Status().SignedIn {
+		return "", ""
+	}
+	key, err := canonical(dir)
+	if err != nil {
 		return "", ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	list, err := c.Workspaces(ctx)
 	if err != nil {
-		return "", ""
+		// Offline (EN-37): what it was when the service last said.
+		s.ent.orgForMu.Lock()
+		defer s.ent.orgForMu.Unlock()
+		last := s.ent.orgFor[key]
+		return last[0], last[1]
 	}
+	defer func() {
+		s.ent.orgForMu.Lock()
+		defer s.ent.orgForMu.Unlock()
+		if s.ent.orgFor == nil {
+			s.ent.orgFor = map[string][2]string{}
+		}
+		s.ent.orgFor[key] = [2]string{id, readOnly}
+	}()
 	folder, shared := s.orgFolder(c, cfg), sharedFor(c.URL())
-	key, err := canonical(dir)
-	if err != nil {
-		return "", ""
-	}
 	for _, w := range list {
 		at, _ := orgDir(shared, folder, w.Handle)
 		if k, err := canonical(at); err != nil || k != key {

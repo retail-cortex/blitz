@@ -259,11 +259,13 @@ type Options struct {
 // New is the connection to the service at u (already normalized),
 // keeping its sign-in in store.
 func New(u string, store secrets.Store, o Options) *Client {
-	if o.HTTP == nil {
-		o.HTTP = http.DefaultClient
-	}
 	if o.Now == nil {
 		o.Now = time.Now
+	}
+	if o.HTTP == nil {
+		// Its own client: limits on reaching the service, and once it
+		// hasn't answered, calls that fail at once for a while (EN-37).
+		o.HTTP = &http.Client{Transport: &reach{base: transport(), now: o.Now}}
 	}
 	if o.Client == "" {
 		o.Client = "blitz"

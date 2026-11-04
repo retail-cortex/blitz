@@ -58,6 +58,10 @@ type enterpriseConn struct {
 	// HTTP is what the calls go through (tests set it); nil for the
 	// default client.
 	http *http.Client
+	// orgFor is each folder's last answer from OrgWorkspaceFor, kept for
+	// when the service doesn't answer (a Viewer's clone stays read-only).
+	orgForMu sync.Mutex
+	orgFor   map[string][2]string
 }
 
 // discoverTimeout bounds checking an address.
@@ -222,7 +226,7 @@ func (e *enterpriseConn) httpClient() *http.Client {
 	if e.http != nil {
 		return e.http
 	}
-	return http.DefaultClient
+	return enterprise.HTTPClient()
 }
 
 func (h configService) GetEnterprise(ctx context.Context, r req[pb.GetEnterpriseRequest]) (*connect.Response[pb.GetEnterpriseResponse], error) {

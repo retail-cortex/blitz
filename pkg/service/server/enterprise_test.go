@@ -1109,6 +1109,15 @@ func TestShareWithOrganization(t *testing.T) {
 		id, readOnly = s.OrgWorkspaceFor(ctx, dir)
 		assert.Empty(t, id+readOnly, "not the organization's")
 	}
+
+	// The service gone (EN-37): each is what it last said, a Viewer's
+	// clone still read-only.
+	org.Close()
+	id, readOnly = s.OrgWorkspaceFor(ctx, board)
+	assert.Equal(t, enterprisetest.WorkspaceID("board"), id)
+	assert.Contains(t, readOnly, "a Viewer of Acme Assist's workspace Board")
+	id, readOnly = s.OrgWorkspaceFor(ctx, t.TempDir())
+	assert.Empty(t, id+readOnly, "never said: neither")
 }
 
 // An Admin publishes a workspace's items to the organization's catalog
@@ -1203,7 +1212,7 @@ func TestPublishToOrganization(t *testing.T) {
 	assert.Equal(t, "FORBIDDEN", info.Reason)
 }
 
-// The organization's items in a workspace (EN-34): listed with their lock
+// The organization's items in a workspace (EN-37): listed with their lock
 // and groups and whether the workspace has its own, a skill as one item;
 // a default one copied into .agents (a skill's whole folder), a locked one
 // and one the workspace has already refused, and nothing before a catalog.

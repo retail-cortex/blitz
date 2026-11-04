@@ -36,6 +36,10 @@ func enterpriseClient(cfg *config.Config) (*enterprise.Client, error) {
 	return enterprise.Shared(u, func() secrets.Store { return secrets.Default(config.ConfigDir("")) }, enterprise.Options{}), nil
 }
 
+// modelsTimeout bounds asking the organization for its models as a
+// workspace opens.
+var modelsTimeout = 8 * time.Second
+
 // newEnterpriseModel is one of the organization's models, through its
 // service's gateway, signed with the person's own session
 // (spec_053_enterprise EN-20). A model the settings name that the
@@ -53,7 +57,11 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if !st.SignedIn {
 		return nil, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Organization, or blitz enterprise login", c.URL())
 	}
-	list, err := c.Models(ctx)
+	// The workspace opens on this: a service that doesn't answer leaves
+	// it without the organization's models (EN-37), never waiting long.
+	mctx, cancel := context.WithTimeout(ctx, modelsTimeout)
+	defer cancel()
+	list, err := c.Models(mctx)
 	if err != nil {
 		return nil, fmt.Errorf("your organization's models: %w", err)
 	}
