@@ -89,6 +89,8 @@ type AppMethods = {
   GetPrefs(): Promise<Prefs>;
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
+  /** Where a workspace's page (an .html file, relative to dir) is served on this computer, for a browser (EL-102). */
+  ServePage(dir: string, path: string): Promise<string>;
   OpenFolder(dir: string): Promise<void>;
   OpenDocument(path: string): Promise<void>;
   RevealPath(path: string): Promise<void>;
@@ -411,6 +413,9 @@ export async function openURL(url: string): Promise<void> {
   }
   return app().OpenURL(url);
 }
+
+/** Where a workspace's page is served on this computer, for a browser (EL-102): its scripts run, its relative files load. */
+export const servePage = (dir: string, path: string) => app().ServePage(dir, path);
 
 /** Shows a folder in the file manager (in the app, or from the tray). */
 export const openFolder = (dir: string) => app().OpenFolder(dir);

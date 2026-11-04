@@ -38,15 +38,17 @@ import {
   mdiAt,
   mdiMessagePlusOutline,
   mdiMinusBoxOutline,
+  mdiOpenInNew,
   mdiPlusBoxMultipleOutline,
   mdiPlusBoxOutline,
   mdiSourceBranch,
   mdiSourceCommit,
   mdiTrayArrowDown,
   mdiUndoVariant,
+  mdiWeb,
 } from "@mdi/js";
-import { canCall, canDragOut, droppedPaths, dragOut, fileManager, revealPath, trashDropped } from "../desktop";
-import { addToContext, showHistory } from "../events";
+import { canCall, canDragOut, droppedPaths, dragOut, fileManager, openURL, revealPath, servePage, trashDropped } from "../desktop";
+import { addToContext, openWeb, showHistory } from "../events";
 import { includeAll } from "../includeAll";
 import { files } from "../api";
 import { message } from "../errors";
@@ -425,6 +427,17 @@ export function FilesShelf({
     const folder = e ? (isFolder(e) ? e.path : parentOf(e.path)) : "";
     const items: MenuEntry[] = [];
     if (e && !isFolder(e)) items.push({ label: t("desktop.files.open"), icon: fileIcon(e.name), onSelect: () => onOpen(e.path) });
+    // A page also opens in a browser, where its scripts run (the preview runs none; EL-102).
+    if (e && !isFolder(e) && /\.html?$/i.test(e.name) && canCall("ServePage")) {
+      const served = (then: (url: string) => unknown) => () =>
+        void servePage(dir, e.path)
+          .then(then)
+          .catch((err: unknown) => snack(message(err), { error: true }));
+      items.push(
+        { label: t("desktop.files.open_in_browser"), icon: mdiWeb, onSelect: served((url) => openWeb({ dir, url })) },
+        { label: t("desktop.files.open_in_system_browser"), icon: mdiOpenInNew, onSelect: served((url) => openURL(url)) },
+      );
+    }
     items.push(
       { label: t("desktop.files.new_file"), icon: mdiFilePlusOutline, onSelect: () => void startNew("file", folder) },
       { label: t("desktop.files.new_folder"), icon: mdiFolderPlusOutline, onSelect: () => void startNew("folder", folder) },

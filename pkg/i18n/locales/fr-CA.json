@@ -1072,6 +1072,8 @@
     "desktop.files.quit_unsaved.other": "{count} fichiers ont des modifications non enregistrées. Quitter quand même?",
     "desktop.files.quit": "Quitter",
     "desktop.files.open": "Ouvrir",
+    "desktop.files.open_in_browser": "Ouvrir dans le navigateur",
+    "desktop.files.open_in_system_browser": "Ouvrir dans le navigateur du système",
     "desktop.files.open_path": "Ouvrir {path}",
     "desktop.files.new_file": "Nouveau fichier",
     "desktop.files.new_folder": "Nouveau dossier",

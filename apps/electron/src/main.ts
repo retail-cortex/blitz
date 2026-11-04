@@ -27,6 +27,7 @@ import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { Pages } from "./pageserve";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
 import {
@@ -447,6 +448,10 @@ async function receiveLink(raw: string) {
   if (ready) void openApp();
 }
 
+/** A workspace's pages served to a browser (EL-102), started when one is first opened. */
+const pages = new Pages();
+app.on("will-quit", () => pages.close());
+
 /** Prints a page (whole HTML, pictures inline) to PDF, offscreen, its scripts off. */
 async function printPDF(html: string, pageSize: unknown): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "blitz-print-"));
@@ -532,6 +537,8 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       await shell.openExternal(url);
       return;
     }
+    case "ServePage":
+      return pages.url(text(a, 0), text(a, 1));
     case "PrintPDF":
       return printPDF(text(a, 0), a[1]);
     case "SetAppearance":

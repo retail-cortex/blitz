@@ -1072,6 +1072,8 @@
     "desktop.files.quit_unsaved.other": "{count} archivos tienen cambios sin guardar. ¿Salir de todos modos?",
     "desktop.files.quit": "Salir",
     "desktop.files.open": "Abrir",
+    "desktop.files.open_in_browser": "Abrir en el navegador",
+    "desktop.files.open_in_system_browser": "Abrir en el navegador del sistema",
     "desktop.files.open_path": "Abrir {path}",
     "desktop.files.new_file": "Archivo nuevo",
     "desktop.files.new_folder": "Carpeta nueva",

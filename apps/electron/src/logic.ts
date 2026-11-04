@@ -25,6 +25,8 @@ export const windowMethods = [
   "ChooseFile",
   "Notify",
   "OpenURL",
+  // A workspace's page on the loopback server, for a browser (EL-102).
+  "ServePage",
   "PrintPDF",
   "SetAppearance",
   "SetMenu",

@@ -25,6 +25,7 @@ const methods = [
   "ChooseFile",
   "Notify",
   "OpenURL",
+  "ServePage",
   "PrintPDF",
   "SetAppearance",
   "SetMenu",
