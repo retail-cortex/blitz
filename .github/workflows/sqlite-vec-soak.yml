@@ -1,0 +1,76 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: sqlite-vec soak
+
+# The databases' tests, run many times on Linux amd64 as ci.yml runs them
+# (the race detector, coverage): TestSQLiteVec failed once there with an
+# out-of-bounds read in sqlite-vec's wasm (vec0Filter), and passed every
+# run on a Mac and in a Linux arm64 container. A rare crash fails some of
+# the runs; none failing says it was the runner's. Runs when this file or
+# the toolbox changes, or by hand.
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - .github/workflows/sqlite-vec-soak.yml
+      - third_party/mcp-toolbox/**
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: How many times to run the tests
+        default: "200"
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
+        with:
+          bazelisk-cache: true
+          disk-cache: ci-ubuntu-latest
+          repository-cache: true
+          cache-save: false
+      - name: Runner
+        run: |
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          free -g | head -2
+      # The whole package each run (as in ci.yml: other tests beside it),
+      # then TestSQLiteVec alone, many times in one process.
+      - name: The databases' tests, ${{ inputs.runs || '200' }} times
+        run: |
+          bazel coverage --config=race --build_tests_only --instrumentation_filter='^//(apps|pkg)[/:]' \
+            --nocache_test_results --runs_per_test="${{ inputs.runs || '200' }}" --test_output=summary \
+            //third_party/mcp-toolbox/embed:embed_test 2>&1 | tee "$RUNNER_TEMP/soak.txt" | grep -vE '^\[|^INFO: From' || true
+          grep -E 'FAILED|PASSED|Stats' "$RUNNER_TEMP/soak.txt" | tail -3
+          logs=bazel-testlogs/third_party/mcp-toolbox/embed/embed_test
+          failed=$(grep -lE -- '--- FAIL|^FAIL|fatal error|panic:' "$logs"/run_*/test.log 2>/dev/null | wc -l)
+          echo "::notice::$failed of ${{ inputs.runs || '200' }} runs failed"
+          for f in $(grep -lE -- '--- FAIL|^FAIL|fatal error|panic:' "$logs"/run_*/test.log 2>/dev/null | head -3); do
+            echo "== $f"; grep -m1 -B2 -A20 -E -- '--- FAIL|fatal error|panic:' "$f"
+          done
+          [ "$failed" -eq 0 ]
+      - name: TestSQLiteVec alone, 2000 times in one process
+        if: always()
+        run: |
+          bazel test --config=race --nocache_test_results --test_output=errors \
+            --test_filter=TestSQLiteVec --test_arg=-test.count=2000 --test_timeout=1800 \
+            //third_party/mcp-toolbox/embed:embed_test

@@ -188,8 +188,11 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 	if err := h.s.git(ctx, tmp, "clone", w.CloneUrl, "."); err != nil {
 		return nil, apiError(connect.CodeUnavailable, "CLONE_FAILED", fmt.Errorf("cloning %s: %w", w.Name, err))
 	}
+	// A folder of files already there is left as it is (a rename onto
+	// one that isn't empty fails).
 	if err := os.Rename(tmp, w.Dir); err != nil {
-		return nil, invalid(err)
+		return nil, apiError(connect.CodeFailedPrecondition, "FOLDER_IN_THE_WAY",
+			fmt.Errorf("%s already has files that aren't %s's: move them, then open it again", w.Dir, w.Name))
 	}
 	// The helper in the clone's own settings, for the service only: Git
 	// run there by the person, or by an agent, signs in as Blitz does.

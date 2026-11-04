@@ -433,6 +433,22 @@ func TestOrgWorkspaces(t *testing.T) {
 	require.NoError(t, err)
 	t.Setenv("BLITZ_TEST_TOKEN", token)
 	s.ent.gitHelper = `!f() { echo username=blitz; echo "password=$BLITZ_TEST_TOKEN"; }; f`
+
+	// Someone's own files where the clone would go are left as they are.
+	require.NoError(t, os.MkdirAll(ws.Dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Dir, "mine.md"), []byte("Mine."), 0o644))
+	_, err = c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FOLDER_IN_THE_WAY", info.Reason)
+	mine, err := os.ReadFile(filepath.Join(ws.Dir, "mine.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "Mine.", string(mine))
+	assert.NoDirExists(t, filepath.Join(ws.Dir, ".git"))
+	beside, err := filepath.Glob(filepath.Join(filepath.Dir(ws.Dir), ".plans-*"))
+	require.NoError(t, err)
+	assert.Empty(t, beside, "the clone beside it is gone")
+	require.NoError(t, os.RemoveAll(ws.Dir))
+
 	opened, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
 	require.NoError(t, err)
 	assert.True(t, opened.Msg.Cloned)
