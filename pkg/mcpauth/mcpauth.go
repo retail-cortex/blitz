@@ -35,6 +35,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
 )
 
@@ -178,10 +179,12 @@ func Login(ctx context.Context, store secrets.Store, server, serverURL string, s
 		}
 		res := resultFrom(r.URL.Query())
 		if res == nil {
-			http.Error(w, "The sign-in didn't return a code.", http.StatusBadRequest)
+			signedin.Write(w, http.StatusBadRequest, signedin.Page{Title: "The sign-in didn't go through", Failed: true,
+				Message: "The server sent no code back. Try blitz mcp login " + server + " again."})
 			return
 		}
-		fmt.Fprintln(w, "Signed in to Blitz. You can close this page.")
+		signedin.Write(w, http.StatusOK, signedin.Page{Title: "You're signed in",
+			Message: "Blitz is signed in to " + server + ". Go back to your terminal; you can close this page."})
 		select {
 		case results <- res:
 		default:

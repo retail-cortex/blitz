@@ -1,0 +1,132 @@
+<!doctype html>
+<!--
+  Copyright 2026 Retail Cortex
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}} · Blitz</title>
+<style>
+  /* The app's glass (pkg/webui glass.css): its backdrop, a frosted card. */
+  :root {
+    --backdrop:
+      radial-gradient(60vmax 50vmax at 8% 0%, #bcd2fb 0%, transparent 60%),
+      radial-gradient(55vmax 45vmax at 100% 20%, #ddd0fb 0%, transparent 60%),
+      radial-gradient(60vmax 50vmax at 40% 110%, #c2e6d4 0%, transparent 60%),
+      #e3e8f1;
+    --card: rgb(250 252 255 / 0.78);
+    --border: rgb(110 122 145 / 0.28);
+    --edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
+    --shadow: 0 8px 28px rgb(31 38 70 / 0.14), 0 1px 3px rgb(31 38 70 / 0.1);
+    --ink: #1f1f1f;
+    --muted: #3c4043;
+    --primary: #0b57d0;
+    --on-primary: #ffffff;
+    --ok: #146c2e;
+    --ok-bg: rgb(20 108 46 / 0.12);
+    --err: #b3261e;
+    --err-bg: rgb(179 38 30 / 0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --backdrop:
+        radial-gradient(60vmax 50vmax at 8% 0%, #1b2d5e 0%, transparent 60%),
+        radial-gradient(55vmax 45vmax at 100% 20%, #33205a 0%, transparent 60%),
+        radial-gradient(60vmax 50vmax at 40% 110%, #0f3a36 0%, transparent 60%),
+        #0b0e15;
+      --card: rgb(30 34 44 / 0.62);
+      --border: rgb(255 255 255 / 0.12);
+      --edge: inset 0 1px 0 rgb(255 255 255 / 0.06);
+      --shadow: 0 12px 36px rgb(0 0 0 / 0.45);
+      --ink: #e3e3e3;
+      --muted: #c4c7c5;
+      --primary: #a8c7fa;
+      --on-primary: #062e6f;
+      --ok: #6dd58c;
+      --ok-bg: rgb(109 213 140 / 0.14);
+      --err: #f2b8b5;
+      --err-bg: rgb(242 184 181 / 0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: var(--backdrop);
+    background-attachment: fixed;
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: min(420px, 100%);
+    padding: 36px 32px 32px;
+    text-align: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    box-shadow: var(--edge), var(--shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+  }
+  .logo { width: 64px; height: 64px; display: block; margin: 0 auto 20px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; margin-bottom: 12px;
+    border-radius: 999px; font-size: 13px; font-weight: 500;
+    color: var(--ok); background: var(--ok-bg);
+  }
+  .failed .badge { color: var(--err); background: var(--err-bg); }
+  .badge svg { width: 16px; height: 16px; }
+  h1 { margin: 0 0 8px; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+  p { margin: 0; color: var(--muted); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-top: 24px; height: 40px; padding: 0 24px;
+    border-radius: 999px; text-decoration: none; font-weight: 500;
+    color: var(--on-primary); background: var(--primary);
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+  .hint { margin-top: 14px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="card{{if .Failed}} failed{{end}}">
+  <svg class="logo" viewBox="100 100 824 824" aria-hidden="true">
+    <defs>
+      <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b6de0"/><stop offset="0.55" stop-color="#0b57d0"/><stop offset="1" stop-color="#062e6f"/></linearGradient>
+      <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde293"/><stop offset="0.45" stop-color="#fbbc04"/><stop offset="1" stop-color="#f29900"/></linearGradient>
+    </defs>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+    <g transform="translate(206 206) scale(25.5)"><path fill="url(#bolt)" d="M11 15H6L13 1V9H18L11 23V15Z"/></g>
+  </svg>
+  {{if .Failed}}
+  <span class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>Not signed in</span>
+  {{else}}
+  <span class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>Signed in</span>
+  {{end}}
+  <h1>{{.Title}}</h1>
+  <p>{{.Message}}</p>
+  {{if .Open}}
+  <a class="btn" href="blitz://show">Open Blitz</a>
+  <p class="hint">You can close this page.</p>
+  {{end}}
+</main>
+</body>
+</html>

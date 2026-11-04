@@ -55,6 +55,7 @@ import {
   shouldRenew,
   parseRunLink,
   parseTasksLink,
+  isShowLink,
   taskWindowMethods,
   tasksURL,
   pictureExtension,
@@ -431,6 +432,7 @@ function setMenu(l: MenuLabels) {
 
 /** A blitz:// link: to the page at once when it's up, else when it asks (PendingLinks). */
 async function receiveLink(raw: string) {
+  if (isShowLink(raw)) return ready ? openApp() : undefined;
   const tasks = parseTasksLink(raw);
   if (tasks) return showTasks(tasks);
   const failed = parseRunLink(raw);

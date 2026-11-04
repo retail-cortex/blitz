@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
 )
 
@@ -126,9 +127,11 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 			return
 		}
 		if e := r.URL.Query().Get("error"); e != "" {
-			fmt.Fprintf(w, "The sign-in was refused (%s). You can close this page and try again in Blitz.\n", e)
+			signedin.Write(w, http.StatusOK, signedin.Page{Title: "The sign-in didn't go through", Failed: true, Open: true,
+				Message: "Your organization's sign-in refused it (" + e + "). Try again from Blitz."})
 		} else {
-			fmt.Fprintln(w, "Signed in to Blitz. You can close this page.")
+			signedin.Write(w, http.StatusOK, signedin.Page{Title: "You're signed in", Open: true,
+				Message: "Blitz is signed in to your organization. Go back to Blitz to carry on."})
 		}
 		select {
 		case codes <- r.URL.Query():

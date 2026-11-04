@@ -48,6 +48,7 @@ import {
   parseDeepLink,
   parseRunLink,
   parseTasksLink,
+  isShowLink,
   tasksURL,
   parseLink,
   renewEvery,
@@ -179,6 +180,11 @@ describe("what the page sends", () => {
     expect(text(["a", 2], 1)).toBe("");
     expect(text([], 3)).toBe("");
   });
+});
+
+describe("isShowLink", () => {
+  it.each(["blitz://show", "blitz://show/", " blitz:show "])("reads %s", (raw) => expect(isShowLink(raw)).toBe(true));
+  it.each(["blitz://open?dir=/x", "https://show", "nonsense"])("ignores %s", (raw) => expect(isShowLink(raw)).toBe(false));
 });
 
 describe("parseTasksLink", () => {

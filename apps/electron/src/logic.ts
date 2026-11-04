@@ -349,6 +349,17 @@ export function parseRunLink(raw: string): RunLink | undefined {
 /** The page's one-time link, opening on the tasks window (the page server keeps tasks). */
 export const tasksURL = (link: string) => link + (link.includes("?") ? "&" : "?") + "tasks";
 
+/** Whether raw is blitz://show: the window, brought forward (the sign-in page's Open Blitz). */
+export function isShowLink(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  return u.protocol === "blitz:" && (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "") === "show";
+}
+
 /** The blitz:// links among a command line's arguments. */
 export const linkArgs = (argv: readonly string[]) => argv.filter((a) => a.startsWith("blitz:"));
 
