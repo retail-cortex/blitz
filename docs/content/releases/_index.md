@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.0](blitz-0.9.0.md): Blitz for your whole organization: sign in the way your company does, its models and catalog, shared workspaces kept in step, jobs that run on the service, its branding everywhere, and work that carries on when the service is down; HTML files open in a browser.
 - [Blitz 0.8.11](blitz-0.8.11.md): counting who uses Blitz, in the open: one message on a day you use it (a random ID, the day, the front end, the version and platform; nothing about your work), with `[usage] count = false` to turn it off.
 - [Blitz 0.8.10](blitz-0.8.10.md): see your agents work together: a handed-off agent's steps and checklist in your conversation as it works, a `/setup` checklist that keeps up with any model, questions as forms, and the coder handoff on Claude fixed.
 - [Blitz 0.8.8](blitz-0.8.8.md): pick up where you left off: each conversation's handoff and the repository's state at the start of the next, Blitz the generalist with a coder and skills for Go, Python, React and Playwright in the built-in browser, each provider keeping its own model, clearer provider errors, and honest advice on local models.
