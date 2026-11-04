@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -235,9 +236,24 @@ func npmPackages(lock, store string) ([]component, []string) {
 	}
 	seen := map[string]bool{}
 	var queue []string
-	for name, d := range lf.Importers["apps/desktop/web"].Dependencies {
-		queue = append(queue, name+"@"+d.Version)
+	// A workspace package of Blitz's own (link:../../../pkg/webui) isn't
+	// listed; its dependencies are, as the page's.
+	importers := map[string]bool{}
+	var importer func(dir string)
+	importer = func(dir string) {
+		if importers[dir] {
+			return
+		}
+		importers[dir] = true
+		for name, d := range lf.Importers[dir].Dependencies {
+			if rel, ok := strings.CutPrefix(d.Version, "link:"); ok {
+				importer(path.Join(dir, rel))
+				continue
+			}
+			queue = append(queue, name+"@"+d.Version)
+		}
 	}
+	importer("apps/desktop/web")
 	for len(queue) > 0 {
 		key := queue[0]
 		queue = queue[1:]

@@ -36,3 +36,4 @@ No organization? Nothing changes for you: Blitz works exactly as before.
 - Everything organizational is opt-in: without `[enterprise] url`, Blitz never contacts an organization's service.
 - Your own providers still work beside your organization's where its policy allows them. Settings says what the policy allows.
 - The catalog and branding are kept on your computer, checked against your organization's signature, so Blitz looks and behaves the same offline until the catalog expires.
+- Vector search in a SQLite database (sqlite-vec's `vec0` tables) works on Linux computers with Intel processors, where it could stop with "out of bounds memory access".

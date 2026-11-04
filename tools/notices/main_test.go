@@ -121,3 +121,39 @@ func TestBundledFonts(t *testing.T) {
 	assert.NotContains(t, render(nil, nil, nil, nil, nil, "APACHE"), "Fonts bundled")
 	assert.NotContains(t, render(nil, nil, nil, nil, nil, "APACHE"), "Colour themes")
 }
+
+// The page's dependencies include those of Blitz's own workspace packages
+// (link:), which aren't listed themselves.
+func TestNpmPackagesFollowLinks(t *testing.T) {
+	dir := t.TempDir()
+	lock := filepath.Join(dir, "pnpm-lock.yaml")
+	require.NoError(t, os.WriteFile(lock, []byte(`importers:
+  apps/desktop/web:
+    dependencies:
+      a: {version: 1.0.0}
+      '@blitz/webui': {version: link:../../../pkg/webui}
+  pkg/webui:
+    dependencies:
+      b: {version: 2.0.0}
+snapshots:
+  a@1.0.0: {}
+  b@2.0.0:
+    dependencies:
+      c: 3.0.0
+  c@3.0.0: {}
+`), 0o644))
+	store := filepath.Join(dir, "store")
+	for _, key := range []string{"a@1.0.0", "b@2.0.0", "c@3.0.0"} {
+		name, _ := splitNpmKey(key)
+		pkg := filepath.Join(store, storeDir(key), "node_modules", name)
+		require.NoError(t, os.MkdirAll(pkg, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"license": "MIT"}`), 0o644))
+	}
+	comps, problems := npmPackages(lock, store)
+	assert.Empty(t, problems)
+	var names []string
+	for _, c := range comps {
+		names = append(names, c.name+"@"+c.version)
+	}
+	assert.Equal(t, []string{"a@1.0.0", "b@2.0.0", "c@3.0.0"}, names, "webui's own dependencies, not webui")
+}
