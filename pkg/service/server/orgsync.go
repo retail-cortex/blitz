@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -49,6 +50,20 @@ type orgSync struct {
 	s      *orgsync.Syncer
 	cancel func()
 	done   chan struct{}
+}
+
+// asPerson is git's options for committing as the person signed in to the
+// organization: the saves are theirs, and a computer with no name and
+// email set for Git couldn't commit them at all.
+func asPerson(p enterprise.Person) []string {
+	return []string{"-c", "user.name=" + cmp.Or(p.Name, p.Email, "Blitz"), "-c", "user.email=" + cmp.Or(p.Email, "blitz@localhost")}
+}
+
+// gitAs is gitOut committing as the person signed in to c.
+func (s *Server) gitAs(c *enterprise.Client) orgsync.Git {
+	return func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		return s.gitOut(ctx, dir, append(asPerson(c.Status().Person), args...)...)
+	}
 }
 
 // gitOut runs git in dir with the organization's credential helper, giving
@@ -187,7 +202,7 @@ func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, ha
 	if who == "" {
 		who, _, _ = strings.Cut(c.Status().Person.Email, "@")
 	}
-	sy := &orgsync.Syncer{Dir: dir, Git: s.gitOut, Who: who, Upstream: remote,
+	sy := &orgsync.Syncer{Dir: dir, Git: s.gitAs(c), Who: who, Upstream: remote,
 		Busy:     func() bool { return s.busyIn(dir) },
 		SignedIn: func() bool { return c.Status().SignedIn },
 		Quiet:    s.ent.syncQuiet, Poll: s.ent.syncPoll,

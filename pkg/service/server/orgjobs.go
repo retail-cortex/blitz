@@ -285,7 +285,7 @@ func (h configService) PushServiceJob(ctx context.Context, r req[pb.PushServiceJ
 		if who == "" {
 			who, _, _ = strings.Cut(c.Status().Person.Email, "@")
 		}
-		if _, err := h.s.gitOut(ctx, dir, "commit", "-q", "-m", who+": the job "+r.Msg.Name, "--", rel); err != nil {
+		if _, err := h.s.gitAs(c)(ctx, dir, "commit", "-q", "-m", who+": the job "+r.Msg.Name, "--", rel); err != nil {
 			return nil, failed(err)
 		}
 	}

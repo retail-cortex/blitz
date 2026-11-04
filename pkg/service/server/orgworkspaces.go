@@ -178,9 +178,18 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 	if err := os.MkdirAll(filepath.Dir(w.Dir), 0o700); err != nil {
 		return nil, invalid(err)
 	}
-	if err := h.s.git(ctx, filepath.Dir(w.Dir), "clone", w.CloneUrl, w.Dir); err != nil {
-		_ = os.RemoveAll(w.Dir)
+	// Cloned beside it and moved into place whole: the folder's sync, and
+	// the rest that look for clones, never find one half made.
+	tmp, err := os.MkdirTemp(filepath.Dir(w.Dir), "."+filepath.Base(w.Dir)+"-")
+	if err != nil {
+		return nil, invalid(err)
+	}
+	defer os.RemoveAll(tmp)
+	if err := h.s.git(ctx, tmp, "clone", w.CloneUrl, "."); err != nil {
 		return nil, apiError(connect.CodeUnavailable, "CLONE_FAILED", fmt.Errorf("cloning %s: %w", w.Name, err))
+	}
+	if err := os.Rename(tmp, w.Dir); err != nil {
+		return nil, invalid(err)
 	}
 	// The helper in the clone's own settings, for the service only: Git
 	// run there by the person, or by an agent, signs in as Blitz does.

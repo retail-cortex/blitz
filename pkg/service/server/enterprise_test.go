@@ -506,9 +506,6 @@ func TestOrgSync(t *testing.T) {
 	opened, err := c.OpenOrgWorkspace(ctx, connect.NewRequest(&pb.OpenOrgWorkspaceRequest{Handle: "plans"}))
 	require.NoError(t, err)
 	dir := opened.Msg.Dir
-	for _, args := range [][]string{{"config", "user.name", "Ana"}, {"config", "user.email", "ana@acme.com"}} {
-		require.NoError(t, exec.Command("git", append([]string{"-C", dir}, args...)...).Run())
-	}
 	state := func() string {
 		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: dir}))
 		require.NoError(t, err)
@@ -996,6 +993,11 @@ func TestShareWithOrganization(t *testing.T) {
 		"Blitz's helper alone: an empty one first clears the person's own")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull) // this computer's helpers (a keychain's) aren't asked
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// No name or email guessed from the computer (as a Linux runner's):
+	// the saves are the person's.
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "user.useConfigOnly")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
 	w := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
 	pullCtx, cancelPull := context.WithTimeout(ctx, 20*time.Second)
 	_, err = w.Pull(pullCtx, connect.NewRequest(&pb.PullRequest{Workspace: notes}))

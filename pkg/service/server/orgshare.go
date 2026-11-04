@@ -90,8 +90,7 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		return nil, apiError(connect.CodeFailedPrecondition, "INSIDE_REPOSITORY",
 			fmt.Errorf("%s is inside the repository %s: share that folder instead", dir, top))
 	}
-	person := c.Status().Person
-	who := []string{"-c", "user.name=" + cmp.Or(person.Name, person.Email, "Blitz"), "-c", "user.email=" + cmp.Or(person.Email, "blitz@localhost")}
+	who := asPerson(c.Status().Person)
 	changes, err := gitText(ctx, dir, "status", "--porcelain")
 	if err != nil {
 		return nil, invalid(err)
