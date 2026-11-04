@@ -47,6 +47,9 @@ type WorkerInfo struct {
 	// "refuse", or "pause" for its owner's answer; "" for where it runs's
 	// default (refuse here, pause on the service; EN-43).
 	OnRequest string
+	// Merge is where a run on the service leaves its changes: "main" (on
+	// main too when they merge cleanly) or "never" (on its branch only).
+	Merge string
 	// Permissions and Limits are what the worker gets after the host
 	// policy.
 	Permissions []string
@@ -152,6 +155,7 @@ type WorkerSpec struct {
 	CatchUp            string   // "", "none" or "once"
 	RunsOn             string   // "", "here" or "service" (spec_053_enterprise EN-40)
 	OnRequest          string   // "", "refuse" or "pause" (EN-43)
+	Merge              string   // "", "main" or "never" (blitz-enterprise JB-10)
 	Prompt             string
 }
 

@@ -86,6 +86,7 @@ describe("formFromWorker", () => {
     catchUp: "once",
     runsOn: "service",
     onRequest: "refuse",
+    merge: "never",
     prompt: "Report.",
   };
   it("round-trips through the form", () => {
@@ -95,6 +96,7 @@ describe("formFromWorker", () => {
     expect(formFromWorker(written).runsOn).toBe("service");
     expect(formFromWorker({ ...written, runsOn: "" }).runsOn).toBe("here");
     expect(formFromWorker({ ...written, onRequest: "maybe" }).onRequest).toBe("");
+    expect(formFromWorker({ ...written, merge: "sometimes" }).merge).toBe(""); // main, the default
   });
   it.each([
     ["unset numbers stay empty", { maxTurns: 0, maxCostUsd: 0 }, { maxTurns: "", maxCostUSD: "" }],

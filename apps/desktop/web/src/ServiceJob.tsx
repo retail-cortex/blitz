@@ -31,11 +31,12 @@ import {
   mdiProgressClock,
   mdiRefresh,
   mdiSourceBranch,
+  mdiSourceMerge,
   mdiStopCircleOutline,
   mdiUploadOutline,
 } from "@mdi/js";
 import { config } from "./api";
-import { message } from "./errors";
+import { message, reason } from "./errors";
 import { useServiceRuns } from "./serviceRuns";
 import { language, t } from "./i18n";
 import type { GetServiceJobResponse, ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
@@ -191,6 +192,8 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
           <ServiceRunRow
             key={r.id}
             run={r}
+            dir={dir}
+            jobId={job?.id ?? ""}
             jobName={worker.name}
             onSaved={(path) => snack(t("desktop.service_job.saved", { path }))}
             onError={(e) => snack(e, { error: true })}
@@ -205,12 +208,16 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
 /** One of the service's runs: how it went, its branch, its files on request, and a paused one's Approve and Deny (EN-43). */
 function ServiceRunRow({
   run,
+  dir,
+  jobId,
   jobName,
   onSaved,
   onError,
   onAnswered,
 }: {
   run: ServiceRun;
+  dir: string;
+  jobId: string;
   jobName: string;
   onSaved: (path: string) => void;
   onError: (e: string) => void;
@@ -230,6 +237,18 @@ function ServiceRunRow({
     setAnswering(false);
   };
   const failed = run.status === "failed";
+  // Add to my workspace (JB-10): its changes, kept on its branch, onto main.
+  const [taking, setTaking] = useState(false);
+  const take = async () => {
+    setTaking(true);
+    try {
+      await config.takeServiceRun({ workspace: dir, jobId, runId: run.id });
+      onAnswered(t("desktop.service_job.taken", { job: jobName }));
+    } catch (e) {
+      onError(reason(e) === "CONFLICTS" ? t("desktop.service_job.take_conflicts", { branch: run.branch }) : message(e));
+    }
+    setTaking(false);
+  };
   const showFiles = async () => {
     if (files) return setFiles(null);
     try {
@@ -271,9 +290,22 @@ function ServiceRunRow({
         ) : (
           run.note && <span className={`t-body-sm ${failed ? "error-text" : "muted"}`}>{run.note}</span>
         )}
-        {run.branch && (
+        {run.branch && run.merged && (
           <span className="t-body-sm muted row" style={{ gap: 4 }}>
-            <Icon path={mdiSourceBranch} size="sm" /> {t("desktop.service_job.branch", { branch: run.branch })}
+            <Icon path={mdiSourceMerge} size="sm" /> {t("desktop.service_job.on_main")}
+          </span>
+        )}
+        {run.branch && !run.merged && (
+          <span className="stack" style={{ gap: 4 }}>
+            <span className="t-body-sm muted row" style={{ gap: 4 }}>
+              <Icon path={mdiSourceBranch} size="sm" /> {t("desktop.service_job.branch", { branch: run.branch })}
+            </span>
+            {run.mergeNote && <span className="t-body-sm muted">{run.mergeNote}</span>}
+            <span>
+              <Button small variant="filled" icon={mdiSourceMerge} disabled={taking || !jobId} onClick={() => void take()}>
+                {t("desktop.service_job.take")}
+              </Button>
+            </span>
           </span>
         )}
         {run.artifacts && run.status !== "queued" && (

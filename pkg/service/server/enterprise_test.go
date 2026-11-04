@@ -756,6 +756,13 @@ func TestServiceJobs(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(home, "Downloads", "sales by week (2).csv"))
 	require.NoError(t, err)
 	assert.Equal(t, "w,s\n", string(data))
+	// Nowhere to save it: Downloads is a file.
+	t.Setenv("HOME", t.TempDir())
+	newHome, _ := os.UserHomeDir()
+	require.NoError(t, os.WriteFile(filepath.Join(newHome, "Downloads"), nil, 0o600))
+	_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: files.Msg.Files[1].Urn}))
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	t.Setenv("HOME", home)
 
 	for name, call := range map[string]func() error{
 		"a file's name for its run's files": func() error {

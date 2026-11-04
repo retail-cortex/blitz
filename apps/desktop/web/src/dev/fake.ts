@@ -909,7 +909,7 @@ const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boo
 const fakeServiceSet = "urn:blitz:artifacts:9b2f0c4e-1d2a-4b7e-9f00-1c2d3e4f5a6b:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e";
 const fakeServicePushed = new Set<string>();
 const fakeServiceJob = { id: "51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", urn: "urn:blitz:jobs:51aa7e10-0b6c-4c2a-8d1e-2f3a4b5c6d7e", name: "sales-digest", schedule: "Mondays at 06:00", enabled: true };
-const fakeServiceRuns: { id: string; trigger: string; status: string; output?: string; note?: string; costUsd: number; created: ReturnType<typeof now>; branch?: string; artifacts: string; pending?: { tool: string; kind: string; detail: string } }[] = [
+const fakeServiceRuns: { id: string; trigger: string; status: string; output?: string; note?: string; costUsd: number; created: ReturnType<typeof now>; branch?: string; merged?: boolean; mergeNote?: string; artifacts: string; pending?: { tool: string; kind: string; detail: string } }[] = [
   {
     id: "7a7a7a7a-7b1c-4d2e-a3f4-5b6c7d8e9f00",
     trigger: "schedule",
@@ -928,6 +928,7 @@ const fakeServiceRuns: { id: string; trigger: string; status: string; output?: s
     costUsd: 0.0831,
     created: timestampFromDate(new Date(Date.now() - 26 * 3600e3)),
     branch: "blitz/jobs/sales-digest/e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01",
+    mergeNote: "its job keeps its changes on their branch (merge: never)",
     artifacts: `${fakeServiceSet}:e8030f9a-7b1c-4d2e-a3f4-5b6c7d8e9f01`,
   },
   {
@@ -2766,6 +2767,12 @@ export function installFake() {
               ]
             : [],
         }),
+        // Add to my workspace: the run's changes onto main.
+        takeServiceRun: ({ runId }) => {
+          const run = fakeServiceRuns.find((r) => r.id === runId);
+          if (run) Object.assign(run, { merged: true, mergeNote: "" });
+          return { run };
+        },
         saveServiceRunFile: ({ urn }) => ({ path: `/home/me/Downloads/${urn.split("/").pop()}` }),
         getOrgSync: ({ workspace }) =>
           workspace.includes("/Blitz/Acme Assist/")

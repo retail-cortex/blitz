@@ -34,12 +34,16 @@ import (
 // makes it saved (or fails with err).
 type fakeSync struct {
 	pb.UnimplementedConfigServiceHandler
-	state string
-	err   error
-	saves int
+	state  string
+	err    error
+	getErr error
+	saves  int
 }
 
 func (f *fakeSync) GetOrgSync(context.Context, *connect.Request[pb.GetOrgSyncRequest]) (*connect.Response[pb.GetOrgSyncResponse], error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
 	out := &pb.GetOrgSyncResponse{State: f.state}
 	if f.state == "conflicts" {
 		out.Pairs = []*pb.OrgSyncPair{{Shared: "plan.md", Mine: "plan (conflict, Ana).md"}}
@@ -96,4 +100,8 @@ func TestEnterpriseSync(t *testing.T) {
 	f.state = ""
 	_, err = runCLI(t, "enterprise", "sync")
 	assert.ErrorContains(t, err, "isn't kept in step")
+
+	f.getErr = connect.NewError(connect.CodeUnavailable, errors.New("the service is restarting"))
+	_, err = runCLI(t, "enterprise", "sync", "status")
+	assert.ErrorContains(t, err, "the service is restarting")
 }

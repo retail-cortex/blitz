@@ -91,6 +91,7 @@ go_library(
         "//pkg/observability",
         "//pkg/orgsync",
         "//pkg/redact",
+        "//pkg/runmerge",
         "//pkg/secrets",
         "//pkg/secretscan",
         "//pkg/signin",

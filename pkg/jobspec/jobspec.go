@@ -52,6 +52,30 @@ type Spec struct {
 	CatchUp string
 	// Timeout is a run's time limit (0: the runner's default).
 	Timeout time.Duration
+	// Merge is where a run on the service leaves its changes: MergeMain or
+	// MergeNever.
+	Merge string
+}
+
+// Where a run on the service leaves its changes (blitz-enterprise
+// spec_009_jobs JB-10): each goes to its own branch first.
+const (
+	// MergeMain adds them to the workspace's main too when they merge
+	// cleanly: the default.
+	MergeMain = "main"
+	// MergeNever keeps them on the run's branch, for someone to add.
+	MergeNever = "never"
+)
+
+// MergeOf is what merge says: MergeMain when unset.
+func MergeOf(s string) (string, error) {
+	switch s {
+	case "", MergeMain:
+		return MergeMain, nil
+	case MergeNever:
+		return MergeNever, nil
+	}
+	return "", fmt.Errorf("merge %q: use \"main\" or \"never\"", s)
 }
 
 // Parse reads a WORKER.md's frontmatter, ignoring what it doesn't need,
@@ -68,6 +92,7 @@ func Parse(data []byte) (Spec, error) {
 		Timezone    string `yaml:"timezone"`
 		RunsOn      string `yaml:"runs_on"`
 		CatchUp     string `yaml:"catch_up"`
+		Merge       string `yaml:"merge"`
 		Limits      struct {
 			Timeout string `yaml:"timeout"`
 		} `yaml:"limits"`
@@ -78,6 +103,9 @@ func Parse(data []byte) (Spec, error) {
 	s := Spec{Description: strings.TrimSpace(f.Description), Schedule: strings.TrimSpace(f.Schedule), Timezone: f.Timezone,
 		RunsOn: f.RunsOn, CatchUp: f.CatchUp}
 	if s.RunsOn, err = RunsOn(f.RunsOn); err != nil {
+		return s, err
+	}
+	if s.Merge, err = MergeOf(f.Merge); err != nil {
 		return s, err
 	}
 	switch s.CatchUp {

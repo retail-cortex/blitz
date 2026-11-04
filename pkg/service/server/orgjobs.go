@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/orgsync"
+	"github.com/retail-cortex/blitz/pkg/runmerge"
 	"github.com/retail-cortex/blitz/pkg/urn"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -73,7 +75,8 @@ func stamp(t *time.Time) *timestamppb.Timestamp {
 
 func serviceRunMsg(r enterprise.ServiceRun) *pb.ServiceRun {
 	m := &pb.ServiceRun{Id: r.ID, Urn: r.URN, Trigger: r.Trigger, Status: r.Status, Note: r.Note, Output: r.Output, CostUsd: r.CostUSD,
-		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts, Answer: r.Answer, AnswerNote: r.AnswerNote}
+		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts, Answer: r.Answer, AnswerNote: r.AnswerNote,
+		Merged: r.Merged, MergeNote: r.MergeNote}
 	if p := r.Pending; p != nil {
 		m.Pending = &pb.ServiceRequest{Tool: p.Tool, Kind: p.Kind, Detail: p.Detail}
 	}
@@ -99,6 +102,67 @@ func (h configService) GetServiceJob(ctx context.Context, r req[pb.GetServiceJob
 		return ok2(out, err)
 	}
 	return ok(why)
+}
+
+func (h configService) TakeServiceRun(ctx context.Context, r req[pb.TakeServiceRunRequest]) (*connect.Response[pb.TakeServiceRunResponse], error) {
+	dir := r.Msg.Workspace
+	c, handle, err := h.s.orgHandle(dir)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := c.JobRuns(ctx, r.Msg.JobId)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	i := slices.IndexFunc(runs, func(x enterprise.ServiceRun) bool { return x.ID == r.Msg.RunId })
+	if i < 0 {
+		return nil, apiError(connect.CodeNotFound, "UNKNOWN_RUN", fmt.Errorf("the job has no run %s", r.Msg.RunId))
+	}
+	run := runs[i]
+	if run.Branch == "" {
+		return nil, apiError(connect.CodeFailedPrecondition, "NO_CHANGES", errors.New("the run changed nothing in the workspace"))
+	}
+	if !run.Merged {
+		if err := h.s.mergeRun(ctx, c, dir, handle, run.Branch); err != nil {
+			return nil, err
+		}
+		if run, err = c.RunMerged(ctx, r.Msg.JobId, run.ID); err != nil {
+			return nil, enterpriseError(err)
+		}
+	}
+	// The folder takes main now, if sync keeps it in step; a plain clone
+	// pulls it.
+	if sy := h.s.syncer(dir); sy != nil {
+		sy.Remote()
+	}
+	return ok(&pb.TakeServiceRunResponse{Run: serviceRunMsg(run)})
+}
+
+// mergeRun adds branch to the main of handle's workspace (whose clone is at
+// dir) through a clone of its own, never touching the folder's files.
+func (s *Server) mergeRun(ctx context.Context, c *enterprise.Client, dir, handle, branch string) error {
+	_, remote := s.orgRemote(c, handle)
+	url, err := gitText(ctx, dir, "remote", "get-url", remote)
+	if err != nil {
+		return invalid(fmt.Errorf("the folder's remote %s: %w", remote, err))
+	}
+	tmp, err := os.MkdirTemp("", "blitz-take-")
+	if err != nil {
+		return apiError(connect.CodeInternal, "INTERNAL", err)
+	}
+	defer os.RemoveAll(tmp)
+	if err := s.git(ctx, tmp, "clone", "--quiet", "--no-checkout", url, "."); err != nil {
+		return apiError(connect.CodeUnavailable, "CLONE_FAILED", fmt.Errorf("cloning the workspace: %w", err))
+	}
+	who := cmp.Or(c.Status().Person.Name, c.Status().Person.Email)
+	git := func(ctx context.Context, args ...string) ([]byte, error) { return s.gitOut(ctx, tmp, args...) }
+	switch err := runmerge.IntoMain(ctx, git, "origin", branch, who); {
+	case errors.Is(err, runmerge.ErrConflicts):
+		return apiError(connect.CodeFailedPrecondition, "CONFLICTS", fmt.Errorf("the run's changes weren't added: %w; they're on its branch %s", err, branch))
+	case err != nil:
+		return apiError(connect.CodeUnavailable, "PUSH_FAILED", fmt.Errorf("the run's changes weren't added to main: %w", err))
+	}
+	return nil
 }
 
 // ok2 is out's response, or err.

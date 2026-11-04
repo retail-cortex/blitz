@@ -173,8 +173,14 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 						fmt.Fprintln(out, "    "+strings.ReplaceAll(line, "\n", "\n    "))
 					}
 				}
-				if r.Branch != "" {
-					fmt.Fprintln(out, "    branch: "+r.Branch)
+				switch {
+				case r.Branch != "" && r.Merged:
+					fmt.Fprintln(out, "    on main (branch: "+r.Branch+")")
+				case r.Branch != "":
+					fmt.Fprintf(out, "    on its branch only, %s: blitz enterprise jobs take %s %s\n", r.Branch, j.Name, r.ID)
+					if r.MergeNote != "" {
+						fmt.Fprintln(out, "      "+r.MergeNote)
+					}
 				}
 				if r.Artifacts != "" && r.Status != "queued" {
 					fmt.Fprintln(out, "    files: blitz enterprise jobs files "+r.Artifacts)
@@ -348,7 +354,43 @@ the service read it now.`,
 		c.Flags().StringVar(&note, "note", "", "a note for the job's agent")
 		return c
 	}
-	cmd.AddCommand(runs, push, runNow, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
+	take := &cobra.Command{
+		Use:   "take <job> [run]",
+		Short: "Add a run's changes, kept on its own branch, to the workspace's main and this folder (its latest such run by default)",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, j, err := find(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			id := ""
+			if len(args) == 2 {
+				id = args[1]
+			} else {
+				list, err := s.ServiceJobRuns(cmd.Context(), j.Dir, j.Name)
+				if err != nil {
+					return err
+				}
+				for _, r := range list {
+					if r.Branch != "" && !r.Merged {
+						id = r.ID
+						break
+					}
+				}
+				if id == "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Every run of %s that changed something is on main already.\n", j.Name)
+					return nil
+				}
+			}
+			r, err := s.TakeServiceRun(cmd.Context(), j.Dir, j.ID, id)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ The changes of %s's run %s are on main (%s); this folder takes them in.\n", j.Name, r.ID, r.Branch)
+			return nil
+		},
+	}
+	cmd.AddCommand(runs, push, runNow, take, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
 	return cmd
 }
 

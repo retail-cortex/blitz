@@ -59,6 +59,10 @@ type ServiceRun struct {
 	Branch    string `json:"branch"`
 	Artifacts string `json:"artifacts"`
 	As        string `json:"as"`
+	// Merged is whether its changes are on main too; MergeNote why not,
+	// when they're on its branch only.
+	Merged    bool   `json:"merged"`
+	MergeNote string `json:"merge_note"`
 	// A paused run's request (status paused), and how it was answered.
 	Pending    *Request `json:"pending"`
 	Answer     string   `json:"answer"`
@@ -111,6 +115,14 @@ func (c *Client) JobRuns(ctx context.Context, job string) ([]ServiceRun, error) 
 func (c *Client) RunJobNow(ctx context.Context, job string) (ServiceRun, error) {
 	var r ServiceRun
 	err := c.signedCall(ctx, http.MethodPost, "/api/v1/jobs/"+url.PathEscape(job)+"/run", nil, &r)
+	return r, err
+}
+
+// RunMerged tells the service that a run's changes, on its branch, are on
+// main now (an Editor of its workspace added them).
+func (c *Client) RunMerged(ctx context.Context, job, run string) (ServiceRun, error) {
+	var r ServiceRun
+	err := c.signedCall(ctx, http.MethodPost, "/api/v1/jobs/"+url.PathEscape(job)+"/runs/"+url.PathEscape(run)+"/merged", nil, &r)
 	return r, err
 }
 

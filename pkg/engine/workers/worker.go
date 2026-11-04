@@ -57,6 +57,7 @@ type frontmatter struct {
 	CatchUp     string     `yaml:"catch_up"`
 	RunsOn      string     `yaml:"runs_on"`
 	OnRequest   string     `yaml:"on_request"`
+	Merge       string     `yaml:"merge"`
 }
 
 // Worker is a worker as read from its directory.
@@ -85,6 +86,9 @@ type Worker struct {
 	// OnRequest is "refuse" or "pause" ("" for where it runs's default,
 	// EN-43).
 	OnRequest string
+	// Merge is jobspec.MergeMain or jobspec.MergeNever: where a run on the
+	// service leaves its changes.
+	Merge string
 	// Prompt is the workflow: WORKER.md's body.
 	Prompt string
 	// Flow is a workflow (spec_043_workflows WF-17) the worker runs, its
@@ -162,6 +166,9 @@ func Load(dir string) (*Worker, error) {
 	if w.RunsOn, err = jobspec.RunsOn(f.RunsOn); err != nil {
 		problems = append(problems, err.Error())
 	}
+	if w.Merge, err = jobspec.MergeOf(f.Merge); err != nil {
+		problems = append(problems, err.Error())
+	}
 	switch w.OnRequest = f.OnRequest; w.OnRequest {
 	case "", "refuse", "pause":
 	default:
@@ -216,7 +223,7 @@ func ParseSpec(name string, data []byte) api.WorkerSpec {
 	}
 	spec.Description, spec.Schedule, spec.Timezone = f.Description, f.Schedule, f.Timezone
 	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp, spec.Workflow = f.Agent, f.Model, f.Permissions, f.CatchUp, f.Workflow
-	spec.RunsOn, spec.OnRequest = f.RunsOn, f.OnRequest
+	spec.RunsOn, spec.OnRequest, spec.Merge = f.RunsOn, f.OnRequest, f.Merge
 	spec.Limits = api.Limits{MaxTurns: f.Limits.MaxTurns, MaxCostUSD: f.Limits.MaxCostUSD, TimeoutRaw: f.Limits.TimeoutRaw}
 	spec.Prompt = strings.TrimSpace(string(body))
 	return spec
@@ -239,6 +246,7 @@ type fileFrontmatter struct {
 	CatchUp     string      `yaml:"catch_up,omitempty"`
 	RunsOn      string      `yaml:"runs_on,omitempty"`
 	OnRequest   string      `yaml:"on_request,omitempty"`
+	Merge       string      `yaml:"merge,omitempty"`
 }
 
 type fileLimits struct {
@@ -254,6 +262,7 @@ func Render(s api.WorkerSpec) []byte {
 		Name: s.Name, Description: strings.TrimSpace(s.Description), Schedule: strings.TrimSpace(s.Schedule),
 		Timezone: strings.TrimSpace(s.Timezone), Agent: strings.TrimSpace(s.Agent), Model: strings.TrimSpace(s.Model),
 		Workflow: strings.TrimSpace(s.Workflow), CatchUp: s.CatchUp, RunsOn: s.RunsOn, OnRequest: s.OnRequest,
+		Merge: s.Merge,
 	}
 	for _, p := range s.Permissions {
 		if p = strings.TrimSpace(p); p != "" {

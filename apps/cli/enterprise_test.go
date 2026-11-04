@@ -295,7 +295,7 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "jobs", "runs", "digest", "--workspace", "plans")
 	require.NoError(t, err)
 	assert.Contains(t, out, "succeeded (schedule)  $0.0500")
-	assert.Contains(t, out, "branch: blitz/jobs/digest/"+run)
+	assert.Contains(t, out, "on its branch only, blitz/jobs/digest/"+run+": blitz enterprise jobs take digest "+run)
 	assert.Contains(t, out, "files: blitz enterprise jobs files "+set)
 	assert.Contains(t, out, "waits for an answer: run_shell_command make deploy (blitz enterprise jobs approve|deny paused-1)")
 	out, err = runCLI(t, "enterprise", "jobs", "runs", "tidy")
@@ -345,6 +345,37 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "jobs", "push", "fresh")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ fresh is on main and the service has it")
+
+	// A run of it kept its changes on its branch: take adds them to main.
+	work := t.TempDir()
+	git("clone", "-q", org.Repo("plans"), work)
+	git("-C", work, "checkout", "-q", "-b", "run")
+	require.NoError(t, os.WriteFile(filepath.Join(work, "recipe.md"), []byte("Soup.\n"), 0o644))
+	git("-C", work, "add", "-A")
+	git("-C", work, "commit", "-qm", "fresh: run r1")
+	git("-C", work, "push", "-q", "origin", "HEAD:refs/heads/blitz/jobs/fresh/r1")
+	org.Mu.Lock()
+	org.ServiceRuns["job-fresh"] = []enterprisetest.ServiceRun{{ID: "r1", Trigger: "now", Status: "succeeded", Created: time.Now(),
+		Branch: "blitz/jobs/fresh/r1", MergeNote: "its job keeps its changes on their branch (merge: never)"}}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "jobs", "runs", "fresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "on its branch only, blitz/jobs/fresh/r1: blitz enterprise jobs take fresh r1\n      its job keeps its changes on their branch (merge: never)")
+	out, err = runCLI(t, "enterprise", "jobs", "take", "fresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ The changes of fresh's run r1 are on main")
+	shown, err := exec.Command("git", "--git-dir", org.Repo("plans"), "show", "main:recipe.md").Output()
+	require.NoError(t, err)
+	assert.Equal(t, "Soup.\n", string(shown))
+	out, err = runCLI(t, "enterprise", "jobs", "take", "fresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "is on main already")
+	out, err = runCLI(t, "enterprise", "jobs", "runs", "fresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "on main (branch: blitz/jobs/fresh/r1)")
+	_, err = runCLI(t, "enterprise", "jobs", "take", "fresh", "r9")
+	assert.ErrorContains(t, err, "no run r9")
+	git("-C", clone, "pull", "-q", "--no-rebase", "origin", "main")
 	worker("laptop", "schedule: hourly")
 	_, err = runCLI(t, "enterprise", "jobs", "push", "laptop")
 	assert.ErrorContains(t, err, "doesn't run it: its WORKER.md doesn't say runs_on: service")
@@ -453,7 +484,7 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 
 	org.Close()
 	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"},
-		{"jobs", "runs", "tidy"}, {"jobs", "run", "tidy"}, {"jobs", "on", "tidy"}, {"jobs", "push", "fresh"}} {
+		{"jobs", "runs", "tidy"}, {"jobs", "run", "tidy"}, {"jobs", "on", "tidy"}, {"jobs", "push", "fresh"}, {"jobs", "take", "fresh"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}

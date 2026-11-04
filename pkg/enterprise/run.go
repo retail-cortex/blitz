@@ -70,8 +70,12 @@ type RunEnd struct {
 	// Output is the run's last message.
 	Output string `json:"output,omitempty"`
 	// Branch is where its changes went ("" for none).
-	Branch  string  `json:"branch,omitempty"`
-	CostUSD float64 `json:"cost_usd"`
+	Branch string `json:"branch,omitempty"`
+	// Merged is whether its changes are on main too; MergeNote why not,
+	// when they're on its branch only (JB-10).
+	Merged    bool    `json:"merged,omitempty"`
+	MergeNote string  `json:"merge_note,omitempty"`
+	CostUSD   float64 `json:"cost_usd"`
 	// A paused run's (RunPaused): what it asks for, and its session.
 	Pending *Request `json:"pending,omitempty"`
 	Session string   `json:"session,omitempty"`

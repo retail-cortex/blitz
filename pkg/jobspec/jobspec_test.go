@@ -30,18 +30,20 @@ func TestParse(t *testing.T) {
 	}{
 		"a service job": {
 			in:   "---\ndescription: The digest\nschedule: Weekdays at 9:30\ntimezone: Europe/Dublin\nruns_on: service\ncatch_up: once\nlimits:\n  timeout: 20m\nagent: writer\n---\nWrite it.\n",
-			want: Spec{Description: "The digest", Schedule: "Weekdays at 9:30", Timezone: "Europe/Dublin", RunsOn: Service, CatchUp: "once", Timeout: 20 * time.Minute},
+			want: Spec{Description: "The digest", Schedule: "Weekdays at 9:30", Timezone: "Europe/Dublin", RunsOn: Service, CatchUp: "once", Timeout: 20 * time.Minute, Merge: MergeMain},
 		},
-		"defaults":          {in: "---\nschedule: \"@hourly\"\n---\n", want: Spec{Schedule: "@hourly", RunsOn: Here, CatchUp: "none"}},
-		"on request only":   {in: "---\nruns_on: service\n---\nGo.", want: Spec{RunsOn: Service, CatchUp: "none"}},
-		"elsewhere":         {in: "---\nruns_on: the moon\n---\n", err: `runs_on "the moon"`},
-		"a bad catch-up":    {in: "---\ncatch_up: all\n---\n", err: `catch_up "all"`},
-		"a bad timeout":     {in: "---\nlimits:\n  timeout: soon\n---\n", err: `limits.timeout "soon"`},
-		"a bad schedule":    {in: "---\nschedule: whenever\n---\n", err: "whenever"},
-		"not YAML":          {in: "---\n: [\n---\n", err: "yaml"},
-		"no frontmatter":    {in: "Just text.", err: "missing frontmatter"},
-		"an unended one":    {in: "---\nschedule: x\n", err: "ends the frontmatter"},
-		"a byte-order mark": {in: "\xef\xbb\xbf\n---\n---", want: Spec{RunsOn: Here, CatchUp: "none"}},
+		"defaults":           {in: "---\nschedule: \"@hourly\"\n---\n", want: Spec{Schedule: "@hourly", RunsOn: Here, CatchUp: "none", Merge: MergeMain}},
+		"on request only":    {in: "---\nruns_on: service\n---\nGo.", want: Spec{RunsOn: Service, CatchUp: "none", Merge: MergeMain}},
+		"kept on its branch": {in: "---\nruns_on: service\nmerge: never\n---\nGo.", want: Spec{RunsOn: Service, CatchUp: "none", Merge: MergeNever}},
+		"a bad merge":        {in: "---\nmerge: sometimes\n---\n", err: `merge "sometimes"`},
+		"elsewhere":          {in: "---\nruns_on: the moon\n---\n", err: `runs_on "the moon"`},
+		"a bad catch-up":     {in: "---\ncatch_up: all\n---\n", err: `catch_up "all"`},
+		"a bad timeout":      {in: "---\nlimits:\n  timeout: soon\n---\n", err: `limits.timeout "soon"`},
+		"a bad schedule":     {in: "---\nschedule: whenever\n---\n", err: "whenever"},
+		"not YAML":           {in: "---\n: [\n---\n", err: "yaml"},
+		"no frontmatter":     {in: "Just text.", err: "missing frontmatter"},
+		"an unended one":     {in: "---\nschedule: x\n", err: "ends the frontmatter"},
+		"a byte-order mark":  {in: "\xef\xbb\xbf\n---\n---", want: Spec{RunsOn: Here, CatchUp: "none", Merge: MergeMain}},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

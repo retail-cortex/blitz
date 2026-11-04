@@ -237,6 +237,11 @@ service ConfigService {
   // minute's try; the sync's state after (NOT_SYNCED when no sync keeps it
   // in step, GIT_BUSY while a turn runs in it).
   rpc SaveOrgSync(SaveOrgSyncRequest) returns (SaveOrgSyncResponse);
+  // Adds a service run's changes, on its own branch, to its workspace's
+  // main (blitz-enterprise JB-10), then brings main into the folder at
+  // workspace: Add to my workspace. CONFLICTS when they change the same
+  // lines as main; NO_CHANGES for a run that left none.
+  rpc TakeServiceRun(TakeServiceRunRequest) returns (TakeServiceRunResponse);
   // A job in an organization workspace as the organization's service runs
   // it (EN-42; NOT_CONNECTED, NOT_SIGNED_IN, NOT_ORG_WORKSPACE): found is
   // false until the service has read it from main.
@@ -1509,6 +1514,19 @@ message GetOrgSyncResponse {
   string error = 3;
 }
 
+// Request message for ConfigService.TakeServiceRun.
+message TakeServiceRunRequest {
+  // The organization workspace's folder.
+  string workspace = 1;
+  string job_id = 2;
+  string run_id = 3;
+}
+
+// Response message for ConfigService.TakeServiceRun.
+message TakeServiceRunResponse {
+  ServiceRun run = 1;
+}
+
 // Request message for ConfigService.SaveOrgSync.
 message SaveOrgSyncRequest {
   string workspace = 1;
@@ -1563,6 +1581,10 @@ message ServiceRun {
   ServiceRequest pending = 12;
   string answer = 13;
   string answer_note = 14;
+  // Whether its changes are on main too, and why not when they're on its
+  // branch only.
+  bool merged = 15;
+  string merge_note = 16;
 }
 
 // What a paused run asks for: a tool, the kind of thing it does, and what

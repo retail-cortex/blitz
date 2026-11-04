@@ -131,7 +131,8 @@ func TestRunJob(t *testing.T) {
 			assert.True(t, o.TrustProject)
 			cfg.Session.StorageDir = t.TempDir()
 			if change {
-				require.NoError(t, os.WriteFile(filepath.Join(cfg.Tools.WorkspaceDir, "digest.md"), []byte("# Digest\n"), 0o644))
+				// Each run's its own, so main having another's isn't this one's.
+				require.NoError(t, os.WriteFile(filepath.Join(cfg.Tools.WorkspaceDir, "digest.md"), []byte("# Digest\n\n"+cfg.Tools.WorkspaceDir+"\n"), 0o644))
 				// What it leaves for people, in the folder it's told of.
 				out := cfg.Sandbox.AllowedPaths[len(cfg.Sandbox.AllowedPaths)-1]
 				assert.Contains(t, o.AppendSystemPrompt, out)
@@ -174,6 +175,8 @@ func TestRunJob(t *testing.T) {
 		assert.Contains(t, git(s.Repo("plans"), "show", branch+":digest.md"), "# Digest")
 		assert.Contains(t, git(s.Repo("plans"), "log", "-1", "--format=%s", branch), "digest: run "+run)
 		assert.NotContains(t, git(s.Repo("plans"), "ls-tree", "-r", "--name-only", branch), "sales by week.csv", "out/ isn't the workspace's")
+		assert.Equal(t, true, end["merged"], "on main too, as the job doesn't say otherwise")
+		assert.Equal(t, git(s.Repo("plans"), "show", branch+":digest.md"), git(s.Repo("plans"), "show", "main:digest.md"))
 
 		require.Contains(t, kept, "out/charts/sales by week.csv")
 		assert.Equal(t, "week,sales\n", kept["out/charts/sales by week.csv"].Body)
@@ -272,6 +275,34 @@ func TestRunJob(t *testing.T) {
 			return nil, os.ErrPermission
 		}
 		assert.ErrorContains(t, RunJob(ctx, job("r6", "digest"), JobOptions{Config: t.TempDir(), Open: broken}), "opening the workspace")
+	})
+
+	t.Run("a job that keeps its changes on their branch", func(t *testing.T) {
+		keep := t.TempDir()
+		git(keep, "clone", "--quiet", s.Repo("plans"), ".")
+		require.NoError(t, os.WriteFile(filepath.Join(keep, ".agents", "workers", "digest", "WORKER.md"),
+			[]byte("---\nschedule: Daily at 6 AM\nruns_on: service\nmerge: never\n---\nWrite the digest.\n"), 0o644))
+		git(keep, "commit", "--quiet", "-am", "Keep it on its branch")
+		git(keep, "push", "--quiet", "origin", "HEAD:main")
+		before := git(s.Repo("plans"), "rev-parse", "main")
+		require.NoError(t, RunJob(ctx, job("r14", "digest"), JobOptions{Config: t.TempDir(), Open: open(true)}))
+		end := ended("r14")
+		assert.Nil(t, end["merged"])
+		assert.Contains(t, end["merge_note"], "merge: never")
+		assert.Equal(t, before, git(s.Repo("plans"), "rev-parse", "main"), "main as it was")
+		git(keep, "revert", "--no-edit", "HEAD")
+		git(keep, "push", "--quiet", "origin", "HEAD:main")
+	})
+
+	t.Run("main refused: kept on its branch, saying why", func(t *testing.T) {
+		hook := filepath.Join(s.Repo("plans"), "hooks", "pre-receive")
+		require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/main ] && { echo main is protected >&2; exit 1; }; done; exit 0\n"), 0o755))
+		defer os.Remove(hook)
+		require.NoError(t, RunJob(ctx, job("r15", "digest"), JobOptions{Config: t.TempDir(), Open: open(true)}))
+		end := ended("r15")
+		assert.Equal(t, "succeeded", end["status"], "its work is on its branch")
+		assert.Nil(t, end["merged"])
+		assert.Contains(t, end["merge_note"], "pushing main")
 	})
 
 	t.Run("a folder it can't use", func(t *testing.T) {

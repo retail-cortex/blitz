@@ -39,6 +39,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/jobspec"
+	"github.com/retail-cortex/blitz/pkg/runmerge"
 	"github.com/retail-cortex/blitz/pkg/urn"
 )
 
@@ -201,6 +203,7 @@ type jobRun struct {
 	out      string // what it leaves for people
 	log      string // its events, one JSON a line
 	sessions string // its session's folder, kept with it while it waits
+	mergeTo  string // where its WORKER.md says its changes go (jobspec.MergeMain or MergeNever)
 }
 
 // errPaused ends a run that asked for more than its job allows: it waits
@@ -318,7 +321,7 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 	var hash, onRequest string
 	for _, info := range list {
 		if info.Name == r.j.Name {
-			hash, onRequest = info.Hash, info.OnRequest
+			hash, onRequest, r.mergeTo = info.Hash, info.OnRequest, info.Merge
 			if len(info.Problems) > 0 {
 				return failed("the job doesn't read: %s", strings.Join(info.Problems, "; "))
 			}
@@ -399,6 +402,9 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 		end.Note = strings.TrimSpace(end.Note + "; its changes weren't pushed: " + err.Error())
 	}
 	end.Branch = branch
+	if branch != "" && end.Status == string(api.RunSucceeded) {
+		end.Merged, end.MergeNote = r.merge(ctx, branch)
+	}
 	if err := r.keep(ctx); err != nil {
 		end.Note = strings.TrimPrefix(end.Note+"; some of its files weren't kept: "+err.Error(), "; ")
 	}
@@ -478,6 +484,21 @@ func (r *jobRun) push(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return branch, nil
+}
+
+// merge adds a succeeded run's changes to main as its job says (JB-10):
+// whether they're on main, or why not.
+func (r *jobRun) merge(ctx context.Context, branch string) (bool, string) {
+	if r.mergeTo == jobspec.MergeNever {
+		return false, "its job keeps its changes on their branch (merge: never)"
+	}
+	ctx = context.WithoutCancel(ctx) // a run at its time limit still adds its work
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if err := runmerge.IntoMain(ctx, r.git, "origin", branch, "Blitz job "+r.j.Name); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
 }
 
 // branch is the run's own branch.

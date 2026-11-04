@@ -303,6 +303,8 @@ type ServiceRun struct {
 	Created   time.Time         `json:"created"`
 	Branch    string            `json:"branch,omitempty"`
 	Artifacts string            `json:"artifacts,omitempty"`
+	Merged    bool              `json:"merged,omitempty"`
+	MergeNote string            `json:"merge_note,omitempty"`
 }
 
 // File is a file under a resource name.
@@ -948,6 +950,23 @@ func NewService(t testing.TB, issuer string) *Service {
 			_ = json.NewEncoder(w).Encode(run)
 		}
 	})
+	mux.HandleFunc("POST /api/v1/jobs/{id}/runs/{run}/merged", func(w http.ResponseWriter, r *http.Request) {
+		if !jobs(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		if _, ok := job(w, r); ok {
+			runs := s.ServiceRuns[r.PathValue("id")]
+			for i := range runs {
+				if runs[i].ID == r.PathValue("run") && runs[i].Branch != "" {
+					runs[i].Merged, runs[i].MergeNote = true, ""
+					_ = json.NewEncoder(w).Encode(runs[i])
+					return
+				}
+			}
+			refuse(w, http.StatusNotFound, "not_found", "That job has no such run with changes.")
+		}
+	})
 	mux.HandleFunc("PUT /api/v1/jobs/{id}/enabled", func(w http.ResponseWriter, r *http.Request) {
 		if !jobs(w, r) {
 			return
@@ -1110,39 +1129,28 @@ func (s *Service) addRepo(handle string) error { return s.makeRepo(handle, true)
 // (an empty one, as the service makes for a new workspace, when not).
 func (s *Service) makeRepo(handle string, first bool) error {
 	bare := filepath.Join(s.repos, filepath.FromSlash(handle)+".git")
-	if err := os.MkdirAll(filepath.Dir(bare), 0o700); err != nil {
-		return err
-	}
 	work, err := os.MkdirTemp("", "ws")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(work)
-	git := func(dir string, args ...string) error {
-		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, args...)...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("git %v: %v: %s", args, err, out)
-		}
-		return nil
-	}
-	if err := git(s.repos, "init", "--bare", bare); err != nil {
-		return err
-	}
+	// Each step: the folder it runs in, then git's arguments.
+	steps := [][]string{{s.repos, "init", "--bare", bare}}
 	if first {
 		if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("# "+handle+"\n"), 0o600); err != nil {
 			return err
 		}
-		for _, args := range [][]string{{"init"}, {"add", "-A"}, {"commit", "-m", "First"}, {"push", bare, "HEAD:main"}} {
-			if err := git(work, args...); err != nil {
-				return err
-			}
+		steps = append(steps, []string{work, "init"}, []string{work, "add", "-A"}, []string{work, "commit", "-m", "First"}, []string{work, "push", bare, "HEAD:main"})
+	}
+	steps = append(steps, []string{bare, "config", "http.receivepack", "true"}, []string{bare, "symbolic-ref", "HEAD", "refs/heads/main"})
+	for _, st := range steps {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, st[1:]...)...)
+		cmd.Dir = st[0]
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %v: %v: %s", st[1:], err, out)
 		}
 	}
-	if err := git(bare, "config", "http.receivepack", "true"); err != nil {
-		return err
-	}
-	return git(bare, "symbolic-ref", "HEAD", "refs/heads/main")
+	return nil
 }
 
 // mainJobs are the WORKER.md files on main in the bare repository, by

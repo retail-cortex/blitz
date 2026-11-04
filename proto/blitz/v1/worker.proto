@@ -148,6 +148,9 @@ message Worker {
   // What a run does when it needs more than it may do: "refuse", or
   // "pause" for its owner's answer; "" for where it runs's default.
   string on_request = 19;
+  // Where a run on the service leaves its changes: "main" (main too, when
+  // they merge cleanly) or "never" (its own branch only).
+  string merge = 20;
 }
 
 // Request message for WorkerService.ListWorkers.
@@ -190,6 +193,8 @@ message CreateWorkerRequest {
   string runs_on = 15;
   // "", "refuse" or "pause".
   string on_request = 16;
+  // "", "main" or "never".
+  string merge = 17;
 }
 
 // WorkerDefinition is a WORKER.md as written: its frontmatter fields and
@@ -220,6 +225,8 @@ message WorkerDefinition {
   string runs_on = 14;
   // "", "refuse" or "pause".
   string on_request = 15;
+  // "", "main" or "never".
+  string merge = 16;
 }
 
 // Request message for WorkerService.GetWorkerSpec.

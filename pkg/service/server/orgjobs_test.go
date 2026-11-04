@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,6 +231,108 @@ func TestWhyNotServiceJob(t *testing.T) {
 		_, err = c.PushServiceJob(ctx, connect.NewRequest(&pb.PushServiceJobRequest{Workspace: dir, Name: "late"}))
 		_, info = errorReason(t, err)
 		assert.Equal(t, "PUSH_FAILED", info.Reason)
+	})
+
+	t.Run("a run's changes added to main", func(t *testing.T) {
+		// A run's branch on the service, as the runner leaves it.
+		bare := org.Repo("plans")
+		run := func(id, file, body string) string {
+			t.Helper()
+			work := t.TempDir()
+			for _, args := range [][]string{{"clone", "-q", bare, "."}, {"checkout", "-q", "-b", "run"}} {
+				out, err := exec.Command("git", append([]string{"-C", work}, args...)...).CombinedOutput()
+				require.NoError(t, err, "%s", out)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(work, file), []byte(body), 0o644))
+			branch := "blitz/jobs/digest/" + id
+			for _, args := range [][]string{{"add", "-A"}, {"-c", "user.name=Blitz job digest", "-c", "user.email=jobs@blitz.invalid", "commit", "-qm", "digest: run " + id},
+				{"push", "-q", "origin", "HEAD:refs/heads/" + branch}} {
+				out, err := exec.Command("git", append([]string{"-C", work}, args...)...).CombinedOutput()
+				require.NoError(t, err, "%s", out)
+			}
+			return branch
+		}
+		org.Mu.Lock()
+		org.ServiceRuns = map[string][]enterprisetest.ServiceRun{"job-digest": {
+			{ID: "r1", Status: "succeeded", Branch: run("r1", "recipe.md", "Soup.\n")},
+			{ID: "r2", Status: "succeeded", Branch: run("r2", "recipe.md", "Stew.\n")},
+			{ID: "r3", Status: "succeeded"},
+		}}
+		org.Mu.Unlock()
+		take := func(id string) (*pb.ServiceRun, error) {
+			got, err := c.TakeServiceRun(ctx, connect.NewRequest(&pb.TakeServiceRunRequest{Workspace: dir, JobId: "job-digest", RunId: id}))
+			if err != nil {
+				return nil, err
+			}
+			return got.Msg.Run, nil
+		}
+		got, err := take("r1")
+		require.NoError(t, err)
+		assert.True(t, got.Merged)
+		out, err := exec.Command("git", "--git-dir", bare, "show", "main:recipe.md").Output()
+		require.NoError(t, err)
+		assert.Equal(t, "Soup.\n", string(out), "on main")
+		_, err = take("r1")
+		require.NoError(t, err, "again: it's on main already")
+
+		_, err = take("r2")
+		_, info := errorReason(t, err)
+		assert.Equal(t, "CONFLICTS", info.Reason, "both changed recipe.md")
+		_, err = take("r3")
+		_, info = errorReason(t, err)
+		assert.Equal(t, "NO_CHANGES", info.Reason)
+		_, err = take("r9")
+		_, info = errorReason(t, err)
+		assert.Equal(t, "UNKNOWN_RUN", info.Reason)
+		_, err = c.TakeServiceRun(ctx, connect.NewRequest(&pb.TakeServiceRunRequest{Workspace: t.TempDir(), JobId: "job-digest", RunId: "r1"}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "NOT_ORG_WORKSPACE", info.Reason)
+
+		// Main refused by the service: it says so, and the run stays as it was.
+		org.Mu.Lock()
+		org.ServiceRuns["job-digest"] = append(org.ServiceRuns["job-digest"], enterprisetest.ServiceRun{ID: "r4", Status: "succeeded", Branch: run("r4", "notes.md", "Notes.\n")})
+		org.Mu.Unlock()
+		hook := filepath.Join(bare, "hooks", "pre-receive")
+		require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/main ] && exit 1; done; exit 0\n"), 0o755))
+		_, err = take("r4")
+		require.NoError(t, os.Remove(hook))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "PUSH_FAILED", info.Reason)
+
+		_, err = c.TakeServiceRun(ctx, connect.NewRequest(&pb.TakeServiceRunRequest{Workspace: dir, JobId: "job-nope", RunId: "r4"}))
+		assert.Error(t, err, "no such job")
+
+		// A folder sync keeps in step fetches main at once.
+		sy := &orgsync.Syncer{Dir: dir}
+		s.ent.syncs.mu.Lock()
+		was := s.ent.syncs.running
+		s.ent.syncs.running = map[string]*orgSync{dir: {s: sy}}
+		s.ent.syncs.mu.Unlock()
+		defer func() {
+			s.ent.syncs.mu.Lock()
+			s.ent.syncs.running = was
+			s.ent.syncs.mu.Unlock()
+		}()
+		_, err = take("r4")
+		require.NoError(t, err, "main as the service has it now")
+
+		// The service out of reach: the clone the merge is made in fails.
+		url, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+		require.NoError(t, err)
+		require.NoError(t, exec.Command("git", "-C", dir, "remote", "set-url", "origin", "http://127.0.0.1:1/plans.git").Run())
+		defer exec.Command("git", "-C", dir, "remote", "set-url", "origin", strings.TrimSpace(string(url))).Run()
+		org.Mu.Lock()
+		org.ServiceRuns["job-digest"] = append(org.ServiceRuns["job-digest"], enterprisetest.ServiceRun{ID: "r5", Status: "succeeded", Branch: run("r5", "more.md", "More.\n")})
+		org.Mu.Unlock()
+		// A folder without the organization's remote.
+		require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "origin", "elsewhere").Run())
+		_, err = take("r5")
+		require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "elsewhere", "origin").Run())
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+		_, err = take("r5")
+		_, info = errorReason(t, err)
+		assert.Equal(t, "CLONE_FAILED", info.Reason)
 	})
 }
 

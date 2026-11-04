@@ -170,6 +170,8 @@ func TestLoadRejectsBadWorkers(t *testing.T) {
 		"bad-permission": "---\nschedule: hourly\npermissions: [\"write:/etc/passwd\"]\n---\ndo it\n",
 		"Bad_Name":       "---\nschedule: hourly\n---\ndo it\n",
 		"bad-timeout":    "---\nschedule: hourly\nlimits: {timeout: soon}\n---\ndo it\n",
+		"bad-merge":      "---\nschedule: hourly\nmerge: sometimes\n---\ndo it\n",
+		"bad-on-request": "---\nschedule: hourly\non_request: shrug\n---\ndo it\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Load(writeWorker(t, root, name, content))

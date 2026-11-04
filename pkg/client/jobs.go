@@ -38,6 +38,9 @@ type ServiceRun struct {
 	CostUSD                           float64
 	Created                           time.Time
 	Branch                            string
+	// Merged is whether its changes are on main too; MergeNote why not.
+	Merged    bool
+	MergeNote string
 	// Artifacts names its files; Pending what a paused run asks for.
 	Artifacts string
 	Pending   *ServiceRequest
@@ -57,7 +60,7 @@ type ServiceFile struct {
 
 func serviceRun(m *pb.ServiceRun) ServiceRun {
 	r := ServiceRun{ID: m.GetId(), Trigger: m.GetTrigger(), Status: m.GetStatus(), Note: m.GetNote(), Output: m.GetOutput(), CostUSD: m.GetCostUsd(),
-		Branch: m.GetBranch(), Artifacts: m.GetArtifacts()}
+		Branch: m.GetBranch(), Merged: m.GetMerged(), MergeNote: m.GetMergeNote(), Artifacts: m.GetArtifacts()}
 	if m.GetCreated() != nil {
 		r.Created = m.GetCreated().AsTime()
 	}
@@ -131,6 +134,16 @@ func (s *Settings) PushServiceJob(ctx context.Context, dir, name string) (*Servi
 		return nil, fromAPI(err)
 	}
 	return missing(res.Msg.GetJob()), nil
+}
+
+// TakeServiceRun adds a service run's changes, on its branch, to the main
+// of the workspace cloned at dir, which takes them in.
+func (s *Settings) TakeServiceRun(ctx context.Context, dir, jobID, runID string) (ServiceRun, error) {
+	res, err := s.c.TakeServiceRun(ctx, connect.NewRequest(&pb.TakeServiceRunRequest{Workspace: dir, JobId: jobID, RunId: runID}))
+	if err != nil {
+		return ServiceRun{}, fromAPI(err)
+	}
+	return serviceRun(res.Msg.GetRun()), nil
 }
 
 // RunServiceJob starts a run of a service job now.

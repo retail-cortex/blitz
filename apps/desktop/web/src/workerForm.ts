@@ -38,6 +38,8 @@ export interface WorkerForm {
   runsOn: "here" | "service";
   /** What a run does when it needs more (EN-43): "" for where it runs's default. */
   onRequest: "" | "refuse" | "pause";
+  /** Where a run on the service leaves its changes (JB-10): "" for main too. */
+  merge: "" | "never";
   prompt: string;
 }
 
@@ -57,6 +59,7 @@ export const emptyWorkerForm: WorkerForm = {
   catchUp: "none",
   runsOn: "here",
   onRequest: "",
+  merge: "",
   prompt: "",
 };
 
@@ -106,6 +109,7 @@ export function workerRequest(f: WorkerForm) {
     catchUp: f.catchUp === "once" ? "once" : "",
     runsOn: f.runsOn === "service" ? "service" : "",
     onRequest: f.onRequest as string,
+    merge: f.merge as string,
     prompt: f.prompt.trim(),
   };
 }
@@ -130,6 +134,7 @@ export function formFromWorker(d: WorkerFields): WorkerForm {
     catchUp: d.catchUp === "once" ? "once" : "none",
     runsOn: d.runsOn === "service" ? "service" : "here",
     onRequest: d.onRequest === "refuse" || d.onRequest === "pause" ? d.onRequest : "",
+    merge: d.merge === "never" ? "never" : "",
     prompt: d.prompt,
   };
 }

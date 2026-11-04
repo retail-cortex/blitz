@@ -376,6 +376,22 @@ export function WorkerEditor({
             <span className="t-body-sm muted">{t("desktop.newworker.on_hint")}</span>
           </div>
         )}
+        {f.runsOn === "service" && (
+          <div className="row wrap" style={{ gap: 12 }}>
+            <span className="t-label">{t("desktop.newworker.merge")}</span>
+            <Segmented
+              small
+              label={t("desktop.newworker.merge")}
+              value={f.merge === "never" ? "never" : "main"}
+              onChange={(v) => set("merge", v === "never" ? "never" : "")}
+              options={[
+                { value: "main", label: t("desktop.newworker.merge_main") },
+                { value: "never", label: t("desktop.newworker.merge_never") },
+              ]}
+            />
+            <span className="t-body-sm muted">{t("desktop.newworker.merge_hint")}</span>
+          </div>
+        )}
         {suggestion && (
           <Dialog
             wide
