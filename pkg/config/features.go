@@ -501,6 +501,10 @@ type MCPServerConfig struct {
 	// by source type (SQLite's database): a relative one is resolved
 	// where its file belongs (spec_046_databases DB-17).
 	FileSettings map[string][]string `toml:"-"`
+	// WorkspaceOnly are an in-process server's files (of Args) whose
+	// ${NAME}s it fills only from the workspace's own secrets, which Env
+	// holds apart from the rest (spec_047_connectors CON-09).
+	WorkspaceOnly []string `toml:"-"`
 }
 
 // BrowserConfig controls the browser tool (spec_027_parity §5.2): a

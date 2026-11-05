@@ -270,6 +270,10 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if w.agents, err = agents.NewRegistry(); err != nil {
 		return nil, fmt.Errorf("failed to load agent registry: %w", err)
 	}
+	if cfg.Org.Locked != "" {
+		// Its locked agents keep their names over plugins' (EN-31).
+		w.agents.Lock(filepath.Join(cfg.Org.Locked, "agents"))
+	}
 	if err := w.agents.LoadExternalAgents(cfg.AgentSearchPaths(dir)...); err != nil {
 		o.Warn(err.Error())
 	}

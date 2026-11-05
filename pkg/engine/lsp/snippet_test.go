@@ -115,7 +115,7 @@ func TestSnippetDocument(t *testing.T) {
 		return nil, ""
 	})
 	path := SnippetPath(filepath.Dir(src), "k", ".go")
-	info := m.OpenSnippet("w", path, "x := 1\nfmt.Println(x)\n", 1)
+	info := m.OpenSnippet(context.Background(), "w", path, "x := 1\nfmt.Println(x)\n", 1)
 	require.NotEmpty(t, info.ID)
 	require.Eventually(t, func() bool { o, _ := seen(); return o != "" }, 5*time.Second, 5*time.Millisecond)
 	o, _ := seen()

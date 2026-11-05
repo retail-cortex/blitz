@@ -17,10 +17,12 @@ package agents
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,8 +45,8 @@ type AgentMetadata struct {
 	// Background makes invoke_agent run it in the background unless the
 	// call says otherwise.
 	Background bool `yaml:"background,omitempty"`
-	// Isolation "worktree" runs it, in the background, in its own git
-	// worktree and branch.
+	// Isolation "worktree" runs it in its own git worktree and branch;
+	// it needs Background.
 	Isolation string `yaml:"isolation,omitempty"`
 
 	// The model settings it runs with, over the model's own
@@ -54,6 +56,11 @@ type AgentMetadata struct {
 	MaxTokens      *int     `yaml:"max_tokens,omitempty"`
 	Effort         string   `yaml:"effort,omitempty"`
 	ThinkingBudget *int     `yaml:"thinking_budget,omitempty"`
+
+	// Lock and Groups are how an organization's catalog applies the
+	// agent (spec_053 EN-30); read by the catalog, accepted here.
+	Lock   string   `yaml:"lock,omitempty"`
+	Groups []string `yaml:"groups,omitempty"`
 }
 
 // ModelSettings returns the model settings the agent sets, and whether it
@@ -72,6 +79,12 @@ func (m AgentMetadata) Check() error {
 	if m.Name == "" {
 		return fmt.Errorf("agent spec must declare a 'name' in frontmatter")
 	}
+	if !ValidName(m.Name) {
+		return fmt.Errorf("name %q: use lowercase letters, digits, - and _", m.Name)
+	}
+	if m.AgencyLevel != "" && !slices.Contains(AgencyLevels, m.AgencyLevel) {
+		return fmt.Errorf("agency_level: %q (one of %s)", m.AgencyLevel, strings.Join(AgencyLevels, ", "))
+	}
 	if m.PermissionMode != "" {
 		if _, err := api.ParsePermissionMode(m.PermissionMode); err != nil {
 			return fmt.Errorf("permission_mode: %w", err)
@@ -82,6 +95,9 @@ func (m AgentMetadata) Check() error {
 	}
 	if m.Isolation != "" && m.Isolation != "worktree" {
 		return fmt.Errorf("isolation: %q (only worktree)", m.Isolation)
+	}
+	if m.Isolation != "" && !m.Background {
+		return fmt.Errorf("isolation: worktree needs background: true")
 	}
 	if m.Temperature != nil && (*m.Temperature < 0 || *m.Temperature > 2) {
 		return fmt.Errorf("temperature: %v (0 to 2)", *m.Temperature)
@@ -114,25 +130,20 @@ type AgentSpec struct {
 	Path string
 }
 
-// ParseMarkdownSpec parses a markdown file containing YAML frontmatter.
+// ParseMarkdownSpec parses a markdown file containing YAML frontmatter. A
+// key it doesn't know is an error: a misspelt permission_mode would leave
+// the agent in the workspace's mode.
 func ParseMarkdownSpec(content []byte) (*AgentSpec, error) {
-	trimmed := bytes.TrimSpace(content)
-	if !bytes.HasPrefix(trimmed, []byte("---")) {
+	if !bytes.HasPrefix(bytes.TrimSpace(bytes.TrimPrefix(content, []byte("\ufeff"))), []byte("---")) {
 		return nil, fmt.Errorf("markdown spec missing starting frontmatter delimiter '---'")
 	}
-
-	// Find closing delimiter
-	rest := trimmed[3:]
-	idx := bytes.Index(rest, []byte("---"))
-	if idx == -1 {
+	frontmatterBytes, promptBytes, ok := frontmatter.Split(content)
+	if !ok {
 		return nil, fmt.Errorf("markdown spec missing closing frontmatter delimiter '---'")
 	}
 
-	frontmatterBytes := rest[:idx]
-	promptBytes := bytes.TrimSpace(rest[idx+3:])
-
 	var meta AgentMetadata
-	if err := yaml.Unmarshal(frontmatterBytes, &meta); err != nil {
+	if err := frontmatter.Strict(frontmatterBytes, &meta); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML frontmatter: %w", err)
 	}
 

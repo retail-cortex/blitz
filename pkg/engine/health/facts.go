@@ -38,9 +38,6 @@ const (
 	KindWorker    = "worker"
 )
 
-// Kinds are the kinds of item, in order.
-var Kinds = []string{KindAgent, KindSkill, KindRule, KindGuardrail, KindEval, KindWorkflow, KindWorker}
-
 // What an item's flags say about it.
 const (
 	FlagUncovered = "uncovered" // an agent no eval checks
@@ -245,13 +242,15 @@ func Build(in Inputs) Facts {
 	for _, e := range in.Audit {
 		switch {
 		case e.Kind == audit.KindToolCall && (e.Tool == "activate_skill" || e.Tool == "run_skill_script"):
-			if name := argString(e.Args, "skill_name", "skill", "name"); name != "" {
+			if name := audit.Arg(e.Args, "skill_name", "skill", "name"); name != "" {
 				activations[name] = append(activations[name], day(e.Time))
 			}
 		case e.Kind == audit.KindRule || e.Kind == audit.KindGuardrail:
 			name := strings.TrimPrefix(strings.TrimPrefix(e.Tool, "rule:"), "guardrail:")
 			verdicts[e.Kind+"/"+name]++
-			if d := strings.ToLower(e.Decision); d != "" && d != "pass" && d != "allow" {
+			// Unjudged (the judge couldn't answer, the turn went on) isn't
+			// firing: a judge that's down would look like a busy guardrail.
+			if d := strings.ToLower(e.Decision); d != "" && d != "pass" && d != "allow" && d != "unjudged" {
 				fired[e.Kind+"/"+name]++
 				signal(e.Kind, name, e.Detail, e.Time)
 			}
@@ -487,13 +486,4 @@ func countSince(runs []EvalRun, since time.Time) int {
 func dayStart(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
-}
-
-func argString(args map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if s, ok := args[k].(string); ok && s != "" {
-			return s
-		}
-	}
-	return ""
 }

@@ -33,7 +33,6 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
-	"gopkg.in/yaml.v3"
 )
 
 // A case's output type.
@@ -128,7 +127,7 @@ func Parse(name, path string, data []byte) Eval {
 	front, body, ok := frontmatter.Split(data)
 	var m meta
 	if ok {
-		if err := yaml.Unmarshal(front, &m); err != nil {
+		if err := frontmatter.Strict(front, &m); err != nil { // a misspelt key is a problem
 			e.Problem = fmt.Sprintf("front matter: %v", err)
 			return e
 		}
@@ -155,11 +154,13 @@ func Load(dir string) []Eval {
 			continue
 		}
 		p := filepath.Join(dir, ent.Name())
+		name := strings.TrimSuffix(ent.Name(), filepath.Ext(ent.Name()))
 		data, err := os.ReadFile(p)
-		if err != nil {
+		if err != nil { // listed, with why, as one that doesn't parse is
+			out = append(out, Eval{Name: name, Path: p, Problem: err.Error()})
 			continue
 		}
-		out = append(out, Parse(strings.TrimSuffix(ent.Name(), filepath.Ext(ent.Name())), p, data))
+		out = append(out, Parse(name, p, data))
 	}
 	slices.SortFunc(out, func(a, b Eval) int { return cmp.Compare(a.Name, b.Name) })
 	return out
@@ -211,11 +212,13 @@ func ParseTable(body string) (intro string, cases []Case, outro string, err erro
 			return intro, nil, outro, fmt.Errorf("the table has no %s column", columns[need].title)
 		}
 	}
-	for n, line := range lines[start+1 : end] {
+	row := 0 // the data rows, from 1
+	for _, line := range lines[start+1 : end] {
 		cells := splitRow(line)
 		if isSeparator(cells) {
 			continue
 		}
+		row++
 		var c Case
 		var threshold string
 		for i, cell := range cells {
@@ -245,14 +248,14 @@ func ParseTable(body string) (intro string, cases []Case, outro string, err erro
 		if threshold != "" {
 			t, perr := strconv.ParseFloat(strings.TrimSuffix(threshold, "%"), 64)
 			if perr != nil {
-				return intro, nil, outro, fmt.Errorf("row %d: threshold %q isn't a number", n+1, threshold)
+				return intro, nil, outro, fmt.Errorf("row %d: threshold %q isn't a number", row, threshold)
 			}
 			if strings.HasSuffix(threshold, "%") {
 				t /= 100
 			}
 			c.Threshold = t
 		}
-		if c.Type == Near && c.Threshold == 0 {
+		if c.Type == Near && threshold == "" { // a 0 written is Check's to refuse
 			c.Threshold = DefaultThreshold
 		}
 		cases = append(cases, c)
@@ -445,7 +448,9 @@ func Save(dir string, e Eval, previous string) (string, []string, error) {
 		return "", nil, err
 	}
 	if previous != "" && previous != e.Name {
-		os.Remove(filepath.Join(dir, previous+".md"))
+		if err := os.Remove(filepath.Join(dir, previous+".md")); err != nil {
+			return target, nil, fmt.Errorf("saved %s, but the old file is still there: %w", target, err)
+		}
 	}
 	return target, nil, nil
 }

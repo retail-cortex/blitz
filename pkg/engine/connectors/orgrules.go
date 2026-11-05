@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 )
@@ -37,32 +38,37 @@ func IsOrg(scope string) bool { return scope == ScopeOrgLocked || scope == Scope
 type orgRules struct {
 	active bool
 	policy config.OrgPolicy
+	cat    Catalog
+	c      Category
 	locked map[string]bool   // the organization's locked connections' names
-	own    map[string]string // the person's (global and workspace): name → kind
+	own    map[string]string // the person's (global and workspace) that read: name → text
 }
 
-// rulesFor is the organization's rules for category's connections in d.
-func rulesFor(d Dirs, category string) orgRules {
+// rulesFor is the organization's rules for c's connections in d.
+func rulesFor(d Dirs, cat Catalog, c Category) orgRules {
 	o := config.OrgLayerFor(d.Prefix)
-	r := orgRules{active: o.Active(), policy: o.Policy, locked: map[string]bool{}, own: map[string]string{}}
+	r := orgRules{active: o.Active(), policy: o.Policy, cat: cat, c: c, locked: map[string]bool{}, own: map[string]string{}}
 	if !r.active {
 		return r
 	}
-	for _, f := range d.Files(ScopeOrgLocked, category) {
+	for _, f := range d.Files(ScopeOrgLocked, c.ID) {
 		r.locked[idOf(f)] = true
 	}
 	for _, scope := range []string{ScopeGlobal, ScopeWorkspace} {
-		for _, f := range d.Files(scope, category) {
-			text, _ := os.ReadFile(f)
-			r.own[idOf(f)] = KindOf(string(text))
+		for _, f := range d.Files(scope, c.ID) {
+			// One that can't be read isn't served, so a default of its
+			// name doesn't give way to it.
+			if text, err := os.ReadFile(f); err == nil {
+				r.own[idOf(f)] = string(text)
+			}
 		}
 	}
 	return r
 }
 
-// refusal is why a connection in scope, named name, of kind (""
-// unknown), isn't used: "" when it is.
-func (r orgRules) refusal(scope, name, kind string) string {
+// refusal is why a connection in scope, named name, whose file holds
+// text, isn't used: "" when it is.
+func (r orgRules) refusal(scope, name, text string) string {
 	if !r.active {
 		return ""
 	}
@@ -71,23 +77,53 @@ func (r orgRules) refusal(scope, name, kind string) string {
 		return ""
 	case ScopeOrgDefault:
 		// It gives way only to one of the person's that's used.
-		if k, ok := r.own[name]; ok && r.personal(name, k) == "" {
+		if t, ok := r.own[name]; ok && r.personal(name, t) == "" {
 			return "your own connection of this name takes its place"
 		}
 		return ""
 	}
-	return r.personal(name, kind)
+	return r.personal(name, text)
 }
 
 // personal is why one of the person's own connections isn't used.
-func (r orgRules) personal(name, kind string) string {
+func (r orgRules) personal(name, text string) string {
 	switch {
 	case r.locked[name]:
 		return "your organization's locked connection of this name takes its place"
 	case !r.policy.Connectors.Own:
 		return "your organization doesn't allow connections of your own"
-	case len(r.policy.Connectors.Kinds) > 0 && kind != "" && !slices.Contains(r.policy.Connectors.Kinds, kind):
-		return fmt.Sprintf("your organization doesn't allow %s connections", kind)
+	}
+	return r.kindRefusal(text)
+}
+
+// kindRefusal is why a file isn't of a kind the organization allows:
+// judged by what it connects to (its backend's source types), not by its
+// "# kind:" comment, which anyone can write. A file whose sources can't
+// be told isn't allowed when kinds are listed.
+func (r orgRules) kindRefusal(text string) string {
+	allowed := r.policy.Connectors.Kinds
+	if len(allowed) == 0 {
+		return ""
+	}
+	var types []string
+	var err error
+	b, ok := backendFor(r.cat, r.c, text)
+	if l, can := b.(SourceLister); ok && can {
+		types, err = l.SourceTypes(text)
+	}
+	if err != nil || len(types) == 0 {
+		return fmt.Sprintf("your organization allows only %s connections, and what this file connects to can't be told", strings.Join(allowed, ", "))
+	}
+	kinds := r.cat.KindsOf(r.c.ID, "")
+	for _, t := range types {
+		if slices.ContainsFunc(kinds, func(k Kind) bool { return k.Source == t && slices.Contains(allowed, k.ID) }) {
+			continue
+		}
+		name := t
+		if i := slices.IndexFunc(kinds, func(k Kind) bool { return k.Source == t }); i >= 0 {
+			name = kinds[i].ID
+		}
+		return fmt.Sprintf("your organization doesn't allow %s connections", name)
 	}
 	return ""
 }

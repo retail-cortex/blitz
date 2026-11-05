@@ -17,6 +17,7 @@ package compose
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -136,6 +137,36 @@ func TestBadRepliesAndLimits(t *testing.T) {
 		full.Turns = append(full.Turns, Turn{Role: "composer", Text: "q"}, Turn{Role: "user", Text: "a"})
 	}
 	assert.Contains(t, Prompt(testRecipe, "", full, nil), "draft it now")
+
+	// Past the last question, a question is sent back for a draft; one
+	// that keeps asking fails the turn (N26 engine-sub-1 #15).
+	for _, tc := range []struct {
+		name    string
+		replies []string
+		drafted bool
+	}{
+		{"then drafts", []string{`{"question": "q6"}`, "{\"draft\": {\"name\": \"x\", \"summary\": \"S\"}}\n```file\nok\n```"}, true},
+		{"keeps asking", []string{`{"question": "q6"}`, `{"question": "q7"}`, `{"question": "q8"}`}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Session{Kind: "thing", Turns: slices.Clone(full.Turns)}
+			m := &scripted{replies: tc.replies}
+			err := Step(context.Background(), testRecipe, "", s, m.ask)
+			if !tc.drafted {
+				assert.ErrorIs(t, err, ErrNoReply)
+				assert.Len(t, s.Turns, len(full.Turns), "no sixth question shown")
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, s.Draft)
+			assert.Contains(t, m.prompts[1], "the most there may be")
+		})
+	}
+
+	// A draft's summary isn't a question: after a draft and a change
+	// asked for, the composer still has its questions.
+	drafted := &Session{Kind: "thing", Turns: []Turn{{Role: "user", Text: "make it"}, {Role: "composer", Text: "S", Drafted: true}, {Role: "user", Text: "change it"}}}
+	assert.Equal(t, 0, drafted.questions())
 	edit := &Session{Kind: "thing", Current: "the old file"}
 	assert.Contains(t, Prompt(testRecipe, "", edit, nil), "the old file")
 }

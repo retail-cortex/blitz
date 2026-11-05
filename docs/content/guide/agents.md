@@ -93,13 +93,15 @@ and report problems with file and line. {agency_instructions}
 | `permission_mode` | `default`, `accept-edits`, `auto`, `plan`, `dont-ask` or `bypass`, when another agent invokes it; `plan` makes a reviewer that can't change anything |
 | `max_turns` | Its own budget of model calls when invoked, within the calling turn's: its calls count toward both |
 | `background` | `true`: run in the background when invoked, unless the call says otherwise |
-| `isolation` | `worktree`: run in its own git worktree (needs `background`) |
+| `isolation` | `worktree`: run in its own git worktree (needs `background: true`) |
 | `temperature`, `top_p`, `max_tokens`, `effort`, `thinking_budget` | Model settings for this agent only, over the model's and the session's |
+
+A key that isn't in this table (a misspelling such as `permissionMode`, or a command's `model`) stops the agent loading, and the desktop app shows why: a typo would otherwise leave it with settings you didn't mean.
 
 `{agency_instructions}` in the prompt is replaced by the agency level's instructions (the table above). Every agent is also told how Blitz shows images, and to draw diagrams as ```` ```mermaid ```` blocks.
 
 - **Changes apply at once:** adding, editing or removing a file takes effect from the next prompt, without a restart. If the active agent's file is removed, the conversation falls back to `blitz`.
-- **Two files, one name:** a project's agent wins over yours, and a plugin's over both.
+- **Two files, one name:** a project's agent wins over yours, and a plugin's over both, but nothing replaces an agent your organization locks. Two files of one name in one folder are reported.
 - **Saving from the desktop app** rewrites the file: comments and keys Blitz doesn't know are dropped.
 - **Project agents and trust:** a project's agents are offered as soon as you open it, as their prompt is text; until you trust the project's settings, one may make the permission mode stricter but never looser.
 

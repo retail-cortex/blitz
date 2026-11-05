@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,17 +135,25 @@ func NewStore(dir string) *Store { return &Store{dir: dir} }
 
 func (s *Store) file() string { return filepath.Join(s.dir, "verdicts.jsonl") }
 
-// All are the verdicts kept, oldest first.
+// All are the verdicts kept, oldest first (what could be read, when the
+// file can't be read whole).
 func (s *Store) All() []Verdict {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.readLocked()
+	all, _ := s.readLocked()
+	return all
 }
 
-func (s *Store) readLocked() []Verdict {
+// readLocked reads the verdicts: none when there's no file yet, and an
+// error when the file can't be read whole, so Add doesn't write over
+// what it couldn't read.
+func (s *Store) readLocked() ([]Verdict, error) {
 	data, err := os.ReadFile(s.file())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var out []Verdict
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -154,7 +164,10 @@ func (s *Store) readLocked() []Verdict {
 			out = append(out, v)
 		}
 	}
-	return out
+	if err := sc.Err(); err != nil {
+		return out, fmt.Errorf("%s: %w", s.file(), err)
+	}
+	return out, nil
 }
 
 // Latest is each item's latest verdict, by Key.
@@ -183,7 +196,11 @@ func (s *Store) History(key string) []Verdict {
 func (s *Store) Add(v Verdict) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	all := append(s.readLocked(), v)
+	all, err := s.readLocked()
+	if err != nil {
+		return fmt.Errorf("the verdicts kept can't be read, so none is added: %w", err)
+	}
+	all = append(all, v)
 	cut := time.Now().Add(-Keep)
 	all = slices.DeleteFunc(all, func(x Verdict) bool { return x.At.Before(cut) })
 	var b bytes.Buffer
@@ -242,12 +259,16 @@ func writeFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// A temporary file of its own: two processes on one store don't
+	// write into each other's.
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return errors.Join(err, os.Remove(tmp))
+	defer os.Remove(tmp.Name())
+	_, werr := tmp.Write(data)
+	if err := errors.Join(werr, tmp.Chmod(0o600), tmp.Close()); err != nil {
+		return err
 	}
-	return nil
+	return os.Rename(tmp.Name(), path)
 }

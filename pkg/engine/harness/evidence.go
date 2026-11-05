@@ -306,11 +306,11 @@ func Build(in Inputs) Evidence {
 			b.scratchUse(t, e)
 			switch e.Tool {
 			case "activate_skill", "run_skill_script":
-				if name := argString(e.Args, "skill_name", "skill", "name"); name != "" {
+				if name := audit.Arg(e.Args, "skill_name", "skill", "name"); name != "" {
 					t.used["skill/"+name] = true
 				}
 			case "invoke_agent":
-				if name := argString(e.Args, "agent_name", "agent", "name"); name != "" {
+				if name := audit.Arg(e.Args, "agent_name", "agent", "name"); name != "" {
 					t.used["agent/"+name] = true
 				}
 			}
@@ -431,12 +431,12 @@ func (b *builder) scratchUse(t *turnState, e audit.Entry) {
 	var path string
 	switch {
 	case slices.Contains(fileWriters, e.Tool):
-		p := filepath.ToSlash(argString(e.Args, "path", "file_path"))
+		p := filepath.ToSlash(audit.Arg(e.Args, "path", "file_path"))
 		if i := strings.Index(p, scratchDir); i >= 0 && (i == 0 || p[i-1] == '/') {
 			kind, path = ScratchRemade, p[i:]
 		}
 	case e.Tool == "run_shell_command":
-		if m := scratchScript.FindString(argString(e.Args, "command")); m != "" {
+		if m := scratchScript.FindString(audit.Arg(e.Args, "command")); m != "" {
 			kind, path = ScratchScript, m
 		}
 	}
@@ -522,30 +522,23 @@ func denier(decision string) (string, bool) {
 		return "denied by the permission rule " + strings.TrimSpace(strings.TrimPrefix(decision, "rule-deny")), false
 	case decision == "unattended-refused":
 		return "refused: it needs approval and nobody was there", false
+	case decision == "mode-dont-ask":
+		return "refused: it needs approval and the permission mode is dont-ask", false
 	}
 	return "", false
 }
 
 // target is what a call acted on: its command or path.
 func target(args map[string]any) string {
-	if c := argString(args, "command"); c != "" {
+	if c := audit.Arg(args, "command"); c != "" {
 		return textutil.Ellipsize(firstLine(c), 120)
 	}
-	return argString(args, "path", "file_path", "url", "skill_name", "agent_name")
+	return audit.Arg(args, "path", "file_path", "url", "skill_name", "agent_name")
 }
 
 func firstLine(s string) string {
 	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
 	return s
-}
-
-func argString(args map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if s, ok := args[k].(string); ok && s != "" {
-			return s
-		}
-	}
-	return ""
 }
 
 // Text is the evidence as the reflector reads it: one line per item,

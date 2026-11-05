@@ -17,6 +17,7 @@ package health
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,8 @@ func TestBuild(t *testing.T) {
 			{Time: ago(day), Kind: audit.KindRule, Tool: "rule:short", Decision: "pass"},
 			{Time: ago(time.Hour), Kind: audit.KindRule, Tool: "rule:short", Decision: "revise", Detail: "too long"},
 			{Time: ago(time.Hour), Kind: audit.KindGuardrail, Tool: "guardrail:secrets", Decision: "redact", Detail: "a key"},
+			// Couldn't judge, let the turn go: not firing (N26 engine-sub-1 #34).
+			{Time: ago(time.Hour), Kind: audit.KindGuardrail, Tool: "guardrail:secrets", Decision: "unjudged", Detail: "the judge is down"},
 			{Time: ago(time.Hour), Kind: audit.KindDenial, Tool: "shell", Decision: "auto-deny: pushes to main"},
 			{Time: ago(time.Hour), Kind: audit.KindDenial, Tool: "shell", Decision: "rule-deny"},
 		},
@@ -224,6 +227,38 @@ func TestStore(t *testing.T) {
 	assert.Equal(t, 0.25, s.State().LastCost)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "verdicts.jsonl"), []byte("not json\n{\"kind\":\"agent\",\"name\":\"z\"}\n"), 0o600))
 	assert.Len(t, s.All(), 1, "a bad line is skipped")
+}
+
+// A verdicts file that can't be read whole isn't written over: an
+// unreadable file or a line past the longest one read fails Add, and
+// what's kept stays (N26 engine-sub-1 #35).
+func TestStoreKeepsWhatItCantRead(t *testing.T) {
+	line := `{"kind":"agent","name":"a","overall":3,"at":"` + time.Now().Format(time.RFC3339) + `"}` + "\n"
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, file string)
+	}{
+		{"unreadable", func(t *testing.T, file string) {
+			require.NoError(t, os.WriteFile(file, []byte(line), 0o600))
+			require.NoError(t, os.Chmod(file, 0o200))
+			t.Cleanup(func() { _ = os.Chmod(file, 0o600) })
+		}},
+		{"a line too long", func(t *testing.T, file string) {
+			long := `{"kind":"agent","name":"` + strings.Repeat("x", 5<<20) + `"}` + "\n"
+			require.NoError(t, os.WriteFile(file, []byte(line+long+line), 0o600))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			s := NewStore(dir)
+			file := filepath.Join(dir, "verdicts.jsonl")
+			tc.setup(t, file)
+			before, _ := os.Stat(file)
+			assert.Error(t, s.Add(Verdict{Kind: KindAgent, Name: "b", Overall: 4, At: time.Now()}))
+			after, _ := os.Stat(file)
+			assert.Equal(t, before.Size(), after.Size(), "left as it was")
+		})
+	}
 }
 
 // The judge's prompt has the rubric, the evidence and the file; its

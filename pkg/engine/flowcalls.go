@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -31,8 +32,10 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -52,39 +55,100 @@ import (
 // fails the step rather than being cut (a cut JSON body no longer parses).
 const flowResponseLimit = 256 << 10
 
-// secret puts secrets' values into text and has them masked from then on.
-func (w *Workspace) secret(text string) string {
-	out, used := w.expandSecrets(text)
+// stepSecrets puts secrets' values into a call's values and has them
+// masked from then on: only those the step's own settings name
+// (flows.Node.Secrets), never one a filled-in template brought in.
+type stepSecrets struct {
+	w     *Workspace
+	named map[string]bool
+}
+
+// stepSecrets is n's: the secrets its settings name.
+func (w *Workspace) stepSecrets(n flows.Node) stepSecrets {
+	names := n.Secrets
+	if names == nil { // not filled: its settings are as written
+		names = namedSecrets(n)
+	}
+	s := stepSecrets{w: w, named: map[string]bool{}}
+	for _, k := range names {
+		s.named[k] = true
+	}
+	return s
+}
+
+// text is text with the step's secrets put in.
+func (s stepSecrets) text(text string) string {
+	lookup := config.Vault("").Resolve(config.SecretScope("", s.w.Dir()))
+	out, used := secrets.Expand(text, func(scope, key string) (string, bool) {
+		if !s.named[scope+"\x00"+key] {
+			return "", false
+		}
+		return lookup(scope, key)
+	})
 	redact.Remember(used...)
 	return out
 }
 
-// secretValue is v with secrets put into each string.
-func (w *Workspace) secretValue(v any) any {
+// value is v with the step's secrets put into each string.
+func (s stepSecrets) value(v any) any {
 	switch x := v.(type) {
 	case string:
-		return w.secret(x)
+		return s.text(x)
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, e := range x {
-			out[k] = w.secretValue(e)
+			out[k] = s.value(e)
 		}
 		return out
 	case []any:
 		out := make([]any, len(x))
 		for i, e := range x {
-			out[i] = w.secretValue(e)
+			out[i] = s.value(e)
 		}
 		return out
 	}
 	return v
 }
 
-// mcpStep calls an MCP step's tool: its text is the tool's text content,
-// its data the structured content (or the JSON in its text). A tool that
-// reports an error fails the step.
+// namedSecrets are the {secrets:…} n's call settings name (scope, NUL,
+// key), sorted; empty, never nil.
+func namedSecrets(n flows.Node) []string {
+	seen := map[string]bool{}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case string:
+			secrets.Expand(x, func(scope, key string) (string, bool) {
+				seen[scope+"\x00"+key] = true
+				return "", false
+			})
+		case map[string]any:
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	walk(n.URL)
+	walk(n.Body)
+	for _, p := range append(slices.Clone(n.Query), n.Headers...) {
+		walk(p.Value)
+	}
+	walk(n.Arguments)
+	walk(n.JSON)
+	if a := n.Auth; a != nil {
+		for _, f := range []string{a.Token, a.Username, a.Password, a.Value, a.TokenURL, a.ClientID, a.ClientSecret, a.Audience} {
+			walk(f)
+		}
+	}
+	return append([]string{}, slices.Sorted(maps.Keys(seen))...)
+}
+
 func (w *Workspace) mcpStep(ctx context.Context, n flows.Node) (flows.Result, error) {
-	args, _ := w.secretValue(n.Arguments).(map[string]any)
+	args, _ := w.stepSecrets(n).value(n.Arguments).(map[string]any)
 	res, err := w.tools.CallMCP(ctx, n.Server, n.Tool, args)
 	if err != nil {
 		return flows.Result{}, err
@@ -110,17 +174,18 @@ func (w *Workspace) mcpStep(ctx context.Context, n flows.Node) (flows.Result, er
 // its data {status, headers, body} (the body parsed when it's JSON). A
 // status of 400 or more fails the step.
 func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (flows.Result, error) {
+	sec := w.stepSecrets(n)
 	method := strings.ToUpper(cmp.Or(n.Method, http.MethodGet))
-	u, err := url.Parse(w.secret(strings.TrimSpace(n.URL)))
+	u, err := url.Parse(sec.text(strings.TrimSpace(n.URL)))
 	if err != nil {
 		return flows.Result{}, fmt.Errorf("the URL: %w", err)
 	}
 	q := u.Query()
 	for _, p := range n.Query {
-		q.Add(p.Name, w.secret(p.Value))
+		q.Add(p.Name, sec.text(p.Value))
 	}
 	if a := n.Auth; a != nil && a.Type == "api_key" && a.In == "query" {
-		q.Set(a.Name, w.secret(a.Value))
+		q.Set(a.Name, sec.text(a.Value))
 	}
 	u.RawQuery = q.Encode()
 	shown := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
@@ -135,13 +200,13 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 	contentType := ""
 	switch {
 	case n.JSON != nil:
-		data, err := json.Marshal(w.secretValue(n.JSON))
+		data, err := json.Marshal(sec.value(n.JSON))
 		if err != nil {
 			return flows.Result{}, fmt.Errorf("the JSON: %w", err)
 		}
 		body, contentType = bytes.NewReader(data), "application/json"
 	case n.Body != "":
-		body = strings.NewReader(w.secret(n.Body))
+		body = strings.NewReader(sec.text(n.Body))
 	case method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch:
 		body = strings.NewReader(input) // nothing set: the step's input
 	}
@@ -153,9 +218,9 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 		req.Header.Set("Content-Type", contentType)
 	}
 	for _, p := range n.Headers {
-		req.Header.Set(p.Name, w.secret(p.Value))
+		req.Header.Set(p.Name, sec.text(p.Value))
 	}
-	if err := w.authorize(ctx, req, n.Auth); err != nil {
+	if err := w.authorize(ctx, req, n.Auth, sec); err != nil {
 		return flows.Result{}, err
 	}
 	resp, err := client.Do(req)
@@ -194,21 +259,21 @@ var oauthSources sync.Map
 // authorize puts an API step's auth on its request: a bearer token, basic
 // auth, an API key in a header, or an OAuth2 token from client
 // credentials (its token URL approved as a request is).
-func (w *Workspace) authorize(ctx context.Context, req *http.Request, a *flows.Auth) error {
+func (w *Workspace) authorize(ctx context.Context, req *http.Request, a *flows.Auth, sec stepSecrets) error {
 	if a == nil {
 		return nil
 	}
 	switch a.Type {
 	case "bearer":
-		req.Header.Set("Authorization", "Bearer "+w.secret(a.Token))
+		req.Header.Set("Authorization", "Bearer "+sec.text(a.Token))
 	case "basic":
-		req.SetBasicAuth(w.secret(a.Username), w.secret(a.Password))
+		req.SetBasicAuth(sec.text(a.Username), sec.text(a.Password))
 	case "api_key":
 		if a.In != "query" {
-			req.Header.Set(a.Name, w.secret(a.Value))
+			req.Header.Set(a.Name, sec.text(a.Value))
 		}
 	case "oauth2":
-		tokenURL := w.secret(a.TokenURL)
+		tokenURL := sec.text(a.TokenURL)
 		tu, err := url.Parse(tokenURL)
 		if err != nil {
 			return fmt.Errorf("the token URL: %w", err)
@@ -220,9 +285,9 @@ func (w *Workspace) authorize(ctx context.Context, req *http.Request, a *flows.A
 		if err != nil {
 			return err
 		}
-		cc := clientcredentials.Config{ClientID: w.secret(a.ClientID), ClientSecret: w.secret(a.ClientSecret), TokenURL: tokenURL, Scopes: a.Scopes}
+		cc := clientcredentials.Config{ClientID: sec.text(a.ClientID), ClientSecret: sec.text(a.ClientSecret), TokenURL: tokenURL, Scopes: a.Scopes}
 		if a.Audience != "" {
-			cc.EndpointParams = url.Values{"audience": {w.secret(a.Audience)}}
+			cc.EndpointParams = url.Values{"audience": {sec.text(a.Audience)}}
 		}
 		key := strings.Join(append([]string{tokenURL, cc.ClientID, a.Audience}, a.Scopes...), "\x00")
 		src, _ := oauthSources.LoadOrStore(key, oauth2.ReuseTokenSource(nil, cc.TokenSource(context.WithValue(context.WithoutCancel(ctx), oauth2.HTTPClient, client))))
@@ -261,7 +326,8 @@ func (t hostsOnly) RoundTrip(req *http.Request) (*http.Response, error) {
 // (and the JSON in it, as data). The card's host and every host it says
 // the agent answers at are approved first; no other is reached.
 func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (flows.Result, error) {
-	base := w.secret(strings.TrimSpace(n.URL))
+	sec := w.stepSecrets(n)
+	base := sec.text(strings.TrimSpace(n.URL))
 	u, err := url.Parse(base)
 	if err != nil {
 		return flows.Result{}, fmt.Errorf("the URL: %w", err)
@@ -271,7 +337,7 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 	}
 	headers := map[string]string{}
 	for _, p := range n.Headers {
-		headers[p.Name] = w.secret(p.Value)
+		headers[p.Name] = sec.text(p.Value)
 	}
 	only := &hostsOnly{hosts: []string{strings.ToLower(u.Hostname())}, headers: headers}
 	client, err := w.tools.NetworkClient(func(rt http.RoundTripper) http.RoundTripper { only.base = rt; return only })

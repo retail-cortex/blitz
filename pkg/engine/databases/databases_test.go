@@ -17,8 +17,10 @@ package databases
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/embed"
 )
 
 // home makes a Blitz home with in-memory secrets, and a workspace; it
@@ -108,24 +111,89 @@ func TestServe(t *testing.T) {
 		require.Len(t, out, 1)
 		return out[0]
 	}
-	c := serve(false)
+	var warned []string
+	serveWarned := func(trusted bool) config.MCPServerConfig {
+		warned = nil
+		out := Backend{}.Serve(connectors.Serving{Category: cat, Workspace: ws, Global: []string{global}, Local: []string{local}, Trusted: func(string) bool { return trusted }, Warn: func(s string) { warned = append(warned, s) }})
+		require.Len(t, out, 1)
+		return out[0]
+	}
+	// Untrusted, with no workspace secret: it doesn't load, so it's left
+	// out with a warning, and the global one is still served (#22).
+	c := serveWarned(false)
 	assert.Equal(t, "databases", c.Name)
 	assert.Equal(t, ID, c.InProcess)
 	assert.Equal(t, "db", c.Prefix)
 	assert.Equal(t, []string{"*"}, c.Agents)
-	assert.Equal(t, []string{global, local}, c.Args)
-	assert.Equal(t, []string{"KITCHEN_DB", "PANTRY_DB"}, Names(c.Args))
+	assert.Equal(t, []string{global}, c.Args)
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], local+" isn't served")
 	assert.NotContains(t, c.Env, "PANTRY_DB", "an untrusted file gets no global secret")
 	assert.Equal(t, []string{"count_recipes"}, c.ReadOnlyTools, "nor runs unasked")
 
 	require.NoError(t, v.Set(config.SecretScope("", ws), "PANTRY_DB", recipes(t)))
 	c = serve(false)
-	assert.Contains(t, c.Env, "PANTRY_DB", "the workspace's own secret")
+	assert.Equal(t, []string{global, local}, c.Args)
+	assert.Equal(t, []string{local}, c.WorkspaceOnly)
+	assert.Contains(t, c.Env, workspaceOnly("PANTRY_DB"), "the workspace's own secret, kept apart")
+	assert.NotContains(t, c.Env, "PANTRY_DB")
 
 	require.NoError(t, v.Delete(config.SecretScope("", ws), "PANTRY_DB"))
 	c = serve(true)
 	assert.Equal(t, "/global/pantry.db", c.Env["PANTRY_DB"], "trusted: the global one too")
+	assert.Empty(t, c.WorkspaceOnly)
 	assert.ElementsMatch(t, []string{"count_recipes", "pantry_count"}, c.ReadOnlyTools)
+}
+
+// An untrusted workspace file that names a global connection's secret
+// gets nothing from it, though both files are served by one Toolbox: its
+// ${NAME}s are filled from the workspace's own secrets alone (N26
+// engine-sub-1 #19, CON-09).
+func TestServeKeepsGlobalSecretsFromUntrustedFiles(t *testing.T) {
+	ws := home(t)
+	_, cat, _ := catalog(t)
+	db := recipes(t)
+	global := filepath.Join(t.TempDir(), "kitchen.yaml")
+	write(t, global, kitchen)
+	// The clone's file uses the global connection's secret.
+	local := filepath.Join(t.TempDir(), "steal.yaml")
+	write(t, local, strings.ReplaceAll(pantry, "${PANTRY_DB}", "${KITCHEN_DB}"))
+	v := config.Vault("")
+	require.NoError(t, v.Set(secrets.GlobalScope, "KITCHEN_DB", db))
+
+	for _, tc := range []struct {
+		name      string
+		workspace string // the workspace's own KITCHEN_DB, "" for none
+		served    bool
+	}{
+		{"no workspace secret: not served", "", false},
+		{"the workspace's own secret", filepath.Join(t.TempDir(), "mine.db"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.workspace != "" {
+				require.NoError(t, v.Set(config.SecretScope("", ws), "KITCHEN_DB", tc.workspace))
+				t.Cleanup(func() { _ = v.Delete(config.SecretScope("", ws), "KITCHEN_DB") })
+			}
+			var warned []string
+			out := Backend{}.Serve(connectors.Serving{Category: cat, Workspace: ws, Global: []string{global}, Local: []string{local}, Warn: func(s string) { warned = append(warned, s) }})
+			require.Len(t, out, 1)
+			c := out[0]
+			assert.Equal(t, tc.served, slices.Contains(c.Args, local))
+			if !tc.served {
+				assert.Equal(t, db, c.Env["KITCHEN_DB"], "the global file's own")
+				require.Len(t, warned, 1)
+				assert.Contains(t, warned[0], workspaceOnly("KITCHEN_DB"))
+				return
+			}
+			assert.Equal(t, tc.workspace, c.Env[workspaceOnly("KITCHEN_DB")])
+			// What Toolbox reads from the clone's file: the workspace's
+			// value, never the global one.
+			cfg, err := embed.LoadWith(context.Background(), []string{local}, c.Env, rewriter(c.FileSettings, baseOf, map[string]bool{local: true}))
+			require.NoError(t, err)
+			assert.Contains(t, fmt.Sprintf("%+v", cfg.Sources["pantry"]), tc.workspace)
+			assert.NotContains(t, fmt.Sprintf("%+v", cfg.Sources["pantry"]), db)
+		})
+	}
 }
 
 // The transport starts Toolbox in-process: its tools listed and called
@@ -229,4 +297,32 @@ func TestTableInfo(t *testing.T) {
 	about, cols = tableInfo("not json")
 	assert.Empty(t, about)
 	assert.Empty(t, cols)
+}
+
+// Test, Try it and Read the tables give an untrusted workspace file the
+// workspace's own secrets alone, as serving it does (N26 engine-sub-1
+// #20, CON-09).
+func TestTestUntrustedGetsNoGlobalSecrets(t *testing.T) {
+	ws := home(t)
+	_, cat, _ := catalog(t)
+	require.NoError(t, config.Vault("").Set(secrets.GlobalScope, "KITCHEN_DB", recipes(t)))
+	c := connectors.Connection{Name: "kitchen", Category: "databases", Scope: connectors.ScopeWorkspace, Custom: true, Text: kitchen}
+	for _, tc := range []struct {
+		name    string
+		trusted bool
+		problem string
+	}{
+		{"untrusted", false, "KITCHEN_DB"},
+		{"trusted", true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := connectors.Env{Workspace: ws, Category: cat, Trusted: tc.trusted}
+			_, err := Backend{}.Test(context.Background(), env, nil, c)
+			if tc.problem != "" {
+				assert.ErrorContains(t, err, tc.problem)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }

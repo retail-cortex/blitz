@@ -18,10 +18,13 @@ package audit
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -71,6 +74,17 @@ type Entry struct {
 	Agent string `json:"agent,omitempty"`
 }
 
+// Arg is the first of keys that args holds as a string that isn't empty
+// ("" when none does): a tool call's argument, by its names.
+func Arg(args map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := args[k].(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 // Logger appends entries to <dir>/audit-YYYY-MM-DD.jsonl. A nil *Logger is a
 // valid no-op, so callers never need to check whether auditing is enabled.
 type Logger struct {
@@ -81,7 +95,15 @@ type Logger struct {
 	redactor  *redact.Redactor
 	workspace string
 	now       func() time.Time
+	// failed is set once a failure is reported.
+	failed bool
 }
+
+// stderr is where a logger's first failure is reported.
+var stderr io.Writer = os.Stderr
+
+// maxLine is the longest entry Read reads; a longer one is skipped.
+var maxLine = 4 << 20
 
 // Open creates the audit directory (owner-only) and returns a logger.
 func Open(dir string, r *redact.Redactor) (*Logger, error) {
@@ -153,8 +175,9 @@ func agentOf(ctx context.Context) (name string) {
 	return a.AgentName()
 }
 
-// Log appends an entry. Failures are reported once to stderr and otherwise
-// ignored: auditing must never break the session.
+// Log appends an entry. Its first failure (an entry that can't be
+// written as JSON, a file that can't be opened or written) is reported to
+// stderr, and later ones aren't: auditing must never break the session.
 func (l *Logger) Log(e Entry) {
 	if l == nil {
 		return
@@ -173,14 +196,16 @@ func (l *Logger) Log(e Entry) {
 	}
 
 	line, err := json.Marshal(e)
-	if err != nil {
-		return
+	if err == nil {
+		err = l.rotateLocked(e.Time)
 	}
-	if err := l.rotateLocked(e.Time); err != nil {
-		fmt.Fprintf(os.Stderr, "audit: %v\n", err)
-		return
+	if err == nil {
+		_, err = l.f.Write(append(line, '\n'))
 	}
-	_, _ = l.f.Write(append(line, '\n'))
+	if err != nil && !l.failed {
+		l.failed = true
+		fmt.Fprintf(stderr, "audit: a %s entry wasn't written (later failures aren't reported): %v\n", e.Kind, err)
+	}
 }
 
 func (l *Logger) rotateLocked(t time.Time) error {
@@ -213,21 +238,48 @@ func Read(dir, workspace string, since time.Time) []Entry {
 		if err != nil {
 			continue
 		}
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
-		for sc.Scan() {
+		eachLine(f, maxLine, func(line []byte) {
 			var e Entry
-			if json.Unmarshal(sc.Bytes(), &e) != nil || e.Time.Before(since) {
-				continue
+			if json.Unmarshal(line, &e) != nil || e.Time.Before(since) {
+				return
 			}
 			if e.Workspace != "" && e.Workspace != workspace {
-				continue
+				return
 			}
 			out = append(out, e)
-		}
+		})
 		f.Close()
 	}
 	return out
+}
+
+// eachLine calls f with each line of r up to max bytes; a longer one is
+// skipped, and the lines after it are still read (a scanner would stop
+// there, losing the rest of the day).
+func eachLine(r io.Reader, max int, f func([]byte)) {
+	br := bufio.NewReaderSize(r, 64<<10)
+	var line []byte
+	long := false
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !long {
+			if len(line)+len(chunk) > max+1 { // +1: the newline
+				long, line = true, line[:0]
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if !long && len(line) > 0 {
+			f(bytes.TrimRight(line, "\r\n"))
+		}
+		line, long = line[:0], false
+		if err != nil {
+			return
+		}
+	}
 }
 
 // Stamp identifies the log Read would read from dir since then, as its

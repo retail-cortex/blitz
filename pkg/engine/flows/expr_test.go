@@ -15,6 +15,7 @@
 package flows
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,6 +121,16 @@ func TestCallsAndRepeats(t *testing.T) {
 	assert.Equal(t, "a → b → c → a", loops["a"])
 	assert.Contains(t, loops, "c")
 	assert.NotContains(t, loops, "d", "calls into a loop, isn't in it")
+	assert.Equal(t, "c → a → b → c", loops["c"], "the loop from it")
+
+	// Shared sub-workflows in a diamond, 30 deep: walked once each (N26
+	// engine-sub-1 #31); a quick answer, and no loop.
+	var diamond []Flow
+	for i := range 30 {
+		next := fmt.Sprintf("w%d", i+1)
+		diamond = append(diamond, Flow{Name: fmt.Sprintf("w%d", i), Nodes: []Node{{ID: "l", Type: Call, Workflow: next}, {ID: "r", Type: Call, Workflow: next}}})
+	}
+	assert.Empty(t, CallLoops(diamond))
 	items, err := List(`[1, "two"]`, Vars{})
 	require.NoError(t, err)
 	assert.Equal(t, []any{float64(1), "two"}, items)

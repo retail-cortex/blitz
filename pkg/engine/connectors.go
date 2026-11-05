@@ -240,27 +240,37 @@ func (w *Workspace) MakeConnectorGlobal(ctx context.Context, category, name stri
 	return saved, nil, w.ReloadConnectors(ctx)
 }
 
-// connectorEnv is where Studio tests a connection: the secret values
-// typed.
-func (w *Workspace) connectorEnv(values map[string]string) connectors.Env {
-	return connectors.Env{Dirs: w.connectorDirs(), Values: values}
+// connectorEnv is where Studio tests c: the secret values typed, and
+// whether it may reach the global secrets. A workspace connection may
+// when its file is trusted, or when there's no file yet (the person's
+// own, typed in the form); an untrusted one gets the workspace's own
+// alone, so pressing Test on a clone's file sends it nothing more (CON-09).
+func (w *Workspace) connectorEnv(c connectors.Connection, values map[string]string) connectors.Env {
+	d := w.connectorDirs()
+	trusted := true
+	if c.Scope != connectors.ScopeGlobal && !connectors.IsOrg(c.Scope) {
+		if f := d.File(connectors.ScopeWorkspace, c.Category, c.Name); f != "" {
+			trusted = w.connectorTrusted(f)
+		}
+	}
+	return connectors.Env{Dirs: d, Values: values, Trusted: trusted}
 }
 
 // TestConnector connects to a connection as written and lists its tools.
 func (w *Workspace) TestConnector(ctx context.Context, c connectors.Connection, values map[string]string) ([]connectors.ToolInfo, error) {
-	return connectors.TestConnection(ctx, w.ConnectorCatalog(), w.connectorEnv(values), c)
+	return connectors.TestConnection(ctx, w.ConnectorCatalog(), w.connectorEnv(c, values), c)
 }
 
 // TryConnectorTool runs one of a connection's tools, as written, with
 // args.
 func (w *Workspace) TryConnectorTool(ctx context.Context, c connectors.Connection, values map[string]string, tool string, args map[string]any) (string, bool, error) {
-	return connectors.TryTool(ctx, w.ConnectorCatalog(), w.connectorEnv(values), c, tool, args)
+	return connectors.TryTool(ctx, w.ConnectorCatalog(), w.connectorEnv(c, values), c, tool, args)
 }
 
 // ReadConnectorSchema reads a connection's tables and their columns, as
 // written: connectors.ErrNoTables when it can read none.
 func (w *Workspace) ReadConnectorSchema(ctx context.Context, c connectors.Connection, values map[string]string) ([]connectors.Table, error) {
-	return connectors.ReadSchema(ctx, w.ConnectorCatalog(), w.connectorEnv(values), c)
+	return connectors.ReadSchema(ctx, w.ConnectorCatalog(), w.connectorEnv(c, values), c)
 }
 
 // ReloadConnectors serves the connection files as they are now: each

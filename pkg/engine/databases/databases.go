@@ -21,7 +21,8 @@
 // A ${NAME} in a file is the Blitz secret NAME, the workspace's own, else
 // the global one; never an environment variable. A workspace's own files
 // reach the global secrets, and their read-only tools run unasked, only
-// once its project settings are trusted.
+// once the person trusts them (saved in Studio, or the project's settings
+// trusted).
 package databases
 
 import (
@@ -96,39 +97,88 @@ func Vars(files []string, scope string, lookup func(scope, key string) (string, 
 // Serve is the category's toolbox server, when it has files: in-process,
 // its files in Args and their secrets in Env, offered to every agent; its
 // tools on read-only sources run without asking. A workspace file the
-// person hasn't trusted gets only the workspace's own secrets, and its
-// tools all ask first.
+// person hasn't trusted gets only the workspace's own secrets (its
+// ${NAME}s are kept apart in Env: WorkspaceOnly), and its tools all ask
+// first. A workspace file that doesn't load on its own is left out, and
+// Warn says why, so it can't stop the others being served.
 func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
-	files := append(slices.Clone(s.Global), s.Local...)
-	if len(files) == 0 {
-		return nil
-	}
 	lookup := config.Vault(s.Prefix).Resolve(s.SecretScope(connectors.ScopeWorkspace))
 	trusted, untrusted := s.Split()
 	vars := Vars(append(slices.Clone(s.Global), trusted...), secrets.AnyScope, lookup)
 	for k, v := range Vars(untrusted, secrets.OnlyWorkspace, lookup) {
-		if _, ok := vars[k]; !ok {
-			vars[k] = v
+		vars[workspaceOnly(k)] = v
+	}
+	only := map[string]bool{}
+	for _, f := range untrusted {
+		only[f] = true
+	}
+	keys := pathKeys(connectors.Load(s.Prefix, s.Workspace).Kinds)
+	files := slices.Clone(s.Global)
+	for _, f := range s.Local {
+		if _, err := embed.LoadWith(context.Background(), []string{f}, vars, rewriter(keys, baseOf, only)); err != nil {
+			if s.Warn != nil {
+				s.Warn(fmt.Sprintf("%s isn't served: %v", f, err))
+			}
+			delete(only, f)
+			continue
 		}
+		files = append(files, f)
+	}
+	if len(files) == 0 {
+		return nil
 	}
 	c := config.MCPServerConfig{
-		Name:         s.Category.Server,
-		Prefix:       s.Category.Prefix,
-		InProcess:    ID,
-		Args:         files,
-		Env:          vars,
-		Agents:       []string{"*"},
-		Fingerprint:  connectors.Fingerprint(files),
-		FileSettings: pathKeys(connectors.Load(s.Prefix, s.Workspace).Kinds),
+		Name:          s.Category.Server,
+		Prefix:        s.Category.Prefix,
+		InProcess:     ID,
+		Args:          files,
+		Env:           vars,
+		Agents:        []string{"*"},
+		Fingerprint:   connectors.Fingerprint(files),
+		FileSettings:  keys,
+		WorkspaceOnly: slices.Sorted(maps.Keys(only)),
 	}
-	// A file that doesn't load still makes the server: listing its tools
-	// fails, saying why, in /mcp and Studio.
-	if unasked := append(slices.Clone(s.Global), trusted...); len(unasked) > 0 {
+	// A global file that doesn't load still makes the server: listing its
+	// tools fails, saying why, in /mcp and Studio.
+	var unasked []string
+	for _, f := range files {
+		if !only[f] {
+			unasked = append(unasked, f)
+		}
+	}
+	if len(unasked) > 0 {
 		if cfg, err := loadConfig(context.Background(), unasked, vars); err == nil {
 			c.ReadOnlyTools = readOnlyTools(cfg)
 		}
 	}
 	return []config.MCPServerConfig{c}
+}
+
+// workspaceOnlyPrefix starts the Env name of a ${NAME} in a file that
+// gets only the workspace's own secrets.
+const workspaceOnlyPrefix = "BLITZ_WORKSPACE_ONLY__"
+
+// workspaceOnly is name's Env name in such a file.
+func workspaceOnly(name string) string { return workspaceOnlyPrefix + name }
+
+// keepApart renames raw's ${NAME}s to their workspace-only names, so
+// Toolbox fills them from the workspace's own secrets alone.
+func keepApart(raw []byte) []byte {
+	return placeholderRE.ReplaceAllFunc(raw, func(m []byte) []byte {
+		return append([]byte("${"+workspaceOnlyPrefix), m[2:]...)
+	})
+}
+
+// rewriter is how a file's text is read: its ${NAME}s kept apart when
+// it's one of only's, then its relative paths resolved.
+func rewriter(keys map[string][]string, base func(string) string, only map[string]bool) func(string, []byte) ([]byte, error) {
+	resolve := resolver(keys, base)
+	return func(file string, raw []byte) ([]byte, error) {
+		if only[file] {
+			raw = keepApart(raw)
+		}
+		return resolve(file, raw)
+	}
 }
 
 var (
@@ -147,7 +197,11 @@ func ReadsOnly(statement string) bool { return embed.ReadsOnly(statement) }
 // folder), and starts Toolbox, connecting to the databases; closing the
 // connection stops it.
 func Transport(c config.MCPServerConfig) mcp.Transport {
-	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: c.FileSettings, base: baseOf}
+	only := map[string]bool{}
+	for _, f := range c.WorkspaceOnly {
+		only[f] = true
+	}
+	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: c.FileSettings, base: baseOf, only: only}
 }
 
 type transport struct {
@@ -156,11 +210,13 @@ type transport struct {
 	// keys are the path settings by source type, resolved against base(file).
 	keys map[string][]string
 	base func(file string) string
+	// only are the files that get the workspace's own secrets alone.
+	only map[string]bool
 }
 
 // Connect starts Toolbox and connects to it.
 func (t *transport) Connect(ctx context.Context) (mcp.Connection, error) {
-	cfg, err := embed.LoadWith(ctx, t.files, t.vars, resolver(t.keys, t.base))
+	cfg, err := embed.LoadWith(ctx, t.files, t.vars, rewriter(t.keys, t.base, t.only))
 	if err != nil {
 		return nil, err
 	}

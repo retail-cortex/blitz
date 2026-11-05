@@ -30,6 +30,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/a2ui"
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"gopkg.in/yaml.v3"
 )
@@ -208,6 +209,12 @@ type Node struct {
 	// step that runs too long.
 	Retry   *Retry `yaml:"retry,omitempty"`
 	Timeout string `yaml:"timeout,omitempty"`
+
+	// Secrets are the {secrets:…} its own settings name, as written,
+	// before templates are filled (scope, NUL, key): the only ones put
+	// into its call, so a filled-in value (an agent's answer, a fetched
+	// page) can't name one. Nil until the step is filled.
+	Secrets []string `yaml:"-" json:"-"`
 }
 
 // Edge carries a step's output to another.
@@ -268,10 +275,11 @@ func ValidName(name string) bool { return gates.ValidName(name) }
 // IsFlow reports whether a file name is a workflow's.
 func IsFlow(file string) bool { return strings.HasSuffix(strings.ToLower(file), Suffix) }
 
-// Parse reads a workflow file; what doesn't hold is its Problem.
+// Parse reads a workflow file; what doesn't hold is its Problem. A key it
+// doesn't know is one: a link's misspelt condition would be taken always.
 func Parse(name, path string, data []byte) Flow {
 	var f Flow
-	if err := yaml.Unmarshal(data, &f); err != nil {
+	if err := frontmatter.Strict(data, &f); err != nil {
 		return Flow{Name: name, Path: path, Problem: fmt.Sprintf("the file isn't a workflow: %v", err)}
 	}
 	f.Name, f.Path = name, path
@@ -290,11 +298,13 @@ func Load(dir string) []Flow {
 			continue
 		}
 		p := filepath.Join(dir, e.Name())
+		name := e.Name()[:len(e.Name())-len(Suffix)]
 		data, err := os.ReadFile(p)
-		if err != nil {
+		if err != nil { // listed, with why, as one that doesn't parse is
+			out = append(out, Flow{Name: name, Path: p, Problem: err.Error()})
 			continue
 		}
-		out = append(out, Parse(e.Name()[:len(e.Name())-len(Suffix)], p, data))
+		out = append(out, Parse(name, p, data))
 	}
 	slices.SortFunc(out, func(a, b Flow) int { return cmp.Compare(a.Name, b.Name) })
 	return out
@@ -303,15 +313,32 @@ func Load(dir string) []Flow {
 // Check says what doesn't hold in f: its name, its steps' types and
 // settings, its edges, and loops.
 func Check(f Flow) []string {
-	var probs []string
+	var out []string
+	for _, p := range check(f) {
+		out = append(out, p.text)
+	}
+	return out
+}
+
+// problem is one of what doesn't hold in a workflow; a draft one (a step
+// not filled in yet, a coming-soon one) doesn't keep it from being saved.
+type problem struct {
+	text  string
+	draft bool
+}
+
+func check(f Flow) []problem {
+	var probs []problem
+	add := func(text string) { probs = append(probs, problem{text: text}) }
+	draft := func(text string) { probs = append(probs, problem{text: text, draft: true}) }
 	if !ValidName(f.Name) {
-		probs = append(probs, fmt.Sprintf("name %q: lowercase letters, digits and single hyphens, up to 64", f.Name))
+		add(fmt.Sprintf("name %q: lowercase letters, digits and single hyphens, up to 64", f.Name))
 	}
 	if len(f.Nodes) == 0 {
-		probs = append(probs, "it has no steps")
+		draft("it has no steps")
 	}
 	if m, err := api.ParsePermissionMode(f.Mode); err != nil || !slices.Contains(Modes, m) {
-		probs = append(probs, fmt.Sprintf("mode %q: one of auto, accept-edits, default, dont-ask or bypass", f.Mode))
+		add(fmt.Sprintf("mode %q: one of auto, accept-edits, default, dont-ask or bypass", f.Mode))
 	}
 	ids := map[string]bool{}
 	for i, n := range f.Nodes {
@@ -321,63 +348,65 @@ func Check(f Flow) []string {
 		}
 		switch {
 		case n.ID == "":
-			probs = append(probs, where+": it needs an ID")
+			add(where + ": it needs an ID")
 		case ids[n.ID]:
-			probs = append(probs, where+": another step has that ID")
+			add(where + ": another step has that ID")
 		}
 		ids[n.ID] = true
 		switch {
 		case !slices.Contains(Types, n.Type):
-			probs = append(probs, fmt.Sprintf("%s: type %q: one of %s", where, n.Type, strings.Join(Types, ", ")))
+			add(fmt.Sprintf("%s: type %q: one of %s", where, n.Type, strings.Join(Types, ", ")))
 		case slices.Contains(comingSoon, n.Type):
-			probs = append(probs, fmt.Sprintf("%s: %s steps don't run yet", where, n.Type))
+			draft(fmt.Sprintf("%s: %s steps don't run yet", where, n.Type))
 		case (n.Type == Agent || n.Type == Refine || n.Type == Browser) && strings.TrimSpace(n.Instructions) == "":
-			probs = append(probs, where+": say what it's to do")
+			draft(where + ": say what it's to do")
 		case n.Type == Extract && len(n.Fields) == 0:
-			probs = append(probs, where+": say which fields to pull out")
+			draft(where + ": say which fields to pull out")
 		case n.Type == Call && n.Workflow == "":
-			probs = append(probs, where+": name the workflow it runs")
+			draft(where + ": name the workflow it runs")
 		case n.Type == Call && n.Workflow == f.Name:
-			probs = append(probs, where+": a workflow can't run itself")
+			add(where + ": a workflow can't run itself")
 		case n.Type == HumanTask && (n.Form == nil || !n.Form.HasRoot()):
-			probs = append(probs, where+": give its form (A2UI components, one of them root)")
+			draft(where + ": give its form (A2UI components, one of them root)")
 		case n.Type == Timer && n.Wait == "" && n.Until == "":
-			probs = append(probs, where+": say how long it waits or until when")
+			draft(where + ": say how long it waits or until when")
 		case n.Type == MCPCall && (n.Server == "" || n.Tool == ""):
-			probs = append(probs, where+": name the MCP server and its tool")
+			draft(where + ": name the MCP server and its tool")
 		case (n.Type == APICall || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
-			probs = append(probs, where+": give the URL")
+			draft(where + ": give the URL")
 		case n.Type == Script && (n.Skill == "" || n.ScriptName == ""):
-			probs = append(probs, where+": name the skill and its script")
+			draft(where + ": name the skill and its script")
 		case (n.Type == ReadFile || n.Type == SaveFile) && strings.TrimSpace(n.Path) == "":
-			probs = append(probs, where+": name the file")
+			draft(where + ": name the file")
 		}
 	}
 	for i, n := range f.Nodes {
 		if n.ID == "" {
 			continue
 		}
-		probs = append(probs, checkSettings(n, i)...)
+		for _, t := range checkSettings(n, i) {
+			add(t)
+		}
 	}
 	defaults, errs := map[string]int{}, map[string]int{}
 	for _, e := range f.Edges {
 		link := fmt.Sprintf("the link %s → %s", e.From, e.To)
 		switch {
 		case !ids[e.From] || !ids[e.To]:
-			probs = append(probs, link+": no such step")
+			add(link + ": no such step")
 			continue
 		case e.From == e.To:
-			probs = append(probs, link+": a step can't feed itself")
+			add(link + ": a step can't feed itself")
 		case e.When != "" && e.If != "":
-			probs = append(probs, link+": a condition in CEL or in plain English, not both")
+			add(link + ": a condition in CEL or in plain English, not both")
 		case (e.Default || e.Error) && e.Conditional():
-			probs = append(probs, link+": a default or error link has no condition")
+			add(link + ": a default or error link has no condition")
 		case e.Default && e.Error:
-			probs = append(probs, link+": a default or an error link, not both")
+			add(link + ": a default or an error link, not both")
 		}
 		if e.When != "" {
 			if err := CheckExpr(e.When); err != nil {
-				probs = append(probs, fmt.Sprintf("%s: when: %v", link, err))
+				add(fmt.Sprintf("%s: when: %v", link, err))
 			}
 		}
 		if e.Default {
@@ -387,29 +416,29 @@ func Check(f Flow) []string {
 			errs[e.From]++
 		}
 		if from := node(f, e.From); from != nil && from.Type == Parallel && (e.Conditional() || e.Default) {
-			probs = append(probs, link+": a parallel gateway takes every link: no conditions")
+			add(link + ": a parallel gateway takes every link: no conditions")
 		}
 	}
 	for id, n := range defaults {
 		if n > 1 {
-			probs = append(probs, fmt.Sprintf("step %s: one default link at most", id))
+			add(fmt.Sprintf("step %s: one default link at most", id))
 		}
 	}
 	for id, n := range errs {
 		if n > 1 {
-			probs = append(probs, fmt.Sprintf("step %s: one error link at most", id))
+			add(fmt.Sprintf("step %s: one error link at most", id))
 		}
 	}
 	for _, n := range f.Nodes {
 		if n.Type == Exclusive || n.Type == Inclusive {
 			if out := len(Outputs(f, n.ID)); out < 2 {
-				probs = append(probs, fmt.Sprintf("step %s: a gateway needs two links out or more", n.ID))
+				draft(fmt.Sprintf("step %s: a gateway needs two links out or more", n.ID))
 			}
 		}
 	}
 	if len(probs) == 0 {
 		if _, err := Order(f); err != nil {
-			probs = append(probs, err.Error())
+			add(err.Error())
 		}
 	}
 	return probs
@@ -606,17 +635,6 @@ func Outputs(f Flow, id string) []Edge {
 	return out
 }
 
-// Inputs are the steps that feed id, in the order their links are listed.
-func Inputs(f Flow, id string) []string {
-	var out []string
-	for _, e := range f.Edges {
-		if e.To == id {
-			out = append(out, e.From)
-		}
-	}
-	return out
-}
-
 // Save writes dir/<name>.flow.yaml from f and returns its path, or the
 // problems that keep it from being saved. previous is the workflow edited
 // ("" for a new one).
@@ -650,7 +668,9 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 		return "", nil, err
 	}
 	if previous != "" && previous != f.Name {
-		os.Remove(filepath.Join(dir, previous+Suffix))
+		if err := os.Remove(filepath.Join(dir, previous+Suffix)); err != nil {
+			return target, nil, fmt.Errorf("saved %s, but the old file is still there: %w", target, err)
+		}
 	}
 	return target, nil, nil
 }
@@ -660,11 +680,10 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 // saved (a draft), and is the workflow's problem until it's fixed.
 func saveChecks(f Flow) []string {
 	var probs []string
-	for _, p := range Check(f) {
-		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "give its form") || strings.Contains(p, "how long it waits") || strings.Contains(p, "workflow it runs") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
-			continue
+	for _, p := range check(f) {
+		if !p.draft {
+			probs = append(probs, p.text)
 		}
-		probs = append(probs, p)
 	}
 	return probs
 }
@@ -681,7 +700,9 @@ func Delete(dir, name string) error {
 }
 
 // CallLoops says which workflows call themselves, through others: for
-// each workflow named in a loop, the loop ("a → b → a").
+// each workflow in a loop, the shortest loop from it ("a → b → a"). Each
+// is a breadth-first search, so workflows that share sub-workflows don't
+// make the paths walked grow exponentially.
 func CallLoops(all []Flow) map[string]string {
 	calls := map[string][]string{}
 	for _, f := range all {
@@ -692,24 +713,30 @@ func CallLoops(all []Flow) map[string]string {
 		}
 	}
 	out := map[string]string{}
-	var walk func(path []string)
-	walk = func(path []string) {
-		last := path[len(path)-1]
-		for _, next := range calls[last] {
-			if i := slices.Index(path, next); i >= 0 {
-				loop := append(slices.Clone(path[i:]), next)
-				for _, name := range path[i:] {
-					if _, ok := out[name]; !ok {
-						out[name] = strings.Join(loop, " → ")
-					}
-				}
-				continue
-			}
-			walk(append(slices.Clone(path), next))
-		}
-	}
 	for _, f := range all {
-		walk([]string{f.Name})
+		start := f.Name
+		from := map[string]string{} // a workflow reached → the one that called it
+		queue := []string{start}
+		for len(queue) > 0 && out[start] == "" {
+			cur := queue[0]
+			queue = queue[1:]
+			for _, next := range calls[cur] {
+				if next == start {
+					loop := []string{start}
+					for at := cur; at != start; at = from[at] {
+						loop = append(loop, at)
+					}
+					loop = append(loop, start)
+					slices.Reverse(loop)
+					out[start] = strings.Join(loop, " → ")
+					break
+				}
+				if _, seen := from[next]; !seen {
+					from[next] = cur
+					queue = append(queue, next)
+				}
+			}
+		}
 	}
 	return out
 }
