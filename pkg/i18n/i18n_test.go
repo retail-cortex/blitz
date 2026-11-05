@@ -15,6 +15,10 @@
 package i18n
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,6 +308,10 @@ func TestPluralCategory(t *testing.T) {
 		{"pt-PT", 0, "other"},
 		{"pt-PT", 1, "one"},
 		{"pt", 2, "other"},
+		{"pt", 0, "one"}, // a bare pt is Brazil's: its likely region
+		{"pt", 1, "one"},
+		{"pt-BR", 1, "one"},
+		{"pt-AO", 0, "other"},
 		{"en", 1, "one"},
 		{"en", 0, "other"},
 	}
@@ -357,4 +365,86 @@ func TestAppName(t *testing.T) {
 	assert.Equal(t, "Quit Blitz", l.T("desktop.appmenu.quit"))
 	assert.True(t, FixedName("desktop.update.ready"))
 	assert.False(t, FixedName("desktop.updates"), "a prefix covers only keys under it")
+}
+
+// duplicateKeys is every key an object in a JSON text repeats, read token
+// by token: decoding into a map would keep the last silently, and the
+// page's JSON.parse does the same.
+func duplicateKeys(data []byte) ([]string, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	type frame struct {
+		object bool
+		keys   map[string]bool
+		key    bool // the next string is a key
+	}
+	var stack []*frame
+	var dups []string
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return dups, nil
+		}
+		if err != nil {
+			return dups, err
+		}
+		var top *frame
+		if len(stack) > 0 {
+			top = stack[len(stack)-1]
+		}
+		if s, ok := tok.(string); ok && top != nil && top.object && top.key {
+			if top.keys[s] {
+				dups = append(dups, s)
+			}
+			top.keys[s] = true
+			top.key = false
+			continue
+		}
+		switch tok {
+		case json.Delim('{'):
+			stack = append(stack, &frame{object: true, keys: map[string]bool{}, key: true})
+			continue
+		case json.Delim('['):
+			stack = append(stack, &frame{})
+			continue
+		case json.Delim('}'), json.Delim(']'):
+			stack = stack[:len(stack)-1]
+		}
+		// A value ended: an object's next string is a key again.
+		if len(stack) > 0 && stack[len(stack)-1].object {
+			stack[len(stack)-1].key = true
+		}
+	}
+}
+
+// No locale file repeats a key: the last would win unseen, in Go and on
+// the page alike.
+func TestNoDuplicateKeys(t *testing.T) {
+	entries, err := fs.ReadDir(embedded, "locales")
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	for _, e := range entries {
+		t.Run(e.Name(), func(t *testing.T) {
+			data, err := fs.ReadFile(embedded, "locales/"+e.Name())
+			require.NoError(t, err)
+			dups, err := duplicateKeys(data)
+			require.NoError(t, err)
+			assert.Empty(t, dups, "keys given twice")
+		})
+	}
+	for _, tc := range []struct {
+		name string
+		text string
+		want []string
+	}{
+		{"none", `{"a": 1, "b": {"a": 2}, "c": [{"a": 1}, {"a": 2}]}`, nil},
+		{"top level", `{"a": 1, "b": 2, "a": 3}`, []string{"a"}},
+		{"nested", `{"messages": {"x.y": "1", "x.z": ["a", "b"], "x.y": "2"}}`, []string{"x.y"}},
+		{"a key after an object value", `{"m": {"k": 1}, "n": {}, "m": 2}`, []string{"m"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dups, err := duplicateKeys([]byte(tc.text))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, dups)
+		})
+	}
 }

@@ -41,6 +41,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/pdftext"
 	_ "golang.org/x/image/bmp" // registers the BMP decoder
 	xdraw "golang.org/x/image/draw"
@@ -128,12 +129,7 @@ func (img *Image) Summary() string {
 	return fmt.Sprintf("%s %d×%d, %s", img.Name, img.Width, img.Height, humanBytes(n))
 }
 
-func pagesLabel(n int) string {
-	if n == 1 {
-		return "1 page"
-	}
-	return fmt.Sprintf("%d pages", n)
-}
+func pagesLabel(n int) string { return i18n.N("attach.pages", n) }
 
 // clock is a length as m:ss (or h:mm:ss).
 func clock(seconds float64) string {
@@ -144,14 +140,16 @@ func clock(seconds float64) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
+// tooLarge says a file is over a limit, in the user's language.
+func tooLarge(name string, size, limit int) error {
+	return errors.New(i18n.T("attach.too_large", "name", name, "size", humanBytes(size), "limit", humanBytes(limit)))
+}
+
 // ErrNotImage is returned for data that isn't a type Blitz attaches.
 var ErrNotImage = errors.New("not a file Blitz can attach (an image, a PDF, a text file, audio or video)")
 
 // decodable are the images decoded, checked and, when too big, scaled.
 var decodable = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/bmp": true}
-
-// IsImagePath reports whether a file name has a supported image extension.
-func IsImagePath(p string) bool { return KindOf(TypeForName(p)) == KindImage }
 
 // Prepare validates data for the model, by its type (detected from the
 // bytes, the name breaking ties: Detect). Images are checked and scaled
@@ -167,7 +165,7 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 		return prepareDocument(name, data)
 	case KindText:
 		if len(data) > MaxTextBytes {
-			return nil, fmt.Errorf("%s is %s; the limit for a text file is %s", name, humanBytes(len(data)), humanBytes(MaxTextBytes))
+			return nil, errors.New(i18n.T("attach.too_large_text", "name", name, "size", humanBytes(len(data)), "limit", humanBytes(MaxTextBytes)))
 		}
 		if !looksLikeText(data) || !utf8.Valid(data) {
 			return nil, fmt.Errorf("%s: %w", name, ErrNotImage)
@@ -176,7 +174,7 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 	case KindAudio, KindVideo:
 		o = o.withDefaults()
 		if int64(len(data)) > max(o.MaxInput, MaxDocumentBytes) {
-			return nil, fmt.Errorf("%s is %s; attach a file this large from the workspace", name, humanBytes(len(data)))
+			return nil, errors.New(i18n.T("attach.too_large_media", "name", name, "size", humanBytes(len(data))))
 		}
 		img := kept(name, data, mime, KindOf(mime))
 		img.Seconds = Duration(mime, data)
@@ -185,7 +183,7 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 		if !decodable[mime] { // HEIC, HEIF
 			o = o.withDefaults()
 			if int64(len(data)) > o.MaxInput {
-				return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(len(data)), humanBytes(int(o.MaxInput)))
+				return nil, tooLarge(name, len(data), int(o.MaxInput))
 			}
 			return kept(name, data, mime, KindImage), nil
 		}
@@ -194,7 +192,7 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 	}
 	o = o.withDefaults()
 	if int64(len(data)) > o.MaxInput {
-		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(len(data)), humanBytes(int(o.MaxInput)))
+		return nil, tooLarge(name, len(data), int(o.MaxInput))
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -225,7 +223,7 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 
 func prepareDocument(name string, data []byte) (*Image, error) {
 	if len(data) > MaxDocumentBytes {
-		return nil, fmt.Errorf("%s is %s; the limit for a PDF is %s", name, humanBytes(len(data)), humanBytes(MaxDocumentBytes))
+		return nil, errors.New(i18n.T("attach.too_large_pdf", "name", name, "size", humanBytes(len(data)), "limit", humanBytes(MaxDocumentBytes)))
 	}
 	pages, err := pdftext.Pages(data)
 	if err != nil {

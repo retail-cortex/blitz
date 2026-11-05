@@ -14,7 +14,7 @@ Preparing pictures for vision models. Source: [`pkg/images`](https://github.com/
 | `Prepare(name, data, Options)` | Check, scale and re-encode an image |
 | `Store`, `OpenStore` | `~/.blitz/images`, by SHA-256, pruned after `retain_days` |
 | `Expand`, `Part`, `HasRefs` | References in and out of model requests |
-| `Mentions`, `IsImagePath` | `@image.png` mentions in a prompt |
+| `Mentions`, `IsAttachablePath` | `@image.png` mentions in a prompt |
 | `ReadClipboard` | `/paste` |
 
 ## Used by

@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
@@ -216,6 +217,7 @@ func (w *Workspace) replaceMCP(m config.MCPConfig) (bool, error) {
 	w.cfgMu.Lock()
 	defer w.cfgMu.Unlock()
 	w.cfg.MCP, w.mcpLive = m, live
+	observability.RememberSecrets(&config.Config{MCP: config.MCPConfig{Servers: live}}) // their tokens, in the process's log and telemetry too
 	return changed, nil
 }
 

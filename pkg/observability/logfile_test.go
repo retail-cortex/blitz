@@ -16,6 +16,7 @@ package observability
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -127,4 +128,34 @@ func TestFileSinkRecoversFromWriteError(t *testing.T) {
 	require.Len(t, lines, 3)
 	assert.Equal(t, float64(2), lines[1]["n"])
 	assert.Equal(t, float64(1), lines[2]["count"])
+}
+
+// Values of any kind are masked before they're written: strings and
+// errors, and maps, slices and structs by their JSON (which stays JSON).
+func TestRedactAttrAnyValue(t *testing.T) {
+	const secret = "tool-secret-value-987"
+	replace := redactAttr(redact.New(secret))
+	type env struct{ Token string }
+	cases := []struct {
+		name string
+		attr slog.Attr
+		want any
+	}{
+		{"a string", slog.String("s", "x "+secret), "x [REDACTED]"},
+		{"a map", slog.Any("args", map[string]any{"key": secret, "n": 1}), json.RawMessage(`{"key":"[REDACTED]","n":1}`)},
+		{"a slice", slog.Any("list", []string{"a", secret}), json.RawMessage(`["a","[REDACTED]"]`)},
+		{"a struct", slog.Any("env", env{Token: secret}), json.RawMessage(`{"Token":"[REDACTED]"}`)},
+		{"nothing to mask", slog.Any("plain", map[string]int{"n": 1}), map[string]int{"n": 1}},
+		{"not JSON", slog.Any("fn", func() {}), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := replace(nil, tc.attr).Value.Any()
+			if tc.want == nil {
+				assert.IsType(t, "", got)
+				return
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }

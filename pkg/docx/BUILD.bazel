@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/docx",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/i18n",
         "//pkg/markdown",
         "@com_github_yuin_goldmark//ast",
         "@com_github_yuin_goldmark//extension/ast",

@@ -57,6 +57,23 @@ describe("A2UI forms", () => {
     expect(actionOf({ id: "x", component: "Button" }, data)).toBeNull();
   });
 
+  it("fails a check calling an unknown function, or an unusable validationRegexp", () => {
+    const field = (extra: Record<string, unknown>): Component => ({ id: "f", component: "TextField", value: { path: "/form/note" }, ...extra });
+    expect(failing(field({ checks: [{ call: "requried", args: { value: { path: "/form/note" } }, message: "Say why" }] }), data)).toEqual(["Say why"]);
+    expect(failing(field({ checks: [{ call: "not", args: { value: { call: "exec" } } }] }), data)).toHaveLength(1);
+    expect(failing(field({ checks: [{ call: "or", args: { values: [true, { call: "toString" }] } }] }), data), "not an inherited name either").toHaveLength(1);
+    expect(failing(field({ checks: [{ call: "not", args: { value: { call: "required", args: { value: { path: "/form/none" } } } } }] }), data)).toEqual([]);
+    expect(failing(field({ validationRegexp: "(" }), data)).toHaveLength(1);
+    expect(failing(field({ validationRegexp: "(", value: { path: "/form/none" } }), data), "even with no answer yet").toHaveLength(1);
+    expect(failing(field({ validationRegexp: "a".repeat(201) }), data)).toHaveLength(1);
+  });
+
+  it("counts and reads values as the service does", () => {
+    expect(resolve({ call: "length", args: { value: "😀😀😀", max: 3 } }, data), "code points, not UTF-16 units").toBe(true);
+    expect(resolve({ call: "numeric", args: { value: " 5 " } }, data)).toBe(true);
+    for (const value of ["  ", true, "0x10", "Infinity", null]) expect(resolve({ call: "numeric", args: { value } }, data), String(value)).toBe(false);
+  });
+
   it("lists children, plain or from a template", () => {
     expect(childrenOf({ id: "c", component: "Column", children: ["a", "b"] }, data).map((c) => c.id)).toEqual(["a", "b"]);
     expect(childrenOf({ id: "l", component: "List", children: { path: "/items", componentId: "row" } }, data)).toEqual([

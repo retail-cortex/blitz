@@ -140,7 +140,7 @@ async function listAgents(c: CommandContext) {
 async function usageTable(c: CommandContext, which: "cost" | "context") {
   const r = await sessions.getUsage({ workspace: c.dir });
   const u = r.usage;
-  if (!u || u.calls === 0) return c.say(t("desktop.usage.none"));
+  if (!u || u.calls === 0) return c.say(t("desktop.usage.none_conversation"));
   c.say(
     which === "cost"
       ? `| | |\n|---|---|\n| ${t("desktop.usage.calls")} | ${u.calls} |\n| ${t("desktop.usage.sent")} | ${k(u.input)} (${t("desktop.usage.cached", { count: k(u.cached) })}) |\n| ${t("desktop.usage.received")} | ${k(u.output)} |\n| ${t("desktop.usage.cost")} | ${u.priced ? "$" + u.costUsd.toFixed(4) : t("desktop.usage.unpriced")} |`
@@ -500,7 +500,7 @@ export const builtinCommands: Builtin[] = [
       }
       c.say(t("desktop.search.searching", { terms }));
       const r = await workspaces.searchWeb({ workspace: c.dir, terms });
-      if (r.links.length === 0) return c.say(t("desktop.search.none", { terms }));
+      if (r.links.length === 0) return c.say(t("desktop.search.found_none", { terms }));
       c.say(`${t("desktop.search.found", { provider: r.provider })}\n\n${r.links.map((l, i) => `${i + 1}. [${l.title.replace(/[[\]]/g, "")}](${l.url})`).join("\n")}\n\n${t("desktop.search.reading")}`, "info", true);
       c.run(recorded, { prompt: r.prompt, readOnly: "search", fetchGrants: r.links.map((l) => l.url), shown: recorded });
     },

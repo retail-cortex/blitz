@@ -25,6 +25,7 @@ package docx
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"image"
@@ -38,6 +39,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/markdown"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
@@ -186,7 +188,7 @@ func (w *writer) block(n ast.Node, p para) {
 				}
 			}
 			w.codeBlock(lines, p)
-			w.note("A Mermaid diagram, kept as its code.", p)
+			w.note(i18n.T("docx.mermaid_note"), p)
 			return
 		}
 		w.codeBlock(lines, p)
@@ -278,10 +280,14 @@ func (w *writer) codeBlock(lines []string, p para) {
 	}
 }
 
+// maxListLevel is the deepest list level the numbering defines (Word's
+// 0 to 8); a list nested deeper is drawn at it.
+const maxListLevel = 8
+
 func (w *writer) list(n *ast.List, p para) {
 	level := 0
 	if p.listed {
-		level = p.level + 1
+		level = min(p.level+1, maxListLevel)
 	}
 	numID := 1 // bullets: one shared list
 	if n.IsOrdered() {
@@ -567,7 +573,7 @@ func (w *writer) picture(dest, alt string, width int) {
 func (w *writer) missing(alt, dest string) {
 	saved := w.italic
 	w.italic = true
-	w.run("[image: " + cmp(alt, dest) + "]")
+	w.run(i18n.T("docx.image_placeholder", "name", cmp.Or(alt, dest)))
 	w.italic = saved
 }
 
@@ -678,11 +684,4 @@ var blankPNG = []byte{
 	0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
 	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
 	0x42, 0x60, 0x82,
-}
-
-func cmp(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

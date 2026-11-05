@@ -66,7 +66,7 @@ bazel run //:desktop            # the desktop app (Electron, spec_038_electron) 
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
 bazel build //:mac-app          # the desktop app for this Mac; //:deb, //:pacman, //:desktop-tar on Linux; //:windows-zip anywhere
 bazel build //:archives         # the CLI release archives, every platform
-BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to http://localhost:4318; logs in ~/.blitz/logs
+BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz -- --local   # a service of its own, which exports traces to http://localhost:4318; logs in ~/.blitz/logs
 bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_filter='PyEnv|InstallsPackages'   # real Python environments (network)
 ```
 

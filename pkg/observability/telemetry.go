@@ -69,6 +69,7 @@ type Telemetry struct {
 	tp *sdktrace.TracerProvider
 	lp *sdklog.LoggerProvider
 	mp *sdkmetric.MeterProvider // nil without a metric exporter
+	r  *redact.Redactor
 }
 
 // StartTelemetry installs global trace and log providers exporting over
@@ -147,6 +148,7 @@ func NewTelemetry(cfg config.TelemetryConfig, version string, r *redact.Redactor
 		attribute.String("service.version", version),
 	)
 	t := &Telemetry{
+		r: r,
 		tp: sdktrace.NewTracerProvider(
 			sdktrace.WithResource(res),
 			sdktrace.WithBatcher(&filterExporter{next: spanExp, capture: cfg.CaptureContent, r: r}),
@@ -178,8 +180,25 @@ func (t *Telemetry) StartMetrics(reader sdkmetric.Reader) {
 		return
 	}
 	res := resource.NewSchemaless(attribute.String("service.name", ServiceName))
-	t.mp = sdkmetric.NewMeterProvider(sdkmetric.WithResource(res), sdkmetric.WithReader(reader))
+	every := sdkmetric.NewView(sdkmetric.Instrument{Name: "*"}, sdkmetric.Stream{AttributeFilter: t.safeAttribute})
+	t.mp = sdkmetric.NewMeterProvider(sdkmetric.WithResource(res), sdkmetric.WithReader(reader), sdkmetric.WithView(every))
 	otel.SetMeterProvider(t.mp)
+}
+
+// safeAttribute keeps a metric attribute unless it may carry content:
+// a string the redactor would mask, or an error.type that is an error's
+// text rather than its type (the in-process Toolbox records err.Error()
+// there, which can hold a database's or driver's message). Blitz's own
+// attributes are names, and kept.
+func (t *Telemetry) safeAttribute(kv attribute.KeyValue) bool {
+	if kv.Value.Type() != attribute.STRING {
+		return true
+	}
+	v := kv.Value.AsString()
+	if kv.Key == "error.type" && strings.ContainsAny(v, " \t\n:") {
+		return false
+	}
+	return t.r.String(v) == v && redact.Mask(v) == v
 }
 
 // LogHandler returns an slog handler that sends records to the collector,
@@ -191,7 +210,10 @@ func (t *Telemetry) LogHandler() slog.Handler {
 	return otelslog.NewHandler(ServiceName, otelslog.WithLoggerProvider(t.lp))
 }
 
-// Flush exports everything recorded so far.
+// Flush exports everything recorded so far, without shutting down. The
+// service uses Shutdown; Flush is for tests (here and in
+// pkg/engine/runtime, whose in-memory exporters Shutdown would clear) and
+// embedders of NewTelemetry.
 func (t *Telemetry) Flush(ctx context.Context) error {
 	if t == nil {
 		return nil

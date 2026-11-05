@@ -501,7 +501,7 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
         ) : (
           <p className="error-text">{t("desktop.service.no_blitzd")}</p>
         )}
-        <p className="t-body-sm muted">{t("desktop.service.waiting", { socket: status.socket })}</p>
+        <p className="t-body-sm muted">{t("desktop.service.waiting_socket", { socket: status.socket })}</p>
         {error && <p className="error-text">{error}</p>}
       </div>
     </div>

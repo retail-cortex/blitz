@@ -61,6 +61,8 @@ func (f Form) Messages(surfaceID string) []map[string]any {
 
 // FormOf reads a surface's form back from its messages (the last
 // components and the whole model they set; a path's update is applied).
+// It is test support: the round-trip check of Messages, here and in
+// pkg/service/server's tests (the page parses forms itself).
 func FormOf(messages []map[string]any) (Form, string, error) {
 	var f Form
 	surface := ""
@@ -279,12 +281,14 @@ func childrenOf(c map[string]any, data map[string]any, scope string) []child {
 	return out
 }
 
-// failing is a component's failing checks' messages.
+// failing is a component's failing checks' messages. A check that calls
+// a function outside the catalog fails (a typo mustn't wave an answer
+// through), and so does a validationRegexp that isn't a usable pattern.
 func failing(c map[string]any, data map[string]any, scope string) []string {
 	var out []string
 	checks, _ := c["checks"].([]any)
 	for _, ch := range checks {
-		if Resolve(ch, data, scope) == false {
+		if callsUnknown(ch) || Resolve(ch, data, scope) == false {
 			msg := "doesn't pass its check"
 			if m, ok := ch.(map[string]any); ok {
 				if s, ok := m["message"].(string); ok && s != "" {
@@ -295,13 +299,38 @@ func failing(c map[string]any, data map[string]any, scope string) []string {
 		}
 	}
 	if re, ok := c["validationRegexp"].(string); ok {
-		if v, ok := Resolve(c["value"], data, scope).(string); ok && v != "" {
-			if r := safeRegexp(re); r != nil && !r.MatchString(v) {
-				out = append(out, "doesn't pass its check")
-			}
+		r := safeRegexp(re)
+		v, ok := Resolve(c["value"], data, scope).(string)
+		if r == nil || ok && v != "" && !r.MatchString(v) {
+			out = append(out, "doesn't pass its check")
 		}
 	}
 	return out
+}
+
+// callsUnknown reports a dynamic value that calls, anywhere in it, a
+// function the catalog doesn't have.
+func callsUnknown(v any) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		if name, ok := x["call"].(string); ok {
+			if _, known := functions[name]; !known {
+				return true
+			}
+		}
+		for _, e := range x {
+			if callsUnknown(e) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range x {
+			if callsUnknown(e) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func eventOf(c map[string]any) map[string]any {
@@ -482,6 +511,7 @@ var functions = map[string]func(map[string]any) any{
 
 var (
 	emailRE    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	decimalRE  = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$`)
 	templateRE = regexp.MustCompile(`\$\{([^}]*)\}`)
 )
 
@@ -534,8 +564,12 @@ func number(v any) (float64, bool) {
 		f, err := x.Float64()
 		return f, err == nil
 	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
-		return f, err == nil && x != "" && !math.IsNaN(f) && !math.IsInf(f, 0)
+		x = strings.TrimSpace(x)
+		if !decimalRE.MatchString(x) { // no hex, Inf or NaN: the page reads the same
+			return 0, false
+		}
+		f, err := strconv.ParseFloat(x, 64)
+		return f, err == nil && !math.IsInf(f, 0)
 	}
 	return 0, false
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -89,4 +90,48 @@ func key(set attribute.Set) string {
 		s += string(kv.Key) + "=" + kv.Value.String()
 	}
 	return s
+}
+
+// Metric attributes that may carry content are dropped before export: an
+// error.type holding an error's text (as the in-process Toolbox records
+// it), and any string the redactor would mask. Names stay.
+func TestMetricAttributesFiltered(t *testing.T) {
+	tel := NewTelemetry(config.TelemetryConfig{Enabled: true}, "test", redact.New("db-password-1234"), tracetest.NewInMemoryExporter(), &memLogExporter{})
+	reader := sdkmetric.NewManualReader()
+	tel.StartMetrics(reader)
+	t.Cleanup(func() { tel.Shutdown(context.Background()) })
+	ctx := context.Background()
+	c, err := tel.mp.Meter("toolbox").Int64Counter("toolbox.calls")
+	require.NoError(t, err)
+	cases := []struct {
+		name string
+		kv   attribute.KeyValue
+		kept bool
+	}{
+		{"a name", attribute.String("tool", "list_tables"), true},
+		{"an error's type", attribute.String("error.type", "*pgconn.PgError"), true},
+		{"an error's text", attribute.String("error.type", `ERROR: relation "customers" does not exist`), false},
+		{"a configured secret", attribute.String("dsn", "postgres://app:db-password-1234@host/db"), false},
+		{"a key by its format", attribute.String("note", "sk-ant-TESTSECRET0123456789abcdef"), false},
+		{"a number", attribute.Int("rows", 3), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.kept, tel.safeAttribute(tc.kv))
+		})
+	}
+	c.Add(ctx, 1, metric.WithAttributes(attribute.String("tool", "q"), attribute.String("error.type", "pq: password authentication failed for user app")))
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rm))
+	var got []string
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if d, ok := m.Data.(metricdata.Sum[int64]); ok && m.Name == "toolbox.calls" {
+				for _, p := range d.DataPoints {
+					got = append(got, key(p.Attributes))
+				}
+			}
+		}
+	}
+	assert.Equal(t, []string{"tool=q"}, got, "the error's text is dropped before export")
 }
