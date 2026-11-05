@@ -60,6 +60,8 @@ func TestHelpIsGroupedAndSorted(t *testing.T) {
 		}
 		assert.True(t, slices.IsSorted(got), "%s: %v", g.title, got)
 	}
+	// /mode offers auto, a workspace's default, to go back to.
+	assert.Contains(t, out, "/mode [auto|default|", "auto missing from /mode's usage")
 	// Custom commands after the built-ins: the bundled ones, then this
 	// project's, sorted.
 	custom := out[strings.Index(out, "Custom commands"):]

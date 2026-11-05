@@ -3164,6 +3164,10 @@ message WatchHumanTasksResponse {
   // How a waiting task reaches the user with no window open ([ui]
   // task_alerts): notify, open or off.
   string alerts = 2;
+  // Always true: tells the service's list (no tasks waiting is a list
+  // too) from the empty messages the desktop's page server adds to a
+  // quiet stream as keepalives (pkg/pageserver), which the page skips.
+  bool listed = 3;
 }
 
 // Request message for WorkspaceService.AnswerHumanTask.
@@ -3402,6 +3406,8 @@ message WatchWorkflowRunsResponse {
   // Running and waiting runs, and those that ended in the last few
   // minutes, newest first (summaries).
   repeated WorkflowRun runs = 1;
+  // Always true: the page server's keepalives are empty messages.
+  bool listed = 2;
 }
 
 // Request message for WorkspaceService.StopWorkflowRun.

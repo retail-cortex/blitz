@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { htmlPicture, isDataImage, pictureSource, pictureURL, setReadPicture } from "./pictures";
 
 const png = "data:image/png;base64,iVBORw0KGgo=";
@@ -86,5 +86,25 @@ describe("pictures", () => {
     await pictureURL("/ws", "a.md", "p0.png"); // forgotten: read again
     await pictureURL("/ws", "a.md", "p69.png"); // kept
     expect(n).toBe(71);
+  });
+
+  it.each([
+    { name: "a picture no longer shown is let go", shown: false, revoked: true },
+    { name: "a picture still shown keeps its URL", shown: true, revoked: false },
+  ])("forgetting the oldest: $name", async ({ shown, revoked }) => {
+    setReadPicture(async () => ({ mime: "image/png", data: new Uint8Array([1]) }));
+    const first = await pictureURL("/ws", "a.md", "first.png");
+    const g = globalThis as { document?: unknown };
+    const had = g.document;
+    g.document = { images: shown ? [{ getAttribute: () => first }] : [] };
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    try {
+      for (let i = 0; i < 64; i++) await pictureURL("/ws", "a.md", `t${i}.png`);
+      await new Promise((r) => setTimeout(r, 0)); // the eviction's then
+      expect(revoke.mock.calls.some(([u]) => u === first)).toBe(revoked);
+    } finally {
+      revoke.mockRestore();
+      g.document = had;
+    }
   });
 });

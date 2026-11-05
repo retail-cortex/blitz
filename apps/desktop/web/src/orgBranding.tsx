@@ -53,11 +53,29 @@ function set(b: Branding | null) {
   for (const f of listeners) f();
 }
 
+/**
+ * Numbers requests, so an answer older than the newest one taken is
+ * dropped (a slow refresh mustn't undo a sign-out's); stop drops the
+ * answers still to come to what was asked so far (the asker went).
+ */
+export function inOrder() {
+  let asked = 0;
+  let taken = 0;
+  return {
+    ask: () => ++asked,
+    take: (n: number) => (n > taken ? ((taken = n), true) : false),
+    stop: () => void (taken = asked),
+  };
+}
+
+const brandingAsks = inOrder();
+
 /** Asks the service for the branding: the kept copy, or refreshed first. */
 export async function loadBranding(refresh: boolean) {
+  const n = brandingAsks.ask();
   try {
     const r = await config.getBranding({ refresh });
-    set(r.branding ?? null);
+    if (brandingAsks.take(n)) set(r.branding ?? null);
   } catch {
     // The service isn't up yet: the look stays as it is.
   }
@@ -267,16 +285,20 @@ const checkEvery = 2 * 60_000;
 export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
   const [state, setState] = useState<EnterpriseState | null>(null);
   const [checking, setChecking] = useState(false);
+  const [asks] = useState(inOrder);
   const check = useCallback(async () => {
+    const n = asks.ask();
     setChecking(true);
+    let next: EnterpriseState | null = null;
     try {
-      setState((await config.getEnterprise({ check: true })).state ?? null);
+      next = (await config.getEnterprise({ check: true })).state ?? null;
     } catch {
-      setState(null);
-    } finally {
-      setChecking(false);
+      // not connected, or the service is away: no banner
     }
-  }, []);
+    if (!asks.take(n)) return;
+    setState(next);
+    setChecking(false);
+  }, [asks]);
   useEffect(() => {
     void check();
     window.addEventListener(configChangedEvent, check);
@@ -284,8 +306,9 @@ export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
     return () => {
       window.removeEventListener(configChangedEvent, check);
       clearInterval(timer);
+      asks.stop();
     };
-  }, [check]);
+  }, [check, asks]);
   if (!state?.url) return null;
   const name = appName(current) === t("desktop.brand") ? state.name || state.url : appName(current);
   if (state.checked && !state.reachable) {
@@ -325,18 +348,25 @@ export interface OrgWorkspaces {
  */
 export function useOrgWorkspaces(): OrgWorkspaces | null {
   const [state, setState] = useState<OrgWorkspaces | null>(null);
+  const [asks] = useState(inOrder);
   const load = useCallback(async () => {
+    const n = asks.ask();
+    let next: OrgWorkspaces | null = null;
     try {
       const r = await config.listOrgWorkspaces({});
-      setState({ organization: r.organization, workspaces: r.workspaces });
+      next = { organization: r.organization, workspaces: r.workspaces };
     } catch {
-      setState(null);
+      // not connected or signed in
     }
-  }, []);
+    if (asks.take(n)) setState(next);
+  }, [asks]);
   useEffect(() => {
     void load();
     window.addEventListener(configChangedEvent, load);
-    return () => window.removeEventListener(configChangedEvent, load);
-  }, [load]);
+    return () => {
+      window.removeEventListener(configChangedEvent, load);
+      asks.stop();
+    };
+  }, [load, asks]);
   return state;
 }

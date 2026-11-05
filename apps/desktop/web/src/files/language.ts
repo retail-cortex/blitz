@@ -79,6 +79,10 @@ interface Doc {
   timer?: ReturnType<typeof setTimeout>;
   opening?: Promise<void>;
   problems?: { version: number; list: Problem[] };
+  /** Its server's state is being asked for (awaitReady). */
+  asking?: boolean;
+  /** When opening it on the service failed: tried again on a change after keepEvery. */
+  failedAt?: number;
 }
 
 // How long typing waits before the text goes to the server, and how often
@@ -96,6 +100,16 @@ export function languageSession(dir: string): LanguageSession {
     sessions.set(dir, s);
   }
   return s;
+}
+
+/**
+ * Ends the language session of the workspace in dir (it closed, or
+ * remounted on a reconnect): its documents close on the service, and the
+ * keeping and watching stop.
+ */
+export function endLanguageSession(dir: string) {
+  sessions.get(dir)?.closeAll();
+  sessions.delete(dir);
 }
 
 /** A workspace's documents on its language servers. */
@@ -161,6 +175,7 @@ export class LanguageSession {
       Object.assign(doc, { id: r.document, language: r.language, state: r.state, detail: r.detail, install: r.install, sent: doc.version });
     } catch {
       doc.state = ServerState.NONE; // no language service here (an older service, the fake): the editor goes on without
+      doc.failedAt = Date.now();
     }
     doc.opening = undefined;
     if (doc.id) {
@@ -172,14 +187,20 @@ export class LanguageSession {
   }
 
   // A server being started: its state is asked for again until it settles.
+  // After its tries, the next keep asks again (a slow server isn't left
+  // "starting" for good).
   private awaitReady(doc: Doc, tries = 30) {
+    doc.asking = true;
     setTimeout(async () => {
-      if (this.docs.get(doc.key) !== doc || tries === 0) return;
+      if (this.docs.get(doc.key) !== doc || tries === 0) {
+        doc.asking = false;
+        return;
+      }
       try {
         const st = await api.getLanguageStatus({ workspace: this.dir });
         const server = st.servers.find((s) => s.language === doc.language);
         if (server && server.state !== ServerState.STARTING && server.state !== ServerState.IDLE) {
-          Object.assign(doc, { state: server.state, detail: server.error, install: server.install });
+          Object.assign(doc, { state: server.state, detail: server.error, install: server.install, asking: false });
           this.notify(doc.key);
           return;
         }
@@ -194,6 +215,13 @@ export class LanguageSession {
   change(key: string, text: string) {
     const d = this.docs.get(key);
     if (!d || d.text === text) return;
+    // A document the service couldn't open (it was away) is tried again,
+    // at most every keepEvery.
+    if (d.failedAt !== undefined && Date.now() - d.failedAt >= keepEvery) {
+      this.docs.delete(key);
+      void this.open(d.path, text, d.block);
+      return;
+    }
     d.text = text;
     d.version++;
     clearTimeout(d.timer);
@@ -234,6 +262,12 @@ export class LanguageSession {
     if (this.docs.size === 0) this.stop();
   }
 
+  /** Closes every document. */
+  closeAll() {
+    for (const key of [...this.docs.keys()]) this.close(key);
+    this.stop();
+  }
+
   /** Renames an open document's path, and its blocks' (moved in the Files shelf). */
   moved(from: string, to: string) {
     for (const d of [...this.docs.values()]) {
@@ -268,6 +302,7 @@ export class LanguageSession {
       const r = await api.keepDocuments({ workspace: this.dir, client: clientId });
       const open = new Set(r.documents);
       for (const d of [...this.docs.values()]) if (d.id && !open.has(d.id)) await this.reopen(d);
+      for (const d of this.docs.values()) if (d.id && d.state === ServerState.STARTING && !d.asking) this.awaitReady(d, 1);
     } catch {
       // the service is away: the next keep will tell
     }
@@ -279,6 +314,9 @@ export class LanguageSession {
     while (!ctl.signal.aborted) {
       try {
         for await (const m of api.watchDiagnostics({ workspace: this.dir, client: clientId }, { signal: ctl.signal })) {
+          // The page server's keepalives are empty messages: no document
+          // (a document still opening has no ID either).
+          if (!m.document) continue;
           const d = [...this.docs.values()].find((x) => x.id === m.document);
           if (!d) continue;
           d.problems = {

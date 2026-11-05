@@ -98,6 +98,18 @@ export function mermaidConfig(theme: Theme, token: (name: (typeof mermaidTokens)
   };
 }
 
+// Mermaid is one instance, configured per theme: its renders go one at a
+// time, each configuring it for itself, so a print's theme never draws a
+// window diagram that's cached under the window's.
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Runs f after every task given before has ended (well or not). */
+export function serially<T>(f: () => Promise<T>): Promise<T> {
+  const run = queue.then(f, f);
+  queue = run.catch(() => {});
+  return run;
+}
+
 async function load(theme: Theme): Promise<Mermaid> {
   loading ??= import("mermaid").then((m) => m.default);
   const m = await loading;
@@ -114,17 +126,19 @@ export async function drawDiagram(source: string, theme: Theme): Promise<string>
   const key = `${theme}\0${source}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const m = await load(theme);
-  const id = `mermaid-${++seq}`;
-  try {
-    const { svg } = await m.render(id, source);
-    if (cache.size >= cacheMax) cache.delete(cache.keys().next().value!);
-    cache.set(key, svg);
-    return svg;
-  } finally {
-    // A failed render leaves its scratch element behind.
-    document.getElementById(`d${id}`)?.remove();
-  }
+  return serially(async () => {
+    const m = await load(theme);
+    const id = `mermaid-${++seq}`;
+    try {
+      const { svg } = await m.render(id, source);
+      if (cache.size >= cacheMax) cache.delete(cache.keys().next().value!);
+      cache.set(key, svg);
+      return svg;
+    } finally {
+      // A failed render leaves its scratch element behind.
+      document.getElementById(`d${id}`)?.remove();
+    }
+  });
 }
 
 /**
@@ -133,16 +147,18 @@ export async function drawDiagram(source: string, theme: Theme): Promise<string>
  * next diagram sets its own theme again.
  */
 export async function drawForPrint(source: string): Promise<string> {
-  loading ??= import("mermaid").then((m) => m.default);
-  const m = await loading;
-  m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14 });
-  configured = "";
-  const id = `mermaid-${++seq}`;
-  try {
-    return (await m.render(id, source)).svg;
-  } finally {
-    document.getElementById(`d${id}`)?.remove();
-  }
+  return serially(async () => {
+    loading ??= import("mermaid").then((m) => m.default);
+    const m = await loading;
+    m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14 });
+    configured = "";
+    const id = `mermaid-${++seq}`;
+    try {
+      return (await m.render(id, source)).svg;
+    } finally {
+      document.getElementById(`d${id}`)?.remove();
+    }
+  });
 }
 
 /** A diagram drawn as a picture: PNG bytes at twice its size, and its size in CSS pixels. */
@@ -158,17 +174,18 @@ export interface DiagramPicture {
  * and a canvas can't draw HTML labels), at twice its size for sharpness.
  */
 export async function drawAsPicture(source: string): Promise<DiagramPicture> {
-  loading ??= import("mermaid").then((m) => m.default);
-  const m = await loading;
-  m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14, htmlLabels: false, flowchart: { htmlLabels: false } });
-  configured = "";
-  const id = `mermaid-${++seq}`;
-  let svg: string;
-  try {
-    svg = (await m.render(id, source)).svg;
-  } finally {
-    document.getElementById(`d${id}`)?.remove();
-  }
+  const svg = await serially(async () => {
+    loading ??= import("mermaid").then((m) => m.default);
+    const m = await loading;
+    m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14, htmlLabels: false, flowchart: { htmlLabels: false } });
+    configured = "";
+    const id = `mermaid-${++seq}`;
+    try {
+      return (await m.render(id, source)).svg;
+    } finally {
+      document.getElementById(`d${id}`)?.remove();
+    }
+  });
   const { width, height } = svgSize(svg);
   const img = new Image();
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized(svg, width, height))}`;

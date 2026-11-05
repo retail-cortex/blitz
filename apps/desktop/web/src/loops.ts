@@ -19,6 +19,8 @@
 // workspace. A loop whose time comes while a turn runs waits for the next.
 // Workers are the way to run something after the window closes.
 
+import { useEffect } from "react";
+
 /** The shortest interval, as in the terminal. */
 export const minLoopMs = 60_000;
 
@@ -88,6 +90,15 @@ export function stopLoop(dir: string, n: number): boolean {
   clearInterval(loop.timer);
   byDir.set(dir, list.filter((l) => l !== loop));
   return true;
+}
+
+/**
+ * Stops dir's loops when the conversation using this goes: its workspace
+ * closed, or remounted on a reconnect, so no loop sends into a
+ * conversation that's gone.
+ */
+export function useLoopsEndWith(dir: string) {
+  useEffect(() => () => stopAllLoops(dir), [dir]);
 }
 
 /** Stops every loop (tests; a closed workspace). */

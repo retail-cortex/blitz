@@ -17,7 +17,7 @@
 import { Window } from "happy-dom";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { pageMarkdown, pagePictures } from "./webMarkdown";
-import { pageHTML, pictureName, picturesFolder, saveName, savePath } from "./webSave";
+import { pageHTML, pictureName, picturesFolder, saveName, savePath, takenNames } from "./webSave";
 
 // The Markdown is made with the window's DOM: happy-dom's here (the tests
 // otherwise run without one).
@@ -113,5 +113,15 @@ describe("the page's pictures", () => {
     expect(pictureName("http://h/photo%20of%20me.jpeg", "jpg", taken)).toBe("photo-of-me.jpg");
     expect(pictureName("http://h/", "svg", taken)).toBe("picture.svg");
     expect(pictureName("not a url", "gif", taken)).toBe("picture.gif");
+  });
+});
+
+describe("a pictures folder that's there", () => {
+  it.each([
+    { name: "a name taken on disk gets another", there: ["logo.png"], want: "logo-2.png" },
+    { name: "in any case", there: ["LOGO.PNG"], want: "logo-2.png" },
+    { name: "a free name is kept", there: ["other.png"], want: "logo.png" },
+  ])("$name", ({ there, want }) => {
+    expect(pictureName("https://shop.example/img/logo.png", "png", takenNames(there.map((name) => ({ name }))))).toBe(want);
   });
 });

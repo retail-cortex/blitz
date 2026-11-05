@@ -728,8 +728,8 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
 }
 
 // The image editor (VE-11): its address and description, for the picture
-// selected or a new one at the cursor. Pictures show as boxes, never
-// loaded (DSK-24).
+// selected or a new one at the cursor. The workspace's pictures show;
+// pictures on the web stay boxes, never loaded (DSK-24).
 
 /**
  * What inserts put in the document: images, and links to other files, a

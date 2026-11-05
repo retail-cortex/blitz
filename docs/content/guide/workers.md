@@ -167,5 +167,5 @@ From the terminal, `blitz enterprise jobs` lists the jobs the service runs in yo
 
 - **The service must be running** at the scheduled time. Missed times collapse into one run when it's back if `catch_up: once` is set, and are skipped otherwise; a laptop that's asleep may miss them.
 - **Background runs are different:** `blitz --bg "<prompt>"` runs one prompt in the service now, and waits for you to answer what it asks ([the service](../products/service.md#background-runs)). Jobs run on a schedule and never wait for an approval; only a workflow's Ask a person step pauses one, until someone answers it.
-- **A loop is lighter:** `/loop 30m <prompt>` repeats a prompt while the session or window is open, with your usual approvals.
+- **A loop is lighter:** `/loop 30m <prompt>` repeats a prompt while the terminal session runs, or while its workspace is open in the window (closing the workspace stops its loops), with your usual approvals.
 - **Project jobs and trust:** a workspace's jobs are files in the project, so read them before enabling; project hooks don't run for jobs until you trust the project's settings ([Sharing settings with your team](configuration.md#sharing-settings-with-your-team)).

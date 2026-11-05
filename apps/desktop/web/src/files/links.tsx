@@ -37,16 +37,30 @@ const Context = createContext<FileLinks | null>(null);
 export function FileLinksProvider({ dir, refresh, children }: { dir: string; refresh: number; children: ReactNode }) {
   const [known, setKnown] = useState<ReadonlySet<string>>(new Set());
   const last = useRef({ dir: "", at: 0 });
+  const shown = useRef(dir);
+  shown.current = dir;
   useEffect(() => {
-    // Again for the same workspace at most every 10 seconds: the list can be long.
-    if (last.current.dir === dir && Date.now() - last.current.at < 10_000) return;
-    last.current = { dir, at: Date.now() };
-    files.findFiles({ workspace: dir, query: "", limit: 20000 }).then(
-      (r) => setKnown(new Set(r.paths)),
-      () => {},
-    );
+    // Again for the same workspace at most every listEvery: the list can
+    // be long. A refresh sooner waits for then, so a file made in a turn
+    // still becomes a link.
+    const timer = setTimeout(() => {
+      last.current = { dir, at: Date.now() };
+      files.findFiles({ workspace: dir, query: "", limit: 20000 }).then(
+        (r) => shown.current === dir && setKnown(new Set(r.paths)),
+        () => {},
+      );
+    }, listingDelay(last.current, dir, Date.now()));
+    return () => clearTimeout(timer);
   }, [dir, refresh]);
   return <Context.Provider value={{ dir, known }}>{children}</Context.Provider>;
+}
+
+/** How often a workspace's files are listed again, at most. */
+export const listEvery = 10_000;
+
+/** How long a listing of dir waits, the last having been of last.dir at last.at: none for another workspace, else until listEvery has passed. */
+export function listingDelay(last: { dir: string; at: number }, dir: string, now: number): number {
+  return last.dir === dir ? Math.max(0, last.at + listEvery - now) : 0;
 }
 
 /** The workspace whose conversation this is and the files it has, if any. */

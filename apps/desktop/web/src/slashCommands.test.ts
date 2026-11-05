@@ -22,7 +22,7 @@ import { FileService } from "./gen/blitz/v1/file_pb";
 import { SessionService } from "./gen/blitz/v1/session_pb";
 import { WorkspaceService } from "./gen/blitz/v1/workspace_pb";
 import { stopAllLoops } from "./loops";
-import { builtin, builtinCommands, builtinsInOrder, commandGroups, exportName, goalPrompt, type CommandContext } from "./slashCommands";
+import { builtin, builtinCommands, builtinsInOrder, commandGroups, exportName, goalPrompt, searchStatusText, type CommandContext } from "./slashCommands";
 
 vi.mock("./clipboard", () => ({ copyText: vi.fn(async () => {}) }));
 vi.mock("./events", () => ({ showLicense: vi.fn(), openDocs: vi.fn() }));
@@ -86,6 +86,8 @@ beforeEach(() => {
         setLocale: (r) => (rec(`locale ${r.input}`), { tag: "es", nativeName: "Español" }),
         listCheckpoints: () => ({ checkpoints: [] }),
         undo: () => ({ restored: [] }),
+        getSearchStatus: () => ({ status: { enabled: true, items: { files: 12, documents: 2 }, scanning: true, unreadable: 1 } }),
+        reindex: () => (rec("reindex"), {}),
       });
       service(FileService, {
         writeFile: (r) => (rec(`write ${r.path} ${r.text}`), { version: "1" }),
@@ -125,6 +127,7 @@ function context(line: string, over: Partial<CommandContext> = {}) {
     busy: () => false,
     settingsChanged: () => did.push("settingsChanged"),
     openView: (v) => did.push(`view ${v}`),
+    openSearch: (q, sources) => did.push(`search ${q}${sources ? ` in ${sources.join(",")}` : ""}`),
     openSettings: (section, scope, connect) => did.push(`settings ${section} ${scope}${connect ? ` ${connect}` : ""}`),
     reload: async () => void did.push("reload"),
     refreshTotal: () => did.push("refreshTotal"),
@@ -161,6 +164,14 @@ describe("the registry", () => {
       const ga = commandGroups.indexOf(a.group), gb = commandGroups.indexOf(b.group);
       expect(ga < gb || (ga === gb && a.name < b.name), `${a.name} before ${b.name}`).toBe(true);
     }
+  });
+  it.each([
+    ["off", { enabled: false }, ["workspace search is off"]],
+    ["never scanned", { enabled: true, items: {} }, ["Last scan: not yet."]],
+    ["scanning, with problems", { enabled: true, items: { files: 3 }, scanning: true, unreadable: 2, embedError: "quota" }, ["files 3", "still being indexed", "2 items couldn't be read", "Embedding stopped: quota"]],
+  ])("says /search status as the terminal does: %s", (_, status, want) => {
+    const text = searchStatusText(status as Parameters<typeof searchStatusText>[0]);
+    for (const w of want) expect(text).toContain(w);
   });
   it("names exports as the terminal does", () => {
     expect(exportName("Fix the Cart!", "s1")).toBe("fix-the-cart.md");
@@ -270,6 +281,14 @@ describe("commands", () => {
     ["/effort high", "high", ["set effort=high"], ["settingsChanged"], []],
     ["/search session cart", "cart", [], [], []],
     ["/search", "error: usage", [], [], []],
+    ["/search web", "error: usage", [], [], []],
+    ["/search files", "error: usage", [], [], []],
+    ["/search status", "files 12, documents 2, chats 0, notes 0", [], [], []],
+    ["/search reindex", "Scanning the workspace for search.", ["reindex"], [], []],
+    ["/search cart checkout", "", [], ["search cart checkout"], []],
+    ["/search status of the cart", "", [], ["search status of the cart"], []],
+    ["/search chats cart", "", [], ["search cart in chats"], []],
+    ["/search all cart", "", [], ["search cart in files,documents,chats,notes"], []],
     ["/checkpoints", "", [], [], []],
     ["/undo", "", [], [], []],
     ["/license full", "", [], [], []],

@@ -16,9 +16,11 @@
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
+import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
-import { WorkflowRunSchema } from "./gen/blitz/v1/workspace_pb";
-import { cost, ended, failedStep, goingRun, isGoing, latestSteps, ms, progress, seeRun, tokens, took, unseenFailures } from "./workflowRuns";
+import { setTransport } from "./api";
+import { WorkflowRunSchema, WorkspaceService } from "./gen/blitz/v1/workspace_pb";
+import { cost, ended, failedStep, goingRun, isGoing, latestSteps, ms, onRunEnded, progress, runsNow, seeRun, subscribeRuns, tokens, took, unseenFailures } from "./workflowRuns";
 
 const run = (id: string, status: string, extra: MessageInitShape<typeof WorkflowRunSchema> = {}) => create(WorkflowRunSchema, { id, status, workspace: "/w", workflow: "brief", ...extra });
 
@@ -103,5 +105,41 @@ describe("workflowRuns", () => {
   it("reads a timestamp's milliseconds", () => {
     expect(ms(undefined)).toBe(0);
     expect(ms(timestampFromMs(1234))).toBe(1234);
+  });
+});
+
+describe("the runs stream", () => {
+  it("skips the page server's keepalives: the runs stay and no end is heard twice", async () => {
+    // The stream ends after its last message; the store then asks for
+    // the runs, so by then it has read every message.
+    let end!: () => void;
+    const polled = new Promise<void>((r) => (end = r));
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(WorkspaceService, {
+          async *watchWorkflowRuns() {
+            yield { runs: [{ id: "a", status: "running", workspace: "/w", workflow: "brief" }], listed: true };
+            yield {}; // a keepalive (pkg/pageserver)
+            yield { runs: [{ id: "a", status: "done", workspace: "/w", workflow: "brief" }], listed: true };
+            yield {};
+          },
+          listWorkflowRuns: () => {
+            end();
+            throw new Error("not now");
+          },
+        });
+      }),
+    );
+    const heard: string[] = [];
+    const stopEnded = onRunEnded((r) => heard.push(r.id));
+    const stop = subscribeRuns(() => {});
+    try {
+      await polled;
+      expect(runsNow().runs.map((r) => [r.id, r.status])).toEqual([["a", "done"]]);
+      expect(heard).toEqual(["a"]);
+    } finally {
+      stop();
+      stopEnded();
+    }
   });
 });

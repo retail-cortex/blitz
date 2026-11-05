@@ -21,6 +21,7 @@
 
 import { useSyncExternalStore } from "react";
 import { workspaces } from "./api";
+import { pause } from "./pause";
 import type { WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 
@@ -39,7 +40,6 @@ export interface ProcessesState {
 let state: ProcessesState = { list: [], receivedAt: 0 };
 const listeners = new Set<() => void>();
 let watching: AbortController | undefined;
-let timer: ReturnType<typeof setTimeout> | undefined;
 
 function take(list: WorkspaceProcess[]) {
   state = { list, receivedAt: Date.now() };
@@ -63,15 +63,16 @@ async function watch(ctl: AbortController) {
       // An older service (unimplemented) or a dropped stream.
     }
     if (ctl.signal.aborted) return;
+    // A list from a stream that broke may be wrong (the service went):
+    // none shows until the stream is back, as the service's runs do.
+    if (state.list.length) take([]);
     // Ends with the abort too, so a loop waiting to retry doesn't hang.
-    await new Promise<void>((res) => {
-      timer = setTimeout(res, retryMs);
-      ctl.signal.addEventListener("abort", () => res(), { once: true });
-    });
+    await pause(retryMs, ctl.signal);
   }
 }
 
-function subscribe(f: () => void) {
+/** Listens for changes to the processes, following the service while anything listens; returns what stops that. */
+export function subscribeProcesses(f: () => void) {
   listeners.add(f);
   if (listeners.size === 1) {
     watching = new AbortController();
@@ -81,14 +82,16 @@ function subscribe(f: () => void) {
     listeners.delete(f);
     if (listeners.size === 0) {
       watching?.abort();
-      clearTimeout(timer);
     }
   };
 }
 
+/** The processes now. */
+export const processesNow = (): ProcessesState => state;
+
 /** The processes running in every open workspace, kept up to date while in use. */
 export function useProcesses(): ProcessesState {
-  return useSyncExternalStore(subscribe, () => state);
+  return useSyncExternalStore(subscribeProcesses, processesNow);
 }
 
 /** Stops a process, whichever session started it (the user's own stop). */

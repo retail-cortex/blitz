@@ -19,8 +19,8 @@
 // workspace dropdown's indicators).
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { getPrefs, savePrefs } from "./desktop";
-import { setLanguage } from "./i18n";
-import { defaultPrefs, type Prefs } from "./prefs";
+import { setLanguage, t } from "./i18n";
+import { defaultPrefs, PrefsKeeper, type Prefs } from "./prefs";
 import { applyDocCss, docCssFor } from "./files/docCss";
 import { applyTheme, onSystemThemeChange, paletteOf, resolveTheme, systemIsDark, type Theme } from "./theme";
 
@@ -36,11 +36,23 @@ interface AppState {
   update: (f: (p: Prefs) => Prefs) => void;
   theme: Theme;
   activity: Record<string, Activity>;
-  setActivity: (dir: string, a: Activity) => void;
+  /** Sets what dir is doing; null forgets it (the workspace closed). */
+  setActivity: (dir: string, a: Activity | null) => void;
   prefsError: string;
   /** Registers how to stop dir's running turn (resolving once it ended). */
   registerStop: (dir: string, stop: (() => Promise<void>) | null) => void;
   stop: (dir: string) => Promise<void>;
+}
+
+/** all with dir's activity set to a (null: dropped), the same object when nothing changed. */
+export function nextActivity(all: Record<string, Activity>, dir: string, a: Activity | null): Record<string, Activity> {
+  if (!a) {
+    if (!(dir in all)) return all;
+    const rest = { ...all };
+    delete rest[dir];
+    return rest;
+  }
+  return all[dir]?.running === a.running && all[dir]?.waiting === a.waiting ? all : { ...all, [dir]: a };
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -55,14 +67,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [prefsError, setPrefsError] = useState("");
   const [systemDark, setSystemDark] = useState(systemIsDark);
   const [activity, setAllActivity] = useState<Record<string, Activity>>({});
-  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  // Holds changes until the preferences load, and saves nothing when
+  // they couldn't be read (so the defaults never replace the file).
+  const [keeper] = useState(() => new PrefsKeeper({ show: setPrefs, save: savePrefs, error: (e) => setPrefsError(String(e)) }));
 
   useEffect(() => {
     getPrefs()
-      .then(setPrefs)
-      .catch((e) => setPrefsError(String(e)))
+      .then(
+        (p) => keeper.loaded(p),
+        (e) => keeper.unread(t("desktop.app.prefs_unread", { error: String(e) })),
+      )
       .finally(() => setLoaded(true));
-  }, []);
+  }, [keeper]);
   useEffect(() => onSystemThemeChange(setSystemDark), []);
 
   const theme = resolveTheme(prefs.theme, systemDark);
@@ -75,16 +91,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => applyDocCss(docCss), [docCss]);
 
   // Saves run one after another, so the file ends with the latest.
-  const update = useCallback((f: (p: Prefs) => Prefs) => {
-    setPrefs((p) => {
-      const next = f(p);
-      saving.current = saving.current.then(() => savePrefs(next).catch((e) => setPrefsError(String(e))));
-      return next;
-    });
-  }, []);
+  const update = useCallback((f: (p: Prefs) => Prefs) => keeper.update(f), [keeper]);
 
-  const setActivity = useCallback((dir: string, a: Activity) => {
-    setAllActivity((all) => (all[dir]?.running === a.running && all[dir]?.waiting === a.waiting ? all : { ...all, [dir]: a }));
+  const setActivity = useCallback((dir: string, a: Activity | null) => {
+    setAllActivity((all) => nextActivity(all, dir, a));
   }, []);
 
   const stoppers = useRef(new Map<string, () => Promise<void>>());

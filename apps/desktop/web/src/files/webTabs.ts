@@ -25,6 +25,9 @@ export const webPath = (id: string) => `web:${id}`;
 /** Whether an editor tab's path is a web page's. */
 export const isWebPath = (path: string) => path.startsWith("web:");
 
+/** The previews the page has opened in the window, by ID: a tab shown again keeps its page; a closed tab's leaves. */
+export const openedPreviews = new Set<string>();
+
 /** A web tab's preview ID, from its path. */
 export const webId = (path: string) => path.slice("web:".length);
 

@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { fenceFile, servedExtension } from "./codeBlock";
+import { fenceFile, OnePicker, servedExtension } from "./codeBlock";
 
 describe("a code block's language", () => {
   it.each([
@@ -34,5 +34,29 @@ describe("a code block's language", () => {
   ])("%s is %s, served as %j", (lang, file, ext) => {
     expect(fenceFile(lang)).toBe(file);
     expect(servedExtension(lang)).toBe(ext);
+  });
+});
+
+describe("the language picker", () => {
+  it.each([
+    { name: "its own view's end closes it", ender: "a", closed: ["a"] },
+    { name: "another view's end leaves it open", ender: "b", closed: [] },
+  ])("$name", ({ ender, closed }) => {
+    const p = new OnePicker();
+    const got: string[] = [];
+    p.show("a", () => got.push("a"));
+    p.closeFor(ender);
+    expect(got).toEqual(closed);
+  });
+  it("opens one at a time, and forgets one that closed itself", () => {
+    const p = new OnePicker();
+    const got: string[] = [];
+    const a = () => got.push("a");
+    p.show("a", a);
+    p.show("b", () => got.push("b"));
+    expect(got).toEqual(["a"]);
+    p.closed(a); // not the open one: b stays
+    p.closeAny();
+    expect(got).toEqual(["a", "b"]);
   });
 });

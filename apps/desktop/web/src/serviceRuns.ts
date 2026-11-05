@@ -21,6 +21,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { config } from "./api";
+import { pause } from "./pause";
 import type { GoingServiceRun, ServiceRunChange } from "./gen/blitz/v1/config_pb";
 
 /** How long to wait before following the stream again after it ends (not connected, signed out, an older service). */
@@ -37,7 +38,6 @@ export interface ServiceRunsState {
 let state: ServiceRunsState = { runs: [], changes: 0 };
 const listeners = new Set<() => void>();
 let watching: AbortController | undefined;
-let timer: ReturnType<typeof setTimeout> | undefined;
 
 function take(runs: GoingServiceRun[], change?: ServiceRunChange) {
   state = { runs, change: change ?? state.change, changes: state.changes + (change ? 1 : 0) };
@@ -55,10 +55,7 @@ async function watch(ctl: AbortController) {
     }
     if (ctl.signal.aborted) return;
     if (state.runs.length) take([]);
-    await new Promise<void>((res) => {
-      timer = setTimeout(res, retryMs);
-      ctl.signal.addEventListener("abort", () => res(), { once: true });
-    });
+    await pause(retryMs, ctl.signal);
   }
 }
 
@@ -72,7 +69,6 @@ function subscribe(f: () => void) {
     listeners.delete(f);
     if (listeners.size === 0) {
       watching?.abort();
-      clearTimeout(timer);
     }
   };
 }

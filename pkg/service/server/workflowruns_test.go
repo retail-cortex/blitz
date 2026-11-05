@@ -57,12 +57,14 @@ func TestWorkflowRunsOverTheAPI(t *testing.T) {
 	defer runs.Close()
 	require.True(t, runs.Receive(), "%v", runs.Err())
 	assert.Empty(t, runs.Msg().Runs)
+	assert.True(t, runs.Msg().Listed, "no runs is a list too, told from a keepalive")
 
 	started, err := c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: "/slow now", Command: true}}))
 	require.NoError(t, err)
 	var run *pb.WorkflowRun
 	for run == nil || len(run.Steps) < 2 {
 		require.True(t, runs.Receive(), "%v", runs.Err())
+		require.True(t, runs.Msg().Listed, "every list says so")
 		if len(runs.Msg().Runs) > 0 {
 			run = runs.Msg().Runs[0]
 		}

@@ -24,10 +24,10 @@ import { onPreviewState, previewClose } from "../desktop";
 import { errorMeta, message, reason } from "../errors";
 import { secretCompletion } from "./secretCompletion";
 import { fileState, languageSupport } from "./codemirror";
-import { languageExtension, languageSession, type LanguageHooks } from "./language";
+import { endLanguageSession, languageExtension, languageSession, type LanguageHooks } from "./language";
 import { afterClosing } from "./tabMenu";
 import { nameOf } from "./tree";
-import { isWebPath, newWebId, webId, webPath, webTabName } from "./webTabs";
+import { isWebPath, newWebId, openedPreviews, webId, webPath, webTabName } from "./webTabs";
 
 /** An open file: its tab, the version its text is based on, and what the editor knows about it. */
 export interface Tab {
@@ -109,6 +109,12 @@ export interface EditorModel {
   dirtyCount: number;
 }
 
+// Closes a web tab's page in the window, and forgets it was opened.
+function closePreview(id: string) {
+  openedPreviews.delete(id);
+  void previewClose(id);
+}
+
 /**
  * A workspace's open files: loading, saving (refused over someone else's
  * change), reloading, and noticing changes made elsewhere.
@@ -150,11 +156,19 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [dir, patch],
   );
 
+  // Loads path's text; with keepEdits (a reload because the file changed
+  // on disk), edits made while it was read are kept, the change on disk
+  // then shown as a conflict, never dropped.
   const load = useCallback(
-    async (path: string) => {
+    async (path: string, keepEdits = false) => {
       try {
         const f = await files.readFile({ workspace: dir, path });
         const info = { version: f.version, size: Number(f.size), binary: f.binary, tooLarge: f.tooLarge, agentRule: f.agentRule };
+        const now = states.current.get(path)?.doc.toString();
+        if (keepEdits && now !== undefined && now !== saved.current.get(path)) {
+          patch(path, { dirty: true, disk: "changed" });
+          return;
+        }
         if (!f.binary && !f.tooLarge) await makeState(path, f.text);
         patch(path, { ...info, loading: false, error: undefined, dirty: false, disk: undefined, conflict: undefined });
       } catch (e) {
@@ -194,7 +208,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     (paths: readonly string[]) => {
       const closed = new Set(paths);
       for (const path of closed) {
-        if (isWebPath(path)) void previewClose(webId(path));
+        if (isWebPath(path)) closePreview(webId(path));
         languageSession(dir).close(path);
         states.current.delete(path);
         saved.current.delete(path);
@@ -251,7 +265,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       const v = versions[t.path] ?? "";
       if (v === t.version || (t.conflict !== undefined && v === t.conflict)) continue;
       if (v === "") patch(t.path, { disk: "deleted" });
-      else if (!t.dirty) void load(t.path);
+      else if (!t.dirty) void load(t.path, true);
       else patch(t.path, { disk: "changed" });
     }
   }, [dir, load, patch]);
@@ -303,6 +317,16 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
         }),
       ),
     [],
+  );
+
+  // A closed (or remounted) workspace's web pages and language documents
+  // go with it, rather than running on unseen.
+  useEffect(
+    () => () => {
+      for (const t of tabsRef.current) if (t.web) closePreview(webId(t.path));
+      endLanguageSession(dir);
+    },
+    [dir],
   );
 
   // The window says when a web tab's page changes (its address, title, loading).

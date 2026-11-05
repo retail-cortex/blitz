@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
+import { createRouterTransport } from "@connectrpc/connect";
+import { Window } from "happy-dom";
 import { describe, expect, it } from "vitest";
-import { accentRules, appName, contrast, logoFor } from "./orgBranding";
-import type { Branding } from "./gen/blitz/v1/config_pb";
+import { setTransport } from "./api";
+import { accentRules, appName, contrast, inOrder, loadBranding, logoFor } from "./orgBranding";
+import { ConfigService, type Branding } from "./gen/blitz/v1/config_pb";
 
 describe("the organization's branding", () => {
   it("measures contrast as WCAG does", () => {
@@ -54,5 +57,46 @@ describe("the organization's branding", () => {
     expect(logoFor(org, true)).toBe("data:dark");
     expect(logoFor({ ...org, images: { "icon.png": "data:icon" } } as unknown as Branding, true)).toBe("data:icon");
     expect(logoFor(null, false)).toBe("");
+  });
+});
+
+describe("answers in order", () => {
+  it.each([
+    { name: "in order: both taken", answers: [1, 2], want: [1, 2] },
+    { name: "the older last: dropped", answers: [2, 1], want: [2] },
+  ])("$name", ({ answers, want }) => {
+    const o = inOrder();
+    o.ask();
+    o.ask();
+    expect(answers.filter((n) => o.take(n))).toEqual(want);
+  });
+  it("drops what was asked before a stop, not what's asked after", () => {
+    const o = inOrder();
+    const before = o.ask();
+    o.stop();
+    const after = o.ask();
+    expect(o.take(before)).toBe(false);
+    expect(o.take(after)).toBe(true);
+  });
+
+  it("a slow refresh doesn't undo a sign-out's answer", async () => {
+    let release!: () => void;
+    const slow = new Promise<void>((r) => (release = r));
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(ConfigService, {
+          // The organization's look, slowly; then signed out, at once.
+          getBranding: async (r) => (r.refresh ? (await slow, { branding: { name: "Acme" } }) : {}),
+        });
+      }),
+    );
+    // The look goes on the page: a DOM for it.
+    const g = globalThis as { document?: Document };
+    g.document ??= new Window().document as unknown as Document;
+    const first = loadBranding(true);
+    await loadBranding(false);
+    release();
+    await first;
+    expect(g.document!.title).not.toContain("Acme");
   });
 });

@@ -77,7 +77,7 @@ describe("commands", () => {
     const help = helpText(all);
     expect(help).toContain("`/db:migrate <name>`");
     expect(help).toContain("`/undo [--force]`");
-    expect(help).toContain("`/mode [default\\|accept-edits\\|plan\\|dont-ask\\|bypass]`"); // pipes escaped in the table
+    expect(help).toContain("`/mode [auto\\|default\\|accept-edits\\|plan\\|dont-ask\\|bypass]`"); // pipes escaped in the table
     expect(builtins().every((b) => help.includes(`/${b.name}`))).toBe(true);
   });
 });

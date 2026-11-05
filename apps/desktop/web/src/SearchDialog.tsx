@@ -33,14 +33,15 @@ import { Chip, Icon, IconButton, Segmented, useModal } from "@blitz/webui";
  * Search by default in to start, else files and PDFs). Each hit shows where it is and its passage, the words marked;
  * Enter or a click opens it: a file at its line, a chat, a plan.
  */
-export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string; initialQuery?: string; onClose: () => void }) {
+export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }: { dir: string; initialQuery?: string; initialSources?: SearchSource[]; onClose: () => void }) {
   const [query, setQuery] = useState(initialQuery);
   // Hidden files (dotfiles, ones git ignores) only when the Files shelf shows them.
   const hidden = useApp().prefs.show_hidden;
-  // The sources: the workspace's defaults, once its first status says
-  // them, unless a chip was clicked first (chosen).
-  const [sources, setSources] = useState<SearchSource[]>(startSources);
-  const chosen = useRef(false);
+  // The sources: those asked for (/search web), else the workspace's
+  // defaults, once its first status says them, unless a chip was clicked
+  // first (chosen).
+  const [sources, setSources] = useState<SearchSource[]>(() => (initialSources?.length ? initialSources : startSources()));
+  const chosen = useRef(Boolean(initialSources?.length));
   // How to search: by meaning too, once an embedding model is set.
   const [mode, setMode] = useState<"hybrid" | "keyword" | "semantic">("hybrid");
   const [hits, setHits] = useState<SearchHit[]>([]);

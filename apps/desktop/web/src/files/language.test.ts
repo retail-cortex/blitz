@@ -190,3 +190,64 @@ describe("a language session", () => {
   });
 });
 
+describe("a language server slow to start, or a service briefly away", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("asks again after its tries, on the next keep", async () => {
+    vi.useFakeTimers();
+    let ready = false;
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(LanguageService, {
+          openDocument: () => ({ document: "doc-1", language: "go", state: ServerState.STARTING }),
+          getLanguageStatus: () => ({ servers: [{ language: "go", state: ready ? ServerState.READY : ServerState.STARTING }] }),
+          keepDocuments: () => ({ documents: ["doc-1"] }),
+          closeDocument: () => ({}),
+          async *watchDiagnostics() {},
+        });
+      }),
+    );
+    const s = new LanguageSession("/ws");
+    await s.open("main.go", "package main\n");
+    await vi.advanceTimersByTimeAsync(31_000); // every try: still starting
+    expect(s.status("main.go")?.state).toBe(ServerState.STARTING);
+    ready = true;
+    await vi.advanceTimersByTimeAsync(31_000); // the next keep asks again
+    expect(s.status("main.go")?.state).toBe(ServerState.READY);
+    s.close("main.go");
+  });
+
+  it("opens a document again on a change, once the service is back", async () => {
+    vi.useFakeTimers();
+    let up = false;
+    const opened: string[] = [];
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(LanguageService, {
+          openDocument: (r) => {
+            if (!up) throw new Error("away");
+            opened.push(r.text);
+            return { document: "doc-1", language: "go", state: ServerState.READY };
+          },
+          changeDocument: () => ({}),
+          keepDocuments: () => ({ documents: ["doc-1"] }),
+          closeDocument: () => ({}),
+          async *watchDiagnostics() {},
+        });
+      }),
+    );
+    const s = new LanguageSession("/ws");
+    await s.open("main.go", "v1\n");
+    expect(s.status("main.go")).toBeUndefined();
+    up = true;
+    s.change("main.go", "v2\n"); // too soon: not tried again
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(opened).toEqual([]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    s.change("main.go", "v3\n");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(opened).toEqual(["v3\n"]);
+    expect(s.status("main.go")?.state).toBe(ServerState.READY);
+    s.close("main.go");
+  });
+});

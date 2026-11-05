@@ -234,3 +234,68 @@ export function moveWorkspace(p: Prefs, dir: string, to: number): Prefs {
   open.splice(Math.max(0, Math.min(to, open.length)), 0, w);
   return { ...p, workspaces: [...open, ...recentWorkspaces(p)] };
 }
+
+/** What a PrefsKeeper does with the preferences: shows them, saves them, and tells of an error. */
+export interface PrefsIO {
+  show: (p: Prefs) => void;
+  save: (p: Prefs) => Promise<unknown>;
+  error: (e: unknown) => void;
+}
+
+/**
+ * Keeps the window's preferences as they change, one save after another so
+ * the file ends with the latest. Nothing is saved before they've loaded: a
+ * change made sooner (a blitz:// link opening a workspace at launch) waits
+ * and is made to what loads. When they couldn't be read, nothing is saved
+ * at all, so the defaults never replace the user's file.
+ */
+export class PrefsKeeper {
+  private current: Prefs = defaultPrefs;
+  private phase: "loading" | "loaded" | "unread" = "loading";
+  private waiting: ((p: Prefs) => Prefs)[] = [];
+  private saving: Promise<unknown> = Promise.resolve();
+
+  constructor(private io: PrefsIO) {}
+
+  /** The preferences now. */
+  get prefs(): Prefs {
+    return this.current;
+  }
+
+  /** Takes the preferences loaded, with the changes made while they loaded (then saved). */
+  loaded(p: Prefs) {
+    if (this.phase !== "loading") return;
+    this.phase = "loaded";
+    const waiting = this.waiting;
+    this.waiting = [];
+    this.current = waiting.reduce((acc, f) => f(acc), p);
+    this.io.show(this.current);
+    if (waiting.length) this.save();
+  }
+
+  /** The preferences couldn't be read: changes are kept for this window only. */
+  unread(e: unknown) {
+    if (this.phase !== "loading") return;
+    this.phase = "unread";
+    this.waiting = [];
+    this.io.error(e);
+  }
+
+  /** Changes the preferences: shown at once, saved once they've loaded. */
+  update(f: (p: Prefs) => Prefs) {
+    if (this.phase === "loading") this.waiting.push(f);
+    this.current = f(this.current);
+    this.io.show(this.current);
+    if (this.phase === "loaded") this.save();
+  }
+
+  /** Resolves once the saves asked for so far are done. */
+  saved(): Promise<unknown> {
+    return this.saving;
+  }
+
+  private save() {
+    const next = this.current;
+    this.saving = this.saving.then(() => this.io.save(next).catch((e) => this.io.error(e)));
+  }
+}

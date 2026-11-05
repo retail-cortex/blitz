@@ -109,8 +109,32 @@ function isMermaidLang(lang: unknown): boolean {
   return typeof lang === "string" && lang.trim().toLowerCase() === "mermaid";
 }
 
-// The open picker's close, so one opens at a time.
-let closePicker: (() => void) | undefined;
+/** Keeps one floating picker open at a time, and which view's it is. */
+export class OnePicker {
+  private open?: { owner: unknown; close: () => void };
+  /** Shows owner's picker (close closes it), closing any other first. */
+  show(owner: unknown, close: () => void) {
+    this.closeAny();
+    this.open = { owner, close };
+  }
+  /** Closes the picker open, whoever's it is. */
+  closeAny() {
+    const o = this.open;
+    this.open = undefined;
+    o?.close();
+  }
+  /** Closes owner's picker, never another view's (a block re-drawn above). */
+  closeFor(owner: unknown) {
+    if (this.open?.owner === owner) this.closeAny();
+  }
+  /** Forgets close's picker once it closed itself. */
+  closed(close: () => void) {
+    if (this.open?.close === close) this.open = undefined;
+  }
+}
+
+// The code blocks' language picker.
+const picker = new OnePicker();
 
 // The raw blocks the catalogs name; the rest are "other".
 const rawKinds = new Set(["frontmatter", "html", "definition", "footnote"]);
@@ -400,7 +424,7 @@ export class CodeBlockView implements NodeView {
   // The language picker: a search over the usual languages, or any name
   // typed (the fence's info string). Chosen, it's the block's language.
   private pickLanguage() {
-    closePicker?.();
+    picker.closeAny();
     const at = this.label.getBoundingClientRect();
     const box = document.createElement("div");
     box.className = "menu floating visual-lang-picker";
@@ -444,7 +468,7 @@ export class CodeBlockView implements NodeView {
     const close = () => {
       box.remove();
       document.removeEventListener("mousedown", outside, true);
-      closePicker = undefined;
+      picker.closed(close);
     };
     const choose = (id: string) => {
       close();
@@ -474,7 +498,7 @@ export class CodeBlockView implements NodeView {
     };
     document.body.append(box);
     document.addEventListener("mousedown", outside, true);
-    closePicker = close;
+    picker.show(this, close);
     index = Math.max(0, languages().findIndex(([id]) => id === current));
     render();
     const r = box.getBoundingClientRect();
@@ -550,7 +574,7 @@ export class CodeBlockView implements NodeView {
   }
 
   destroy() {
-    closePicker?.();
+    picker.closeFor(this);
     clearTimeout(this.drawTimer);
     this.pz?.destroy();
     this.cm.destroy();

@@ -104,6 +104,7 @@ The line: open source holds the interfaces, their open-source defaults and the c
 ## 7. Branding and terms
 
 - **EN-50** *Built (2026-11-02; `pkg/enterprise`, its `RefreshBranding`; blitzd's `GetBranding`). The envelope is `{"kid", "payload", "signature"}`: the payload's JSON in base64url, and an Ed25519 signature, base64url, of `blitz-enterprise/v1`, NUL, the key ID, NUL and the payload, checked against `/api/v1/info`'s `catalog_keys` (base64), asked again once for a key published since. The desktop app asks for it at start, every 10 minutes and when the settings change.* With `branding` listed, `GET <url>/api/v1/branding` (with `If-None-Match`) gives:
+- **EN-50** *2026-11-05 (scan N26-desktop-3#17: a slow refresh answering after a sign-out's put the organization's look back for ten minutes).* The window takes the branding, the organization banner's state and the organization's workspaces in the order they were asked: an answer older than one already taken is dropped, as is one that comes after its view went.
   - the app's name and short name;
   - a logo and an icon, each for light and dark;
   - two accent colours, one for the light theme and one for the dark (no one colour reads well on both);

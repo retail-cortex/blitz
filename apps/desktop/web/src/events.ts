@@ -18,6 +18,7 @@
 // palette asks a workspace's composer to take text or run a command, or a
 // workspace to show a view.
 import type { WebBlock } from "./attachments";
+import type { SearchSource } from "./search";
 
 /** The event that asks a workspace's composer to take text, or run a command. */
 export const composeEvent = "blitz:compose";
@@ -264,9 +265,9 @@ export function goToFile(detail: { dir: string }) {
 
 /** The event that opens workspace search. */
 export const searchWorkspaceEvent = "blitz:search-workspace";
-/** Opens workspace search on the active workspace, with query typed. */
-export function searchWorkspace(query = "") {
-  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query } }));
+/** Opens workspace search on the active workspace, with query typed, on sources (undefined: the usual ones). */
+export function searchWorkspace(query = "", sources?: SearchSource[]) {
+  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query, sources } }));
 }
 
 /** The event that says a workspace's files may have changed. */

@@ -708,6 +708,7 @@
     "desktop.agents.title": "**Agents**",
     "desktop.app.closed": "{name} fermé.",
     "desktop.app.lost": "Le service Blitz ne répond pas. Reconnexion…",
+    "desktop.app.prefs_unread": "Impossible de lire vos paramètres ({error}). Les changements faits maintenant durent jusqu’à ce que vous quittiez et ne sont pas enregistrés : votre fichier de paramètres reste tel quel.",
     "desktop.app.reconnected": "Reconnecté au service Blitz.",
     "desktop.app.starting": "Démarrage…",
     "desktop.app.stop_close": "Arrêter et fermer",
