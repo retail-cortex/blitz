@@ -108,3 +108,33 @@ func TestToolPaths(t *testing.T) {
 		})
 	}
 }
+
+// A sub-agent's session ends when it returns: what it was handed isn't
+// kept for good, one entry per call (N26 engine-runtime#21).
+func TestScopedRulesOfASubagentAreForgotten(t *testing.T) {
+	ws := t.TempDir()
+	for name, body := range map[string]string{"a.go": "package a", ".blitz/rules/go.md": "---\npaths: [\"**/*.go\"]\n---\nUse tabs in Go files."} {
+		p := filepath.Join(ws, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	rules := memory.LoadAll(ws, config.MemoryConfig{Enabled: true, RuleDirs: []string{".blitz/rules"}}).Rules
+	require.Len(t, rules, 1)
+	read := toolCall("read_file", map[string]any{"path": "a.go"})
+	sub := NewMockLLM("sub", read, textContent("read it"), read, textContent("read it again"))
+	f := newEngineWith(t, fixtureOpts{
+		cfg:  func(c *config.Config) { c.Tools.WorkspaceDir = ws },
+		opts: []Option{WithScopedRules(rules), WithAgentModel("reader", sub)},
+	})
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "reader.md"), []byte("---\nname: reader\ndescription: test\ntools: [read_file]\n---\nRead."), 0o644))
+	require.NoError(t, f.eng.agentReg.LoadExternalAgents(dir))
+	ctx := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	for range 2 {
+		_, err := f.eng.InvokeSubagent(ctx, "reader", "read a.go")
+		require.NoError(t, err)
+	}
+	f.eng.scoped.mu.Lock()
+	defer f.eng.scoped.mu.Unlock()
+	assert.Empty(t, f.eng.scoped.given, "sub-agent sessions kept")
+}

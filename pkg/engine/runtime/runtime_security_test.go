@@ -247,6 +247,7 @@ func TestInvokeSubagentDirect(t *testing.T) {
 	deep := context.WithValue(context.Background(), subagentDepthKey{}, MaxSubagentDepth)
 	_, err = f.eng.InvokeSubagent(deep, "helios", "x")
 	assert.ErrorIs(t, err, ErrSubagentDepth, "expected depth error, got %v", err)
+	assert.ErrorContains(t, err, "can't delegate; do the work itself", "the error says what to do")
 }
 
 func TestInvokeAgentToolWiredEndToEnd(t *testing.T) {

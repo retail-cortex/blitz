@@ -54,6 +54,7 @@ func TestStalledBodyFails(t *testing.T) {
 	start := time.Now()
 	_, err = io.ReadAll(resp.Body)
 	require.ErrorIs(t, err, ErrStalled, "want ErrStalled, got %v", err)
+	assert.ErrorContains(t, err, "llm.stall_timeout_seconds", "names the setting (N26 engine-runtime#19)")
 	d := time.Since(start)
 	require.LessOrEqual(t, d, 2*time.Second, "stall detected after %v", d)
 }

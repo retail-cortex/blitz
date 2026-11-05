@@ -339,7 +339,17 @@ func TestImageWrappersEdgeCases(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSupportsDocuments(t *testing.T) {
+// Which models read a PDF as it is (inline), not as its text: AcceptedMedia
+// decides (spec_011_images IMG-51a).
+func TestModelsThatReadPDFs(t *testing.T) {
+	readsPDF := func(provider, model string) bool {
+		for _, a := range AcceptedMedia(provider, model, false) {
+			if a.Kind == images.KindDocument {
+				return a.Inline > 0
+			}
+		}
+		return false
+	}
 	tests := []struct {
 		provider, model string
 		want            bool
@@ -355,7 +365,7 @@ func TestSupportsDocuments(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.provider+"/"+tc.model, func(t *testing.T) {
-			assert.Equal(t, tc.want, SupportsDocuments(tc.provider, tc.model))
+			assert.Equal(t, tc.want, readsPDF(tc.provider, tc.model))
 		})
 	}
 }

@@ -3809,6 +3809,7 @@
     "tasks.state.failed": "échouée",
     "tasks.state.stopped": "arrêtée",
     "tasks.ended": "La tâche {id} ({agent}) est {state} après {took} : {summary}",
+    "tasks.cost_unpriced": "La tâche {id} ({agent}) a une limite de coût de {limit} $, mais son modèle {model} n’a pas de prix : la limite ne peut pas l’arrêter. Ajoutez un prix sous [pricing] ou surveillez ses appels.",
     "exit.tasks_running.one": "{count} tâche en arrière-plan toujours en cours :",
     "exit.tasks_running.other": "{count} tâches en arrière-plan toujours en cours :",
     "exit.tasks_stopped.one": "{count} tâche en arrière-plan arrêtée.",

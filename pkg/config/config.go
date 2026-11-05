@@ -181,6 +181,7 @@ type LLMConfig struct {
 	// headers, or no streamed data) for this long, so a hung connection
 	// can't block a turn forever. It must exceed the longest non-streamed
 	// generation.
+	// 0 or less: DefaultStallTimeoutSeconds.
 	StallTimeoutSeconds int `toml:"stall_timeout_seconds"`
 	// FallbackModels are tried in order when the model in use fails before
 	// answering (after its retries): "provider/model" (e.g.
@@ -857,7 +858,7 @@ func DefaultConfig() *Config {
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,
-			StallTimeoutSeconds: 600,
+			StallTimeoutSeconds: DefaultStallTimeoutSeconds,
 			Gemini: GeminiConfig{
 				APIKey: os.Getenv("GEMINI_API_KEY"),
 				Model:  "gemini-4-argon",
@@ -912,9 +913,9 @@ func DefaultConfig() *Config {
 			AutoApproveCommands: false,
 			MaxParallel:         8,
 
-			MaxBackgroundAgents:     4,
-			BackgroundAgentTimeout:  "30m",
-			BackgroundAgentMaxTurns: 50,
+			MaxBackgroundAgents:     DefaultMaxBackgroundAgents,
+			BackgroundAgentTimeout:  DefaultBackgroundAgentTimeout,
+			BackgroundAgentMaxTurns: DefaultBackgroundAgentMaxTurns,
 		},
 		Session: SessionConfig{
 			StorageDir: filepath.Join(homeDir, ".blitz", "sessions"),

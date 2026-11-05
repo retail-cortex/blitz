@@ -27,7 +27,7 @@ import (
 
 // agentRun gives a sub-agent's run its agent's own permission mode and
 // model-call budget, from its frontmatter (spec_032_background_agents
-// BGA-50). A mode looser than the workspace's applies only to built-in
+// BGA-50), within the calling run's budget. A mode looser than the workspace's applies only to built-in
 // agents, the user's own, and a trusted project's; bypass also needs the
 // OS sandbox. Otherwise the workspace's mode stays, and the log says why.
 func (e *Engine) agentRun(ctx context.Context, spec *agents.AgentSpec) context.Context {
@@ -52,11 +52,11 @@ func (e *Engine) agentRun(ctx context.Context, spec *agents.AgentSpec) context.C
 		}
 	}
 	if spec.MaxTurns > 0 {
-		own := &runState{maxTurns: spec.MaxTurns}
-		if st := stateFrom(ctx); st != nil {
-			own.sessionID, own.planOnly, own.mode, own.allowed = st.sessionID, st.planOnly, st.mode, st.allowed
-			own.agent, own.model, own.models, own.taskID = st.agent, st.model, st.models, st.taskID
-		}
+		// Its own cap, inside the calling run's: its calls count toward
+		// both, so a high max_turns can't escape the run's budget.
+		st := stateFrom(ctx)
+		own := st.child(spec.MaxTurns)
+		own.parent = st
 		ctx = context.WithValue(ctx, runStateKey{}, own)
 	}
 	return ctx

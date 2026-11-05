@@ -51,6 +51,7 @@ func (e *Engine) Aside(ctx context.Context, sessionID, prompt string, handler Ev
 
 	scratch := session.InMemoryService()
 	asideID := fmt.Sprintf("btw-%d", e.subagentSeq.Add(1))
+	defer e.scoped.forget(asideID) // the copy ends with the aside
 	if err = copySession(ctx, e.sessions, scratch, sessionID, asideID); err != nil {
 		return err
 	}

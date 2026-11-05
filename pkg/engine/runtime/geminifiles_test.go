@@ -142,3 +142,57 @@ func TestNewGeminiUploader(t *testing.T) {
 		})
 	}
 }
+
+// gatedFiles is a Files API whose uploads of the file named block wait
+// until released; others answer at once.
+type gatedFiles struct {
+	block            string // the display name whose upload waits
+	started, release chan struct{}
+}
+
+func (g *gatedFiles) Upload(ctx context.Context, _ io.Reader, cfg *genai.UploadFileConfig) (*genai.File, error) {
+	if cfg.DisplayName == g.block {
+		close(g.started)
+		select {
+		case <-g.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return &genai.File{Name: "files/" + cfg.DisplayName, URI: "https://g/files/" + cfg.DisplayName, State: genai.FileStateActive}, nil
+}
+
+func (g *gatedFiles) Get(context.Context, string, *genai.GetFileConfig) (*genai.File, error) {
+	return nil, errors.New("not processing")
+}
+
+// One file's slow upload (a large video being processed) doesn't hold
+// up another file's (N26 engine-runtime#29).
+func TestGeminiUploaderOneFileAtATime(t *testing.T) {
+	dir := t.TempDir()
+	slow, quick := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	for _, sha := range []string{slow, quick} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, sha+".mp4"), []byte("V"), 0o600))
+	}
+	g := &gatedFiles{block: slow[:12], started: make(chan struct{}), release: make(chan struct{})}
+	up := newGeminiUploader(g)
+	done := make(chan error, 1)
+	go func() {
+		_, err := up(context.Background(), filepath.Join(dir, slow+".mp4"), "video/mp4", slow)
+		done <- err
+	}()
+	<-g.started
+	quickDone := make(chan error, 1)
+	go func() {
+		_, err := up(context.Background(), filepath.Join(dir, quick+".mp4"), "video/mp4", quick)
+		quickDone <- err
+	}()
+	select {
+	case err := <-quickDone:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Error("another file's upload waited for the slow one")
+	}
+	close(g.release)
+	require.NoError(t, <-done)
+}

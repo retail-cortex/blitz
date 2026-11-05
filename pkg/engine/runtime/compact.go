@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -134,7 +135,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 	}
 
 	e.mu.RLock()
-	llm, gc := e.llm, e.generateConfig()
+	llm, gc := e.modelForLocked(e.active), e.generateConfig() // the active agent's model (it may be pinned)
 	e.mu.RUnlock()
 	focusLine := ""
 	if f := strings.TrimSpace(focus); f != "" {
@@ -159,7 +160,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 		return CompactResult{}, errors.New("the summarizer returned no text; history left unchanged")
 	}
 	e.restoreUsage(sessionID)
-	e.usage.Record(sessionID, llm.Name(), res.Usage)
+	e.usage.RecordCall(ctx, sessionID, settingsName(llm.Name()), res.Usage, 0)
 	e.saveUsage(ctx, sessionID)
 
 	ev, err := compactionEvent(window, events, summary)
@@ -199,13 +200,23 @@ func (e *Engine) EventCount(ctx context.Context, sessionID string) int {
 // ForgetSession drops a session's event log, in memory and on disk, once
 // the session is deleted. A session this process never loaded is fine.
 func (e *Engine) ForgetSession(ctx context.Context, sessionID string) {
-	_ = e.sessions.Delete(ctx, &session.DeleteRequest{AppName: appName, UserID: "user", SessionID: sessionID})
-	// And what the engine kept about it: its tasks, notes, usage, rules.
+	if err := e.sessions.Delete(ctx, &session.DeleteRequest{AppName: appName, UserID: "user", SessionID: sessionID}); err != nil {
+		slog.WarnContext(ctx, "forgetting a session: its log wasn't deleted", "session", sessionID, "error", err)
+	}
+	// And what the engine kept about it: its tasks, notes, usage, rules,
+	// fallback state.
 	e.tasks.mu.Lock()
 	tasks := e.tasks.forgetSessionLocked(sessionID)
 	e.tasks.mu.Unlock()
 	e.usage.Forget(append(tasks, sessionID)...)
 	e.scoped.forget(sessionID)
+	e.fallbackMu.Lock()
+	for key := range e.fallbackBy {
+		if s, _, _ := strings.Cut(key, "\x00"); s == sessionID {
+			delete(e.fallbackBy, key)
+		}
+	}
+	e.fallbackMu.Unlock()
 }
 
 // truncater is a session service that can drop the end of a session's log

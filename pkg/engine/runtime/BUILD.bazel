@@ -192,6 +192,7 @@ go_test(
         "//pkg/observability",
         "//pkg/redact",
         "//pkg/secrets",
+        "@com_github_anthropics_anthropic_sdk_go//:anthropic-sdk-go",
         "@com_github_anthropics_anthropic_sdk_go//config",
         "@com_github_anthropics_anthropic_sdk_go//option",
         "@com_github_azure_azure_sdk_for_go_sdk_azcore//:azcore",

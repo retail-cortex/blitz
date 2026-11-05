@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -118,7 +119,12 @@ func TestProviderError(t *testing.T) {
 
 	plain := errors.New("boom")
 	assert.Equal(t, plain, providerError(plain, "openai", "m", ""), "not an API error")
-	assert.Equal(t, plain, providerError(plain, "", "m", ""), "no provider")
+
+	// A model built without a provider name (Azure OpenAI, llm.provider
+	// unset) says what the server said too (N26 engine-runtime#15).
+	err = providerError(call("401"), "", "gpt-4o", "sk-secret-key-123456")
+	assert.ErrorContains(t, err, "Incorrect API key provided")
+	assert.NotContains(t, err.Error(), "sk-secret-key-123456")
 }
 
 // Ollama's model is its own, else one older settings set in [llm.openai];
@@ -165,4 +171,33 @@ func TestOllamaAutoServer(t *testing.T) {
 	assert.Equal(t, "qwen3:8b", asked, "the first model it lists")
 	assert.Equal(t, "hello", text)
 	assert.Equal(t, "qwen3:8b", a.Name())
+}
+
+// While Ollama is slow to list its models (hung, not refusing), the
+// model's name is still at hand: the UI and the engine's read lock don't
+// wait on it (N26 engine-runtime#28).
+func TestOllamaAutoNameDoesntWaitForTheList(t *testing.T) {
+	a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil)
+	listing, release := make(chan struct{}), make(chan struct{})
+	a.list = func(ctx context.Context) ([]string, error) {
+		close(listing)
+		<-release
+		return nil, errors.New("gave up")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = a.resolve(context.Background())
+	}()
+	<-listing
+	named := make(chan string, 1)
+	go func() { named <- a.Name() }()
+	select {
+	case n := <-named:
+		assert.Equal(t, "ollama", n)
+	case <-time.After(2 * time.Second):
+		t.Error("Name waited for Ollama's list")
+	}
+	close(release)
+	<-done
 }

@@ -108,9 +108,11 @@ func TestTaskRunsInTheBackground(t *testing.T) {
 }
 
 func TestTasksEnd(t *testing.T) {
+	listCall := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
 	cases := []struct {
 		name  string
 		cfg   func(*config.Config)
+		sub   model.LLM // the task's model (nil: one that never answers)
 		act   func(e *Engine) error
 		state string
 		why   string
@@ -126,6 +128,12 @@ func TestTasksEnd(t *testing.T) {
 			state: api.TaskFailed, why: "time limit",
 		},
 		{
+			name:  "past its model-call budget",
+			cfg:   func(c *config.Config) { c.Tools.BackgroundAgentMaxTurns = 1 },
+			sub:   NewMockLLM("sub", listCall, listCall),
+			state: api.TaskFailed, why: "maximum turns reached (1 model calls): tools.background_agent_max_turns sets it",
+		},
+		{
 			name:  "the workspace closing",
 			act:   func(e *Engine) error { e.StopTasks(); return nil },
 			state: api.TaskStopped, why: "stopped",
@@ -133,7 +141,11 @@ func TestTasksEnd(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f, ctx, _ := taskEngine(t, newGated(), c.cfg) // never answers
+			var sub model.LLM = newGated() // never answers
+			if c.sub != nil {
+				sub = c.sub
+			}
+			f, ctx, _ := taskEngine(t, sub, c.cfg)
 			_, err := f.eng.StartTask(ctx, "qa", "review", "")
 			require.NoError(t, err)
 			if c.act != nil {
@@ -164,6 +176,11 @@ func TestTaskLimits(t *testing.T) {
 	assert.ErrorContains(t, err, "can't start background tasks")
 	_, err = f.eng.StartTask(context.Background(), "qa", "no session", "")
 	assert.Error(t, err)
+
+	// A limit that isn't one is reported, not replaced by the default.
+	g, gctx, _ := taskEngine(t, newGated(), func(c *config.Config) { c.Tools.BackgroundAgentMaxTurns = 0 })
+	_, err = g.eng.StartTask(gctx, "qa", "x", "")
+	assert.ErrorContains(t, err, "tools.background_agent_max_turns")
 }
 
 // A running turn hears about an ended task with its next tool result.
@@ -309,6 +326,122 @@ func TestAgentRunDefaults(t *testing.T) {
 	}
 }
 
+// A task with a cost cap on a model without a price is told, once, that
+// the cap can't stop it (N26 engine-runtime#5).
+func TestTaskCostCapOnAnUnpricedModel(t *testing.T) {
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	cases := []struct {
+		name   string
+		cap    float64
+		served string
+		told   bool
+	}{
+		{name: "an unpriced model", cap: 1, served: "local-llama", told: true},
+		{name: "a priced model", cap: 1, served: "gemini-3.8-flash"},
+		{name: "no cap", served: "local-llama"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sub := NewMockLLM(c.served, list, list, textContent("done"))
+			sub.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 1}
+			sub.ServedBy = c.served
+			var notices []string
+			var mu sync.Mutex
+			f, ctx, _ := taskEngine(t, sub, func(cfg *config.Config) { cfg.Tools.BackgroundAgentMaxCostUSD = c.cap })
+			f.eng.notice = func(m string) { mu.Lock(); notices = append(notices, m); mu.Unlock() }
+			_, err := f.eng.StartTask(ctx, "qa", "look", "")
+			require.NoError(t, err)
+			done, events, err := f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Second)
+			require.NoError(t, err)
+			require.Equal(t, api.TaskDone, done.State, "%+v", done)
+			told := 0
+			for _, e := range events {
+				if strings.Contains(e, "has no price") {
+					told++
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if c.told {
+				assert.Equal(t, 1, told, "told once in its events: %v", events)
+				require.Len(t, notices, 1)
+				assert.Contains(t, notices[0], "local-llama")
+			} else {
+				assert.Zero(t, told, "%v", events)
+				assert.Empty(t, notices)
+			}
+		})
+	}
+}
+
+// A background task keeps the restrictions of the run that started it: a
+// /plan turn, a read-only /btw or /search, or a command's allowed tools
+// can't write through a background agent (N26 engine-runtime#1).
+func TestTaskKeepsItsStartersRestrictions(t *testing.T) {
+	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}}}}}
+	cases := []struct {
+		name    string
+		opt     ExecOption
+		created bool
+		refusal string
+	}{
+		{name: "an ordinary run", created: true},
+		{name: "plan-only", opt: WithPlanOnly(), refusal: "plan mode"},
+		{name: "read-only", opt: WithReadOnly("/btw"), refusal: "/btw is read-only"},
+		{name: "allowed tools", opt: WithAllowedTools([]string{"Read", "Task"}), refusal: "isn't among the tools"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newEngineWith(t, fixtureOpts{opts: []Option{WithAgentModel("worker", NewMockLLM("sub", create, textContent("ok")))}})
+			t.Cleanup(f.eng.StopTasks)
+			agentFile(t, f.eng, t.TempDir(), "worker", "")
+			st := &runState{sessionID: "s"}
+			if c.opt != nil {
+				c.opt(st)
+			}
+			ctx := context.WithValue(context.Background(), runStateKey{}, st)
+			_, err := f.eng.StartTask(ctx, "worker", "make a file", "")
+			require.NoError(t, err)
+			_, events, err := f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Second)
+			require.NoError(t, err)
+			_, statErr := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "made.txt"))
+			assert.Equal(t, c.created, statErr == nil, "made.txt created")
+			if c.refusal != "" {
+				assert.Contains(t, strings.Join(events, "\n"), c.refusal)
+			}
+		})
+	}
+}
+
+// An agent's own max_turns caps it inside the calling run's budget: a
+// high one doesn't escape the run's (N26 engine-runtime#14).
+func TestAgentBudgetStaysInTheRunsBudget(t *testing.T) {
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	cases := []struct {
+		name   string
+		front  string
+		parent int
+		want   string
+	}{
+		{name: "the run's budget is lower", front: "max_turns: 100", parent: 3, want: "(3 model calls)"},
+		{name: "the agent's own is lower", front: "max_turns: 2", parent: 50, want: "(2 model calls)"},
+		{name: "no own budget: the run's", front: "", parent: 3, want: "(3 model calls)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sub := NewMockLLM("sub", list, list, list, list, list, list)
+			f := newEngineWith(t, fixtureOpts{opts: []Option{WithAgentModel("worker", sub)}})
+			agentFile(t, f.eng, t.TempDir(), "worker", c.front)
+			parent := &runState{sessionID: "s", maxTurns: c.parent}
+			ctx := context.WithValue(context.Background(), runStateKey{}, parent)
+			_, err := f.eng.InvokeSubagent(ctx, "worker", "list")
+			require.ErrorIs(t, err, api.ErrMaxTurns)
+			assert.ErrorContains(t, err, c.want)
+			assert.Positive(t, parent.turns.Load(), "the agent's calls count toward the run's")
+		})
+	}
+}
+
 // An agent whose frontmatter says background: true runs in the
 // background unless the call says otherwise.
 func TestAgentBackgroundByDefault(t *testing.T) {
@@ -366,6 +499,40 @@ func TestTaskInItsOwnWorktree(t *testing.T) {
 
 	_, err = f.eng.StartTask(ctx, "qa", "x", "worktree")
 	require.NoError(t, err, "a second isolated task")
+}
+
+// A task in its own worktree can still delegate in the foreground
+// (BGA-04): its registry runs sub-agents as the workspace's does (N26
+// engine-runtime#1b).
+func TestTaskInAWorktreeDelegates(t *testing.T) {
+	invoke := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "invoke_agent", Args: map[string]any{"agent_name": "helper", "prompt": "help"}}}}}
+	f := newEngineWith(t, fixtureOpts{
+		cfg: func(c *config.Config) {
+			ws := c.Tools.WorkspaceDir
+			for _, args := range [][]string{{"init", "-q"}, {"commit", "-q", "--allow-empty", "-m", "first"}} {
+				cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+				cmd.Dir = ws
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "%s", out)
+			}
+		},
+		opts: []Option{
+			WithAgentModel("worker", NewMockLLM("sub", invoke, textContent("done"))),
+			WithAgentModel("helper", NewMockLLM("helper", textContent("helped"))),
+		},
+	})
+	t.Cleanup(f.eng.StopTasks)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "worker.md"), []byte("---\nname: worker\ndescription: test\ntools: [invoke_agent]\n---\nDo it."), 0o644))
+	require.NoError(t, f.eng.agentReg.LoadExternalAgents(dir))
+	agentFile(t, f.eng, t.TempDir(), "helper", "")
+	ctx := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	started, err := f.eng.StartTask(ctx, "worker", "delegate", "worktree")
+	require.NoError(t, err)
+	done, events, err := f.eng.WaitTask(ctx, []string{"s"}, started.ID, 10*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, api.TaskDone, done.State, "%+v", done)
+	assert.Contains(t, events, "← invoke_agent", "the delegation failed: %v", events)
 }
 
 // A task stopped while its worktree is still being made (a slow

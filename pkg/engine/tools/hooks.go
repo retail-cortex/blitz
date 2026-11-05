@@ -63,6 +63,44 @@ type Hooks struct {
 	// hooks (in the background). Nil: none.
 	permHook func(context.Context, api.ApprovalRequest) Outcome
 	notify   func(ctx context.Context, typ, message string)
+	// shared is the gate whose session grants h uses and adds to (Share);
+	// nil: its own.
+	shared *Hooks
+}
+
+// Share makes h decide as from does, for a registry that stands in for
+// from's elsewhere (a background task's worktree): from's sub-agents,
+// tasks and reviewer, its permission_request and notification hooks,
+// its saved rules, and its session's grants, which h uses and adds to.
+func (h *Hooks) Share(from *Hooks) {
+	from.mu.RLock()
+	invoker, tasks, reviewer, store, permHook, notify := from.invoker, from.tasks, from.reviewer, from.store, from.permHook, from.notify
+	root := from.grantsHolder()
+	from.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.invoker, h.tasks, h.reviewer, h.store, h.permHook, h.notify = invoker, tasks, reviewer, store, permHook, notify
+	h.shared = root
+}
+
+// grantsHolder is the gate holding h's session grants. Callers may hold
+// h.mu: shared is set once, before h is used.
+func (h *Hooks) grantsHolder() *Hooks {
+	if h.shared != nil {
+		return h.shared
+	}
+	return h
+}
+
+// remembered reports whether the session allowed key.
+func (h *Hooks) remembered(key string) bool {
+	if key == "" {
+		return false
+	}
+	g := h.grantsHolder()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.session[key]
 }
 
 // SetEventHooks connects the gate to permission_request and notification
@@ -350,8 +388,8 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	if m, ok := ctx.Value(modeKey{}).(api.PermissionMode); ok {
 		policy.Mode = m
 	}
-	remembered := req.Key != "" && h.session[req.Key]
 	h.mu.RUnlock()
+	remembered := h.remembered(req.Key)
 
 	record := func(decision string) {
 		kind := audit.KindApproval
@@ -471,9 +509,10 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		if req.Key == "" {
 			return nil
 		}
-		h.mu.Lock()
-		h.session[req.Key] = true
-		h.mu.Unlock()
+		g := h.grantsHolder()
+		g.mu.Lock()
+		g.session[req.Key] = true
+		g.mu.Unlock()
 		if decision == api.DecisionAlways && store != nil {
 			if err := store.Add(req.Key, req.KeyLabel); err != nil {
 				// The user approved: allow it (for the session), but tell

@@ -133,8 +133,8 @@ func TestFallbackTakesOverThenPrimaryReturns(t *testing.T) {
 	require.Equal(t, "from gemini-x", text, "primary not back: %q from=%q calls=%d", text, from, primary.count())
 	require.Equal(t, "", from, "primary not back: %q from=%q calls=%d", text, from, primary.count())
 	require.Equal(t, 2, primary.count(), "primary not back: %q from=%q calls=%d", text, from, primary.count())
-	require.Equal(t, "gemini-x", f.Name(), "name %q models %v", f.Name(), f.Models())
-	require.Equal(t, "gemini-x,claude-y", strings.Join(f.Models(), ","), "name %q models %v", f.Name(), f.Models())
+	require.Equal(t, "gemini-x", f.Name(), "name %q models %v", f.Name(), chainNames(f))
+	require.Equal(t, "gemini-x,claude-y", strings.Join(chainNames(f), ","), "name %q models %v", f.Name(), chainNames(f))
 }
 
 func TestNoFallbackAfterOutputOrOnCancel(t *testing.T) {
@@ -237,7 +237,7 @@ func TestNewModelBuildsACrossProviderChain(t *testing.T) {
 	require.NoError(t, err)
 	fm, ok := m.(*fallbackModel)
 	require.True(t, ok, "chain = %T %v", m, fm)
-	require.Equal(t, "gpt-test,claude-sonnet-5,nosuchprovider/x", strings.Join(fm.Models(), ","), "chain = %T %v", m, fm)
+	require.Equal(t, "gpt-test,claude-sonnet-5,nosuchprovider/x", strings.Join(chainNames(fm), ","), "chain = %T %v", m, fm)
 	text, err := generateText(t, m)
 	require.NoError(t, err, "got %q, %v after %d primary calls", text, err, oaiCalls.Load())
 	require.Equal(t, "ok", text, "got %q, %v after %d primary calls", text, err, oaiCalls.Load())
@@ -313,4 +313,52 @@ func TestConsumerStoppingCountsAsAnswered(t *testing.T) {
 	require.Equal(t, "from gemini-x", text)
 	require.Empty(t, from)
 	require.Equal(t, 0, backup.count())
+}
+
+// The fallback notices are once per change in each run: a background
+// task answered by a fallback doesn't flip the notices of its session's
+// turn, whose primary answers, and "is answering again" names the model
+// that recovered (N26 engine-runtime#8).
+func TestFallbackNoticesPerRun(t *testing.T) {
+	fellBack := func() *model.LLMResponse {
+		r := &model.LLMResponse{}
+		markFallback(r, "local", "pinned-primary")
+		return r
+	}
+	primary := func() *model.LLMResponse { return &model.LLMResponse{} }
+	turn := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	task := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s", taskID: "task-1"})
+	type call struct {
+		ctx  context.Context
+		resp func() *model.LLMResponse
+	}
+	cases := []struct {
+		name  string
+		calls []call
+		want  []string
+	}{
+		{name: "a task on its fallback, the turn on its primary", calls: []call{{task, fellBack}, {turn, primary}, {task, fellBack}, {turn, primary}},
+			want: []string{"pinned-primary is unavailable; answering with fallback local for now."}},
+		{name: "the primary recovers", calls: []call{{turn, fellBack}, {turn, fellBack}, {turn, primary}},
+			want: []string{"pinned-primary is unavailable; answering with fallback local for now.", "pinned-primary is answering again."}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got []string
+			e := &Engine{notice: func(m string) { got = append(got, m) }}
+			for _, cl := range c.calls {
+				e.noteFallback(cl.ctx, cl.resp())
+			}
+			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
+// chainNames are a fallback chain's models' names, in order.
+func chainNames(f *fallbackModel) []string {
+	names := make([]string, len(f.chain))
+	for i, m := range f.chain {
+		names[i] = m.Name()
+	}
+	return names
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,6 +187,27 @@ func TestEnterpriseModel(t *testing.T) {
 		_, _, err = callAPI(inSession("sess-4"), m, helloRequest())
 		assert.ErrorIs(t, err, enterprise.ErrNotSignedIn)
 	})
+	// The organization's errors are worded for its people: no [llm.api]
+	// and no token script (N26 engine-runtime#16).
+	for _, c := range []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{name: "a refused sign-in", status: http.StatusForbidden, want: "your organization's service refused your sign-in (HTTP 403): sign in again (Settings › Organization, or blitz enterprise login)"},
+		{name: "another error", status: http.StatusNotFound, want: "your organization's service: HTTP 404 Not Found: no such model"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := newOrgService(t, [2]any{c.status, `{"error":{"message":"no such model"}}`})
+			m, err := NewModel(context.Background(), signedIn(t, s), "fast")
+			require.NoError(t, err)
+			_, _, err = callAPI(inSession("sess-5"), m, helloRequest())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), c.want)
+			assert.NotContains(t, err.Error(), "[llm.api]")
+			assert.NotContains(t, err.Error(), "token script")
+		})
+	}
 	t.Run("signed out", func(t *testing.T) {
 		s := newOrgService(t)
 		enterprise.Register(enterprise.New(s.URL, &secrets.Memory{}, enterprise.Options{}))
@@ -302,4 +324,20 @@ func TestEnterprisePolicy(t *testing.T) {
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
 	assert.ErrorContains(t, err, "catalog is out of date")
+}
+
+// fixedSource gives one access token.
+type fixedSource string
+
+func (f fixedSource) AccessToken(context.Context) (string, error) { return string(f), nil }
+func (f fixedSource) Invalidate()                                 {}
+
+// The organization's access token is remembered by the redactor, as a
+// token script's is (MDL-108; N26 engine-runtime#27).
+func TestEnterpriseTokenIsMasked(t *testing.T) {
+	p := &apiProvider{source: fixedSource("org-access-token-27")}
+	tok, err := p.token(context.Background(), "s")
+	require.NoError(t, err)
+	assert.Equal(t, "org-access-token-27", tok)
+	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-access-token-27"), "org-access-token-27")
 }

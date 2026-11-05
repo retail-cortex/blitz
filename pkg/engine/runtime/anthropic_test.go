@@ -25,11 +25,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -66,6 +68,12 @@ func (f *fakeAnthropic) handler(w http.ResponseWriter, r *http.Request) {
 		respond = f.responses[n]
 	}
 	f.mu.Unlock()
+	if strings.HasSuffix(r.URL.Path, "/messages") && r.Method == http.MethodPost {
+		if why := invalidMessages(req); why != "" { // refused as the Messages API refuses it
+			http.Error(w, `{"type":"error","error":{"type":"invalid_request_error","message":`+strconv.Quote(why)+`}}`, 400)
+			return
+		}
+	}
 	if respond == nil {
 		http.Error(w, `{"type":"error","error":{"type":"invalid_request_error","message":"no more responses"}}`, 400)
 		return
@@ -79,6 +87,55 @@ func (f *fakeAnthropic) handler(w http.ResponseWriter, r *http.Request) {
 	maps.Copy(w.Header(), rec.Header())
 	w.WriteHeader(rec.Code)
 	w.Write(rec.Body.Bytes())
+}
+
+// invalidMessages is why the Messages API would refuse req with a 400
+// ("" when it wouldn't): no messages, a first message not the user's, two
+// in a row from one role, a tool_result whose tool_use isn't in the
+// message before it, a temperature other than 1 with thinking on, or a thinking budget
+// not below max_tokens.
+func invalidMessages(req map[string]any) string {
+	msgs, _ := req["messages"].([]any)
+	if len(msgs) == 0 {
+		return "messages: at least one message is required"
+	}
+	prevRole := ""
+	var prevUses map[string]bool
+	for i, raw := range msgs {
+		m, _ := raw.(map[string]any)
+		role, _ := m["role"].(string)
+		if i == 0 && role != "user" {
+			return "messages: the first message must use the user role"
+		}
+		if role == prevRole {
+			return fmt.Sprintf("messages.%d: roles must alternate between user and assistant", i)
+		}
+		uses := map[string]bool{}
+		blocks, _ := m["content"].([]any)
+		for _, b := range blocks {
+			block, _ := b.(map[string]any)
+			switch block["type"] {
+			case "tool_use":
+				id, _ := block["id"].(string)
+				uses[id] = true
+			case "tool_result":
+				if id, _ := block["tool_use_id"].(string); !prevUses[id] {
+					return fmt.Sprintf("messages.%d: unexpected tool_use_id %q in tool_result blocks: each tool_result block must have a corresponding tool_use block in the previous message", i, id)
+				}
+			}
+		}
+		prevRole, prevUses = role, uses
+	}
+	if thinking, _ := req["thinking"].(map[string]any); thinking != nil && thinking["type"] == "enabled" {
+		if t, ok := req["temperature"]; ok && t != 1.0 {
+			return "temperature may only be set to 1 when thinking is enabled"
+		}
+		budget, _ := thinking["budget_tokens"].(float64)
+		if maxTokens, _ := req["max_tokens"].(float64); budget >= maxTokens {
+			return "max_tokens must be greater than thinking.budget_tokens"
+		}
+	}
+	return ""
 }
 
 func jsonReply(body string) func(http.ResponseWriter) {
@@ -856,7 +913,7 @@ func TestAnthropicConversions(t *testing.T) {
 		assert.Contains(t, string(b), "unsupported type", "the encoding error goes to the model")
 	})
 	t.Run("errors and effort", func(t *testing.T) {
-		assert.EqualError(t, anthropicError(errors.New("boom")), "anthropic: boom")
+		assert.EqualError(t, anthropicError(errors.New("boom"), ""), "anthropic: boom")
 		assert.True(t, supportsEffort("claude-opus-4-6-20260101"))
 		assert.False(t, supportsEffort("claude-haiku-4-5"))
 	})
@@ -867,4 +924,83 @@ func TestAnthropicConversions(t *testing.T) {
 		_, err = newAnthropicModel(context.Background(), config.AnthropicConfig{APIKeyCommand: "exit 4"}, "")
 		assert.ErrorContains(t, err, "[llm.anthropic]")
 	})
+}
+
+// A refused sign-in says what to check for how the model signs in, not
+// always the API key (N26 engine-runtime#15).
+func TestAnthropicAuthHints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`, http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	client := anthropic.NewClient(option.WithBaseURL(srv.URL), option.WithAPIKey("k"), option.WithMaxRetries(0))
+	_, refused := client.Models.Get(context.Background(), "claude-x", anthropic.ModelGetParams{})
+	require.Error(t, refused)
+	cases := []struct {
+		name string
+		hint string
+		want string
+	}{
+		{name: "an API key", hint: anthropicAuthHint(config.AnthropicConfig{APIKey: "k"}), want: "check llm.anthropic.api_key or ANTHROPIC_API_KEY"},
+		{name: "a key command", hint: anthropicAuthHint(config.AnthropicConfig{APIKeyCommand: "pass show k"}), want: "check llm.anthropic.api_key_command"},
+		{name: "ant auth login", hint: anthropicAuthHint(config.AnthropicConfig{Auth: config.AuthOAuth}), want: "sign in again with ant auth login"},
+		{name: "Vertex AI", hint: anthropicAuthHint(config.AnthropicConfig{Auth: config.AuthADC}), want: "check Google Cloud's credentials (gcloud auth application-default login)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := anthropicError(refused, c.hint)
+			assert.ErrorContains(t, err, "authentication failed (401); "+c.want)
+			if c.name != "an API key" {
+				assert.NotContains(t, err.Error(), "ANTHROPIC_API_KEY")
+			}
+		})
+	}
+}
+
+// A tool call cut off at max_tokens mid-arguments isn't run with empty
+// arguments: the reply says it was cut off (N26 engine-runtime#23).
+func TestAnthropicCutOffToolCall(t *testing.T) {
+	cases := []struct {
+		name    string
+		partial string
+		stop    string
+		call    bool
+	}{
+		{name: "cut off", partial: `{\"path\": \"a`, stop: "max_tokens"},
+		{name: "whole", partial: `{\"path\": \"a.go\"}`, stop: "tool_use", call: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			events := []string{
+				`{"type":"message_start","message":{"id":"msg_c","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_c","name":"read_file","input":{}}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"` + c.partial + `"}}`,
+				`{"type":"content_block_stop","index":0}`, // the API closes a cut-off block too
+			}
+			events = append(events,
+				`{"type":"message_delta","delta":{"stop_reason":"`+c.stop+`","stop_sequence":null},"usage":{"output_tokens":42}}`,
+				`{"type":"message_stop"}`)
+			_, opts := newFake(t, sseReply(events...))
+			m := mustAnthropicModel(t, config.AnthropicConfig{}, "claude-opus-5", opts...)
+			out, err := collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("go")}}, true)
+			require.NoError(t, err)
+			final := out[len(out)-1]
+			var calls []*genai.FunctionCall
+			text := ""
+			for _, p := range final.Content.Parts {
+				if p.FunctionCall != nil {
+					calls = append(calls, p.FunctionCall)
+				}
+				text += p.Text
+			}
+			if c.call {
+				require.Len(t, calls, 1)
+				assert.Equal(t, "a.go", calls[0].Args["path"])
+				return
+			}
+			assert.Empty(t, calls, "a cut-off call would run with no arguments")
+			assert.Contains(t, text, "The call to read_file was cut off")
+			assert.Equal(t, genai.FinishReasonMaxTokens, final.FinishReason)
+		})
+	}
 }

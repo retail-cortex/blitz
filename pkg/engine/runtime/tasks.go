@@ -24,11 +24,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"github.com/retail-cortex/blitz/pkg/worktree"
 	"google.golang.org/adk/v2/session"
@@ -76,6 +78,9 @@ type task struct {
 	events []string     // guarded by taskManager.mu
 	cancel context.CancelCauseFunc
 	done   chan struct{}
+	// unpricedTold is set once the session heard its cost cap can't be
+	// enforced.
+	unpricedTold atomic.Bool
 }
 
 // taskManager holds a workspace's tasks.
@@ -254,20 +259,15 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	if _, ok := e.agentReg.Get(agentName); !ok {
 		return api.TaskInfo{}, &api.UnknownAgentError{Name: agentName}
 	}
-	limit := e.cfg.Tools.MaxBackgroundAgents
-	if limit <= 0 {
-		limit = 4
+	limits, err := e.cfg.Tools.BackgroundLimits()
+	if err != nil {
+		return api.TaskInfo{}, fmt.Errorf("background tasks can't start: %w", err)
 	}
-	timeout, err := time.ParseDuration(e.cfg.Tools.BackgroundAgentTimeout)
-	if err != nil || timeout <= 0 {
-		timeout = 30 * time.Minute
-	}
-	maxTurns := e.cfg.Tools.BackgroundAgentMaxTurns
-	if maxTurns <= 0 {
-		maxTurns = 50
-	}
+	limit, timeout, maxTurns := limits.Agents, limits.Timeout, limits.MaxTurns
+	budgetKey := "tools.background_agent_max_turns"
 	if spec, _ := e.agentReg.Get(agentName); spec != nil && spec.MaxTurns > 0 {
 		maxTurns = spec.MaxTurns // its own budget, as in the foreground
+		budgetKey = "max_turns in the " + agentName + " agent's front matter"
 	}
 
 	m := e.tasks
@@ -318,12 +318,15 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	m.publishLocked(st.sessionID, api.SessionEvent{Task: &started})
 	m.mu.Unlock()
 
-	// Its own run state charges its session and has its own budget;
-	// nobody is asked anything; the turn's notices aren't its.
-	own := &runState{sessionID: st.sessionID, maxTurns: maxTurns, taskID: id, agent: st.agent, model: st.model, models: st.models}
+	// Its own run state charges its session and has its own budget (it
+	// outlives the turn, so not the turn's); it keeps the starting run's
+	// restrictions (plan-only, read-only, allowed tools); nobody is asked
+	// anything; the turn's notices aren't its.
+	own := st.child(maxTurns)
+	own.taskID = id
 	runCtx = context.WithValue(runCtx, runStateKey{}, own)
 	runCtx = context.WithValue(runCtx, taskKey{}, id)
-	runCtx = context.WithValue(runCtx, turnNoticeKey{}, (func(string))(nil))
+	runCtx = WithTurnNotices(runCtx, nil) // the engine's and the tools' (an MCP server failing)
 	runCtx = context.WithValue(runCtx, turnStatusKey{}, (func(string))(nil))
 	runCtx = context.WithValue(runCtx, subagentEventKey{}, func(ev *session.Event) { e.taskEvent(t, ev) })
 	runCtx = tools.Background(runCtx)
@@ -350,6 +353,11 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 			defer isolated.Close()
 		}
 		result, err := e.InvokeSubagent(runCtx, agentName, prompt)
+		if errors.Is(err, api.ErrMaxTurns) && own.turns.Load() > int64(own.maxTurns) {
+			// Its own budget ran out: say where it's set, as its time
+			// and cost limits do.
+			err = fmt.Errorf("%w: %s sets it", err, budgetKey)
+		}
 		e.endTask(runCtx, t, result, err)
 	}()
 	return e.taskInfo(t), nil
@@ -387,8 +395,28 @@ func (e *Engine) taskEvent(t *task, ev *session.Event) {
 		t.events = slices.Delete(t.events, 0, over)
 	}
 	m.mu.Unlock()
-	if limit := e.cfg.Tools.BackgroundAgentMaxCostUSD; limit > 0 && e.usage.Session(t.info.ID).CostUSD > limit {
+	limit := e.cfg.Tools.BackgroundAgentMaxCostUSD
+	if limit <= 0 {
+		return
+	}
+	u := e.usage.Session(t.info.ID)
+	if u.CostUSD > limit {
 		t.cancel(fmt.Errorf("its cost limit ($%.2f, tools.background_agent_max_cost_usd)", limit))
+	}
+	// A call of unknown cost (an unpriced model, or no usage): the cap
+	// can't be enforced, which its session hears once.
+	if u.Calls > 0 && !u.Priced && t.unpricedTold.CompareAndSwap(false, true) {
+		model := ev.ModelVersion
+		if model == "" {
+			model, _ = e.AgentModel(t.info.Agent)
+		}
+		msg := i18n.T("tasks.cost_unpriced", "id", t.info.ID, "agent", t.info.Agent, "limit", fmt.Sprintf("%.2f", limit), "model", model)
+		m.mu.Lock()
+		t.events = append(t.events, msg)
+		m.mu.Unlock()
+		if e.notice != nil {
+			e.notice(msg)
+		}
 	}
 }
 
@@ -519,7 +547,11 @@ func (e *Engine) WaitTask(ctx context.Context, sessions []string, id string, wai
 	return e.taskInfo(t), events, nil
 }
 
-// StopTask stops task id and waits a few seconds for it to end.
+// stopWait is how long StopTask and StopTasks wait for a stopped task to
+// end; one still going after it is reported as it is (still running).
+var stopWait = 5 * time.Second
+
+// StopTask stops task id and waits up to stopWait for it to end.
 func (e *Engine) StopTask(sessions []string, id string) (api.TaskInfo, error) {
 	t, err := e.get(sessions, id)
 	if err != nil {
@@ -528,7 +560,7 @@ func (e *Engine) StopTask(sessions []string, id string) (api.TaskInfo, error) {
 	t.cancel(errTaskStopped)
 	select {
 	case <-t.done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(stopWait):
 	}
 	return e.taskInfo(t), nil
 }
@@ -550,7 +582,7 @@ func (e *Engine) StopTasks() {
 	for _, t := range running {
 		select {
 		case <-t.done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(stopWait):
 		}
 	}
 }
@@ -600,8 +632,10 @@ func (m *taskManager) forgetSessionLocked(session string) []string {
 
 // worktreeTools makes task id's worktree and a tools registry rooted in
 // it: its files, sandbox and checkpoints are the worktree's. It shares the
-// workspace's settings, but not its MCP servers or hooks, which the
-// workspace's own run already provides.
+// workspace's settings, current mode and approvals (sub-agents, tasks,
+// the auto mode's reviewer, permission_request hooks, the session's
+// grants), but not its MCP servers or other hooks, which the workspace's
+// own run already provides. A mode the worktree can't take fails it.
 func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, error) {
 	w, err := worktree.Create(e.toolReg.Workspace().Dir(), worktree.NewName(id+"-"), "")
 	if err != nil {
@@ -618,6 +652,13 @@ func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, e
 		}
 		return nil, w, err
 	}
-	_ = reg.SetPermissionMode(e.toolReg.Hooks().Mode())
+	reg.Hooks().Share(e.toolReg.Hooks())
+	if err := reg.SetPermissionMode(e.toolReg.Hooks().Mode()); err != nil {
+		reg.Close()
+		if _, rerr := worktree.Remove(e.toolReg.Workspace().Dir(), w.Name, true); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("removing worktree %s: %w", w.Name, rerr))
+		}
+		return nil, w, fmt.Errorf("the session's mode %s: %w", e.toolReg.Hooks().Mode(), err)
+	}
 	return reg, w, nil
 }

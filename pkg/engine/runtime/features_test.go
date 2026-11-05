@@ -49,6 +49,8 @@ func TestUsageEstimate(t *testing.T) {
 	u = tr.Estimate("unknown-model", m, 0)
 	assert.False(t, u.Priced, "unknown model should be unpriced: %+v", u)
 	assert.Equal(t, float64(0), u.CostUSD, "unknown model should be unpriced: %+v", u)
+	u = tr.Estimate("gemini-3.8-flash", nil, 0) // no usage reported: unknown cost
+	assert.Equal(t, api.Usage{Calls: 1}, u, "a call without usage should be one unpriced call")
 
 	tr.Record("s", "gemini-3.8-flash", m)
 	tr.Record("s", "gemini-3.8-flash", &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10})
@@ -119,6 +121,17 @@ func functionResponses(t *testing.T, eng *Engine, sid, prompt string, opts ...Ex
 		return nil
 	}, opts...)
 	return out, err
+}
+
+// An answer without usage is still a call, of unknown cost: /cost
+// doesn't show an exact-looking $0.00 (N26 engine-runtime#6).
+func TestEngineRecordsACallWithoutUsage(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{}, textContent("hi"))
+	_, err := collect(t, f.eng, "s1", "hello")
+	require.NoError(t, err)
+	u := f.eng.Usage("s1")
+	assert.Equal(t, 1, u.Calls, "usage %+v", u)
+	assert.False(t, u.Priced, "usage %+v", u)
 }
 
 func TestEngineRecordsUsage(t *testing.T) {

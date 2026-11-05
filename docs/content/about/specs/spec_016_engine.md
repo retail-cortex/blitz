@@ -40,8 +40,10 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 ### 3.1 Callbacks
 - **ENG-20** Before each tool: audit `tool_call` (name, args); apply the plan/read-only refusal (§4); MCP approval (`ApproveMCP`); `pre_tool` hooks (a block returns `{"error":"blocked by pre_tool hook: <reason>"}` instead of running). Refusals are returned as tool results so the model sees them.
+- **ENG-20a** *2026-11-04 (scan N26-engine-runtime#10: ENG-20 listed an old order).* The order is: audit `tool_call`; the plan/read-only refusal; the allowed-tools refusal; the permission rules' deny; `pre_tool` hooks; guardrails on the action; MCP approval (`ApproveMCP`).
 - **ENG-21** After each tool: `post_tool` hooks (asynchronous, see [spec_010_hooks](spec_010_hooks.md)); audit `tool_result` with decision `ok`/`error` (tool error or an `error` field); attach steer messages (§5).
 - **ENG-22** After each non-partial model response: note fallback changes (§ fallback in [spec_015_models](spec_015_models.md)) and record usage priced by the model that actually answered (`ModelVersion` if it has a price, else the calling agent's model), including cache-write tokens from `CustomMetadata["cache_creation_input_tokens"]`.
+- **ENG-22a** *2026-11-04 (scan N26-engine-runtime#6, #13: an answer without `UsageMetadata` wasn't recorded at all, so `/cost` showed an exact-looking $0.00 and model_calls undercounted).* An answer (a response with content) without usage is recorded as one call of unknown cost: `Calls` +1 and the session `Priced=false` (`UsageTracker.Estimate(model, nil)` is unpriced, as `EstimateUsage` already was). A response with neither content nor usage isn't a call. The token metrics are recorded under the call's context (`UsageTracker.RecordCall`), keeping its trace.
 
 ## 4. Plan mode and read-only modes
 
@@ -69,18 +71,22 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 - **ENG-60** Automatic: the ADK runner compacts once a prompt reaches `context.token_threshold`, retaining `retain_events` raw events.
 - **ENG-61** Manual `Compact(session, focus, keepTurns≥1)`: find the start of the keepTurns-th most recent **user turn** (a user-authored event that is not a function response and not a compaction), so a tool call is never separated from its result. Nothing before it, or everything already compacted, is `ErrNothingToCompact`.
 - **ENG-62** The window is summarised by the current model with a fixed prompt (goals and constraints, decisions and why, files read/changed, commands and outcomes, unresolved errors, next steps) plus "Pay particular attention to: <focus>", timeout 3 min. Earlier summaries inside the window are fed as "[Summary of earlier conversation]" events, and the events they cover are omitted, so a second compaction never loses the first summary's content.
+- **ENG-62a** *2026-11-04 (scan N26-engine-runtime#25: the summary was written by the engine's model even with the active agent pinned).* "The current model" is the active agent's: its pin if it has one, else the configured model; the summary's usage is recorded by that model's name, and a summarizer that reports none is an unpriced call (ENG-22a).
 - **ENG-63** Only prose parts of the summary are kept; an empty summary is an error and history is unchanged (recording it would delete the covered turns).
 - **ENG-64** The compaction event spans the window's true timestamp range and lists as excluded any in-range event outside the window not already covered, so nothing is dropped unsummarised. If the clock is not after the window's end, it refuses to record. Summarisation tokens count toward session usage. A `compact` span is recorded.
 
 ## 8. Sub-agents
 
 - **ENG-70** `InvokeSubagent(agent, prompt)` (behind the `invoke_agent` tool) builds the agent fresh and runs it in an isolated in-memory session `subagent-<name>-<seq>`; returns the concatenated final non-thought text authored by that agent. Nesting is capped at depth 3 (`ErrSubagentDepth`). The calling run's usage accounting, per-model settings and turn limit context still apply.
+- **ENG-70a** *2026-11-04 (scan N26-engine-runtime#14).* A sub-agent with its own `max_turns` counts its model calls toward the calling run's budget too ([spec_032_background_agents](spec_032_background_agents.md) BGA-50a).
+- **ENG-70b** *2026-11-04 (scan N26-engine-runtime#11: the depth error said nothing a person could do).* The depth stays a fixed 3 (no setting); `ErrSubagentDepth`'s message says what to do: "…(3): an agent this deep can't delegate; do the work itself, or have a shallower agent hand it out".
 
 ## 9. Usage and cost
 
 - **ENG-80** Per call: input = prompt + tool-use prompt tokens; cached; cache-write (clamped to uncached input); output = candidates + thoughts; `LastPrompt` = input (the current context size).
 - **ENG-81** Cost = (uncached × input + cached × cached_input + cache_write × write_rate + output × output_rate) / 1e6, where write_rate defaults to the input rate. Price lookup: exact model name, else the longest configured prefix (`gemini-3.8-flash-001` → `gemini-3.8-flash`). An unpriced call marks the session `Priced=false`.
 - **ENG-82** Usage is kept per session in memory for the life of the process; it is not persisted.
+- **ENG-82a** *2026-11-04 (scan N26-engine-runtime#9: ENG-82 described the old behaviour).* With a `UsageStore` (`WithUsageStore`; `session.Storage` implements it) a session's usage is saved after every call and restored on its first read, so `/cost` survives a restart; without one it is kept in memory for the life of the process.
 
 ## 10. Tracing
 

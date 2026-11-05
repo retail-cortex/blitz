@@ -99,17 +99,6 @@ func AcceptedMedia(provider, modelName string, upload bool) []Accept {
 	}
 }
 
-// SupportsDocuments reports whether a model reads a PDF as it is, pages,
-// figures and all, rather than as its text.
-func SupportsDocuments(provider, modelName string) bool {
-	for _, a := range AcceptedMedia(provider, modelName, false) {
-		if a.Kind == images.KindDocument {
-			return a.Inline > 0
-		}
-	}
-	return false
-}
-
 // accepts finds the entry that takes mime, if any.
 func accepts(list []Accept, mime string) (Accept, bool) {
 	for _, a := range list {

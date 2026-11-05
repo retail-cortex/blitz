@@ -523,6 +523,12 @@ func (w *Workspace) Close() error {
 		w.dropUploads(time.Time{})
 		err = w.tools.Close()
 	}
+	if w.storage != nil {
+		// Its active session is no longer its to write: a workspace
+		// opened after it in this process writes it again, rather than
+		// hand its metadata to this one's stale copy.
+		w.storage.Release()
+	}
 	w.audit.Close()
 	w.lock.release()
 	return err

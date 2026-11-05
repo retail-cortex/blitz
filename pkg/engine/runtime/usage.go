@@ -54,12 +54,13 @@ func (t *UsageTracker) HasPrice(model string) bool {
 }
 
 // Estimate converts token counts to USD for model. cacheWrites are prompt
-// tokens (already counted in the prompt total) written to the cache.
+// tokens (already counted in the prompt total) written to the cache. A
+// call that reported no usage is one call of unknown cost (unpriced).
 func (t *UsageTracker) Estimate(model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
-	u := api.Usage{Calls: 1, Priced: true}
 	if m == nil {
-		return u
+		return api.Usage{Calls: 1}
 	}
+	u := api.Usage{Calls: 1, Priced: true}
 	u.Input = int64(m.PromptTokenCount) + int64(m.ToolUsePromptTokenCount)
 	u.Cached = int64(m.CachedContentTokenCount)
 	u.CacheWrite = min(max(cacheWrites, 0), max(u.Input-u.Cached, 0))
@@ -87,8 +88,14 @@ func (t *UsageTracker) Record(session, model string, m *genai.GenerateContentRes
 
 // RecordWrites is Record with a count of cache-write tokens.
 func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
+	return t.RecordCall(context.Background(), session, model, m, cacheWrites)
+}
+
+// RecordCall is RecordWrites for a call made under ctx, whose trace the
+// token metrics keep.
+func (t *UsageTracker) RecordCall(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
 	u := t.Estimate(model, m, cacheWrites)
-	observability.RecordTokens(context.Background(), model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
+	observability.RecordTokens(ctx, model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.sessions[session]
@@ -104,13 +111,10 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 // its tokens and cost, but not as a prompt, so the context's size stays
 // the conversation's. Without usage (a provider that reports none) the
 // cost is unknown.
-func (t *UsageTracker) RecordSpeech(session, model string, m *genai.GenerateContentResponseUsageMetadata) {
+func (t *UsageTracker) RecordSpeech(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata) {
 	u := t.Estimate(model, m, 0)
 	u.LastPrompt = 0
-	if m == nil {
-		u.Priced = false
-	}
-	observability.RecordTokens(context.Background(), model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
+	observability.RecordTokens(ctx, model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.sessions[session]

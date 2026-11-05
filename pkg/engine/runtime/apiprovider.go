@@ -344,7 +344,13 @@ func keepErrorBody(ctx context.Context, res *http.Response, err error) {
 // token is session's token, or "" when nothing uses one.
 func (p *apiProvider) token(ctx context.Context, session string) (string, error) {
 	if p.source != nil {
-		return p.source.AccessToken(ctx)
+		// The organization's token is remembered by the redactor too, as a
+		// script's is (MDL-108): a gateway error echoing it is masked.
+		tok, err := p.source.AccessToken(ctx)
+		if err == nil {
+			redact.Remember(tok)
+		}
+		return tok, err
 	}
 	if p.tokens == nil {
 		return "", nil
@@ -463,7 +469,7 @@ func (m *apiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, s
 		ctx = context.WithValue(withAgent(withSession(ctx, session), adkAgentName(ctx)), errorBodyKey{}, &reply)
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			if err != nil {
-				err = apiError(err, reply.Load())
+				err = apiError(err, reply.Load(), m.p.source != nil)
 			}
 			if !yield(resp, err) {
 				return
@@ -477,8 +483,14 @@ func (m *apiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, s
 // error.message, else the start of reply's body: the SDK's text is only
 // the status, and it has no error at all for a body it can't read), every error is the api provider's ("[llm.api] …", not
 // the adapter's "openai: call failed"), and nothing quotes a token (one
-// can be in the URL).
-func apiError(err error, reply *errorReply) error {
+// can be in the URL). For an organization's service (org: the enterprise
+// provider) the errors are its, and a rejected sign-in says how to sign
+// in again: the person has no [llm.api] and no token script.
+func apiError(err error, reply *errorReply, org bool) error {
+	prefix := "[llm.api] "
+	if org {
+		prefix = "your organization's service: "
+	}
 	status, reason, body := 0, "", ""
 	if reply != nil {
 		status, body = reply.status, reply.body
@@ -492,7 +504,10 @@ func apiError(err error, reply *errorReply) error {
 		// Its text quotes the request's URL, which can hold the token.
 		status = anthropicErr.StatusCode
 	case status == 0:
-		return maskedError{"[llm.api] " + strings.TrimPrefix(err.Error(), adapterPrefix), err}
+		return maskedError{prefix + strings.TrimPrefix(err.Error(), adapterPrefix), err}
+	}
+	if org && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
+		return fmt.Errorf("your organization's service refused your sign-in (HTTP %d): sign in again (Settings › Organization, or blitz enterprise login), then retry", status)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return fmt.Errorf("[llm.api] the API rejected the token (HTTP %d). Check the token script, sign in again if needed, then retry", status)
@@ -503,7 +518,7 @@ func apiError(err error, reply *errorReply) error {
 	case "budget_exceeded", "quota_exceeded":
 		return maskedError{errorMessage(body) + " Settings › Models (or blitz enterprise usage) shows what's left of each limit; another model may still be within yours.", ErrOrgLimit}
 	}
-	text := fmt.Sprintf("[llm.api] HTTP %d", status)
+	text := fmt.Sprintf("%sHTTP %d", prefix, status)
 	if s := http.StatusText(status); s != "" {
 		text += " " + s
 	}

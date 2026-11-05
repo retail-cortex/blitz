@@ -85,12 +85,15 @@ func defaultProvider(cfg *config.Config) string {
 	return strings.ToLower(cfg.LLM.Provider)
 }
 
-// knownProviders are the provider prefixes recognised in model references.
-var knownProviders = map[string]bool{
-	"gemini": true, "anthropic": true, "openai": true, "ollama": true,
-	"bedrock": true, "azure": true, "vertex-anthropic": true, "api": true,
-	"enterprise": true,
-}
+// knownProviders are the provider prefixes recognised in model
+// references: the settings' (config.Providers) and an organization's.
+var knownProviders = func() map[string]bool {
+	m := map[string]bool{"enterprise": true}
+	for _, p := range config.Providers {
+		m[p] = true
+	}
+	return m
+}()
 
 // ParseModelRef splits "provider/model" into its parts. Without a known
 // provider prefix the whole reference is a model of defaultProvider, so
@@ -269,11 +272,9 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return newOpenAIModel(ctx, modelName, "ollama", defaultOllamaBaseURL, pol.openAIOptions()...)
 
 	default:
-		// Fallback to Gemini if configured
-		if cfg.LLM.Gemini.APIKey != "" {
-			return gemini.NewModel(ctx, modelName, pol.geminiConfig(cfg.LLM.Gemini.APIKey))
-		}
-		return nil, fmt.Errorf("unsupported or unconfigured LLM provider '%s'", provider)
+		// A misspelt provider is that, whatever keys are set: never
+		// another provider's model under its name.
+		return nil, errUnknownProvider(provider)
 	}
 }
 
@@ -415,7 +416,9 @@ func (m *MockLLM) Name() string {
 
 // GenerateContent records the request and answers with the next scripted
 // response ("Done." once they run out), as one final response whether or
-// not streaming was asked for.
+// not streaming was asked for. As strict as the APIs it stands for: a
+// call whose context is done fails with its error, and a request with a
+// tool result whose call isn't before it is refused.
 func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		m.mu.Lock()
@@ -423,6 +426,16 @@ func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, st
 		m.CallCount++
 		m.Requests = append(m.Requests, req)
 		m.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			yield(nil, err)
+			return
+		}
+		if req != nil {
+			if err := unpairedResult(req.Contents); err != nil {
+				yield(nil, err)
+				return
+			}
+		}
 
 		var content *genai.Content
 		if idx < len(m.Responses) {
@@ -431,9 +444,14 @@ func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, st
 			content = genai.NewContentFromText("Done.", genai.RoleModel)
 		}
 
+		var usage *genai.GenerateContentResponseUsageMetadata
+		if m.Usage != nil { // each response its own, as a real one's
+			u := *m.Usage
+			usage = &u
+		}
 		resp := &model.LLMResponse{
 			Content:        content,
-			UsageMetadata:  m.Usage,
+			UsageMetadata:  usage,
 			ModelVersion:   m.ServedBy,
 			CustomMetadata: m.Metadata,
 		}
@@ -442,6 +460,31 @@ func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, st
 		}
 		yield(resp, nil)
 	}
+}
+
+// unpairedResult is the error the model APIs give a request with a tool
+// result whose call (by ID when it has one, else by name) isn't in an
+// earlier message.
+func unpairedResult(contents []*genai.Content) error {
+	calls := map[string]bool{}
+	for _, c := range contents {
+		if c == nil {
+			continue
+		}
+		for _, p := range c.Parts {
+			switch {
+			case p.FunctionCall != nil:
+				calls[p.FunctionCall.ID] = true
+				calls["name:"+p.FunctionCall.Name] = true
+			case p.FunctionResponse != nil:
+				r := p.FunctionResponse
+				if r.ID != "" && !calls[r.ID] || r.ID == "" && !calls["name:"+r.Name] {
+					return fmt.Errorf("400 Bad Request: a tool result (%s %q) has no tool call before it", r.Name, r.ID)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // toolCallParsingModel wraps any model.LLM to detect and convert JSON-encoded tool calls in text

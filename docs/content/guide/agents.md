@@ -91,7 +91,7 @@ and report problems with file and line. {agency_instructions}
 | `default_model` | `provider/model` it runs on, unless pinned |
 | `agency_level` | `low`, `medium`, `high`, `extreme`, when it runs for another agent (as the active agent it follows the session's level) |
 | `permission_mode` | `default`, `accept-edits`, `auto`, `plan`, `dont-ask` or `bypass`, when another agent invokes it; `plan` makes a reviewer that can't change anything |
-| `max_turns` | Its own budget of model calls when invoked |
+| `max_turns` | Its own budget of model calls when invoked, within the calling turn's: its calls count toward both |
 | `background` | `true`: run in the background when invoked, unless the call says otherwise |
 | `isolation` | `worktree`: run in its own git worktree (needs `background`) |
 | `temperature`, `top_p`, `max_tokens`, `effort`, `thinking_budget` | Model settings for this agent only, over the model's and the session's |
@@ -109,10 +109,10 @@ The main agent hands work to another with `invoke_agent`: the other agent starts
 
 A delegated agent can also run **in the background**: `invoke_agent` with `background: true` (or an agent whose file says so) starts it as a task (`task-1`, `task-2`, …) and returns at once, so the main agent keeps working with you. When the task ends, the main agent hears about it with its next step, or before your next message, and can read the whole result with `task_output`; `list_tasks` and `stop_task` do the rest.
 
-- A task runs what your permission mode and rules allow. Anything it would ask about waits for you: the terminal asks at its prompt, labelled ("qa · task-3 asks"), and the desktop app shows the request beside the conversation (**Ctrl+J** jumps to the next).
+- A task runs what your permission mode and rules allow, and keeps the limits of the turn that started it: one started from a `/plan` turn, `/btw`, `/search` or a command with `allowed-tools` can't do more than that turn could. Anything it would ask about waits for you: the terminal asks at its prompt, labelled ("qa · task-3 asks"), and the desktop app shows the request beside the conversation (**Ctrl+J** jumps to the next).
 - `/tasks` lists them (`/tasks show <id>`, `/tasks stop <id>`); the desktop app shows a card under the call, with **Show** and **Stop**. Exiting offers to stop or wait for them.
-- Limits: `tools.max_background_agents` (4 at once), `tools.background_agent_timeout` (30 minutes), `tools.background_agent_max_turns` (50 model calls) and `tools.background_agent_max_cost_usd` (none). Their cost counts in the session's.
-- `isolation: worktree` gives a task its own git worktree and branch, so its changes stay out of your checkout until you merge them; `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree[=name]`.
+- Limits: `tools.max_background_agents` (4 at once), `tools.background_agent_timeout` (30 minutes), `tools.background_agent_max_turns` (50 model calls) and `tools.background_agent_max_cost_usd` (none). Their cost counts in the session's; on a model without a price the cost cap can't stop a task, and you're told so once. A value that isn't one (0, or a timeout like `30 min` instead of `30m`) is reported when a task would start, and by the settings check, rather than replaced; a task that runs out of model calls says which setting gave it its budget.
+- `isolation: worktree` gives a task its own git worktree and branch, so its changes stay out of your checkout until you merge them (it can still delegate, and your session's approvals and `permission_request` hooks apply there); `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree[=name]`.
 - A background task can't start another, and [jobs](workers.md) can't start them at all.
 
 Not to be confused with **background runs**: `blitz --bg "<prompt>"` runs a whole prompt in the service, and `blitz agents` lists those runs ([the service](../products/service.md#background-runs)), not agent definitions.

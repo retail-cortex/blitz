@@ -48,11 +48,15 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 	e.mu.RLock()
 	spec, ok := e.agentReg.Get(e.active)
 	extra := e.extraInstructions
+	system := ""
+	if ok { // as the agent gets it: the session's agency, skills, images, diagrams
+		system = e.rootPrompt(spec) + e.imageInstruction(spec) + diagramInstruction
+	}
 	e.mu.RUnlock()
 	chars := map[string]int{}
 	order := []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results", "images", "documents", "media", "summary"}
 	if ok {
-		chars["system_prompt"] = len(spec.InterpolatePrompt(e.cfg.Blitz.AgencyLevel))
+		chars["system_prompt"] = len(system)
 		for _, t := range e.toolReg.GetToolsForAgent(spec.Tools) {
 			if d, ok := t.(interface {
 				Declaration() *genai.FunctionDeclaration

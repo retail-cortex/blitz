@@ -30,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
@@ -247,8 +248,9 @@ func TestBuildProviderModel(t *testing.T) {
 		},
 		{name: "none: openai address", model: "gpt-x", cfg: func(c *config.Config) { c.LLM.OpenAI.BaseURL = "http://127.0.0.1:1/v1" }, want: "openai"},
 		{name: "none: ollama", model: "llama", want: "openai"},
-		{name: "unknown with a gemini key", provider: "mystery", model: "gemini-x", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, want: "gemini"},
-		{name: "unknown", provider: "mystery", err: "unsupported or unconfigured LLM provider"},
+		// A misspelt provider is never Gemini's model under its name (N26 engine-runtime#17).
+		{name: "unknown with a gemini key", provider: "antropic", model: "claude-opus-5", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, err: `unknown provider "antropic" (gemini, anthropic, openai, ollama, bedrock, azure, vertex-anthropic or api)`},
+		{name: "unknown", provider: "mystery", err: `unknown provider "mystery"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.DefaultConfig()
@@ -348,6 +350,88 @@ func TestListModelsProviders(t *testing.T) {
 			tc.cfg(&c.LLM)
 			_, err := listProvider(context.Background(), c, tc.provider)
 			assert.Error(t, err)
+		})
+	}
+}
+
+// The scripted model is as strict as the APIs it stands for (N26
+// engine-runtime#22): a call whose context is done fails, a tool result
+// without its call is refused, and each response's usage is its own.
+func TestMockLLMIsStrict(t *testing.T) {
+	call := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "c1", Name: "list_files"}}}}
+	result := func(id string) *genai.Content {
+		return &genai.Content{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: id, Name: "list_files"}}}}
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cases := []struct {
+		name     string
+		ctx      context.Context
+		contents []*genai.Content
+		err      string
+	}{
+		{name: "an answer", ctx: context.Background(), contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser)}},
+		{name: "a result after its call", ctx: context.Background(), contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser), call, result("c1")}},
+		{name: "a result without its call", ctx: context.Background(), contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser), call, result("c2")}, err: "has no tool call before it"},
+		{name: "cancelled", ctx: cancelled, contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser)}, err: context.Canceled.Error()},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewMockLLM("m", textContent("ok"))
+			var err error
+			for _, e := range m.GenerateContent(c.ctx, &model.LLMRequest{Contents: c.contents}, false) {
+				err = e
+			}
+			if c.err == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, c.err)
+			}
+		})
+	}
+	t.Run("usage of its own", func(t *testing.T) {
+		m := NewMockLLM("m", textContent("a"), textContent("b"))
+		m.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 1}
+		var got []*genai.GenerateContentResponseUsageMetadata
+		for range 2 {
+			for r := range m.GenerateContent(context.Background(), &model.LLMRequest{}, false) {
+				got = append(got, r.UsageMetadata)
+			}
+		}
+		require.Len(t, got, 2)
+		assert.NotSame(t, got[0], got[1])
+	})
+}
+
+// The fake Messages API refuses what the real one refuses (N26
+// engine-runtime#22).
+func TestFakeMessagesAPIIsStrict(t *testing.T) {
+	user := map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "hi"}}}
+	use := map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "t1", "name": "x", "input": map[string]any{}}}}
+	result := func(id string) map[string]any {
+		return map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id}}}
+	}
+	cases := []struct {
+		name string
+		req  map[string]any
+		why  string
+	}{
+		{name: "valid", req: map[string]any{"messages": []any{user, use, result("t1")}, "max_tokens": 100.0}},
+		{name: "no messages", req: map[string]any{"messages": []any{}}, why: "at least one message"},
+		{name: "assistant first", req: map[string]any{"messages": []any{use}}, why: "first message"},
+		{name: "two from the user", req: map[string]any{"messages": []any{user, user}}, why: "alternate"},
+		{name: "a result without its use", req: map[string]any{"messages": []any{user, use, result("t2")}}, why: "unexpected tool_use_id"},
+		{name: "temperature with thinking", req: map[string]any{"messages": []any{user}, "max_tokens": 100.0, "temperature": 0.5, "thinking": map[string]any{"type": "enabled", "budget_tokens": 10.0}}, why: "temperature"},
+		{name: "a budget past max_tokens", req: map[string]any{"messages": []any{user}, "max_tokens": 100.0, "thinking": map[string]any{"type": "enabled", "budget_tokens": 100.0}}, why: "budget_tokens"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := invalidMessages(c.req)
+			if c.why == "" {
+				assert.Empty(t, got)
+			} else {
+				assert.Contains(t, got, c.why)
+			}
 		})
 	}
 }

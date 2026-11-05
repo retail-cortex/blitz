@@ -39,8 +39,11 @@ type ollamaAuto struct {
 	key, baseURL string
 	opts         []option.RequestOption
 
-	mu    sync.Mutex
-	inner model.LLM
+	// finding serialises the lookups; mu guards inner only, so Name
+	// never waits on Ollama's list (a hung Ollama would hold it).
+	finding sync.Mutex
+	mu      sync.Mutex
+	inner   model.LLM
 	// list and build are Ollama's model list and newOpenAIModel; tests
 	// replace them.
 	list  func(ctx context.Context) ([]string, error)
@@ -80,10 +83,13 @@ func (a *ollamaAuto) Name() string {
 
 // resolve finds the model on the first call, and again after a failure.
 func (a *ollamaAuto) resolve(ctx context.Context) (model.LLM, error) {
+	a.finding.Lock()
+	defer a.finding.Unlock()
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.inner != nil {
-		return a.inner, nil
+	inner := a.inner
+	a.mu.Unlock()
+	if inner != nil {
+		return inner, nil
 	}
 	ids, err := a.list(ctx)
 	if err != nil {
@@ -97,7 +103,9 @@ func (a *ollamaAuto) resolve(ctx context.Context) (model.LLM, error) {
 		return nil, err
 	}
 	slog.InfoContext(ctx, "no Ollama model chosen: using the first it has", "model", ids[0])
+	a.mu.Lock()
 	a.inner = m
+	a.mu.Unlock()
 	return m, nil
 }
 
@@ -123,7 +131,7 @@ func (a *ollamaAuto) GenerateContent(ctx context.Context, req *model.LLMRequest,
 // which model it doesn't have and what to do.
 func providerError(err error, provider, name, key string) error {
 	var apiErr *openai.Error
-	if provider == "" || !errors.As(err, &apiErr) {
+	if !errors.As(err, &apiErr) {
 		return err
 	}
 	if provider == "ollama" && apiErr.StatusCode == http.StatusNotFound {

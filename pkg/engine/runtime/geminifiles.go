@@ -74,10 +74,9 @@ type uploaded struct {
 }
 
 func newGeminiUploader(files geminiFilesAPI) images.Uploader {
-	var mu sync.Mutex // one upload of a file at a time
+	var locks fileLocks // one upload of a file at a time; other files go on
 	return func(ctx context.Context, path, mime, sha string) (*genai.FileData, error) {
-		mu.Lock()
-		defer mu.Unlock()
+		defer locks.lock(sha)()
 		record := filepath.Join(filepath.Dir(path), sha+".gemini.json")
 		var u uploaded
 		if b, err := os.ReadFile(record); err == nil && json.Unmarshal(b, &u) == nil && nowForUpload().Before(u.Expires) && u.URI != "" {
@@ -101,6 +100,42 @@ func newGeminiUploader(files geminiFilesAPI) images.Uploader {
 			os.WriteFile(record, b, 0o600) // best effort: else it goes up again next time
 		}
 		return &genai.FileData{FileURI: file.URI, MIMEType: mime}, nil
+	}
+}
+
+// fileLocks are a lock per file (by sha), kept while someone holds or
+// waits for it.
+type fileLocks struct {
+	mu sync.Mutex
+	m  map[string]*fileLock
+}
+
+type fileLock struct {
+	sync.Mutex
+	users int
+}
+
+// lock locks key's lock and returns its unlock.
+func (l *fileLocks) lock(key string) func() {
+	l.mu.Lock()
+	if l.m == nil {
+		l.m = map[string]*fileLock{}
+	}
+	f := l.m[key]
+	if f == nil {
+		f = &fileLock{}
+		l.m[key] = f
+	}
+	f.users++
+	l.mu.Unlock()
+	f.Lock()
+	return func() {
+		f.Unlock()
+		l.mu.Lock()
+		if f.users--; f.users == 0 {
+			delete(l.m, key)
+		}
+		l.mu.Unlock()
 	}
 }
 
