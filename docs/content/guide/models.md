@@ -17,7 +17,7 @@ Model requests are retried on rate limits, overload, 5xx responses and dropped c
 
 ## Fallback models
 
-If the model fails before answering (after its retries: an outage, a rate limit, bad credentials), the next one in `llm.fallback_models` answers instead:
+If the model fails before answering (after its retries), for any reason (an outage, a rate limit, a bad key, a model name it doesn't know, a conversation too long for it, your organization's budget), the next one in `llm.fallback_models` answers instead. Stopping a turn never switches models:
 
 ```toml
 [llm]
@@ -25,7 +25,7 @@ provider = "gemini"
 fallback_models = ["anthropic/claude-sonnet-5", "gemini-3.5-flash-lite"]
 ```
 
-Each provider uses its own credentials. A failed model is skipped for 15 seconds, doubling up to 5 minutes, then tried again. You see one notice when a fallback takes over and one when the primary is back, and cost is priced by the model that answered. For OpenRouter names that contain a slash, write the provider first: `openai/anthropic/claude-sonnet-5`.
+Each provider uses its own credentials. A failed model is skipped for 15 seconds, doubling up to 5 minutes, then tried again. You see one notice when a fallback takes over, naming the primary's error so a broken key or a mistyped model doesn't go unnoticed, and one when the primary is back, and cost is priced by the model that answered. For OpenRouter names that contain a slash, write the provider first: `openai/anthropic/claude-sonnet-5`.
 
 ## Per-agent models
 

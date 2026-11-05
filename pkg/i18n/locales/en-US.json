@@ -454,6 +454,7 @@
     "tools.mcp.unavailable": "The MCP server \"{server}\" is unavailable: {error}",
     "tools.mcp.available": "The MCP server \"{server}\" is available again.",
     "model.fallback": "{primary} is unavailable; answering with fallback {model} for now.",
+    "model.fallback_error": "{primary} failed ({error}); answering with fallback {model} for now.",
     "model.fallback_recovered": "{model} is answering again.",
     "model.reconnecting": "Lost the connection to the model ({error}). Reconnecting…",
     "org.builtin_kept": "Your organization switches off the built-in agent {name}, but sessions start with it: it's kept. Set another default agent to go without it.",

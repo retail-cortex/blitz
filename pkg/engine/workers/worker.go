@@ -94,6 +94,19 @@ type Worker struct {
 	// Flow is a workflow (spec_043_workflows WF-17) the worker runs, its
 	// prompt the workflow's input.
 	Flow string
+	// FlowFile is Flow's file as Hash covers it, read once with it (nil
+	// when the worker runs no workflow or its file is missing): a run
+	// takes the workflow's steps, and the permissions they grant, from
+	// these bytes, never from a later read an edit could have changed
+	// (spec_023_workers WK-05b).
+	FlowFile *FlowFile
+}
+
+// FlowFile is a workflow's file as read when its worker was hashed.
+type FlowFile struct {
+	// Path is the file's path; Data its content.
+	Path string
+	Data []byte
 }
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
@@ -182,7 +195,7 @@ func Load(dir, flowsDir string) (*Worker, error) {
 	default:
 		problems = append(problems, fmt.Sprintf("catch_up %q: use \"none\" or \"once\"", w.CatchUp))
 	}
-	if w.Hash, err = hashDir(dir, flowsDir); err != nil {
+	if w.Hash, w.FlowFile, err = hashDir(dir, flowsDir, data); err != nil {
 		problems = append(problems, "hashing: "+err.Error())
 	}
 	if len(problems) > 0 {
@@ -202,7 +215,7 @@ func ReadSpec(dir, flowsDir string) (api.WorkerSpec, string, error) {
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
-	hash, err := hashDir(dir, flowsDir)
+	hash, _, err := hashDir(dir, flowsDir, data)
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
@@ -238,7 +251,10 @@ func ParseSpec(name string, data []byte) api.WorkerSpec {
 // removing it changes the hash and an enabled job waits to be enabled
 // again (spec_023_workers WK-05a). A worker without a workflow has the hash
 // of its files alone.
-func HashDir(dir, flowsDir string) (string, error) { return hashDir(dir, flowsDir) }
+func HashDir(dir, flowsDir string) (string, error) {
+	hash, _, err := hashDir(dir, flowsDir, nil)
+	return hash, err
+}
 
 // fileFrontmatter is frontmatter as Render writes it: set fields only.
 type fileFrontmatter struct {
@@ -320,8 +336,11 @@ const flowSuffix = ".flow.yaml"
 // hashDir is the SHA-256 of every regular file under dir, in path order,
 // each as its relative path, size and content (as skills' ContentHash),
 // then, for a worker that runs a workflow, the workflow's file in flowsDir
-// (hashFlow). Symbolic links are skipped: they could point anywhere.
-func hashDir(dir, flowsDir string) (string, error) {
+// (hashFlow), which it returns as read. md, if not nil, is WORKER.md as
+// the caller read it, hashed in place of another read, so what was parsed
+// is what was hashed. Symbolic links are skipped: they could point
+// anywhere.
+func hashDir(dir, flowsDir string, md []byte) (string, *FlowFile, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -333,35 +352,49 @@ func hashDir(dir, flowsDir string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	sort.Strings(paths)
 	h := sha256.New()
 	var total int64
+	if md == nil {
+		if md, err = os.ReadFile(filepath.Join(dir, FileName)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", nil, err
+		}
+	}
 	for _, p := range paths {
+		rel, _ := filepath.Rel(dir, p)
+		if filepath.ToSlash(rel) == FileName && md != nil {
+			if total += int64(len(md)); total > maxHashedBytes {
+				return "", nil, fmt.Errorf("worker directory is larger than %d MB", maxHashedBytes>>20)
+			}
+			fmt.Fprintf(h, "%s\x00%d\x00", FileName, len(md))
+			h.Write(md)
+			continue
+		}
 		info, err := os.Stat(p)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if total += info.Size(); total > maxHashedBytes {
-			return "", fmt.Errorf("worker directory is larger than %d MB", maxHashedBytes>>20)
+			return "", nil, fmt.Errorf("worker directory is larger than %d MB", maxHashedBytes>>20)
 		}
 		f, err := os.Open(p)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
-		rel, _ := filepath.Rel(dir, p)
 		fmt.Fprintf(h, "%s\x00%d\x00", filepath.ToSlash(rel), info.Size())
 		_, err = io.Copy(h, f)
 		f.Close()
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
-	if err := hashFlow(h, dir, flowsDir, total); err != nil {
-		return "", err
+	flow, err := hashFlow(h, md, flowsDir, total)
+	if err != nil {
+		return "", nil, err
 	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), flow, nil
 }
 
 // hashFlow adds to h the workflow the worker in dir runs, if it names one:
@@ -369,21 +402,24 @@ func hashDir(dir, flowsDir string) (string, error) {
 // workflow (<name>.flow.yaml, the suffix in any case), by name, each as
 // its name, size and content, or a mark that there's none. Nothing is
 // added for a worker without a workflow, so its hash is what it was
-// before workflows were hashed. total is what's been hashed so far.
-func hashFlow(h io.Writer, dir, flowsDir string, total int64) error {
-	data, err := os.ReadFile(filepath.Join(dir, FileName))
-	if err != nil {
-		return nil // no WORKER.md: Load and ReadSpec say so
+// before workflows were hashed. md is the worker's WORKER.md (nil: none,
+// which Load and ReadSpec report); total is what's been hashed so far. It
+// returns the first of the files as read (flows.Load's order), nil when
+// there's none.
+func hashFlow(h io.Writer, md []byte, flowsDir string, total int64) (*FlowFile, error) {
+	if md == nil {
+		return nil, nil
 	}
-	name := strings.TrimSpace(ParseSpec("", data).Workflow)
+	name := strings.TrimSpace(ParseSpec("", md).Workflow)
 	if name == "" {
-		return nil
+		return nil, nil
 	}
+	var err error
 	fmt.Fprintf(h, "\x00workflow\x00%s\x00", name)
 	var entries []os.DirEntry
 	if flowsDir != "" {
 		if entries, err = os.ReadDir(flowsDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
+			return nil, err
 		}
 	}
 	var files []string
@@ -395,20 +431,25 @@ func hashFlow(h io.Writer, dir, flowsDir string, total int64) error {
 	}
 	if len(files) == 0 {
 		fmt.Fprint(h, "missing")
-		return nil
+		return nil, nil
 	}
+	var first *FlowFile
 	for _, n := range files {
-		data, err := os.ReadFile(filepath.Join(flowsDir, n))
+		path := filepath.Join(flowsDir, n)
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if total += int64(len(data)); total > maxHashedBytes {
-			return fmt.Errorf("worker directory and workflow are larger than %d MB", maxHashedBytes>>20)
+			return nil, fmt.Errorf("worker directory and workflow are larger than %d MB", maxHashedBytes>>20)
 		}
 		fmt.Fprintf(h, "%s\x00%d\x00", n, len(data))
 		h.Write(data)
+		if first == nil {
+			first = &FlowFile{Path: path, Data: data}
+		}
 	}
-	return nil
+	return first, nil
 }
 
 // Found is a worker found by Discover, with why it can't be used if it

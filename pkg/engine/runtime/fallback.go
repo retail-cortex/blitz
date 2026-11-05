@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"strings"
+	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
 	"google.golang.org/adk/v2/model"
@@ -28,6 +30,16 @@ import (
 // FallbackFromKey is set in a response's CustomMetadata when a fallback
 // model answered; its value is the name of the model that failed first.
 const FallbackFromKey = "blitz_fallback_from"
+
+// FallbackReasonKey is set beside FallbackFromKey: the primary's error
+// that made the chain move on (this call's, or the one that opened its
+// breaker), so a broken key or a bad model name isn't hidden behind the
+// fallback.
+const FallbackReasonKey = "blitz_fallback_reason"
+
+// maxFallbackReason caps the primary's error in the notice: provider
+// errors can carry a whole response body.
+const maxFallbackReason = 300
 
 // modelFailThreshold is one failure: SDK retries have already run by the
 // time a call fails, so one is enough to prefer the next model for a
@@ -39,19 +51,27 @@ const modelFailThreshold = 1
 // outage doesn't cost a failed call on every step; the primary is tried
 // again when its cooldown ends.
 //
-// It only moves on when a model fails before producing anything: once
-// output has been yielded (streamed text is on screen) an error ends the
-// call, as it would without fallbacks. Cancellation never moves on.
+// It moves on for any error a model returns before producing anything,
+// client errors included (a 400, a broken key, an unknown model, a context
+// too long, an organization's budget refusal): the owner's decision
+// (MDL-61a), with the primary's error named in the notice. Once output has
+// been yielded (streamed text is on screen) an error ends the call, as it
+// would without fallbacks. Cancellation never moves on.
 type fallbackModel struct {
 	chain  []model.LLM
 	health []*breaker.Breaker
+
+	mu sync.Mutex
+	// lastErr is, by model, the error it last failed with before
+	// producing anything: the reason named while its breaker is open.
+	lastErr []error
 }
 
 func newFallbackModel(chain []model.LLM) model.LLM {
 	if len(chain) == 1 {
 		return chain[0]
 	}
-	f := &fallbackModel{chain: chain, health: make([]*breaker.Breaker, len(chain))}
+	f := &fallbackModel{chain: chain, health: make([]*breaker.Breaker, len(chain)), lastErr: make([]error, len(chain))}
 	for i := range chain {
 		f.health[i] = breaker.New(modelFailThreshold)
 	}
@@ -80,6 +100,7 @@ func (f *fallbackModel) GenerateContent(ctx context.Context, req *model.LLMReque
 				if done {
 					return
 				}
+				f.setLastErr(i, err)
 				errs = append(errs, fmt.Errorf("%s: %w", m.Name(), err))
 			}
 			if tried {
@@ -112,7 +133,7 @@ func (f *fallbackModel) try(ctx context.Context, i int, m model.LLM, req *model.
 		}
 		produced = true
 		if i > 0 && resp != nil {
-			markFallback(resp, m.Name(), f.chain[0].Name())
+			markFallback(resp, m.Name(), f.chain[0].Name(), f.reason())
 		}
 		if !yield(resp, nil) {
 			f.health[i].Success() // it was answering; the consumer stopped
@@ -123,9 +144,32 @@ func (f *fallbackModel) try(ctx context.Context, i int, m model.LLM, req *model.
 	return true, nil
 }
 
-// markFallback records which model answered, so usage is priced by it and
-// the user can be told.
-func markFallback(resp *model.LLMResponse, served, primary string) {
+// setLastErr records why model i failed.
+func (f *fallbackModel) setLastErr(i int, err error) {
+	f.mu.Lock()
+	f.lastErr[i] = err
+	f.mu.Unlock()
+}
+
+// reason is the primary's last error as one short line, or "" if none is
+// known.
+func (f *fallbackModel) reason() string {
+	f.mu.Lock()
+	err := f.lastErr[0]
+	f.mu.Unlock()
+	if err == nil {
+		return ""
+	}
+	s := strings.Join(strings.Fields(err.Error()), " ")
+	if r := []rune(s); len(r) > maxFallbackReason {
+		s = string(r[:maxFallbackReason]) + "…"
+	}
+	return s
+}
+
+// markFallback records which model answered, so usage is priced by it,
+// and why the primary didn't, so the user can be told.
+func markFallback(resp *model.LLMResponse, served, primary, reason string) {
 	if resp.ModelVersion == "" {
 		resp.ModelVersion = served
 	}
@@ -133,4 +177,7 @@ func markFallback(resp *model.LLMResponse, served, primary string) {
 		resp.CustomMetadata = map[string]any{}
 	}
 	resp.CustomMetadata[FallbackFromKey] = primary
+	if reason != "" {
+		resp.CustomMetadata[FallbackReasonKey] = reason
+	}
 }
