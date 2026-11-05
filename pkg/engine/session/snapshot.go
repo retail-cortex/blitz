@@ -216,14 +216,17 @@ func (s *Storage) copyLocked(src, rec *SessionRecord) (err error) {
 	if err := writeNew(s.path(rec.ID, messagesSuffix), bytes.NewReader(msgs)); err != nil {
 		return err
 	}
-	if f, err := os.Open(s.path(src.ID, eventsSuffix)); err == nil {
-		err = writeNew(s.path(rec.ID, eventsSuffix), f)
-		f.Close()
-		if err != nil {
+	// The event log, and what its sub-agents did (SES-23a).
+	for _, suffix := range []string{eventsSuffix, subagentsSuffix} {
+		if f, err := os.Open(s.path(src.ID, suffix)); err == nil {
+			err = writeNew(s.path(rec.ID, suffix), f)
+			f.Close()
+			if err != nil {
+				return err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
 	}
 	rec.MessageCount = len(src.Messages)
 	// The copy holds the same conversation, so the same context size; what
@@ -237,7 +240,7 @@ func (s *Storage) copyLocked(src, rec *SessionRecord) (err error) {
 // removeLocked deletes a session's files, metadata first so it stops being
 // listed even if a later removal fails.
 func (s *Storage) removeLocked(id string) {
-	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, legacySuffix} {
+	for _, suffix := range sessionSuffixes {
 		_ = os.Remove(s.path(id, suffix))
 	}
 }

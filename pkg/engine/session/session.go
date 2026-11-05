@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,6 +51,10 @@ const (
 	messagesSuffix = ".jsonl"
 	legacySuffix   = ".json"
 )
+
+// sessionSuffixes are every file a session has, metadata first, so a
+// session being removed stops being listed even if a later removal fails.
+var sessionSuffixes = []string{metaSuffix, messagesSuffix, eventsSuffix, subagentsSuffix, legacySuffix}
 
 var validID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
@@ -253,10 +258,14 @@ func (s *Storage) Append(msg Message) error {
 // AppendTo adds msg (stamped now) to session id, active or not: a turn's
 // messages go to the session it runs in, whatever another client (or a
 // service that restarted since the session was opened) made active. A
-// session with no metadata yet is created under id.
+// session with no metadata yet is created under id. A session another
+// storage of this process has active is that storage's to write (SES-49a).
 func (s *Storage) AppendTo(id string, msg Message) error {
 	if err := ValidateID(id); err != nil {
 		return err
+	}
+	if o := s.ownerOf(id); o != nil {
+		return o.AppendTo(id, msg)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -701,7 +710,7 @@ func (s *Storage) Delete(id string) error {
 		return fmt.Errorf("%w: %s", api.ErrSessionNotFound, id)
 	}
 	// Metadata first, so it stops being listed even if a later removal fails.
-	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, subagentsSuffix, legacySuffix} {
+	for _, suffix := range sessionSuffixes {
 		if err := os.Remove(s.path(id, suffix)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -742,10 +751,33 @@ func (s *Storage) readMeta(id string) (*SessionRecord, error) {
 	}
 	var rec SessionRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
+		// Its transcript is intact: the conversation stays in the history
+		// and can be continued, its metadata rebuilt from it (SES-13a).
+		if r := s.metaFromTranscript(id); r != nil {
+			slog.Warn("session metadata unreadable: rebuilt from its transcript", "session", id, "error", err)
+			return r, nil
+		}
 		return nil, fmt.Errorf("corrupt session metadata %s: %w", id, err)
 	}
 	rec.Messages = nil
 	return &rec, nil
+}
+
+// metaFromTranscript is session id's metadata as its transcript gives it
+// (times, count, title), or nil when it has no messages.
+func (s *Storage) metaFromTranscript(id string) *SessionRecord {
+	msgs, err := s.readMessages(id)
+	if err != nil || len(msgs) == 0 {
+		return nil
+	}
+	rec := &SessionRecord{ID: id, Workspace: s.workspace, CreatedAt: msgs[0].Timestamp, UpdatedAt: msgs[len(msgs)-1].Timestamp, MessageCount: len(msgs)}
+	for _, m := range msgs {
+		if m.Role == "user" {
+			rec.Title = TitleFrom(m.Content)
+			break
+		}
+	}
+	return rec
 }
 
 func (s *Storage) readMessages(id string) ([]Message, error) {
