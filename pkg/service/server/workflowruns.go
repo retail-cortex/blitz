@@ -199,7 +199,7 @@ func (h workspaceService) WatchWorkflowRuns(ctx context.Context, r req[pb.WatchW
 		}
 		if sig := b.String(); sig != last {
 			last = sig
-			if err := stream.Send(&pb.WatchWorkflowRunsResponse{Runs: runs}); err != nil {
+			if err := stream.Send(&pb.WatchWorkflowRunsResponse{Runs: runs, Listed: true}); err != nil {
 				return err
 			}
 		}

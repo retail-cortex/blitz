@@ -110,7 +110,7 @@ func (h workspaceService) WatchHumanTasks(ctx context.Context, r req[pb.WatchHum
 		}
 		if sig != last {
 			last = sig
-			if err := stream.Send(&pb.WatchHumanTasksResponse{Tasks: cur.Tasks, Alerts: cur.Alerts}); err != nil {
+			if err := stream.Send(&pb.WatchHumanTasksResponse{Tasks: cur.Tasks, Alerts: cur.Alerts, Listed: true}); err != nil {
 				return err
 			}
 		}

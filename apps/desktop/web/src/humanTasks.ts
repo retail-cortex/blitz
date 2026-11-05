@@ -83,7 +83,10 @@ let watching: AbortController | undefined;
 async function watch(ctl: AbortController) {
   while (!ctl.signal.aborted) {
     try {
-      for await (const r of workspaces.watchHumanTasks({ workspace: "" }, { signal: ctl.signal })) take(r);
+      for await (const r of workspaces.watchHumanTasks({ workspace: "" }, { signal: ctl.signal })) {
+        // The page server's keepalives are empty messages: not a list.
+        if (r.listed) take(r);
+      }
     } catch {
       // An older service (unimplemented) or a dropped stream: ask now,
       // and try the stream again after a while.
@@ -94,7 +97,8 @@ async function watch(ctl: AbortController) {
   }
 }
 
-function subscribe(f: () => void) {
+/** Listens for changes to the tasks, following the service while anything listens; returns what stops that. */
+export function subscribeTasks(f: () => void) {
   listeners.add(f);
   if (listeners.size === 1) {
     watching = new AbortController();
@@ -120,9 +124,12 @@ export async function answerTask(task: Pick<HumanTask, "id" | "workspace">, acti
   return r;
 }
 
+/** The tasks and the dialog's state now. */
+export const tasksNow = (): TasksState => state;
+
 /** The tasks, oldest first, and the dialog's state, kept up to date while in use. */
 export function useTasks(): TasksState {
-  return useSyncExternalStore(subscribe, () => state);
+  return useSyncExternalStore(subscribeTasks, tasksNow);
 }
 
 /** Calls f with tasks that have arrived since the last poll; returns what stops that. */

@@ -1222,7 +1222,7 @@ async function* watchFakeTasks(workspace: string) {
     const sig = fakeAlerts + tasks.map((x) => x.id).join("|");
     if (sig !== last) {
       last = sig;
-      yield { alerts: fakeAlerts, tasks };
+      yield { alerts: fakeAlerts, tasks, listed: true };
     }
     await sleep(500);
   }
@@ -1523,7 +1523,7 @@ async function* watchFakeRuns(workspace: string) {
     if (receiptsVersion !== last) {
       last = receiptsVersion;
       const cutoff = Date.now() - 10 * 60_000;
-      yield { runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (r.status === "running" || r.status === "waiting" || (r.ended && Number(r.ended.seconds) * 1000 > cutoff))).map(summary) };
+      yield { runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (r.status === "running" || r.status === "waiting" || (r.ended && Number(r.ended.seconds) * 1000 > cutoff))).map(summary), listed: true };
     }
     await sleep(300);
   }

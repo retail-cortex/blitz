@@ -279,6 +279,9 @@ export class LanguageSession {
     while (!ctl.signal.aborted) {
       try {
         for await (const m of api.watchDiagnostics({ workspace: this.dir, client: clientId }, { signal: ctl.signal })) {
+          // The page server's keepalives are empty messages: no document
+          // (a document still opening has no ID either).
+          if (!m.document) continue;
           const d = [...this.docs.values()].find((x) => x.id === m.document);
           if (!d) continue;
           d.problems = {

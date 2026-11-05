@@ -76,7 +76,7 @@ func (f *fakeExtras) StopWorkflowRun(_ context.Context, r *connect.Request[pb.St
 // WatchWorkflowRuns sends the runs twice, then ends.
 func (f *fakeExtras) WatchWorkflowRuns(_ context.Context, _ *connect.Request[pb.WatchWorkflowRunsRequest], stream *connect.ServerStream[pb.WatchWorkflowRunsResponse]) error {
 	for _, status := range []string{"running", "done"} {
-		if err := stream.Send(&pb.WatchWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "f1", Workflow: "brief", Status: status}}}); err != nil {
+		if err := stream.Send(&pb.WatchWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "f1", Workflow: "brief", Status: status}}, Listed: true}); err != nil {
 			return err
 		}
 	}
