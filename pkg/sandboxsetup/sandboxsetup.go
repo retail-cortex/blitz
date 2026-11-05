@@ -232,6 +232,10 @@ var trustedOwner = func(uid uint32) bool { return uid == 0 }
 // person (or anything running as them) could replace.
 var ErrNotSystemBwrap = errors.New("isn't a system program (owned by root and writable by root alone, in folders that are too): install bubblewrap from the system's packages, or put /usr/bin before it on PATH")
 
+// walkTop is the last folder systemProgram looks at, "" for the
+// filesystem's root (tests stop at their fake system's).
+var walkTop = ""
+
 // systemProgram is nil when path and every folder above it are owned by
 // root and writable by no one else. A folder above it that anyone may write
 // to but with the sticky bit (/tmp) is fine: no one can remove or replace
@@ -247,7 +251,7 @@ func systemProgram(path string) error {
 		if !ok || !trustedOwner(uid) || (info.Mode().Perm()&0o022 != 0 && !sticky) {
 			return fmt.Errorf("bwrap at %s %w", path, ErrNotSystemBwrap)
 		}
-		if p == filepath.Dir(p) {
+		if p == walkTop || p == filepath.Dir(p) {
 			return nil
 		}
 	}

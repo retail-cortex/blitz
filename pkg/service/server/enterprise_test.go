@@ -1097,15 +1097,18 @@ func TestShareWithOrganization(t *testing.T) {
 	assert.Equal(t, notes, list.Msg.Workspaces[0].Dir)
 
 	// Kept in step where it is, through its own remote.
-	require.Eventually(t, func() bool {
+	// Each wait ends as soon as it holds; a busy CI runner's commits and
+	// pushes take longer than 10 s now and then.
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
 		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: notes}))
-		return err == nil && st.Msg.State == "saved"
-	}, 10*time.Second, 20*time.Millisecond)
+		require.NoError(ct, err)
+		assert.Equal(ct, "saved", st.Msg.State, "its sync's state")
+	}, 30*time.Second, 20*time.Millisecond)
 	require.NoError(t, os.WriteFile(filepath.Join(notes, "more.md"), []byte("More."), 0o644))
 	require.Eventually(t, func() bool {
 		out, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%s", "main").Output()
 		return strings.Contains(string(out), "more.md")
-	}, 10*time.Second, 20*time.Millisecond, "its change saved and shared")
+	}, 30*time.Second, 20*time.Millisecond, "its change saved and shared")
 
 	// Save now: at once, and the state after.
 	require.NoError(t, os.WriteFile(filepath.Join(notes, "now.md"), []byte("Now."), 0o644))

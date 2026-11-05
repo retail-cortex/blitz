@@ -57,10 +57,13 @@ func newFakeSystem(t *testing.T, restriction string, withParser, withBwrap bool,
 		require.NoError(t, os.WriteFile(restrict, []byte(restriction+"\n"), 0o644))
 	}
 	old := []any{goos, lookPath, restrictFile, profileDir, parsers, probe, run}
-	oldOwner := trustedOwner
+	oldOwner, oldTop := trustedOwner, walkTop
 	trustedOwner = func(uid uint32) bool { return uid == 0 || uid == uint32(os.Getuid()) }
+	// The folders above the test's own are the machine's: in Bazel's
+	// sandbox on Linux root's show as nobody's, so the walk stops here.
+	walkTop = dir
 	t.Cleanup(func() {
-		trustedOwner = oldOwner
+		trustedOwner, walkTop = oldOwner, oldTop
 		goos, lookPath, restrictFile, profileDir = old[0].(string), old[1].(func(string) (string, error)), old[2].(string), old[3].(string)
 		parsers = old[4].([]string)
 		probe = old[5].(func(context.Context, string) ([]byte, error))
