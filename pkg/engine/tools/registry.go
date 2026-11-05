@@ -196,6 +196,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		return nil, fmt.Errorf("failed to open workspace: %w", err)
 	}
+	rules.SetWorkspace(ws.Dir())
 
 	policy, err := NewCommandPolicy(CommandPolicyConfig{
 		Allow:       sb.Commands.Allow,
