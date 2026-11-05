@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/images"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -302,9 +303,18 @@ func (h sessionService) StartBackground(ctx context.Context, r req[pb.StartBackg
 	if t == nil || strings.TrimSpace(t.Text) == "" {
 		return nil, apiError(connect.CodeInvalidArgument, "INVALID_TURN", errors.New("a background run needs a prompt"))
 	}
+	var imgs []*images.Image
+	for _, id := range t.ImageIds {
+		img, err := w.image(id)
+		if err != nil {
+			return nil, err
+		}
+		imgs = append(imgs, img)
+	}
 	run, err := h.s.startRun(w, api.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, MaxTurns: int(t.MaxTurns),
 		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command,
+		Images: imgs, FetchGrants: t.FetchGrants, Context: contextBlocks(t.Context),
 	})
 	if err != nil {
 		return nil, err

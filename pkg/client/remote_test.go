@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
@@ -139,7 +141,6 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"SetLocale":            func() error { _, err := r.SetLocale(ctx, "fr"); return err },
 		"Undo":                 func() error { _, err := r.Undo(false); return err },
 		"GitDiff":              func() error { _, err := r.GitDiff(ctx, false); return err },
-		"GitStatus":            func() error { _, err := r.GitStatus(ctx); return err },
 		"LoadImage":            func() error { _, err := r.LoadImage("a.png"); return err },
 		"AddImage":             func() error { _, err := r.AddImage("a.png", nil); return err },
 		"LoadAttachments":      func() error { _, err := r.LoadAttachments([]string{"a.png"}, "", nil); return err },
@@ -166,6 +167,18 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 	set, err := r.Set(ctx, " Effort ", "low")
 	assert.Error(t, err)
 	assert.Equal(t, "effort", set, "the key as it would have been applied")
+}
+
+// Reload's error is app's, not the transport's, as every other call's
+// (N26 api-client-config#21).
+func TestRemoteReloadError(t *testing.T) {
+	r, _ := gone(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := r.Reload(ctx)
+	var ce *connect.Error
+	assert.False(t, errors.As(err, &ce), "a raw connect error: %v", err)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 // With the service gone, the calls that can't return an error tell warn

@@ -109,6 +109,7 @@ func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Deci
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
 		return &pb.TurnEvent{Kind: &pb.TurnEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
 			RequestId: id, Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, ScopeLabel: req.KeyLabel,
+			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk,
 		}}}
 	})
 	if err != nil {

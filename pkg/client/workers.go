@@ -135,8 +135,9 @@ func workerInfo(w *pb.Worker) api.WorkerInfo {
 	out := api.WorkerInfo{
 		Workspace: w.Workspace, Name: w.Name, Description: w.Description, Path: w.Path, Hash: w.Hash,
 		State: workerStates[w.State], Schedule: w.Schedule, Cron: w.Cron, Timezone: w.Timezone, Next: timeOf(w.NextRun),
-		Agent: w.Agent, Model: w.Model, Permissions: w.Permissions, Problems: w.Problems,
-		Limits: api.Limits{MaxTurns: int(w.Limits.GetMaxTurns()), MaxCostUSD: w.Limits.GetMaxCostUsd(), Timeout: w.Limits.GetTimeout().AsDuration()},
+		Agent: w.Agent, Model: w.Model, Permissions: w.Permissions, Workflow: w.Workflow, RunsOn: w.RunsOn, OnRequest: w.OnRequest, Merge: w.Merge,
+		Problems: w.Problems,
+		Limits:   api.Limits{MaxTurns: int(w.Limits.GetMaxTurns()), MaxCostUSD: w.Limits.GetMaxCostUsd(), Timeout: w.Limits.GetTimeout().AsDuration()},
 	}
 	if w.LastRun != nil {
 		r := workerRun(w.LastRun)

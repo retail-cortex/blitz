@@ -22,6 +22,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,6 +88,19 @@ func TestErrorsFromTheService(t *testing.T) {
 		"WORKER_INVALID": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrWorkerInvalid)
 			assert.EqualError(t, err, "the message", "the service's message, with the problems")
+		},
+		// N26 api-client-config#9: reasons the service sends that had no sentinel.
+		"SESSION_OPEN": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrSessionOpen)
+		},
+		"SESSION_NOT_FOUND": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrSessionNotFound)
+		},
+		"UNSUPPORTED_MEDIA": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrUnsupportedMedia)
+		},
+		"MANAGED": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, config.ErrManaged)
 		},
 		"SOMETHING_NEW": func(t *testing.T, err error) {
 			assert.EqualError(t, err, "the message")

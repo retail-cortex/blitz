@@ -142,6 +142,7 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	for _, img := range t.Images {
 		turn.ImageIds = append(turn.ImageIds, img.SHA256)
 	}
+	turn.Context = contextMsgs(t.Context)
 	r.ranIn(sessionID)
 	stream, err := r.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sessionID, Turn: turn}))
 	if err != nil {
@@ -188,6 +189,7 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 		var err error
 		if d, err = approve(ctx, api.ApprovalRequest{
 			Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, KeyLabel: req.ScopeLabel,
+			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk,
 		}); err != nil {
 			d = api.DecisionDeny
 		}
@@ -758,7 +760,7 @@ func (r *Remote) ReloadMemory(ctx context.Context) ([]string, error) {
 func (r *Remote) Reload(ctx context.Context) (api.ReloadResult, error) {
 	res, err := r.workspaces.ReloadAgentFiles(ctx, connect.NewRequest(&pb.ReloadAgentFilesRequest{Workspace: r.dir}))
 	if err != nil {
-		return api.ReloadResult{}, err
+		return api.ReloadResult{}, fromAPI(err)
 	}
 	return api.ReloadResult{Agents: int(res.Msg.Agents), Skills: int(res.Msg.Skills), Files: res.Msg.Files, Problems: res.Msg.Problems}, nil
 }
@@ -854,16 +856,6 @@ func (r *Remote) GitDiff(ctx context.Context, color bool) (string, error) {
 		return "", fromAPI(err)
 	}
 	return res.Msg.Diff, nil
-}
-
-// GitStatus is the workspace's git branch and how many files differ from
-// HEAD (WorkspaceService.GetGitStatus).
-func (r *Remote) GitStatus(ctx context.Context) (api.GitStatus, error) {
-	res, err := r.workspaces.GetGitStatus(ctx, connect.NewRequest(&pb.GetGitStatusRequest{Workspace: r.dir}))
-	if err != nil {
-		return api.GitStatus{}, fromAPI(err)
-	}
-	return api.GitStatus{Git: res.Msg.Git, Repo: res.Msg.Repo, Branch: res.Msg.Branch, Changed: int(res.Msg.Changed)}, nil
 }
 
 // ListApprovals lists the standing approvals the user gave

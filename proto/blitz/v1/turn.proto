@@ -228,6 +228,16 @@ message ApprovalRequest {
   // the turn's own agent).
   string agent = 7;
   string task_id = 8;
+  // Identifies what "for this session" and "always" cover (an exact
+  // command, all edits in a workspace); "" when the action can only be
+  // allowed once.
+  string key = 9;
+  // What the action is on, for policies that match them: paths, the
+  // command, the URL's host, the MCP tool as "server:tool".
+  repeated string targets = 10;
+  // An ask rule covers the action: it's asked even where a mode, an
+  // allow rule or a remembered approval would let it through.
+  bool must_ask = 11;
 }
 
 // Decision answers an ApprovalRequest.

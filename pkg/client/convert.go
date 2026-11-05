@@ -83,6 +83,10 @@ var sentinels = map[string]error{
 	"EMPTY_SEARCH":             api.ErrEmptySearch,
 	"NO_EMBEDDINGS":            api.ErrNoEmbeddings,
 	"UNKNOWN_SEARCH_MODE":      api.ErrUnknownSearchMode,
+	"SESSION_OPEN":             api.ErrSessionOpen,
+	"SESSION_NOT_FOUND":        api.ErrSessionNotFound,
+	"UNSUPPORTED_MEDIA":        api.ErrUnsupportedMedia,
+	"MANAGED":                  config.ErrManaged,
 }
 
 // fromAPI turns a failed call's error into app's typed error for its
@@ -178,7 +182,7 @@ func sessions(list []*pb.SessionInfo) []api.SessionInfo {
 }
 
 func agent(a *pb.AgentInfo) api.AgentInfo {
-	return api.AgentInfo{Name: a.GetName(), DisplayName: a.GetDisplayName(), Description: a.GetDescription(), Active: a.GetActive(), PinnedModel: a.GetPinnedModel()}
+	return api.AgentInfo{Name: a.GetName(), DisplayName: a.GetDisplayName(), Description: a.GetDescription(), Active: a.GetActive(), PinnedModel: a.GetPinnedModel(), OrgLock: a.GetOrgLock()}
 }
 
 func saved(s *pb.Saved) api.Saved {
@@ -233,7 +237,8 @@ func skill(s *pb.SkillInfo) api.SkillInfo {
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
 		Network: s.Network, NeedsNetwork: s.NeedsNetwork, Env: s.Env, Withheld: s.Withheld, Blocked: s.Blocked,
-		Dir: s.Dir,
+		Dir: s.Dir, Kind: s.Kind, Agents: s.Agents, Members: s.Members, References: s.References, Project: s.Project, PackageFiles: s.PackageFiles, NeedsReview: s.NeedsReview,
+		Triggers: s.Triggers, Scenarios: int(s.Scenarios),
 	}
 	for _, t := range s.Tools {
 		out.Tools = append(out.Tools, api.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Why})
@@ -241,7 +246,7 @@ func skill(s *pb.SkillInfo) api.SkillInfo {
 	for _, sc := range s.Scripts {
 		out.Scripts = append(out.Scripts, api.SkillScript{
 			Name: sc.Name, Language: sc.Language, Source: sc.Source, Timeout: sc.GetTimeout().AsDuration(),
-			Deps: sc.Deps, Allowed: sc.Allowed, Reasons: sc.Reasons,
+			Deps: sc.Deps, Allowed: sc.Allowed, Reasons: sc.Reasons, Found: sc.Found,
 		})
 	}
 	return out
@@ -283,6 +288,16 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 	return out, true
 }
 
+// contextMsgs is what the user added to a turn from elsewhere, for the
+// service.
+func contextMsgs(list []api.ContextBlock) []*pb.ContextBlock {
+	var out []*pb.ContextBlock
+	for _, c := range list {
+		out = append(out, &pb.ContextBlock{Kind: c.Kind, Url: c.URL, Title: c.Title, Html: c.HTML, Text: c.Text})
+	}
+	return out
+}
+
 func actionKind(k pb.ActionKind) api.ActionKind {
 	switch k {
 	case pb.ActionKind_ACTION_KIND_COMMAND:
@@ -315,7 +330,7 @@ func decisionMsg(d api.Decision) pb.Decision {
 func evalResultOf(m *pb.EvalResult) api.EvalResult {
 	return api.EvalResult{Case: m.GetCase(), Name: m.GetName(), Agent: m.GetAgent(), Type: m.GetType(), Scope: m.GetScope(), Status: m.GetStatus(), Score: m.GetScore(),
 		Threshold: m.GetThreshold(), Prompt: m.GetPrompt(), Expected: m.GetExpected(), Output: m.GetOutput(), Reason: m.GetReason(), Refusals: m.GetRefusals(),
-		CostUSD: m.GetCostUsd(), Duration: m.GetDuration().AsDuration()}
+		CostUSD: m.GetCostUsd(), Duration: m.GetDuration().AsDuration(), SkillsUsed: m.GetSkillsUsed()}
 }
 
 // evalRunOf is an eval run from the service, of the workspace dir.

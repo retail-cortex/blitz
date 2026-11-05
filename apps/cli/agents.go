@@ -55,7 +55,7 @@ func serviceSocket() (string, error) {
 
 // startBackground starts prompt as a background run in cfg's workspace
 // (blitz --bg) and says how to follow it.
-func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t api.Turn) error {
+func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t api.Turn, imagePaths []string) error {
 	sock, err := serviceSocket()
 	if err != nil {
 		return err
@@ -67,6 +67,11 @@ func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t a
 	r, err := client.Attach(ctx, sock, dir, nil)
 	if err != nil {
 		return err
+	}
+	// --image and @image mentions go with the run, as they do with a turn
+	// (N26 api-client-config#8).
+	if t.Images, err = r.LoadAttachments(imagePaths, t.Text, func(msg string) { fmt.Fprintf(os.Stderr, "!  %s\n", msg) }); err != nil {
+		return withCode(exitUsage, fmt.Errorf("--image %w", err))
 	}
 	run, err := r.StartBackground(ctx, t)
 	if err != nil {

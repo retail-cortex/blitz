@@ -257,12 +257,22 @@ func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
 	return m
 }
 
+// contextBlocks is what the user added to a turn from elsewhere.
+func contextBlocks(list []*pb.ContextBlock) []api.ContextBlock {
+	var out []api.ContextBlock
+	for _, c := range list {
+		out = append(out, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+	}
+	return out
+}
+
 // taskRequestMsg is a task's approval request or question, as a turn's
 // are, with who asks.
 func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
 	if a := r.Approval; a != nil {
 		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
 			RequestId: r.ID, Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, ScopeLabel: a.KeyLabel,
+			Key: a.Key, Targets: a.Targets, MustAsk: a.MustAsk,
 			Agent: r.Agent, TaskId: r.TaskID,
 		}}}
 	}
