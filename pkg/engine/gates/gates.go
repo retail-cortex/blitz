@@ -169,7 +169,16 @@ func Load(dirs ...string) []Rule {
 	seen := map[string]bool{}
 	for _, dir := range dirs {
 		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
+			if err != nil {
+				// A folder that can't be read: Studio says so (one that
+				// isn't there has no rules).
+				if !errors.Is(err, fs.ErrNotExist) {
+					rel, _ := filepath.Rel(dir, p)
+					out = append(out, Rule{Name: filepath.ToSlash(rel), Path: p, Problem: "couldn't read it: " + err.Error()})
+				}
+				return nil
+			}
+			if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 				return nil
 			}
 			rel, _ := filepath.Rel(dir, p)
@@ -177,11 +186,12 @@ func Load(dirs ...string) []Rule {
 			if seen[name] {
 				return nil
 			}
+			seen[name] = true
 			data, err := os.ReadFile(p)
 			if err != nil {
+				out = append(out, Rule{Name: name, Path: p, Problem: "couldn't read it: " + err.Error()})
 				return nil
 			}
-			seen[name] = true
 			out = append(out, Parse(name, p, data))
 			return nil
 		})

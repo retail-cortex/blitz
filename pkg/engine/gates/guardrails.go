@@ -17,7 +17,9 @@ package gates
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"net/url"
 	"os"
@@ -386,7 +388,11 @@ func LoadGuardrails(dirs ...string) []Guardrail {
 	var out []Guardrail
 	seen := map[string]bool{}
 	for _, dir := range dirs {
-		entries, _ := os.ReadDir(dir)
+		entries, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			// Its guardrails can't be read: Studio says so, by the folder.
+			out = append(out, Guardrail{Name: filepath.Base(dir), Path: dir, Problem: "couldn't read the folder: " + err.Error()})
+		}
 		for _, e := range entries {
 			if !e.Type().IsRegular() || !strings.HasSuffix(strings.ToLower(e.Name()), ".md") {
 				continue
@@ -396,11 +402,12 @@ func LoadGuardrails(dirs ...string) []Guardrail {
 				continue
 			}
 			p := filepath.Join(dir, e.Name())
+			seen[name] = true
 			data, err := os.ReadFile(p)
 			if err != nil {
+				out = append(out, Guardrail{Name: name, Path: p, Problem: "couldn't read it: " + err.Error()})
 				continue
 			}
-			seen[name] = true
 			out = append(out, ParseGuardrail(name, p, data))
 		}
 	}
