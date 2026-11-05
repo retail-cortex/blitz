@@ -351,17 +351,15 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if cfg.Blitz.PlanReview == config.PlanReviewAgent {
 		entries = append(entries, entry{[]string{"enter_plan_mode"}, func() (tool.Tool, error) { return NewEnterPlanModeTool(r.hooks) }})
 	}
+	// The web settings, once: web_fetch, the browser and skill scripts'
+	// fetches start from them.
+	r.web = WebFetchConfig{
+		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
+		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
+	}
 	if cfg.Web.Enabled {
 		entries = append(entries, entry{[]string{"web_fetch"}, func() (tool.Tool, error) {
-			wc := WebFetchConfig{
-				AllowDomains: cfg.Web.AllowDomains,
-				DenyDomains:  cfg.Web.DenyDomains,
-				AllowPrivate: cfg.Web.AllowPrivate,
-				AllowNetwork: sb.AllowNetwork,
-				MaxBytes:     cfg.Web.MaxBytes,
-				Rules:        rules,
-				Timeout:      time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-			}
+			wc := r.web
 			// The browser is made below, before this runs.
 			if cfg.Web.BrowserFallback && r.browser != nil {
 				wc.Browser = r.browser.pageText
@@ -372,19 +370,16 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	r.fetch = cfg.Web.Enabled
 	r.webOn = cfg.Web.Enabled
 	r.page.open = cfg.Browser.Open
-	r.web = WebFetchConfig{
-		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
-		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-	}
 	if cfg.Web.Enabled && cfg.Browser.Enabled {
 		timeout := time.Duration(cfg.Web.TimeoutSeconds) * time.Second
 		if timeout < 30*time.Second {
 			timeout = 30 * time.Second // a page with scripts takes longer than a fetch
 		}
-		r.browser = newBrowserTool(r, cfg.Browser, WebFetchConfig{
-			AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains,
-			AllowNetwork: sb.AllowNetwork, Rules: rules,
-		}, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
+		// The browser goes by the domains, the rules and the network
+		// setting; local pages are its own setting (browser.allow_local).
+		bw := r.web
+		bw.AllowPrivate, bw.MaxBytes, bw.Timeout = false, 0, 0
+		r.browser = newBrowserTool(r, cfg.Browser, bw, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
 		entries = append(entries, entry{[]string{"browser"}, func() (tool.Tool, error) { return NewBrowserTool(r.browser) }})
 	}
 	// Always there, for a speech model set later; agents have it only while
@@ -420,10 +415,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			NewPyEnvs("", cfg.Skills.Policy.Packages),
 			ScriptBoxConfig{Mode: cfg.Skills.Policy.Sandbox, Blocked: ws.Blocked()})
 		if cfg.Web.Enabled {
-			r.skillScripts.SetWeb(WebFetchConfig{
-				AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
-				AllowNetwork: sb.AllowNetwork, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second, Rules: rules,
-			})
+			r.skillScripts.SetWeb(r.web)
 		}
 		entries = append(entries, entry{[]string{"run_skill_script"}, func() (tool.Tool, error) { return NewRunSkillScriptTool(r.skillScripts) }})
 	}

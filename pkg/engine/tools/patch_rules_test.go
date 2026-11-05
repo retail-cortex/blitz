@@ -21,6 +21,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -122,6 +123,39 @@ func TestPathRuleForms(t *testing.T) {
 			rules.SetWorkspace(ws)
 			got, _ := rules.Decide(RuleWrite, []string{tt.target})
 			assert.Equal(t, tt.want, got == EffectDeny)
+		})
+	}
+}
+
+// The web settings are made once, and skill scripts' fetches get all of
+// them, web.max_bytes included (N26 engine-tools-2#17).
+func TestRegistryWebSettingsOnce(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.UCToolsDir = filepath.Join(t.TempDir(), "uc")
+	cfg.Sandbox.Shell = "off"
+	cfg.Web.Enabled, cfg.Skills.Enabled = true, true
+	cfg.Web.MaxBytes = 12345
+	cfg.Web.AllowPrivate = true
+	prov, err := skills.NewProvider()
+	require.NoError(t, err)
+	r, err := NewRegistry(cfg, nil, prov)
+	require.NoError(t, err)
+	t.Cleanup(func() { r.Close() })
+	require.NotNil(t, r.skillScripts)
+	require.NotNil(t, r.skillScripts.web)
+	tests := []struct {
+		name string
+		got  WebFetchConfig
+	}{
+		{"web_fetch's", r.web},
+		{"skill scripts'", r.skillScripts.web.cfg},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, int64(12345), tt.got.MaxBytes)
+			assert.True(t, tt.got.AllowPrivate)
+			assert.Same(t, r.rules, tt.got.Rules)
 		})
 	}
 }
