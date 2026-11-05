@@ -189,7 +189,7 @@ func (h configService) SearchRegistrySkills(ctx context.Context, r req[pb.Search
 	found, err := h.s.skillStore().Search(ctx, r.Msg.Query)
 	out := &pb.SearchRegistrySkillsResponse{Problems: problems(err)}
 	for _, f := range found {
-		out.Skills = append(out.Skills, &pb.RegistrySkill{Registry: f.Registry, Name: f.Name, Description: f.Description, Version: f.Version, CastorId: f.CastorID})
+		out.Skills = append(out.Skills, &pb.RegistrySkill{Registry: f.Registry, Name: f.Name, Description: f.Description, Version: f.Version})
 	}
 	return ok(out)
 }

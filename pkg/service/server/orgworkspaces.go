@@ -72,7 +72,7 @@ func (s *Server) orgFolder(c *enterprise.Client, cfg *config.Config) string {
 func (s *Server) orgWorkspaceMsg(w enterprise.Workspace, folder string, shared map[string]sharedFolder) *pb.OrgWorkspace {
 	dir, _ := orgDir(shared, folder, w.Handle)
 	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return &pb.OrgWorkspace{Handle: w.Handle, Name: w.Name, Role: w.Role, Sync: w.Sync, CloneUrl: w.CloneURL, Dir: dir, Cloned: err == nil}
+	return &pb.OrgWorkspace{Handle: w.Handle, Name: w.Name, Role: w.Role, Sync: w.Sync, Dir: dir, Cloned: err == nil}
 }
 
 func (h configService) ListOrgWorkspaces(ctx context.Context, _ req[pb.ListOrgWorkspacesRequest]) (*connect.Response[pb.ListOrgWorkspacesResponse], error) {
@@ -186,7 +186,7 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 		return nil, invalid(err)
 	}
 	defer os.RemoveAll(tmp)
-	if err := h.s.git(ctx, tmp, "clone", w.CloneUrl, "."); err != nil {
+	if err := h.s.git(ctx, tmp, "clone", list[i].CloneURL, "."); err != nil {
 		return nil, apiError(connect.CodeUnavailable, "CLONE_FAILED", fmt.Errorf("cloning %s: %w", w.Name, err))
 	}
 	// A folder of files already there is left as it is (a rename onto

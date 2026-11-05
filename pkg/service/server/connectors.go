@@ -102,7 +102,7 @@ func kindMsg(k connectors.Kind) *pb.ConnectorKind {
 		m.ReadOnlyHint = k.ReadOnly.Hint
 	}
 	if q := k.Queries; q != nil {
-		m.QueriesHint, m.QueriesExample, m.Placeholders = q.Hint, q.Example, q.Placeholders
+		m.QueriesHint, m.QueriesExample = q.Hint, q.Example
 	}
 	return m
 }

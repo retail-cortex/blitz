@@ -836,8 +836,7 @@ func TestServiceJobs(t *testing.T) {
 	org.RunChanges <- enterprisetest.RunChange{Run: run, Job: job, Workspace: "plans", Status: "succeeded"}
 	require.True(t, watch.Receive(), watch.Err())
 	require.NotNil(t, watch.Msg().Change, "the odd one isn't sent")
-	assert.Equal(t, "succeeded", watch.Msg().Change.Status)
-	assert.Equal(t, plans, watch.Msg().Change.Dir)
+	assert.Equal(t, job, watch.Msg().Change.JobId, "the job whose runs to ask for again")
 	// The service's stream drops: followed again, with the list as it is.
 	defer func(d time.Duration) { watchRunsRetry = d }(watchRunsRetry)
 	watchRunsRetry = 20 * time.Millisecond

@@ -84,7 +84,7 @@ func stamp(t *time.Time) *timestamppb.Timestamp {
 
 func serviceRunMsg(r enterprise.ServiceRun) *pb.ServiceRun {
 	m := &pb.ServiceRun{Id: r.ID, Urn: r.URN, Trigger: r.Trigger, Status: r.Status, Note: r.Note, Output: r.Output, CostUsd: r.CostUSD,
-		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts, Answer: r.Answer, AnswerNote: r.AnswerNote,
+		Created: stamp(&r.Created), Ended: stamp(r.Ended), Branch: r.Branch, Artifacts: r.Artifacts, Answer: r.Answer,
 		Merged: r.Merged, MergeNote: r.MergeNote}
 	if p := r.Pending; p != nil {
 		m.Pending = &pb.ServiceRequest{Tool: p.Tool, Kind: p.Kind, Detail: p.Detail}
@@ -381,7 +381,7 @@ func (h configService) ListServiceRunFiles(ctx context.Context, r req[pb.ListSer
 		if err != nil || f.Path == "" {
 			continue
 		}
-		out.Files = append(out.Files, &pb.ServiceRunFile{Urn: f.String(), Path: f.Path, Size: it.Size, MediaType: it.MediaType})
+		out.Files = append(out.Files, &pb.ServiceRunFile{Urn: f.String(), Path: f.Path, Size: it.Size})
 	}
 	return ok(out)
 }
@@ -504,7 +504,7 @@ func (h configService) WatchServiceRuns(ctx context.Context, _ req[pb.WatchServi
 					continue
 				}
 				// A list that can't be had now comes with the next change.
-				_ = send(&pb.ServiceRunChange{RunId: ch.Run, JobId: ch.Job, Workspace: ch.Workspace, Dir: dir(ch.Workspace), Status: ch.Status})
+				_ = send(&pb.ServiceRunChange{JobId: ch.Job})
 			case err := <-ended:
 				cancel()
 				var ref *enterprise.Refusal
@@ -589,7 +589,7 @@ func (h configService) ListServiceJobs(ctx context.Context, _ req[pb.ListService
 
 // orgUsed is u, for model, as the API says it.
 func orgUsed(model string, u enterprise.Used) *pb.OrgUsed {
-	return &pb.OrgUsed{Model: model, Requests: u.Requests, InputTokens: u.InputTokens, CachedInputTokens: u.Cached, OutputTokens: u.OutputTokens, CostUsd: u.CostUSD}
+	return &pb.OrgUsed{Model: model, Requests: u.Requests, InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CostUsd: u.CostUSD}
 }
 
 // byModel is a usage map as a list, the costliest first.

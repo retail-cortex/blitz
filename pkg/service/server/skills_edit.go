@@ -151,6 +151,6 @@ func (h workspaceService) RunSkillScript(ctx context.Context, r req[pb.RunSkillS
 	run := w.RunSkillScript(ctx, r.Msg.Name, r.Msg.Script, r.Msg.Args)
 	return ok(&pb.RunSkillScriptResponse{
 		ExitCode: int32(run.ExitCode), Stdout: run.Stdout, Stderr: run.Stderr, TimedOut: run.TimedOut,
-		Sandbox: run.Sandbox, OutputFiles: run.Files, Error: run.Error,
+		Sandbox: run.Sandbox, Error: run.Error,
 	})
 }

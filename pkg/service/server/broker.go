@@ -107,9 +107,7 @@ func (b *broker) waiting(id string) bool {
 // approve is the workspaces' api.Approver.
 func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
-		return &pb.TurnEvent{Kind: &pb.TurnEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
-			RequestId: id, Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, ScopeLabel: req.KeyLabel,
-		}}}
+		return &pb.TurnEvent{Kind: &pb.TurnEvent_ApprovalRequest{ApprovalRequest: approvalRequestMsg(id, req)}}
 	})
 	if err != nil {
 		return api.DecisionDeny, err
