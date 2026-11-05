@@ -626,3 +626,24 @@ func TestOllamaURL(t *testing.T) {
 		})
 	}
 }
+
+// A guardrail file with a problem shows in the report, as Studio shows
+// it; good ones say nothing.
+func TestDoctorGuardrails(t *testing.T) {
+	doctorHome(t, "")
+	ws := projectDir(t)
+	dir := filepath.Join(ws, ".agents", "guardrails")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\nstage: [nonsense\n---\nCheck it."), 0o644))
+	checks := Run(context.Background(), Options{Dir: ws})
+	var got []string
+	for _, c := range checks {
+		if c.name == "guardrails" {
+			got = append(got, c.detail)
+			assert.Equal(t, statusWarn, c.status)
+		}
+	}
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0], filepath.Join(dir, "broken.md"))
+	assert.Contains(t, got[0], "front matter")
+}

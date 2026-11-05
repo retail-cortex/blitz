@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/guardrails"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/plugins"
@@ -106,6 +107,7 @@ func Run(ctx context.Context, o Options) []Check {
 	}
 	checkProject(cfg, add)
 	checkSkills(cfg, add)
+	checkGuardrails(cfg, add)
 
 	// Offline, credentials are only found, not tried; with --online the
 	// model request below tries them.
@@ -584,6 +586,17 @@ func checkSkills(cfg *config.Config, add func(name string, st checkStatus, forma
 		add("script sandbox", statusOK, "%s (%s)", box.Name(), note)
 	default:
 		add("script sandbox", statusOK, "%s", box.Name())
+	}
+}
+
+// checkGuardrails reports each guardrail file with a problem: a custom one
+// is skipped, a built-in one runs with its defaults, and either way the
+// file doesn't do what it says (spec_041_gates).
+func checkGuardrails(cfg *config.Config, add func(string, checkStatus, string, ...any)) {
+	for _, g := range guardrails.Load(engine.GuardrailDirs(cfg, config.ExpandHome(cfg.Tools.WorkspaceDir))...) {
+		if g.Problem != "" {
+			add("guardrails", statusWarn, "%s: %s", cmp.Or(g.Path, g.Name), g.Problem)
+		}
 	}
 }
 

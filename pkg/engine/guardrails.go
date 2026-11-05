@@ -71,8 +71,13 @@ func (w *Workspace) ProjectGuardrailsDir() string {
 // (~/.blitz/guardrails), then the organization's defaults; a name in an
 // earlier folder wins, so a locked guardrail can't be replaced or switched
 // off by a file of its name (spec_053_enterprise EN-31).
-func (w *Workspace) guardrailDirs() []string {
-	return w.cfg.Org.LockedFirst([]string{w.ProjectGuardrailsDir(), filepath.Join(config.ConfigDir(""), "guardrails")}, "guardrails")
+func (w *Workspace) guardrailDirs() []string { return GuardrailDirs(w.cfg, w.Dir()) }
+
+// GuardrailDirs are the folders a workspace at dir reads its guardrails
+// from, with cfg's organization (Workspace.Guardrails; blitz doctor checks
+// the same files).
+func GuardrailDirs(cfg *config.Config, dir string) []string {
+	return cfg.Org.LockedFirst([]string{filepath.Join(dir, ".agents", "guardrails"), filepath.Join(config.ConfigDir(""), "guardrails")}, "guardrails")
 }
 
 // Guardrails are the workspace's guardrails, read afresh: the built-in
