@@ -36,7 +36,7 @@ import {
   mdiWeb,
 } from "@mdi/js";
 import { files, sessions, workspaces } from "./api";
-import { allCommands, paletteResults, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
+import { allCommands, listedCommands, paletteResults, shortcutLabel, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
 import { compose, findInFile, loadSession, openDocs, openFile, openWeb, searchWorkspace, showView, startSetup } from "./events";
 import { loadAppDocs } from "./docs/load";
 import { findTerms, hitTarget, queryTerms } from "./search";
@@ -47,6 +47,7 @@ import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./
 import { useApp } from "./state";
 import type { Section } from "./SettingsDrawer";
 import type { SearchHit } from "./gen/blitz/v1/workspace_pb";
+import { chatTitle } from "./HistoryMenu";
 import { t, tn } from "./i18n";
 import { Icon, useModal } from "@blitz/webui";
 import { canPreview, toggleFullscreen } from "./desktop";
@@ -87,11 +88,11 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     if (!dir) return;
     workspaces
       .listCommands({ workspace: dir })
-      .then((r) => setCustom(r.commands.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || t("desktop.cmd.run", { name: c.name }), source: (c.source || "project") as CommandSpec["source"] }))))
+      .then((r) => setCustom(listedCommands(r.commands)))
       .catch(() => {});
     sessions
       .listSessions({ workspace: dir })
-      .then((r) => setChats(r.sessions.slice(0, 30).map((s) => ({ id: s.id, title: s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled"), detail: tn("desktop.messages", s.messageCount) }))))
+      .then((r) => setChats(r.sessions.slice(0, 30).map((s) => ({ id: s.id, title: chatTitle(s), detail: tn("desktop.messages", s.messageCount) }))))
       .catch(() => {});
   }, [dir]);
 
@@ -156,7 +157,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         },
       };
     });
-    out.push({ group, label: t("desktop.palette.search_for", { query: query.trim() }), detail: "⇧⌘F", icon: mdiMagnify, run: () => (onClose(), searchWorkspace(query.trim())) });
+    out.push({ group, label: t("desktop.palette.search_for", { query: query.trim() }), detail: shortcutLabel("F", true), icon: mdiMagnify, run: () => (onClose(), searchWorkspace(query.trim())) });
     return out;
   }, [passages, dir, query, onClose]);
   const fileItems = useMemo<PaletteItem[]>(
@@ -195,8 +196,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         });
       }
       out.push(
-        { group: t("desktop.palette.group.view"), label: t("desktop.search.open"), detail: "⇧⌘F", icon: mdiMagnify, run: done(searchWorkspace) },
-        { group: t("desktop.palette.group.view"), label: t("desktop.files.find"), detail: "⌘F", icon: mdiMagnify, run: done(() => (showView({ dir, view: "editor" }), findInFile({ dir }))) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.search.open"), detail: shortcutLabel("F", true), icon: mdiMagnify, run: done(searchWorkspace) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.files.find"), detail: shortcutLabel("F"), icon: mdiMagnify, run: done(() => (showView({ dir, view: "editor" }), findInFile({ dir }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.setup.title"), icon: mdiAutoFix, run: done(() => startSetup(dir)) },
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },

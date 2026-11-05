@@ -277,9 +277,9 @@ export function SkillSettings() {
   );
 }
 
-/** The workspace a project skill's folder is in (<dir>/.agents/skills/<name>), else "". */
+/** The workspace a project skill's folder is in (<dir>/.agents/skills/<name>, with either slash), else "". */
 export function workspaceOf(dir: string): string {
-  const m = /^(.*)\/\.agents\/skills\/[^/]+$/.exec(dir);
+  const m = /^(.*)[\\/]\.agents[\\/]skills[\\/][^\\/]+$/.exec(dir);
   return m ? m[1] : "";
 }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { describe, expect, it } from "vitest";
-import { sandboxDetail } from "./SandboxNotice";
+import { restartAfterFix, sandboxDetail } from "./SandboxNotice";
 
 describe("sandboxDetail", () => {
   it("says what each state means", () => {
@@ -25,5 +25,26 @@ describe("sandboxDetail", () => {
     expect(sandboxDetail({ state: "restricted", detail: "uid map" })).toContain("Allow");
     expect(sandboxDetail({ state: "broken", detail: "seccomp" })).toContain('sandbox.shell = "auto"');
     expect(sandboxDetail({ state: "broken" })).toContain("()");
+  });
+});
+
+// N26 desktop-1#19: a service not back in time was reported as fixed.
+describe("restartAfterFix", () => {
+  const ok = async () => {};
+  it.each([
+    { name: "back", restart: ok, settled: true, want: "" },
+    { name: "not back in time", restart: ok, settled: false, want: "didn't start within 15 seconds" },
+    {
+      name: "restart failed",
+      restart: async () => {
+        throw new Error("no service");
+      },
+      settled: true,
+      want: "no service",
+    },
+  ])("$name", async ({ restart, settled, want }) => {
+    const got = await restartAfterFix(restart, async () => ({ settled }));
+    if (want) expect(got).toContain(want);
+    else expect(got).toBe("");
   });
 });

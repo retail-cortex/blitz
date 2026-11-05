@@ -15,7 +15,9 @@
  */
 
 // Settings › Connectors › MCP servers (spec_009_mcp MCP-46): the form for one server,
-// to and from MCPServerConfig, and the list as the page shows it.
+// to and from MCPServerConfig, and the list as the page shows it. The
+// service withholds env and header values (a secret's name aside): such a
+// value shows empty, and saved empty it keeps what's saved.
 import { create } from "@bufbuild/protobuf";
 import { MCPServerConfigSchema, type MCPServerConfig } from "./gen/blitz/v1/config_pb";
 
@@ -37,16 +39,26 @@ export interface McpForm {
   timeout: string;
   /** Comma-separated; "" for the main agent, * for all. */
   agents: string;
+  /** Only these of its tools, comma-separated; "" for all. */
+  tools: string;
+  /** Names its tools prefix__tool; "" for their own names. */
+  prefix: string;
   disabled: boolean;
 }
 
 /** An empty form: a new command server, sandboxed. */
-export const emptyForm: McpForm = { name: "", kind: "command", command: "", args: "", env: "", url: "", headers: "", autoApprove: false, sandbox: true, timeout: "", agents: "", disabled: false };
+export const emptyForm: McpForm = { name: "", kind: "command", command: "", args: "", env: "", url: "", headers: "", autoApprove: false, sandbox: true, timeout: "", agents: "", tools: "", prefix: "", disabled: false };
 
 const lines = (s: string) =>
   s
     .split("\n")
     .map((l) => l.trim())
+    .filter(Boolean);
+
+const commaList = (s: string) =>
+  s
+    .split(",")
+    .map((a) => a.trim())
     .filter(Boolean);
 
 /** Lines of "key<sep>value" as a map; a line without sep is a problem. */
@@ -86,6 +98,8 @@ export function toForm(s: MCPServerConfig): McpForm {
     sandbox: s.sandbox !== false,
     timeout: s.timeoutSeconds ? String(s.timeoutSeconds) : "",
     agents: s.agents.join(", "),
+    tools: s.tools.join(", "),
+    prefix: s.prefix,
     disabled: s.disabled,
   };
 }
@@ -119,10 +133,9 @@ export function fromForm(f: McpForm): MCPServerConfig {
     // Only a stdio server runs sandboxed; on is the default, left unsaid.
     sandbox: command && !f.sandbox ? false : undefined,
     timeoutSeconds: f.timeout.trim() ? Number(f.timeout.trim()) : 0,
-    agents: f.agents
-      .split(",")
-      .map((a) => a.trim())
-      .filter(Boolean),
+    agents: commaList(f.agents),
+    tools: commaList(f.tools),
+    prefix: f.prefix.trim(),
     disabled: f.disabled,
   });
 }

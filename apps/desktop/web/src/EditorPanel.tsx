@@ -90,7 +90,6 @@ function Panel() {
           projectWaiting={waiting(project)}
           onReviewProject={() => setReviewing(true)}
           onSettingsChanged={refreshSettings}
-          onOpenView={() => {}}
         />
       </FileLinksProvider>
       {reviewing && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}

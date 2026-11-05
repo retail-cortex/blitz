@@ -17,7 +17,7 @@
 // The commit dialog's rules: what a staged file's status letter says, how
 // long the subject line is, and when Commit can be pressed.
 
-/** The longest subject line git's tools show whole. */
+/** The longest subject line git's tools show whole (pkg/engine/commit.go's commitInstruction asks the model for the same). */
 export const subjectLimit = 72;
 
 /** The i18n key for a staged file's git status letter (A, M, D, …). */

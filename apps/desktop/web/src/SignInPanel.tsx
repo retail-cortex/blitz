@@ -20,7 +20,7 @@
 // URL, a device code), and Sign out. It sits beside the API key choice:
 // signing in adds a way, it never replaces the key.
 import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiLoginVariant, mdiLogoutVariant, mdiOpenInNew } from "@mdi/js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { config } from "./api";
 import { openURL } from "./desktop";
 import { message } from "./errors";
@@ -28,6 +28,9 @@ import { configChanged } from "./events";
 import type { SignInStatus } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { Button, Icon, useSnackbar } from "@blitz/webui";
+
+/** How long the profile's typing pauses before its status is asked. */
+const profileDelay = 400;
 
 /** A provider's sign-in status and buttons (provider: google, anthropic, aws or azure). */
 export function SignInPanel({ workspace, provider, profile = "" }: { workspace: string; provider: string; profile?: string }) {
@@ -38,19 +41,25 @@ export function SignInPanel({ workspace, provider, profile = "" }: { workspace: 
   const [error, setError] = useState("");
   const abort = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await config.getSignIn({ workspace, provider, profile });
-      setStatus(res.statuses[0] ?? null);
-    } catch (e) {
-      setError(message(e));
-    }
-  }, [workspace, provider, profile]);
+  // The status, asked once the profile's typing pauses (each ask runs the
+  // ant tool on the service's machine); only the last answer counts.
   useEffect(() => {
     setStatus(null);
     setError("");
-    void load();
-  }, [load]);
+    let live = true;
+    const timer = setTimeout(
+      () =>
+        config.getSignIn({ workspace, provider, profile }).then(
+          (res) => live && setStatus(res.statuses[0] ?? null),
+          (e) => live && setError(message(e)),
+        ),
+      profile ? profileDelay : 0,
+    );
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [workspace, provider, profile]);
   useEffect(() => () => abort.current?.abort(), []);
 
   const name = t(`desktop.signin.provider.${provider}`);

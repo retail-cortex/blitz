@@ -24,6 +24,7 @@ const saved = create(ApiProviderSettingsSchema, {
   headers: [
     { name: "Authorization", value: tokenPlaceholder, hasValue: true },
     { name: "X-Team", value: "", hasValue: true },
+    { name: "X-Gateway", value: `Bearer ${tokenPlaceholder}`, hasValue: true },
   ],
   tokenScript: "print-token",
   tokenScriptLanguage: "",
@@ -38,6 +39,7 @@ describe("the api form", () => {
       headers: [
         { name: "Authorization", value: "", hasValue: true, useToken: true },
         { name: "X-Team", value: "", hasValue: true, useToken: false },
+        { name: "X-Gateway", value: "", hasValue: true, useToken: true, token: `Bearer ${tokenPlaceholder}` },
       ],
       tokenScript: "print-token",
       language: "shell",
@@ -56,10 +58,19 @@ describe("the api form", () => {
       headers: [
         { name: "Authorization", value: tokenPlaceholder },
         { name: "X-Team", value: "" },
+        { name: "X-Gateway", value: `Bearer ${tokenPlaceholder}` },
       ],
       tokenScript: "print-token",
       tokenScriptLanguage: "shell",
     });
+  });
+
+  // N26 desktop-1#2: "Bearer {{TOKEN_SCRIPT}}" uses the token, as the
+  // service has it, so the script is kept and sent.
+  it("takes a header using the placeholder inside its value as the token", () => {
+    const f = toApiForm(create(ApiProviderSettingsSchema, { baseUrl: "https://gw.example/v1", headers: [{ name: "Authorization", value: `Bearer ${tokenPlaceholder}`, hasValue: true }], tokenScript: "print-token" }));
+    expect(usesToken(f)).toBe(true);
+    expect(fromApiForm(f)).toMatchObject({ headers: [{ name: "Authorization", value: `Bearer ${tokenPlaceholder}` }], tokenScript: "print-token" });
   });
 
   it("doesn't send a script nothing uses", () => {

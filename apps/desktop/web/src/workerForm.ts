@@ -209,7 +209,8 @@ export function parseRules(text: string): Rule[] {
     .filter(Boolean)
     .map((l) => {
       const i = l.indexOf(":");
-      const kind = i > 0 ? l.slice(0, i).trim() : "";
+      // The kind in any case, as the service reads it (Shell:… is shell).
+      const kind = i > 0 ? l.slice(0, i).trim().toLowerCase() : "";
       return (ruleKinds as readonly string[]).includes(kind) ? { kind: kind as RuleKind, pattern: l.slice(i + 1).trim() } : { kind: "" as const, pattern: l };
     });
 }

@@ -22,6 +22,7 @@ The desktop app's conversation, beside the code in VS Code, attached to the same
 - **VSC-02** Its workspace is the folder of the file in front, else the window's first folder; with no folder it says to open one.
 - **VSC-03** The view loads the page built for the desktop app (`//apps/desktop/web:page`, packed as `media/page`), its asset paths turned into webview URIs, under a policy that allows only its own files, scripts with the view's nonce, and calls to the proxy (`page.ts`). The settings go first, as `window.blitzEditor` (`dir`, `api`, `token`).
 - **VSC-04** Inside an editor the page shows only the conversation (`EditorPanel`): the workspace's settings, the project-trust question and banner, and the chat (`useWorkspaceSettings`, shared with the desktop app's workspace). Its theme follows VS Code's (the body's `vscode-dark` / `vscode-light` classes), its notifications are VS Code's, and links to files in the chat open them in VS Code at their line. Its controls are the desktop app's (one page): the accent's buttons, fields and composer buttons ([spec_024_desktop](spec_024_desktop.md) DSK-35).
+- **VSC-04a** *2026-11-05 (scan N26-desktop-1#8: `/diff`, `/processes` and the like did nothing there, without a word).* A command that opens one of the desktop's views says in the chat that the view isn't in the editor's panel.
 
 ## 3. Reaching the service
 

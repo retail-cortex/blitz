@@ -17,14 +17,14 @@
 // The chat bar's History menu: the workspace's saved chats and workers'
 // runs, searched and filtered, opened with a click, and deleted one at a
 // time or ticked and deleted together. Rules in history.ts.
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { mdiDeleteOutline, mdiHistory, mdiMagnify } from "@mdi/js";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { deletable, filterHistory, historyCounts, toggleAll, type HistoryFilter } from "./history";
 import { language, t, tn } from "./i18n";
-import { Button, Icon, IconButton, Segmented, nudge, useAnchoredMenu } from "@blitz/webui";
+import { Button, Icon, IconButton, Segmented, useAnchoredMenu, useKeptInWindow } from "@blitz/webui";
 
 /** A session's name in the history: a snapshot's, else its title. */
 export function chatTitle(s: SessionInfo): string {
@@ -60,13 +60,7 @@ export function HistoryMenu({
   const allTicked = shownTickable.length > 0 && shownTickable.every((s) => ticked.has(s.id));
   const someTicked = shownTickable.some((s) => ticked.has(s.id));
 
-  // Kept in the window, as a menu is.
-  useLayoutEffect(() => {
-    const el = layer.current;
-    if (!el || !at) return;
-    const { x, y } = nudge(el.getBoundingClientRect(), window.innerWidth, window.innerHeight);
-    el.style.transform = x || y ? `translate(${x}px, ${y}px)` : "";
-  }, [at, layer]);
+  useKeptInWindow(layer, at);
 
   const tick = (id: string, on: boolean) =>
     setTicked((cur) => {

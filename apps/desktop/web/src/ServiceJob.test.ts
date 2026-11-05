@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { describe, expect, it } from "vitest";
-import { whyNot } from "./ServiceJob";
+import { waitsForSync, whyNot } from "./ServiceJob";
 
 // spec_053 EN-42: a job the service hasn't got says why.
 describe("why the service hasn't got a job", () => {
@@ -41,4 +41,19 @@ describe("why the service hasn't got a job", () => {
     expect(r("not_read", "the service is down")).toContain("the service is down");
     expect(r("")).toBe(r("not_read"));
   });
+});
+
+// N26 desktop-1#34: Studio asked every 5 s without end, in states waiting can't clear.
+describe("looking again while sync saves a job", () => {
+  it.each([
+    { name: "saving", reason: "saving", syncState: "", polls: 0, want: true },
+    { name: "pushing", reason: "saving", syncState: "pushing", polls: 59, want: true },
+    { name: "long enough", reason: "saving", syncState: "", polls: 60, want: false },
+    { name: "offline", reason: "saving", syncState: "offline", polls: 0, want: false },
+    { name: "signed out", reason: "saving", syncState: "signed_out", polls: 0, want: false },
+    { name: "conflicts", reason: "saving", syncState: "conflicts", polls: 0, want: false },
+    { name: "refused", reason: "saving", syncState: "refused", polls: 0, want: false },
+    { name: "not pushed", reason: "not_pushed", syncState: "", polls: 0, want: false },
+  ])("$name", ({ reason, syncState, polls, want }) => expect(waitsForSync({ reason, syncState }, polls)).toBe(want));
+  it("not with nothing missing", () => expect(waitsForSync(null, 0)).toBe(false));
 });

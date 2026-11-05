@@ -23,7 +23,7 @@ import { t } from "./i18n";
 import { Button, Dialog, Icon, useSnackbar } from "@blitz/webui";
 
 /** A skill's scripts to review, as ConfigService.GetSkillReview has them (or Studio's SkillInfo). */
-export interface ScriptsToReview {
+interface ScriptsToReview {
   dir: string;
   hash: string;
   scripts: { name: string; language: string; source: string; deps: string[] }[];

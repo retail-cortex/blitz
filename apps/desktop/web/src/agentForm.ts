@@ -78,7 +78,7 @@ export const newAgentForm: AgentForm = { ...emptyAgentForm, tools: starterTools 
 export type AgentField = "name" | "description" | "defaultModel" | "maxTurns" | "temperature" | "topP" | "maxTokens" | "thinkingBudget";
 
 /** Whether a name can be an agent's (as the service checks it). */
-export const validAgentName = (name: string) => /^[a-z0-9][a-z0-9_-]*$/.test(name);
+export const validAgentName = (name: string) => /^[a-z0-9][a-z0-9_-]{0,63}$/.test(name);
 
 const text = (n: number | undefined) => (n === undefined ? "" : String(n));
 

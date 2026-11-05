@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { acceptAttribute, acceptedAs, attachableFiles, clock, describeImage, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment } from "./attachments";
+import { acceptAttribute, acceptedAs, attachableFiles, clock, describeImage, failedUpload, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment } from "./attachments";
 
 // What the service reports for a Claude model, and for Gemini.
 const claude: Accepted[] = [
@@ -56,6 +56,11 @@ describe("attachments", () => {
     expect(readyIds(list)).toEqual(["x"]);
     expect(uploading(list)).toBe(true);
     expect(uploading([list[0], list[2]])).toBe(false);
+  });
+  // N26 desktop-1#5: a failed upload was dropped from the prompt unsaid.
+  it("holds the prompt while an upload failed", () => {
+    expect(failedUpload([{ key: "1", name: "a", url: "u1", id: "x" }])).toBe(false);
+    expect(failedUpload([{ key: "1", name: "a", url: "u1", id: "x" }, { key: "3", name: "c", url: "u3", error: "too big" }])).toBe(true);
   });
   it("sends web content as it is, uploading nothing", () => {
     const page = { kind: "web_page" as const, url: "http://localhost:3000/", title: "Home", html: "<p>hi</p>", text: "" };

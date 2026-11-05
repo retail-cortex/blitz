@@ -35,6 +35,24 @@ export interface CommandSpec {
 export const builtins = (): CommandSpec[] =>
   builtinsInOrder().map((b) => ({ name: b.name, args: b.args, description: t(b.describe ?? `desktop.cmd.${b.name}`), source: "builtin", group: b.group }));
 
+/** A workspace's command as ListCommands gives it. */
+export interface ListedCommand {
+  name: string;
+  argumentHint: string;
+  description: string;
+  source: string;
+}
+
+/** The workspace's commands (ListCommands) as the composer and the palette offer them. */
+export const listedCommands = (cs: readonly ListedCommand[]): CommandSpec[] =>
+  cs.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || t("desktop.cmd.run", { name: c.name }), source: (c.source || "project") as CommandSpec["source"] }));
+
+/** The window runs on macOS (its shortcuts use ⌘; elsewhere Ctrl). */
+const onMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/** A Cmd/Ctrl shortcut as the platform writes it: ⇧⌘F on macOS, Ctrl+Shift+F elsewhere. */
+export const shortcutLabel = (key: string, shift = false, mac = onMac) => (mac ? `${shift ? "⇧" : ""}⌘${key}` : `Ctrl+${shift ? "Shift+" : ""}${key}`);
+
 /** A composer line as a command, or undefined when it isn't one. */
 export function parseCommand(line: string): { name: string; args: string } | undefined {
   const t = line.trim();

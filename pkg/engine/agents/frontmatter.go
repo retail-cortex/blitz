@@ -80,7 +80,7 @@ func (m AgentMetadata) Check() error {
 		return fmt.Errorf("agent spec must declare a 'name' in frontmatter")
 	}
 	if !ValidName(m.Name) {
-		return fmt.Errorf("name %q: use lowercase letters, digits, - and _", m.Name)
+		return fmt.Errorf("name %q: use at most 64 lowercase letters, digits, - and _, starting with a letter or digit", m.Name)
 	}
 	if m.AgencyLevel != "" && !slices.Contains(AgencyLevels, m.AgencyLevel) {
 		return fmt.Errorf("agency_level: %q (one of %s)", m.AgencyLevel, strings.Join(AgencyLevels, ", "))
