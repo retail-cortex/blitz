@@ -278,6 +278,15 @@ func TestModelErrorSummary(t *testing.T) {
 	assert.Equal(t, "api key is required", got, "summary = %q", got)
 	leak := ModelErrorSummary(errors.New("bad key AIzaSySECRETSECRETSECRETSECRETSECRET123"), cfg)
 	assert.NotContains(t, leak, "SECRET", "key leaked: %q", leak)
+	// Every credential the settings hold, as the log's redactor masks them:
+	// Azure's key, the web search key, an MCP server's token.
+	cfg.LLM.Azure.APIKey = "0123456789abcdef0123456789abcdef"
+	cfg.Web.SearchAPIKey = "search-key-SECRET-77"
+	cfg.MCP.Servers = []config.MCPServerConfig{{Name: "gh", Env: map[string]string{"GITHUB_TOKEN": "mcp-token-SECRET-88"}}}
+	for _, v := range []string{"0123456789abcdef0123456789abcdef", "search-key-SECRET-77", "mcp-token-SECRET-88"} {
+		got := ModelErrorSummary(errors.New("upstream said "+v), cfg)
+		assert.NotContains(t, got, v, "leaked: %q", got)
+	}
 
 	// A quota error is kept whole, on one line, whatever wraps it.
 	quota := fmt.Errorf("anthropic: %w", &runtime.QuotaError{Message: "Quota exceeded for aiplatform.googleapis.com/x.\nPlease submit a quota increase request."})
