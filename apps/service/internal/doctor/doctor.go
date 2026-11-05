@@ -341,7 +341,11 @@ func Run(ctx context.Context, o Options) []Check {
 		add("audit log", statusWarn, "disabled")
 	}
 
-	if mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory); len(mem.Docs)+len(mem.Rules) > 0 {
+	mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory)
+	for _, p := range mem.Problems {
+		add("rule", statusWarn, "%s", p)
+	}
+	if len(mem.Docs)+len(mem.Rules) > 0 {
 		var paths []string
 		for _, d := range mem.Docs {
 			paths = append(paths, d.Path)

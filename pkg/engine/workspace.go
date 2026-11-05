@@ -684,6 +684,9 @@ func (w *Workspace) loadMemory() {
 		return b
 	}})
 	w.memoryStamp = memory.Stamp(w.Dir(), w.cfg.Memory, w.memory)
+	for _, p := range w.memory.Problems {
+		w.warnOnce(p) // read again at each change: said once
+	}
 }
 
 // unavailable stands in for the configured model when it can't be built:

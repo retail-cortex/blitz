@@ -11,7 +11,7 @@ Specs: [memory](../about/specs/spec_012_memory.md), [MCP](../about/specs/spec_00
 
 A line can import another file with `@docs/style.md`: relative to the file, at most five deep, never from outside the repository (or `~/.blitz` for your own files), and never a blocked path.
 
-Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
+Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. Quote globs (`paths: "*.go"`): a file whose front matter isn't valid YAML isn't used, and Blitz says so. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
 
 A rule can also be checked rather than followed. Give it `when: before_agent` (it judges your prompt before the agent runs) or `when: after_agent` (it judges the answer and the changes before the turn ends), and say what a failure does:
 
