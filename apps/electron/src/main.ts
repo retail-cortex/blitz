@@ -32,12 +32,15 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
 import {
   absolutePaths,
-  agentRequestAllowed,
+  agentRequestResolved,
   devToolsAllowed,
   devToolsCommand,
   stringList,
   type AgentReach,
   appMenu,
+  hostRestart,
+  restartDelay,
+  strictestReach,
   bounds,
   consoleLine,
   contentScript,
@@ -228,7 +231,13 @@ async function openApp() {
     },
   });
   win.once("ready-to-show", () => win?.show());
+  // The previews and the agent's views go with the page: when the window
+  // closes, and when it loads the page again (a new host, EL-02).
+  win.webContents.on("did-start-navigation", (d) => {
+    if (d.isMainFrame && !d.isSameDocument) closeViews();
+  });
   win.on("closed", () => {
+    closeViews();
     win = null;
   });
   guard(win);
@@ -259,7 +268,7 @@ function showTasks(t: TasksLink) {
     openTaskWindow();
     return;
   }
-  const n = new Notification({ title: t.title, body: t.body });
+  const n = keep(new Notification({ title: t.title, body: t.body }));
   n.on("click", () => openTaskWindow());
   n.show();
   setTimeout(() => {
@@ -285,12 +294,26 @@ function showRun(r: RunLink) {
     void openApp();
   };
   if (!Notification.isSupported()) return open();
-  const n = new Notification({ title: r.title, body: r.body });
+  const n = keep(new Notification({ title: r.title, body: r.body }));
   n.on("click", open);
   n.show();
   setTimeout(() => {
     if (!win && !taskWin) app.quit();
   }, 10 * 60_000).unref();
+}
+
+// The notifications shown and not yet clicked or closed: held, so the
+// garbage collector doesn't take one (and its click) while it shows.
+const shown = new Set<Notification>();
+
+/** Holds n until it's clicked or closed. */
+function keep(n: Notification): Notification {
+  shown.add(n);
+  const forget = () => shown.delete(n);
+  n.on("click", forget);
+  n.on("close", forget);
+  n.on("failed", forget);
+  return n;
 }
 
 /** The small window with only the tasks: their forms, Submit and Later. */
@@ -327,14 +350,20 @@ function openTaskWindow() {
   void taskWin.loadURL(tasksURL(takeLink()));
 }
 
+// How many times in a row the host stopped on its own soon after it
+// started: each restart waits longer (restartDelay).
+let quickExits = 0;
+
 /**
  * Starts blitz-tray --serve and resolves with the first link it prints.
  * It stops when its standard input closes (when this app quits); if it
- * stops on its own, it's started again and the window reloaded.
+ * stops on its own, it's started again (sooner the longer it ran, giving
+ * up after a run of quick exits) and the window reloaded.
  */
 function serve(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(host, ["--serve", "--page", pageDir], { stdio: ["pipe", "pipe", "inherit"], windowsHide: true });
+    const started = Date.now();
     sidecar = child;
     let first = true;
     createInterface({ input: child.stdout! }).on("line", (line) => {
@@ -352,14 +381,20 @@ function serve(): Promise<string> {
     child.once("exit", (code) => {
       if (first) return reject(new Error(`${host} exited (${code}) before serving the page`));
       if (quitting) return;
+      quickExits = Date.now() - started < hostRestart.quickMs ? quickExits + 1 : 0;
+      const wait = restartDelay(quickExits);
+      if (wait === undefined) return fail(new Error(`${host} kept stopping (${code}) soon after it started`));
       // Serve again on a new port, and point the window there.
-      serve().then(
-        (link) => {
-          origin = originOf(link);
-          reload(link);
-        },
-        (err) => fail(err),
-      );
+      setTimeout(() => {
+        if (quitting) return;
+        serve().then(
+          (link) => {
+            origin = originOf(link);
+            reload(link);
+          },
+          (err) => fail(err),
+        );
+      }, wait);
     });
   });
 }
@@ -519,7 +554,7 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     }
     case "Notify": {
       if (!Notification.isSupported()) return;
-      const n = new Notification({ title: text(a, 0), body: text(a, 1) });
+      const n = keep(new Notification({ title: text(a, 0), body: text(a, 1) }));
       const dir = text(a, 2);
       n.on("click", () => {
         if (!win) return;
@@ -668,11 +703,14 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     }
     case "AgentBrowserTakeOver": {
       // The user takes the watched view: the agent lets go, the tab stays.
+      // Its request filter stays: the tab keeps the reach the agent had.
+      // An off-screen view has no tab to keep, so it closes.
       const v = agents.get(previewId(a[0]) ?? "");
       if (!v) return;
       agents.delete(v.id);
       if (v.view.webContents.debugger.isAttached()) v.view.webContents.debugger.detach();
       send("agentbrowser:closed", { id: v.id, reason: "the user took over the page" });
+      if (!v.watched) v.view.webContents.close();
       return;
     }
     case "AgentBrowserClose": {
@@ -680,7 +718,6 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       const v = agents.get(id);
       if (!v) return;
       agents.delete(id);
-      agentReach.delete(v.view.webContents.id);
       if (previews.has(id)) closePreview(id);
       else v.view.webContents.close();
       return;
@@ -749,17 +786,33 @@ const agents = new Map<string, { id: string; view: WebContentsView; watched: boo
 const agentReach = new Map<number, AgentReach>();
 const filtered = new WeakSet<Session>();
 
-/** Filters the agent's requests in ses (once a session); others' go through. */
-function filterAgentRequests(ses: Session) {
+// What requests without a view (a service worker's, a shared worker's)
+// may reach in each session an agent's view used: the strictest of the
+// views' reaches (strictestReach), as such a worker may be the agent's.
+const sessionReach = new WeakMap<Session, AgentReach>();
+
+/**
+ * Filters the agent's requests in ses (once a session), by the addresses
+ * dialled (agentRequestResolved, with the session's own resolver);
+ * requests without a view are filtered by the session's strictest reach,
+ * and other windows' requests go through.
+ */
+function filterAgentRequests(ses: Session, reach: AgentReach) {
+  sessionReach.set(ses, strictestReach(sessionReach.get(ses), reach));
   if (filtered.has(ses)) return;
   filtered.add(ses);
+  const resolve = (host: string) => ses.resolveHost(host).then((r) => r.endpoints.map((e) => e.address));
   ses.webRequest.onBeforeRequest((details, done) => {
-    const reach = details.webContentsId === undefined ? undefined : agentReach.get(details.webContentsId);
-    done({ cancel: reach !== undefined && !agentRequestAllowed(details.url, reach) });
+    const reach = details.webContentsId === undefined ? sessionReach.get(ses) : agentReach.get(details.webContentsId);
+    if (reach === undefined) return done({});
+    agentRequestResolved(details.url, reach, resolve).then(
+      (ok) => done({ cancel: !ok }),
+      () => done({ cancel: true }),
+    );
   });
 }
 
-/** A session of its own for a view without a profile: in memory, gone with it. */
+/** A session of its own for a view without a profile: in memory, its storage cleared when the view closes. */
 function throwawaySession(id: string): Session {
   const s = session.fromPartition(`agent-${id}`);
   s.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
@@ -772,7 +825,7 @@ function throwawaySession(id: string): Session {
 async function openAgentView(id: string, watched: boolean, profile: string | undefined, reach: AgentReach) {
   if (!win) throw new Error("no window");
   const ses = profile ? profileSessionOf(profile) : throwawaySession(id);
-  filterAgentRequests(ses);
+  filterAgentRequests(ses, reach);
   const view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false, offscreen: !watched, backgroundThrottling: false } });
   const wc = view.webContents;
   agentReach.set(wc.id, reach);
@@ -796,6 +849,8 @@ async function openAgentView(id: string, watched: boolean, profile: string | und
   });
   wc.on("destroyed", () => {
     agentReach.delete(wc.id);
+    // Electron keeps an in-memory session for good; what's in it goes.
+    if (!profile) void ses.clearStorageData().catch(() => {});
     if (agents.delete(id)) send("agentbrowser:closed", { id, reason: "the view closed" });
   });
   await wc.loadURL("about:blank");
@@ -863,8 +918,18 @@ function closePreview(id: string) {
   const p = previews.get(id);
   if (!p) return;
   previews.delete(id);
-  win?.contentView.removeChildView(p.view);
-  p.view.webContents.close();
+  if (win && !win.isDestroyed()) win.contentView.removeChildView(p.view);
+  if (!p.view.webContents.isDestroyed()) p.view.webContents.close();
+}
+
+/** Closes every preview and agent's view, as the page they belong to goes. */
+function closeViews() {
+  for (const id of [...previews.keys()]) closePreview(id);
+  for (const v of agents.values()) {
+    if (!v.view.webContents.isDestroyed()) v.view.webContents.close();
+  }
+  // Their reach goes as each is destroyed (until then, their requests are still filtered).
+  agents.clear();
 }
 
 /** Starting failed: say why, and quit. */

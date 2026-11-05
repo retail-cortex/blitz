@@ -19,7 +19,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   absolutePaths,
+  agentAddressAllowed,
   agentRequestAllowed,
+  agentRequestResolved,
+  hostRestart,
+  restartDelay,
+  strictestReach,
   devToolsAllowed,
   devToolsCommand,
   matchDomain,
@@ -483,7 +488,69 @@ describe("the agent's view", () => {
     ["a file", "file:///etc/passwd", local, false],
     ["javascript", "javascript:alert(1)", local, false],
     ["nonsense", "not a url", local, false],
+    ["IPv4-mapped loopback", "http://[::ffff:127.0.0.1]:8080/", open, false],
+    ["IPv4-mapped loopback, allowed", "http://[::ffff:127.0.0.1]:8080/", local, true],
+    ["IPv4-mapped metadata, even allowed local", "http://[::ffff:169.254.169.254]/", local, false],
+    ["IPv4-mapped private, in hex", "http://[::ffff:c0a8:101]/", open, false],
+    ["IPv4-compatible loopback", "http://[::127.0.0.1]/", open, false],
+    ["NAT64 loopback", "http://[64:ff9b::7f00:1]/", open, false],
+    ["NAT64 metadata, even allowed local", "http://[64:ff9b::a9fe:a9fe]/", local, false],
+    ["6to4 private", "http://[2002:c0a8:0101::1]/", open, false],
+    ["a decimal loopback address", "http://2130706433/", open, false],
+    ["an octal loopback address", "http://0177.0.0.1/", open, false],
+    ["the unspecified address", "http://0.0.0.0:8080/", local, false],
+    ["the unspecified IPv6 address", "http://[::]:8080/", local, false],
+    ["multicast", "http://224.0.0.1/", local, false],
+    ["unique local IPv6", "http://[fd00::1]/", open, false],
+    ["a public IPv6 address", "http://[2606:4700::1111]/", open, true],
+    ["NAT64 public", "http://[64:ff9b::808:808]/", open, true],
   ])("%s", (_name, url, reach, want) => expect(agentRequestAllowed(url, reach)).toBe(want));
+
+  // Names are judged by what they resolve to, as WEB-32's proxy does
+  // after DNS: a name for a local address (nip.io, a rebinding domain) is
+  // refused unless local addresses are allowed, metadata never.
+  const dns: Record<string, string[]> = {
+    "shop.example": ["93.184.216.34", "2606:2800:220:1::1"],
+    "127.0.0.1.nip.io": ["127.0.0.1"],
+    "localtest.me": ["::1", "127.0.0.1"],
+    "rebind.example": ["93.184.216.34", "10.0.0.5"],
+    "metadata.example": ["169.254.169.254"],
+    "mapped.example": ["::ffff:192.168.1.1"],
+  };
+  const resolve = (host: string) => (dns[host] ? Promise.resolve(dns[host]) : Promise.reject(new Error(`no such host ${host}`)));
+  it.each([
+    ["a public name", "https://shop.example/", open, true],
+    ["a name for loopback", "http://127.0.0.1.nip.io:11434/", open, false],
+    ["a name for loopback, allowed", "http://127.0.0.1.nip.io:11434/", local, true],
+    ["a name for loopback IPv6", "http://localtest.me/", open, false],
+    ["a name with one private address among public ones", "http://rebind.example/", open, false],
+    ["a name for metadata, even allowed local", "http://metadata.example/", local, false],
+    ["a name for an IPv4-mapped private address", "http://mapped.example/", open, false],
+    ["a name that doesn't resolve", "http://nowhere.example/", local, false],
+    ["a literal address, not resolved", "http://8.8.8.8/", open, true],
+    ["a denied domain, not resolved", "https://evil.example/", open, false],
+    ["data", "data:text/plain,hi", open, true],
+  ])("after DNS: %s", async (_name, url, reach, want) => expect(await agentRequestResolved(url, reach, resolve)).toBe(want));
+
+  it.each([
+    ["8.8.8.8", true],
+    ["::ffff:8.8.8.8", true],
+    ["::ffff:7f00:1", false],
+    ["0:0:0:0:0:ffff:7f00:1", false],
+    ["::1", false],
+    ["fe80::1%en0", false],
+    ["fc00::1", false],
+    ["ff02::1", false],
+    ["100.64.0.1", false],
+    ["256.1.1.1", false],
+    ["1::2::3", false],
+    ["shop.example", false],
+  ])("the address %s", (address, want) => expect(agentAddressAllowed(address, open)).toBe(want));
+
+  it("holds a session's requests without a view to the strictest reach", () => {
+    expect(strictestReach(undefined, local)).toEqual({ allowLocal: false, deny: open.deny });
+    expect(strictestReach({ allowLocal: true, deny: ["a.example"] }, { allowLocal: true, deny: ["b.example", "a.example"] })).toEqual({ allowLocal: false, deny: ["a.example", "b.example"] });
+  });
 
   it("matches domains as web.deny_domains does", () => {
     expect(matchDomain("blocked.example", "*.blocked.example")).toBe(true);
@@ -500,11 +567,37 @@ describe("the agent's view", () => {
     expect(devToolsCommand("nope")).toBeUndefined();
     expect(devToolsAllowed("Page.navigate")).toBe(true);
     expect(devToolsAllowed("Runtime.evaluate")).toBe(true);
-    for (const m of ["Browser.close", "Target.createTarget", "Storage.clearDataForOrigin", "SystemInfo.getInfo"]) expect(devToolsAllowed(m)).toBe(false);
+    expect(devToolsAllowed("Network.enable")).toBe(true);
+    for (const m of [
+      "Browser.close",
+      "Target.createTarget",
+      "Storage.clearDataForOrigin",
+      "SystemInfo.getInfo",
+      "Network.getAllCookies",
+      "Network.getCookies",
+      "Network.setCookies",
+      "Network.deleteCookies",
+      "Network.clearBrowserCookies",
+      "DOMStorage.getDOMStorageItems",
+      "IndexedDB.requestData",
+      "CacheStorage.requestEntries",
+    ])
+      expect(devToolsAllowed(m), m).toBe(false);
   });
 
   it("reads a list of strings", () => {
     expect(stringList(["a", 1, "", null, "b"])).toEqual(["a", "b"]);
     expect(stringList("a")).toEqual([]);
   });
+});
+
+describe("starting the host again", () => {
+  it.each([
+    [0, 0],
+    [1, hostRestart.baseMs],
+    [2, 2 * hostRestart.baseMs],
+    [3, 4 * hostRestart.baseMs],
+    [hostRestart.maxQuick, Math.min(hostRestart.baseMs * 2 ** (hostRestart.maxQuick - 1), hostRestart.maxMs)],
+    [hostRestart.maxQuick + 1, undefined],
+  ])("after %i quick exits waits %s ms", (n, want) => expect(restartDelay(n)).toBe(want));
 });

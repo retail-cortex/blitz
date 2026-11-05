@@ -77,6 +77,7 @@ func (windowsSystem) Shortcut(link, target string) error {
 
 func (windowsSystem) WriteEntry(e wininstall.Entry) error { return wininstall.WriteEntry(e) }
 func (windowsSystem) DeleteEntry() error                  { return wininstall.DeleteEntry() }
+func (windowsSystem) InstalledRoot() string               { return wininstall.InstallLocation() }
 func (windowsSystem) RemoveRunValue() error               { return loginitem.UninstallTray() }
 func (windowsSystem) RemoveFromPath(dir string) error     { return pagehost.RemoveFromUserPath(dir) }
 

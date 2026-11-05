@@ -37,6 +37,8 @@ type fakeSystem struct {
 	entry                         *wininstall.Entry
 	deleted, runRemoved           bool
 	pathRemoved, deleteLater      string
+	// installed is the folder the entry in Add or remove programs names.
+	installed string
 }
 
 func (f *fakeSystem) Self() (string, error) { return f.self, nil }
@@ -53,6 +55,7 @@ func (f *fakeSystem) Shortcut(link, target string) error {
 }
 func (f *fakeSystem) WriteEntry(e wininstall.Entry) error { f.entry = &e; return nil }
 func (f *fakeSystem) DeleteEntry() error                  { f.deleted = true; return nil }
+func (f *fakeSystem) InstalledRoot() string               { return f.installed }
 func (f *fakeSystem) RemoveRunValue() error               { f.runRemoved = true; return nil }
 func (f *fakeSystem) RemoveFromPath(dir string) error     { f.pathRemoved = dir; return nil }
 func (f *fakeSystem) Start(exe string, args ...string) error {
@@ -102,6 +105,7 @@ func TestInstall(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "app", string(data))
 	assert.FileExists(t, filepath.Join(root, wininstall.Uninstaller), "the uninstaller comes with the app")
+	assert.FileExists(t, filepath.Join(root, wininstall.Marker), "the folder is marked as an install")
 	link, err := os.ReadFile(filepath.Join(f.menu, "Blitz.lnk"))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "Blitz.exe"), string(link))
@@ -165,4 +169,86 @@ func TestWithin(t *testing.T) {
 	assert.True(t, within(filepath.Join("a", "b", "c"), filepath.Join("a", "b")))
 	assert.False(t, within(filepath.Join("a", "bc"), filepath.Join("a", "b")))
 	assert.False(t, within(filepath.Join("a", "b"), filepath.Join("a", "b")))
+}
+
+// The uninstaller removes only a folder Blitz was installed in: a copy of
+// it elsewhere, or a setup program missing its app, removes nothing.
+func TestUninstallOnlyAnInstall(t *testing.T) {
+	retryEvery = 0
+	for _, tc := range []struct {
+		name string
+		// setup makes the folder and returns the program to run and its arguments.
+		setup   func(t *testing.T, f *fakeSystem) (self string, args []string)
+		removed bool
+	}{
+		{
+			name: "the uninstaller copied into a folder of other files",
+			setup: func(t *testing.T, f *fakeSystem) (string, []string) {
+				dir := filepath.Join(filepath.Dir(f.local), "Downloads")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "taxes.pdf"), []byte("mine"), 0o644))
+				self := filepath.Join(dir, wininstall.Uninstaller)
+				require.NoError(t, os.WriteFile(self, []byte("MZ uninstaller"), 0o755))
+				return self, []string{"/S"}
+			},
+		},
+		{
+			name: "its copy in %TEMP% pointed at a folder that isn't an install",
+			setup: func(t *testing.T, f *fakeSystem) (string, []string) {
+				dir := filepath.Join(filepath.Dir(f.local), "Documents")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "Blitz.exe"), []byte("not ours"), 0o644))
+				self := filepath.Join(f.temp, "blitz-uninstall-1.exe")
+				require.NoError(t, os.WriteFile(self, []byte("MZ uninstaller"), 0o755))
+				return self, []string{"--uninstall", "--root", dir, "/S"}
+			},
+		},
+		{
+			name: "a setup program missing its app",
+			setup: func(t *testing.T, f *fakeSystem) (string, []string) {
+				require.Equal(t, 0, run([]string{"/S"}, f))
+				self := filepath.Join(filepath.Dir(f.local), "Blitz_1.0_windows_x64_setup.exe")
+				require.NoError(t, os.WriteFile(self, []byte("MZ cut off"), 0o755))
+				return self, []string{"/S"}
+			},
+		},
+		{
+			name: "an install from before the marker, named by its entry",
+			setup: func(t *testing.T, f *fakeSystem) (string, []string) {
+				require.Equal(t, 0, run([]string{"/S"}, f))
+				root := wininstall.DefaultRoot(f.local)
+				require.NoError(t, os.Remove(filepath.Join(root, wininstall.Marker)))
+				f.installed = root
+				self := filepath.Join(f.temp, "blitz-uninstall-1.exe")
+				require.NoError(t, os.WriteFile(self, []byte("MZ uninstaller"), 0o755))
+				return self, []string{"--uninstall", "--root", root, "/S"}
+			},
+			removed: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFake(t)
+			self, args := tc.setup(t, f)
+			f.self, f.ran = self, nil
+			dir := filepath.Dir(self)
+			for i, a := range args {
+				if a == "--root" {
+					dir = args[i+1]
+				}
+			}
+			if strings.HasPrefix(filepath.Base(self), "Blitz_") {
+				dir = wininstall.DefaultRoot(f.local)
+			}
+			code := run(args, f)
+			if tc.removed {
+				assert.Equal(t, 0, code)
+				assert.NoDirExists(t, dir)
+				return
+			}
+			assert.Equal(t, 1, code)
+			assert.DirExists(t, dir, "nothing removed")
+			assert.False(t, f.deleted, "the entry stays")
+			assert.Empty(t, f.ran, "nothing stopped or started")
+		})
+	}
 }

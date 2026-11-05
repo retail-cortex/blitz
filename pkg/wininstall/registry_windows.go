@@ -49,6 +49,20 @@ func DeleteEntry() error {
 	return err
 }
 
+// InstallLocation is the folder the app's entry names ("" without one).
+func InstallLocation() string {
+	k, err := registry.OpenKey(registry.CURRENT_USER, UninstallKey, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue("InstallLocation")
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
 // SetDisplayVersion updates the entry's version after an update, when the
 // app was installed with the setup program (else there's no entry, and
 // nothing is written).
