@@ -191,7 +191,9 @@ func readReceipt(path string) (FlowReceipt, error) {
 	return r, json.Unmarshal(data, &r)
 }
 
-// pruneReceipts removes the oldest receipts in dir beyond keptReceipts.
+// pruneReceipts removes the oldest receipts in dir beyond keptReceipts,
+// making room for one more; a run still going (here, or paused with its
+// record in flows/runs, waiting on a task) keeps its receipt, however old.
 func pruneReceipts(dir string) {
 	entries, _ := os.ReadDir(dir)
 	type file struct {
@@ -199,16 +201,28 @@ func pruneReceipts(dir string) {
 		mod  time.Time
 	}
 	var files []file
+	total := 0
+	records := filepath.Join(filepath.Dir(dir), "runs")
 	for _, e := range entries {
-		if info, err := e.Info(); err == nil && strings.HasSuffix(e.Name(), ".json") {
-			files = append(files, file{e.Name(), info.ModTime()})
+		info, err := e.Info()
+		if err != nil || !strings.HasSuffix(e.Name(), ".json") {
+			continue
 		}
+		total++
+		if _, live := liveRuns.Load(strings.TrimSuffix(e.Name(), ".json")); live {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(records, e.Name())); err == nil {
+			continue
+		}
+		files = append(files, file{e.Name(), info.ModTime()})
 	}
-	if len(files) < keptReceipts {
+	over := total - (keptReceipts - 1)
+	if over <= 0 {
 		return
 	}
-	slices.SortFunc(files, func(a, b file) int { return b.mod.Compare(a.mod) })
-	for _, f := range files[keptReceipts-1:] {
+	slices.SortFunc(files, func(a, b file) int { return a.mod.Compare(b.mod) })
+	for _, f := range files[:min(over, len(files))] {
 		os.Remove(filepath.Join(dir, f.name))
 	}
 }

@@ -511,7 +511,7 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 		m.try()
 		res, err = once(sctx)
 		cancel()
-		if err == nil || try >= attempts || ctx.Err() != nil {
+		if err == nil || try >= attempts || ctx.Err() != nil || !retryable(err) {
 			break
 		}
 		r.emit(api.Event{Notice: &api.Notice{Text: fmt.Sprintf("↻ /%s › %s: %v (try %d of %d)", r.f.Name, r.title(n.ID), err, try+1, attempts)}})
@@ -868,3 +868,11 @@ func (w *Workspace) callStep(ctx context.Context, r *flowRun, n flows.Node, inpu
 
 // maxCallDepth is how deep workflows may call each other.
 const maxCallDepth = 8
+
+// retryable reports whether a step's error may go away when it's tried
+// again: not a refusal (an approval denied, a guardrail or hook's block)
+// or the web being off, which would only be asked or refused again.
+func retryable(err error) bool {
+	var blocked *api.BlockedError
+	return !errors.Is(err, tools.ErrNotApproved) && !errors.Is(err, tools.ErrWebOff) && !errors.As(err, &blocked)
+}

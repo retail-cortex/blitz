@@ -48,7 +48,8 @@ import (
 // made, never kept in the workflow's events, and masked wherever it
 // shows; requests go through web_fetch's guards and approvals.
 
-// flowResponseLimit is the most of a response a step keeps.
+// flowResponseLimit is the most of a response a step keeps: a longer one
+// fails the step rather than being cut (a cut JSON body no longer parses).
 const flowResponseLimit = 256 << 10
 
 // secret puts secrets' values into text and has them masked from then on.
@@ -162,9 +163,12 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 		return flows.Result{}, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, flowResponseLimit))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, flowResponseLimit+1))
 	if err != nil {
 		return flows.Result{}, fmt.Errorf("reading the response: %w", err)
+	}
+	if len(data) > flowResponseLimit {
+		return flows.Result{}, fmt.Errorf("%s %s answered with more than %d KiB, the most a step keeps", method, shown, flowResponseLimit>>10)
 	}
 	text := w.secretRedactor().String(string(data))
 	headers := map[string]any{}
