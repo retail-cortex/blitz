@@ -30,6 +30,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/a2ui"
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"gopkg.in/yaml.v3"
 )
@@ -268,10 +269,11 @@ func ValidName(name string) bool { return gates.ValidName(name) }
 // IsFlow reports whether a file name is a workflow's.
 func IsFlow(file string) bool { return strings.HasSuffix(strings.ToLower(file), Suffix) }
 
-// Parse reads a workflow file; what doesn't hold is its Problem.
+// Parse reads a workflow file; what doesn't hold is its Problem. A key it
+// doesn't know is one: a link's misspelt condition would be taken always.
 func Parse(name, path string, data []byte) Flow {
 	var f Flow
-	if err := yaml.Unmarshal(data, &f); err != nil {
+	if err := frontmatter.Strict(data, &f); err != nil {
 		return Flow{Name: name, Path: path, Problem: fmt.Sprintf("the file isn't a workflow: %v", err)}
 	}
 	f.Name, f.Path = name, path
@@ -601,17 +603,6 @@ func Outputs(f Flow, id string) []Edge {
 	for _, e := range f.Edges {
 		if e.From == id {
 			out = append(out, e)
-		}
-	}
-	return out
-}
-
-// Inputs are the steps that feed id, in the order their links are listed.
-func Inputs(f Flow, id string) []string {
-	var out []string
-	for _, e := range f.Edges {
-		if e.To == id {
-			out = append(out, e.From)
 		}
 	}
 	return out

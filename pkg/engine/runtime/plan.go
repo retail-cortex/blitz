@@ -123,10 +123,10 @@ var toolAliases = map[string][]string{
 
 // WithAllowedTools limits the run to the named tools (Blitz's names, or
 // Claude Code's such as Bash or Read; "Bash(git *)" counts as Bash): any
-// other tool is refused. Empty means no limit.
+// other tool is refused. Nil means no limit; empty, no tools.
 func WithAllowedTools(names []string) ExecOption {
 	return func(s *runState) {
-		if len(names) == 0 {
+		if names == nil {
 			return
 		}
 		s.allowed = map[string]bool{}
@@ -154,5 +154,8 @@ func allowedRefusal(st *runState, toolName string) map[string]any {
 		names = append(names, n)
 	}
 	slices.Sort(names)
+	if len(names) == 0 {
+		return map[string]any{"error": fmt.Sprintf("%s isn't allowed: this command allows no tools", toolName)}
+	}
 	return map[string]any{"error": fmt.Sprintf("%s isn't among the tools this command allows (%s)", toolName, strings.Join(names, ", "))}
 }

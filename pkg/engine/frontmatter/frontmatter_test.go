@@ -70,3 +70,34 @@ func TestEdit(t *testing.T) {
 	_, err = Edit([]byte("---\n- a list\n---\n"), "", func(Fields) {})
 	assert.ErrorContains(t, err, "isn't a mapping")
 }
+
+func TestStrict(t *testing.T) {
+	type doc struct {
+		Name  string   `yaml:"name"`
+		Tools []string `yaml:"tools"`
+	}
+	tests := []struct {
+		name, in, problem string
+		want              doc
+	}{
+		{name: "known keys", in: "name: a\ntools: [x]\n", want: doc{Name: "a", Tools: []string{"x"}}},
+		{name: "empty", in: ""},
+		{name: "a misspelt key", in: "name: a\ntool: [x]\n", problem: `line 2: unknown key "tool"`},
+		{name: "two unknown keys", in: "nme: a\nmodel: b\n", problem: `line 1: unknown key "nme"; line 2: unknown key "model"`},
+		{name: "a wrong type", in: "tools: {a: b}\n", problem: "cannot unmarshal"},
+		{name: "not YAML", in: "name: [\n", problem: "yaml:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var d doc
+			err := Strict([]byte(tt.in), &d)
+			if tt.problem != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.problem)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, d)
+		})
+	}
+}

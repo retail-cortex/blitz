@@ -71,8 +71,6 @@ func TestParseAndOrder(t *testing.T) {
 		ids = append(ids, n.ID)
 	}
 	assert.Equal(t, []string{"notes", "web", "both", "draft", "save"}, ids)
-	assert.Equal(t, []string{"notes", "web"}, Inputs(f, "both"))
-	assert.Empty(t, Inputs(f, "notes"))
 }
 
 func TestCheck(t *testing.T) {
@@ -91,6 +89,9 @@ func TestCheck(t *testing.T) {
 		{"loop", "nodes: [{id: a, type: accumulate}, {id: b, type: accumulate}]\nedges: [{from: a, to: b}, {from: b, to: a}]", "the steps loop"},
 		{"unknown mode", "mode: yolo\nnodes: [{id: a, type: accumulate}]", `mode "yolo"`},
 		{"plan mode", "mode: plan\nnodes: [{id: a, type: accumulate}]", `mode "plan"`},
+		// N26 engine-sub-1 #27: a misspelt key isn't dropped.
+		{"a link's misspelt condition", "nodes: [{id: a, type: accumulate}, {id: b, type: accumulate}]\nedges: [{from: a, to: b, condition: output.ok}]", `unknown key "condition"`},
+		{"a step's misspelt key", "nodes: [{id: a, type: accumulate, foreach: x}]", `unknown key "foreach"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -150,7 +150,7 @@ func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.E
 		}
 		opts = append(opts, runtime.WithModel(llm))
 	}
-	if len(c.AllowedTools) > 0 {
+	if c.AllowedTools != nil {
 		opts = append(opts, runtime.WithAllowedTools(c.AllowedTools))
 	}
 	return opts, nil

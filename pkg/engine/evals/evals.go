@@ -33,7 +33,6 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
-	"gopkg.in/yaml.v3"
 )
 
 // A case's output type.
@@ -128,7 +127,7 @@ func Parse(name, path string, data []byte) Eval {
 	front, body, ok := frontmatter.Split(data)
 	var m meta
 	if ok {
-		if err := yaml.Unmarshal(front, &m); err != nil {
+		if err := frontmatter.Strict(front, &m); err != nil { // a misspelt key is a problem
 			e.Problem = fmt.Sprintf("front matter: %v", err)
 			return e
 		}

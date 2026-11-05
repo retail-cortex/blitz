@@ -132,7 +132,7 @@ func TestParseEdgeCases(t *testing.T) {
 	_, err = Parse("b", "user", "", []byte("---\ndescription: x\n---"))
 	assert.ErrorContains(t, err, "no prompt", "nothing after the closing line")
 
-	c, err := Parse("b", "user", "", []byte("---\nallowed-tools: [Read, \" \", Bash(git *), 3]\n---\n#"))
+	c, err := Parse("b", "user", "", []byte("---\nallowed-tools: [Read, \" \", Bash(git *)]\n---\n#"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Read", "Bash(git *)"}, c.AllowedTools, "a YAML list keeps the non-blank strings")
 	assert.Empty(t, c.Description, "a heading with no text gives no description")
@@ -162,4 +162,39 @@ func TestLoadReportsBadFiles(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty.md", "the malformed file is named")
 	assert.Contains(t, err.Error(), "dangling.md", "the unreadable file is reported")
+	assert.Contains(t, err.Error(), "locked", "the unreadable folder is reported (N26 engine-sub-1 #14)")
+}
+
+// TestAllowedTools checks that allowed-tools is read strictly: a misspelt
+// key or a value it can't read is the command's problem, and an empty one
+// allows no tools, never all of them (N26 engine-sub-1 #12).
+func TestAllowedTools(t *testing.T) {
+	cases := []struct {
+		name, front string
+		want        []string
+		problem     string
+	}{
+		{name: "none: no limit", front: "description: d", want: nil},
+		{name: "a string", front: "allowed-tools: Read, Grep", want: []string{"Read", "Grep"}},
+		{name: "a list", front: "allowed-tools: [Read]", want: []string{"Read"}},
+		{name: "an empty list: no tools", front: "allowed-tools: []", want: []string{}},
+		{name: "no value: no tools", front: "allowed-tools:", want: []string{}},
+		{name: "an empty string: no tools", front: `allowed-tools: ""`, want: []string{}},
+		{name: "Claude Code's disable-model-invocation", front: "disable-model-invocation: true\nallowed-tools: Read", want: []string{"Read"}},
+		{name: "the underscore spelling", front: "allowed_tools: Read, Grep", problem: `unknown key "allowed_tools"`},
+		{name: "camel case", front: "allowedTools: [Read]", problem: `unknown key "allowedTools"`},
+		{name: "a mapping", front: "allowed-tools: {Read: true}", problem: "allowed-tools: line 2"},
+		{name: "a number in the list", front: "allowed-tools: [Read, 3]", problem: "a tool's name"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cmd, err := Parse("x", "user", "", []byte("---\n"+c.front+"\n---\nDo it."))
+			if c.problem != "" {
+				assert.ErrorContains(t, err, c.problem)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, cmd.AllowedTools)
+		})
+	}
 }

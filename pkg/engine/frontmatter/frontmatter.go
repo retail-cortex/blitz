@@ -22,6 +22,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -42,6 +44,31 @@ func Split(data []byte) (front, body []byte, ok bool) {
 	}
 	return rest[:i], bytes.TrimSpace(rest[i+4:]), true
 }
+
+// Strict decodes the YAML in data into v and refuses a key v has no field
+// for: a misspelt key (permission-mode, allowed_tools, condition) would
+// otherwise be dropped without a word, and what it meant to set wouldn't
+// apply. Empty data decodes as nothing.
+func Strict(data []byte, v any) error {
+	d := yaml.NewDecoder(bytes.NewReader(data))
+	d.KnownFields(true)
+	err := d.Decode(v)
+	var te *yaml.TypeError
+	switch {
+	case err == nil, errors.Is(err, io.EOF):
+		return nil
+	case errors.As(err, &te):
+		msgs := make([]string, len(te.Errors))
+		for i, m := range te.Errors {
+			msgs[i] = unknownField.ReplaceAllString(m, `line $1: unknown key "$2"`)
+		}
+		return errors.New(strings.Join(msgs, "; "))
+	}
+	return err
+}
+
+// unknownField is yaml.v3's message for a key with no field.
+var unknownField = regexp.MustCompile(`^line (\d+): field (.+) not found in type \S+$`)
 
 // Fields is a front matter mapping, edited in place.
 type Fields struct{ m *yaml.Node }

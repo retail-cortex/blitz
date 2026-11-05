@@ -46,6 +46,10 @@ type Registry struct {
 	// held then (see Refresh).
 	dirs  []string
 	stamp string
+	// locked are the organization's locked folders (see Lock).
+	locked []string
+	// reload keeps one load at a time, so an older one can't win.
+	reload sync.Mutex
 }
 
 // NewRegistry creates a new Registry and loads built-in embedded agent specs.
@@ -97,6 +101,8 @@ func (r *Registry) loadEmbeddedAgents() error {
 // specs are reported in the returned (joined) error; valid ones are still
 // loaded. The directories are remembered for Refresh.
 func (r *Registry) LoadExternalAgents(dirs ...string) error {
+	r.reload.Lock()
+	defer r.reload.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, dir := range dirs {
@@ -110,6 +116,8 @@ func (r *Registry) LoadExternalAgents(dirs ...string) error {
 // was added, changed or removed since they were last loaded, and reports
 // whether it did. An agent whose file is gone is gone.
 func (r *Registry) Refresh() (bool, error) {
+	r.reload.Lock()
+	defer r.reload.Unlock()
 	r.mu.RLock()
 	dirs, was := r.dirs, r.stamp
 	r.mu.RUnlock()
@@ -117,8 +125,8 @@ func (r *Registry) Refresh() (bool, error) {
 	if now == was {
 		return false, nil
 	}
-	agents := make(map[string]*AgentSpec, len(r.agents))
 	r.mu.RLock()
+	agents := make(map[string]*AgentSpec, len(r.agents))
 	for name, spec := range r.agents {
 		if r.builtin[name] {
 			agents[name] = spec
@@ -130,6 +138,28 @@ func (r *Registry) Refresh() (bool, error) {
 	r.agents, r.stamp = agents, now
 	r.mu.Unlock()
 	return true, errors.Join(errs...)
+}
+
+// Lock marks dirs as the organization's locked agent folders (spec_053
+// EN-31): an agent loaded from one can't be replaced by a later folder's
+// of the same name, such as a plugin's; that one is reported instead.
+// Call it before loading.
+func (r *Registry) Lock(dirs ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, dir := range dirs {
+		r.locked = append(r.locked, filepath.Clean(config.ExpandHome(dir)))
+	}
+}
+
+// isLocked reports whether path is in a locked folder.
+func (r *Registry) isLocked(path string) bool {
+	for _, dir := range r.locked {
+		if path != "" && strings.HasPrefix(path, dir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Invalidate makes the next Refresh load the external agents again
@@ -170,8 +200,9 @@ func (r *Registry) SwitchOff(names []string) {
 // IsBuiltin reports whether name is a built-in agent's.
 func (r *Registry) IsBuiltin(name string) bool { return r.builtin[name] }
 
-// load adds the agents in dirs to into (later directories win), returning
-// what couldn't be loaded. r.builtin is fixed once the registry is made.
+// load adds the agents in dirs to into (later directories win, but not
+// over a locked folder's), returning what couldn't be loaded. r.builtin
+// and r.locked are fixed once loading starts.
 func (r *Registry) load(into map[string]*AgentSpec, dirs []string) []error {
 	var errs []error
 	for _, dir := range dirs {
@@ -179,6 +210,7 @@ func (r *Registry) load(into map[string]*AgentSpec, dirs []string) []error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			continue
 		}
+		seen := map[string]string{} // this folder's names, by file
 
 		// The callback never fails, so neither does the walk.
 		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -201,6 +233,14 @@ func (r *Registry) load(into map[string]*AgentSpec, dirs []string) []error {
 				errs = append(errs, fmt.Errorf("%s: agent name %q is reserved by a built-in agent", path, spec.Name))
 				return nil
 			}
+			if prev := into[spec.Name]; prev != nil && r.isLocked(prev.Path) && !r.isLocked(path) {
+				errs = append(errs, fmt.Errorf("%s: agent name %q is the organization's locked agent's (%s)", path, spec.Name, prev.Path))
+				return nil
+			}
+			if other, ok := seen[spec.Name]; ok {
+				errs = append(errs, fmt.Errorf("%s: agent name %q is also defined in %s; this file is used", path, spec.Name, other))
+			}
+			seen[spec.Name] = path
 			spec.Path = path
 			into[spec.Name] = spec
 			return nil

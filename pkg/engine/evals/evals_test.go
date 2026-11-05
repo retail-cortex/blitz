@@ -31,7 +31,6 @@ const sample = `---
 description: Answers about the shop
 agents: [blitz]
 near: embedding
-team: support
 ---
 Cases from support tickets.
 
@@ -67,6 +66,7 @@ func TestParseProblems(t *testing.T) {
 		{"bad front matter", "---\nagents: [\n---\n", "front matter"},
 		{"bad near", "---\nnear: vibes\n---\n", `near "vibes"`},
 		{"bad allow", "---\nallow: [run_command]\n---\n", `allow "run_command"`},
+		{"a misspelt key", "---\nagent: support\n---\n", `unknown key "agent"`}, // N26 engine-sub-1 #24
 		{"case problems", "| ID | Prompt | Output | Type | Threshold | Scope |\n|-|-|-|-|-|-|\n| a | p | o | fuzzy | | |\n| a | | o | near | 2 | later |\n|  | p | o | exact | | |\n",
 			`case a: output type "fuzzy"`},
 	}
@@ -117,7 +117,9 @@ func TestSave(t *testing.T) {
 	data, _ = os.ReadFile(p2)
 	assert.Contains(t, string(data), "team: support")
 	assert.Contains(t, string(data), "near: embedding")
-	assert.Len(t, Load(dir), 1)
+	all := Load(dir)
+	require.Len(t, all, 1)
+	assert.Contains(t, all[0].Problem, `unknown key "team"`, "kept, but it's the eval's problem")
 
 	_, probs, _ = Save(dir, Eval{Name: "store", Cases: []Case{{ID: "a", Prompt: "p"}}}, "")
 	assert.Equal(t, []string{`name "store": there's an eval by that name`}, probs)

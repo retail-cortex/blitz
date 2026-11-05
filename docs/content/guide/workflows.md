@@ -136,3 +136,5 @@ edges:
   - {from: gather, to: draft}
   - {from: draft, to: save}
 ```
+
+A key Blitz doesn't know, on the workflow, a step or a link, is the workflow's problem, and it doesn't run until it's fixed: a link's condition written `condition:` instead of `when:` would otherwise be no condition at all.

@@ -42,7 +42,7 @@ Cases from last month's tickets.
 - **Near** passes when the answer means the same: scored from 0 to 1 and compared with the threshold. With `near: judge` (the default) a fast model, the suggestions model, scores it and says why; with `near: embedding` it's the similarity of the two texts' embeddings, from search's `search.embedding_model`.
 - **Scope** is what a failure means: **Fail** fails the eval, **Warn** is a warning, **Info** is only noted.
 
-A line break in a cell is `<br>`; a `|` is `\|`. Text above and below the table stays as you wrote it.
+A line break in a cell is `<br>`; a `|` is `\|`. Text above and below the table stays as you wrote it. A front matter key other than these five (`agent:` for `agents:`, say) is the eval's problem, and it doesn't run until it's fixed.
 
 ## What a case may do
 

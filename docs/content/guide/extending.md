@@ -173,6 +173,8 @@ mode: plan                                 # read-only
 Fix issue #$1: read it with `gh issue view $1`, find the cause, fix it and add a test.
 ```
 
+Without `allowed-tools` the turn may use every tool; `allowed-tools: []` allows none. A key Blitz doesn't know (`allowed_tools`, say) or an `allowed-tools` it can't read is the command's problem, reported, and the command doesn't run.
+
 `/review`, `/security-review` (both read-only), `/simplify` and `/verify` are bundled, and every skill is a command too. Built-in commands win name clashes; `/help` lists the custom ones.
 
 ## Plugins
