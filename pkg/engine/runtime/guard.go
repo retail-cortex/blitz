@@ -16,7 +16,11 @@ package runtime
 
 import (
 	"context"
+	"maps"
 
+	"github.com/retail-cortex/blitz/pkg/guardrails"
+	"github.com/retail-cortex/blitz/pkg/redact"
+	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 )
 
@@ -50,6 +54,9 @@ type GuardVerdict struct {
 	Text *string
 	// Notices are said in the conversation.
 	Notices []string
+	// Withheld ends a streamed answer: the rest of it isn't sent (Text is
+	// the last of it).
+	Withheld bool
 }
 
 // WithGuard has the engine ask g at every step.
@@ -79,24 +86,94 @@ func (e *Engine) tell(ctx context.Context, notices []string) {
 	}
 }
 
-// guardOutput lets the guard check each text part of the model's reply,
-// replacing what it masks or withholds.
-func (e *Engine) guardOutput(ctx interface {
-	context.Context
-	AgentName() string
-}, resp *model.LLMResponse) {
-	if e.guard == nil || resp == nil || resp.Content == nil {
+// HeldTextKey is the CustomMetadata key of the end of a streamed answer
+// that was held back (see guardOutput) and is sent with its final
+// response: front ends showing the streamed pieces get it as the last
+// piece, before the final text that repeats them.
+const HeldTextKey = "blitz_held_text"
+
+// guardOutput checks the model's answer, masking the secrets it echoes
+// and letting the guard replace what it masks or withholds. A streamed
+// answer is checked as it grows, not piece by piece: the word still
+// arriving at the end, and a window before it, is held
+// (guardrails.Hold) until it's settled or the answer ends, so a key
+// split across pieces is checked whole. The final response, the whole
+// answer, is checked whole, and carries the held end (HeldTextKey).
+func (e *Engine) guardOutput(ctx agent.Context, resp *model.LLMResponse) {
+	if resp == nil || e.guard == nil && e.secrets == nil {
 		return
 	}
-	c := e.guardCall(ctx, ctx, "", nil)
-	for _, p := range resp.Content.Parts {
-		if p == nil || p.Text == "" || p.Thought {
-			continue
-		}
-		v := e.guard.Output(ctx, c, p.Text, !resp.Partial)
-		if v.Text != nil {
-			p.Text = *v.Text
-		}
-		e.tell(ctx, v.Notices)
+	var c GuardCall
+	if e.guard != nil && ctx != nil {
+		c = e.guardCall(ctx, ctx, "", nil)
 	}
+	check := func(text string, final bool) (string, bool) {
+		if e.secrets != nil {
+			text = redact.Mask(text)
+		}
+		if e.guard == nil {
+			return text, false
+		}
+		v := e.guard.Output(ctx, c, text, final)
+		if ctx != nil {
+			e.tell(ctx, v.Notices)
+		}
+		if v.Text != nil {
+			text = *v.Text
+		}
+		return text, v.Withheld
+	}
+	hold := e.outputHold(ctx, resp.Partial, check)
+	if !resp.Partial && hold != nil {
+		if rest := hold.Flush(); rest != "" {
+			resp.CustomMetadata = maps.Clone(resp.CustomMetadata) // a model may share one map across responses
+			if resp.CustomMetadata == nil {
+				resp.CustomMetadata = map[string]any{}
+			}
+			resp.CustomMetadata[HeldTextKey] = rest
+		}
+	}
+	if resp.Content == nil {
+		return
+	}
+	for _, p := range resp.Content.Parts {
+		switch {
+		case p == nil || p.Text == "":
+		case p.Thought:
+			if e.secrets != nil {
+				p.Text = redact.Mask(p.Text)
+			}
+		case resp.Partial && hold != nil:
+			p.Text = hold.Write(p.Text)
+		default:
+			p.Text, _ = check(p.Text, !resp.Partial)
+		}
+	}
+}
+
+// outputHold is the hold of the answer streaming from the agent of ctx
+// (by invocation, branch and agent, so parallel agents' are apart), in
+// the run's state: made by a partial response, ended by the final one,
+// which gets it back to flush. Nil without a run (each piece is then
+// checked alone).
+func (e *Engine) outputHold(ctx agent.Context, partial bool, check func(string, bool) (string, bool)) *guardrails.Hold {
+	if ctx == nil {
+		return nil
+	}
+	st := stateFrom(ctx)
+	if st == nil {
+		return nil
+	}
+	key := ctx.InvocationID() + "\x00" + ctx.Branch() + "\x00" + ctx.AgentName()
+	if !partial {
+		h, _ := st.holds.LoadAndDelete(key)
+		hold, _ := h.(*guardrails.Hold)
+		return hold
+	}
+	window := 0
+	if w, ok := e.guard.(interface{ OutputWindow() int }); ok {
+		window = w.OutputWindow()
+	}
+	h, _ := st.holds.LoadOrStore(key, &guardrails.Hold{Check: func(text string) (string, bool) { return check(text, false) }, Window: window})
+	return h.(*guardrails.Hold)
 }

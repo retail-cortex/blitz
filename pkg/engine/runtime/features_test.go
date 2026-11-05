@@ -275,7 +275,6 @@ func TestEngineAuditsToolCalls(t *testing.T) {
 	f.tools.SetAudit(log)
 	_, err := functionResponses(t, f.eng, "s", "list")
 	require.NoError(t, err)
-	log.Close()
 	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
 	require.Len(t, files, 1, "audit files %v", files)
 	b, _ := os.ReadFile(files[0])
@@ -299,7 +298,6 @@ func TestEngineAuditsWhatFailed(t *testing.T) {
 	f.tools.SetAudit(log)
 	_, err := functionResponses(t, f.eng, "s", "go")
 	require.NoError(t, err)
-	log.Close()
 	results := map[string]audit.Entry{}
 	for _, e := range audit.Read(dir, "", time.Now().Add(-time.Hour)) {
 		if e.Kind == audit.KindToolResult {

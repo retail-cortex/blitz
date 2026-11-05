@@ -103,6 +103,9 @@ type runState struct {
 	// failures counts the run's failed calls by tool, arguments and error
 	// (*atomic.Int32), to tell the agent when it repeats one.
 	failures sync.Map
+	// holds are the answers streaming in the run, held back while their
+	// end may be a secret still arriving (see guardOutput).
+	holds sync.Map
 	// parent is the run a sub-agent with its own budget was called from,
 	// or a budget several runs share (see Budget): its model calls count
 	// toward each run up the chain too.
@@ -810,24 +813,9 @@ func partsNameSecrets(parts []*genai.Part) bool {
 	return false
 }
 
-// maskSecrets masks the secret values the model echoes in its answer.
-func maskSecrets(resp *model.LLMResponse) {
-	if resp == nil || resp.Content == nil {
-		return
-	}
-	for _, p := range resp.Content.Parts {
-		if p != nil && p.Text != "" {
-			p.Text = redact.Mask(p.Text)
-		}
-	}
-}
-
 // afterModel records token usage for the run's session.
 func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr error) (*model.LLMResponse, error) {
-	if e.secrets != nil {
-		maskSecrets(resp)
-	}
-	e.guardOutput(ctx, resp) // guardrails on the answer: secrets, personal data, custom checks
+	e.guardOutput(ctx, resp) // secrets it echoes, and guardrails on the answer: secrets, personal data, custom checks
 	if resp == nil || resp.Partial {
 		return nil, nil
 	}

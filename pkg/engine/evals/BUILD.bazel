@@ -31,6 +31,7 @@ go_library(
         "//pkg/api",
         "//pkg/engine/frontmatter",
         "//pkg/engine/gates",
+        "//pkg/engine/jsonl",
     ],
 )
 

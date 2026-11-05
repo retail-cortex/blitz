@@ -90,7 +90,10 @@ func (r *bgRun) add(ev *pb.TurnEvent) {
 	}
 	r.events = append(r.events, ev)
 	if over := len(r.events) - keptRunEvents; over > 0 {
-		r.events = slices.Delete(r.events, 0, over)
+		// Resliced, not shifted (as liveRun.add): the dropped are cleared,
+		// and append copies the kept when it outgrows the array.
+		clear(r.events[:over])
+		r.events = r.events[over:]
 		r.dropped += over
 	}
 	for ch := range r.notify {

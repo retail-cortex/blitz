@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
@@ -85,13 +86,12 @@ func Arg(args map[string]any, keys ...string) string {
 	return ""
 }
 
-// Logger appends entries to <dir>/audit-YYYY-MM-DD.jsonl. A nil *Logger is a
+// Logger appends entries to <dir>/audit-YYYY-MM-DD.jsonl, each on a line
+// of its own after a torn one (jsonl.Append). A nil *Logger is a
 // valid no-op, so callers never need to check whether auditing is enabled.
 type Logger struct {
 	mu        sync.Mutex
 	dir       string
-	day       string
-	f         *os.File
 	redactor  *redact.Redactor
 	workspace string
 	now       func() time.Time
@@ -197,32 +197,12 @@ func (l *Logger) Log(e Entry) {
 
 	line, err := json.Marshal(e)
 	if err == nil {
-		err = l.rotateLocked(e.Time)
-	}
-	if err == nil {
-		_, err = l.f.Write(append(line, '\n'))
+		err = jsonl.Append(filepath.Join(l.dir, "audit-"+e.Time.Format(time.DateOnly)+".jsonl"), 0o600, line)
 	}
 	if err != nil && !l.failed {
 		l.failed = true
 		fmt.Fprintf(stderr, "audit: a %s entry wasn't written (later failures aren't reported): %v\n", e.Kind, err)
 	}
-}
-
-func (l *Logger) rotateLocked(t time.Time) error {
-	day := t.Format("2006-01-02")
-	if l.f != nil && day == l.day {
-		return nil
-	}
-	if l.f != nil {
-		l.f.Close()
-	}
-	f, err := os.OpenFile(filepath.Join(l.dir, "audit-"+day+".jsonl"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
-	if err != nil {
-		l.f = nil
-		return err
-	}
-	l.f, l.day = f, day
-	return nil
 }
 
 // Read returns the entries in dir's daily files (audit-YYYY-MM-DD.jsonl)
@@ -293,19 +273,4 @@ func Stamp(dir string, since time.Time) string {
 		}
 	}
 	return fmt.Sprintf("%d:%x", since.UnixNano(), h.Sum(nil)[:8])
-}
-
-// Close closes the current file.
-func (l *Logger) Close() error {
-	if l == nil {
-		return nil
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.f == nil {
-		return nil
-	}
-	err := l.f.Close()
-	l.f = nil
-	return err
 }

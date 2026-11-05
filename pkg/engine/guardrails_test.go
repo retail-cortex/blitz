@@ -253,6 +253,53 @@ func TestSecretsGuardrail(t *testing.T) {
 	assert.Contains(t, res.Output, "[withheld by the guardrail secrets]")
 }
 
+// A key streamed in pieces is checked whole: the answer's end is held
+// back until it's settled, so no piece shows any of the key, and what's
+// shown, the pieces and the held end, is the final answer (N26
+// followups#1). Blocking, the stream stops at the key.
+func TestSecretsGuardrailStreamed(t *testing.T) {
+	key := "sk-proj-" + strings.Repeat("A1b2C3d4E5", 6)
+	answer := strings.Repeat("Some words before it. ", 12) + "The key is " + key + " and that's all."
+	for _, tc := range []struct {
+		name   string
+		chunk  int
+		action string
+	}{
+		{"one byte at a time", 1, "redact"},
+		{"seven bytes at a time", 7, "redact"},
+		{"fifty bytes at a time", 50, "redact"},
+		{"blocking", 7, "block"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestStreaming(t, tc.chunk, nil, text(answer))
+			writeGuardrail(t, w, "secrets", "---\nbuiltin: secrets\naction: "+tc.action+"\n---\n")
+			var shown strings.Builder
+			pieces := 0
+			res, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "the key?"}, func(e api.Event) {
+				if tx := e.Text; tx != nil && !tx.Thought && (tx.Partial || !tx.Repeat) {
+					shown.WriteString(tx.Text)
+					if tx.Partial {
+						pieces++
+					}
+				}
+			})
+			require.NoError(t, err)
+			assert.Greater(t, pieces, 1, "it streamed")
+			for i := 0; i+8 <= len(key); i += 4 {
+				assert.NotContains(t, shown.String(), key[i:i+8], "no part of the key is shown")
+			}
+			assert.NotContains(t, res.Output, key[8:16])
+			if tc.action == "block" {
+				assert.Contains(t, shown.String(), "[withheld by the guardrail secrets]")
+				assert.NotContains(t, shown.String(), "that's all", "the stream stops at the key")
+				return
+			}
+			assert.Contains(t, shown.String(), "and that's all.", "the held end is shown")
+			assert.Equal(t, res.Output, shown.String(), "what's shown is the final answer")
+		})
+	}
+}
+
 // A custom input guardrail refuses a failing prompt; one that can't be
 // judged refuses too (a guardrail errs on the side of safety).
 func TestCustomGuardrails(t *testing.T) {

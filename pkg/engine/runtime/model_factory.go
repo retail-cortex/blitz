@@ -387,6 +387,10 @@ type MockLLM struct {
 	// FinishReasons, if set, are the responses' finish reasons, in order
 	// (MAX_TOKENS: a reply cut off at the output limit).
 	FinishReasons []genai.FinishReason
+	// Chunk, if set, streams a reply that's only text when streaming is
+	// asked for, as a streaming API does: pieces of Chunk bytes as
+	// partial responses, then the whole text as the final one.
+	Chunk int
 }
 
 // Calls returns the number of GenerateContent calls so far.
@@ -458,8 +462,32 @@ func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, st
 		if idx < len(m.FinishReasons) {
 			resp.FinishReason = m.FinishReasons[idx]
 		}
+		if text, ok := onlyText(content); ok && stream && m.Chunk > 0 {
+			for i := 0; i < len(text); i += m.Chunk {
+				piece := genai.NewContentFromText(text[i:min(i+m.Chunk, len(text))], genai.RoleModel)
+				if !yield(&model.LLMResponse{Content: piece, Partial: true}, nil) {
+					return
+				}
+			}
+			resp.Content = genai.NewContentFromText(text, genai.RoleModel) // its own, as the aggregate is
+		}
 		yield(resp, nil)
 	}
+}
+
+// onlyText is content's text when it has nothing else.
+func onlyText(content *genai.Content) (string, bool) {
+	if content == nil || len(content.Parts) == 0 {
+		return "", false
+	}
+	var b strings.Builder
+	for _, p := range content.Parts {
+		if p == nil || p.Text == "" || p.Thought || p.FunctionCall != nil {
+			return "", false
+		}
+		b.WriteString(p.Text)
+	}
+	return b.String(), true
 }
 
 // unpairedResult is the error the model APIs give a request with a tool

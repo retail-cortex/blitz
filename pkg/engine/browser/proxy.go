@@ -199,16 +199,51 @@ func (p *proxy) untrack(cs ...net.Conn) {
 }
 
 // PublicAddr reports whether addr is a routable public address: not
-// loopback, private, link-local (cloud metadata), CGNAT, multicast or
-// unspecified.
+// loopback, private, link-local (cloud metadata at 169.254.169.254),
+// multicast, unspecified or reserved. An IPv6 address carrying an IPv4 one
+// (mapped, compatible, NAT64 or 6to4) is judged by that, as the Electron
+// app's rules do. The web tools and the browser share it.
 func PublicAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
+	switch b := addr.As16(); {
+	case nat64.Contains(addr):
+		return PublicAddr(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(addr):
+		return PublicAddr(netip.AddrFrom4([4]byte(b[2:6])))
+	case addr.Is6() && [12]byte(b[:12]) == [12]byte{} && (b[12]|b[13]|b[14] != 0 || b[15] > 1):
+		return PublicAddr(netip.AddrFrom4([4]byte(b[12:16]))) // IPv4-compatible, ::a.b.c.d (not :: or ::1)
+	}
+	for _, p := range reserved {
+		if p.Contains(addr) {
+			return false
+		}
+	}
 	return addr.IsValid() && !addr.IsLoopback() && !addr.IsPrivate() && !addr.IsLinkLocalUnicast() &&
 		!addr.IsLinkLocalMulticast() && !addr.IsInterfaceLocalMulticast() && !addr.IsMulticast() &&
-		!addr.IsUnspecified() && !cgnat.Contains(addr) && !(addr.Is4() && addr.As4()[0] == 0)
+		!addr.IsUnspecified()
 }
 
-var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+// reserved are ranges netip doesn't flag that aren't public either:
+// carrier-grade NAT, "this network", IETF protocol assignments,
+// benchmarking, the reserved class E (and broadcast); local-use NAT64,
+// whose embedding varies; and Teredo, whose embedded address is hidden.
+var reserved = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2001::/32"),
+}
+
+// IPv6 forms that carry an IPv4 address: NAT64 (64:ff9b::/96, the last 4
+// bytes) and 6to4 (2002::/16, bytes 2 to 5). On a DNS64/NAT64 network
+// 64:ff9b::a9fe:a9fe is 169.254.169.254.
+var (
+	nat64     = netip.MustParsePrefix("64:ff9b::/96")
+	sixToFour = netip.MustParsePrefix("2002::/16")
+)
 
 // normalHost is host lower-cased, without a trailing dot or brackets.
 func normalHost(host string) string {

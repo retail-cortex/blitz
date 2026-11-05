@@ -31,6 +31,7 @@ Three records, each with secrets masked and none able to break a session:
 ## 3. Audit log
 
 - **AUD-01** `~/.blitz/audit/audit-YYYY-MM-DD.jsonl` (UTC day rotation), directory 0700, files 0600, append-only. Disabled with `[audit] enabled = false` (then a nil logger no-ops everywhere).
+- **AUD-01a** *2026-11-05 (scan N26-followups#2: the entry after a torn last line was written onto it, and lost with it).* Each entry is appended with `jsonl.Append` (spec_023 WK-44a): after a torn last line it starts a line of its own, so only the torn entry is skipped. The day's file is opened for each entry, not held open.
 - **AUD-02** Entry: `time` (UTC), `session`, `kind`, `tool`, `args`, `detail`, `decision`, `error`, `workspace`. Session and workspace default to the context set when the session opened.
 - **AUD-03** Kinds: `session_start`, `prompt`, `tool_call` (name, args), `tool_result` (ok/error), `approval` (decision: `once|session|always|auto-policy|session-rule|saved-rule|user-selected|unattended-permitted`), `denial` (`deny|no-approver|error|unattended-refused`), `hook` (`block` or error), `undo` (files), `attachment` (path and hash only), `user_shell` (`!cmd`, `exit N`, start error), `user_search` (`/search web` provider and query).
 - **AUD-04** Detail, error and args are redacted before writing. Write failures are reported once to stderr and otherwise ignored.

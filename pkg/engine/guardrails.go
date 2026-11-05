@@ -577,6 +577,12 @@ func redactInjection(result map[string]any) map[string]any {
 	return out
 }
 
+// OutputWindow is how much of a streaming answer the engine holds back
+// before the word still arriving (runtime.HeldTextKey): the longest
+// secret the workspace knows by value, so one with spaces in it is whole
+// when it's checked (guardrails.Window when that's longer).
+func (g guard) OutputWindow() int { return g.w.secretRedactor().Longest() }
+
 // Output applies the output guardrails to a piece of the answer: the
 // secrets guardrail masks (or withholds) on every piece; custom checks
 // judge the whole answer. While a custom one that blocks is on, the
@@ -602,6 +608,7 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 				}
 			case gates.Block:
 				cur = i18n.T("guardrail.withheld_text", "name", gr.Name)
+				v.Withheld = true
 				if st.once(gr.Name) {
 					g.w.auditGuardrail(ctx, gr, "block", "")
 					v.Notices = append(v.Notices, i18n.T("guardrail.withheld_answer", "name", gr.Name))
