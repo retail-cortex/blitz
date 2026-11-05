@@ -92,6 +92,8 @@
     "fork.usage": "Usage: /fork [n], n the last prompt to keep (1 the first)",
     "fork.done": "Now in a copy of the session: {id} ({messages} messages). The original is unchanged (/session list).",
     "export.done": "Wrote the session to {path}",
+    "export.pdf_diagram": "Diagram: export from the Blitz desktop app to draw it.",
+    "export.pdf_image": "[image: {name}]",
     "help.style": "The output styles: how the agent writes its answers (concise, explanatory, yours)",
     "style.list": "Output styles (/style <name>; add your own in ~/.blitz/styles):",
     "style.set": "Output style {name}, from the next prompt.",

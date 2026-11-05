@@ -48,6 +48,8 @@ import (
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
 	"golang.org/x/image/font/sfnt"
+
+	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
 // Page sizes.
@@ -292,7 +294,7 @@ func (r *renderer) block(n ast.Node) {
 		lang := string(n.Language(r.src))
 		r.code(markdown.Lines(n, r.src), lang)
 		if strings.EqualFold(lang, "mermaid") {
-			r.note("Diagram: export from the Blitz desktop app to draw it.")
+			r.note(i18n.T("export.pdf_diagram")) // in the reader's language: it's their document
 		}
 	case *ast.CodeBlock:
 		r.code(markdown.Lines(n, r.src), "")
@@ -601,7 +603,7 @@ func (r *renderer) picture(dest, alt string) {
 	if data == nil {
 		saved := r.st
 		r.st.italic, r.st.color = true, mutedColor
-		r.text("[image: " + cmpString(alt, dest) + "]")
+		r.text(i18n.T("export.pdf_image", "name", cmpString(alt, dest)))
 		r.st = saved
 		return
 	}
@@ -610,7 +612,7 @@ func (r *renderer) picture(dest, alt string) {
 	info := r.f.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: kind}, bytes.NewReader(data))
 	if r.f.Err() || info == nil {
 		r.f.ClearError()
-		r.text("[image: " + cmpString(alt, dest) + "]")
+		r.text(i18n.T("export.pdf_image", "name", cmpString(alt, dest)))
 		return
 	}
 	info.SetDpi(96)

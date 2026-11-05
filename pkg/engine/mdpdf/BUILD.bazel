@@ -32,6 +32,7 @@ go_library(
         "//pkg/pdftext:__pkg__",
     ],
     deps = [
+        "//pkg/i18n",
         "//pkg/markdown",
         "@com_github_alecthomas_chroma_v2//:chroma",
         "@com_github_alecthomas_chroma_v2//lexers",
@@ -48,6 +49,7 @@ go_test(
     srcs = ["mdpdf_test.go"],
     embed = [":mdpdf"],
     deps = [
+        "//pkg/i18n",
         "//pkg/pdftext",
         "@com_github_ledongthuc_pdf//:pdf",
         "@com_github_stretchr_testify//assert",
