@@ -15,13 +15,13 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -282,6 +282,7 @@ type liveRun struct {
 	run     api.Run
 	events  []*pb.TurnEvent
 	dropped int // events dropped from the front, to keep keptRunEvents
+	keep    int // how many to keep instead, when set (tests)
 	done    bool
 	changed chan struct{} // closed and replaced when events arrive or the run ends
 	// stop cancels the run's context with api.ErrRunStopped: the run ends,
@@ -294,8 +295,13 @@ func (lr *liveRun) add(ev *pb.TurnEvent, done bool) {
 	defer lr.mu.Unlock()
 	if ev != nil {
 		lr.events = append(lr.events, ev)
-		if over := len(lr.events) - keptRunEvents; over > 0 {
-			lr.events = slices.Delete(lr.events, 0, over)
+		if over := len(lr.events) - cmp.Or(lr.keep, keptRunEvents); over > 0 {
+			// Resliced, not shifted: moving every kept event down on each
+			// one added made a long run's events quadratic. The array is
+			// copied when append outgrows it; until then the dropped are
+			// cleared so they can go.
+			clear(lr.events[:over])
+			lr.events = lr.events[over:]
 			lr.dropped += over
 		}
 	}

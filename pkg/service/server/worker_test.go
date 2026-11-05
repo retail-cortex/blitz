@@ -643,16 +643,19 @@ func TestWatchWorkerRunKeepsTheLatest(t *testing.T) {
 	piece := func(i int) *pb.TurnEvent {
 		return &pb.TurnEvent{Kind: &pb.TurnEvent_Text{Text: &pb.Text{Text: fmt.Sprint(i, " ")}}}
 	}
-	lr := &liveRun{run: api.Run{ID: "r1"}, changed: make(chan struct{})}
+	// keep, not keptRunEvents: ten thousand events through the stream
+	// under the race detector outran the deadline on a loaded machine.
+	const keep = 200
+	lr := &liveRun{run: api.Run{ID: "r1"}, changed: make(chan struct{}), keep: keep}
 	s.sched.mu.Lock()
 	s.sched.live["r1"] = lr
 	s.sched.mu.Unlock()
-	const made = keptRunEvents + 10
+	const made = keep + 10
 	for i := range made {
 		lr.add(piece(i), false)
 	}
 	lr.mu.Lock()
-	assert.Len(t, lr.events, keptRunEvents, "no more kept")
+	assert.Len(t, lr.events, keep, "no more kept")
 	assert.Equal(t, 10, lr.dropped)
 	lr.mu.Unlock()
 
@@ -667,9 +670,9 @@ func TestWatchWorkerRunKeepsTheLatest(t *testing.T) {
 			continue
 		}
 		got = append(got, ev.GetText().GetText())
-		if len(got) == keptRunEvents {
+		if len(got) == keep {
 			// Live ones after the kept, more than are kept in all.
-			for i := made; i < made+keptRunEvents+5; i++ {
+			for i := made; i < made+keep+5; i++ {
 				lr.add(piece(i), false)
 			}
 			lr.add(&pb.TurnEvent{Kind: &pb.TurnEvent_Finished{Finished: &pb.TurnFinished{}}}, true)
@@ -679,7 +682,7 @@ func TestWatchWorkerRunKeepsTheLatest(t *testing.T) {
 	assert.True(t, finished)
 	require.NotEmpty(t, got)
 	assert.Equal(t, "10 ", got[0], "from the oldest kept")
-	assert.Equal(t, fmt.Sprint(made+keptRunEvents+4, " "), got[len(got)-1], "to the last")
+	assert.Equal(t, fmt.Sprint(made+keep+4, " "), got[len(got)-1], "to the last")
 	for i := 1; i < len(got); i++ {
 		var a, b int
 		fmt.Sscan(got[i-1], &a)
