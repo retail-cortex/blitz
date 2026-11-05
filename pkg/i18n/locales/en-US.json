@@ -3073,7 +3073,7 @@
     "desktop.skills.agents_all": "Every agent: choose some to offer it to them only.",
     "desktop.skills.agents_some": "Only the agents chosen.",
     "desktop.skills.tools": "Tools it may use",
-    "desktop.skills.tools_hint": "allowed-tools in SKILL.md; none means the agent's own.",
+    "desktop.skills.tools_hint": "allowed-tools in SKILL.md: /skill-name holds the turn to them; none means the agent's own.",
     "desktop.skills.save": "Save",
     "desktop.skills.saved": "Saved {name}",
     "desktop.skills.delete": "Delete",

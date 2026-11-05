@@ -95,7 +95,7 @@ func Parse(name, source, path string, data []byte) (Command, error) {
 		}
 		body = rest
 		c.Description, c.ArgumentHint, c.Agent, c.Model = fm.Description, fm.ArgumentHint, fm.Agent, fm.Model
-		c.AllowedTools = toolList(fm.AllowedTools)
+		c.AllowedTools = ToolList(fm.AllowedTools)
 		switch strings.ToLower(strings.TrimSpace(fm.Mode)) {
 		case "", "default":
 		case "plan":
@@ -114,8 +114,9 @@ func Parse(name, source, path string, data []byte) (Command, error) {
 	return c, nil
 }
 
-// toolList reads allowed-tools as a list or a space/comma-separated string.
-func toolList(v any) []string {
+// ToolList reads allowed-tools (a command's or a skill's) as a list or a
+// space/comma-separated string, keeping "Bash(git *)" whole.
+func ToolList(v any) []string {
 	var out []string
 	switch t := v.(type) {
 	case string:

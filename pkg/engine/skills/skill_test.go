@@ -130,7 +130,7 @@ func TestDefinitionDetails(t *testing.T) {
 
 	s, err := ParseSkillMD([]byte("---\nname: x\nallowed_tools: Read, Bash\nexecution_hints: {timeout_seconds: -5}\nscripts:\n  - language: unspecified\n    inline_code: \"x\"\n---\n"), "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"Read", "Bash"}, s.AllowedToolsList(), "the legacy key is read when allowed-tools is unset")
+	assert.Equal(t, "Read, Bash", s.AllowedToolsLegacy, "the legacy key is read")
 	require.Len(t, s.Scripts, 1)
 	assert.Equal(t, LanguageUnspecified, s.Scripts[0].Language)
 	assert.Contains(t, s.Problems, "execution_hints: timeout_seconds can't be negative")

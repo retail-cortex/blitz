@@ -3073,7 +3073,7 @@
     "desktop.skills.agents_all": "Tous les agents : choisissez-en pour l'offrir à eux seulement.",
     "desktop.skills.agents_some": "Seulement les agents choisis.",
     "desktop.skills.tools": "Outils qu'elle peut utiliser",
-    "desktop.skills.tools_hint": "allowed-tools dans SKILL.md; aucun signifie ceux de l'agent.",
+    "desktop.skills.tools_hint": "allowed-tools dans SKILL.md : /nom-de-la-compétence limite le tour à ces outils; aucun signifie ceux de l'agent.",
     "desktop.skills.save": "Enregistrer",
     "desktop.skills.saved": "{name} enregistrée",
     "desktop.skills.delete": "Supprimer",

@@ -3073,7 +3073,7 @@
     "desktop.skills.agents_all": "Todos los agentes: elige algunos para ofrecerla solo a ellos.",
     "desktop.skills.agents_some": "Solo los agentes elegidos.",
     "desktop.skills.tools": "Herramientas que puede usar",
-    "desktop.skills.tools_hint": "allowed-tools en SKILL.md; ninguna significa las del agente.",
+    "desktop.skills.tools_hint": "allowed-tools en SKILL.md: /nombre-de-la-habilidad limita el turno a ellas; ninguna significa las del agente.",
     "desktop.skills.save": "Guardar",
     "desktop.skills.saved": "Se guardó {name}",
     "desktop.skills.delete": "Eliminar",

@@ -383,13 +383,3 @@ func (m *SkillMetadata) DeclaredTier() HITLTier {
 	}
 	return t
 }
-
-// AllowedToolsList is the spec's allowed-tools (or Castor's legacy
-// allowed_tools), split on spaces and commas.
-func (m *SkillMetadata) AllowedToolsList() []string {
-	s := m.AllowedTools
-	if s == "" {
-		s = m.AllowedToolsLegacy
-	}
-	return strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == ',' || r == '\n' || r == '\t' })
-}
