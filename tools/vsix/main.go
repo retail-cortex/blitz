@@ -22,6 +22,7 @@ package main
 
 import (
 	"archive/zip"
+	"cmp"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -220,7 +221,7 @@ func vsixManifest(m manifest, entries []entry) ([]byte, error) {
 	d.Version, d.NS = "2.0.0", "http://schemas.microsoft.com/developer/vsx-schema/2011"
 	md := &d.Metadata
 	md.Identity.Language, md.Identity.ID, md.Identity.Version, md.Identity.Publisher = "en-US", m.Name, m.Version, m.Publisher
-	md.DisplayName = cmpOr(m.DisplayName, m.Name)
+	md.DisplayName = cmp.Or(m.DisplayName, m.Name)
 	md.Description.Space, md.Description.Text = "preserve", m.Description
 	md.Categories = strings.Join(m.Categories, ",")
 	md.GalleryFlags = "Public"
@@ -250,13 +251,6 @@ func vsixManifest(m manifest, entries []entry) ([]byte, error) {
 	return append([]byte(xml.Header), b...), nil
 }
 
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
 // contentTypes is [Content_Types].xml: a type for each file extension.
 func contentTypes(entries []entry) []byte {
 	types := map[string]string{".vsixmanifest": "text/xml", ".json": "application/json"}
@@ -269,7 +263,7 @@ func contentTypes(entries []entry) []byte {
 		if i := strings.IndexByte(t, ';'); i >= 0 {
 			t = t[:i]
 		}
-		types[ext] = cmpOr(t, "application/octet-stream")
+		types[ext] = cmp.Or(t, "application/octet-stream")
 	}
 	exts := make([]string, 0, len(types))
 	for ext := range types {

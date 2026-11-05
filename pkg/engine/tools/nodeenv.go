@@ -16,6 +16,7 @@ package tools
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -71,14 +72,7 @@ func NewNodeEnvs(dir string, p config.NPMPolicy) *NodeEnvs {
 	if dir == "" {
 		dir = config.ExpandHome("~/.blitz/node-envs")
 	}
-	return &NodeEnvs{dir: dir, registry: cmpOr(p.Registry, "https://registry.npmjs.org"), locks: map[string]*sync.Mutex{}}
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
+	return &NodeEnvs{dir: dir, registry: cmp.Or(p.Registry, "https://registry.npmjs.org"), locks: map[string]*sync.Mutex{}}
 }
 
 // minNode is the first Node that runs TypeScript by stripping its types.

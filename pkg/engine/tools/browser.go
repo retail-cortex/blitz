@@ -30,6 +30,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/browser"
+	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -104,8 +106,9 @@ type browserTool struct {
 	profileName string
 	allow       []string
 	// shows are how each chat chose to see the agent browse in the app
-	// ("watch" or "silent", AB-02), and inApp says the running browser is
-	// the app's view, shown so.
+	// ("watch" or "silent", AB-02; actMu guards it, forgotten when the
+	// session is deleted), and inApp says the running browser is the
+	// app's view, shown so.
 	shows map[string]string
 	inApp string
 }
@@ -167,12 +170,26 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		}
 		target = u
 	}
-	if action == "script" && !bt.cfg.AllowScripts {
-		if err := bt.r.hooks.Approve(ctx, api.ApprovalRequest{
-			Tool: "browser", Kind: api.ActionCommand, Detail: "run in the page: " + in.Script,
-			Key: "browser:script", KeyLabel: "scripts in the browser",
-		}); err != nil {
-			return fail(err)
+	if action == "script" {
+		// The page's host is what web rules see: deny refuses its scripts
+		// even with browser.allow_scripts, and ask puts them to the person.
+		bt.actMu.Lock()
+		host := bt.host
+		bt.actMu.Unlock()
+		var effect Effect
+		if host != "" {
+			var rule *PermissionRule
+			if effect, rule = bt.web.Rules.Decide(RuleWeb, []string{host}); effect == EffectDeny {
+				return fail(fmt.Errorf("scripts on %s are denied by the permission rule deny %s", host, rule))
+			}
+		}
+		if !bt.cfg.AllowScripts || effect == EffectAsk {
+			if err := bt.r.hooks.Approve(ctx, api.ApprovalRequest{
+				Tool: "browser", Kind: api.ActionCommand, Detail: "run in the page: " + in.Script,
+				Key: "browser:script", KeyLabel: "scripts in the browser", MustAsk: effect == EffectAsk,
+			}); err != nil {
+				return fail(err)
+			}
 		}
 	}
 
@@ -211,7 +228,7 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		if err = need(in.Script, "script"); err == nil {
 			out.Result, err = b.Eval(actx, in.Script)
 			if len(out.Result) > webMaxOutputChars {
-				out.Result, out.Truncated = out.Result[:webMaxOutputChars], true
+				out.Result, out.Truncated = textutil.TruncateUTF8(out.Result, webMaxOutputChars), true
 			}
 		}
 	case "screenshot":
@@ -403,13 +420,6 @@ func (bt *browserTool) syncProfile() {
 	}
 }
 
-// showAsk is the question browser.show "ask" puts, and its answers.
-const (
-	showAsk    = "Watch Blitz browse in a tab, or let it run silently?"
-	showWatch  = "Watch it in a tab"
-	showSilent = "Run silently"
-)
-
 // show is how the chat sees the agent browse in the app (AB-02):
 // browser.show, or for "ask" the chat's answer, asked the first time
 // (silent where no one can answer, as a job's run).
@@ -419,13 +429,19 @@ func (bt *browserTool) show(ctx context.Context) string {
 		return bt.cfg.Show
 	}
 	session := sessionOf(ctx)
-	if v, ok := bt.shows[session]; ok {
+	bt.actMu.Lock()
+	v, ok := bt.shows[session]
+	bt.actMu.Unlock()
+	if ok {
 		return v
 	}
-	v := "silent"
-	if answer, err := bt.r.hooks.askUser(ctx, showAsk, []string{showWatch, showSilent}); err == nil && answer == showWatch {
+	v = "silent"
+	options := []string{i18n.T("tools.browser.watch"), i18n.T("tools.browser.silent")}
+	if answer, err := bt.r.hooks.askUser(ctx, i18n.T("tools.browser.show_ask"), options); err == nil && answer == options[0] {
 		v = "watch"
 	}
+	bt.actMu.Lock()
+	defer bt.actMu.Unlock()
 	if bt.shows == nil {
 		bt.shows = map[string]string{}
 	}

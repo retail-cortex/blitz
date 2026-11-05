@@ -55,7 +55,7 @@ func TestNilCheckpoints(t *testing.T) {
 // than stacking empty turns.
 func TestBeginReusesAnEmptyTurn(t *testing.T) {
 	ws, _ := newTestWorkspace(t)
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	c.BeginTurn("s", 0, "first")
 	c.BeginTurn("s", 2, "second")
 	require.NoError(t, ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a")))
@@ -69,7 +69,7 @@ func TestBeginReusesAnEmptyTurn(t *testing.T) {
 // A change that fails after its snapshot was taken leaves no entry behind.
 func TestFailedChangesAreDiscarded(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "exists.txt"), "x")
 	sub := filepath.Join(dir, "ro")
 	writeFile(t, filepath.Join(sub, "f.txt"), "f")
@@ -84,7 +84,7 @@ func TestFailedChangesAreDiscarded(t *testing.T) {
 	assert.Empty(t, c.List(), "failed changes were recorded")
 	// Discarding what was never recorded is a no-op.
 	c.discard("", filepath.Join(dir, "nothing"))
-	empty := NewCheckpoints(ws, 0)
+	empty := newTestCheckpoints(ws, 0)
 	empty.discard("", filepath.Join(dir, "nothing"))
 }
 
@@ -95,7 +95,7 @@ func TestCheckpointTooLargeFiles(t *testing.T) {
 	ws, err := NewWorkspace(dir, 8)
 	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "big.txt"), "0123456789abc")
 	writeFile(t, filepath.Join(dir, "small.txt"), "s0")
 	c.Begin("t")
@@ -135,7 +135,7 @@ func TestCheckpointMissingSnapshot(t *testing.T) {
 // A file that can't be put back is reported; the others still are.
 func TestCheckpointRestoreFailure(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	c.Begin("t")
 	require.NoError(t, ws.CreateExclusive(context.Background(), "made.txt", []byte("m")))
 	// Replaced by a non-empty directory, which removing can't undo.
@@ -253,7 +253,7 @@ func TestCheckpointsPartialUndoKeepsTheFailures(t *testing.T) {
 		t.Skip("root ignores directory permissions")
 	}
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	ro := filepath.Join(dir, "ro")
 	require.NoError(t, os.Mkdir(ro, 0o755))
 	writeFile(t, filepath.Join(ro, "a.txt"), "a1")

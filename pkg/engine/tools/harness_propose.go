@@ -19,6 +19,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -123,7 +124,7 @@ var errGlobalUnattended = errors.New("only the user can choose an entry for ever
 
 // NewSaveGlobalExperienceTool is save_global_experience: a "How to work"
 // entry that held in several workspaces goes to the user's global
-// instructions file, once the user chose it.
+// instructions file, once the user chose it and approves it.
 func NewSaveGlobalExperienceTool(r *Registry) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{Name: "save_global_experience", Description: "Add a \"How to work\" entry to the user's global instructions file, read in every workspace. Only an entry the user chose in your question, that held in two or more workspaces; never a fact about one project."},
@@ -137,6 +138,15 @@ func NewSaveGlobalExperienceTool(r *Registry) (tool.Tool, error) {
 				return SaveGlobalExperienceOutput{Error: errGlobalUnattended.Error()}, nil
 			case entry == "" || strings.Contains(entry, "\n"):
 				return SaveGlobalExperienceOutput{Error: "the entry is one line"}, nil
+			}
+			// The person says yes to the entry itself, every time: the
+			// reflector's evidence quotes sessions, which can carry
+			// injected text (N26 engine-tools-1#22).
+			if err := r.hooks.Approve(ctx, api.ApprovalRequest{
+				Tool: "save_global_experience", Kind: api.ActionWrite, MustAsk: true,
+				Detail: "Add to your global instructions, read in every workspace: " + entry,
+			}); err != nil {
+				return SaveGlobalExperienceOutput{Error: err.Error()}, nil
 			}
 			path, err := save(ctx, entry)
 			if err != nil {

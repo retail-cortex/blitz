@@ -17,6 +17,7 @@
 package tools
 
 import (
+	"cmp"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,7 +58,7 @@ func TestFindRunsc(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("RUNSC_PATH", c.env)
-			t.Setenv("PATH", cmpOr(c.path, t.TempDir()))
+			t.Setenv("PATH", cmp.Or(c.path, t.TempDir()))
 			p := filepath.Join(home, ".blitz", "bin", "runsc")
 			os.RemoveAll(filepath.Dir(p))
 			if c.inHome {

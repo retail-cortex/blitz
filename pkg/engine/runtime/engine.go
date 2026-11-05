@@ -911,9 +911,9 @@ func (e *Engine) preToolHooks(ctx agent.Context, t tool.Tool, args map[string]an
 		}); err != nil {
 			return map[string]any{"error": err.Error()}
 		}
-		hooks.GrantCall(id)
+		hooks.GrantCall(ctx)
 	case "allow":
-		hooks.GrantCall(id)
+		hooks.GrantCall(ctx)
 	}
 	if out.Context != "" && id != "" {
 		e.hookContext.Store(id, out.Context)
@@ -948,7 +948,7 @@ func exitCode(result map[string]any) int {
 // the user sent while the turn was running (see Steer).
 func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[string]any, toolErr error) (map[string]any, error) {
 	id := tools.CallID(ctx)
-	e.toolReg.Hooks().EndCall(id)
+	e.toolReg.Hooks().EndCall(ctx)
 	e.toolReg.ScriptHooks().PostTool(ctx, e.sessionOf(ctx), t.Name(), args, result, toolErr)
 	entry := audit.Entry{Kind: audit.KindToolResult, Tool: t.Name(), Decision: "ok"}
 	if toolErr != nil {

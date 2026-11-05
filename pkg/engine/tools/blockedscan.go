@@ -17,6 +17,8 @@ package tools
 import (
 	"context"
 	"io/fs"
+	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,7 +34,13 @@ const (
 	blockedScanMaxDepth   = 12
 )
 
-var blockedScanSkip = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, "__pycache__": true}
+// blockedScanSkip are the folders the scan doesn't descend into: grep's,
+// and .git.
+var blockedScanSkip = func() map[string]bool {
+	m := maps.Clone(grepSkipDirs)
+	m[".git"] = true
+	return m
+}()
 
 // racyWindow is how close to when it was read a directory's modification
 // time can be and still change again without the time changing (file
@@ -63,6 +71,11 @@ type blockedScan struct {
 	// them.
 	readDir func(string) ([]fs.DirEntry, error)
 	now     func() time.Time
+	// limited says which limit stopped the last scan ("entries" or
+	// "depth"; "" for none): blocked names past it aren't masked. The
+	// first time, the service's log says so.
+	limited string
+	warned  bool
 }
 
 // scannedDir is a directory as last read.
@@ -143,6 +156,7 @@ func (s *blockedScan) expandCtx(ctx context.Context) (files, dirs []string, err 
 			continue
 		}
 		if w.count++; w.count > blockedScanMaxEntries {
+			w.limited = "entries"
 			break
 		}
 		if info.IsDir() && w.dir(root, 0) {
@@ -151,6 +165,11 @@ func (s *blockedScan) expandCtx(ctx context.Context) (files, dirs []string, err 
 	}
 	if w.err != nil {
 		return nil, nil, w.err // and nothing forgotten: the walk didn't finish
+	}
+	if s.limited = w.limited; s.limited != "" && !s.warned {
+		s.warned = true
+		slog.Warn("the blocked-path scan before sandboxed commands stopped at its limit: blocked names past it (such as .env files) aren't masked from commands",
+			"limit", s.limited, "max_entries", blockedScanMaxEntries, "max_depth", blockedScanMaxDepth, "roots", s.spec.WritableDirs)
 	}
 	// Directories not walked this time (removed, or now past the limits)
 	// are forgotten.
@@ -171,7 +190,8 @@ type blockedWalk struct {
 	visited map[string]bool
 	count   int // entries walked, roots included
 	ctx     context.Context
-	err     error // ctx's, once it ended
+	err     error  // ctx's, once it ended
+	limited string // the limit that left entries unread: "entries" or "depth"
 }
 
 // cancelCheck is how many entries the walk reads between checks of its
@@ -187,6 +207,7 @@ func (w *blockedWalk) dir(path string, depth int) bool {
 	w.visited[path] = true
 	for _, e := range w.scan.entries(path) {
 		if w.count++; w.count > blockedScanMaxEntries {
+			w.limited = "entries"
 			return true
 		}
 		if w.count%cancelCheck == 0 {
@@ -195,7 +216,11 @@ func (w *blockedWalk) dir(path string, depth int) bool {
 			}
 		}
 		switch {
-		case e.isDir && (blockedScanSkip[e.name] || depth+1 > blockedScanMaxDepth):
+		case e.isDir && blockedScanSkip[e.name]:
+		case e.isDir && depth+1 > blockedScanMaxDepth:
+			if w.limited == "" {
+				w.limited = "depth"
+			}
 		case e.blocked:
 			w.add(filepath.Join(path, e.name), e.isDir)
 		case e.isDir:

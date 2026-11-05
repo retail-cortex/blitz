@@ -29,7 +29,7 @@ import (
 // out of /checkpoints and /undo (BL-WK-01, BL-WK-02).
 func TestWorkerRunCheckpoints(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	in := func(session string) context.Context { return WithOwnerSession(context.Background(), session) }
 	read := func(name string) string {
 		b, _ := os.ReadFile(filepath.Join(dir, name))
@@ -76,7 +76,7 @@ func TestWorkerRunCheckpoints(t *testing.T) {
 // latest turn, as before.
 func TestCheckpointWithoutSession(t *testing.T) {
 	ws, _ := newTestWorkspace(t)
-	c := NewCheckpoints(ws, 0)
+	c := newTestCheckpoints(ws, 0)
 	c.BeginTurn("a", 0, "first")
 	c.BeginTurn("b", 0, "second")
 	require.NoError(t, ws.WriteFileAtomic(context.Background(), "x.txt", []byte("x")))

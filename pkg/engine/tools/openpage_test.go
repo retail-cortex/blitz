@@ -91,7 +91,11 @@ func TestOpenPage(t *testing.T) {
 		{name: "ask, system", open: "ask", answer: "System browser", want: PageSystem, window: []string{"system", "system"}, asked: 1},
 		{name: "ask, no one to answer", open: "ask", want: PageEmbedded, window: []string{"embedded", "embedded"}},
 		{name: "no window", open: "embedded", noWindow: true, want: PageSystem, system: 2},
-		{name: "the window can't", open: "embedded", windowFail: true, want: PageSystem, system: 2},
+		{name: "the window can't", open: "system", windowFail: true, want: PageSystem, system: 2},
+		{name: "the window can't, ask", open: "ask", answer: "Embedded browser", windowFail: true, want: PageSystem, system: 2, asked: 1},
+		// Asked for the app's tab: never the service machine's browser
+		// instead (N26 engine-tools-1#15).
+		{name: "the window can't, embedded", open: "embedded", windowFail: true, err: "browser.open = \"embedded\""},
 		{name: "a job's run", open: "embedded", unattended: true, err: "nobody is watching"},
 	}
 	for _, tt := range tests {
@@ -156,4 +160,42 @@ func TestOpenPageTool(t *testing.T) {
 	out = runTool(t, open, map[string]any{"url": "github.com"})
 	assert.Contains(t, errOf(out), "couldn't open the system browser")
 	assert.Equal(t, "https://github.com", out["url"])
+}
+
+// An ask web(…) rule puts open_page to the person, and a deleted
+// session's answers are forgotten (N26 engine-tools-1#13, #34).
+func TestOpenPageAskRuleAndSessionGone(t *testing.T) {
+	for _, tc := range []struct {
+		name, url string
+		decision  api.Decision
+		asked     int
+		wantErr   string
+	}{
+		{name: "ask rule, declined", url: "ask.example", decision: api.DecisionDeny, asked: 1, wantErr: "declined"},
+		{name: "ask rule, approved", url: "ask.example/x", decision: api.DecisionOnce, asked: 1},
+		{name: "no rule", url: "ok.example", decision: api.DecisionDeny},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hooks, reqs := decisionHooks(tc.decision)
+			r := &Registry{hooks: hooks, rules: rulesOf(t, nil, []string{"web(ask.example)"}, nil)}
+			r.SetPageOpener(func(context.Context, string, string) error { return nil })
+			r.page.open = PageEmbedded
+			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
+			if tc.wantErr != "" {
+				assert.Contains(t, errOf(out), tc.wantErr)
+			} else {
+				assert.Empty(t, errOf(out))
+			}
+			require.Len(t, *reqs, tc.asked)
+			if tc.asked > 0 {
+				assert.True(t, (*reqs)[0].MustAsk)
+			}
+		})
+	}
+
+	r := &Registry{hooks: &Hooks{}, browser: &browserTool{shows: map[string]string{"s1": "watch", "s2": "silent"}}}
+	r.page.where = map[string]string{"s1": PageSystem, "s2": PageEmbedded}
+	r.SessionGone("s1")
+	assert.Equal(t, map[string]string{"s2": PageEmbedded}, r.page.where)
+	assert.Equal(t, map[string]string{"s2": "silent"}, r.browser.shows)
 }

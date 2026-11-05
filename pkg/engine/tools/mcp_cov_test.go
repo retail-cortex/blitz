@@ -157,6 +157,23 @@ func TestManagedToolPausedServer(t *testing.T) {
 	assert.ErrorContains(t, err, "unavailable after repeated failures")
 }
 
+// A tool its server no longer serves (the settings changed under a running
+// turn) doesn't run: ApproveMCP no longer knows its name, so it was never
+// approved as the server's (N26 engine-tools-1#25).
+func TestManagedToolNoLongerServed(t *testing.T) {
+	m := NewMCPManagerFromToolsets([]MCPToolset{{
+		Config:  config.MCPServerConfig{Name: "odd", Prefix: "o"},
+		Toolset: staticToolset{tools: []tool.Tool{declarationless{plainTool{"bare"}}}},
+	}}, nil)
+	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
+	require.NoError(t, err)
+	m.replace(nil, nil)
+	_, _, ok := m.Lookup("o__bare")
+	require.False(t, ok, "the gate no longer knows it")
+	_, err = tl[0].(runnerTool).Run(createTestToolContext(), map[string]any{})
+	assert.ErrorContains(t, err, "no longer served")
+}
+
 // A nil manager (no MCP configured) serves and owns nothing.
 func TestNilMCPManager(t *testing.T) {
 	var m *MCPManager
@@ -365,10 +382,11 @@ func TestMCPHealthToldInTheTurn(t *testing.T) {
 	}
 	m.recordSuccess(ctx, srv)
 	require.Len(t, said, 3, "%v", said)
-	assert.Contains(t, said[0], `mcp server "gh" unavailable: down`)
+	assert.Contains(t, said[0], `The MCP server "gh" is unavailable: down`)
 	assert.Contains(t, said[1], "keeps failing")
 	assert.Contains(t, said[2], "available again")
-	assert.Equal(t, said, warned, "the log hears the same")
+	require.Len(t, warned, 3, "the log hears the same, in English")
+	assert.Contains(t, warned[0], `mcp server "gh" unavailable: down`)
 	// Outside a turn: the log only.
 	m.recordFailure(context.Background(), srv, errors.New("down again"))
 	assert.Len(t, said, 3)

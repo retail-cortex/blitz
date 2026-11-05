@@ -125,7 +125,7 @@ func TestMCPElicitation(t *testing.T) {
 		}
 		return "3", nil
 	}
-	s.call = context.Background()
+	end := s.startCall(context.Background())
 	res, err = m.elicit(s, req)
 	require.NoError(t, err)
 	assert.Equal(t, "accept", res.Action)
@@ -136,4 +136,45 @@ func TestMCPElicitation(t *testing.T) {
 	m.Ask = func(context.Context, string, []string) (string, error) { return "", context.Canceled }
 	res, _ = m.elicit(s, req)
 	assert.Equal(t, "decline", res.Action)
+	end()
+}
+
+// TestMCPElicitationCallOwner checks whose call an elicitation goes to:
+// the one session's calls in progress, and nobody's when several
+// sessions' calls run at once (N26 engine-tools-1#24).
+func TestMCPElicitationCallOwner(t *testing.T) {
+	inSession := func(id string) context.Context {
+		return context.WithValue(context.Background(), ownerSessionKey{}, id)
+	}
+	a1, a2, b := inSession("a"), inSession("a"), inSession("b")
+	require.NotSame(t, a1, a2)
+	for _, tc := range []struct {
+		name  string
+		calls []context.Context
+		want  context.Context
+	}{
+		{"none", nil, nil},
+		{"one", []context.Context{a1}, a1},
+		{"one session's two", []context.Context{a1, a2}, a2},
+		{"two sessions'", []context.Context{a1, b}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &mcpServer{}
+			for _, c := range tc.calls {
+				defer s.startCall(c)()
+			}
+			if tc.want == nil {
+				assert.Nil(t, s.currentCall())
+			} else {
+				assert.Same(t, tc.want, s.currentCall())
+			}
+		})
+	}
+	s := &mcpServer{}
+	endA := s.startCall(a1)
+	endB := s.startCall(b)
+	endA()
+	assert.Same(t, b, s.currentCall(), "the other session's call, once the first ends")
+	endB()
+	assert.Nil(t, s.currentCall())
 }

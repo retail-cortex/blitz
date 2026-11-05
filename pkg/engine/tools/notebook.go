@@ -160,7 +160,6 @@ func newCellID() string {
 	return hex.EncodeToString(b)
 }
 
-// render is the notebook as its cells with their outputs, for read_file.
 // NotebookText is a Jupyter notebook's cells as text, as read_file shows
 // them, each headed "## Cell N [kind]" (workspace search indexes it).
 func NotebookText(data []byte) (string, error) {
@@ -242,6 +241,7 @@ func readNotebook(ws *Workspace, path string) (ReadFileOutput, bool) {
 	out := ReadFileOutput{Path: path, Content: content, TotalLines: strings.Count(content, "\n")}
 	if len(content) > maxReadOutputBytes {
 		out.Content, out.Truncated = textutil.TruncateUTF8(content, maxReadOutputBytes), true
+		out.Content += fmt.Sprintf("\n... [output truncated at %d bytes: the notebook's later cells aren't shown; grep finds text in them]\n", maxReadOutputBytes)
 	}
 	return out, true
 }

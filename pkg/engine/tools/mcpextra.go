@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -165,7 +167,7 @@ func (m *MCPManager) ReadResource(ctx context.Context, server, uri string) (stri
 			fmt.Fprintf(&b, "(binary content, %d bytes, %s)", len(c.Blob), c.MIMEType)
 		}
 		if b.Len() > maxResourceText {
-			return b.String()[:maxResourceText] + "\n… (cut)", nil
+			return textutil.TruncateUTF8(b.String(), maxResourceText) + "\n… (cut)", nil
 		}
 	}
 	return b.String(), nil
@@ -265,10 +267,11 @@ func (m *MCPManager) elicit(s *mcpServer, req *mcp.ElicitRequest) (*mcp.ElicitRe
 		return decline, nil
 	}
 	p := req.Params
-	intro := fmt.Sprintf("The MCP server %q asks: %s", s.cfg.Name, p.Message)
+	intro := i18n.T("tools.mcp.elicit", "server", s.cfg.Name, "message", p.Message)
 	if p.URL != "" { // the server wants the user to visit a page
-		answer, err := m.Ask(ctx, intro+"\n\n"+p.URL+"\n\nOpen it and continue?", []string{"Continue", "Decline"})
-		if err != nil || answer != "Continue" {
+		options := []string{i18n.T("tools.mcp.continue"), i18n.T("tools.mcp.decline")}
+		answer, err := m.Ask(ctx, intro+"\n\n"+p.URL+"\n\n"+i18n.T("tools.mcp.elicit_url"), options)
+		if err != nil || answer != options[0] {
 			return decline, nil
 		}
 		return &mcp.ElicitResult{Action: "accept"}, nil
@@ -329,12 +332,45 @@ func (m *MCPManager) elicit(s *mcpServer, req *mcp.ElicitRequest) (*mcp.ElicitRe
 	return &mcp.ElicitResult{Action: "accept", Content: content}, nil
 }
 
+// startCall records ctx as one of server s's tool calls in progress, until
+// the function it returns is called.
+func (s *mcpServer) startCall(ctx context.Context) func() {
+	s.callMu.Lock()
+	defer s.callMu.Unlock()
+	if s.calls == nil {
+		s.calls = map[int]context.Context{}
+	}
+	s.callSeq++
+	id := s.callSeq
+	s.calls[id] = ctx
+	return func() {
+		s.callMu.Lock()
+		defer s.callMu.Unlock()
+		delete(s.calls, id)
+	}
+}
+
 // currentCall is the context of server s's tool call in progress, for
-// its elicitation to reach the right person; nil when none runs.
+// its elicitation to reach the right person: the latest call when every
+// call in progress is one session's, and nil when none runs or calls of
+// several sessions do, since the request can't say whose it is.
 func (s *mcpServer) currentCall() context.Context {
 	s.callMu.Lock()
 	defer s.callMu.Unlock()
-	return s.call
+	var latest context.Context
+	var latestID int
+	session := ""
+	for id, ctx := range s.calls {
+		sid := sessionOf(ctx)
+		if latest != nil && sid != session {
+			return nil
+		}
+		session = sid
+		if latest == nil || id > latestID {
+			latest, latestID = ctx, id
+		}
+	}
+	return latest
 }
 
 // ListMCPResourcesInput optionally names a server.
@@ -371,12 +407,28 @@ func NewMCPResourceTools(r *Registry) ([]tool.Tool, error) {
 					return ListMCPResourcesOutput{Error: err.Error()}, nil
 				}
 			}
-			res, err := r.mcp.Resources(ctx, in.Server)
-			out := ListMCPResourcesOutput{Resources: res}
-			if out.Resources == nil {
-				out.Resources = []MCPResource{}
+			servers := []string{in.Server}
+			if in.Server == "" {
+				servers = r.mcp.Servers()
 			}
-			if err != nil {
+			out := ListMCPResourcesOutput{Resources: []MCPResource{}}
+			var errs []error
+			for _, name := range servers {
+				// Every server is approved as its tools are, listed together
+				// or not (N26 engine-tools-1#26).
+				if in.Server == "" {
+					if err := r.approveMCPServer(ctx, name, "list_mcp_resources", nil); err != nil {
+						errs = append(errs, fmt.Errorf("MCP server %q: %w", name, err))
+						continue
+					}
+				}
+				res, err := r.mcp.Resources(ctx, name)
+				out.Resources = append(out.Resources, res...)
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}
+			if err := errors.Join(errs...); err != nil {
 				out.Error = err.Error()
 			}
 			return out, nil

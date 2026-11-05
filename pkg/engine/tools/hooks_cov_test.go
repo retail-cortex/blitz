@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/audit"
 )
 
 // cmdReq is a shell command's approval request.
@@ -61,7 +63,11 @@ func TestHooksAlwaysSaveFails(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(parent, nil, 0o600)) // saving can't make the directory
 	h.SetStore(store)
-	require.NoError(t, h.Approve(context.Background(), cmdReq("k")), "the user approved it")
+	var notices []string
+	ctx := WithNotices(context.Background(), func(m string) { notices = append(notices, m) })
+	require.NoError(t, h.Approve(ctx, cmdReq("k")), "the user approved it")
+	require.Len(t, notices, 1, "the user is told (N26 engine-tools-1#5)")
+	assert.Contains(t, notices[0], "saving the rule failed")
 	assert.False(t, store.Has("k"), "a rule that wasn't saved")
 	assert.Empty(t, store.Rules())
 	require.NoError(t, h.Approve(context.Background(), cmdReq("k")))
@@ -85,18 +91,25 @@ func TestHooksNotify(t *testing.T) {
 func TestHooksPermissionRequestHook(t *testing.T) {
 	for _, tc := range []struct {
 		out     Outcome
+		mustAsk bool
 		wantErr string
 		asked   int
 	}{
-		{Outcome{Decision: "allow"}, "", 0},
-		{Outcome{Decision: "deny", Reason: "not today"}, "not today", 0},
-		{Outcome{Decision: "deny"}, "a permission_request hook denied it", 0},
-		{Outcome{}, "", 1},
+		{Outcome{Decision: "allow"}, false, "", 0},
+		{Outcome{Decision: "deny", Reason: "not today"}, false, "not today", 0},
+		{Outcome{Decision: "deny"}, false, "a permission_request hook denied it", 0},
+		{Outcome{}, false, "", 1},
+		// What an ask rule says the user must see, the hook may refuse but
+		// not allow (N26 engine-tools-1#3).
+		{Outcome{Decision: "allow"}, true, "", 1},
+		{Outcome{Decision: "deny"}, true, "a permission_request hook denied it", 0},
 	} {
-		t.Run(tc.out.Decision+tc.out.Reason, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s%s must-ask=%v", tc.out.Decision, tc.out.Reason, tc.mustAsk), func(t *testing.T) {
 			h, reqs := decisionHooks(api.DecisionOnce)
 			h.SetEventHooks(func(context.Context, api.ApprovalRequest) Outcome { return tc.out }, nil)
-			err := h.Approve(context.Background(), cmdReq(""))
+			req := cmdReq("")
+			req.MustAsk = tc.mustAsk
+			err := h.Approve(context.Background(), req)
 			if tc.wantErr != "" {
 				assert.ErrorContains(t, err, tc.wantErr)
 			} else {
@@ -138,4 +151,36 @@ func TestHooksAskRuleWithoutApprover(t *testing.T) {
 	h.SetRules(rules)
 	req := api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "go.lock", Targets: []string{"go.lock"}}
 	assert.ErrorContains(t, h.Approve(context.Background(), req), "must be asked about")
+}
+
+// TestHooksRefusalsAuditedAsDenials checks every refusing decision is
+// logged as a denial (N26 engine-tools-1#4).
+func TestHooksRefusalsAuditedAsDenials(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		mode     api.PermissionMode
+		hook     string
+		ctx      func(context.Context) context.Context
+		decision string
+	}{
+		{"dont-ask", api.ModeDontAsk, "", nil, "mode-dont-ask"},
+		{"hook deny", api.ModeDefault, "deny", nil, "hook-deny"},
+		{"background", api.ModeDefault, "", Background, "background-refused"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := decisionHooks(api.DecisionOnce)
+			if tc.hook != "" {
+				h.SetEventHooks(func(context.Context, api.ApprovalRequest) Outcome { return Outcome{Decision: tc.hook} }, nil)
+			}
+			var got []audit.Entry
+			ctx := WithDecisionObserver(WithMode(context.Background(), tc.mode), func(e audit.Entry) { got = append(got, e) })
+			if tc.ctx != nil {
+				ctx = tc.ctx(ctx)
+			}
+			require.ErrorIs(t, h.Approve(ctx, cmdReq("")), ErrNotApproved)
+			require.Len(t, got, 1)
+			assert.Equal(t, tc.decision, got[0].Decision)
+			assert.Equal(t, audit.KindDenial, got[0].Kind)
+		})
+	}
 }

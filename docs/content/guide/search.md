@@ -67,7 +67,7 @@ allow_local = true     # localhost and private addresses; cloud metadata never
 # visible = true       # watch it work
 ```
 
-Running a script the agent wrote in a page asks first unless `allow_scripts` is set. Set `[browser] enabled = false` to turn the tool off.
+Running a script the agent wrote in a page asks first unless `allow_scripts` is set (`tools.auto_approve_commands` doesn't cover it), and a `deny web(…)` rule for the page's site refuses it either way. Set `[browser] enabled = false` to turn the tool off.
 
 **In the desktop app.** With the app open, the agent browses in the app itself instead of a hidden Chrome. The first time in a chat it asks: **Watch it in a tab** (a tab with a bar saying Blitz is browsing; **Take over** to use the page yourself, **Stop** to end it) or **Run silently** (out of sight). Settings › Browser › **How the agent browses** sets it for good (`browser.show = "watch" | "silent" | "ask"`). Without the app (jobs, the command line), it's Chrome as before.
 

@@ -118,12 +118,6 @@ type Checkpoints struct {
 	collect  bool // turns were dropped: remove unused blobs at the next save
 }
 
-// NewCheckpoints attaches an in-memory checkpoint store to ws.
-func NewCheckpoints(ws *Workspace, maxBytes int64) *Checkpoints {
-	c, _ := OpenCheckpoints(ws, CheckpointOptions{MaxBytes: maxBytes})
-	return c
-}
-
 // OpenCheckpoints attaches a checkpoint store to ws, loading what an
 // earlier process persisted in o.Dir. When the index can't be loaded
 // (unreadable, from a newer Blitz, or damaged, which is set aside), the

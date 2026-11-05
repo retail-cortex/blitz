@@ -61,8 +61,8 @@ func TestCommandPolicyShellForms(t *testing.T) {
 		{"env -i rm x", VerdictDeny, "deny rule"},
 		{"bash -c", VerdictNeedsApproval, ""},
 		{"bash script.sh", VerdictNeedsApproval, ""},
-		{`bash -c "echo 'open"`, VerdictNeedsApproval, "could not parse"},
-		{`env bash -c "echo 'open"`, VerdictNeedsApproval, "could not parse"},
+		{`bash -c "echo 'open"`, VerdictDeny, "check it against the deny rules"},
+		{`env bash -c "echo 'open"`, VerdictDeny, "check it against the deny rules"},
 		{`bash -c "bash -c \"bash -c 'bash -c \\\"bash -c rm\\\"'\""`, VerdictNeedsApproval, "too deep"},
 		{"echo $\"hi\"", VerdictNeedsApproval, "runtime expansion"},
 		{"echo \"a\\$b\\\\c\\q\"", VerdictAutoApprove, ""},
@@ -89,6 +89,46 @@ func TestCommandPolicyUnparsableWithAskRules(t *testing.T) {
 	assert.Equal(t, VerdictNeedsApproval, d.Verdict)
 	assert.True(t, d.MustAsk)
 	assert.Contains(t, d.Reason, "could not parse")
+}
+
+// TestCommandPolicyPartlyUnparsable checks a script that doesn't parse
+// whole (N26 engine-tools-1#1): what parsed is checked against the deny
+// rules, any deny rule refuses the rest, and with none it must be asked.
+func TestCommandPolicyPartlyUnparsable(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cfg     CommandPolicyConfig
+		deny    []string // [permissions] deny
+		script  string
+		verdict Verdict
+		reason  string
+	}{
+		{"denied before a bad nested script", CommandPolicyConfig{Deny: []string{"git push --force*"}}, nil,
+			"git push --force origin main; bash -c 'if'", VerdictDeny, `matches deny rule "git push --force*"`},
+		{"denied before a bad statement", CommandPolicyConfig{Deny: []string{"rm"}}, nil,
+			"rm -rf x; echo 'open", VerdictDeny, `matches deny rule "rm"`},
+		{"denied inside a bad nested script", CommandPolicyConfig{Deny: []string{"rm"}}, nil,
+			`bash -c "rm -rf x; echo 'open"`, VerdictDeny, `matches deny rule "rm"`},
+		{"permission deny rule", CommandPolicyConfig{}, []string{"shell(git push --force*)"},
+			"git push --force; bash -c 'if'", VerdictDeny, "matches deny rule"},
+		{"a deny rule can't be ruled out", CommandPolicyConfig{Deny: []string{"rm"}}, nil,
+			"echo hi; bash -c 'if'", VerdictDeny, "check it against the deny rules"},
+		{"no deny rules: asked", CommandPolicyConfig{AutoApprove: []string{"echo"}}, nil,
+			"echo hi; bash -c 'if'", VerdictNeedsApproval, "could not parse"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := mustPolicy(t, tc.cfg)
+			if tc.deny != nil {
+				p.SetRules(rulesOf(t, nil, nil, tc.deny))
+			}
+			d := p.Evaluate(tc.script)
+			assert.Equal(t, tc.verdict, d.Verdict, "reason %q, commands %q", d.Reason, d.Commands)
+			assert.Contains(t, d.Reason, tc.reason)
+			if tc.verdict == VerdictNeedsApproval {
+				assert.True(t, d.MustAsk, "a script that can't be checked whole is always asked")
+			}
+		})
+	}
 }
 
 // TestUnescapeDoubleQuoted checks backslashes inside double quotes keep only

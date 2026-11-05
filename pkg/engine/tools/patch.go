@@ -67,6 +67,45 @@ func parsePatch(text string) ([]filePatch, error) {
 	return parseUnified(text)
 }
 
+// PatchTargets returns the files a patch for apply_patch names: those it
+// writes (updated, added, or moved from or to) and those it deletes
+// (deleted, or moved from). A patch apply_patch can't parse is read line by
+// line for its file headers instead, so a hook's if or a file rule still
+// sees every file it names.
+func PatchTargets(patch string) (written, deleted []string) {
+	if patches, err := parsePatch(patch); err == nil {
+		for _, p := range patches {
+			switch {
+			case p.op == opDelete:
+				deleted = append(deleted, p.path)
+			case p.moveTo != "":
+				written = append(written, p.path, p.moveTo)
+				deleted = append(deleted, p.path)
+			default:
+				written = append(written, p.path)
+			}
+		}
+		return written, deleted
+	}
+	for line := range strings.Lines(patch) {
+		line = strings.TrimRight(line, "\r\n")
+		if p, ok := strings.CutPrefix(line, "*** Delete File: "); ok {
+			if p = strings.TrimSpace(p); p != "" {
+				deleted = append(deleted, p)
+			}
+			continue
+		}
+		for _, prefix := range []string{"+++ ", "--- ", "*** Update File: ", "*** Add File: ", "*** Move to: "} {
+			if p, ok := strings.CutPrefix(line, prefix); ok {
+				if p = diffPath(strings.TrimPrefix(diffPath(p, "a/"), "b/"), ""); p != "" && p != "/dev/null" {
+					written = append(written, p)
+				}
+			}
+		}
+	}
+	return written, deleted
+}
+
 func parseUnified(text string) ([]filePatch, error) {
 	lines := strings.Split(text, "\n")
 	var patches []filePatch

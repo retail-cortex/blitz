@@ -253,3 +253,23 @@ func BenchmarkBlockedScan(b *testing.B) {
 		}
 	})
 }
+
+// A scan that stops at a limit says so (N26 engine-tools-1#7): blocked
+// names past it aren't masked.
+func TestBlockedScanReportsItsLimit(t *testing.T) {
+	_, spec := scanFixture(t)
+	s := newBlockedScan(spec)
+	s.expand()
+	assert.Equal(t, "depth", s.limited, "the fixture's deepest .env files are past the depth limit")
+	assert.True(t, s.warned)
+
+	flat := t.TempDir()
+	writeFile(t, filepath.Join(flat, ".env"), "x")
+	m, err := NewPathMatcher([]string{".env"}, []string{flat})
+	require.NoError(t, err)
+	s = newBlockedScan(OSSandboxSpec{WritableDirs: []string{flat}, Blocked: m})
+	files, _ := s.expand()
+	assert.Equal(t, []string{filepath.Join(flat, ".env")}, files)
+	assert.Empty(t, s.limited)
+	assert.False(t, s.warned)
+}

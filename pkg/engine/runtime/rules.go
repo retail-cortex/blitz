@@ -18,7 +18,7 @@ import (
 	"context"
 	"maps"
 	"path/filepath"
-	"strings"
+	"slices"
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
@@ -92,37 +92,23 @@ func (s *scopedRules) take(session string, paths []string) []*memory.Rule {
 	return out
 }
 
-// toolPaths returns the files a tool call reads or edits, absolute. Tools
-// that only list or search (list_files, glob, grep) don't count: a rule is
-// for working on a file, not for seeing its name.
+// toolPaths returns the files a tool call reads or edits, absolute: the
+// paths permission rules see in it (tools.CallTargets). Tools that only
+// list or search (list_files, glob, grep, lsp) don't count: a rule is for
+// working on a file, not for seeing its name.
 func toolPaths(workspace, tool string, args map[string]any) []string {
-	var raw []string
 	switch tool {
-	case "read_file", "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "view_image", "view_document", "view_media", "notebook_edit":
-		if p, ok := args["path"].(string); ok && p != "" {
-			raw = append(raw, p)
-		}
-	case "generate_audio":
-		for _, k := range []string{"text_path", "path"} {
-			if p, ok := args[k].(string); ok && p != "" {
+	case "list_files", "glob", "grep", "lsp":
+		return nil
+	}
+	targets := tools.CallTargets(tool, args)
+	var raw []string
+	for _, kind := range []string{tools.RuleRead, tools.RuleWrite, tools.RuleDelete} {
+		for _, p := range targets[kind] {
+			if !slices.Contains(raw, p) {
 				raw = append(raw, p)
 			}
 		}
-	case "export_pdf", "export_docx": // path, or markdown given
-		p, _ := args["path"].(string)
-		out, _ := args["output"].(string)
-		written := tools.ExportPDFOutputPath(p, out)
-		if tool == "export_docx" {
-			written = tools.ExportDocxOutputPath(p, out)
-		}
-		for _, f := range []string{p, written} {
-			if f != "" {
-				raw = append(raw, f)
-			}
-		}
-	case "apply_patch":
-		patch, _ := args["patch"].(string)
-		raw = patchPaths(patch)
 	}
 	out := make([]string, 0, len(raw))
 	for _, p := range raw {
@@ -144,28 +130,6 @@ func canonical(p string) string {
 		return filepath.Join(dir, filepath.Base(p))
 	}
 	return p
-}
-
-// patchPaths finds the files a patch names, in either format apply_patch
-// takes.
-func patchPaths(patch string) []string {
-	var out []string
-	for line := range strings.Lines(patch) {
-		line = strings.TrimRight(line, "\r\n")
-		for _, prefix := range []string{"+++ ", "--- ", "*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: "} {
-			if p, ok := strings.CutPrefix(line, prefix); ok {
-				p = strings.TrimSpace(p)
-				if i := strings.IndexByte(p, '\t'); i >= 0 {
-					p = p[:i]
-				}
-				p = strings.TrimPrefix(strings.TrimPrefix(p, "a/"), "b/")
-				if p != "" && p != "/dev/null" {
-					out = append(out, p)
-				}
-			}
-		}
-	}
-	return out
 }
 
 // attachRules returns result with the rules for the files the tool

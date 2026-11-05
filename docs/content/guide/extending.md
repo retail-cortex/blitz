@@ -126,7 +126,7 @@ command = "grep -qv 'password' || { echo 'no secrets' >&2; exit 2; }"
 | `pre_tool`, `prompt_submit` | Block the action: exit 2 (stderr is the reason) or print `{"decision":"block","reason":"…"}`. What a `prompt_submit` hook prints is given to the agent with the prompt |
 | `session_start` | Add context for the agent |
 | `stop` | Keep the agent going: `{"continue": true, "reason": "now run the tests"}`, at most five times per prompt |
-| `permission_request` | Answer an approval: `{"decision": "allow"}` or `"deny"` (deny rules still come first) |
+| `permission_request` | Answer an approval: `{"decision": "allow"}` or `"deny"` (deny rules still come first, and what an ask rule covers it may only deny) |
 | `post_tool`, `post_tool_failure`, `session_end`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification` | Observe only. They run in the background, in order, and never delay the agent |
 
 A `pre_tool` hook can do more than block. Its JSON reply may carry `"decision": "allow"` (the call skips its approval question; deny and ask rules still apply), `"ask"` (you're asked first), `"updated_args"` (the call runs with these arguments instead), `"additional_context"` (given to the agent with the result) and, from any hook, `"system_message"` (shown to you).
@@ -150,6 +150,8 @@ match  = "run_shell_command"
 type   = "prompt"
 prompt = "Deny anything that deletes outside the workspace or touches production."
 ```
+
+`if` takes a permission rule: `shell(…)` is checked against each command of the script (one Blitz can't parse runs the hook, so it can decide), `read`, `write` and `delete(…)` against the files a call reads, writes or deletes (for `apply_patch`, the files in its patch), and `web(…)` against a page's host.
 
 `/hooks` lists them all, where each came from, and their recent failures.
 

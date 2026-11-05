@@ -64,7 +64,11 @@ type GrepInput struct {
 type GrepOutput struct {
 	Matches      []GrepMatch `json:"matches"`
 	TotalMatches int         `json:"total_matches"`
-	Error        string      `json:"error,omitempty"`
+	// Truncated says the search stopped at max_matches: there may be more.
+	Truncated bool `json:"truncated,omitempty"`
+	// Note says what wasn't searched (files over grep's size limit).
+	Note  string `json:"note,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // NewGrepTool creates an ADK tool for workspace grep searching.
@@ -75,11 +79,15 @@ func NewGrepTool(ws *Workspace) (tool.Tool, error) {
 			Description: "Search for pattern or literal string across workspace files",
 		},
 		func(ctx agent.Context, input GrepInput) (GrepOutput, error) {
-			matches, err := grepWorkspace(ctx, ws, input)
+			res, err := grepSearch(ctx, ws, input)
 			if err != nil {
 				return GrepOutput{Error: err.Error()}, nil
 			}
-			return GrepOutput{Matches: matches, TotalMatches: len(matches)}, nil
+			out := GrepOutput{Matches: res.matches, TotalMatches: len(res.matches), Truncated: res.truncated}
+			if res.tooBig > 0 {
+				out.Note = fmt.Sprintf("%d file(s) over %d MiB weren't searched; use run_shell_command with grep or rg for them", res.tooBig, grepMaxFileSize>>20)
+			}
+			return out, nil
 		},
 	)
 }
@@ -120,23 +128,39 @@ func newLineMatcher(input GrepInput) (*lineMatcher, error) {
 
 type grepFileResult struct {
 	matches []GrepMatch
+	tooBig  bool // over grepMaxFileSize: not searched
 }
 
+// grepResult is a search's matches, whether it stopped at its maximum,
+// and how many files were too big to search.
+type grepResult struct {
+	matches   []GrepMatch
+	truncated bool
+	tooBig    int
+}
+
+// grepWorkspace is grepSearch's matches.
 func grepWorkspace(ctx context.Context, ws *Workspace, input GrepInput) ([]GrepMatch, error) {
+	res, err := grepSearch(ctx, ws, input)
+	return res.matches, err
+}
+
+func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult, error) {
 	if input.Query == "" {
-		return nil, fmt.Errorf("query must not be empty")
+		return grepResult{}, fmt.Errorf("query must not be empty")
 	}
 	searchPath := input.Path
 	if searchPath == "" {
 		searchPath = "."
 	}
 	max := input.MaxMatches
-	if max <= 0 || max > 500 {
+	if max <= 0 {
 		max = 100
 	}
+	max = min(max, 500)
 	matcher, err := newLineMatcher(input)
 	if err != nil {
-		return nil, err
+		return grepResult{}, err
 	}
 
 	// Collect candidate files first; walking is cheap relative to reading.
@@ -160,7 +184,7 @@ func grepWorkspace(ctx context.Context, ws *Workspace, input GrepInput) ([]GrepM
 		return nil
 	})
 	if walkErr != nil {
-		return nil, fmt.Errorf("search error: %v", walkErr)
+		return grepResult{}, fmt.Errorf("search error: %v", walkErr)
 	}
 
 	// Scan files in parallel, but consume results in walk order so the first
@@ -197,53 +221,62 @@ func grepWorkspace(ctx context.Context, ws *Workspace, input GrepInput) ([]GrepM
 				if scanCtx.Err() != nil {
 					return
 				}
-				ch <- grepFileResult{matches: grepFile(scanCtx, entry, matcher, max)}
+				matches, tooBig := grepFile(scanCtx, entry, matcher, max)
+				ch <- grepFileResult{matches: matches, tooBig: tooBig}
 			}(entry)
 		}
 	}()
 
-	matches := make([]GrepMatch, 0, 16)
+	out := grepResult{matches: make([]GrepMatch, 0, 16)}
 	for ch := range order {
 		res, ok := <-ch
 		if !ok {
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return grepResult{}, ctx.Err()
 			}
 			continue
 		}
+		if res.tooBig {
+			out.tooBig++
+		}
 		for _, m := range res.matches {
-			matches = append(matches, m)
-			if len(matches) >= max {
-				return matches, nil
+			out.matches = append(out.matches, m)
+			if len(out.matches) >= max {
+				out.truncated = true
+				return out, nil
 			}
 		}
 	}
-	return matches, nil
+	return out, nil
 }
 
-// grepFile returns up to max matches from a single file. Unreadable, oversized,
-// and binary files yield no matches.
-func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) []GrepMatch {
+// grepFile returns up to max matches from a single file, and whether it
+// was too big to search. Unreadable, oversized, and binary files yield no
+// matches.
+func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) ([]GrepMatch, bool) {
 	f, err := entry.Open()
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
-	if err != nil || info.Size() > grepMaxFileSize {
-		return nil
+	if err != nil {
+		return nil, false
+	}
+	if info.Size() > grepMaxFileSize {
+		return nil, true
 	}
 	// Reading the whole (bounded) file avoids bufio.Scanner's line-length limit.
 	data, err := io.ReadAll(io.LimitReader(f, grepMaxFileSize))
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	if bytes.IndexByte(data[:min(len(data), grepBinarySniffLen)], 0) >= 0 {
-		return nil
+		return nil, false
 	}
 	if m.prefilter != nil && !m.prefilter(data) {
-		return nil
+		return nil, false
 	}
 
 	var out []GrepMatch
@@ -251,7 +284,7 @@ func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) []G
 	for len(data) > 0 {
 		lineNum++
 		if lineNum%4096 == 0 && ctx.Err() != nil {
-			return out
+			return out, false
 		}
 		var line []byte
 		if i := bytes.IndexByte(data, '\n'); i >= 0 {
@@ -267,9 +300,9 @@ func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) []G
 				Content:    textutil.Ellipsize(strings.TrimSpace(string(line)), grepMaxLineContent),
 			})
 			if len(out) >= max {
-				return out
+				return out, false
 			}
 		}
 	}
-	return out
+	return out, false
 }

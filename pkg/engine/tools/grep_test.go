@@ -180,3 +180,44 @@ func TestGrepFileEdges(t *testing.T) {
 		assert.False(t, files["locked.txt"], "unreadable files are skipped")
 	}
 }
+
+// Over the maximum, list_files and grep clamp to it rather than fall back
+// to their defaults, and say when they stopped short; grep says what was
+// too big to search (N26 engine-tools-1#17, #18).
+func TestListAndGrepLimits(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	var lines strings.Builder
+	for i := range 250 {
+		writeFile(t, filepath.Join(dir, "many", fmt.Sprintf("f%03d.txt", i)), "")
+		fmt.Fprintf(&lines, "hit %d\n", i)
+	}
+	writeFile(t, filepath.Join(dir, "hits.txt"), lines.String())
+	writeFile(t, filepath.Join(dir, "big", "huge.txt"), "hit\n"+strings.Repeat("x", grepMaxFileSize))
+
+	list := toolOf(t)(NewListFilesTool(ws))
+	grep := toolOf(t)(NewGrepTool(ws))
+	for _, tc := range []struct {
+		name      string
+		tool      runnerTool
+		args      map[string]any
+		key       string
+		count     int
+		truncated bool
+	}{
+		{"list over the maximum", list, map[string]any{"directory": "many", "max_entries": 1000}, "total_count", 250, false},
+		{"list stops short", list, map[string]any{"directory": "many", "max_entries": 10}, "total_count", 10, true},
+		{"grep over the maximum", grep, map[string]any{"query": "hit", "path": "hits.txt", "max_matches": 600}, "total_matches", 250, false},
+		{"grep stops short", grep, map[string]any{"query": "hit", "path": "hits.txt", "max_matches": 5}, "total_matches", 5, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := runTool(t, tc.tool, tc.args)
+			require.Empty(t, errOf(out))
+			assert.EqualValues(t, tc.count, out[tc.key])
+			truncated, _ := out["truncated"].(bool)
+			assert.Equal(t, tc.truncated, truncated)
+		})
+	}
+	out := runTool(t, grep, map[string]any{"query": "hit", "path": "big"})
+	assert.EqualValues(t, 0, out["total_matches"])
+	assert.Contains(t, out["note"], "1 file(s) over 5 MiB weren't searched")
+}

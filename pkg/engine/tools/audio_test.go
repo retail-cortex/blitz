@@ -136,7 +136,7 @@ func TestGenerateAudio(t *testing.T) {
 
 func TestGenerateAudioApproval(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	f := &fakeSpeaker{ext: ".wav"}
 
 	h, reqs := approverHooks(false)
@@ -159,6 +159,36 @@ func TestGenerateAudioApproval(t *testing.T) {
 	_, err := cp.Undo(false)
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(dir, "a.wav"), "undone with the turn")
+}
+
+// TestGenerateAudioWriteRules checks the file generate_audio writes is
+// decided by write rules (N26 engine-tools-1#12).
+func TestGenerateAudioWriteRules(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, wantErr string
+		mustAsk             bool
+	}{
+		{name: "denied", path: "docs/o.wav", wantErr: "denied by the permission rule deny write(docs/**)"},
+		{name: "asked", path: "talks/o.wav", mustAsk: true},
+		{name: "neither", path: "o.wav"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, dir := newTestWorkspace(t)
+			f := &fakeSpeaker{ext: ".wav"}
+			h, reqs := approverHooks(true)
+			h.SetRules(rulesOf(t, nil, []string{"write(talks/**)"}, []string{"write(docs/**)"}))
+			out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true)), map[string]any{"text": "x", "path": tc.path})
+			if tc.wantErr != "" {
+				assert.Contains(t, errOf(out), tc.wantErr)
+				assert.Empty(t, *reqs, "refused before anything is asked")
+				assert.NoFileExists(t, filepath.Join(dir, tc.path))
+				return
+			}
+			require.Empty(t, errOf(out))
+			require.Len(t, *reqs, 1)
+			assert.Equal(t, tc.mustAsk, (*reqs)[0].MustAsk)
+		})
+	}
 }
 
 // generate_audio is always registered; agents have it only while there's

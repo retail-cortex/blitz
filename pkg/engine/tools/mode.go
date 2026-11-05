@@ -23,8 +23,8 @@ import (
 )
 
 // StartingMode is the permission mode a workspace opens in: [blitz]
-// permission_mode, else bypass for the older auto_approve = true, else
-// auto.
+// permission_mode, else (unset) bypass for the older auto_approve = true,
+// else auto.
 func StartingMode(cfg *config.Config) (api.PermissionMode, error) {
 	if strings.TrimSpace(cfg.Blitz.PermissionMode) == "" {
 		if cfg.Blitz.AutoApprove {
@@ -36,10 +36,7 @@ func StartingMode(cfg *config.Config) (api.PermissionMode, error) {
 	if err != nil {
 		return "", fmt.Errorf("blitz.permission_mode: %w", err)
 	}
-	if cfg.Blitz.AutoApprove && mode == api.ModeDefault {
-		mode = api.ModeBypass
-	}
-	return mode, nil
+	return mode, nil // a mode set, default too, wins over auto_approve
 }
 
 // Mode returns the permission mode.

@@ -155,7 +155,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 		functiontool.Config{
 			Name: "generate_audio",
 			Description: "Read text aloud with a speech model and save it as an audio file, such as an audio overview of notes. " +
-				"For a conversation between two hosts, give speakers and start each line with a speaker's name and a colon. Keep it under about ten minutes (9,000 characters); Markdown formatting isn't read out.",
+				"For a conversation between two hosts, give speakers and start each line with a speaker's name and a colon. Keep it within the limit ([audio] max_chars; the tool says so when the text is longer); Markdown formatting isn't read out.",
 		},
 		func(ctx agent.Context, input GenerateAudioInput) (GenerateAudioOutput, error) {
 			fail := func(msg string) (GenerateAudioOutput, error) {
@@ -172,7 +172,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 			}
 			maxChars := cfg.MaxChars
 			if maxChars <= 0 {
-				maxChars = 9_000
+				maxChars = config.DefaultAudioMaxChars
 			}
 			text := input.Text
 			if input.TextPath != "" {
@@ -229,6 +229,12 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 				return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
 			}
 
+			// The file is a write: write rules decide it as for the file
+			// tools, deny refusing and ask asking the person.
+			effect, rule := hooks.Rules().Decide(RuleWrite, []string{rel})
+			if effect == EffectDeny {
+				return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", rel, rule))
+			}
 			voices := "one voice"
 			if len(speakers) == 2 {
 				voices = fmt.Sprintf("%s and %s", speakers[0].Name, speakers[1].Name)
@@ -237,6 +243,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 				Tool: "generate_audio", Kind: api.ActionNetwork,
 				Detail: fmt.Sprintf("Speak %d characters with %s (%s) → %s", n, speaker.Model(), voices, rel),
 				Key:    "audio:" + speaker.Model(), KeyLabel: "speech with " + speaker.Model(), Targets: []string{speaker.Host()},
+				MustAsk: effect == EffectAsk,
 			}); err != nil {
 				return fail(err.Error())
 			}

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -119,4 +120,31 @@ func TestGuardedCmdStartFailure(t *testing.T) {
 	err = cmd.Run()
 	assert.Error(t, err, "the directory it should run in is missing")
 	cmd.Release() // safe again
+}
+
+// A scrub_env pattern that isn't a glob stops the workspace from opening,
+// instead of scrubbing nothing (N26 engine-tools-1#8).
+func TestScrubEnvPatternsChecked(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		patterns []string
+		wantErr  string
+	}{
+		{"globs", []string{"*_TOKEN", "AWS_*", "GITHUB_TOKEN"}, ""},
+		{"an unclosed class", []string{"MY_[TOKEN"}, `sandbox.scrub_env: "MY_[TOKEN" isn't a valid pattern`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Tools.WorkspaceDir = t.TempDir()
+			cfg.Tools.ApprovalsFile = ""
+			cfg.Sandbox.ScrubEnv = tc.patterns
+			r, err := NewRegistry(cfg, nil, nil)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			r.Close()
+		})
+	}
 }

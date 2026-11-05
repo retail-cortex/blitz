@@ -207,6 +207,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		return nil, err
 	}
 
+	if err := checkScrubEnv(sb.ScrubEnv); err != nil {
+		ws.Close()
+		return nil, err
+	}
 	// Shell-only writable dirs are optional; missing ones are skipped.
 	writable := append(ws.WritableDirs(), DefaultShellWritableDirs()...)
 	for _, d := range sb.ShellWritablePaths {

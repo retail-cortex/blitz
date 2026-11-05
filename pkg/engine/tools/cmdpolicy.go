@@ -290,16 +290,8 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 		ask = p.rules.shellPatterns(EffectAsk)
 	}
 
-	if parseErr != nil {
-		if allowActive {
-			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the command to check it against the allow-list: " + parseErr.Error(), Commands: rendered}
-		}
-		d.Reason = "could not parse command: " + parseErr.Error()
-		d.MustAsk = len(ask) > 0 // an ask rule can't be ruled out
-		return d
-	}
-
-	// Deny always wins, including for wrappers themselves.
+	// Deny always wins, including for wrappers themselves, and is checked
+	// against what parsed of a script that didn't parse whole.
 	for _, c := range cmds {
 		if c.redirect != "" {
 			continue
@@ -307,6 +299,21 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 		if pat, ok := matchAny(deny, c); ok {
 			return CommandDecision{Verdict: VerdictDeny, Reason: fmt.Sprintf("%q matches deny rule %q", c.String(), pat), Commands: rendered}
 		}
+	}
+	// A script (or a bash -c script in it) that doesn't parse can't be
+	// checked whole: refused when an allow-list or a deny rule could miss
+	// it, and otherwise put to the person, never through a mode, an
+	// auto-approval or a remembered approval.
+	if parseErr != nil {
+		switch {
+		case allowActive:
+			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the command to check it against the allow-list: " + parseErr.Error(), Commands: rendered}
+		case len(deny) > 0:
+			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the whole command to check it against the deny rules: " + parseErr.Error(), Commands: rendered}
+		}
+		d.Reason = "could not parse command: " + parseErr.Error()
+		d.MustAsk = true
+		return d
 	}
 	// Then ask rules: any command they cover (or can't rule out) asks.
 	if len(ask) > 0 {
@@ -422,14 +429,9 @@ func extractCommands(script string, depth int) ([]simpleCommand, error) {
 	if depth > maxNestedShellDepth {
 		return []simpleCommand{{words: []string{"<nested shell>"}, unverified: "shell nesting too deep"}}, nil
 	}
-	// Parsers carry state and aren't safe for concurrent use; tools may run in parallel.
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(script), "")
-	if err != nil {
-		return nil, err
-	}
 	var cmds []simpleCommand
-	var walkErr error
-	syntax.Walk(file, func(n syntax.Node) bool {
+	var firstErr error
+	visit := func(n syntax.Node) bool {
 		if st, ok := n.(*syntax.Stmt); ok {
 			for _, r := range st.Redirs {
 				if target, ok := writtenFile(r); ok {
@@ -453,14 +455,27 @@ func extractCommands(script string, depth int) ([]simpleCommand, error) {
 		c := newSimpleCommand(words, dyn)
 		inner, err := expandCommand(&c, depth)
 		if err != nil {
-			walkErr = err
-			return false
+			// A bash -c script that doesn't parse: what parsed of it is
+			// checked, and the error says the rest couldn't be.
+			if firstErr == nil {
+				firstErr = err
+			}
+			c.unverified = "its script can't be parsed"
 		}
 		cmds = append(cmds, c)
 		cmds = append(cmds, inner...)
 		return true // keep walking into command substitutions etc.
-	})
-	return cmds, walkErr
+	}
+	// Statements are walked as they parse, so a script with a syntax error
+	// still yields the commands before it. Parsers carry state and aren't
+	// safe for concurrent use; tools may run in parallel.
+	for st, err := range syntax.NewParser(syntax.Variant(syntax.LangBash)).StmtsSeq(strings.NewReader(script)) {
+		if err != nil {
+			return cmds, err
+		}
+		syntax.Walk(st, visit)
+	}
+	return cmds, firstErr
 }
 
 // writtenFile returns the file a redirection writes, if it writes one:
@@ -553,10 +568,7 @@ func expandCommand(c *simpleCommand, depth int) ([]simpleCommand, error) {
 	c.transparent = true
 	inner := newSimpleCommand(args[skip:], argDyn[skip:])
 	nested, err := expandCommand(&inner, depth)
-	if err != nil {
-		return nil, err
-	}
-	return append([]simpleCommand{inner}, nested...), nil
+	return append([]simpleCommand{inner}, nested...), err
 }
 
 // unwrap returns the index in args where a known wrapper's command starts.
