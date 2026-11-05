@@ -38,9 +38,11 @@ type fakeSync struct {
 	err    error
 	getErr error
 	saves  int
+	dirs   []string // the workspaces asked about
 }
 
-func (f *fakeSync) GetOrgSync(context.Context, *connect.Request[pb.GetOrgSyncRequest]) (*connect.Response[pb.GetOrgSyncResponse], error) {
+func (f *fakeSync) GetOrgSync(_ context.Context, r *connect.Request[pb.GetOrgSyncRequest]) (*connect.Response[pb.GetOrgSyncResponse], error) {
+	f.dirs = append(f.dirs, r.Msg.GetWorkspace())
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -100,6 +102,14 @@ func TestEnterpriseSync(t *testing.T) {
 	f.state = ""
 	_, err = runCLI(t, "enterprise", "sync")
 	assert.ErrorContains(t, err, "isn't kept in step")
+
+	// The global --dir names the workspace, from any folder (N26 cli-1#6).
+	ws := t.TempDir()
+	t.Chdir(t.TempDir())
+	f.state = "saved"
+	_, err = runCLI(t, "-d", ws, "enterprise", "sync", "status")
+	require.NoError(t, err)
+	assert.Equal(t, ws, f.dirs[len(f.dirs)-1])
 
 	f.getErr = connect.NewError(connect.CodeUnavailable, errors.New("the service is restarting"))
 	_, err = runCLI(t, "enterprise", "sync", "status")

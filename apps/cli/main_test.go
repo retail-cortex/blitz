@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
@@ -397,4 +398,22 @@ func TestMaskConfigMCPSecrets(t *testing.T) {
 	assert.NotContains(t, m.MCP.Servers[0].Env["TOKEN"], "secret")
 	assert.NotContains(t, m.MCP.Servers[0].Headers["Authorization"], "secret-1234")
 	assert.Equal(t, "Bearer hdr-secret-1234567", cfg.MCP.Servers[0].Headers["Authorization"], "the config itself is unchanged")
+}
+
+// config show masks every credential the settings hold: Azure's and the
+// web search key, the gateway's and hooks' headers too (N26 cli-1#3).
+func TestMaskConfigEverySecret(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Azure.APIKey = "azure-secret-1234567"
+	cfg.Web.SearchAPIKey = "tvly-secret-1234567"
+	cfg.LLM.API.Headers = map[string]string{"Authorization": "Bearer gw-secret-1234567"}
+	cfg.Hooks.PreTool = []config.HookConfig{{Type: "http", URL: "https://h", Headers: map[string]string{"X-Token": "hook-secret-1234567"}}}
+	var out bytes.Buffer
+	require.NoError(t, toml.NewEncoder(&out).Encode(maskConfig(cfg)))
+	for _, secret := range []string{"azure-secret", "tvly-secret", "gw-secret", "hook-secret"} {
+		t.Run(secret, func(t *testing.T) {
+			assert.NotContains(t, out.String(), secret)
+		})
+	}
+	assert.Equal(t, "hook-secret-1234567", cfg.Hooks.PreTool[0].Headers["X-Token"], "the config itself is unchanged")
 }

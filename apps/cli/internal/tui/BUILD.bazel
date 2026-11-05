@@ -147,7 +147,13 @@ go_test(
         "tui_test.go",
     ],
     # The untranslated-output lint reads these sources.
-    data = glob(["*.go"]) + ["//apps/cli:main.go"],  # keep
+    data = glob(["*.go"]) + [
+        "//apps/cli:agents.go",
+        "//apps/cli:auth.go",
+        "//apps/cli:enterprise.go",
+        "//apps/cli:enterprisesync.go",
+        "//apps/cli:main.go",
+    ],  # keep
     embed = [":tui"],
     shard_count = 6,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on

@@ -88,7 +88,7 @@ The sign-in belongs to the machine the Blitz service runs on, and Blitz can run 
 ```bash
 blitz auth login google|anthropic|aws|azure   # runs gcloud, ant, aws or az, which opens your browser
 blitz auth status                             # where each sign-in stands
-blitz auth logout
+blitz auth logout google|anthropic|aws|azure  # signs that provider's tool out
 blitz config set-auth <provider> <api_key|adc|oauth>
 ```
 

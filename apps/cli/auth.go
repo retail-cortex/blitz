@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -89,13 +90,13 @@ signing in is another way, chosen with blitz config set-auth.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt) // Ctrl+C stops the sign-in
 			defer stop()
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Signing in to %s: finish in the browser it opens (Ctrl+C stops).\n", args[0])
+			fmt.Fprintln(out, i18n.T("signin.cli_start", "provider", args[0]))
 			st, err := s.SignIn(ctx, dir, args[0], profile, func(e client.SignInEvent) {
 				switch {
 				case e.Code != "":
-					fmt.Fprintf(out, "  %s\n  Code: %s\n", e.Line, e.Code)
+					fmt.Fprintf(out, "  %s\n  %s\n", e.Line, i18n.T("signin.cli_code", "code", e.Code))
 				case e.URL != "":
-					fmt.Fprintf(out, "  If the browser didn't open: %s\n", e.URL)
+					fmt.Fprintln(out, "  "+i18n.T("signin.cli_no_browser", "url", e.URL))
 				default:
 					fmt.Fprintf(out, "  %s\n", e.Line)
 				}
@@ -135,11 +136,11 @@ signing in is another way, chosen with blitz config set-auth.`,
 func describeSignIn(s client.SignInStatus) string {
 	switch {
 	case s.SignedIn:
-		return "signed in: " + s.Detail
+		return i18n.T("signin.cli_signed_in", "detail", s.Detail)
 	case !s.ToolFound:
-		return fmt.Sprintf("not signed in (%s isn't installed: %s)", s.Tool, s.Install)
+		return i18n.T("signin.cli_no_tool", "tool", s.Tool, "install", s.Install)
 	default:
-		return fmt.Sprintf("not signed in (blitz auth login %s): %s", s.Provider, s.Detail)
+		return i18n.T("signin.cli_signed_out", "provider", s.Provider, "detail", s.Detail)
 	}
 }
 

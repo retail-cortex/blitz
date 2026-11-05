@@ -62,7 +62,7 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 			}
 			pin := ""
 			if a.PinnedModel != "" {
-				pin = fmt.Sprintf(" %s[pinned %s]%s", Cyan, safe(a.PinnedModel), Reset)
+				pin = " " + Cyan + i18n.T("pin.pinned_tag", "model", safe(a.PinnedModel)) + Reset
 			}
 			fmt.Printf("%s %s%s%s (%s)%s: %s\n", marker, Bold, safe(a.DisplayName), Reset, safe(a.Name), pin, safe(a.Description))
 		}
@@ -502,7 +502,7 @@ func handleSessionCommand(args []string, app *App) {
 		for _, s := range list {
 			snapshot := ""
 			if s.Snapshot != "" {
-				snapshot = " " + Cyan + "snapshot " + safe(s.Snapshot) + Reset
+				snapshot = " " + Cyan + i18n.T("session.snapshot_tag", "name", safe(s.Snapshot)) + Reset
 			}
 			fmt.Printf("  • %s%s%s (%s): %s [%s]%s\n", Bold, safe(s.ID), Reset, safe(s.Agent), safe(sessionTitle(s)), i18n.N("session.messages", s.MessageCount), snapshot)
 			if all {
