@@ -464,6 +464,33 @@ func TestGuardrailsReadLongContent(t *testing.T) {
 	assert.Equal(t, strings.Repeat("x", 20), around(text, "missing", 20))
 }
 
+// A custom output guardrail that blocks holds the answer's stream: its
+// pieces aren't shown until the whole answer is judged (one that warns
+// lets them stream).
+func TestOutputGuardrailHoldsStream(t *testing.T) {
+	for _, tc := range []struct {
+		action string
+		held   bool
+	}{
+		{"block", true},
+		{"warn", false},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			w := openTest(t)
+			writeGuardrail(t, w, "polite", "---\nstage: output\naction: "+tc.action+"\n---\nNo rude words.\n")
+			turn := api.Turn{}
+			w.startGuardrails("s", &turn)
+			v := guard{w}.Output(context.Background(), runtime.GuardCall{Session: "s"}, "a piece", false)
+			if tc.held {
+				require.NotNil(t, v.Text)
+				assert.Empty(t, *v.Text)
+			} else {
+				assert.Nil(t, v.Text)
+			}
+		})
+	}
+}
+
 // A limits guardrail's defaults say where to set what refused a call.
 func TestLimitSettingDefault(t *testing.T) {
 	w := openTest(t)

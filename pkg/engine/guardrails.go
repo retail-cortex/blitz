@@ -512,7 +512,9 @@ func redactInjection(result map[string]any) map[string]any {
 
 // Output applies the output guardrails to a piece of the answer: the
 // secrets guardrail masks (or withholds) on every piece; custom checks
-// judge the whole answer.
+// judge the whole answer. While a custom one that blocks is on, the
+// pieces aren't streamed: the answer is shown once it's judged, so one
+// it withholds is never seen.
 func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, final bool) runtime.GuardVerdict {
 	st := g.w.guardsFor(c.Session)
 	var v runtime.GuardVerdict
@@ -546,6 +548,9 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 			continue
 		}
 		if !final {
+			if gr.Action == gates.Block {
+				cur = "" // held until the whole answer is judged
+			}
 			continue // a custom check judges the whole answer
 		}
 		verdict, err := g.w.judgeGuardrail(ctx, gr, cur)
