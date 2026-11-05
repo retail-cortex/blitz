@@ -49,8 +49,8 @@ func cmd(args []string, stderr io.Writer) int {
 	icon := fs.String("icon", "", "its icon, a square PNG of 256 px or more")
 	ver := fs.String("version", "0.0.0", "its version (a.b.c)")
 	out := fs.String("out", "", "where the rewritten program goes")
-	name := fs.String("name", "Blitz.exe", "its file name, as its details give it")
-	desc := fs.String("description", "Blitz", "what it is, as Explorer and Task Manager show it")
+	name := fs.String("name", defaultDetails.Name, "its file name, as its details give it")
+	desc := fs.String("description", defaultDetails.Description, "what it is, as Explorer and Task Manager show it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -69,8 +69,8 @@ type Details struct {
 	Description string
 }
 
-// blitzExe is Blitz.exe's details.
-var blitzExe = Details{Name: "Blitz.exe", Description: "Blitz"}
+// defaultDetails are Blitz.exe's details: the flags' defaults.
+var defaultDetails = Details{Name: "Blitz.exe", Description: "Blitz"}
 
 func run(in, iconPath, ver, out string, d Details) error {
 	if in == "" || iconPath == "" || out == "" {

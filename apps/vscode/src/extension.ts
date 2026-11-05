@@ -20,11 +20,11 @@
 // links to open here, an approval's change shows in the diff view, and
 // the selection or a file goes to the chat.
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join } from "node:path";
 import * as vscode from "vscode";
-import { selectionText } from "./compose";
+import { inWorkspace, selectionText } from "./compose";
 import { pageHtml } from "./page";
-import { applyPatch, parsePatch } from "./patch";
+import { applyPatch, parsePatch, ProposedTexts } from "./patch";
 import { startProxy, type Proxy } from "./proxy";
 import { serviceSocket } from "./socket";
 
@@ -42,7 +42,7 @@ const proposedScheme = "blitz-proposed";
 
 /** The proposed versions of files, shown on the diff view's right. */
 class Proposed implements vscode.TextDocumentContentProvider {
-  private texts = new Map<string, string>();
+  readonly texts = new ProposedTexts();
   private n = 0;
   add(path: string, text: string): vscode.Uri {
     const uri = vscode.Uri.from({ scheme: proposedScheme, path: `/${path}`, query: String(++this.n) });
@@ -52,6 +52,10 @@ class Proposed implements vscode.TextDocumentContentProvider {
   provideTextDocumentContent(uri: vscode.Uri): string {
     return this.texts.get(uri.toString()) ?? "";
   }
+  /** Forgets a proposed version once its document closes. */
+  closed(doc: vscode.TextDocument) {
+    if (doc.uri.scheme === proposedScheme) this.texts.delete(doc.uri.toString());
+  }
 }
 
 /** The chat view. */
@@ -60,13 +64,16 @@ class ChatView implements vscode.WebviewViewProvider {
   private proxy?: Promise<Proxy>;
   private ready = false;
   private queue: ToPage[] = [];
+  // The workspace the page was opened for (VSC-02): the messages from it
+  // are about this folder, whichever file is in front later.
+  private bound?: string;
 
   constructor(
     private readonly ctx: vscode.ExtensionContext,
     private readonly proposed: Proposed,
   ) {}
 
-  /** The workspace the chat is for: the folder of the file in front, else the first. */
+  /** The workspace for a new page: the folder of the file in front, else the first. */
   private dir(): string | undefined {
     const doc = vscode.window.activeTextEditor?.document.uri;
     const folder = (doc && vscode.workspace.getWorkspaceFolder(doc)) ?? vscode.workspace.workspaceFolders?.[0];
@@ -81,8 +88,9 @@ class ChatView implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((m: FromPage) => this.onMessage(m));
     view.onDidDispose(() => (this.view = undefined));
     const dir = this.dir();
+    this.bound = dir;
     if (!dir) {
-      view.webview.html = notice("Open a folder: Blitz works in a workspace.");
+      view.webview.html = notice(vscode.l10n.t("Open a folder: Blitz works in a workspace."));
       return;
     }
     try {
@@ -94,12 +102,13 @@ class ChatView implements vscode.WebviewViewProvider {
         cspSource: view.webview.cspSource,
       });
     } catch (e) {
-      view.webview.html = notice(`Blitz couldn't start its view: ${e instanceof Error ? e.message : String(e)}`);
+      this.proxy = undefined; // the next time the view opens tries again
+      view.webview.html = notice(vscode.l10n.t("Blitz couldn't start its view: {0}", e instanceof Error ? e.message : String(e)));
     }
   }
 
   private async onMessage(m: FromPage) {
-    const dir = this.dir();
+    const dir = this.bound;
     switch (m.type) {
       case "ready":
         this.ready = true;
@@ -137,7 +146,7 @@ class ChatView implements vscode.WebviewViewProvider {
       try {
         const left = p.oldPath ? file : this.proposed.add(path, "");
         const right = this.proposed.add(path, p.newPath ? applyPatch(now, p) : "");
-        await vscode.commands.executeCommand("vscode.diff", left, right, `${path} ↔ proposed by Blitz`);
+        await vscode.commands.executeCommand("vscode.diff", left, right, vscode.l10n.t("{0} ↔ proposed by Blitz", path));
       } catch (e) {
         vscode.window.showWarningMessage(`${path}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -153,27 +162,36 @@ class ChatView implements vscode.WebviewViewProvider {
   /** The editor's selection, as text for the chat's composer. */
   addSelection() {
     const ed = vscode.window.activeTextEditor;
-    const dir = this.dir();
-    if (!ed || !dir) return;
+    if (!ed) return;
     const sel = ed.selection;
     const text = ed.document.getText(sel);
     if (!text) return this.addFile(ed.document.uri);
-    this.post({ type: "compose", text: selectionText(relative(dir, ed.document.uri.fsPath), sel.start.line + 1, sel.end.line + (sel.end.character === 0 && sel.end.line > sel.start.line ? 0 : 1), ed.document.languageId, text) });
+    const path = this.chatPath(ed.document.uri);
+    if (path === undefined) return;
+    this.post({ type: "compose", text: selectionText(path, sel.start.line + 1, sel.end.line + (sel.end.character === 0 && sel.end.line > sel.start.line ? 0 : 1), ed.document.languageId, text) });
     this.reveal();
   }
 
   /** A file (the one in front, or the one clicked), mentioned in the composer. */
   addFile(uri?: vscode.Uri) {
-    const dir = this.dir();
     uri ??= vscode.window.activeTextEditor?.document.uri;
-    if (!uri || !dir) return;
-    const path = relative(dir, uri.fsPath);
-    if (path.startsWith("..") || isAbsolute(path)) {
-      vscode.window.showWarningMessage(`${uri.fsPath} isn't in the workspace Blitz works in (${dir}).`);
-      return;
-    }
+    if (!uri) return;
+    const path = this.chatPath(uri);
+    if (path === undefined) return;
     this.post({ type: "addToContext", path });
     this.reveal();
+  }
+
+  /**
+   * uri's path in the chat's workspace (the page's, else the one a page
+   * would open for), or undefined, saying so, when it isn't in it.
+   */
+  private chatPath(uri: vscode.Uri): string | undefined {
+    const dir = this.view ? this.bound : this.dir();
+    if (!dir) return undefined;
+    const path = inWorkspace(dir, uri.fsPath);
+    if (path === undefined) vscode.window.showWarningMessage(vscode.l10n.t("{0} isn't in the workspace Blitz works in ({1}).", uri.fsPath, dir));
+    return path;
   }
 
   private reveal() {
@@ -198,6 +216,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(
     vscode.window.registerWebviewViewProvider("blitz.chat", chat, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.workspace.registerTextDocumentContentProvider(proposedScheme, proposed),
+    vscode.workspace.onDidCloseTextDocument((doc) => proposed.closed(doc)),
     vscode.commands.registerCommand("blitz.focus", () => vscode.commands.executeCommand("blitz.chat.focus")),
     vscode.commands.registerCommand("blitz.addSelection", () => chat.addSelection()),
     vscode.commands.registerCommand("blitz.addFile", (uri?: vscode.Uri) => chat.addFile(uri)),

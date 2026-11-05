@@ -18,14 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
-func newEnterpriseSyncCommand() *cobra.Command {
+func newEnterpriseSyncCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Save this workspace's changes to your organization's service now, and say how its sync stands",
@@ -35,7 +35,7 @@ others' changes, and pushes to the workspace's main on your organization's
 service. "blitz enterprise sync status" only says how it stands.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return syncCmd(cmd, true)
+			return syncCmd(cmd, g, true)
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
@@ -43,22 +43,21 @@ service. "blitz enterprise sync status" only says how it stands.`,
 		Short: "How this workspace's sync stands: saved, saving, offline, signed out, refused, or both versions of files kept",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return syncCmd(cmd, false)
+			return syncCmd(cmd, g, false)
 		},
 	})
 	return cmd
 }
 
-func syncCmd(cmd *cobra.Command, save bool) error {
-	sock, err := ensureService(cmd.Context())
+func syncCmd(cmd *cobra.Command, g *globalFlags, save bool) error {
+	s, err := orgSettings(cmd)
 	if err != nil {
 		return err
 	}
-	dir, err := os.Getwd()
+	dir, err := orgWorkspace(g)
 	if err != nil {
 		return err
 	}
-	s := client.AttachSettings(sock)
 	st, err := s.OrgSync(cmd.Context(), dir)
 	if err != nil {
 		return err
@@ -81,21 +80,21 @@ func syncCmd(cmd *cobra.Command, save bool) error {
 func printOrgSync(w io.Writer, st client.OrgSync) {
 	switch st.State {
 	case "saved":
-		fmt.Fprintln(w, "✓ Saved: the service has everything")
+		fmt.Fprintln(w, "✓ "+i18n.T("org.sync_saved"))
 	case "saving":
-		fmt.Fprintln(w, "Saving…")
+		fmt.Fprintln(w, i18n.T("org.sync_saving"))
 	case "offline":
-		fmt.Fprintln(w, "Not saved: the service can't be reached, so the changes wait on this computer")
+		fmt.Fprintln(w, i18n.T("org.sync_offline"))
 	case "signed_out":
-		fmt.Fprintln(w, "Not saved: signed out (blitz enterprise login)")
+		fmt.Fprintln(w, i18n.T("org.sync_signed_out"))
 	case "refused":
-		fmt.Fprintln(w, "Not saved: the service refused it")
+		fmt.Fprintln(w, i18n.T("org.sync_refused"))
 	case "secrets":
-		fmt.Fprintln(w, "Not saved: it holds what looks like a secret, so the changes wait on this computer")
+		fmt.Fprintln(w, i18n.T("org.sync_secrets"))
 	case "conflicts":
-		fmt.Fprintln(w, "Saved, with both versions of these files kept:")
+		fmt.Fprintln(w, i18n.T("org.sync_conflicts"))
 		for _, p := range st.Pairs {
-			fmt.Fprintf(w, "  %s (yours: %s)\n", p[0], p[1])
+			fmt.Fprintln(w, "  "+i18n.T("org.sync_pair", "path", p[0], "yours", p[1]))
 		}
 	default:
 		fmt.Fprintln(w, st.State)

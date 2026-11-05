@@ -604,3 +604,46 @@ func TestCheckAPI(t *testing.T) {
 	assert.Equal(t, "API at https://gateway.example.com, headers X-Api-Key", detail)
 	assert.NotContains(t, detail, "static-secret")
 }
+
+// Ollama's address is shown as the model's factory resolves it: its own
+// base_url first.
+func TestOllamaURL(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		ollama, openai string
+		want           string
+	}{
+		{"its own", "http://gpu-box:11434/v1", "https://api.openai.com/v1", "http://gpu-box:11434/v1"},
+		{"its own over [llm.openai]'s", "http://gpu-box:11434/v1", "http://other:8080/v1", "http://gpu-box:11434/v1"},
+		{"[llm.openai]'s, not OpenAI's", "", "http://other:8080/v1", "http://other:8080/v1"},
+		{"OpenAI's default: this machine", "", "https://api.openai.com/v1", "http://localhost:11434/v1"},
+		{"none", "", "", "http://localhost:11434/v1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var llm config.LLMConfig
+			llm.Ollama.BaseURL, llm.OpenAI.BaseURL = tc.ollama, tc.openai
+			assert.Equal(t, tc.want, ollamaURL(llm))
+		})
+	}
+}
+
+// A guardrail file with a problem shows in the report, as Studio shows
+// it; good ones say nothing.
+func TestDoctorGuardrails(t *testing.T) {
+	doctorHome(t, "")
+	ws := projectDir(t)
+	dir := filepath.Join(ws, ".agents", "guardrails")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\nstage: [nonsense\n---\nCheck it."), 0o644))
+	checks := Run(context.Background(), Options{Dir: ws})
+	var got []string
+	for _, c := range checks {
+		if c.name == "guardrails" {
+			got = append(got, c.detail)
+			assert.Equal(t, statusWarn, c.status)
+		}
+	}
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0], filepath.Join(dir, "broken.md"))
+	assert.Contains(t, got[0], "front matter")
+}

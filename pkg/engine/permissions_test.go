@@ -95,6 +95,17 @@ func TestPermissionRuleSavedForTheWorkspace(t *testing.T) {
 	require.NoError(t, err)
 	own, _, _ := config.ScopePermissions("", w.Dir())
 	assert.Empty(t, own.Allow)
+
+	// A rule only in the file counts as removed; one in neither doesn't
+	// (N26 cli-1#20: /permissions remove --save said "Removed" for a typo).
+	_, _, err = config.AddPermissionRule("", w.Dir(), "allow", "shell(make test)")
+	require.NoError(t, err)
+	res, err = w.RemovePermissionRule("shell(make test)", api.ScopeWorkspace)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Removed)
+	res, err = w.RemovePermissionRule("shell(typo)", api.ScopeWorkspace)
+	require.NoError(t, err)
+	assert.Zero(t, res.Removed)
 }
 
 // /permissions remove takes out the session's and the settings' rules,

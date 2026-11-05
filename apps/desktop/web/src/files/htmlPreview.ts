@@ -19,6 +19,13 @@
 // images and media) put inline, since it's shown from text in a sandboxed
 // frame that can reach neither the app nor the files.
 
+/**
+ * The preview frame's sandbox: nothing allowed, so the page's scripts
+ * don't run and it opens no windows or forms (FIL-54a, EL-102). Open in
+ * Browser runs them.
+ */
+export const previewSandbox = "";
+
 /** Reads a workspace file: its text (stylesheets, scripts) or a data: URL of its bytes (images, media). */
 export interface HtmlLoaders {
   text: (path: string) => Promise<string>;

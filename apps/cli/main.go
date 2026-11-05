@@ -146,7 +146,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newGitCredentialCommand())
 	groupHelp(root)
 	return root
 }
@@ -162,8 +162,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
 	f.Lookup("worktree").NoOptDefVal = "new"
-	f.StringArrayVar(&o.global.addDirs, "add-dir", nil, "Let the agent read and write this directory too, for this run, as sandbox.allowed_paths does (repeatable; runs without the service)")
-	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs without the service)")
+	f.StringArrayVar(&o.global.addDirs, "add-dir", nil, "Let the agent read and write this directory too, for this run, as sandbox.allowed_paths does (repeatable; runs in a private service)")
+	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs in a private service)")
 	f.StringVar(&o.global.ref, "ref", "", "With --worktree: the commit or branch to start from (default HEAD)")
 	f.StringVarP(&o.resume, "resume", "r", "", "Resume a saved session by ID (no ID: the most recent), or start a new one from a snapshot by name")
 	f.Lookup("resume").NoOptDefVal = "latest"
@@ -171,8 +171,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVar(&o.outputFormat, "output-format", formatText, "Output for one-shot runs: text, json, or stream-json")
 	f.StringVar(&o.inputFormat, "input-format", inputText, "Input: text, or stream-json (JSON lines on stdin: prompts, approval answers and question answers; needs --output-format stream-json)")
 	f.StringVar(&o.jsonSchema, "json-schema", "", "One-shot runs answer with JSON valid against this schema (a file, or inline JSON), as structured_result")
-	f.StringVar(&o.appendPrompt, "append-system-prompt", "", "Add this to the agent's instructions for the run (runs without the service)")
-	f.StringVar(&o.appendPromptFile, "append-system-prompt-file", "", "Add this file's text to the agent's instructions for the run (runs without the service)")
+	f.StringVar(&o.appendPrompt, "append-system-prompt", "", "Add this to the agent's instructions for the run (runs in a private service)")
+	f.StringVar(&o.appendPromptFile, "append-system-prompt-file", "", "Add this file's text to the agent's instructions for the run (runs in a private service)")
 	f.BoolVar(&o.fork, "fork", false, "With --resume or --continue: continue in a copy of the session, leaving it as it was")
 	f.StringVar(&o.name, "name", "", "Name the new session")
 	f.BoolVar(&o.noPersist, "no-session-persistence", false, "Don't keep the run's session (one-shot runs; the audit log is still written)")
@@ -181,7 +181,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
 	f.BoolVar(&o.bg, "bg", false, "Start the prompt as a background run in the Blitz service and return ('blitz agents' lists them)")
-	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
+	f.BoolVar(&o.local, "local", false, "Run in a private Blitz service of this run's own, even when the shared one is running")
 	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
 	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
 	f.StringVar(&o.effort, "effort", "", "Reasoning effort for this run: minimal, low, medium, high, or max (where the model supports it)")

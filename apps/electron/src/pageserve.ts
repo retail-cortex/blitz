@@ -21,7 +21,8 @@
 // pictures, data) load as they would on a web server. Never a file
 // outside the workspace, links included; only GET and HEAD; nothing
 // listed. The window's own preview, which runs no scripts, stays the
-// default.
+// default. Every workspace's pages share this server's origin, so their
+// scripts share its storage (localStorage, cookies) too.
 
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
@@ -108,7 +109,7 @@ export class Pages {
     if (!(await stat(root)).isDirectory()) throw new Error(`not serving ${dir}: not a folder`);
     if (!isPage(rel)) throw new Error(`not opening ${rel}: only pages (.html) open in a browser`);
     const file = inside(root, rel);
-    if (!file || !(await this.within(root, file))?.isFile()) throw new Error(`not opening ${rel}: no such page in the workspace`);
+    if (!file || !(await this.within(root, file))?.info.isFile()) throw new Error(`not opening ${rel}: no such page in the workspace`);
     let token = this.tokens.get(root);
     if (!token) {
       token = randomBytes(18).toString("base64url");
@@ -119,12 +120,12 @@ export class Pages {
     return pageURL(`http://127.0.0.1:${this.port}/${token}`, rel);
   }
 
-  /** within is file's stat when it is in root once its links are followed. */
+  /** within is file's real path and stat when it is in root once its links are followed. */
   private async within(root: string, file: string) {
     try {
       const real = await realpath(file);
       if (real !== root && !real.startsWith(root + path.sep)) return undefined;
-      return await stat(real);
+      return { real, info: await stat(real) };
     } catch {
       return undefined;
     }
@@ -161,21 +162,22 @@ export class Pages {
     if (!root) return no(404);
     let file = inside(root, rest.join("/"));
     if (!file) return no(404);
-    let info = await this.within(root, file);
-    if (info?.isDirectory()) {
+    let found = await this.within(root, file);
+    if (found?.info.isDirectory()) {
       file = path.join(file, "index.html");
-      info = await this.within(root, file);
+      found = await this.within(root, file);
     }
-    if (!info?.isFile()) return no(404);
+    if (!found?.info.isFile()) return no(404);
     res.writeHead(200, {
       "Content-Type": typeOf(file),
-      "Content-Length": info.size,
+      "Content-Length": found.info.size,
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
     });
     if (req.method === "HEAD") return res.end();
-    createReadStream(file)
+    // The path checked (links followed), so a link swapped after the check doesn't lead out.
+    createReadStream(found.real)
       .on("error", () => res.destroy())
       .pipe(res);
   }

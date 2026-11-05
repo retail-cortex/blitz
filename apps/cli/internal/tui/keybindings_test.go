@@ -73,6 +73,7 @@ func TestLoadKeyBindings(t *testing.T) {
 		{"bad key", "editor = \"alt+x\"\n", "isn't a key"},
 		{"not a command", "[commands]\n\"ctrl+t\" = \"tasks\"\n", "isn't a /command"},
 		{"already bound", "[commands]\n\"ctrl+g\" = \"/tasks\"\n", "already bound"},
+		{"two commands on one key", "[commands]\n\"ctrl+t\" = \"/tasks\"\n\"Ctrl+T\" = \"/status\"\n", "already bound"},
 		{"same key", "editor = \"shift+tab\"\n", "the same key"},
 		{"none for a command", "[commands]\n\"none\" = \"/tasks\"\n", "not a key"},
 		{"not TOML", "editor = \n", "keybindings.toml"},

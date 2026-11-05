@@ -26,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,20 @@ func TestEnterpriseCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "version 1.0.0; offers gateway, jobs, branding")
 	assert.Contains(t, out, "Signed in     no: blitz enterprise login")
+	out, err = runCLI(t, "enterprise", "about")
+	require.NoError(t, err)
+	assert.Contains(t, out, "hasn't published anything about itself")
+	org.Mu.Lock()
+	org.Branding = map[string]any{"name": "Acme Assist", "about": "Our assistant.", "support": "https://help.acme.com"}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "about")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Acme Assist\n\nOur assistant.")
+	assert.Contains(t, out, "Support: https://help.acme.com")
+	org.Mu.Lock()
+	org.Branding = nil
+	org.Mu.Unlock()
+	i18n.SetAppName("") // the refresh named the program for the organization
 
 	out, err = runCLI(t, "enterprise", "login")
 	require.NoError(t, err, out)
@@ -96,7 +111,7 @@ func TestEnterpriseCommand(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "a-file")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	t.Setenv("BLITZ_SOCKET", filepath.Join(file, "s.sock"))
-	for _, args := range [][]string{{"status"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}, {"terms"}, {"workspaces"}, {"open", "x"}, {"create", "x"}, {"share", "."}} {
+	for _, args := range [][]string{{"status"}, {"about"}, {"connect", "https://b.acme.com"}, {"disconnect"}, {"login"}, {"logout"}, {"terms"}, {"workspaces"}, {"open", "x"}, {"create", "x"}, {"share", "."}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.ErrorContains(t, err, "starting the Blitz service", args)
 	}
@@ -120,6 +135,33 @@ func TestDescribeOrganization(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var b bytes.Buffer
 			describeOrganization(&b, c.o)
+			for _, w := range c.want {
+				assert.Contains(t, b.String(), w)
+			}
+		})
+	}
+}
+
+// What the organization says about itself, as the desktop's About shows
+// it (EN-52; N26 cli-1#8).
+func TestDescribeBranding(t *testing.T) {
+	cases := map[string]struct {
+		b    client.Branding
+		why  string
+		want []string
+	}{
+		"none":  {want: []string{"hasn't published anything about itself"}},
+		"stale": {b: client.Branding{Name: "Acme"}, why: "offline", want: []string{"Couldn't ask your organization's service (offline)", "Acme"}},
+		"all": {b: client.Branding{Name: "Acme Assist", About: "Our assistant.", Support: "https://help.acme.com", Documents: []client.OrgDocument{
+			{Document: "terms", Version: "v1", Text: "Be kind."}, {Document: "privacy", Version: "p2", Text: "We keep little."}}},
+			want: []string{"Acme Assist\n\nOur assistant.", "Support: https://help.acme.com", "Terms of service (version v1): blitz enterprise terms", "Privacy notice (version p2):\nWe keep little."}},
+		"links": {b: client.Branding{Documents: []client.OrgDocument{{Document: "privacy", Version: "p1", URL: "https://acme.com/privacy"}, {Document: "terms", Version: "v2", URL: "https://acme.com/terms"}}},
+			want: []string{"Privacy notice (version p1): https://acme.com/privacy", "Terms of service (version v2): https://acme.com/terms"}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var b bytes.Buffer
+			describeBranding(&b, c.b, c.why)
 			for _, w := range c.want {
 				assert.Contains(t, b.String(), w)
 			}

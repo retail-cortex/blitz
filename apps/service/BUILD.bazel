@@ -45,7 +45,10 @@ go_binary(
 go_test(
     name = "service_test",
     size = "small",
-    srcs = ["main_test.go"],
+    srcs = [
+        "main_test.go",
+        "stop_unix_test.go",
+    ],
     embed = [":service_lib"],
     deps = [
         "@com_github_stretchr_testify//assert",

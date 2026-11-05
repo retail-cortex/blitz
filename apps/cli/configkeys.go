@@ -23,9 +23,29 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// settingsScope is the workspace whose own settings a config command
+// changes with --workspace (--dir's, else the current directory), or ""
+// for the global ones.
+func settingsScope(g *globalFlags, workspace bool) (string, error) {
+	if !workspace {
+		return "", nil
+	}
+	cfg, err := loadConfig(g)
+	if err != nil {
+		return "", err
+	}
+	return cfg.Tools.WorkspaceDir, nil
+}
+
+// printUpdated says a settings file changed and when it applies.
+func printUpdated(cmd *cobra.Command, path string) {
+	fmt.Fprintln(cmd.OutOrStdout(), i18n.T("config.updated", "path", path))
+}
 
 // keyCommands manage providers' API keys: kept in the OS keychain, the
 // settings file referring to them. --workspace works on the workspace's
@@ -33,19 +53,8 @@ import (
 // ones.
 func keyCommands(g *globalFlags) []*cobra.Command {
 	var workspace bool
-	scope := func() (string, error) {
-		if !workspace {
-			return "", nil
-		}
-		cfg, err := loadConfig(g)
-		if err != nil {
-			return "", err
-		}
-		return cfg.Tools.WorkspaceDir, nil
-	}
-	done := func(cmd *cobra.Command, path string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "Updated %s. Workspaces open in the service use it when they reopen (the desktop app's settings apply at once).\n", path)
-	}
+	scope := func() (string, error) { return settingsScope(g, workspace) }
+	done := printUpdated
 	provider := func(args []string) (string, error) {
 		p := strings.ToLower(args[0])
 		for _, k := range config.KeyedProviders {

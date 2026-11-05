@@ -27,10 +27,10 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// The tray's MCP servers submenu (spec_009_mcp MCP-48) and what the menu's
-// entries do (the jobs and workflows are in each workspace's submenu,
-// menus.go; spec_023_workers WK-90): what the running service says, as
-// menu entries, and what clicking one does. main draws them.
+// The tray's MCP servers submenu (spec_009_mcp MCP-48) and what clicking
+// any of the menu's entries does (Do, here; the jobs' and workflows'
+// entries, in each workspace's submenu, are menus.go's, spec_023_workers
+// WK-90): what the running service says, as menu entries. main draws them.
 
 // Extras is what the submenus show: the global MCP servers, every
 // workspace's workers and the runs going on.

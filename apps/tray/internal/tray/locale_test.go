@@ -15,6 +15,7 @@
 package tray
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,4 +108,30 @@ func TestSetupLocale(t *testing.T) {
 func TestSystemLanguages(t *testing.T) {
 	t.Setenv("LANGUAGE", "fr_CA:es")
 	assert.Contains(t, SystemLanguages(), "fr_CA")
+}
+
+// A catalog in ui.locales_dir that doesn't load is logged, not dropped
+// without a word; other files say nothing.
+func TestLoadCatalogs(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, body string
+		logged           bool
+	}{
+		{"a broken catalog", "de.json", "{not json", true},
+		{"not a catalog", "notes.txt", "{not json", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, tc.file), []byte(tc.body), 0o644))
+			var lines []string
+			b := LoadCatalogs([]string{dir}, func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) })
+			require.NotNil(t, b)
+			if !tc.logged {
+				assert.Empty(t, lines)
+				return
+			}
+			require.Len(t, lines, 1)
+			assert.Contains(t, lines[0], filepath.Join(dir, tc.file))
+		})
+	}
 }

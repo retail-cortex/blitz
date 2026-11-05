@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -169,4 +170,24 @@ func TestREPLCtrlCAtPromptWithBackgroundProcess(t *testing.T) {
 		t.Fatal("REPL did not exit after choosing kill")
 	}
 	assert.Len(t, pm.Running(), 0, "background process survived")
+}
+
+// stopFails is a TaskControl whose task "bad" won't stop.
+type stopFails struct{ tasks []api.TaskInfo }
+
+func (s stopFails) ListTasks() []api.TaskInfo { return s.tasks }
+
+func (s stopFails) StopTask(id string) (api.TaskInfo, error) {
+	if id == "bad" {
+		return api.TaskInfo{}, errBoom
+	}
+	return api.TaskInfo{ID: id, State: api.TaskStopped}, nil
+}
+
+// Killing counts only the tasks that stopped and names the ones that didn't.
+func TestKillCountsStoppedTasks(t *testing.T) {
+	w := work{tasks: stopFails{tasks: []api.TaskInfo{running("good"), running("bad")}}}
+	out := captureStdout(t, w.kill)
+	assert.Contains(t, out, "Stopped 1 background task.")
+	assert.Contains(t, out, "Couldn't stop task bad: boom")
 }

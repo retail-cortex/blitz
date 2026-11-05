@@ -22,7 +22,7 @@ import (
 )
 
 func TestPermissionsCommand(t *testing.T) {
-	app, _ := newCommandApp(t, "/permissions\n/permissions deny Bash(git push *)\n/permissions ask\n/permissions deny what(x)\n/permissions\n/permissions remove shell(git push *)\n/permissions remove shell(nope)\n/exit\n")
+	app, _ := newCommandApp(t, "/permissions\n/permissions deny Bash(git push *)\n/permissions ask\n/permissions deny what(x)\n/permissions\n/permissions remove shell(git push *)\n/permissions remove shell(nope)\n/permissions remove shell(typo) --save\n/exit\n")
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 	for _, want := range []string{
 		"Permission rules", "none — add some",
@@ -31,6 +31,7 @@ func TestPermissionsCommand(t *testing.T) {
 		"unknown kind",
 		"Removed shell(git push *)",
 		"No rule shell(nope)",
+		"No rule shell(typo)", // --save doesn't hide a rule that isn't there
 	} {
 		t.Run(want, func(t *testing.T) {
 			assert.Contains(t, out, want, "missing %q in:\n%s", want, out)

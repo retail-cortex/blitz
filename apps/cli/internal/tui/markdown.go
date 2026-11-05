@@ -30,6 +30,7 @@ type markdownStream struct {
 	r       *glamour.TermRenderer
 	out     io.Writer
 	pending strings.Builder
+	scan    blockScan // how far pending has been read, so a write reads only what's new
 }
 
 func newMarkdownStream(out io.Writer, theme string, width int) (*markdownStream, error) {
@@ -67,10 +68,11 @@ func themeFromEnv() string {
 func (m *markdownStream) Write(text string) {
 	m.pending.WriteString(text)
 	buf := m.pending.String()
-	if cut := completeBlocks(buf); cut > 0 {
+	if cut := m.scan.next(buf); cut > 0 {
 		m.render(buf[:cut])
 		m.pending.Reset()
 		m.pending.WriteString(buf[cut:])
+		m.scan.pos -= cut
 	}
 }
 
@@ -97,26 +99,42 @@ func (m *markdownStream) render(block string) {
 // completeBlocks returns the length of the longest prefix of s made of whole
 // Markdown blocks, or 0 if no block is complete yet.
 func completeBlocks(s string) int {
-	cut, inFence, pos := 0, false, 0
-	prevBlank := false
+	var b blockScan
+	return b.next(s)
+}
+
+// blockScan reads a growing buffer for whole Markdown blocks. It keeps
+// where it stopped and whether it's inside a fence, so a long code block
+// streamed in small pieces is read once, not again on every piece.
+type blockScan struct {
+	pos       int // the end of the last whole line read
+	inFence   bool
+	prevBlank bool
+}
+
+// next reads s's new whole lines and returns the length of the longest
+// prefix made of whole blocks, or 0 if no new block is complete. A caller
+// that drops that prefix from its buffer takes it off pos too.
+func (b *blockScan) next(s string) int {
+	cut := 0
 	for {
-		nl := strings.IndexByte(s[pos:], '\n')
+		nl := strings.IndexByte(s[b.pos:], '\n')
 		if nl < 0 {
 			return cut
 		}
-		line := s[pos : pos+nl]
-		end := pos + nl + 1
+		line := s[b.pos : b.pos+nl]
+		end := b.pos + nl + 1
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~"):
-			if inFence {
+			if b.inFence {
 				cut = end // a closed fence ends a block
 			}
-			inFence = !inFence
-		case !inFence && trimmed == "" && !prevBlank:
+			b.inFence = !b.inFence
+		case !b.inFence && trimmed == "" && !b.prevBlank:
 			cut = end
 		}
-		prevBlank = trimmed == ""
-		pos = end
+		b.prevBlank = trimmed == ""
+		b.pos = end
 	}
 }

@@ -46,7 +46,7 @@ func (taskService) ListHumanTasks(context.Context, *connect.Request[pb.ListHuman
 }
 
 func (taskService) ListWorkflowRuns(_ context.Context, r *connect.Request[pb.ListWorkflowRunsRequest]) (*connect.Response[pb.ListWorkflowRunsResponse], error) {
-	return connect.NewResponse(&pb.ListWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "r1", Status: "failed", Workflow: string(rune('a' + r.Msg.Limit - 20))}}}), nil
+	return connect.NewResponse(&pb.ListWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "r1", Status: "failed", Workflow: string(rune('a' + r.Msg.Limit - RunsLimit))}}}), nil
 }
 
 func TestFetchTasks(t *testing.T) {
@@ -68,7 +68,7 @@ func TestFetchTasks(t *testing.T) {
 	runs, err := FetchRuns(context.Background(), sock)
 	require.NoError(t, err)
 	require.Len(t, runs, 1)
-	assert.Equal(t, "a", runs[0].Workflow, "the latest 20 asked for")
+	assert.Equal(t, "a", runs[0].Workflow, "the latest RunsLimit asked for")
 
 	_, _, err = FetchTasks(context.Background(), filepath.Join(shortTemp(t), "none.sock"))
 	assert.Error(t, err, "nothing listening")
@@ -147,6 +147,8 @@ func TestFailedAndRunLink(t *testing.T) {
 	seen := map[string]bool{}
 	assert.Equal(t, []*pb.WorkflowRun{failed}, Failed(seen, runs, start), "only r1 failed since")
 	assert.Empty(t, Failed(seen, runs, start), "once")
+	assert.Empty(t, Failed(seen, runs[1:], start), "r1 left the list")
+	assert.Empty(t, seen, "and is forgotten")
 
 	assert.Empty(t, RunLink("off", failed))
 	u, err := url.Parse(RunLink("notify", failed))

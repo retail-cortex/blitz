@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"github.com/spf13/cobra"
@@ -77,8 +78,8 @@ func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t a
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Started %s in %s (session %s).\n", run.ID, run.Workspace, run.SessionID)
-	fmt.Fprintf(out, "Follow it with 'blitz attach %s' (or 'blitz logs %s -f'); stop it with 'blitz stop %s'.\n", run.ID, run.ID, run.ID)
+	fmt.Fprintln(out, i18n.T("agents.started", "id", run.ID, "workspace", run.Workspace, "session", run.SessionID))
+	fmt.Fprintln(out, i18n.T("agents.follow_hint", "id", run.ID))
 	return nil
 }
 
@@ -109,7 +110,7 @@ func newAgentsCommand() *cobra.Command {
 func printRuns(out io.Writer, list []api.BackgroundRun, all bool, now time.Time) {
 	shown := 0
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tSTATE\tAGE\tCOST\tWORKSPACE\tPROMPT")
+	fmt.Fprintln(tw, i18n.T("agents.columns"))
 	for _, r := range list {
 		if !all && !r.Active() {
 			continue
@@ -117,7 +118,7 @@ func printRuns(out io.Writer, list []api.BackgroundRun, all bool, now time.Time)
 		shown++
 		state := r.State
 		if r.Waiting > 0 {
-			state = fmt.Sprintf("waiting (%d)", r.Waiting)
+			state = i18n.T("agents.waiting", "count", r.Waiting)
 		}
 		end := now
 		if !r.Ended.IsZero() {
@@ -127,11 +128,11 @@ func printRuns(out io.Writer, list []api.BackgroundRun, all bool, now time.Time)
 			textutil.SanitizeTerminal(homeRel(r.Workspace)), textutil.SanitizeTerminal(textutil.Ellipsize(r.Prompt, 50)))
 	}
 	if shown == 0 {
-		msg := "No background runs are going"
+		msg := i18n.T("agents.none_going")
 		if all {
-			msg = "No background runs"
+			msg = i18n.T("agents.none")
 		}
-		fmt.Fprintf(out, "%s: start one with 'blitz --bg \"<prompt>\"'.\n", msg)
+		fmt.Fprintln(out, msg)
 		return
 	}
 	tw.Flush()
@@ -170,7 +171,7 @@ func newLogsCommand() *cobra.Command {
 			case ctx.Err() != nil:
 				return nil
 			case ended && err != nil:
-				fmt.Fprintf(cmd.OutOrStdout(), "\nThe run failed: %v\n", err)
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", i18n.T("agents.run_failed", "error", err.Error()))
 			case ended:
 				if line := tui.UsageLine(res.Before, res.After); line != "" {
 					fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", line)
@@ -178,7 +179,7 @@ func newLogsCommand() *cobra.Command {
 			case err != nil:
 				return err
 			default:
-				fmt.Fprintf(cmd.OutOrStdout(), "\n(still running: 'blitz logs %s -f' follows it)\n", args[0])
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", i18n.T("agents.still_running", "id", args[0]))
 			}
 			return nil
 		},
@@ -204,7 +205,7 @@ func newStopCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s. Its session is %s ('blitz -d %s --resume %s').\n", run.ID, run.State, run.SessionID, run.Workspace, run.SessionID)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("agents.stopped", "id", run.ID, "state", run.State, "session", run.SessionID, "workspace", run.Workspace))
 			return nil
 		},
 	}

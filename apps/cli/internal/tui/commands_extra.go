@@ -124,7 +124,7 @@ func cmdUndo(args []string, app *App) {
 	if err != nil {
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
 		// Changes made before /cd are in the other workspace's checkpoints.
-		if s, ok := app.Workspace.ActiveSession(); ok && s.MovedFrom != "" && strings.Contains(err.Error(), "nothing to undo") {
+		if s, ok := app.Workspace.ActiveSession(); ok && s.MovedFrom != "" && errors.Is(err, api.ErrNothingToUndo) {
 			fmt.Printf("%s%s%s\n", Dim, i18n.T("undo.moved", "dir", s.MovedFrom), Reset)
 		}
 	}
@@ -341,6 +341,8 @@ func cmdExport(args []string, app *App) {
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
 		return
 	}
+	force := slices.Contains(args, "--force")
+	args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--force" })
 	name := ""
 	if len(args) > 0 {
 		name = strings.Join(args, " ")
@@ -359,11 +361,32 @@ func cmdExport(args []string, app *App) {
 			return
 		}
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	// An existing file (README.md, an earlier export) is kept unless
+	// --force says to replace it.
+	if err := writeExport(path, data, force); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			fmt.Printf("%s%s%s\n", Yellow, i18n.T("export.exists", "path", safe(path), "name", safe(name)), Reset)
+			return
+		}
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
 		return
 	}
 	fmt.Printf("%s✓ %s%s\n", Green, i18n.T("export.done", "path", safe(path)), Reset)
+}
+
+// writeExport writes data to path; without force an existing file is
+// os.ErrExist.
+func writeExport(path string, data []byte, force bool) error {
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !force {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	return errors.Join(err, f.Close())
 }
 
 // exportName is a file name for a session's export.
@@ -731,8 +754,12 @@ func cmdLocale(ctx context.Context, args []string, app *App) {
 	}
 	input := strings.Join(args, " ")
 	res, err := app.Workspace.SetLocale(ctx, input)
-	if err != nil {
+	switch {
+	case errors.Is(err, api.ErrUnknownLocale):
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("locale.unknown", "input", strconv.Quote(safe(input))), Reset)
+		return
+	case err != nil: // the service or the save failed, not the language
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("locale.failed", "error", safe(err.Error())), Reset)
 		return
 	}
 	// The interface follows the model's reply language.

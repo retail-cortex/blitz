@@ -103,7 +103,7 @@ func TestExtensionCommandOutputs(t *testing.T) {
 		"rule removed and saved": {
 			setup: func(s *stubBackend) {
 				s.removePermission = func(rule string, _ api.Scope) (api.PermissionChange, error) {
-					return api.PermissionChange{Rule: rule, Saved: api.Saved{Path: "/cfg/.env.toml"}}, nil
+					return api.PermissionChange{Rule: rule, Removed: 1, Saved: api.Saved{Path: "/cfg/.env.toml"}}, nil
 				}
 			},
 			line: "/permissions remove shell(ls) --save", want: []string{"Removed shell(ls)", "/cfg/.env.toml"},

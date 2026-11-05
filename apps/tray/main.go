@@ -142,20 +142,27 @@ func startTray(exe string) error {
 	return tray.Detached(exe)
 }
 
-// lockFile holds the lock: kept here, it isn't collected (and closed,
-// releasing the lock) while the tray runs.
+// lockFile holds the lock, and is load-bearing though nothing reads it:
+// an *os.File nothing refers to is collected, and its finalizer closes
+// it, releasing the lock while the tray runs. Kept in this variable for
+// the process's life, it's never collected (linters that call it unused
+// are wrong; don't remove it).
 var lockFile *os.File
 
 // lock holds ~/.blitz/run/tray.lock for as long as the tray runs, so a
-// second tray (started by hand, or twice at login) exits.
+// second tray (started by hand, or twice at login) exits. When the lock
+// can't be taken at all (the folder can't be made), the tray says why
+// and doesn't run, rather than run beside another unchecked.
 func lock() bool {
 	dir := config.ExpandHome("~/.blitz/run")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return true
+		fmt.Fprintln(os.Stderr, "blitz-tray: not starting, as it can't tell whether a tray already runs:", err)
+		return false
 	}
 	f, err := os.OpenFile(filepath.Join(dir, "tray.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return true
+		fmt.Fprintln(os.Stderr, "blitz-tray: not starting, as it can't tell whether a tray already runs:", err)
+		return false
 	}
 	if !tryLock(f) {
 		f.Close()
@@ -427,7 +434,12 @@ func onReady() {
 	click := func(a tray.Action) {
 		do("", func() error { return tray.Do(context.Background(), sock, a, acts.OpenLink) })
 	}
+	// refresh runs from the menu's loop and from each action's goroutine:
+	// one at a time, so two don't redraw the same submenus at once.
+	var refreshMu sync.Mutex
 	refresh := func() {
+		refreshMu.Lock()
+		defer refreshMu.Unlock()
 		st := status()
 		mu.Lock()
 		note := busy
@@ -446,10 +458,7 @@ func onReady() {
 			live := tray.Live{Runs: runs.get(), JobRuns: extras.Runs}
 			spaces := tray.Spaces(openSpaces(), extras.Workers)
 			procMenu.parent.Show()
-			if title := tray.ProcessesTitle(extras.Processes); procMenu.title != title {
-				procMenu.title = title
-				procMenu.parent.SetTitle(title)
-			}
+			procMenu.setTitle(tray.ProcessesTitle(extras.Processes))
 			procMenu.show(tray.ProcessEntries(extras.Processes, spaces), click)
 			if waiting := tray.FetchApprovals(context.Background(), sock); len(waiting) > 0 {
 				approvalsMenu.parent.SetTitle(tray.ApprovalsTitle(len(waiting)))

@@ -31,13 +31,12 @@ type trayIcon struct {
 	mu                     sync.Mutex
 	running, waiting, busy bool
 	frame                  int
+	// stop ends the pulse's loop: it runs only while busy, so an idle
+	// tray doesn't wake four times a second.
+	stop chan struct{}
 }
 
-func newTrayIcon() *trayIcon {
-	t := &trayIcon{}
-	go t.loop()
-	return t
-}
+func newTrayIcon() *trayIcon { return &trayIcon{} }
 
 // set shows the service's state and the tasks' dot (the pulse goes on
 // drawing it while something runs).
@@ -57,12 +56,26 @@ func (t *trayIcon) pulse(busy bool) {
 	if t.busy && !busy {
 		t.frame = 0
 		setIcon(t.running, t.waiting, 1)
+		close(t.stop)
+		t.stop = nil
+	}
+	if !t.busy && busy {
+		t.stop = make(chan struct{})
+		go t.loop(t.stop)
 	}
 	t.busy = busy
 }
 
-func (t *trayIcon) loop() {
-	for range time.Tick(pulseEvery) {
+// loop draws the pulse's frames until stop closes.
+func (t *trayIcon) loop(stop chan struct{}) {
+	tick := time.NewTicker(pulseEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-tick.C:
+		}
 		t.mu.Lock()
 		if t.busy && t.running {
 			t.frame = (t.frame + 1) % len(tray.PulseFrames)

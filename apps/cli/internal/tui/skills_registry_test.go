@@ -17,12 +17,17 @@ package tui
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/skillreg"
@@ -39,9 +44,9 @@ func TestSkillsFromRegistries(t *testing.T) {
 	skillRegistries = func() *skillreg.Store { return store }
 	t.Cleanup(func() { skillRegistries = saved })
 
-	out := captureStdout(t, func() { handleSkillsCommand([]string{"registry"}, app) })
+	out := captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"registry"}, app) })
 	assert.Contains(t, out, "No skill registries")
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"search", "lit"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"search", "lit"}, app) })
 	assert.NotContains(t, out, "In your registries", "none added: no registry section")
 
 	reg := t.TempDir()
@@ -57,18 +62,18 @@ func TestSkillsFromRegistries(t *testing.T) {
 	_, err := store.Add(t.Context(), "", filepath.Join(reg, "index.json"), "")
 	require.NoError(t, err)
 
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"registry"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"registry"}, app) })
 	assert.Contains(t, out, "castor")
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"search", "literature"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"search", "literature"}, app) })
 	assert.Contains(t, out, "In your registries (1)")
 	assert.Contains(t, out, "castor/lit-review")
 	assert.Contains(t, out, "/skills install")
 
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"install"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"install"}, app) })
 	assert.Contains(t, out, "Usage: /skills install")
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"install", "ghost"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"install", "ghost"}, app) })
 	assert.Contains(t, out, "✗")
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"install", "castor/lit-review", "--project"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"install", "castor/lit-review", "--project"}, app) })
 	assert.Contains(t, out, "Installed lit-review 1.0.0 from castor")
 	assert.FileExists(t, filepath.Join(app.Workspace.Dir(), ".agents", "skills", "lit-review", "SKILL.md"))
 	_, ok := app.Workspace.Skill("lit-review")
@@ -78,9 +83,48 @@ func TestSkillsFromRegistries(t *testing.T) {
 	_, err = store.Add(t.Context(), "gone", filepath.Join(reg, "index.json"), "")
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(filepath.Join(reg, "index.json")))
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"search", "x"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"search", "x"}, app) })
 	assert.Contains(t, out, "registry castor")
 	require.NoError(t, os.WriteFile(store.File, []byte("[[registries"), 0o600))
-	out = captureStdout(t, func() { handleSkillsCommand([]string{"registry"}, app) })
+	out = captureStdout(t, func() { handleSkillsCommand(t.Context(), []string{"registry"}, app) })
 	assert.Contains(t, out, "✗")
+}
+
+// Ctrl+C (the REPL's context) stops an install or a search waiting on a
+// slow registry.
+func TestSkillsRegistryFollowsTheContext(t *testing.T) {
+	app := newTestApp(t, nil)
+	home := t.TempDir()
+	store := &skillreg.Store{File: filepath.Join(home, "r.toml"), UserSkills: filepath.Join(home, "skills"), Secrets: &secrets.Memory{}}
+	saved := skillRegistries
+	skillRegistries = func() *skillreg.Store { return store }
+	t.Cleanup(func() { skillRegistries = saved })
+	var stall atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if stall.Load() {
+			<-r.Context().Done()
+			return
+		}
+		idx, _ := json.Marshal(skillreg.Index{Version: 1, Name: "Slow", Skills: []skillreg.Entry{{Name: "x", Version: "1", ArchiveURL: "x.zip"}}})
+		_, _ = w.Write(idx)
+	}))
+	t.Cleanup(srv.Close)
+	_, err := store.Add(t.Context(), "", srv.URL+"/index.json", "")
+	require.NoError(t, err)
+	stall.Store(true)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, args := range [][]string{{"install", "slow/x"}, {"search", "x"}} {
+		t.Run(args[0], func(t *testing.T) {
+			done := make(chan string, 1)
+			go func() { done <- captureStdout(t, func() { handleSkillsCommand(ctx, args, app) }) }()
+			select {
+			case out := <-done:
+				assert.Contains(t, out, "context canceled")
+			case <-time.After(5 * time.Second):
+				t.Fatal("the registry call didn't follow the context")
+			}
+		})
+	}
 }

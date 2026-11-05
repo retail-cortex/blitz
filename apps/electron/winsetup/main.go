@@ -56,6 +56,8 @@ type system interface {
 	Shortcut(link, target string) error
 	WriteEntry(wininstall.Entry) error
 	DeleteEntry() error
+	// InstalledRoot is the folder the entry names ("" without one).
+	InstalledRoot() string
 	// RemoveRunValue stops the tray starting at login.
 	RemoveRunValue() error
 	// RemoveFromPath takes dir off the user's PATH.
@@ -116,13 +118,23 @@ func run(args []string, sys system) int {
 	}
 	zr, err := wininstall.Payload(f, info.Size())
 	switch {
-	case o.uninstall || errors.Is(err, wininstall.ErrNoPayload):
+	case o.uninstall:
+		return uninstall(sys, o, self)
+	case errors.Is(err, wininstall.ErrNoPayload):
+		// Without the app, only the uninstaller uninstalls: a setup
+		// program missing its end (a cut-off download) says so instead.
+		if !strings.EqualFold(filepath.Base(self), wininstall.Uninstaller) {
+			return fail(sys, o, errDamaged)
+		}
 		return uninstall(sys, o, self)
 	case err != nil:
 		return fail(sys, o, err)
 	}
 	return install(sys, o, zr)
 }
+
+// errDamaged is a setup program without its app.
+var errDamaged = errors.New("this setup program is damaged (it doesn't carry Blitz): download it again")
 
 // fail says err (unless silent) and returns the failure's status.
 func fail(sys system, o options, err error) int {
@@ -150,6 +162,10 @@ func install(sys system, o options, zr *zip.Reader) int {
 		_ = os.RemoveAll(staged)
 		return fail(sys, o, fmt.Errorf("unpacking Blitz: %w", err))
 	}
+	if err := os.WriteFile(filepath.Join(staged, wininstall.Marker), []byte(markerText), 0o644); err != nil {
+		_ = os.RemoveAll(staged)
+		return fail(sys, o, fmt.Errorf("unpacking Blitz: %w", err))
+	}
 	if err := wininstall.Place(staged, root); err != nil {
 		_ = os.RemoveAll(staged)
 		return fail(sys, o, err)
@@ -171,11 +187,31 @@ func install(sys system, o options, zr *zip.Reader) int {
 	return 0
 }
 
+// markerText is the marker file's (wininstall.Marker), for whoever opens it.
+const markerText = "This folder is Blitz, put here by its setup program. Uninstall it from Add or remove programs.\r\n"
+
+// installed reports whether root is a folder the setup program installed
+// Blitz in: it holds the marker, or (an install from before the marker)
+// it's the folder the entry in Add or remove programs names and holds
+// Blitz.exe.
+func installed(sys system, root string) bool {
+	if _, err := os.Stat(filepath.Join(root, wininstall.Marker)); err == nil {
+		return true
+	}
+	entry := sys.InstalledRoot()
+	if entry == "" || !strings.EqualFold(filepath.Clean(entry), filepath.Clean(root)) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(root, wininstall.App))
+	return err == nil
+}
+
 // uninstall removes what install made: the app's folder, its shortcuts,
 // its entry, the tray's start at login and the blitz command's PATH
 // entry. Settings and conversations (~/.blitz) stay. Run from inside the
 // app's folder, it copies itself to %TEMP% and runs from there, so the
-// folder can go.
+// folder can go. It removes only a folder Blitz was installed in
+// (installed), so a copy of the uninstaller elsewhere removes nothing.
 func uninstall(sys system, o options, self string) int {
 	root := o.root
 	if root == "" {
@@ -183,6 +219,12 @@ func uninstall(sys system, o options, self string) int {
 		if !strings.EqualFold(filepath.Base(self), wininstall.Uninstaller) {
 			root = wininstall.DefaultRoot(sys.LocalAppData())
 		}
+	}
+	if !installed(sys, root) {
+		if o.root != "" {
+			sys.DeleteLater(self)
+		}
+		return fail(sys, o, fmt.Errorf("%s isn't a folder Blitz was installed in, so nothing was removed", root))
 	}
 	if o.root == "" && within(self, root) {
 		tmp := filepath.Join(sys.TempDir(), fmt.Sprintf("blitz-uninstall-%d.exe", time.Now().UnixNano()))

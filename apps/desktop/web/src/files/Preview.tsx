@@ -24,7 +24,7 @@ import { Button, useSnackbar } from "@blitz/webui";
 import { takeAnchor } from "../events";
 import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
 import { playsVideo, type PreviewKind } from "./previewKind";
-import { inlineHtml, type HtmlLoaders } from "./htmlPreview";
+import { inlineHtml, previewSandbox, type HtmlLoaders } from "./htmlPreview";
 
 import { showFound } from "./find";
 import { TableView } from "./TableView";
@@ -107,8 +107,9 @@ function SvgPreview({ text, name }: { text: string; name: string }) {
 }
 
 // An HTML page from the editor's text, its relative files put inline
-// (htmlPreview.ts), in a frame whose scripts run sandboxed: no access to
-// the app, its storage or the service. Redrawn a moment after typing stops.
+// (htmlPreview.ts), in a sandboxed frame where its scripts don't run and
+// that reaches neither the app, its storage nor the service. Redrawn a
+// moment after typing stops.
 function HtmlPreview({ dir, path, text }: { dir: string; path: string; text: string }) {
   const [doc, setDoc] = useState<string>();
   const first = useRef(true);
@@ -137,7 +138,7 @@ function HtmlPreview({ dir, path, text }: { dir: string; path: string; text: str
   if (doc === undefined) return null;
   return (
     <div className="preview preview-html">
-      <iframe title={path} sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={doc} />
+      <iframe title={path} sandbox={previewSandbox} srcDoc={doc} />
     </div>
   );
 }

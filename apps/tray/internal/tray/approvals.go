@@ -38,7 +38,7 @@ func FetchApprovals(ctx context.Context, sock string) []*pb.GoingServiceRun {
 	return res.Msg.Runs
 }
 
-// ApprovalsTitle is the Jobs menu's title for n runs waiting.
+// ApprovalsTitle is the approvals submenu's title for n runs waiting.
 func ApprovalsTitle(n int) string { return i18n.N("tray.approvals", n) }
 
 // ApprovalEntries are the waiting runs, each with what it asks and

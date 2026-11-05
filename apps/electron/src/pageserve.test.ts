@@ -64,6 +64,7 @@ describe("Pages", () => {
     await writeFile(outside, "secret");
     await symlink(outside, path.join(ws, "site", "leak.txt"));
     await symlink(outside, path.join(ws, "leak.html"));
+    await symlink(path.join(ws, "notes.txt"), path.join(ws, "site", "notes-link.txt"));
   });
   afterAll(async () => {
     pages.close();
@@ -88,6 +89,11 @@ describe("Pages", () => {
     expect(await res.text()).toContain("app.js");
     res = await fetch(url, { method: "HEAD" });
     expect(res.status).toBe(200);
+  });
+
+  it("serves a link in the workspace as the file it leads to, the path it checked", async () => {
+    const url = await pages.url(ws, "site/index.html");
+    expect(await (await fetch(new URL("notes-link.txt", url))).text()).toBe("notes");
   });
 
   it("serves nothing else", async () => {

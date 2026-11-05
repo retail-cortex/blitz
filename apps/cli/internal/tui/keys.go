@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ergochat/readline"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -68,6 +69,11 @@ type escReader struct {
 
 	mu     sync.Mutex
 	inject []byte
+	// injected counts the bytes of inject handed to the editor that
+	// filterKey hasn't seen yet. They steer the editor (Ctrl+E, Ctrl+U,
+	// Enter, a bound command's text), so they pass through untouched even
+	// when the person bound one of those keys.
+	injected int
 	// While cancelling, the editor gets one Ctrl+C at a time (armed) until
 	// the read ends: one more each time the last reached filterKey, so none
 	// is left over for the next read.
@@ -85,6 +91,7 @@ func (r *escReader) Read(p []byte) (int, error) {
 		if len(r.inject) > 0 {
 			n := copy(p, r.inject)
 			r.inject = r.inject[n:]
+			r.injected += n
 			r.mu.Unlock()
 			return n, nil
 		}
@@ -111,6 +118,19 @@ func (r *escReader) push(s string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.inject = append(r.inject, s...)
+}
+
+// fromInject reports whether r is one of the bytes injected by push,
+// rather than a key the person pressed. The editor reads its runes in
+// order, so the next injected bytes it filters are push's.
+func (r *escReader) fromInject(k rune) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.injected <= 0 {
+		return false
+	}
+	r.injected -= max(1, utf8.RuneLen(k))
+	return true
 }
 
 // cancel makes the read in progress end with Ctrl+C.
@@ -179,6 +199,9 @@ type keyState struct {
 func (t *TerminalInput) filterKey(r rune) (rune, bool) {
 	if r == readline.CharInterrupt {
 		t.stdin.interrupted()
+	}
+	if t.stdin.fromInject(r) {
+		return r, true
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()

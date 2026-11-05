@@ -62,7 +62,7 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 			}
 			pin := ""
 			if a.PinnedModel != "" {
-				pin = fmt.Sprintf(" %s[pinned %s]%s", Cyan, safe(a.PinnedModel), Reset)
+				pin = " " + Cyan + i18n.T("pin.pinned_tag", "model", safe(a.PinnedModel)) + Reset
 			}
 			fmt.Printf("%s %s%s%s (%s)%s: %s\n", marker, Bold, safe(a.DisplayName), Reset, safe(a.Name), pin, safe(a.Description))
 		}
@@ -104,7 +104,7 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 
 	case "skills":
-		handleSkillsCommand(args, app)
+		handleSkillsCommand(ctx, args, app)
 
 	case "session":
 		handleSessionCommand(args, app)
@@ -217,7 +217,7 @@ var helpGroups = []struct {
 		{"/goal [<condition>|clear]", "help.goal"},
 		{"/loop [<interval> <prompt>|stop <n>]", "help.loop"},
 		{"/plan <goal>", "help.plan"},
-		{"/search web|session <terms>", "help.search"},
+		{"/search [files|documents|chats|notes|all|web|session] <terms>, /search status|reindex", "help.search"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
 		{"/processes [all|log <id>|stop <id>…|stop flagged|stop all]", "help.processes"},
 	}},
@@ -227,7 +227,7 @@ var helpGroups = []struct {
 		{"/cd [path]", "help.cd"},
 		{"/diff [git]", "help.diff"},
 		{"/init", "help.init"},
-		{"/memory [reload|add <note>]", "help.memory"},
+		{"/memory [reload|add <note>|notes|forget <name>]", "help.memory"},
 		{"/reload", "help.reload"},
 		{"/paste", "help.paste"},
 		{"/trust", "help.trust"},
@@ -235,7 +235,7 @@ var helpGroups = []struct {
 	{"help.group.safety", [][2]string{
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
 		{"/hooks", "help.hooks"},
-		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
+		{"/mode [default|accept-edits|auto|plan|dont-ask|bypass]", "help.mode"},
 		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
 		{"/sandbox", "help.sandbox"},
 	}},
@@ -365,7 +365,7 @@ func isUpdateCommand(line string) bool {
 	return len(f) >= 2 && (strings.EqualFold(f[0], "/skills") || strings.EqualFold(f[0], "/agents") || strings.EqualFold(f[0], "/rules")) && strings.EqualFold(f[1], "update")
 }
 
-func handleSkillsCommand(args []string, app *App) {
+func handleSkillsCommand(ctx context.Context, args []string, app *App) {
 	sub := "list"
 	if len(args) > 0 {
 		sub = strings.ToLower(args[0])
@@ -409,7 +409,7 @@ func handleSkillsCommand(args []string, app *App) {
 		for _, s := range matched {
 			fmt.Printf("  • %s%s%s: %s\n", Bold, safe(s.Name), Reset, safe(s.Description))
 		}
-		searchRegistries(query)
+		searchRegistries(ctx, query)
 		fmt.Println()
 
 	case "registry", "registries":
@@ -437,7 +437,7 @@ func handleSkillsCommand(args []string, app *App) {
 		if len(args) > 2 && args[2] == "--project" {
 			dir = app.Workspace.Dir()
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		ctx, cancel := context.WithTimeout(ctx, skillInstallTimeout)
 		defer cancel()
 		i, err := skillRegistries().Install(ctx, args[1], dir)
 		if err != nil {
@@ -451,14 +451,21 @@ func handleSkillsCommand(args []string, app *App) {
 // skillRegistries is the user's registries (a variable for tests).
 var skillRegistries = skillreg.Default
 
+// How long installing a skill and searching the registries may take; the
+// REPL's Ctrl+C stops either sooner (variables for tests).
+var (
+	skillInstallTimeout = 2 * time.Minute
+	skillSearchTimeout  = 30 * time.Second
+)
+
 // searchRegistries lists what the user's registries offer for query, if
 // they added any.
-func searchRegistries(query string) {
+func searchRegistries(ctx context.Context, query string) {
 	store := skillRegistries()
 	if regs, _ := store.Registries(); len(regs) == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, skillSearchTimeout)
 	defer cancel()
 	found, err := store.Search(ctx, query)
 	fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("skills.registry_hits", "count", len(found)), Reset)
@@ -495,7 +502,7 @@ func handleSessionCommand(args []string, app *App) {
 		for _, s := range list {
 			snapshot := ""
 			if s.Snapshot != "" {
-				snapshot = " " + Cyan + "snapshot " + safe(s.Snapshot) + Reset
+				snapshot = " " + Cyan + i18n.T("session.snapshot_tag", "name", safe(s.Snapshot)) + Reset
 			}
 			fmt.Printf("  • %s%s%s (%s): %s [%s]%s\n", Bold, safe(s.ID), Reset, safe(s.Agent), safe(sessionTitle(s)), i18n.N("session.messages", s.MessageCount), snapshot)
 			if all {
