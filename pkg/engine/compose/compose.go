@@ -81,9 +81,9 @@ func (s *Session) Lock() { s.mu.Lock() }
 // Unlock lets s go after a turn.
 func (s *Session) Unlock() { s.mu.Unlock() }
 
-// Snapshot is a copy of s, to hand out.
-func (s *Session) Snapshot() Session {
-	c := Session{ID: s.ID, Kind: s.Kind, Workspace: s.Workspace, Current: s.Current, CostUSD: s.CostUSD, Updated: s.Updated}
+// Snapshot is a copy of s, to hand out (its own, unheld lock).
+func (s *Session) Snapshot() *Session {
+	c := &Session{ID: s.ID, Kind: s.Kind, Workspace: s.Workspace, Current: s.Current, CostUSD: s.CostUSD, Updated: s.Updated}
 	c.Turns = append([]Turn(nil), s.Turns...)
 	if s.Draft != nil {
 		d := *s.Draft
@@ -357,11 +357,17 @@ func (st *Store) Drop(workspace, id string) {
 	}
 }
 
+// sweepLocked forgets the sessions past Keep. A session in a turn (its
+// lock held) is in use, and Updated is the turn's to write: it's left.
 func (st *Store) sweepLocked() {
 	cut := time.Now().Add(-Keep)
 	for id, s := range st.sessions {
+		if !s.mu.TryLock() {
+			continue
+		}
 		if s.Updated.Before(cut) {
 			delete(st.sessions, id)
 		}
+		s.mu.Unlock()
 	}
 }

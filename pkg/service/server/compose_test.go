@@ -52,7 +52,7 @@ func TestComposeOverTheAPI(t *testing.T) {
 // A session's message: its turns, whether it asks, and a workflow draft
 // with the workflow the canvas opens.
 func TestComposeMsg(t *testing.T) {
-	s := compose.Session{ID: "compose-1", Kind: "workflow", Turns: []compose.Turn{{Role: "user", Text: "a brief"}, {Role: "composer", Text: "Where?", Options: []string{"here"}}}}
+	s := &compose.Session{ID: "compose-1", Kind: "workflow", Turns: []compose.Turn{{Role: "user", Text: "a brief"}, {Role: "composer", Text: "Where?", Options: []string{"here"}}}}
 	m := composeMsg(s)
 	assert.True(t, m.Asking)
 	assert.Equal(t, []string{"here"}, m.Turns[1].Options)
