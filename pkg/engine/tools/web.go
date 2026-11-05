@@ -36,6 +36,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -67,53 +68,6 @@ type WebFetchConfig struct {
 // ErrBlockedAddress is returned when a request targets a non-public address.
 var ErrBlockedAddress = errors.New("destination address is not allowed")
 
-// cgnat is 100.64.0.0/10 (carrier-grade NAT), not covered by netip.IsPrivate.
-var cgnat = netip.MustParsePrefix("100.64.0.0/10")
-
-// reserved are ranges netip doesn't flag that aren't public either:
-// carrier-grade NAT, "this network", IETF protocol assignments,
-// benchmarking, the reserved class E (and broadcast); local-use NAT64,
-// whose embedding varies; and Teredo, whose embedded address is hidden.
-var reserved = []netip.Prefix{
-	cgnat,
-	netip.MustParsePrefix("0.0.0.0/8"),
-	netip.MustParsePrefix("192.0.0.0/24"),
-	netip.MustParsePrefix("198.18.0.0/15"),
-	netip.MustParsePrefix("240.0.0.0/4"),
-	netip.MustParsePrefix("64:ff9b:1::/48"),
-	netip.MustParsePrefix("2001::/32"),
-}
-
-// IPv6 forms that carry an IPv4 address: NAT64 (64:ff9b::/96, the last 4
-// bytes) and 6to4 (2002::/16, bytes 2 to 5). On a DNS64/NAT64 network
-// 64:ff9b::a9fe:a9fe is 169.254.169.254.
-var (
-	nat64     = netip.MustParsePrefix("64:ff9b::/96")
-	sixToFour = netip.MustParsePrefix("2002::/16")
-)
-
-// publicAddr reports whether addr is a routable public address. Loopback,
-// private, link-local (including cloud metadata at 169.254.169.254),
-// multicast, unspecified and reserved addresses are rejected, and so is an
-// IPv6 address whose embedded IPv4 one would be.
-func publicAddr(addr netip.Addr) bool {
-	addr = addr.Unmap()
-	switch b := addr.As16(); {
-	case nat64.Contains(addr):
-		return publicAddr(netip.AddrFrom4([4]byte(b[12:16])))
-	case sixToFour.Contains(addr):
-		return publicAddr(netip.AddrFrom4([4]byte(b[2:6])))
-	}
-	for _, p := range reserved {
-		if p.Contains(addr) {
-			return false
-		}
-	}
-	return addr.IsValid() && !addr.IsLoopback() && !addr.IsPrivate() && !addr.IsLinkLocalUnicast() &&
-		!addr.IsLinkLocalMulticast() && !addr.IsInterfaceLocalMulticast() && !addr.IsMulticast() &&
-		!addr.IsUnspecified()
-}
-
 type webFetcher struct {
 	cfg    WebFetchConfig
 	client *http.Client
@@ -129,7 +83,7 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
 	f := &webFetcher{cfg: cfg}
-	f.allowAddr = func(ap netip.AddrPort) bool { return cfg.AllowPrivate || publicAddr(ap.Addr()) }
+	f.allowAddr = func(ap netip.AddrPort) bool { return cfg.AllowPrivate || browser.PublicAddr(ap.Addr()) }
 
 	dialer := &net.Dialer{
 		Timeout: 10 * time.Second,
@@ -258,7 +212,7 @@ func (f *webFetcher) checkResolved(ctx context.Context, host string) error {
 		return err
 	}
 	for _, a := range addrs {
-		if !publicAddr(a) {
+		if !browser.PublicAddr(a) {
 			return fmt.Errorf("%w: %s is %s, not a public address (set web.allow_private to permit)", ErrBlockedAddress, host, a)
 		}
 	}

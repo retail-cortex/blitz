@@ -43,13 +43,22 @@ func TestPublicAddr(t *testing.T) {
 		addr string
 		want bool
 	}{
-		{"8.8.8.8", true}, {"2606:4700::1111", true},
-		{"127.0.0.1", false}, {"::1", false}, {"10.1.2.3", false}, {"192.168.0.1", false},
-		{"169.254.169.254", false}, {"100.64.0.1", false}, {"0.0.0.0", false}, {"224.0.0.1", false},
-		{"::ffff:127.0.0.1", false},
+		{"8.8.8.8", true}, {"1.1.1.1", true}, {"2606:4700::1111", true},
+		{"127.0.0.1", false}, {"::1", false}, {"10.1.2.3", false}, {"172.16.0.1", false}, {"192.168.0.1", false},
+		{"169.254.169.254", false}, {"fe80::1", false}, {"fc00::1", false}, {"100.64.0.1", false},
+		{"0.0.0.0", false}, {"0.1.2.3", false}, {"224.0.0.1", false}, {"", false},
+		{"198.18.0.1", false}, {"198.19.255.255", false}, {"192.0.0.8", false}, {"240.0.0.1", false}, {"255.255.255.255", false},
+		// IPv6 forms of an IPv4 address are judged by it (N26 followups#5).
+		{"::ffff:127.0.0.1", false}, {"::ffff:8.8.8.8", true},
+		{"::127.0.0.1", false}, {"::10.0.0.1", false}, {"::8.8.8.8", true},
+		{"64:ff9b::7f00:1", false}, {"64:ff9b::a9fe:a9fe", false}, {"64:ff9b::c0a8:1", false}, {"64:ff9b::808:808", true},
+		{"64:ff9b:1::1", false}, {"64:ff9b:1::808:808", false},
+		{"2002:7f00:1::", false}, {"2002:a00:1::1", false}, {"2002:a9fe:a9fe::1", false}, {"2002:808:808::1", true},
+		{"2001:0:4136:e378::1", false},
 	} {
 		t.Run(tt.addr, func(t *testing.T) {
-			assert.Equal(t, tt.want, PublicAddr(netip.MustParseAddr(tt.addr)))
+			a, _ := netip.ParseAddr(tt.addr) // "" is the invalid address
+			assert.Equal(t, tt.want, PublicAddr(a))
 		})
 	}
 }

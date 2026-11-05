@@ -467,3 +467,49 @@ func TestStoreFailures(t *testing.T) {
 	_, err = resolve("https://h.example/index.json", "%zz")
 	assert.Error(t, err)
 }
+
+// A skill installed for the user and for a project under one name: with the
+// project, uninstall removes the project's copy, leaving the user's.
+func TestUninstallPrefersTheProject(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name    string
+		project bool
+		removed string // "project" or "user"
+	}{
+		{name: "with the project, its copy", project: true, removed: "project"},
+		{name: "without one, the user's", project: false, removed: "user"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newRegistry(t)
+			reg.index = Index{Version: 1, Name: "r"}
+			reg.offer("stats", "1", archive(t, map[string]string{"SKILL.md": skillMD("stats")}))
+			s := newStore(t)
+			_, err := s.Add(ctx, "", reg.URL+"/index.json", "")
+			require.NoError(t, err)
+			project := t.TempDir()
+			u, err := s.Install(ctx, "stats", "")
+			require.NoError(t, err)
+			p, err := s.Install(ctx, "stats", project)
+			require.NoError(t, err)
+
+			dir := ""
+			if tc.project {
+				dir = project
+			}
+			i, err := s.Uninstall("stats", dir)
+			require.NoError(t, err)
+			gone, kept := p, u
+			if tc.removed == "user" {
+				gone, kept = u, p
+			}
+			assert.Equal(t, gone.Dir, i.Dir)
+			assert.NoDirExists(t, gone.Dir)
+			assert.DirExists(t, kept.Dir, "the other copy stays")
+			left, err := s.Installed()
+			require.NoError(t, err)
+			require.Len(t, left, 1)
+			assert.Equal(t, kept.Dir, left[0].Dir, "and its record")
+		})
+	}
+}

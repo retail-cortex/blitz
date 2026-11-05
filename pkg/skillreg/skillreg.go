@@ -646,16 +646,21 @@ func (s *Store) Update(ctx context.Context, names ...string) ([]Installed, error
 	return done, errors.Join(errs...)
 }
 
-// Uninstall removes a skill installed from a registry (the user's, or the
-// project's at projectDir when the user has none of that name), and its
-// record; a skill it didn't install is left alone.
+// Uninstall removes a skill installed from a registry (the project's at
+// projectDir, or the user's when the project has none of that name or
+// projectDir is empty), and its record; a skill it didn't install is left
+// alone.
 func (s *Store) Uninstall(name, projectDir string) (Installed, error) {
 	st, err := s.load()
 	if err != nil {
 		return Installed{}, err
 	}
+	dirs := []string{filepath.Join(s.UserSkills, name)}
+	if projectDir != "" {
+		dirs = append([]string{filepath.Join(projectDir, ".agents", "skills", name)}, dirs...)
+	}
 	at := -1
-	for _, dir := range []string{filepath.Join(s.UserSkills, name), filepath.Join(projectDir, ".agents", "skills", name)} {
+	for _, dir := range dirs {
 		if at = slices.IndexFunc(st.Installed, func(i Installed) bool { return i.Dir == dir }); at >= 0 {
 			break
 		}
