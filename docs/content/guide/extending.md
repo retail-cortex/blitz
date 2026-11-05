@@ -201,7 +201,7 @@ blitz --plugin-dir ./lint-kit "try it"             # load one for a run, without
 blitz plugin import claude ~/src/some-claude-plugin    # or: import gemini <extension>
 ```
 
-Installing shows everything the plugin adds, and hooks and MCP commands first, because they run code on your machine; it asks before going ahead (`--yes` skips the question). Blitz records a hash of the installed files and won't load a plugin whose files changed afterwards: `blitz plugin update` fetches it again. A marketplace lists each plugin with its hash, and a plugin that doesn't match isn't installed.
+Installing shows everything the plugin adds, and hooks and MCP commands first, because they run code on your machine; it asks before going ahead (`--yes` skips the question). Blitz records a hash of the installed files and won't load a plugin whose files changed afterwards: `blitz plugin update` fetches it again. A marketplace lists each plugin with its hash, and a plugin that doesn't match isn't installed. Plugins and marketplaces come over https (plain http only from this machine), since their hashes are only as good as the connection. `hooks.toml` and `mcp.toml` hold the `[hooks]` and `[mcp]` tables' contents, without the table's name: a key Blitz doesn't know is an error, so a hook can't be skipped silently. The Claude importer doesn't give an agent a scoped tool such as `Bash(git tag:*)`, since the Blitz tool would allow every command; its report names it.
 
 Plugins you enable load in every workspace. A project can turn some off, or on once you trust its settings:
 

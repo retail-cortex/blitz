@@ -40,6 +40,7 @@ func TestImportClaude(t *testing.T) {
 		"hooks/hooks.json": `{"hooks": {
 			"PreToolUse": [{"matcher": "Edit|Write|Frobnicate", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/check.sh", "timeout": 10}]}],
 			"UserPromptSubmit": [{"hooks": [{"type": "prompt", "prompt": "x"}]}],
+			"PostCompact": [{"hooks": [{"type": "command", "command": "after.sh"}]}],
 			"Elsewhere": [{"hooks": [{"type": "command", "command": "x"}]}]
 		}}`,
 		".mcp.json":              `{"mcpServers": {"reviewdb": {"command": "${CLAUDE_PLUGIN_ROOT}/db", "args": ["--ro"]}, "old": {"type": "sse", "url": "https://x/sse"}}}`,
@@ -65,11 +66,13 @@ func TestImportClaude(t *testing.T) {
 	assert.Contains(t, read(t, filepath.Join(out, "commands", "review.md")), RootVar+"/scripts/review.sh")
 
 	agent := read(t, filepath.Join(out, "agents", "reviewer.md"))
-	assert.Contains(t, agent, "- read_file\n    - grep\n    - run_shell_command")
+	assert.Contains(t, agent, "- read_file\n    - grep\n")
+	assert.NotContains(t, agent, "run_shell_command", "Bash(git diff *) would be the whole shell")
+	require.Len(t, p.Hooks.PostCompact, 1)
 	assert.NotContains(t, agent, "color")
 
 	skipped := strings.Join(r.Skipped, "\n")
-	for _, want := range []string{"Frobnicate", "UserPromptSubmit hook of type prompt", "hook event Elsewhere", "old: SSE", "Teleport", `model "sonnet"`, "output-styles"} {
+	for _, want := range []string{"Frobnicate", "UserPromptSubmit hook of type prompt", "hook event Elsewhere", "old: SSE", "Teleport", `model "sonnet"`, "output-styles", "Bash(git diff *) not given"} {
 		assert.Contains(t, skipped, want)
 	}
 
@@ -213,4 +216,25 @@ func TestImportClaudeUnreadable(t *testing.T) {
 func TestRootVarsMap(t *testing.T) {
 	assert.Nil(t, rootVarsMap(nil))
 	assert.Equal(t, map[string]string{"A": RootVar + "/x"}, rootVarsMap(map[string]string{"A": "${CLAUDE_PLUGIN_ROOT}/x"}))
+}
+
+// A scoped tool isn't widened to the whole tool.
+func TestMapTools(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		in                       []string
+		mapped, unmapped, scoped []string
+	}{
+		{"plain", []string{"Read", " Bash ", "Read"}, []string{"read_file", "run_shell_command"}, nil, nil},
+		{"scoped", []string{"Bash(git tag:*)", "Bash(npm test)", "Read"}, []string{"read_file"}, nil, []string{"Bash(git tag:*)", "Bash(npm test)"}},
+		{"empty scope", []string{"Bash()"}, []string{"run_shell_command"}, nil, nil},
+		{"unknown", []string{"Teleport(x)", ""}, nil, []string{"Teleport(x)"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mapped, unmapped, scoped := mapTools(tc.in)
+			assert.Equal(t, tc.mapped, mapped)
+			assert.Equal(t, tc.unmapped, unmapped)
+			assert.Equal(t, tc.scoped, scoped)
+		})
+	}
 }

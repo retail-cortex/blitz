@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -527,6 +528,33 @@ func TestProviderReadySignIn(t *testing.T) {
 			cfg.LLM.Provider = "openai"
 			tc.set(cfg)
 			assert.Equal(t, tc.want, cfg.providerReady(tc.ref))
+		})
+	}
+}
+
+// Events names every event field of HooksConfig, so a new event can't be
+// left out of ByEvent, Map, WithSource or AppendHooks.
+func TestHooksEvents(t *testing.T) {
+	var h HooksConfig
+	events := h.Events()
+	ty := reflect.TypeOf(h)
+	require.Len(t, events, ty.NumField())
+	for i := range ty.NumField() {
+		f := ty.Field(i)
+		t.Run(f.Name, func(t *testing.T) {
+			list, ok := events[f.Tag.Get("toml")]
+			require.True(t, ok, "Events has no %s", f.Tag.Get("toml"))
+			assert.Same(t, reflect.ValueOf(&h).Elem().Field(i).Addr().Interface(), list)
+		})
+	}
+	one := []HookConfig{{Command: "x"}}
+	all := h.Map(func([]HookConfig) []HookConfig { return one })
+	both := AppendHooks(all, WithSource(all, "f"))
+	for event, list := range both.ByEvent() {
+		t.Run(event, func(t *testing.T) {
+			require.Len(t, list, 2)
+			assert.Equal(t, "", list[0].Source)
+			assert.Equal(t, "f", list[1].Source)
 		})
 	}
 }

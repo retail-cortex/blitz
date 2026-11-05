@@ -670,29 +670,15 @@ func WithSource(h HooksConfig, file string) HooksConfig {
 		}
 		return out
 	}
-	h.PreTool, h.PostTool, h.PromptSubmit = mark(h.PreTool), mark(h.PostTool), mark(h.PromptSubmit)
-	h.SessionStart, h.SessionEnd, h.Stop = mark(h.SessionStart), mark(h.SessionEnd), mark(h.Stop)
-	h.PostToolFailure, h.SubagentStart, h.SubagentStop = mark(h.PostToolFailure), mark(h.SubagentStart), mark(h.SubagentStop)
-	h.PreCompact, h.PostCompact = mark(h.PreCompact), mark(h.PostCompact)
-	h.Notification, h.PermissionRequest = mark(h.Notification), mark(h.PermissionRequest)
-	return h
+	return h.Map(mark)
 }
 
 // AppendHooks adds add's hooks after h's, event by event.
 func AppendHooks(h, add HooksConfig) HooksConfig {
-	h.PreTool = append(h.PreTool, add.PreTool...)
-	h.PostTool = append(h.PostTool, add.PostTool...)
-	h.PromptSubmit = append(h.PromptSubmit, add.PromptSubmit...)
-	h.SessionStart = append(h.SessionStart, add.SessionStart...)
-	h.SessionEnd = append(h.SessionEnd, add.SessionEnd...)
-	h.Stop = append(h.Stop, add.Stop...)
-	h.PostToolFailure = append(h.PostToolFailure, add.PostToolFailure...)
-	h.SubagentStart = append(h.SubagentStart, add.SubagentStart...)
-	h.SubagentStop = append(h.SubagentStop, add.SubagentStop...)
-	h.PreCompact = append(h.PreCompact, add.PreCompact...)
-	h.PostCompact = append(h.PostCompact, add.PostCompact...)
-	h.Notification = append(h.Notification, add.Notification...)
-	h.PermissionRequest = append(h.PermissionRequest, add.PermissionRequest...)
+	more := add.Events()
+	for event, list := range h.Events() {
+		*list = append(*list, *more[event]...)
+	}
 	return h
 }
 
