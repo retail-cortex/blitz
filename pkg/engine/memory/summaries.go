@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/textutil"
+
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 )
 
 // Session summaries are where each earlier session of a workspace left off
@@ -135,23 +137,22 @@ func readSummary(path string) (Summary, error) {
 	}
 	s := Summary{Session: strings.TrimSuffix(filepath.Base(path), ".md"), Path: path}
 	text := string(data)
-	if rest, ok := strings.CutPrefix(text, "---\n"); ok {
-		if head, body, ok := strings.Cut(rest, "\n---\n"); ok {
-			text = body
-			for _, line := range strings.Split(head, "\n") {
-				k, v, _ := strings.Cut(line, ":")
-				v = strings.TrimSpace(v)
-				switch strings.TrimSpace(k) {
-				case "title":
-					if t, err := strconv.Unquote(v); err == nil {
-						v = t
-					}
-					s.Title = v
-				case "messages":
-					s.Messages, _ = strconv.Atoi(v)
-				case "updated":
-					s.Updated, _ = time.Parse(time.RFC3339, v)
+	// One reader for every front matter (a BOM or CRLF lines included).
+	if head, body, ok := frontmatter.Split(data); ok {
+		text = string(body)
+		for _, line := range strings.Split(string(head), "\n") {
+			k, v, _ := strings.Cut(line, ":")
+			v = strings.TrimSpace(v)
+			switch strings.TrimSpace(k) {
+			case "title":
+				if t, err := strconv.Unquote(v); err == nil {
+					v = t
 				}
+				s.Title = v
+			case "messages":
+				s.Messages, _ = strconv.Atoi(v)
+			case "updated":
+				s.Updated, _ = time.Parse(time.RFC3339, v)
 			}
 		}
 	}
