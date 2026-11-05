@@ -18,7 +18,7 @@ go_library(
     name = "jsonl",
     srcs = ["jsonl.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/jsonl",
-    visibility = ["//visibility:public"],
+    visibility = ["//pkg/engine:__subpackages__"],
 )
 
 go_test(
