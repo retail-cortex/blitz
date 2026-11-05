@@ -92,12 +92,17 @@ func TasksLink(alerts string, arrived []*pb.HumanTask) string {
 	return "blitz://tasks?" + q.Encode()
 }
 
-// FetchRuns asks the service for the latest workflow runs, in every
-// workspace (spec_043_workflows WF-19), newest first.
+// RunsLimit is how many of the latest workflow runs the tray asks for
+// each check: enough that the runs ending between two checks (10 s) all
+// come back, so none fails unannounced.
+const RunsLimit = 100
+
+// FetchRuns asks the service for the latest workflow runs (RunsLimit), in
+// every workspace (spec_043_workflows WF-19), newest first.
 func FetchRuns(ctx context.Context, sock string) ([]*pb.WorkflowRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	r, err := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL).ListWorkflowRuns(ctx, connect.NewRequest(&pb.ListWorkflowRunsRequest{Limit: 20}))
+	r, err := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL).ListWorkflowRuns(ctx, connect.NewRequest(&pb.ListWorkflowRunsRequest{Limit: RunsLimit}))
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +110,19 @@ func FetchRuns(ctx context.Context, sock string) ([]*pb.WorkflowRun, error) {
 }
 
 // Failed returns the runs that failed after since and aren't in seen, and
-// adds them to seen.
+// adds them to seen. seen keeps only runs still in the list, so it doesn't
+// grow for the tray's life (the list is the newest runs: one that left it
+// doesn't come back).
 func Failed(seen map[string]bool, runs []*pb.WorkflowRun, since time.Time) []*pb.WorkflowRun {
+	listed := make(map[string]bool, len(runs))
+	for _, r := range runs {
+		listed[r.Id] = true
+	}
+	for id := range seen {
+		if !listed[id] {
+			delete(seen, id)
+		}
+	}
 	var out []*pb.WorkflowRun
 	for _, r := range runs {
 		if r.Status != "failed" || seen[r.Id] || r.Ended == nil || !r.Ended.AsTime().After(since) {

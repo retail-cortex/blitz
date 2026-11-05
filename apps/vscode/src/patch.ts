@@ -17,6 +17,38 @@
 // An approval's proposed change, for the editor's diff view: the files a
 // unified diff names, and a file's text with its hunks applied.
 
+/**
+ * The proposed versions shown in diff views, by their URI: the newest max
+ * are kept (an older diff's right side is empty once it's dropped), and
+ * one goes when its document closes, so they don't pile up for the
+ * extension's life.
+ */
+export class ProposedTexts {
+  private texts = new Map<string, string>();
+  constructor(private readonly max = 100) {}
+
+  set(uri: string, text: string) {
+    this.texts.delete(uri);
+    this.texts.set(uri, text);
+    for (const k of this.texts.keys()) {
+      if (this.texts.size <= this.max) break;
+      this.texts.delete(k);
+    }
+  }
+
+  get(uri: string): string | undefined {
+    return this.texts.get(uri);
+  }
+
+  delete(uri: string) {
+    this.texts.delete(uri);
+  }
+
+  get size() {
+    return this.texts.size;
+  }
+}
+
 /** One file's part of a unified diff. */
 export interface FilePatch {
   /** The file before (undefined when the diff creates it). */

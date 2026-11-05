@@ -43,6 +43,10 @@ const (
 	Uninstaller = "Uninstall Blitz.exe"
 	// App is the app's program in its folder.
 	App = "Blitz.exe"
+	// Marker is the file the setup program leaves in the folder it
+	// installs: the uninstaller removes only a folder that has it (or the
+	// folder the entry in Add or remove programs names).
+	Marker = "Blitz install.txt"
 	// magic ends a setup program that carries the zip: then the zip's
 	// length (8 bytes, little-endian) and magic.
 	magic = "BLITZZIP"

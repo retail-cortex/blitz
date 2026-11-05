@@ -32,6 +32,7 @@ go_library(
         "//pkg/engine/skills",
         "//pkg/engine/tools",
         "//pkg/enterprise",
+        "//pkg/guardrails",
         "//pkg/i18n",
         "//pkg/observability",
         "//pkg/plugins",

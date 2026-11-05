@@ -16,6 +16,17 @@
 
 // What the editor sends the chat's composer.
 
+import { isAbsolute, relative, sep } from "node:path";
+
+/**
+ * file's path in the workspace dir (the chat's), or undefined when it
+ * isn't in it: a file of another folder isn't the chat's to name (VSC-02a).
+ */
+export function inWorkspace(dir: string, file: string): string | undefined {
+  const p = relative(dir, file);
+  return p === "" || p === ".." || p.startsWith(".." + sep) || isAbsolute(p) ? undefined : p;
+}
+
 /** A selection as the composer gets it: where it's from, and the code. */
 export function selectionText(path: string, from: number, to: number, language: string, text: string): string {
   const where = from === to ? `line ${from}` : `lines ${from}–${to}`;

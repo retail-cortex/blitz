@@ -38,6 +38,7 @@ func (otherSystem) Desktop() string                   { return "" }
 func (otherSystem) Shortcut(string, string) error     { return errWindowsOnly }
 func (otherSystem) WriteEntry(wininstall.Entry) error { return errWindowsOnly }
 func (otherSystem) DeleteEntry() error                { return errWindowsOnly }
+func (otherSystem) InstalledRoot() string             { return "" }
 func (otherSystem) RemoveRunValue() error             { return errWindowsOnly }
 func (otherSystem) RemoveFromPath(string) error       { return errWindowsOnly }
 func (otherSystem) Start(string, ...string) error     { return errWindowsOnly }

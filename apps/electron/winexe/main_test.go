@@ -53,7 +53,7 @@ func runfile(t *testing.T, p string) string {
 func TestRewrite(t *testing.T) {
 	exe := runfile(t, *exePath)
 	out := filepath.Join(t.TempDir(), "Blitz.exe")
-	require.NoError(t, run(exe, runfile(t, *iconPath), "0.6.6", out, blitzExe))
+	require.NoError(t, run(exe, runfile(t, *iconPath), "0.6.6", out, defaultDetails))
 
 	before := load(t, exe)
 	after := load(t, out)
@@ -138,16 +138,16 @@ func TestRewriteRefuses(t *testing.T) {
 		{"not a program", notExe, write("ok2.png", 256, 256), filepath.Join(dir, "o.exe"), "reading the program's resources"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.ErrorContains(t, run(tc.in, tc.icon, "1.0.0", tc.out, blitzExe), tc.want)
+			assert.ErrorContains(t, run(tc.in, tc.icon, "1.0.0", tc.out, defaultDetails), tc.want)
 		})
 	}
 	if *exePath != "" {
 		exe := runfile(t, *exePath)
-		assert.ErrorContains(t, run(exe, write("small.png", 64, 64), "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "at least 256 px")
-		assert.ErrorContains(t, run(exe, write("wide.png", 512, 256), "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "must be square")
+		assert.ErrorContains(t, run(exe, write("small.png", 64, 64), "1.0.0", filepath.Join(dir, "o.exe"), defaultDetails), "at least 256 px")
+		assert.ErrorContains(t, run(exe, write("wide.png", 512, 256), "1.0.0", filepath.Join(dir, "o.exe"), defaultDetails), "must be square")
 		bad := filepath.Join(dir, "bad.png")
 		require.NoError(t, os.WriteFile(bad, []byte("not a png"), 0o600))
-		assert.ErrorContains(t, run(exe, bad, "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "reading the icon")
+		assert.ErrorContains(t, run(exe, bad, "1.0.0", filepath.Join(dir, "o.exe"), defaultDetails), "reading the icon")
 	}
 }
 

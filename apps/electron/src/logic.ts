@@ -119,6 +119,23 @@ export function shouldRenew(error: string, url: string, origin: string, lastRene
   return origin !== "" && error.startsWith("net::ERR_CERT_") && originOf(url) === origin && now - lastRenew >= renewEvery;
 }
 
+/**
+ * How the host (blitz-tray --serve) is started again when it stops on its
+ * own (EL-02): a run shorter than quickMs counts as a quick exit.
+ */
+export const hostRestart = { quickMs: 10_000, baseMs: 1_000, maxMs: 30_000, maxQuick: 6 };
+
+/**
+ * How long to wait before starting the host again after quickExits quick
+ * exits in a row: at once after a long run, then 1 s, 2 s, 4 s … (at most
+ * maxMs), and undefined (give up, and say so) after more than maxQuick.
+ */
+export function restartDelay(quickExits: number): number | undefined {
+  if (quickExits <= 0) return 0;
+  if (quickExits > hostRestart.maxQuick) return undefined;
+  return Math.min(hostRestart.baseMs * 2 ** (quickExits - 1), hostRestart.maxMs);
+}
+
 /** The origin of a URL ("" when it isn't one). */
 export function originOf(url: string): string {
   try {
@@ -617,6 +634,15 @@ export interface AgentReach {
   deny: string[];
 }
 
+/**
+ * The strictest of two reaches: no private addresses, and both deny
+ * lists. A session's requests without a view (a worker's) are held to
+ * it (EL-17).
+ */
+export function strictestReach(had: AgentReach | undefined, reach: AgentReach): AgentReach {
+  return { allowLocal: false, deny: [...new Set([...(had?.deny ?? []), ...reach.deny])] };
+}
+
 /** The list of strings in v, a list from the page; anything else is left out. */
 export function stringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
@@ -630,11 +656,86 @@ export function matchDomain(host: string, pattern: string): boolean {
   return h === p;
 }
 
+/** The 16-bit groups of IPv6 address s (a zone and a trailing dotted IPv4 part allowed), or undefined. */
+export function ipv6Groups(s: string): number[] | undefined {
+  let a = s.toLowerCase().replace(/%.*$/, "");
+  const tail = /^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+  if (tail) {
+    const v4 = ipv4Bytes(tail[2]);
+    if (!v4) return undefined;
+    a = tail[1] + ((v4[0] << 8) | v4[1]).toString(16) + ":" + ((v4[2] << 8) | v4[3]).toString(16);
+  }
+  const halves = a.split("::");
+  if (halves.length > 2) return undefined;
+  const part = (h: string) => (h === "" ? [] : h.split(":"));
+  const head = part(halves[0]);
+  const rest = halves.length === 2 ? part(halves[1]) : [];
+  const fill = 8 - head.length - rest.length;
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return undefined;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? fill : 0).fill("0"), ...rest];
+  if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return undefined;
+  return groups.map((g) => parseInt(g, 16));
+}
+
+/** The four bytes of dotted IPv4 address s, or undefined. */
+export function ipv4Bytes(s: string): number[] | undefined {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  const b = m?.slice(1).map(Number);
+  return b && b.every((x) => x <= 255) ? b : undefined;
+}
+
 /**
- * Whether the agent's view may request url (EL-17), as the headless
- * browser's proxy decides for its pages (WEB-32): web and data addresses
- * only, never a denied domain or a link-local address (cloud metadata),
- * and loopback and private ones only with allowLocal.
+ * The IPv4 address an IPv6 one carries, as the network delivers it:
+ * IPv4-mapped (::ffff:a.b.c.d), IPv4-compatible (::a.b.c.d), NAT64
+ * (64:ff9b::/96 and the local-use 64:ff9b:1::/48) and 6to4 (2002::/16).
+ */
+function embeddedIPv4(g: number[]): number[] | undefined {
+  const v4 = (hi: number, lo: number) => [hi >> 8, hi & 255, lo >> 8, lo & 255];
+  const zero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+  if (zero(0, 5) && g[5] === 0xffff) return v4(g[6], g[7]);
+  if (zero(0, 6) && (g[6] !== 0 || g[7] > 1)) return v4(g[6], g[7]);
+  if (g[0] === 0x64 && g[1] === 0xff9b && (zero(2, 6) || g[2] === 1)) return v4(g[6], g[7]);
+  if (g[0] === 0x2002) return v4(g[1], g[2]);
+  return undefined;
+}
+
+/**
+ * Whether the agent's view may reach address (an IP address, as typed or
+ * as a name resolved to), as the headless browser's proxy decides for
+ * what it dials (WEB-32): link-local (cloud metadata), multicast and
+ * unspecified addresses never, loopback and private ones only with
+ * allowLocal. An IPv6 address carrying an IPv4 one (mapped, NAT64, 6to4)
+ * is judged by that; what isn't an address isn't allowed.
+ */
+export function agentAddressAllowed(address: string, reach: AgentReach): boolean {
+  let v4 = ipv4Bytes(address);
+  const g = v4 ? undefined : ipv6Groups(address.replace(/^\[|\]$/g, ""));
+  if (g) v4 = embeddedIPv4(g);
+  if (v4) {
+    const [a, b] = v4;
+    if (a === 169 && b === 254) return false; // link-local: never
+    if (a === 0 || a >= 224) return false; // unspecified, multicast, reserved
+    const local = a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    return !local || reach.allowLocal;
+  }
+  if (!g) return false;
+  if ((g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xff00) === 0xff00) return false; // link-local, multicast
+  if (g.every((x) => x === 0)) return false; // unspecified
+  const local = (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) || (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfec0;
+  return !local || reach.allowLocal;
+}
+
+/** Whether host (a URL's hostname, brackets and all) is an IP address rather than a name. */
+export function isAddress(host: string): boolean {
+  return ipv4Bytes(host) !== undefined || ipv6Groups(host.replace(/^\[|\]$/g, "")) !== undefined;
+}
+
+/**
+ * Whether the agent's view may request url (EL-17), as far as its text
+ * tells: web and data addresses only, never a denied domain, an address
+ * by agentAddressAllowed, and local names (localhost, .local, .internal)
+ * only with allowLocal. A name's addresses are checked once resolved
+ * (agentRequestResolved).
  */
 export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
   let u: URL;
@@ -647,21 +748,30 @@ export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
   if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "ws:" && u.protocol !== "wss:") return false;
   const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (reach.deny.some((d) => matchDomain(host, d))) return false;
-  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host)?.slice(1).map(Number);
-  if (v4) {
-    const [a, b] = v4;
-    if (a === 169 && b === 254) return false; // link-local: never
-    if (a === 0) return false;
-    const local = a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
-    return !local || reach.allowLocal;
-  }
-  if (host.includes(":")) {
-    if (/^fe[89ab]/.test(host)) return false; // link-local
-    const local = host === "::1" || /^f[cd]/.test(host) || host === "::";
-    return !local || reach.allowLocal;
-  }
+  if (isAddress(host)) return agentAddressAllowed(host, reach);
   const localName = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal");
   return !localName || reach.allowLocal;
+}
+
+/**
+ * Whether the agent's view may request url (EL-17), as the headless
+ * browser's proxy decides for its pages (WEB-32): agentRequestAllowed,
+ * then, for a name, every address it resolves to (resolve, the view's
+ * session's resolver, so what's checked is what Chromium dials from its
+ * cache) by agentAddressAllowed. A name that doesn't resolve is refused.
+ */
+export async function agentRequestResolved(raw: string, reach: AgentReach, resolve: (host: string) => Promise<string[]>): Promise<boolean> {
+  if (!agentRequestAllowed(raw, reach)) return false;
+  const u = new URL(raw);
+  if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "ws:" && u.protocol !== "wss:") return true;
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (isAddress(host)) return true;
+  try {
+    const addresses = await resolve(host);
+    return addresses.length > 0 && addresses.every((a) => agentAddressAllowed(a, reach));
+  } catch {
+    return false;
+  }
 }
 
 /** A DevTools command the engine sent for the agent's view, or undefined. */
@@ -686,7 +796,13 @@ export function devToolsCommand(raw: unknown): DevToolsCommand | undefined {
   return { id: c.id, method: c.method, params: c.params, sessionId: typeof c.sessionId === "string" ? c.sessionId : undefined };
 }
 
-/** Whether the agent may send method to its view: never the app's own browser, other targets, or its storage (EL-17). */
+/**
+ * Whether the agent may send method to its view: never the app's own
+ * browser, other targets, or storage beyond the page's (EL-17): not
+ * Storage, DOMStorage, IndexedDB or CacheStorage, nor the cookie methods
+ * that reach every site's cookies in the view's profile.
+ */
 export function devToolsAllowed(method: string): boolean {
-  return !/^(Browser|Target|SystemInfo|Storage|Tethering|ServiceWorker)\./.test(method);
+  if (/^(Browser|Target|SystemInfo|Storage|DOMStorage|IndexedDB|CacheStorage|Tethering|ServiceWorker)\./.test(method)) return false;
+  return !/^Network\.(getAllCookies|getCookies|setCookie|setCookies|deleteCookies|clearBrowserCookies)$/.test(method);
 }

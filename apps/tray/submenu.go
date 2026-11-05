@@ -31,8 +31,18 @@ type submenu struct {
 	key    string
 	items  []*systray.MenuItem
 	done   chan struct{} // closed when the items go, ending their clicks' goroutines
-	// The parent's title as last set (slots set it).
+	// The parent's title as last set (setTitle; slots set it).
 	title string
+}
+
+// setTitle sets the parent's title, unless it's what's shown.
+func (m *submenu) setTitle(title string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.title != title {
+		m.title = title
+		m.parent.SetTitle(title)
+	}
 }
 
 // show draws entries, unless they're what's drawn.
@@ -112,12 +122,7 @@ func (s *slots) show(entries []tray.Entry, click func(tray.Action)) {
 			continue
 		}
 		e := entries[i]
-		sm.mu.Lock()
-		if title := tray.Label(e); sm.title != title {
-			sm.title = title
-			sm.parent.SetTitle(title)
-		}
-		sm.mu.Unlock()
+		sm.setTitle(tray.Label(e))
 		sm.parent.Show()
 		sm.show(e.Children, click)
 	}

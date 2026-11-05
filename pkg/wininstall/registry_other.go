@@ -27,5 +27,8 @@ func WriteEntry(Entry) error { return errNotWindows }
 // DeleteEntry removes the app's entry (Windows only).
 func DeleteEntry() error { return errNotWindows }
 
+// InstallLocation is the folder the app's entry names: none but on Windows.
+func InstallLocation() string { return "" }
+
 // SetDisplayVersion updates the entry's version (nothing to do but on Windows).
 func SetDisplayVersion(string) error { return nil }

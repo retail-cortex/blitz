@@ -15,7 +15,19 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { selectionText } from "./compose";
+import { join } from "node:path";
+import { inWorkspace, selectionText } from "./compose";
+
+describe("inWorkspace", () => {
+  const dir = join("/w", "a");
+  it.each([
+    ["a file in it", join(dir, "src", "x.go"), join("src", "x.go")],
+    ["a file of another folder", join("/w", "b", "src", "x.go"), undefined],
+    ["a folder beside it with its name as a prefix", join("/w", "ab", "x.go"), undefined],
+    ["the folder itself", dir, undefined],
+    ["a name starting with two dots", join(dir, "..x"), "..x"],
+  ])("%s", (_name, file, want) => expect(inWorkspace(dir, file)).toBe(want));
+});
 
 describe("selectionText", () => {
   it("says where the code is from, fenced with its language", () => {

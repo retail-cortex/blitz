@@ -77,7 +77,7 @@ every login.`,
 			if cmd.Flags().Changed("license") {
 				return showLicense(cmd, license)
 			}
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := untilStopped(cmd.Context())
 			defer stop()
 			o.Version = version
 			return service.Run(ctx, o)
@@ -188,14 +188,18 @@ func showLicense(cmd *cobra.Command, which string) error {
 // errUsage marks a bad flag or argument.
 var errUsage = errors.New("usage")
 
-// newGitCredentialCommand is blitzd git-credential: Git's credential helper
-// for the organization's service (spec_053_enterprise EN-61), set in each
-// organization clone's own Git settings. It asks the running service for
-// the access token, which only the service renews; with no service
-// running, it answers nothing.
+// untilStopped is ctx, cancelled when the process is asked to stop
+// (Ctrl-C, or SIGTERM: a service manager's stop, a cloud runner's), so
+// what runs can end and save its state rather than be killed at once.
+func untilStopped(ctx context.Context) (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+}
+
 // newRunJobCommand is blitzd run-job: one run of a job the organization's
-// service runs (spec_009_jobs JB-10), in the runner the service starts,
-// which describes the run in its environment.
+// service runs (blitz-enterprise's spec_009_jobs JB-10), in the runner the
+// service starts, which describes the run in its environment. The
+// runner's stop (SIGTERM) ends the run as the service's stop ends it, so
+// RunJob reports and saves it.
 func newRunJobCommand() *cobra.Command {
 	var configDir string
 	cmd := &cobra.Command{
@@ -208,13 +212,20 @@ func newRunJobCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%w: %v", errUsage, err)
 			}
-			return service.RunJob(cmd.Context(), j, service.JobOptions{Config: configDir, Client: "blitzd " + version + " (job)"})
+			ctx, stop := untilStopped(cmd.Context())
+			defer stop()
+			return service.RunJob(ctx, j, service.JobOptions{Config: configDir, Client: "blitzd " + version + " (job)"})
 		},
 	}
 	cmd.Flags().StringVar(&configDir, "config", "", "configuration file (default: the usual search)")
 	return cmd
 }
 
+// newGitCredentialCommand is blitzd git-credential: Git's credential helper
+// for the organization's service (spec_053_enterprise EN-61), set in each
+// organization clone's own Git settings. It asks the running service for
+// the access token, which only the service renews; with no service
+// running, it answers nothing.
 func newGitCredentialCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    "git-credential <get|store|erase>",

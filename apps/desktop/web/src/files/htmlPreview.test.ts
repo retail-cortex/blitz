@@ -16,13 +16,18 @@
 
 import { Window } from "happy-dom";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { inlineHtml, isRelative, resolveRef } from "./htmlPreview";
+import { inlineHtml, isRelative, previewSandbox, resolveRef } from "./htmlPreview";
 
 const dom = new Window();
 beforeAll(() => vi.stubGlobal("DOMParser", dom.DOMParser));
 afterAll(() => vi.unstubAllGlobals());
 
 describe("an HTML file's preview", () => {
+  it("runs no scripts and opens no windows (FIL-54a)", () => {
+    const allowed = previewSandbox.split(/\s+/).filter(Boolean);
+    for (const flag of ["allow-scripts", "allow-popups", "allow-forms", "allow-same-origin", "allow-top-navigation"]) expect(allowed).not.toContain(flag);
+  });
+
   it.each([
     ["style.css", true],
     ["./img/a.png", true],
