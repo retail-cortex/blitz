@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
@@ -143,8 +145,11 @@ func newWebSearcher(cfg WebSearchConfig) (*webSearcher, error) {
 	if cfg.MaxResults <= 0 {
 		cfg.MaxResults = searchDefaultResults
 	}
+	if cfg.MaxResults > searchMaxResults {
+		slog.Warn("web search", "search_max_results", cfg.MaxResults, "used", searchMaxResults, "why", "searches return at most this many results")
+	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 20 * time.Second
+		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
 	return &webSearcher{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}}, nil
 }

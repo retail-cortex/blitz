@@ -743,7 +743,7 @@ func applyFeatureDefaults(c *Config) {
 	c.PDF = PDFConfig{PageSize: "auto"}
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
-	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
+	c.Web = WebConfig{Enabled: true, MaxBytes: DefaultWebMaxBytes, TimeoutSeconds: DefaultWebTimeoutSeconds, BrowserFallback: true}
 	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask", Open: "ask"}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
@@ -786,3 +786,16 @@ type HarnessConfig struct {
 
 // DefaultReflectThreshold is [harness] reflect_threshold's default.
 const DefaultReflectThreshold = 5
+
+// Defaults the tools fall back on for a setting left at 0, the same as
+// DefaultConfig's, so each is defined once.
+const (
+	// DefaultShellTimeoutSeconds is tools.shell_timeout_seconds'.
+	DefaultShellTimeoutSeconds = 120
+	// DefaultMaxFileSizeBytes is tools.max_file_size_bytes'.
+	DefaultMaxFileSizeBytes = 10 << 20
+	// DefaultWebMaxBytes is web.max_bytes'.
+	DefaultWebMaxBytes = 2 << 20
+	// DefaultWebTimeoutSeconds is web.timeout_seconds', and web search's.
+	DefaultWebTimeoutSeconds = 20
+)

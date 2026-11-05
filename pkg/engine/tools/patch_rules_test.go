@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -158,4 +159,26 @@ func TestRegistryWebSettingsOnce(t *testing.T) {
 			assert.Same(t, r.rules, tt.got.Rules)
 		})
 	}
+}
+
+// Limits are named where they stop something, and the tools' defaults are
+// the configuration's (N26 engine-tools-2#19, #20).
+func TestLimitsAreNamed(t *testing.T) {
+	tests := []struct {
+		name, got, want string
+	}{
+		{"a shell time-out", timedOut(2 * time.Minute), "set timeout_seconds, up to 1800"},
+		{"a workspace too large to copy", errWorkspaceTooBig.Error(), "over 512 MiB or 50000 files"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Contains(t, tt.got, tt.want)
+		})
+	}
+	d := config.DefaultConfig()
+	assert.Equal(t, time.Duration(d.Tools.ShellTimeoutSeconds)*time.Second, defaultShellTimeout)
+	assert.Equal(t, d.Tools.MaxFileSizeBytes, DefaultMaxFileSize)
+	f := newWebFetcher(WebFetchConfig{})
+	assert.Equal(t, d.Web.MaxBytes, f.cfg.MaxBytes)
+	assert.Equal(t, time.Duration(d.Web.TimeoutSeconds)*time.Second, f.cfg.Timeout)
 }

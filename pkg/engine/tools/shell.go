@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	defaultShellTimeout = 120 * time.Second
+	defaultShellTimeout = config.DefaultShellTimeoutSeconds * time.Second
 	maxShellTimeout     = 30 * time.Minute
 	shellOutputLimit    = 100 * 1024
 	// shellWaitDelay bounds how long Wait blocks on pipes held open by
@@ -186,7 +187,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 	// The time limit or a cancellation while the sandbox got ready: as if
 	// it had stopped the command, which never started.
 	case errors.Is(cmdCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
-		return RunShellCommandOutput{ExitCode: -1, Error: fmt.Sprintf("command timed out after %s", timeout), DurationMs: time.Since(start).Milliseconds()}
+		return RunShellCommandOutput{ExitCode: -1, Error: timedOut(timeout), DurationMs: time.Since(start).Milliseconds()}
 	case ctx.Err() != nil:
 		return RunShellCommandOutput{ExitCode: -1, Error: "command cancelled", DurationMs: time.Since(start).Milliseconds()}
 	default:
@@ -211,7 +212,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 	switch {
 	case errors.Is(cmdCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
 		result.ExitCode = -1
-		result.Error = fmt.Sprintf("command timed out after %s", timeout)
+		result.Error = timedOut(timeout)
 	case ctx.Err() != nil:
 		result.ExitCode = -1
 		result.Error = "command cancelled"
@@ -256,4 +257,9 @@ func sessionOf(ctx context.Context) (id string) {
 		return c.SessionID()
 	}
 	return ""
+}
+
+// timedOut says a command ran out of time, and how to give one more.
+func timedOut(after time.Duration) string {
+	return fmt.Sprintf("command timed out after %s (set timeout_seconds, up to %d, for a longer one, or run it in the background)", after, int(maxShellTimeout/time.Second))
 }

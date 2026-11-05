@@ -900,8 +900,8 @@ func DefaultConfig() *Config {
 			},
 		},
 		Tools: ToolsConfig{
-			ShellTimeoutSeconds: 120,
-			MaxFileSizeBytes:    10 * 1024 * 1024, // 10MB
+			ShellTimeoutSeconds: DefaultShellTimeoutSeconds,
+			MaxFileSizeBytes:    DefaultMaxFileSizeBytes,
 			WorkspaceDir:        ".",
 			AutoApproveCommands: false,
 			MaxParallel:         8,

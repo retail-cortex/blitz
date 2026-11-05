@@ -26,10 +26,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // DefaultMaxFileSize bounds how much of a single file the tools will load into memory.
-const DefaultMaxFileSize int64 = 10 * 1024 * 1024
+const DefaultMaxFileSize int64 = config.DefaultMaxFileSizeBytes
 
 var (
 	// ErrOutsideWorkspace is returned when a path is not under any sandbox root.

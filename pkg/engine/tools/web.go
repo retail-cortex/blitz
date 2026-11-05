@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -122,10 +123,10 @@ type webFetcher struct {
 
 func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 	if cfg.MaxBytes <= 0 {
-		cfg.MaxBytes = 2 << 20
+		cfg.MaxBytes = config.DefaultWebMaxBytes
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 20 * time.Second
+		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
 	f := &webFetcher{cfg: cfg}
 	f.allowAddr = func(ap netip.AddrPort) bool { return cfg.AllowPrivate || publicAddr(ap.Addr()) }

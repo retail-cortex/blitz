@@ -41,7 +41,7 @@ const (
 )
 
 // errWorkspaceTooBig refuses a copy past the bounds.
-var errWorkspaceTooBig = errors.New("the workspace is too large to copy for a script that writes it")
+var errWorkspaceTooBig = fmt.Errorf("the workspace is too large to copy for a script that writes it (over %d MiB or %d files)", wsCopyMaxBytes>>20, wsCopyMaxFiles)
 
 // wsCopy is a workspace's copy for a script: the files as copied, by
 // relative path, with their hashes.

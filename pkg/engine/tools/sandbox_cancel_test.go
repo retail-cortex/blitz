@@ -87,7 +87,7 @@ func TestShellTimeoutWhileTheSandboxGetsReady(t *testing.T) {
 	start := time.Now()
 	out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "true", TimeoutSeconds: 1})
 	assert.Equal(t, -1, out.ExitCode)
-	assert.Equal(t, "command timed out after 1s", out.Error)
+	assert.Contains(t, out.Error, "command timed out after 1s (set timeout_seconds, up to 1800")
 	assert.Less(t, time.Since(start), 10*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())

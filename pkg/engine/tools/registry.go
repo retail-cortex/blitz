@@ -233,6 +233,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		ws.Close()
 		return nil, err
 	}
+	if cfg.Tools.ShellTimeoutSeconds > int(maxShellTimeout/time.Second) {
+		slog.Warn("tools.shell_timeout_seconds is over the limit", "set", cfg.Tools.ShellTimeoutSeconds, "used", int(maxShellTimeout/time.Second))
+	}
 	env := &ExecEnv{Sandbox: osb, ScrubEnv: sb.ScrubEnv, Dir: ws.Dir()}
 	// Signed in with Google's ADC, and sharing it (sandbox.share_adc): the
 	// model's commands get a copy of it (gcloud's directory stays blocked,

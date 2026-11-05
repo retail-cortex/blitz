@@ -25,6 +25,7 @@ Args: `command`, `cwd?` (inside the workspace), `timeout_seconds?`, `background?
 - **SH-02** Policy `deny` → "blocked by command policy: <reason>", nothing runs. `auto_approve` → runs without asking. Otherwise approval (kind `run_command`, key = exact command in this workspace, target = the command). The detail shows `(in <cwd>)`, `[background]`, and the policy's reason when it could not auto-approve.
 - **SH-03** Runs `bash -c <command>` in the cwd, stdout+stderr interleaved into one buffer capped at 100 KiB (excess discarded while running, with a truncation notice that never splits a UTF-8 rune).
 - **SH-04** Timeout: `tools.shell_timeout_seconds` (default 120 s), per-call override, capped at 30 min (clamped before conversion to avoid overflow). Timeout → exit −1 "command timed out after …"; cancellation → exit −1 "command cancelled"; otherwise the process exit code.
+- **SH-04a** *2026-11-05 (scan N26-engine-tools-2#19: the time-out didn't say how to allow longer, and a setting over the cap was cut without a word).* The time-out reads "command timed out after 2m0s (set timeout_seconds, up to 1800, for a longer one, or run it in the background)", and a `tools.shell_timeout_seconds` over 1800 is logged as over the limit when the workspace opens. The 120 s default is `config.DefaultShellTimeoutSeconds`, used by both the settings and the tool.
 - **SH-05** After a kill, `Wait` waits at most 2 s for pipes held open by descendants.
 
 ## 3. Command policy
