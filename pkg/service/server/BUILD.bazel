@@ -174,6 +174,7 @@ go_test(
         "//pkg/engine/workers",
         "//pkg/enterprise",
         "//pkg/enterprise/enterprisetest",
+        "//pkg/i18n",
         "//pkg/images",
         "//pkg/orgsync",
         "//pkg/secrets",

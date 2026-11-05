@@ -64,7 +64,7 @@ import { parseForm, problemText, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
 import { ApprovalCard } from "../Conversation";
-import { message } from "../errors";
+import { message, reasonText } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { HumanTask, SkillInfo, WorkflowFile, WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import type { ItemIntent } from "../intent";
@@ -575,7 +575,7 @@ export function WorkflowsPane({
         }
         if (k?.case === "finished") {
           const err = k.value.error;
-          if (err) snack(err.message || err.reason, { error: true });
+          if (err) snack(err.message || reasonText(err.reason), { error: true });
           return;
         }
       }
