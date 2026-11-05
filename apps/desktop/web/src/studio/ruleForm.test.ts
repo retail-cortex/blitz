@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { RuleFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName } from "./ruleForm";
 
-const rule = (o: Partial<{ name: string; when: string; action: string; order: number; paths: string[]; agents: string[] }>) => create(RuleFileSchema, { name: "r", text: "x", ...o });
+const rule = (o: Partial<{ name: string; when: string; action: string; order: number; paths: string[]; agents: string[]; problem: string }>) => create(RuleFileSchema, { name: "r", text: "x", ...o });
 
 describe("the rule form", () => {
   it("reads a gate and writes back only a gate's fields", () => {
@@ -50,5 +50,21 @@ describe("the rule form", () => {
     expect(moved(["a", "b", "c"], 0, 5)).toEqual(["a", "b", "c"]);
     expect(nextOrder(s.before)).toBe(30);
     expect(nextOrder([])).toBe(10);
+  });
+
+  it.each([
+    { name: "a misspelt when", r: { name: "gate", when: "after-agent", action: "block", agents: ["qa"], problem: 'when "after-agent": before_agent or after_agent' }, want: { when: "after-agent", action: "block", agents: ["qa"] } },
+    { name: "an action the form doesn't offer", r: { name: "gate", when: "before_agent", action: "stop", problem: "action" }, want: { when: "before_agent", action: "stop" } },
+  ])("keeps $name as written, so saving doesn't make the gate an instruction", ({ r, want }) => {
+    const f = formFromRule(rule(r));
+    expect(f).toMatchObject(want);
+    expect(specFromForm(f)).toMatchObject(want);
+  });
+
+  it("lists a rule with a problem that isn't a gate on its own, not under instructions", () => {
+    const s = ruleSections([rule({ name: "typo", when: "after-agent", action: "block", problem: "when" }), rule({ name: "plain" }), rule({ name: "bad-gate", when: "before_agent", problem: "action" })]);
+    expect(s.broken.map((r) => r.name)).toEqual(["typo"]);
+    expect(s.instructions.map((r) => r.name)).toEqual(["plain"]);
+    expect(s.before.map((r) => r.name)).toEqual(["bad-gate"]);
   });
 });

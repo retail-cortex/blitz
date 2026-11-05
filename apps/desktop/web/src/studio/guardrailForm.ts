@@ -76,8 +76,8 @@ export function formFromGuardrail(g: GuardrailFile): GuardrailForm {
     description: g.description,
     pii: g.pii,
     judge: g.judge,
-    maxCostUsd: num(l?.maxCostUsd ?? 0),
-    maxTurns: num(l?.maxTurns ?? 0),
+    maxCostUsd: String(l?.maxCostUsd ?? defaultLimits.maxCostUsd),
+    maxTurns: String(l?.maxTurns ?? defaultLimits.maxTurns),
     maxFilesChanged: num(l?.maxFilesChanged ?? 0),
     domains: (l?.allowedDomains ?? []).join(", "),
     commands: (l?.commands ?? []).join("\n"),
@@ -110,6 +110,33 @@ const split = (s: string, by: RegExp) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+/**
+ * A limits ceiling as typed: empty is the default (sent as the default,
+ * which the service leaves out of the file, so it follows the default),
+ * 0 is no limit, and anything else not a number at or above 0 (a whole
+ * one if whole) is NaN.
+ */
+function limitValue(s: string, fallback: number, whole: boolean): number {
+  const v = s.trim();
+  if (!v) return fallback;
+  if (!/^\d+(\.\d+)?$|^\.\d+$/.test(v)) return NaN;
+  const n = Number(v);
+  return whole && !Number.isInteger(n) ? NaN : n;
+}
+
+/** Whether a ceiling as typed is 0: no limit. */
+export const noLimit = (s: string) => s.trim() !== "" && limitValue(s, 1, false) === 0;
+
+/** The limits fields that aren't a number the guardrail takes (the form shows these and doesn't save). */
+export function limitsProblems(f: GuardrailForm): Partial<Record<"maxCostUsd" | "maxTurns" | "maxFilesChanged", true>> {
+  if (f.builtin !== "limits") return {};
+  const out: Partial<Record<"maxCostUsd" | "maxTurns" | "maxFilesChanged", true>> = {};
+  if (Number.isNaN(limitValue(f.maxCostUsd, 0, false))) out.maxCostUsd = true;
+  if (Number.isNaN(limitValue(f.maxTurns, 0, true))) out.maxTurns = true;
+  if (Number.isNaN(limitValue(f.maxFilesChanged, 0, true))) out.maxFilesChanged = true;
+  return out;
+}
+
 /** The form as SaveGuardrail takes it: a built-in's own settings only. */
 export function specFromForm(f: GuardrailForm) {
   const b = f.builtin;
@@ -125,7 +152,13 @@ export function specFromForm(f: GuardrailForm) {
     judge: b === "prompt_injection" && f.judge,
     limits:
       b === "limits"
-        ? { maxCostUsd: Number(f.maxCostUsd) || 0, maxTurns: Math.floor(Number(f.maxTurns)) || 0, maxFilesChanged: Math.floor(Number(f.maxFilesChanged)) || 0, allowedDomains: split(f.domains, /,/), commands: split(f.commands, /\n/) }
+        ? {
+            maxCostUsd: limitValue(f.maxCostUsd, Number(defaultLimits.maxCostUsd), false),
+            maxTurns: limitValue(f.maxTurns, Number(defaultLimits.maxTurns), true),
+            maxFilesChanged: limitValue(f.maxFilesChanged, 0, true),
+            allowedDomains: split(f.domains, /,/),
+            commands: split(f.commands, /\n/),
+          }
         : undefined,
     text: b ? "" : f.text,
     off: f.off,
