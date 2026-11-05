@@ -123,14 +123,36 @@ func (m *PyEnvs) Lookup(python string, deps []string) (PyEnv, bool) {
 	return e, true
 }
 
-// InstallCommands describes how Ensure installs deps, for the approval
-// prompt.
+// InstallCommands is the install command Ensure runs for deps, for the
+// approval prompt: the same words (installArgv), with uv by its name and
+// the environment's interpreter as <env>/bin/python.
 func (m *PyEnvs) InstallCommands(deps []string) string {
-	only := ""
-	if m.wheelsOnly {
-		only = " --only-binary :all:"
+	uv, _ := findUV()
+	argv := m.installArgv(uv, filepath.Join("<env>", "bin", "python"), deps)
+	if uv != "" {
+		argv[0] = "uv"
 	}
-	return fmt.Sprintf("pip install --index-url %s%s -- %s", m.index, only, strings.Join(deps, " "))
+	return strings.Join(argv, " ")
+}
+
+// installArgv installs deps into the environment whose interpreter is
+// python: with uv when it's there ("" for none), else with pip, which
+// takes the requirements without "--" (the skills policy has checked them
+// as plain requirements).
+func (m *PyEnvs) installArgv(uv, python string, deps []string) []string {
+	var argv []string
+	if uv != "" {
+		argv = []string{uv, "pip", "install", "--quiet", "--python", python, "--index-url", m.index}
+	} else {
+		argv = []string{python, "-m", "pip", "install", "--quiet", "--index-url", m.index}
+	}
+	if m.wheelsOnly {
+		argv = append(argv, "--only-binary", ":all:")
+	}
+	if uv != "" {
+		argv = append(argv, "--")
+	}
+	return append(argv, deps...)
 }
 
 // Ensure returns the environment for deps, building it in box first if
@@ -172,22 +194,14 @@ func (m *PyEnvs) build(ctx context.Context, box ScriptBox, e PyEnv, cache string
 	if uv, err := findUV(); err == nil {
 		readOnly = append(readOnly, filepath.Dir(uv))
 		env = append(env, "UV_CACHE_DIR="+cache, "UV_NO_CONFIG=1", "UV_PYTHON_DOWNLOADS=never", "UV_LINK_MODE=copy")
-		install := []string{uv, "pip", "install", "--quiet", "--python", e.Interpreter(), "--index-url", m.index}
-		if m.wheelsOnly {
-			install = append(install, "--only-binary", ":all:")
-		}
 		steps = [][]string{
 			{uv, "venv", "--quiet", "--python", e.Python, e.Dir},
-			append(append(install, "--"), e.Deps...),
+			m.installArgv(uv, e.Interpreter(), e.Deps),
 		}
 	} else {
-		install := []string{e.Interpreter(), "-m", "pip", "install", "--quiet", "--index-url", m.index}
-		if m.wheelsOnly {
-			install = append(install, "--only-binary", ":all:")
-		}
 		steps = [][]string{
 			{e.Python, "-m", "venv", e.Dir},
-			append(install, e.Deps...), // validated as plain requirements by the skills policy
+			m.installArgv("", e.Interpreter(), e.Deps),
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, pyEnvBuildLimit)
@@ -226,7 +240,7 @@ func MountsFor(python string) []string {
 }
 
 // findUV looks for uv on PATH, then in ~/.blitz/bin.
-func findUV() (string, error) {
+var findUV = func() (string, error) {
 	if p, err := exec.LookPath("uv"); err == nil {
 		return filepath.EvalSymlinks(p)
 	}
