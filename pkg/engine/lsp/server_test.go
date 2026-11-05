@@ -431,14 +431,19 @@ func TestManagerAnswers(t *testing.T) {
 
 // Diagnostics coming faster than they're read: the latest are kept.
 func TestServerNotified(t *testing.T) {
-	s := &server{text: map[string]string{"file:///a.go": "package a"}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1)}
+	first := make(chan struct{})
+	s := &server{text: map[string]string{"file:///a.go": "package a"}, diags: map[string]publishedDiags{}, changed: first}
 	for _, uri := range []string{"file:///a.go", "file:///a.go", "file:///other.go"} {
 		params, _ := json.Marshal(map[string]any{"uri": uri, "diagnostics": []any{map[string]any{"message": "about " + uri}}})
 		s.notified("textDocument/publishDiagnostics", params)
 	}
 	assert.Equal(t, "about file:///a.go", s.diags["file:///a.go"].items[0].Message)
 	assert.NotContains(t, s.diags, "file:///other.go", "only open documents' diagnostics are kept")
-	assert.Len(t, s.changed, 1)
+	select {
+	case <-first:
+	default:
+		t.Fatal("the waiters were told")
+	}
 }
 
 // Only the documents synced last stay open: the others are closed, and
@@ -537,4 +542,71 @@ func TestManagerSendsConfiguration(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assert.Equal(t, []string{"initialize", "initialized", "workspace/didChangeConfiguration"}, methods[:3])
+}
+
+// Diagnostics about an earlier version of a document are waited past,
+// and a notification wakes every waiter, whichever file each waits for
+// (N26 engine-sub-2#22).
+func TestWaitDiagnostics(t *testing.T) {
+	publish := func(s *server, uri string, version int) {
+		params, err := json.Marshal(map[string]any{"uri": uri, "version": version, "diagnostics": []any{map[string]any{"message": "m"}}})
+		require.NoError(t, err)
+		s.notified("textDocument/publishDiagnostics", params)
+	}
+	newServer := func(uris ...string) *server {
+		s := &server{text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{})}
+		for _, u := range uris {
+			s.text[u], s.version[u] = "x", 2
+		}
+		return s
+	}
+	ctx := context.Background()
+	tests := []struct {
+		name      string
+		published int // the version published before the wait (0: none)
+		later     int // the version published while it waits (0: none)
+		ok        bool
+	}{
+		{"current", 2, 0, true},
+		{"unversioned", 0, 0, false},
+		{"stale only", 1, 0, false},
+		{"stale, then current", 1, 2, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newServer("file:///a.go")
+			if tt.published > 0 {
+				publish(s, "file:///a.go", tt.published)
+			}
+			if tt.later > 0 {
+				go func() {
+					time.Sleep(20 * time.Millisecond)
+					publish(s, "file:///a.go", tt.later)
+				}()
+			}
+			d, ok, err := s.waitDiagnostics(ctx, "file:///a.go", 300*time.Millisecond)
+			require.NoError(t, err)
+			assert.Equal(t, tt.ok, ok)
+			if ok {
+				assert.Equal(t, 2, d.version)
+			}
+		})
+	}
+	t.Run("two waiters", func(t *testing.T) {
+		s := newServer("file:///a.go", "file:///b.go")
+		var wg sync.WaitGroup
+		got := make([]bool, 2)
+		for i, u := range []string{"file:///a.go", "file:///b.go"} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, got[i], _ = s.waitDiagnostics(ctx, u, 2*time.Second)
+			}()
+		}
+		time.Sleep(20 * time.Millisecond)
+		publish(s, "file:///a.go", 2)
+		publish(s, "file:///b.go", 2)
+		wg.Wait()
+		assert.Equal(t, []bool{true, true}, got)
+	})
 }
