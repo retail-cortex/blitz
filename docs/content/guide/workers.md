@@ -99,6 +99,7 @@ A job's limits cover its whole run, every model call and every step of a `workfl
 
 - **Rewrite with AI:** in the job form, **Rewrite with AI** turns rough instructions into ones that run well unattended. It names the sources, says exactly what file to write and in what format, and says what to do when a step fails. It also suggests the narrowest permissions those instructions need. You review it first: **Use these** fills in the form, **Keep mine** leaves it as it was, and nothing is saved until you Save.
 - **Enable** pins the job's content. Edit it (in the app, or by hand) and it pauses as **changed** until you enable it again, so what runs is always what you read.
+- **A job that runs a workflow** pins the workflow too: its steps decide what the job may write and reach, so editing the workflow (or adding or deleting it) pauses the job as **changed** until you enable it again.
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz jobs run <name>`, runs an enabled job at once and shows what it does.
 - **Two at once?** The same job never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.

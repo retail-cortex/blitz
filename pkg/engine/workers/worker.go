@@ -104,8 +104,9 @@ func ValidName(name string) bool { return validName.MatchString(name) }
 
 // Load reads the worker in dir (a directory holding WORKER.md). The
 // directory's name is the worker's name; a name in the frontmatter must
-// match it.
-func Load(dir string) (*Worker, error) {
+// match it. flowsDir is the workspace's workflows folder: a worker that
+// runs a workflow is hashed with that workflow's file (HashDir).
+func Load(dir, flowsDir string) (*Worker, error) {
 	path := filepath.Join(dir, FileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -181,7 +182,7 @@ func Load(dir string) (*Worker, error) {
 	default:
 		problems = append(problems, fmt.Sprintf("catch_up %q: use \"none\" or \"once\"", w.CatchUp))
 	}
-	if w.Hash, err = hashDir(dir); err != nil {
+	if w.Hash, err = hashDir(dir, flowsDir); err != nil {
 		problems = append(problems, "hashing: "+err.Error())
 	}
 	if len(problems) > 0 {
@@ -192,15 +193,16 @@ func Load(dir string) (*Worker, error) {
 
 // ReadSpec reads the worker in dir as written, for editing: its
 // frontmatter as given (not as the policy caps it), and the hash of its
-// files, which an edit must still match. It reads what it can of a file
-// that isn't valid: unknown keys are ignored, and a file whose frontmatter
-// can't be read at all comes back whole as the workflow.
-func ReadSpec(dir string) (api.WorkerSpec, string, error) {
+// files (HashDir, with flowsDir), which an edit must still match. It reads
+// what it can of a file that isn't valid: unknown keys are ignored, and a
+// file whose frontmatter can't be read at all comes back whole as the
+// workflow.
+func ReadSpec(dir, flowsDir string) (api.WorkerSpec, string, error) {
 	data, err := os.ReadFile(filepath.Join(dir, FileName))
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
-	hash, err := hashDir(dir)
+	hash, err := hashDir(dir, flowsDir)
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
@@ -229,8 +231,14 @@ func ParseSpec(name string, data []byte) api.WorkerSpec {
 	return spec
 }
 
-// HashDir is the hash Load gives the worker in dir.
-func HashDir(dir string) (string, error) { return hashDir(dir) }
+// HashDir is the hash Load gives the worker in dir: its files and, for a
+// worker that runs a workflow (workflow: in WORKER.md), that workflow's
+// file in flowsDir, or that it's missing. The workflow's steps add to what
+// the job may do (flows.SchedulePermissions), so editing, adding or
+// removing it changes the hash and an enabled job waits to be enabled
+// again (spec_023_workers WK-05a). A worker without a workflow has the hash
+// of its files alone.
+func HashDir(dir, flowsDir string) (string, error) { return hashDir(dir, flowsDir) }
 
 // fileFrontmatter is frontmatter as Render writes it: set fields only.
 type fileFrontmatter struct {
@@ -305,10 +313,15 @@ func split(data []byte) (fm, body []byte, err error) { return jobspec.Split(data
 // maxHashedBytes bounds how much of a worker's directory is hashed.
 const maxHashedBytes = 64 << 20
 
+// flowSuffix ends a workflow's file name, as flows.Suffix (a test keeps
+// them equal; the flows package is more than a worker needs to import).
+const flowSuffix = ".flow.yaml"
+
 // hashDir is the SHA-256 of every regular file under dir, in path order,
-// each as its relative path, size and content (as skills' ContentHash).
-// Symbolic links are skipped: they could point anywhere.
-func hashDir(dir string) (string, error) {
+// each as its relative path, size and content (as skills' ContentHash),
+// then, for a worker that runs a workflow, the workflow's file in flowsDir
+// (hashFlow). Symbolic links are skipped: they could point anywhere.
+func hashDir(dir, flowsDir string) (string, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -345,7 +358,57 @@ func hashDir(dir string) (string, error) {
 			return "", err
 		}
 	}
+	if err := hashFlow(h, dir, flowsDir, total); err != nil {
+		return "", err
+	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// hashFlow adds to h the workflow the worker in dir runs, if it names one:
+// every regular file in flowsDir that flows.Load would read as that
+// workflow (<name>.flow.yaml, the suffix in any case), by name, each as
+// its name, size and content, or a mark that there's none. Nothing is
+// added for a worker without a workflow, so its hash is what it was
+// before workflows were hashed. total is what's been hashed so far.
+func hashFlow(h io.Writer, dir, flowsDir string, total int64) error {
+	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil {
+		return nil // no WORKER.md: Load and ReadSpec say so
+	}
+	name := strings.TrimSpace(ParseSpec("", data).Workflow)
+	if name == "" {
+		return nil
+	}
+	fmt.Fprintf(h, "\x00workflow\x00%s\x00", name)
+	var entries []os.DirEntry
+	if flowsDir != "" {
+		if entries, err = os.ReadDir(flowsDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	var files []string
+	for _, e := range entries { // sorted by name
+		n := e.Name()
+		if e.Type().IsRegular() && strings.HasSuffix(strings.ToLower(n), flowSuffix) && n[:len(n)-len(flowSuffix)] == name {
+			files = append(files, n)
+		}
+	}
+	if len(files) == 0 {
+		fmt.Fprint(h, "missing")
+		return nil
+	}
+	for _, n := range files {
+		data, err := os.ReadFile(filepath.Join(flowsDir, n))
+		if err != nil {
+			return err
+		}
+		if total += int64(len(data)); total > maxHashedBytes {
+			return fmt.Errorf("worker directory and workflow are larger than %d MB", maxHashedBytes>>20)
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", n, len(data))
+		h.Write(data)
+	}
+	return nil
 }
 
 // Found is a worker found by Discover, with why it can't be used if it
@@ -356,9 +419,10 @@ type Found struct {
 }
 
 // Discover loads every worker under the directories given (each holding
-// <name>/WORKER.md), invalid ones included with their errors. Directories
-// without a WORKER.md are ignored; a root that can't be read is an error.
-func Discover(dirs ...string) ([]Found, error) {
+// <name>/WORKER.md), invalid ones included with their errors, their
+// workflows read from flowsDir (Load). Directories without a WORKER.md are
+// ignored; a root that can't be read is an error.
+func Discover(flowsDir string, dirs ...string) ([]Found, error) {
 	var out []Found
 	var errs []error
 	for _, root := range dirs {
@@ -377,7 +441,7 @@ func Discover(dirs ...string) ([]Found, error) {
 			if _, err := os.Stat(filepath.Join(dir, FileName)); err != nil {
 				continue
 			}
-			w, err := Load(dir)
+			w, err := Load(dir, flowsDir)
 			if w != nil {
 				out = append(out, Found{Worker: w, Err: err})
 			} else {

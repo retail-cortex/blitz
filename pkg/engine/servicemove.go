@@ -83,7 +83,7 @@ func (w *Workspace) ServiceProblems(name string) ([]string, error) {
 	// The job as written: a permission the parser refused still names
 	// what the job reaches.
 	text := wk.Prompt
-	if spec, _, err := workers.ReadSpec(wk.Dir); err == nil {
+	if spec, _, err := workers.ReadSpec(wk.Dir, w.ProjectWorkflowsDir()); err == nil {
 		text = spec.Prompt + "\n" + strings.Join(spec.Permissions, "\n")
 	}
 	for _, m := range absPath.FindAllStringSubmatch(text, -1) {
@@ -119,7 +119,7 @@ func (w *Workspace) MoveToService(name string, force bool) (problems []string, i
 	if err != nil {
 		return problems, api.WorkerInfo{}, false, err
 	}
-	spec, hash, err := workers.ReadSpec(dir)
+	spec, hash, err := workers.ReadSpec(dir, w.ProjectWorkflowsDir())
 	if err != nil {
 		return problems, api.WorkerInfo{}, false, err
 	}
