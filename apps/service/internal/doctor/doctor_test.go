@@ -604,3 +604,25 @@ func TestCheckAPI(t *testing.T) {
 	assert.Equal(t, "API at https://gateway.example.com, headers X-Api-Key", detail)
 	assert.NotContains(t, detail, "static-secret")
 }
+
+// Ollama's address is shown as the model's factory resolves it: its own
+// base_url first.
+func TestOllamaURL(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		ollama, openai string
+		want           string
+	}{
+		{"its own", "http://gpu-box:11434/v1", "https://api.openai.com/v1", "http://gpu-box:11434/v1"},
+		{"its own over [llm.openai]'s", "http://gpu-box:11434/v1", "http://other:8080/v1", "http://gpu-box:11434/v1"},
+		{"[llm.openai]'s, not OpenAI's", "", "http://other:8080/v1", "http://other:8080/v1"},
+		{"OpenAI's default: this machine", "", "https://api.openai.com/v1", "http://localhost:11434/v1"},
+		{"none", "", "", "http://localhost:11434/v1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var llm config.LLMConfig
+			llm.Ollama.BaseURL, llm.OpenAI.BaseURL = tc.ollama, tc.openai
+			assert.Equal(t, tc.want, ollamaURL(llm))
+		})
+	}
+}

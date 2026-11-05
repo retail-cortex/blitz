@@ -63,6 +63,17 @@ type Check struct {
 	detail string
 }
 
+// ollamaURL is the address the ollama provider talks to, as the model's
+// factory resolves it (runtime's openAIKey): [llm.ollama] base_url, else
+// [llm.openai]'s unless that is OpenAI's own, else Ollama on this machine.
+func ollamaURL(llm config.LLMConfig) string {
+	u := cmp.Or(llm.Ollama.BaseURL, llm.OpenAI.BaseURL)
+	if u == "" || u == "https://api.openai.com/v1" {
+		return "http://localhost:11434/v1"
+	}
+	return u
+}
+
 // Run runs every check, with o's settings.
 func Run(ctx context.Context, o Options) []Check {
 	online := o.Online
@@ -127,7 +138,7 @@ func Run(ctx context.Context, o Options) []Check {
 			add("credentials", statusWarn, "no api_key; relying on an `ant auth login` profile or workload identity%s", confirm)
 		}
 	case cfg.LLM.Provider == "ollama":
-		add("credentials", statusOK, "ollama needs no API key (%s)", cfg.LLM.OpenAI.BaseURL)
+		add("credentials", statusOK, "ollama needs no API key (%s)", ollamaURL(cfg.LLM))
 	case cfg.LLM.Provider == "bedrock":
 		add("credentials", statusOK, "AWS's credential chain, region %q%s", cfg.LLM.Bedrock.Region, confirm)
 	case cfg.LLM.Provider == "azure":
