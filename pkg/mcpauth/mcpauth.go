@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -68,6 +69,7 @@ func Load(store secrets.Store, server string) (*Record, error) {
 	}
 	var r Record
 	if err := json.Unmarshal([]byte(v), &r); err != nil || r.Token == nil {
+		slog.Warn("the MCP server's kept sign-in can't be read: sign in again with blitz mcp login", "server", server, "error", err)
 		return nil, ErrNotSignedIn
 	}
 	return &r, nil
@@ -119,7 +121,11 @@ func (s *saving) Token() (*oauth2.Token, error) {
 	if t.AccessToken != s.last {
 		s.last = t.AccessToken
 		s.record.Token = t
-		_ = Save(s.store, s.server, &s.record) // the token works either way
+		// The token works either way; unkept, a server that rotates its
+		// refresh tokens asks to sign in again at the next start.
+		if err := Save(s.store, s.server, &s.record); err != nil {
+			slog.Warn("couldn't keep the MCP server's refreshed sign-in: the next start may ask for blitz mcp login", "server", s.server, "store", s.store.Kind(), "error", err)
+		}
 	}
 	return t, nil
 }

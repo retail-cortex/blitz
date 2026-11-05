@@ -55,6 +55,13 @@ func exercise(t *testing.T, s Store, name string) {
 
 func TestMemory(t *testing.T) { exercise(t, &Memory{}, "a") }
 
+// A secret too large for a Windows credential says so (N26
+// safety-enterprise#21).
+func TestCredFits(t *testing.T) {
+	assert.NoError(t, credFits("k", 2560))
+	assert.EqualError(t, credFits("gcp_sa", 4000), "saving gcp_sa in the Credential Manager: it's 4000 bytes, and Windows keeps at most 2560 in a secret")
+}
+
 func TestFileStoreIsPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "blitz", "secrets.toml")
 	exercise(t, &FileStore{Path: path}, "global/llm.gemini.api_key")

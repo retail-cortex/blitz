@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -386,6 +387,15 @@ func TestSignInRefused(t *testing.T) {
 		assert.Equal(t, "unauthenticated", ref.Code)
 		assert.Equal(t, "The sign-in couldn't be checked.", err.Error())
 		assert.False(t, c.Status().SignedIn)
+	})
+	t.Run("an ID token for another sign-in", func(t *testing.T) {
+		p, s, c, _, _ := setup(t)
+		claims := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"ana","nonce":"from-another-sign-in"}`))
+		p.IDToken = "eyJhbGciOiJub25lIn0." + claims + ".sig"
+		assert.ErrorContains(t, c.SignInBrowser(ctx, browse(t), nil), "isn't for this sign-in")
+		assert.Empty(t, s.SignIns, "not sent to the service")
+		assert.True(t, nonceMatches("eyJhbGciOiJub25lIn0."+base64.RawURLEncoding.EncodeToString([]byte(`{"nonce":"n1"}`))+".x", "n1"))
+		assert.True(t, nonceMatches("opaque", "n1"), "nothing to compare")
 	})
 	t.Run("no ID token", func(t *testing.T) {
 		p, _, c, _, _ := setup(t)

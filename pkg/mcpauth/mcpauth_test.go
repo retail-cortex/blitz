@@ -15,10 +15,12 @@
 package mcpauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -188,6 +190,21 @@ func TestStoreErrors(t *testing.T) {
 			assert.ErrorIs(t, err, ErrNotSignedIn)
 		})
 	}
+}
+
+// A refreshed token the store won't keep is said in the log, with the
+// server (N26 safety-enterprise#22).
+func TestRefreshUnkept(t *testing.T) {
+	var log bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&log, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	s := &saving{base: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "new"}), last: "old", store: failing{errors.New("keychain locked")}, server: "docs"}
+	tok, err := s.Token()
+	require.NoError(t, err, "the token works either way")
+	assert.Equal(t, "new", tok.AccessToken)
+	assert.Contains(t, log.String(), "server=docs")
+	assert.Contains(t, log.String(), "keychain locked")
 }
 
 // A refresh that fails is reported, and nothing is saved.
