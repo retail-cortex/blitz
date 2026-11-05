@@ -287,6 +287,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.skills.SwitchOff(off)
 	}
 	if cfg.Skills.Enabled {
+		// The organization's locked skills win over any other of their
+		// name, a plugin's (loaded later) included (spec_053 EN-31).
+		if cfg.Org.Locked != "" {
+			w.skills.Lock(filepath.Join(cfg.Org.Locked, "skills"))
+		}
 		if err := w.skills.DiscoverExternal(cfg.SkillSearchPaths(dir)); err != nil {
 			o.Warn(err.Error())
 		}

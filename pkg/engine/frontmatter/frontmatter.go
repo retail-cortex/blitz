@@ -29,19 +29,30 @@ import (
 )
 
 // Split is a Markdown file's front matter (without its --- lines) and
-// body; ok is false when it has none.
+// body; ok is false when it has none. The front matter opens with a ---
+// line and ends at the next line that is only --- (trailing spaces and a
+// CR allowed), never at a --- inside a value; a leading BOM and blank
+// lines are skipped.
 func Split(data []byte) (front, body []byte, ok bool) {
 	t := bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\ufeff")))
-	if !bytes.HasPrefix(t, []byte("---")) {
+	first, rest, _ := bytes.Cut(t, []byte("\n"))
+	if !fence(first) {
 		return nil, t, false
 	}
-	rest := t[3:]
-	i := bytes.Index(rest, []byte("\n---"))
-	if i < 0 {
-		return nil, t, false
+	for off := 0; ; {
+		line, _, more := bytes.Cut(rest[off:], []byte("\n"))
+		if fence(line) {
+			return rest[:off], bytes.TrimSpace(rest[off+len(line):]), true
+		}
+		if !more {
+			return nil, t, false
+		}
+		off += len(line) + 1
 	}
-	return rest[:i], bytes.TrimSpace(rest[i+4:]), true
 }
+
+// fence reports whether line is a --- line.
+func fence(line []byte) bool { return string(bytes.TrimRight(line, " \t\r")) == "---" }
 
 // Fields is a front matter mapping, edited in place.
 type Fields struct{ m *yaml.Node }
@@ -109,7 +120,9 @@ func (f Fields) String(key, value string) {
 		f.set(key, nil)
 		return
 	}
-	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Value: value})
+	// Tagged a string, so a value YAML would read as something else
+	// (true, 1.0, null) is written quoted and reads back as written.
+	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
 }
 
 // Int sets key to n, or removes it when n is 0.
@@ -173,7 +186,7 @@ func (f Fields) List(key string, values []string) {
 	}
 	seq := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
 	for _, v := range values {
-		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: v})
+		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v})
 	}
 	f.set(key, seq)
 }

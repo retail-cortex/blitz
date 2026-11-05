@@ -26,8 +26,14 @@ func TestSplit(t *testing.T) {
 		name, in, front, body string
 		ok                    bool
 	}{
-		{"front matter and a body", "---\na: 1\n---\n\nBody.\n", "\na: 1", "Body.", true},
-		{"a byte order mark first", "\ufeff---\na: 1\n---\nB", "\na: 1", "B", true},
+		{"front matter and a body", "---\na: 1\n---\n\nBody.\n", "a: 1\n", "Body.", true},
+		{"a byte order mark first", "\ufeff---\na: 1\n---\nB", "a: 1\n", "B", true},
+		{"empty", "---\n---\nB", "", "B", true},
+		{"CRLF lines", "---\r\na: 1\r\n---\r\nB", "a: 1\r\n", "B", true},
+		// N26 engine-sub-2#2: only a --- line ends it.
+		{"--- inside a value", "---\nd: a --- b\nagents: [x]\n---\nB", "d: a --- b\nagents: [x]\n", "B", true},
+		{"a longer rule isn't a fence", "---\na: 1\n----\nb: 2\n---  \nB", "a: 1\n----\nb: 2\n", "B", true},
+		{"not opened by a --- line", "---a: 1\n---\nB", "", "---a: 1\n---\nB", false},
 		{"none", "Just text.", "", "Just text.", false},
 		{"never closed", "---\na: 1\n", "", "---\na: 1", false},
 	}

@@ -42,13 +42,20 @@ type Provider struct {
 	// and the next look searches again (SK-95).
 	dirs   []string
 	stamps map[string]string
+	// locked are the folders whose skills the organization locks
+	// (spec_053 EN-31), and lockedBy the skills found in them, by name:
+	// a skill of a locked name from any other folder isn't used.
+	locked   map[string]bool
+	lockedBy map[string]string
 }
 
 // NewProvider initializes the skills provider with embedded built-in skills.
 func NewProvider() (*Provider, error) {
 	p := &Provider{
-		skills:  make(map[string]*Skill),
-		builtin: make(map[string]bool),
+		skills:   make(map[string]*Skill),
+		builtin:  make(map[string]bool),
+		locked:   make(map[string]bool),
+		lockedBy: make(map[string]string),
 	}
 
 	if err := p.loadEmbeddedSkills(); err != nil {
@@ -68,20 +75,26 @@ func Builtins() ([]*Skill, error) {
 	return p.listLocked(), nil
 }
 
-func (p *Provider) loadEmbeddedSkills() error {
-	err := fs.WalkDir(builtin.FS, ".", func(path string, d fs.DirEntry, err error) error {
+func (p *Provider) loadEmbeddedSkills() error { return p.loadBuiltins(builtin.FS) }
+
+// loadBuiltins adds the skills in fsys as built-in ones.
+func (p *Provider) loadBuiltins(fsys fs.FS) error {
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
 			return nil
 		}
 
-		data, err := builtin.FS.ReadFile(path)
+		data, err := fs.ReadFile(fsys, path)
 		if err != nil {
 			return err
 		}
 
 		skill, err := ParseSkillMD(data, "builtin://"+path)
-		if err == nil && skill.Name != "" {
-			skill.fsys, skill.root = builtin.FS, filepath.ToSlash(filepath.Dir(path))
+		if err != nil {
+			return err // a broken built-in is Blitz's bug, not to vanish quietly
+		}
+		if skill.Name != "" {
+			skill.fsys, skill.root = fsys, filepath.ToSlash(filepath.Dir(path))
 			skill.scanBundle()
 			p.skills[skill.Name] = skill
 			p.builtin[skill.Name] = true
@@ -107,6 +120,20 @@ func LoadFolder(dir string) (*Skill, error) {
 	s.fsys, s.root, s.hostDir = os.DirFS(dir), ".", dir
 	s.scanBundle()
 	return s, nil
+}
+
+// Lock marks dirs as the organization's locked skill folders (spec_053
+// EN-31): a skill found in one wins over a skill of its name in any
+// other folder, whichever is searched first, and the clash is reported.
+// An empty dir is ignored. Call it before DiscoverExternal.
+func (p *Provider) Lock(dirs ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, d := range dirs {
+		if d != "" {
+			p.locked[d] = true
+		}
+	}
 }
 
 // DiscoverExternal scans search directories for SKILL.md files. External
@@ -146,13 +173,7 @@ func folderStamp(dir string) string {
 		return ""
 	}
 	h := sha256.New()
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err == nil && d.IsDir() && path != dir && slices.Contains(heavyDirs, d.Name()) {
-			return filepath.SkipDir
-		}
-		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
-			return nil
-		}
+	_ = walkSkillFiles(dir, func(path string) {
 		if info, err := os.Stat(path); err == nil {
 			fmt.Fprintf(h, "%s\x00%d\x00%d", path, info.Size(), info.ModTime().UnixNano())
 		}
@@ -160,9 +181,30 @@ func folderStamp(dir string) string {
 			fmt.Fprintf(h, "\x00%d", info.ModTime().UnixNano())
 		}
 		h.Write([]byte{'\n'})
-		return nil
 	})
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// walkSkillFiles calls found with each SKILL.md under dir, skipping
+// heavyDirs, which both the stamp and discovery skip (a SKILL.md an npm
+// package ships in node_modules isn't the workspace's skill), and
+// returns the folders it couldn't read.
+func walkSkillFiles(dir string, found func(path string)) error {
+	var errs []error
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+		if d.IsDir() && path != dir && slices.Contains(heavyDirs, d.Name()) {
+			return filepath.SkipDir
+		}
+		if !d.IsDir() && d.Name() == "SKILL.md" {
+			found(path)
+		}
+		return nil
+	})
+	return errors.Join(append(errs, err)...)
 }
 
 // Refresh searches the folders again when what they hold changed since it
@@ -206,6 +248,7 @@ func (p *Provider) rediscover(now map[string]string) error {
 			delete(p.skills, name)
 		}
 	}
+	clear(p.lockedBy)
 	err := p.discover(p.dirs)
 	p.stamps = now
 	return err
@@ -252,36 +295,46 @@ func (p *Provider) discover(dirs []string) error {
 			continue
 		}
 
-		_ = filepath.WalkDir(expandedDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
-				return nil
-			}
-
+		locked := p.locked[dir] || p.locked[expandedDir]
+		// Reported rather than skipped silently: a typo in the front
+		// matter, or a folder that can't be read, shouldn't make a skill
+		// vanish without a word.
+		if err := walkSkillFiles(expandedDir, func(path string) {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				return nil
+				errs = append(errs, err)
+				return
 			}
-
 			skill, err := ParseSkillMD(data, path)
 			if err != nil {
-				// Reported rather than skipped silently: a typo in the
-				// frontmatter shouldn't make a skill vanish without a word.
 				errs = append(errs, fmt.Errorf("%s: %w", path, err))
-				return nil
+				return
 			}
 			if p.builtin[skill.Name] {
 				errs = append(errs, fmt.Errorf("%s: skill name %q is reserved by a built-in skill", path, skill.Name))
-				return nil
+				return
 			}
-			if skill.Name != "" {
-				// Its resources, references and scripts, from its folder.
-				skillDir := filepath.Dir(path)
-				skill.fsys, skill.root, skill.hostDir = os.DirFS(skillDir), ".", skillDir
-				skill.scanBundle()
-				p.skills[skill.Name] = skill
+			if skill.Name == "" {
+				return
 			}
-			return nil
-		})
+			if by, ok := p.lockedBy[skill.Name]; ok && !locked {
+				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization (%s); this one isn't used", path, skill.Name, by))
+				return
+			}
+			if old := p.skills[skill.Name]; old != nil && locked && p.lockedBy[skill.Name] == "" {
+				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization; %s isn't used", old.Path, skill.Name, path))
+			}
+			if locked {
+				p.lockedBy[skill.Name] = path
+			}
+			// Its resources, references and scripts, from its folder.
+			skillDir := filepath.Dir(path)
+			skill.fsys, skill.root, skill.hostDir = os.DirFS(skillDir), ".", skillDir
+			skill.scanBundle()
+			p.skills[skill.Name] = skill
+		}); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	return errors.Join(errs...)
