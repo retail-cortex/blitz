@@ -324,7 +324,7 @@ export const builtinCommands: Builtin[] = [
     args: "[--force]",
     group: "session",
     async run(c) {
-      const res = await workspaces.undo({ workspace: c.dir, force: c.args === "--force" });
+      const res = await workspaces.undo({ workspace: c.dir, sessionId: c.sessionId ?? "", force: c.args === "--force" });
       c.say(res.restored.length ? t("desktop.changes.undid", { label: res.label, files: res.restored.join(", ") }) : t("desktop.undo.nothing"));
       if (res.error) c.say(res.error.message, "error");
     },

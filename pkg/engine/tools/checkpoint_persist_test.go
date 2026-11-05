@@ -87,7 +87,7 @@ func TestCheckpointsOutliveTheProcess(t *testing.T) {
 	d = cp2.SessionDiff("other")
 	assert.Equal(t, "", d, "another session's diff: %q", d)
 	for range 2 {
-		_, err := cp2.Undo(false)
+		_, err := cp2.Undo("", false)
 		require.NoError(t, err)
 	}
 	got := readString(t, filepath.Join(dir, "f.txt"))
@@ -211,7 +211,7 @@ func TestPersistedCheckpointsAgeOutAndSurviveDamage(t *testing.T) {
 	blobs, _ = os.ReadDir(filepath.Join(store, "blobs"))
 	os.Remove(filepath.Join(store, "blobs", blobs[0].Name()))
 	_, cp3 := reopen(t, dir, store)
-	_, err := cp3.Undo(false)
+	_, err := cp3.Undo("", false)
 	assert.Error(t, err, "undo without its snapshot")
 	assert.Contains(t, err.Error(), "snapshot limit", "undo without its snapshot: %v", err)
 
@@ -271,7 +271,7 @@ func TestCheckpointsKeepAStoreTheyCannotLoad(t *testing.T) {
 			assert.Empty(t, cp2.List())
 			cp2.Begin("later")
 			require.NoError(t, ws2.WriteFileAtomic(context.Background(), "f.txt", []byte("v3")))
-			_, err = cp2.Undo(false)
+			_, err = cp2.Undo("", false)
 			require.NoError(t, err, "this process's changes are still undone, in memory")
 
 			blobs, err := os.ReadDir(filepath.Join(store, "blobs"))

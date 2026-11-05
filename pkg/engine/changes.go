@@ -42,13 +42,23 @@ func (w *Workspace) ListCheckpoints() []api.Checkpoint {
 	return out
 }
 
-// Undo restores the files the latest turn with changes modified, and
-// audits it. A partial restore returns both what was restored and why the
-// rest wasn't.
-func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
-	res, err := w.tools.Checkpoints().Undo(force)
+// Undo restores the files session's latest turn with changes modified
+// ("": the active session's), counting its sub-agents' and tasks', and
+// audits it. Other sessions' turns are left alone, even when the session
+// has nothing to undo. A partial restore returns both what was restored
+// and why the rest wasn't.
+func (w *Workspace) Undo(session string, force bool) (api.UndoResult, error) {
+	if session == "" {
+		if active := w.storage.Active(); active != nil {
+			session = active.ID
+		}
+	}
+	if session == "" {
+		return api.UndoResult{}, errNothingToUndoHere
+	}
+	res, err := w.tools.Checkpoints().Undo(session, force)
 	if errors.Is(err, tools.ErrNothingToUndo) {
-		return api.UndoResult{}, api.ErrNothingToUndo // the API's, which the service maps
+		return api.UndoResult{}, errNothingToUndoHere // the API's, which the service maps
 	}
 	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
 	if len(res.Restored) > 0 {
@@ -56,6 +66,10 @@ func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
 	}
 	return out, err
 }
+
+// errNothingToUndoHere is /undo's answer when the chat it ran from changed
+// nothing it can still restore, whatever other chats changed.
+var errNothingToUndoHere = fmt.Errorf("%w in this chat", api.ErrNothingToUndo)
 
 // UndoWorkerRun restores the files worker run runID changed, as they were
 // before it (BL-WK-02), with /undo's conflict rules.

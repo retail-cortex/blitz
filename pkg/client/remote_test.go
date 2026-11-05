@@ -139,7 +139,7 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"Reload":               func() error { _, err := r.Reload(ctx); return err },
 		"AddMemory":            func() error { _, err := r.AddMemory(ctx, "x"); return err },
 		"SetLocale":            func() error { _, err := r.SetLocale(ctx, "fr"); return err },
-		"Undo":                 func() error { _, err := r.Undo(false); return err },
+		"Undo":                 func() error { _, err := r.Undo("", false); return err },
 		"GitDiff":              func() error { _, err := r.GitDiff(ctx, false); return err },
 		"LoadImage":            func() error { _, err := r.LoadImage("a.png"); return err },
 		"AddImage":             func() error { _, err := r.AddImage("a.png", nil); return err },
@@ -390,10 +390,13 @@ func TestRemoteBackendCalls(t *testing.T) {
 		n, err = r.ClearApprovals()
 		require.NoError(t, err)
 		assert.Zero(t, n, "none left")
-		undone, err := r.Undo(false)
+		// Another chat's /undo leaves this one's turn alone.
+		_, err = r.Undo("another-chat", false)
+		assert.ErrorContains(t, err, "nothing to undo in this chat")
+		undone, err := r.Undo("", false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"made.txt"}, undone.Restored)
-		_, err = r.Undo(false)
+		_, err = r.Undo("", false)
 		assert.ErrorIs(t, err, api.ErrNothingToUndo)
 		_, err = r.GitDiff(ctx, true)
 		assert.Error(t, err, "not a repository")

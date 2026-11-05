@@ -99,7 +99,7 @@ Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_
 
 ## Checkpoints and undo
 
-Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. Checkpoints are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30). `/rewind` goes back to before any earlier prompt: its files, the conversation, or both. Only the file tools' changes are tracked: if a file changed since, by a command or by you, `/undo` stops and says so (`--force` overwrites).
+Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. `/undo` takes back the latest turn of the chat you run it from, including what its sub-agents and background tasks changed; another chat's turns in the same workspace are left alone, and a chat with nothing of its own to undo says so. Checkpoints are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30). `/rewind` goes back to before any earlier prompt: its files, the conversation, or both. Only the file tools' changes are tracked: if a file changed since, by a command or by you, `/undo` stops and says so (`--force` overwrites).
 
 ## Audit log
 

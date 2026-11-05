@@ -156,7 +156,7 @@ func TestGenerateAudioApproval(t *testing.T) {
 	out = runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true)), map[string]any{"text": "x", "path": "a.wav"})
 	require.Empty(t, errOf(out))
 	assert.FileExists(t, filepath.Join(dir, "a.wav"))
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(dir, "a.wav"), "undone with the turn")
 }

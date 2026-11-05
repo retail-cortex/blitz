@@ -40,7 +40,7 @@ func TestNilCheckpoints(t *testing.T) {
 	assert.Nil(t, c.RunFiles("r"))
 	assert.Empty(t, c.SessionDiff(""))
 	restorers := map[string]func() error{
-		"undo":     func() error { _, err := c.Undo(false); return err },
+		"undo":     func() error { _, err := c.Undo("", false); return err },
 		"rewind":   func() error { _, err := c.Rewind("s", 0, false); return err },
 		"undo run": func() error { _, err := c.UndoRun("r", false); return err },
 	}
@@ -103,9 +103,9 @@ func TestCheckpointTooLargeFiles(t *testing.T) {
 	require.NoError(t, ws.WriteFileAtomic(context.Background(), "small.txt", []byte("s1")))
 
 	assert.Contains(t, c.SessionDiff(""), "big.txt: too large to diff")
-	_, err = c.Undo(false)
+	_, err = c.Undo("", false)
 	require.ErrorContains(t, err, "snapshot limit")
-	res, err := c.Undo(true)
+	res, err := c.Undo("", true)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"small.txt"}, res.Restored)
 	assert.Equal(t, "tiny", readString(t, filepath.Join(dir, "big.txt")))
@@ -125,7 +125,7 @@ func TestCheckpointMissingSnapshot(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(store, "blobs", hashOf([]byte("a0")))))
 
 	assert.Contains(t, c.SessionDiff(""), "a.txt: snapshot missing")
-	res, err := c.Undo(false)
+	res, err := c.Undo("", false)
 	require.ErrorContains(t, err, "a.txt: snapshot")
 	assert.Equal(t, []string{"b.txt"}, res.Restored)
 	assert.Equal(t, "b0", readString(t, filepath.Join(dir, "b.txt")))
@@ -142,7 +142,7 @@ func TestCheckpointRestoreFailure(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(dir, "made.txt")))
 	writeFile(t, filepath.Join(dir, "made.txt", "inner"), "i")
 
-	res, err := c.Undo(true)
+	res, err := c.Undo("", true)
 	assert.ErrorContains(t, err, "made.txt")
 	assert.Empty(t, res.Restored)
 }
@@ -216,7 +216,7 @@ func TestOpenCheckpointsProblems(t *testing.T) {
 		c, err := OpenCheckpoints(ws, CheckpointOptions{Dir: store})
 		require.NoError(t, err)
 		require.Len(t, c.List(), 1)
-		_, err = c.Undo(false)
+		_, err = c.Undo("", false)
 		assert.ErrorContains(t, err, "snapshot limit", "a bad hash is not restorable")
 	})
 }
@@ -242,7 +242,7 @@ func TestCheckpointStoreNotWritable(t *testing.T) {
 	list := c.List()
 	require.Len(t, list, 1)
 	assert.Equal(t, []string{"a.txt", "b.txt"}, list[0].Files)
-	_, err := c.Undo(false)
+	_, err := c.Undo("", false)
 	assert.ErrorContains(t, err, "a.txt", "a change without its snapshot isn't undoable")
 }
 
@@ -265,7 +265,7 @@ func TestCheckpointsPartialUndoKeepsTheFailures(t *testing.T) {
 	require.NoError(t, os.Chmod(ro, 0o500)) // a.txt can't be replaced
 	t.Cleanup(func() { os.Chmod(ro, 0o755) })
 
-	res, err := cp.Undo(false)
+	res, err := cp.Undo("", false)
 	require.Error(t, err)
 	assert.Equal(t, []string{"b.txt"}, res.Restored)
 	l := cp.List()
@@ -273,7 +273,7 @@ func TestCheckpointsPartialUndoKeepsTheFailures(t *testing.T) {
 	assert.Equal(t, []string{filepath.Join("ro", "a.txt")}, l[0].Files)
 
 	require.NoError(t, os.Chmod(ro, 0o755))
-	res, err = cp.Undo(false)
+	res, err = cp.Undo("", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join("ro", "a.txt")}, res.Restored)
 	assert.Equal(t, "a1", readString(t, filepath.Join(ro, "a.txt")))

@@ -87,6 +87,8 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
   const [selected, setSelected] = useState("");
   const [summary, setSummary] = useState("");
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  // The chat whose latest turn Undo takes back (not another chat's).
+  const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState("");
   // Git's view: whether the folder is a repository, and git installed.
@@ -109,6 +111,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
       setSelected((cur) => (parsed.some((f) => f.path === cur) ? cur : (parsed[0]?.path ?? "")));
       const last = [...(s.session?.messages ?? [])].reverse().find((m) => m.role === "model");
       setSummary(last?.text ?? "");
+      setSessionId(s.session?.id ?? "");
       setCheckpoints(c.checkpoints);
     } catch (e) {
       setError(message(e));
@@ -120,7 +123,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
 
   const undo = async (force = false) => {
     try {
-      const res = await workspaces.undo({ workspace: dir, force });
+      const res = await workspaces.undo({ workspace: dir, sessionId, force });
       snack(t("desktop.changes.undid", { label: res.label, files: res.restored.join(", ") || t("desktop.changes.nothing_restored") }));
       if (res.error) snack(res.error.message, { error: true });
       refresh();

@@ -85,7 +85,7 @@ beforeEach(() => {
         listTools: () => ({ agent: "blitz", tools: [{ name: "read_file", description: "Reads a file", planAllowed: true }] }),
         setLocale: (r) => (rec(`locale ${r.input}`), { tag: "es", nativeName: "Español" }),
         listCheckpoints: () => ({ checkpoints: [] }),
-        undo: () => ({ restored: [] }),
+        undo: (r) => (rec(`undo ${r.sessionId} ${r.force}`), { restored: [] }),
         getSearchStatus: () => ({ status: { enabled: true, items: { files: 12, documents: 2 }, scanning: true, unreadable: 1 } }),
         reindex: () => (rec("reindex"), {}),
       });
@@ -290,7 +290,8 @@ describe("commands", () => {
     ["/search chats cart", "", [], ["search cart in chats"], []],
     ["/search all cart", "", [], ["search cart in files,documents,chats,notes"], []],
     ["/checkpoints", "", [], [], []],
-    ["/undo", "", [], [], []],
+    ["/undo", "", ["undo s1 false"], [], []],
+    ["/undo --force", "", ["undo s1 true"], [], []],
     ["/license full", "", [], [], []],
     ["/docs", "", [], [], []],
     ["/docs spec then setup", "", [], [], []],

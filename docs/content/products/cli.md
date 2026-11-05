@@ -143,7 +143,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 
 | Command | |
 |---|---|
-| `/undo [--force]` | Revert the last turn's file changes (checkpoints are kept between runs) |
+| `/undo [--force]` | Revert this session's last turn's file changes, not another chat's (checkpoints are kept between runs) |
 | `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt: its files, the conversation, or both, or summarize from or up to it |
 | `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session, a file at a time (or `git diff`) |
 | `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold and what it's made of |

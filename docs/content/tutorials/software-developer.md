@@ -190,7 +190,7 @@ As it works:
 - **Approvals.** Edits and commands ask first, unless you've allowed them. Read what it wants to do; **Allow once** is always safe. The permission mode is in the status bar; **Ask** is the default, and [Safety](../guide/safety.md) explains the rest.
 - **Watching.** The chat shows each step: the files it reads, the edits, the commands and their results.
 - **Reviewing.** **Changes** (desktop), or `/diff` in the terminal, shows everything this session changed, file by file, beside the agent's summary. Then `/agent reviewer` and "review this change against the spec".
-- **Undoing.** Every turn is a checkpoint: **Undo last turn** in Changes, or `/undo`, puts the files back as they were. To go further back, hover a prompt and choose **Edit**.
+- **Undoing.** Every turn is a checkpoint: **Undo last turn** in Changes, or `/undo`, puts the files back as they were. It takes back this chat's latest turn only, never another chat's in the same folder. To go further back, hover a prompt and choose **Edit**.
 - **Committing.** The agent won't commit unless you ask; commit when the reviewer is satisfied and the checks pass.
 
 Then the next requirements, and the next spec. When a change of plan comes up mid-build, change the spec first, then the code.

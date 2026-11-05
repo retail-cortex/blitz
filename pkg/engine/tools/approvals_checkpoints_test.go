@@ -139,12 +139,12 @@ func TestCheckpointUndo(t *testing.T) {
 	assert.Contains(t, d, "+v3", "session diff missing change:\n%s", d)
 
 	// Undo turn 2: deleted file comes back.
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	require.NoError(t, err)
 	b, _ := os.ReadFile(filepath.Join(dir, "new.txt"))
 	assert.Equal(t, "n\n", string(b), "deleted file not restored: %q", b)
 	// Undo turn 1: original content and mode restored, created file removed.
-	res, err := cp.Undo(false)
+	res, err := cp.Undo("", false)
 	require.NoError(t, err)
 	b, _ = os.ReadFile(path)
 	assert.Equal(t, "v1\n", string(b), "content not restored: %q", b)
@@ -154,7 +154,7 @@ func TestCheckpointUndo(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "created file not removed by undo")
 	assert.Len(t, res.Restored, 2, "restored %v", res.Restored)
 	// Negative: nothing left.
-	_, err = cp.Undo(false)
+	_, err = cp.Undo("", false)
 	assert.Error(t, err, "expected nothing to undo")
 }
 
@@ -167,11 +167,11 @@ func TestCheckpointUndoConflict(t *testing.T) {
 	ws.WriteFileAtomic(context.Background(), "f.txt", []byte("tool edit\n"))
 	os.WriteFile(path, []byte("user edit after\n"), 0o644) // changed outside the tools
 
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	require.ErrorIs(t, err, api.ErrUndoConflict, "expected conflict, got %v", err)
 	b, _ := os.ReadFile(path)
 	assert.Equal(t, "user edit after\n", string(b), "conflicting undo modified the file")
-	_, err = cp.Undo(true)
+	_, err = cp.Undo("", true)
 	require.NoError(t, err, "forced undo")
 	b, _ = os.ReadFile(path)
 	assert.Equal(t, "orig\n", string(b), "forced undo did not restore: %q", b)
@@ -186,7 +186,7 @@ func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
 	require.Error(t, ws.CreateExclusive(context.Background(), "adir", []byte("x")), "expected create over directory to fail")
 	l := cp.List()
 	assert.Len(t, l, 0, "failed writes were recorded: %+v", l)
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	assert.Error(t, err, "undo should have nothing to do")
 	_, err = os.Stat(filepath.Join(dir, "adir"))
 	assert.NoError(t, err, "directory was removed")

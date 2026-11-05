@@ -160,7 +160,9 @@ type Backend interface {
 
 	// Checkpoints and approvals.
 	ListCheckpoints() []Checkpoint
-	Undo(force bool) (UndoResult, error)
+	// Undo restores the files session's latest turn changed ("": the
+	// active session's); other sessions' turns are left alone.
+	Undo(session string, force bool) (UndoResult, error)
 	RewindPoints() ([]RewindPoint, error)
 	Rewind(ctx context.Context, index int, mode RewindMode, force bool) (RewindResult, error)
 	SessionDiff() string

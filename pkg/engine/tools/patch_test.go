@@ -202,7 +202,7 @@ func TestApplyPatchIsUndoable(t *testing.T) {
 	cp.Begin("patch")
 	out := runTool(t, toolOf(t)(NewApplyPatchTool(ws, allowAll())), map[string]any{"patch": "*** Begin Patch\n*** Update File: a.txt\n-a\n+A\n*** Add File: n.txt\n+n\n*** End Patch"})
 	require.Equal(t, true, out["success"], "%v", out)
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	require.NoError(t, err)
 	b, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
 	assert.Equal(t, "a\n", string(b), "undo did not revert patch")
