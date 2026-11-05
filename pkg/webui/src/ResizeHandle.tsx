@@ -40,23 +40,22 @@ export function ResizeHandle({
 }) {
   const drag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const panel = e.currentTarget.parentElement!;
+    const handle = e.currentTarget;
+    const panel = handle.parentElement!;
     const box = panel.getBoundingClientRect();
     const hi = Math.max(min, max());
-    let w = width;
-    const move = (ev: PointerEvent) => {
-      w = Math.round(Math.min(Math.max(edge === "left" ? box.right - ev.clientX : ev.clientX - box.left, min), hi));
-      panel.style.width = `${w}px`;
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      document.body.classList.remove("resizing");
-      onResize(w);
-    };
-    document.body.classList.add("resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    handle.setPointerCapture?.(e.pointerId);
+    followDrag({
+      win: window,
+      handle,
+      body: document.body,
+      start: width,
+      widthAt: (x) => Math.round(Math.min(Math.max(edge === "left" ? box.right - x : x - box.left, min), hi)),
+      show: (w) => {
+        panel.style.width = `${w}px`;
+      },
+      end: onResize,
+    });
   };
   return (
     <div
@@ -69,4 +68,47 @@ export function ResizeHandle({
       title={t("desktop.resize_hint")}
     />
   );
+}
+
+/**
+ * Follows a drag: each move shows the width at the pointer, and the drag
+ * ends once, with the last width, when the pointer is let go or the drag
+ * is cancelled (the system's pointercancel, or the handle losing the
+ * pointer), so nothing is left listening, nor the body marked resizing.
+ */
+export function followDrag({
+  win,
+  handle,
+  body,
+  start,
+  widthAt,
+  show,
+  end,
+}: {
+  win: EventTarget;
+  handle: EventTarget;
+  body: { classList: { add(c: string): void; remove(c: string): void } };
+  start: number;
+  widthAt: (clientX: number) => number;
+  show: (w: number) => void;
+  end: (w: number) => void;
+}) {
+  let w = start;
+  const move = (ev: Event) => {
+    w = widthAt((ev as PointerEvent).clientX);
+    show(w);
+  };
+  const stop = () => {
+    win.removeEventListener("pointermove", move);
+    win.removeEventListener("pointerup", stop);
+    win.removeEventListener("pointercancel", stop);
+    handle.removeEventListener("lostpointercapture", stop);
+    body.classList.remove("resizing");
+    end(w);
+  };
+  body.classList.add("resizing");
+  win.addEventListener("pointermove", move);
+  win.addEventListener("pointerup", stop);
+  win.addEventListener("pointercancel", stop);
+  handle.addEventListener("lostpointercapture", stop);
 }

@@ -262,7 +262,7 @@ func copyIncluded(root, to string) error {
 		}
 		for _, src := range matches {
 			rel, err := filepath.Rel(root, src)
-			if err != nil || strings.HasPrefix(rel, "..") || strings.HasPrefix(rel, Dir) {
+			if err != nil || outside(filepath.ToSlash(rel)) {
 				continue
 			}
 			info, err := os.Lstat(src)
@@ -275,6 +275,12 @@ func copyIncluded(root, to string) error {
 		}
 	}
 	return sc.Err()
+}
+
+// outside reports whether rel (slash-separated, as Dir is, so the test
+// holds on Windows too) leaves the repository or is in its worktrees.
+func outside(rel string) bool {
+	return rel == ".." || strings.HasPrefix(rel, "../") || rel == Dir || strings.HasPrefix(rel, Dir+"/")
 }
 
 func copyFile(src, dst string, perm os.FileMode) error {

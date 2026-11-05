@@ -16,7 +16,8 @@
 # Measures the Go tests' coverage of apps/ and pkg/ (not tools, generated
 # code or dependencies), writes the summary for the docs site's coverage
 # page (docs/data/coverage.json, not committed), and fails when the total
-# is below tools/coverage/floor.txt.
+# is below tools/coverage/floor.txt. A Go library no test links isn't in
+# the total: the summary lists it as not counted.
 #
 #   tools/coverage.sh [bazel flags…] [-- //tools/coverage flags…]
 #
@@ -32,8 +33,14 @@ done
 [[ "${1:-}" == "--" ]] && shift
 
 bazel coverage --build_tests_only --combined_report=lcov --instrumentation_filter='^//(apps|pkg)[/:]' ${bazel_flags[@]+"${bazel_flags[@]}"} //...
+# The Go libraries, for the report to list those no test links (they're
+# in no LCOV record, so not in the total).
+libraries="$(mktemp)"
+trap 'rm -f "$libraries"' EXIT
+bazel query --output=package 'kind("go_library rule", //apps/... + //pkg/...)' >"$libraries"
 bazel run //tools/coverage -- \
   --lcov=bazel-out/_coverage/_coverage_report.dat \
+  --libraries="$libraries" \
   --json=docs/data/coverage.json \
   --commit="$(git rev-parse --short HEAD)" \
   --date="$(date -u +%Y-%m-%d)" \

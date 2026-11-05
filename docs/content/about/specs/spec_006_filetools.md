@@ -8,7 +8,7 @@ weight: 6
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/workspace.go`, `pathpolicy.go`, `pathlock.go`, `file_ops.go`, `file_edit.go`, `patch.go`, `grep.go`, `checkpoint.go`, `diff.go`, `export_pdf.go`, `documents.go`, `audio.go`, `pkg/engine/mdpdf/mdpdf.go`, `pkg/pdftext/pdftext.go`, `pkg/engine/runtime/speech.go` |
 | Tests | `pkg/engine/tools/workspace_test.go`, `sandbox_paths_test.go`, `file_tools_test.go`, `edit_race_test.go`, `patch_test.go`, `grep_test.go`, `approvals_checkpoints_test.go`, `export_pdf_test.go`, `documents_test.go`, `audio_test.go`, `pkg/engine/mdpdf/mdpdf_test.go`, `pkg/pdftext/pdftext_test.go`, `pkg/engine/runtime/speech_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md), [spec_005_approvals](spec_005_approvals.md) (approval gate) |
@@ -33,6 +33,7 @@ Every file tool goes through one `Workspace` sandbox: paths must fall under a co
 ## 3. Blocked-path patterns
 
 - **FS-10** Pattern forms (each matches the path itself and everything beneath it): no slash (`.env`, `*.pem`) — that name at any depth; absolute (`~/.ssh`, `/etc/x`) — that location, also its symlink-resolved spelling; relative with a slash (`config/prod/*.yaml`) — relative to every root.
+- **FS-78** *2026-11-05 (scan N26-pkg-small-2#16: `**/*.{pem,key}` and `id_[rd]sa` were taken literally and blocked nothing, without a word).* A pattern's `{a,b}` alternatives are a pattern each (`textutil.ExpandBraces`, nested ones too, at most 64), and `[abc]`, `[a-z]` and `[!abc]` are classes (never a slash); an unclosed or impossible one stays literal. The same holds for `read`/`write`/`delete` permission rules, in-process and in the macOS profile.
 - **FS-11** `*` matches within one segment, `**` across segments (`**/` optional), `?` one character. Patterns containing `"` or newline are invalid.
 - **FS-12** Matching is case-insensitive on macOS and Windows (so `.ENV` is `.env`).
 - **FS-13** The same expressions (without Go-only syntax) are emitted for the macOS Seatbelt profile ([spec_007_shell](spec_007_shell.md)).

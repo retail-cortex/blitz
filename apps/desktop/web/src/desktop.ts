@@ -161,6 +161,7 @@ export interface UpdateStatus {
   available: boolean;
   can: boolean; // the app updates itself here (else reason says why not)
   reason?: string;
+  reason_key?: string; // reason's message key, to say it in the page's language
   downloading: boolean;
   ready: boolean; // downloaded, checked, unpacked: restart to update
   error?: string;

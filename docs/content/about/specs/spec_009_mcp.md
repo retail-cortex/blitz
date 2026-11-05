@@ -8,7 +8,7 @@ weight: 9
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/mcp.go`; `pkg/engine/breaker` |
 | Tests | `pkg/engine/tools/mcp_test.go`, `mcp_resilience_test.go`; `pkg/engine/runtime/mcp_agents_test.go` |
 | Depends on | [spec_007_shell](spec_007_shell.md) (exec env, sandbox), [spec_005_approvals](spec_005_approvals.md), [spec_015_models](spec_015_models.md) (breaker) |

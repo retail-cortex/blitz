@@ -8,7 +8,7 @@ weight: 15
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/runtime/model_factory.go`, `anthropic.go`, `openai_images.go`, `images.go`, `documents.go`, `fallback.go`, `httpclient.go`, `settings.go`, `usage.go`, `speech.go`, `apiprovider.go`, `apiresponse.go`, `apitoken.go`, `scriptrun.go`; `pkg/config/apiprovider.go`; `pkg/engine/breaker` |
 | Tests | `pkg/engine/runtime/anthropic_test.go`, `fallback_test.go`, `httpclient_test.go`, `settings_test.go`, `pin_test.go`, `images_test.go`, `speech_test.go`, `apiprovider_test.go`, `apitoken_test.go`, `scriptrun_test.go`; `pkg/config/apiprovider_test.go`; `pkg/engine/breaker/breaker_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md) |

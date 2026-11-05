@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -44,12 +45,16 @@ func DefaultSocket() string {
 	if p := os.Getenv("BLITZ_SOCKET"); p != "" {
 		return config.ExpandHome(p)
 	}
-	return config.ExpandHome("~/.blitz/run/blitz.sock")
+	return config.ExpandHome(defaultSocket)
 }
+
+const defaultSocket = "~/.blitz/run/blitz.sock"
 
 // Listen opens the Unix socket at path for this user only. It refuses when
 // a service already answers there, and replaces a socket left by one that
-// died.
+// died, never another kind of file. It makes the folder private (0700)
+// when it creates it, and always ~/.blitz/run; a folder of the user's
+// own, such as their home for $BLITZ_SOCKET=~/blitz.sock, keeps its mode.
 //
 // The 0600 mode (and the folder's 0700) is the only gate: there is no peer
 // check, so anything running as the user may connect. The model's commands
@@ -62,17 +67,24 @@ func DefaultSocket() string {
 // user's (and the system's, and administrators').
 func Listen(path string) (net.Listener, error) {
 	dir := filepath.Dir(path)
+	_, err := os.Stat(dir)
+	created := errors.Is(err, fs.ErrNotExist)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	// The directory, not only the socket, keeps other users out: there is
 	// no window between creating the socket and restricting it.
-	if err := restrict(dir, 0o700); err != nil {
-		return nil, err
+	if created || dir == filepath.Dir(config.ExpandHome(defaultSocket)) {
+		if err := restrict(dir, 0o700); err != nil {
+			return nil, err
+		}
 	}
-	if _, err := os.Lstat(path); err == nil {
+	if info, err := os.Lstat(path); err == nil {
 		if Running(path) {
 			return nil, fmt.Errorf("%w (%s)", ErrRunning, path)
+		}
+		if !isSocket(info.Mode()) {
+			return nil, fmt.Errorf("%s is there and isn't a socket: it's left as it is (choose another $BLITZ_SOCKET)", path)
 		}
 		if err := os.Remove(path); err != nil {
 			return nil, fmt.Errorf("removing stale socket: %w", err)
@@ -87,6 +99,12 @@ func Listen(path string) (net.Listener, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+// isSocket says whether a file is a socket (on Windows, Go may report an
+// AF_UNIX socket's reparse point as irregular).
+func isSocket(m fs.FileMode) bool {
+	return m&fs.ModeSocket != 0 || (goruntime.GOOS == "windows" && m&fs.ModeIrregular != 0)
 }
 
 // restrict sets path's permissions (not on Windows, which has none).

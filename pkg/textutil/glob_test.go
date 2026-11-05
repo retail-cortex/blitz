@@ -16,6 +16,7 @@ package textutil
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,14 @@ func TestGlobToRegex(t *testing.T) {
 		"double star":     {glob: "src/**", want: `src/.*`, match: []string{"src/a/b"}},
 		"double star dir": {glob: "**/x", want: `(.*/)?x`, match: []string{"x", "a/b/x"}},
 		"literal":         {glob: "a+b", want: `a\+b`, match: []string{"a+b"}, noMatch: []string{"aab"}},
+		"class":           {glob: "*.[ch]", want: `[^/]*\.[ch]`, match: []string{"a.c", "a.h"}, noMatch: []string{"a.o", "a.[ch]"}},
+		"range":           {glob: "v[0-9]", want: `v[0-9]`, match: []string{"v1"}, noMatch: []string{"va"}},
+		"negated":         {glob: "[!.]*", want: `[^/.][^/]*`, match: []string{"a"}, noMatch: []string{".env", "/x"}},
+		"bracket first":   {glob: "[]a]", want: `[\]a]`, match: []string{"]", "a"}, noMatch: []string{"b"}},
+		"unclosed":        {glob: "a[b", want: `a\[b`, match: []string{"a[b"}},
+		"no range":        {glob: "[z-a]", want: `\[z-a\]`, match: []string{"[z-a]"}},
+		"empty negation":  {glob: "[!]", want: `\[!\]`, match: []string{"[!]"}},
+		"braces literal":  {glob: "{a,b}", want: `\{a,b\}`, match: []string{"{a,b}"}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -46,6 +55,27 @@ func TestGlobToRegex(t *testing.T) {
 			for _, m := range tc.noMatch {
 				assert.False(t, re.MatchString(m), "should not match %q", m)
 			}
+		})
+	}
+}
+
+// Each alternative is a glob of its own.
+func TestExpandBraces(t *testing.T) {
+	for name, tc := range map[string]struct {
+		glob string
+		want []string
+	}{
+		"none":     {"*.pem", []string{"*.pem"}},
+		"two":      {"**/*.{pem,key}", []string{"**/*.pem", "**/*.key"}},
+		"empty":    {"a{,.bak}", []string{"a", "a.bak"}},
+		"repeated": {"{a,b}/{c,d}", []string{"a/c", "a/d", "b/c", "b/d"}},
+		"nested":   {"{a,b{c,d}}", []string{"a", "bc", "bd"}},
+		"one":      {"{a}.{b,c}", []string{"{a}.b", "{a}.c"}},
+		"unclosed": {"{a,b", []string{"{a,b"}},
+		"too many": {strings.Repeat("{a,b}", 7), []string{strings.Repeat("{a,b}", 7)}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, ExpandBraces(tc.glob))
 		})
 	}
 }

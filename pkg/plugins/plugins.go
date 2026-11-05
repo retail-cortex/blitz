@@ -106,14 +106,22 @@ func Read(dir string) (*Plugin, error) {
 	p.Agents = mdNames(filepath.Join(dir, AgentsDir))
 	if exists(filepath.Join(dir, HooksFile)) {
 		var h hooksFile
-		if _, err := toml.DecodeFile(filepath.Join(dir, HooksFile), &h); err != nil {
+		md, err := toml.DecodeFile(filepath.Join(dir, HooksFile), &h)
+		if err == nil {
+			err = undecoded(md)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", HooksFile, err)
 		}
 		p.Hooks = h
 	}
 	if exists(filepath.Join(dir, MCPFile)) {
 		var m mcpFile
-		if _, err := toml.DecodeFile(filepath.Join(dir, MCPFile), &m); err != nil {
+		md, err := toml.DecodeFile(filepath.Join(dir, MCPFile), &m)
+		if err == nil {
+			err = undecoded(md)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", MCPFile, err)
 		}
 		for _, s := range m.Servers {
@@ -124,6 +132,21 @@ func Read(dir string) (*Plugin, error) {
 		p.MCP = m.Servers
 	}
 	return p, nil
+}
+
+// undecoded refuses keys the file's type doesn't have: a hook or server
+// under a key Blitz doesn't read ([[hooks.pre_tool]] copied from
+// config.toml, [[mcp.servers]]) would otherwise never run, silently.
+func undecoded(md toml.MetaData) error {
+	keys := md.Undecoded()
+	if len(keys) == 0 {
+		return nil
+	}
+	names := make([]string, len(keys))
+	for i, k := range keys {
+		names[i] = k.String()
+	}
+	return fmt.Errorf("unknown keys %s (the file holds the [hooks] or [mcp] table's contents, without the table's name)", strings.Join(names, ", "))
 }
 
 // Summary lists what the plugin adds, one line each, those that run code

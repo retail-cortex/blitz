@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -125,6 +124,14 @@ const maxRecent = 20
 
 var themes = map[string]bool{"system": true, "light": true, "dark": true}
 
+// lightThemes and darkThemes are the colour themes' IDs, as
+// pkg/webui/src/themes.ts lists them (a test holds them equal): another
+// is reset to "blitz".
+var (
+	lightThemes = []string{"blitz", "one-light"}
+	darkThemes  = []string{"blitz", "one-dark-pro"}
+)
+
 // normalize fills in defaults and drops what can't be right: unknown
 // themes, duplicate or relative directories, and old closed workspaces.
 func (p *Prefs) normalize() {
@@ -155,10 +162,10 @@ func (p *Prefs) normalize() {
 	if p.Updates != "off" {
 		p.Updates = "auto"
 	}
-	if p.LightTheme != "one-light" {
+	if !slices.Contains(lightThemes, p.LightTheme) {
 		p.LightTheme = "blitz"
 	}
-	if p.DarkTheme != "one-dark-pro" {
+	if !slices.Contains(darkThemes, p.DarkTheme) {
 		p.DarkTheme = "blitz"
 	}
 	if p.GPU != "off" {
@@ -275,20 +282,4 @@ func (s *PrefsStore) Save(p Prefs) (Prefs, error) {
 		return p, err
 	}
 	return p, os.Rename(tmp.Name(), s.path)
-}
-
-// SafeURL reports whether a link from model output may be opened in the
-// system browser: web and mail links only, never file: or custom schemes.
-func SafeURL(raw string) bool {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	switch strings.ToLower(u.Scheme) {
-	case "http", "https":
-		return u.Host != ""
-	case "mailto":
-		return u.Opaque != "" || u.Path != ""
-	}
-	return false
 }

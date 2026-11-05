@@ -242,8 +242,11 @@ func (Backend) Render(cat connectors.Category, kind *connectors.Kind, c connecto
 				continue
 			}
 		}
-		switch f.Type {
-		case connectors.FieldList:
+		switch {
+		case f.Secret():
+			// Quoted, so the filled value stays a string whatever it reads as.
+			src.Content = append(src.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: f.Key}, &yaml.Node{Kind: yaml.ScalarNode, Value: v, Style: yaml.DoubleQuotedStyle})
+		case f.Type == connectors.FieldList:
 			var list []string
 			for _, d := range strings.Split(v, ",") {
 				if d = strings.TrimSpace(d); d != "" {
@@ -251,7 +254,7 @@ func (Backend) Render(cat connectors.Category, kind *connectors.Kind, c connecto
 				}
 			}
 			addList(src, f.Key, list)
-		case connectors.FieldNumber:
+		case f.Type == connectors.FieldNumber:
 			src.Content = append(src.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: f.Key}, &yaml.Node{Kind: yaml.ScalarNode, Value: v, Tag: "!!int"})
 		default:
 			add(src, f.Key, v)

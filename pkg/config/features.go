@@ -429,15 +429,34 @@ type HooksConfig struct {
 	PermissionRequest []HookConfig `toml:"permission_request"`
 }
 
+// Events gives a pointer to each event's hooks, by event name: the one
+// list of events that ByEvent, Map and AppendHooks walk (a test holds it
+// to HooksConfig's fields).
+func (h *HooksConfig) Events() map[string]*[]HookConfig {
+	return map[string]*[]HookConfig{
+		"pre_tool": &h.PreTool, "post_tool": &h.PostTool, "prompt_submit": &h.PromptSubmit,
+		"session_start": &h.SessionStart, "session_end": &h.SessionEnd, "stop": &h.Stop,
+		"post_tool_failure": &h.PostToolFailure, "subagent_start": &h.SubagentStart, "subagent_stop": &h.SubagentStop,
+		"pre_compact": &h.PreCompact, "post_compact": &h.PostCompact, "notification": &h.Notification,
+		"permission_request": &h.PermissionRequest,
+	}
+}
+
 // ByEvent returns the hooks for each event name.
 func (h HooksConfig) ByEvent() map[string][]HookConfig {
-	return map[string][]HookConfig{
-		"pre_tool": h.PreTool, "post_tool": h.PostTool, "prompt_submit": h.PromptSubmit,
-		"session_start": h.SessionStart, "session_end": h.SessionEnd, "stop": h.Stop,
-		"post_tool_failure": h.PostToolFailure, "subagent_start": h.SubagentStart, "subagent_stop": h.SubagentStop,
-		"pre_compact": h.PreCompact, "post_compact": h.PostCompact, "notification": h.Notification,
-		"permission_request": h.PermissionRequest,
+	out := make(map[string][]HookConfig)
+	for event, list := range h.Events() {
+		out[event] = *list
 	}
+	return out
+}
+
+// Map returns h with each event's hooks replaced by fn's result for them.
+func (h HooksConfig) Map(fn func([]HookConfig) []HookConfig) HooksConfig {
+	for _, list := range h.Events() {
+		*list = fn(*list)
+	}
+	return h
 }
 
 // All returns every configured hook.

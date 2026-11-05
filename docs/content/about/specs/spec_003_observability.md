@@ -8,7 +8,7 @@ weight: 3
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/audit/audit.go`, `pkg/redact/redact.go`, `pkg/observability/{logfile,telemetry,span}.go`; wiring in `apps/cli/setup.go`, `pkg/engine/workspace.go` |
 | Tests | `pkg/engine/audit/audit_test.go`, `pkg/redact/redact_test.go`, `pkg/observability/observability_test.go`, `pkg/engine/runtime/telemetry_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md) |

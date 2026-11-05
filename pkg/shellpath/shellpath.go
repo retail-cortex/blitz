@@ -42,13 +42,27 @@ func LoginShell() string {
 // shell's startup files print.
 const pathMarker = "BLITZ_PATH="
 
+var (
+	// timeout bounds the shell's run (tests shorten it).
+	timeout = 5 * time.Second
+	// waitDelay bounds the wait, once the shell is stopped, for what its
+	// startup files left running with its output open.
+	waitDelay = time.Second
+)
+
 // UserPath is PATH as a new terminal has it: what an interactive login
 // shell prints, else (it fails, or takes over 5 s) this process's PATH.
+// A startup file that leaves a program running with the shell's output
+// open doesn't hold it up past another second: the service's start waits
+// for it.
 func UserPath(shell string) []string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	// fish joins a quoted $PATH with colons too.
-	out, err := exec.CommandContext(ctx, shell, "-i", "-l", "-c", `printf '`+pathMarker+`%s\n' "$PATH"`).Output()
+	cmd := exec.CommandContext(ctx, shell, "-i", "-l", "-c", `printf '`+pathMarker+`%s\n' "$PATH"`)
+	cmd.Stdin = nil // not the service's: an interactive shell would read it
+	cmd.WaitDelay = waitDelay
+	out, err := cmd.Output()
 	if err == nil {
 		for _, l := range strings.Split(string(out), "\n") {
 			if v, ok := strings.CutPrefix(l, pathMarker); ok {

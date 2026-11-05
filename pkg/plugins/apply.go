@@ -50,7 +50,7 @@ func Apply(cfg *config.Config, store *Store) ([]Loaded, []string) {
 			continue
 		}
 		dir := store.PluginDir(i)
-		if h, err := Hash(dir); err != nil || h != i.Hash {
+		if h, err := Hash(dir); err != nil || h != i.Hash || hasLink(dir) {
 			problems = append(problems, fmt.Sprintf("plugin %s: its files changed since it was installed (reinstall it: blitz plugin update %s)", i.Name, i.Name))
 			continue
 		}
@@ -111,20 +111,14 @@ const RootVar = "${BLITZ_PLUGIN_ROOT}"
 
 // rooted puts the plugin's directory in its hooks' commands.
 func rooted(h config.HooksConfig, dir string) config.HooksConfig {
-	fix := func(list []config.HookConfig) []config.HookConfig {
+	return h.Map(func(list []config.HookConfig) []config.HookConfig {
 		out := slices.Clone(list)
 		for i := range out {
 			out[i].Command = strings.ReplaceAll(out[i].Command, RootVar, dir)
 			out[i].Args = replaceAll(out[i].Args, dir)
 		}
 		return out
-	}
-	h.PreTool, h.PostTool, h.PromptSubmit = fix(h.PreTool), fix(h.PostTool), fix(h.PromptSubmit)
-	h.SessionStart, h.SessionEnd, h.Stop = fix(h.SessionStart), fix(h.SessionEnd), fix(h.Stop)
-	h.PostToolFailure, h.SubagentStart, h.SubagentStop = fix(h.PostToolFailure), fix(h.SubagentStart), fix(h.SubagentStop)
-	h.PreCompact, h.PostCompact = fix(h.PreCompact), fix(h.PostCompact)
-	h.Notification, h.PermissionRequest = fix(h.Notification), fix(h.PermissionRequest)
-	return h
+	})
 }
 
 func rootedServer(s config.MCPServerConfig, dir string) config.MCPServerConfig {
@@ -149,6 +143,21 @@ func replaceAll(list []string, dir string) []string {
 		out[i] = strings.ReplaceAll(v, RootVar, dir)
 	}
 	return out
+}
+
+// hasLink reports whether dir holds a symbolic link. Installing copies
+// only regular files, and Hash skips links, so one added later would
+// change what loads while the hash still matched.
+func hasLink(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
+		if err == nil && d.Type()&os.ModeSymlink != 0 {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 func isDir(p string) bool {

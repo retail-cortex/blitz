@@ -1,0 +1,211 @@
+--- a/embed/config.go
++++ b/embed/config.go
+@@ -18,6 +18,7 @@ import (
+ 	"bufio"
+ 	"bytes"
+ 	"context"
++	"errors"
+ 	"fmt"
+ 	"io"
+ 	"os"
+@@ -27,13 +28,12 @@ import (
+ 	"strings"
+ 
+ 	"github.com/goccy/go-yaml"
+-	"github.com/goccy/go-yaml/lexer"
+-	"github.com/goccy/go-yaml/token"
+ 	"github.com/google/go-cmp/cmp"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/auth/generic"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/resources"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/server"
+ 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
++	yamlv3 "gopkg.in/yaml.v3"
+ )
+ 
+ // Config is a parsed Toolbox configuration: its sources, tools, groups and
+@@ -65,11 +65,20 @@ type ConfigParser struct {
+ 	AllowMissingEnvVars bool
+ }
+ 
++// envPattern is a ${NAME} or ${NAME:default} placeholder.
++var envPattern = regexp.MustCompile(`\$\{(\w+)(:([^}]*))?\}`)
++
+ // parseEnv replaces environment variables ${ENV_NAME} with their values.
+ // also support ${ENV_NAME:default_value}.
++//
++// Blitz: the placeholders are filled in the parsed YAML's scalars, not in
++// its text, and the YAML written again: a value's own YAML syntax (a " #",
++// a ": ", a leading "*" or quote, a newline) stays inside its value instead
++// of cutting it short or adding keys. A placeholder in a comment stays as
++// it is. A plain scalar that was only placeholders takes the type its
++// value reads as (port: ${PORT} stays a number); a quoted one stays a
++// string.
+ func (p *ConfigParser) parseEnv(input string) (string, error) {
+-	re := regexp.MustCompile(`\$\{(\w+)(:([^}]*))?\}`)
+-
+ 	if p.EnvVars == nil {
+ 		p.EnvVars = make(map[string]string)
+ 	}
+@@ -77,80 +86,68 @@ func (p *ConfigParser) parseEnv(input string) (string, error) {
+ 	// Normalize CRLF to LF since goccy/go-yaml lexer counts \r inconsistently across OSes
+ 	input = strings.ReplaceAll(input, "\r\n", "\n")
+ 	input = strings.ReplaceAll(input, "\r", "\n")
++	if !envPattern.MatchString(input) {
++		return input, nil
++	}
+ 
+-	// Pre-index comments: map[line]firstCommentStartColumn
+-	// YAML comments are line-scoped, so everything from '#' to the end of that line is comment text.
+-	commentColByLine := make(map[int]int)
+-	for _, t := range lexer.Tokenize(input) {
+-		if t.Type == token.CommentType && t.Position != nil {
+-			if existingCol, exists := commentColByLine[t.Position.Line]; !exists || t.Position.Column < existingCol {
+-				commentColByLine[t.Position.Line] = t.Position.Column
+-			}
++	var docs []*yamlv3.Node
++	dec := yamlv3.NewDecoder(strings.NewReader(input))
++	for {
++		var doc yamlv3.Node
++		if err := dec.Decode(&doc); errors.Is(err, io.EOF) {
++			break
++		} else if err != nil {
++			return "", err
+ 		}
++		docs = append(docs, &doc)
+ 	}
+ 
+ 	var missing []string
+ 	seenMissing := make(map[string]bool)
+-	matches := re.FindAllStringSubmatchIndex(input, -1)
+-	var output strings.Builder
+-	lastIndex := 0
+-	line, column := 1, 1
+-	scannedBytes := 0
+-
+-	for _, match := range matches {
+-		start, end := match[0], match[1]
+-		// Scan only from last scanned position since regex matches are in order
+-		for _, r := range input[scannedBytes:start] {
+-			if r == '\n' {
+-				line++
+-				column = 1
++	var fill func(n *yamlv3.Node)
++	fill = func(n *yamlv3.Node) {
++		if n.Kind == yamlv3.AliasNode {
++			return
++		}
++		for _, c := range n.Content {
++			fill(c)
++		}
++		if n.Kind != yamlv3.ScalarNode || !envPattern.MatchString(n.Value) {
++			return
++		}
++		n.Value = envPattern.ReplaceAllStringFunc(n.Value, func(m string) string {
++			sub := envPattern.FindStringSubmatch(m)
++			variableName, defaultProvided := sub[1], sub[2] != ""
++			defaultValue := sub[3]
++			if defaultProvided {
++				p.OptionalEnvVars = append(p.OptionalEnvVars, variableName)
+ 			} else {
+-				column++
++				p.requiredEnvVars = append(p.requiredEnvVars, variableName)
++			}
++			if value, found := p.EnvVars[variableName]; found { // Blitz: only the values given, never the process's environment
++				return value
++			}
++			if defaultProvided {
++				p.EnvVars[variableName] = defaultValue
++				return defaultValue
+ 			}
+-		}
+-		scannedBytes = start
+-
+-		// checks if the placeholder is on or after the '#' on this line
+-		if commentCol, ok := commentColByLine[line]; ok && column >= commentCol {
+-			output.WriteString(input[lastIndex:end])
+-			lastIndex = end
+-			continue
+-		}
+-
+-		output.WriteString(input[lastIndex:start])
+-
+-		variableName := input[match[2]:match[3]]
+-		defaultValue := ""
+-		defaultProvided := match[4] != -1 && match[5] != -1
+-		if defaultProvided {
+-			defaultValue = input[match[6]:match[7]]
+-		}
+-
+-		if defaultProvided {
+-			p.OptionalEnvVars = append(p.OptionalEnvVars, variableName)
+-		} else {
+-			p.requiredEnvVars = append(p.requiredEnvVars, variableName)
+-		}
+-
+-		if value, found := p.EnvVars[variableName]; found { // Blitz: only the values given, never the process's environment
+-			p.EnvVars[variableName] = value
+-			output.WriteString(value)
+-		} else if defaultProvided {
+-			p.EnvVars[variableName] = defaultValue
+-			output.WriteString(defaultValue)
+-		} else {
+ 			if p.AllowMissingEnvVars {
+ 				p.EnvVars[variableName] = variableName
+-				output.WriteString(variableName)
+-			} else if !seenMissing[variableName] {
++				return variableName
++			}
++			if !seenMissing[variableName] {
+ 				seenMissing[variableName] = true
+-				missing = append(missing, fmt.Sprintf("%q (line %d, column %d)", variableName, line, column))
++				missing = append(missing, fmt.Sprintf("%q (line %d, column %d)", variableName, n.Line, n.Column))
+ 			}
++			return m
++		})
++		if n.Style&(yamlv3.TaggedStyle|yamlv3.DoubleQuotedStyle|yamlv3.SingleQuotedStyle|yamlv3.LiteralStyle|yamlv3.FoldedStyle) == 0 {
++			n.Tag = "" // resolved from its value, as the text it stood for would be
+ 		}
+-
+-		lastIndex = end
+ 	}
+-	output.WriteString(input[lastIndex:])
++	for _, doc := range docs {
++		fill(doc)
++	}
+ 
+ 	// Filter out OptionalEnvVars that were also found as required
+ 	var finalOptional []string
+@@ -161,16 +158,28 @@ func (p *ConfigParser) parseEnv(input string) (string, error) {
+ 	}
+ 	p.OptionalEnvVars = finalOptional
+ 
+-	var err error
+ 	if len(missing) > 0 {
+ 		if len(missing) == 1 {
+-			err = fmt.Errorf("environment variable not found: %s", missing[0])
+-		} else {
+-			err = fmt.Errorf("environment variables not found:\n  - %s", strings.Join(missing, "\n  - "))
++			return "", fmt.Errorf("environment variable not found: %s", missing[0])
+ 		}
++		return "", fmt.Errorf("environment variables not found:\n  - %s", strings.Join(missing, "\n  - "))
+ 	}
+ 
+-	return output.String(), err
++	var out bytes.Buffer
++	enc := yamlv3.NewEncoder(&out)
++	enc.SetIndent(2)
++	for _, doc := range docs {
++		if len(doc.Content) == 0 {
++			continue
++		}
++		if err := enc.Encode(doc); err != nil {
++			return "", err
++		}
++	}
++	if err := enc.Close(); err != nil {
++		return "", err
++	}
++	return out.String(), nil
+ }
+ 
+ // ParseConfig parses one configuration file's content.

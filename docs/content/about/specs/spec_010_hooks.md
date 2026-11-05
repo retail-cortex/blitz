@@ -8,7 +8,7 @@ weight: 10
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/scripthooks.go`, `hookif.go`; called from `pkg/engine/runtime/engine.go` and `pkg/engine/turn.go` |
 | Tests | `pkg/engine/tools/scripthooks_test.go`, `posthooks_test.go`, `hookdecisions_test.go`; `pkg/engine/hooks_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md), [spec_007_shell](spec_007_shell.md) (process guard), [spec_003_observability](spec_003_observability.md) |

@@ -89,11 +89,9 @@ import (
 	_ "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools/sqlite/sqlitesql"
 )
 
-// Version is the Toolbox release this copy was taken from.
+// Version is the Toolbox release this copy was taken from (VERSION, which
+// tools/update_toolbox.sh writes; a test holds them equal).
 const Version = "1.14.0"
-
-// SourceTypes are the database sources this copy offers.
-var SourceTypes = []string{"postgres", "alloydb-postgres", "sqlite", "bigquery"}
 
 // Load reads and merges files (Toolbox's YAML: sources, tools, groups),
 // filling each ${NAME} (or ${NAME:default}) from env alone, never from the
@@ -185,17 +183,26 @@ var (
 	readVerbs = map[string]bool{"select": true, "with": true, "explain": true, "show": true, "pragma": true, "values": true, "describe": true, "table": true}
 	// writeWords in a statement may make it write (WITH … DELETE).
 	writeWords = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex)\b`)
+	// writeCalls are functions that write or act though a SELECT calls
+	// them (Postgres's sequences, large objects, backends, dblink).
+	writeCalls = regexp.MustCompile(`(?i)\b(setval|nextval|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|lo_\w+|dblink_exec|dblink_send_query|set_config|pg_advisory_lock\w*|pg_switch_wal|pg_promote)\s*\(`)
+	// pragmaSet is a PRAGMA that sets its value (PRAGMA x = 1); the call
+	// form, PRAGMA table_info(t), is mostly a read and isn't counted.
+	pragmaSet = regexp.MustCompile(`(?i)^\s*pragma\s+[\w.]+\s*=`)
 	sqlComment = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
 )
 
 // ReadsOnly says whether a SQL statement only reads: it starts with
 // SELECT, WITH, EXPLAIN, SHOW, PRAGMA, VALUES, DESCRIBE or TABLE, and has
-// no word that writes. It's a hint, not a guard: a read-only source is
+// no word that writes, no call to a function that writes or acts (setval,
+// pg_terminate_backend, lo_unlink, dblink_exec, …) and is no PRAGMA that
+// sets a value. It's a hint, not a guard: a read-only source is
 // what stops writes.
 func ReadsOnly(statement string) bool {
 	s := sqlComment.ReplaceAllString(statement, " ")
 	words := strings.Fields(strings.ToLower(strings.TrimLeft(strings.TrimSpace(s), "(")))
-	return len(words) > 0 && readVerbs[strings.TrimRight(words[0], ";")] && !writeWords.MatchString(s)
+	return len(words) > 0 && readVerbs[strings.TrimRight(words[0], ";")] && !writeWords.MatchString(s) &&
+		!writeCalls.MatchString(s) && !pragmaSet.MatchString(s)
 }
 
 // ReadOnlySources are cfg's sources that can't write, by name: SQLite,

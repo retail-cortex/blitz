@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The arithmetic of ui/charts.tsx, kept apart to be tested.
+// The arithmetic of ./charts.tsx, kept apart to be tested.
 
 /** A score ring's dash and gap for a score out of 5 on a circle of radius r. */
 export function ringDash(score: number, r: number): { dash: number; gap: number } {

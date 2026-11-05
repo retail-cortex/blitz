@@ -35,3 +35,9 @@ copy_to_bin(
     srcs = glob(["**/*.test.*"]),
     visibility = ["//pkg/webui:__pkg__"],
 )
+
+# The theme IDs, which the desktop host's preferences check against.
+exports_files(
+    ["themes.ts"],
+    visibility = ["//pkg/pagehost:__pkg__"],
+)

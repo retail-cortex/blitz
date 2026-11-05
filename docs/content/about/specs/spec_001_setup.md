@@ -8,7 +8,7 @@ weight: 1
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `go.mod`, `MODULE.bazel`, `.bazelrc`, `.gitignore`, `buf.yaml`, `docs/content/development/_index.md`, `LICENSE`, `NOTICE`, `docs/content/about/history.md` |
 | Next | [spec_002_config](spec_002_config.md) … [spec_025_release](spec_025_release.md) |
 
