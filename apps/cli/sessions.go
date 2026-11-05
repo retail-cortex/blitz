@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/docx"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -53,7 +54,7 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 			if err := os.WriteFile(out, data, 0o644); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %s\n", out)
+			fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("session.cli_wrote", "path", out))
 			return nil
 		},
 	}

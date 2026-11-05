@@ -101,3 +101,30 @@ func TestCommandsUseTheLocale(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "editor de líneas no disponible: x", i18n.T("startup.line_editor", "error", "x"))
 }
+
+// A subcommand's output speaks the interface language too, as the REPL's
+// does; its errors stay English (spec_020 CLI-30b, N26 cli-1#7, cli-2#18).
+func TestSubcommandOutputIsTranslated(t *testing.T) {
+	for _, tc := range []struct {
+		locale string
+		args   []string
+		want   string
+	}{
+		{"es", []string{"plugin", "list"}, "No hay plugins instalados."},
+		{"fr-CA", []string{"plugin", "list"}, "Aucun plugiciel installé."},
+		{"es", []string{"plugin", "marketplace", "list"}, "No hay mercados."},
+		{"fr-CA", []string{"skills", "registry", "list"}, "Aucun registre."},
+		{"en-US", []string{"plugin", "list"}, "No plugins installed."},
+	} {
+		t.Run(tc.locale+" "+strings.Join(tc.args, " "), func(t *testing.T) {
+			home := isolate(t)
+			t.Cleanup(func() { i18n.SetCurrent(nil) })
+			require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[ui]\nlocale = \""+tc.locale+"\"\n"), 0o600))
+			i18n.SetCurrent(nil)
+			out, err := runCLI(t, tc.args...)
+			require.NoError(t, err)
+			assert.Contains(t, out, tc.want)
+		})
+	}
+}

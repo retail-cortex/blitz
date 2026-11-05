@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/spf13/cobra"
 )
@@ -68,15 +69,15 @@ func newUpdateCommand() *cobra.Command {
 			newer := version == "dev" || selfupdate.Compare(tag, version) > 0
 			switch {
 			case check && newer:
-				fmt.Fprintf(out, "Blitz %s is available (this is %s): blitz update\n", tag, version)
+				fmt.Fprintln(out, i18n.T("update.available", "version", tag, "current", version))
 				return nil
 			case check:
-				fmt.Fprintf(out, "Blitz %s is the latest release.\n", version)
+				fmt.Fprintln(out, i18n.T("update.latest", "version", version))
 				return nil
 			case version == "dev" && want == "":
 				return withCode(exitUsage, errors.New("this is a development build: name a release with --version, or install one"))
 			case !newer && want == "":
-				fmt.Fprintf(out, "Blitz %s is the latest release.\n", version)
+				fmt.Fprintln(out, i18n.T("update.latest", "version", version))
 				return nil
 			}
 			exe, err := executable()
@@ -92,7 +93,7 @@ func newUpdateCommand() *cobra.Command {
 			if err := installRelease(ctx, out, tag, exe, skipSignature); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Updated to Blitz %s. If the Blitz service is running: blitz service restart\n", tag)
+			fmt.Fprintln(out, i18n.T("update.updated", "version", tag))
 			return nil
 		},
 	}
@@ -110,13 +111,13 @@ func installRelease(ctx context.Context, out io.Writer, tag, exe string, skipSig
 	if goruntime.GOOS == "windows" {
 		ext = ".zip"
 	}
-	name := fmt.Sprintf("blitz_%s_%s_%s%s", ver, goruntime.GOOS, goruntime.GOARCH, ext)
+	name := strings.Join([]string{"blitz", ver, goruntime.GOOS, goruntime.GOARCH}, "_") + ext
 	tmp, err := os.MkdirTemp("", "blitz-update-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	fmt.Fprintf(out, "Downloading Blitz %s for %s/%s…\n", tag, goruntime.GOOS, goruntime.GOARCH)
+	fmt.Fprintln(out, i18n.T("update.downloading", "version", tag, "platform", goruntime.GOOS+"/"+goruntime.GOARCH))
 	src := releases()
 	for _, f := range []string{name, "checksums.txt", "checksums.txt.sigstore.json"} {
 		if err := selfupdate.Fetch(ctx, src.File(tag, f), filepath.Join(tmp, f)); err != nil {
@@ -125,11 +126,11 @@ func installRelease(ctx context.Context, out io.Writer, tag, exe string, skipSig
 	}
 	sums := filepath.Join(tmp, "checksums.txt")
 	if skipSignature {
-		fmt.Fprintln(out, "Not checking the signature (--skip-signature); the checksum is still checked.")
+		fmt.Fprintln(out, i18n.T("update.skip_signature"))
 	} else if err := checkSignature(ctx, sums, filepath.Join(tmp, "checksums.txt.sigstore.json")); err != nil {
 		return err
 	} else {
-		fmt.Fprintln(out, "The checksums are signed by Blitz's release workflow.")
+		fmt.Fprintln(out, i18n.T("update.signed"))
 	}
 	if err := selfupdate.CheckSum(sums, filepath.Join(tmp, name)); err != nil {
 		return err

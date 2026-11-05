@@ -15,15 +15,15 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("//build:macos.bzl", "macho_uuid_linkopts", "signed_binary")
 
-# The REPL's untranslated-output lint reads main.go and the translated
-# subcommands too.
-exports_files([
-    "agents.go",
-    "auth.go",
-    "enterprise.go",
-    "enterprisesync.go",
-    "main.go",
-])
+# The untranslated-output lint in internal/tui reads every source here.
+filegroup(
+    name = "i18n_lint_sources",
+    srcs = glob(
+        ["*.go"],
+        exclude = ["*_test.go"],
+    ),
+    visibility = ["//apps/cli/internal/tui:__pkg__"],
+)
 
 go_library(
     name = "cli_lib",

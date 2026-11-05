@@ -27,6 +27,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 
@@ -71,11 +72,10 @@ func serviceInstall(out io.Writer) error {
 	if err := loginitem.Install(bin); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "✓ The Blitz service starts at login (%s).\n", path)
-	fmt.Fprintf(out, "   It runs %s; after upgrading Blitz, run 'blitz service install' again.\n", bin)
+	fmt.Fprintln(out, i18n.T("service.installed", "path", path))
+	fmt.Fprintln(out, i18n.T("service.installed_runs", "program", bin))
 	if keys := keysOnlyInEnvironment(); len(keys) > 0 {
-		fmt.Fprintf(out, "!  %s %s only in your shell's environment, which the service won't see: put %s in %s.\n",
-			strings.Join(keys, ", "), plural(len(keys), "is", "are"), plural(len(keys), "it", "them"), filepath.Join(config.ConfigDir(""), ".env.toml"))
+		fmt.Fprintln(out, i18n.N("service.keys_in_env", len(keys), "keys", strings.Join(keys, ", "), "file", filepath.Join(config.ConfigDir(""), ".env.toml")))
 	}
 	return nil
 }
@@ -87,7 +87,7 @@ func serviceUninstall(out io.Writer) error {
 		}
 		return err
 	}
-	fmt.Fprintln(out, "The Blitz service no longer starts at login.")
+	fmt.Fprintln(out, i18n.T("service.uninstalled"))
 	return nil
 }
 
@@ -104,11 +104,11 @@ func serviceRestart(ctx context.Context, out io.Writer) error {
 		if err := waitService(ctx, sock, nil); err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "✓ The Blitz service restarted.")
+		fmt.Fprintln(out, i18n.T("service.restarted"))
 		return nil
 	}
 	if !socket.Running(sock) {
-		fmt.Fprintln(out, "The Blitz service isn't running: it reads the change when it starts.")
+		fmt.Fprintln(out, i18n.T("service.not_running"))
 		return nil
 	}
 	if err := shutdownService(ctx, sock); err != nil {
@@ -120,7 +120,7 @@ func serviceRestart(ctx context.Context, out io.Writer) error {
 	if _, err := ensureService(ctx); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "✓ The Blitz service restarted.")
+	fmt.Fprintln(out, i18n.T("service.restarted"))
 	return nil
 }
 
@@ -156,15 +156,16 @@ func serviceStatus(out io.Writer) error {
 	if err != nil {
 		return withCode(exitUsage, err)
 	}
-	installed := "not installed"
+	installed := i18n.T("service.item_missing")
 	if loginitem.Installed() {
-		installed = "installed (" + path + ")"
+		installed = i18n.T("service.item_installed", "path", path)
 	}
-	running := "not running"
+	running := i18n.T("service.stopped")
 	if sock := socket.DefaultSocket(); socket.Running(sock) {
-		running = "answering on " + sock
+		running = i18n.T("service.answering", "socket", sock)
 	}
-	fmt.Fprintf(out, "login item: %s\nservice:    %s\n", installed, running)
+	fmt.Fprintln(out, i18n.T("service.status_item", "state", installed))
+	fmt.Fprintln(out, i18n.T("service.status_service", "state", running))
 	return nil
 }
 
@@ -211,13 +212,6 @@ func keysOnlyInEnvironment() []string {
 		}
 	}
 	return out
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // serviceBinary finds blitzd: beside this blitz (as released and bundled),

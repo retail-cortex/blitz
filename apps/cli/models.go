@@ -22,6 +22,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -58,7 +59,7 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 				fmt.Fprintf(out, "%s\n", pm.Provider)
 				if pm.Err != "" {
 					failed++
-					fmt.Fprintf(out, "  can't list its models: %v\n\n", pm.Err)
+					fmt.Fprintf(out, "%s\n\n", i18n.T("model.cli_list_failed", "error", pm.Err))
 					continue
 				}
 				if pm.Note != "" {
@@ -68,7 +69,7 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 				for _, m := range pm.Models {
 					price := "-"
 					if m.HasPrice {
-						price = fmt.Sprintf("$%.2f in, $%.2f out per million tokens", m.InputPerMTok, m.OutputPerMTok)
+						price = i18n.T("model.cli_price", "input", fmt.Sprintf("$%.2f", m.InputPerMTok), "output", fmt.Sprintf("$%.2f", m.OutputPerMTok))
 					}
 					line := fmt.Sprintf("  %s/%s\t%s", pm.Provider, m.ID, price)
 					if about := modelAbout(m); about != "" {
@@ -95,20 +96,20 @@ func modelAbout(m client.ListedModel) string {
 		parts = append(parts, m.DisplayName)
 	}
 	if m.Default {
-		parts = append(parts, "the default")
+		parts = append(parts, i18n.T("model.cli_default"))
 	}
 	if c := m.Caps; c != nil {
 		var can []string
 		for _, f := range []struct {
 			on   bool
 			what string
-		}{{c.Tools, "tools"}, {c.Images, "images"}, {c.Thinking, "thinking"}} {
+		}{{c.Tools, i18n.T("model.cli_tools")}, {c.Images, i18n.T("model.cli_images")}, {c.Thinking, i18n.T("model.cli_thinking")}} {
 			if f.on {
 				can = append(can, f.what)
 			}
 		}
 		if c.Context > 0 {
-			can = append(can, fmt.Sprintf("%dK context", c.Context/1000))
+			can = append(can, i18n.T("model.cli_context", "size", c.Context/1000))
 		}
 		if len(can) > 0 {
 			parts = append(parts, strings.Join(can, ", "))

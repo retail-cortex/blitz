@@ -18,10 +18,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -126,9 +128,9 @@ always asks.`,
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "%s %s: %s\n", effect, c.Rule, describeRule(c))
 			if c.Tested {
-				fmt.Fprintf(out, "  %q: %s\n", sample, map[bool]string{true: "matches", false: "doesn't match"}[c.Matches])
+				fmt.Fprintf(out, "  %q: %s\n", sample, map[bool]string{true: i18n.T("config.rule_matches"), false: i18n.T("config.rule_no_match")}[c.Matches])
 				if c.Redirect != "" && c.Matches && c.Kind == "shell" && effect == "allow" {
-					fmt.Fprintf(out, "  but it writes %s through a redirection, so it still asks\n", c.Redirect)
+					fmt.Fprintln(out, i18n.T("config.rule_redirect", "path", c.Redirect))
 				}
 			}
 			return nil
@@ -173,13 +175,13 @@ always asks.`,
 func describeRule(c client.RuleCheck) string {
 	switch c.Form {
 	case "prefix":
-		return fmt.Sprintf("the command %q with any arguments", c.Pattern)
+		return i18n.T("config.rule_prefix", "pattern", strconv.Quote(c.Pattern))
 	case "glob":
-		return fmt.Sprintf("commands matching %q (* is any text)", c.Pattern)
+		return i18n.T("config.rule_glob", "pattern", strconv.Quote(c.Pattern))
 	case "regex":
-		return fmt.Sprintf("commands the regular expression %q matches in full", strings.TrimPrefix(c.Pattern, "re:"))
+		return i18n.T("config.rule_regex", "pattern", strconv.Quote(strings.TrimPrefix(c.Pattern, "re:")))
 	case "path":
-		return fmt.Sprintf("paths matching %q, and what's under them", c.Pattern)
+		return i18n.T("config.rule_path", "pattern", strconv.Quote(c.Pattern))
 	}
 	return fmt.Sprintf("%s %q", c.Kind, c.Pattern)
 }
@@ -205,7 +207,7 @@ func listPermissionRules(out io.Writer, prefix, workspace string) error {
 			}
 		}
 		if n == 0 {
-			fmt.Fprintln(out, "  none")
+			fmt.Fprintln(out, i18n.T("config.rules_none"))
 		}
 	}
 	if workspace != "" {
@@ -213,16 +215,16 @@ func listPermissionRules(out io.Writer, prefix, workspace string) error {
 		if err != nil {
 			return err
 		}
-		print("workspace ("+path+")", own)
-		print("global ("+gpath+")", global)
+		print(i18n.T("config.rules_workspace", "path", path), own)
+		print(i18n.T("config.rules_global", "path", gpath), global)
 		effective = global.Merge(own)
 	} else {
-		print("global ("+path+")", own)
+		print(i18n.T("config.rules_global", "path", path), own)
 	}
 	if effective.DefaultsOn() {
-		fmt.Fprintf(out, "built-in (read_only_defaults on; off: blitz config permissions defaults off):\n  allow %s\n  ask   %s\n", strings.Join(config.ReadOnlyCommands, ", "), strings.Join(config.ReadOnlyGuards, ", "))
+		fmt.Fprintln(out, i18n.T("config.rules_builtin_on", "commands", strings.Join(config.ReadOnlyCommands, ", "), "guards", strings.Join(config.ReadOnlyGuards, ", ")))
 	} else {
-		fmt.Fprintln(out, "built-in: off (on: blitz config permissions defaults on)")
+		fmt.Fprintln(out, i18n.T("config.rules_builtin_off"))
 	}
 	return nil
 }

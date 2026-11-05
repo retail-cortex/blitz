@@ -633,7 +633,7 @@ func TestEnterpriseCatalogCommand(t *testing.T) {
 
 // Why the service hasn't got a job, and what to do, as Studio says it
 // (spec_053 EN-42).
-func TestMissingText(t *testing.T) {
+func TestMissingErr(t *testing.T) {
 	for name, c := range map[string]struct {
 		m    client.ServiceJobMissing
 		want string
@@ -650,7 +650,7 @@ func TestMissingText(t *testing.T) {
 		"unreadable":  {client.ServiceJobMissing{Reason: "not_read", Detail: "the service is down"}, "yet: the service is down"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.Contains(t, missingText("d", &c.m), c.want)
+			assert.ErrorContains(t, missingErr("d", &c.m), c.want)
 		})
 	}
 }

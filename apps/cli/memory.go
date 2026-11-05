@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +68,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(list) == 0 {
-				fmt.Fprintln(out, "No notes: the agent saves them with its remember tool.")
+				fmt.Fprintln(out, i18n.T("memory.cli_no_notes"))
 				return nil
 			}
 			for _, n := range list {
@@ -128,7 +129,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 			if err := r.ForgetNote(n.Name); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Forgot %s.\n", n.Name)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("memory.cli_forgot", "name", n.Name))
 			return nil
 		},
 	}

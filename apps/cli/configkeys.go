@@ -79,23 +79,25 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "settings: %s\nkeys kept in: %s\n", info.Path, info.SecretStore)
+			fmt.Fprintln(out, i18n.T("config.keys_settings", "path", info.Path))
+			fmt.Fprintln(out, i18n.T("config.keys_store", "store", info.SecretStore))
 			for _, p := range info.Providers {
 				src := string(p.KeySource)
 				if p.KeyMissing {
-					src += " (missing from the store: set it again)"
+					src += i18n.T("config.key_missing")
 				}
 				if p.KeySource == config.KeyPlain || p.KeySource == config.KeyObfuscated {
-					src += " (move it: blitz config secure-key " + p.Name + ")"
+					src += i18n.T("config.key_move", "provider", p.Name)
 				}
-				vertex := "project " + cmp.Or(p.ProjectID, "from GOOGLE_CLOUD_PROJECT") + ", location " + cmp.Or(p.Location, "from GOOGLE_CLOUD_LOCATION, else global")
+				vertex := i18n.T("config.key_vertex", "project", cmp.Or(p.ProjectID, i18n.T("config.key_vertex_project")),
+					"location", cmp.Or(p.Location, i18n.T("config.key_vertex_location")))
 				switch {
 				case p.Auth == config.AuthADC:
-					src = "Google Cloud ADC, " + vertex + " (key: " + src + ", unused)"
+					src = i18n.T("config.key_adc", "vertex", vertex, "key", src)
 				case p.Auth == config.AuthOAuth && p.Name == "gemini":
-					src = "OAuth, your Google account (blitz auth login google), " + vertex + " (key: " + src + ", unused)"
+					src = i18n.T("config.key_google_oauth", "vertex", vertex, "key", src)
 				case p.Auth == config.AuthOAuth:
-					src = "OAuth, `ant auth login` profile " + cmp.Or(p.Profile, "ant's active one") + " (key: " + src + ", unused)"
+					src = i18n.T("config.key_ant_oauth", "profile", cmp.Or(p.Profile, i18n.T("config.key_ant_active")), "key", src)
 				}
 				fmt.Fprintf(out, "  %-10s %s\n", p.Name, src)
 			}
@@ -115,7 +117,7 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 			if err != nil {
 				return err
 			}
-			key, err := readSecret(cmd, fmt.Sprintf("%s API key: ", p))
+			key, err := readSecret(cmd, i18n.T("config.key_prompt", "provider", p))
 			if err != nil {
 				return err
 			}
