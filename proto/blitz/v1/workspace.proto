@@ -1351,8 +1351,8 @@ message RunSkillScriptResponse {
   // The sandbox it ran in.
   string sandbox = 5;
   // Removed 2026-11-05 (scan N26-service#10: no client read it).
-  reserved 6;
-  reserved "output_files";
+  // Deprecated: no longer set (kept for older clients).
+  repeated string output_files = 6 [deprecated = true];
   // Why it didn't run, or failed to.
   string error = 7;
 }
@@ -3134,8 +3134,8 @@ message HumanTask {
   // from the run as the step started.
   string a2ui_json = 9;
   // Removed 2026-11-05 (scan N26-service#10: no client read it).
-  reserved 10;
-  reserved "fire_at";
+  // Deprecated: no longer set (kept for older clients).
+  google.protobuf.Timestamp fire_at = 10 [deprecated = true];
   google.protobuf.Timestamp created = 11;
   // The chat its run's agent steps are turns in.
   string session_id = 12;
@@ -3754,8 +3754,8 @@ message ConnectorKind {
   map<string, string> queries_hint = 11;
   string queries_example = 12;
   // Removed 2026-11-05 (scan N26-service#10: no client read it).
-  reserved 13;
-  reserved "placeholders";
+  // Deprecated: no longer set (kept for older clients).
+  string placeholders = 13 [deprecated = true];
   // builtin, global or workspace; its file ("" built in).
   string origin = 14;
   string path = 15;

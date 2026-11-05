@@ -205,8 +205,9 @@ message CompletionItem {
   // Other changes that come with it (an import).
   repeated TextEdit additional_edits = 8;
   // Removed 2026-11-05 (scan N26-service#10: no client read it).
-  reserved 9, 10;
-  reserved "sort_text", "filter_text";
+  // Deprecated: no longer set (kept for older clients).
+  string sort_text = 9 [deprecated = true];
+  string filter_text = 10 [deprecated = true];
 }
 
 // Response message for LanguageService.Complete.
