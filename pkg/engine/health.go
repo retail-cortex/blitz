@@ -444,7 +444,7 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 		in.Workflows = append(in.Workflows, s)
 	}
 
-	list, _ := w.ListWorkers()
+	list, _ := w.listWorkers()
 	for _, wk := range list {
 		s := health.Source{Name: wk.Name, Path: wk.Path, Detail: wk.Workflow, Hash: wk.Hash, Off: wk.State != api.StateEnabled}
 		if len(wk.Problems) > 0 && wk.State != api.StateEnabled {
@@ -478,7 +478,6 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 			in.Audit = append(in.Audit, e)
 		}
 	}
-	_ = ctx
 	return in
 }
 

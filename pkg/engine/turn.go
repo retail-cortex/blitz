@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -44,35 +45,29 @@ import (
 // refused prompt is a *BlockedError. A turn that fails part way still
 // returns what it produced.
 func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
-	var opts []runtime.ExecOption
-	if t.Command {
-		// A workflow runs as this turn, step by step (spec_043_workflows).
-		if f, input, ok := w.flowCommand(t.Text); ok {
-			return w.runFlow(ctx, sessionID, f, input, on)
-		}
-		var err error
-		if opts, err = w.expandCommand(ctx, &t); err != nil {
-			return api.TurnResult{}, err
-		}
+	tt, opts, f, err := w.prepareTurn(ctx, t)
+	if err != nil {
+		return api.TurnResult{}, err
 	}
-	// Plan permission mode, and plan_review = always, plan every prompt
-	// first; side questions and read-only turns are read-only already.
-	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	if f != nil {
+		// A workflow runs as this turn, step by step (spec_043_workflows).
+		return w.runFlow(ctx, sessionID, f.flow, f.input, on)
+	}
 	start := time.Now()
-	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
-	if t.Command && isReflect(t.Text) && err == nil {
+	res, err := w.run(ctx, sessionID, tt, on, w.storage, opts...)
+	if tt.Command && isReflect(tt.Text) && err == nil {
 		// The next reflection's evidence starts where this one began
 		// (spec_048_harness_learning HE-04).
 		w.reflected(start)
 	}
-	if t.Command && (isSetup(t.Text) || isReflect(t.Text)) {
+	if tt.Command && (isSetup(tt.Text) || isReflect(tt.Text)) {
 		// The instructions and experience it wrote apply from the next
 		// prompt.
 		if _, rerr := w.ReloadMemory(context.WithoutCancel(ctx)); rerr != nil {
 			w.warn(rerr.Error())
 		}
 	}
-	if err == nil && !t.Command && !t.Aside && tools.Attended(ctx) {
+	if err == nil && !tt.Command && !tt.Aside && tools.Attended(ctx) {
 		// Time to learn from the runs? Said in the chat (HE-63).
 		w.offerReflect(on, time.Now())
 	}
@@ -112,22 +107,43 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		started(rec.ID)
 	}
 	w.sessionStarted(rec.ID, "background")
-	var opts []runtime.ExecOption
-	if t.Command {
-		// A workflow (spec_043_workflows WF-10) or a command runs as it
-		// would in a chat.
-		if f, input, ok := w.flowCommand(t.Text); ok {
-			return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f, input, on)
-		}
-		if opts, err = w.expandCommand(ctx, &t); err != nil {
-			return api.TurnResult{}, err
-		}
+	// A workflow (spec_043_workflows WF-10) or a command runs as it would
+	// in a chat.
+	tt, opts, f, err := w.prepareTurn(ctx, t)
+	if err != nil {
+		return api.TurnResult{}, err
 	}
-	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st, opts...)
+	if f != nil {
+		return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f.flow, f.input, on)
+	}
+	res, err := w.run(ctx, rec.ID, tt, on, st, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	w.auditTurnEnd(rec.ID, err)
 	return res, err
+}
+
+// flowTurn is the workflow a command turn runs, with its input.
+type flowTurn struct {
+	flow  flows.Flow
+	input string
+}
+
+// prepareTurn is t as the engine runs it, for Run and RunDetached alike:
+// a command expanded (its options for the run) or the workflow it names
+// (f, run instead of a turn), and planned first in plan permission mode
+// or with plan_review = always (side questions and read-only turns are
+// read-only already).
+func (w *Workspace) prepareTurn(ctx context.Context, t api.Turn) (tt turn, opts []runtime.ExecOption, f *flowTurn, err error) {
+	if t.Command {
+		if fl, input, ok := w.flowCommand(t.Text); ok {
+			return turn{}, nil, &flowTurn{flow: fl, input: input}, nil
+		}
+		if opts, err = w.expandCommand(ctx, &t); err != nil {
+			return turn{}, nil, nil, err
+		}
+	}
+	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	return turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, opts, nil, nil
 }
 
 // UsageOf returns a session's usage, whichever is active.

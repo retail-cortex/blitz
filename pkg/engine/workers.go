@@ -330,6 +330,12 @@ func writeFileAtomic(tmpDir, path string, data []byte) error {
 // ListWorkers returns the workspace's workers, by name.
 func (w *Workspace) ListWorkers() ([]api.WorkerInfo, error) {
 	w.RefreshAgents(context.Background()) // a worker's agent may be new
+	return w.listWorkers()
+}
+
+// listWorkers is ListWorkers without reading the agent files again (the
+// health page asks every few seconds; a turn or a listing reads them).
+func (w *Workspace) listWorkers() ([]api.WorkerInfo, error) {
 	if !w.cfg.Workers.Enabled {
 		return nil, api.ErrWorkersDisabled
 	}

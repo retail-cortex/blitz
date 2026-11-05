@@ -463,8 +463,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.tools.ScriptHooks().Info = func(_ context.Context, session string) tools.HookInfo {
 		return tools.HookInfo{TranscriptPath: w.storage.TranscriptPath(session), PermissionMode: string(w.tools.Hooks().Mode()), Agent: w.engine.ActiveAgent()}
 	}
-	w.settingsWatch = w.watchSettings()
 	w.bgCtx, w.bgStop = context.WithCancel(context.Background())
+	w.settingsWatch = w.watchSettings() // its reloads stop with bgCtx
 	w.tools.SetSearcher(w.Search)
 	w.openSearch(ctx)
 	opened = true

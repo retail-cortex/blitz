@@ -138,7 +138,7 @@ func (w *Workspace) watchSettings() *settingsWatch {
 			}
 			if fp := connectors.Fingerprint(connectors.AllFiles(w.connectorDirs())); fp != connSeen {
 				connSeen = fp
-				if err := w.ReloadConnectors(context.Background()); err != nil {
+				if err := w.ReloadConnectors(w.bgCtx); err != nil {
 					w.warn("connectors: " + err.Error())
 				}
 			}
