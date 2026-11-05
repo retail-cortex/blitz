@@ -181,7 +181,7 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 		}
 	})}
 	go srv.Serve(ln)
-	defer srv.Close()
+	defer signedin.Close(srv)
 
 	nonce := random()
 	show(Prompt{URL: cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", nonce))})

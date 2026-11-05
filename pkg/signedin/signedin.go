@@ -20,6 +20,7 @@
 package signedin
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"html/template"
@@ -28,6 +29,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed page.html
@@ -128,6 +130,21 @@ func (p Page) view() view {
 		v.Accent = template.CSS(css) // built here from checked colours only
 	}
 	return v
+}
+
+// closeWait is how long Close waits for a page being written.
+var closeWait = time.Second
+
+// Close stops the sign-in's local server once the page it's writing has
+// gone out (at most closeWait), so the browser never gets half a page: the
+// sign-in carries on as soon as the page's handler has the code, before
+// the page is sent.
+func Close(srv *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), closeWait)
+	defer cancel()
+	if srv.Shutdown(ctx) != nil {
+		_ = srv.Close()
+	}
 }
 
 // Write writes p to w as the answer, with status.

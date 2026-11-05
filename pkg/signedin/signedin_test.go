@@ -15,11 +15,15 @@
 package signedin
 
 import (
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWrite(t *testing.T) {
@@ -63,4 +67,34 @@ func TestWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Close lets the page being written go out whole: the sign-in moves on
+// once the handler has the code, before the page is sent (the browser got
+// half a page, or none, now and then).
+func TestCloseSendsThePage(t *testing.T) {
+	got := make(chan struct{})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Write(w, http.StatusOK, Page{Title: "Signed in", Message: "All done."})
+		close(got) // the sign-in carries on from here
+		time.Sleep(50 * time.Millisecond)
+	})}
+	go srv.Serve(ln)
+	pages := make(chan string, 1)
+	go func() {
+		res, err := http.Get("http://" + ln.Addr().String() + "/")
+		if assert.NoError(t, err) {
+			defer res.Body.Close()
+			body, err := io.ReadAll(res.Body)
+			assert.NoError(t, err, "the page read whole")
+			pages <- string(body)
+		}
+	}()
+	<-got
+	Close(srv)
+	page := <-pages
+	assert.Contains(t, page, "All done.")
+	assert.Contains(t, page, "</html>")
 }

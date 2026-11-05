@@ -199,7 +199,7 @@ func Login(ctx context.Context, store secrets.Store, server, serverURL string, s
 		}
 	})}
 	go srv.Serve(ln)
-	defer srv.Close()
+	defer signedin.Close(srv)
 
 	var saved *Record
 	handler, err := auth.NewAuthorizationCodeHandler(&auth.AuthorizationCodeHandlerConfig{

@@ -26,5 +26,8 @@ go_test(
     name = "signedin_test",
     srcs = ["signedin_test.go"],
     embed = [":signedin"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )
