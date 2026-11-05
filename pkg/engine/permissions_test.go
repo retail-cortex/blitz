@@ -97,6 +97,44 @@ func TestPermissionRuleSavedForTheWorkspace(t *testing.T) {
 	assert.Empty(t, own.Allow)
 }
 
+// /permissions remove takes out the session's and the settings' rules,
+// but not a project file's or a built-in one: those are refused, naming
+// where they change (spec_031 PRJ-41; N26 engine-top-2#3).
+func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.ProjectPermissions = config.PermissionsConfig{Deny: []string{"shell(git push*)"}}
+	})
+	_, err := w.AddPermissionRule("deny", "shell(make deploy)", api.ScopeSession)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, rule, refused string
+		removed             int
+	}{
+		{name: "a project file's rule", rule: "shell(git push*)", refused: filepath.Join(".blitz", "settings.toml")},
+		{name: "a built-in rule", rule: "shell(ls)", refused: "read_only_defaults"},
+		{name: "a session rule", rule: "Bash(make deploy)", removed: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := w.RemovePermissionRule(tc.rule, api.ScopeSession)
+			if tc.refused != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.refused)
+				assert.Zero(t, res.Removed)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.removed, res.Removed)
+			}
+		})
+	}
+	rules := map[string]string{}
+	for _, r := range w.ListPermissionRules() {
+		rules[r.Rule] = r.Source
+	}
+	assert.Equal(t, "project", rules["shell(git push*)"], "the project's rule stays")
+	assert.Equal(t, "built-in", rules["shell(ls)"], "the built-in rule stays")
+	assert.NotContains(t, rules, "shell(make deploy)")
+}
+
 // A deny rule naming a tool refuses the call before it runs.
 func TestToolDenyRuleInTheEngine(t *testing.T) {
 	agents := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_agents", Args: map[string]any{}}}}}

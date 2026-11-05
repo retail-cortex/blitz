@@ -96,6 +96,7 @@ This design lets a repository carry settings in three tiers:
 
   In the service these are `WorkspaceService.GetProjectSettings` and `TrustProject`. The client implements them, so the REPL works the same attached or local.
 - **PRJ-41** Permission listings (`ListPermissionRules`, the run settings panel) show the scope `project` for rules from project files. They can't be removed from Blitz: they're edited in the file.
+- **PRJ-41a** *2026-11-05 (scan N26-engine-top-2#3: `/permissions remove` and `RemovePermissionRule` deleted every rule with that text, a project's deny rules and the built-in ones too, until a project file changed).* `RemovePermissionRule` removes only the session's, the flags' and the settings' rules; one that is a project file's rule is refused ("… comes from the project's .blitz/settings.toml: change it there"), and so is a built-in read-only rule (turned off with `read_only_defaults = false`).
 
 ## 8. What changed for existing users
 

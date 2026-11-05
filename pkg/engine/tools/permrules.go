@@ -392,8 +392,8 @@ func (p *PermissionRules) Add(effect Effect, text, source string) error {
 }
 
 // Remove removes the rules written as text (any effect unless one is
-// given) and reports how many.
-func (p *PermissionRules) Remove(text string, effect Effect) int {
+// given), from any of sources (none: every source), and reports how many.
+func (p *PermissionRules) Remove(text string, effect Effect, sources ...string) int {
 	want, err := ParsePermissionRule(cmpEffect(effect), text, "")
 	key := strings.TrimSpace(text)
 	if err == nil {
@@ -403,7 +403,7 @@ func (p *PermissionRules) Remove(text string, effect Effect) int {
 	defer p.mu.Unlock()
 	n := 0
 	p.rules = slices.DeleteFunc(p.rules, func(r PermissionRule) bool {
-		if r.String() == key && (effect == "" || r.Effect == effect) {
+		if r.String() == key && (effect == "" || r.Effect == effect) && (len(sources) == 0 || slices.Contains(sources, r.Source)) {
 			n++
 			return true
 		}
