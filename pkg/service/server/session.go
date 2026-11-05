@@ -196,10 +196,7 @@ func (s *Server) turn(w *workspace, dir string, t *pb.Turn) (api.Turn, error) {
 		}
 		imgs = append(imgs, img)
 	}
-	var added []api.ContextBlock
-	for _, c := range t.Context {
-		added = append(added, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
-	}
+	added := contextBlocks(t.Context)
 	prompt := t.Prompt
 	if note := s.conflictNote(dir); note != "" {
 		prompt = cmp.Or(prompt, t.Text) + "\n\n" + note

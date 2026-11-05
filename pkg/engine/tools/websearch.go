@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
@@ -143,8 +145,11 @@ func newWebSearcher(cfg WebSearchConfig) (*webSearcher, error) {
 	if cfg.MaxResults <= 0 {
 		cfg.MaxResults = searchDefaultResults
 	}
+	if cfg.MaxResults > searchMaxResults {
+		slog.Warn("web search", "search_max_results", cfg.MaxResults, "used", searchMaxResults, "why", "searches return at most this many results")
+	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 20 * time.Second
+		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
 	return &webSearcher{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}}, nil
 }
@@ -409,6 +414,13 @@ func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, str
 	return out, textutil.Ellipsize(strings.TrimSpace(answer.String()), 2000), len(gm.WebSearchQueries), nil
 }
 
+// groundingRedirectHost reports whether host serves Google's grounding
+// redirects: only those links are resolved, whatever host an answer (or a
+// custom search_url) names. Replaced in tests.
+var groundingRedirectHost = func(host string) bool {
+	return strings.EqualFold(host, "vertexaisearch.cloud.google.com")
+}
+
 // resolveRedirects replaces Google grounding redirect links with their
 // targets, in parallel. A link that can't be resolved is kept as it is.
 func (s *webSearcher) resolveRedirects(ctx context.Context, results []SearchResult) {
@@ -419,7 +431,7 @@ func (s *webSearcher) resolveRedirects(ctx context.Context, results []SearchResu
 	var wg sync.WaitGroup
 	for i := range results {
 		u, err := url.Parse(results[i].URL)
-		if err != nil || !strings.HasPrefix(u.Path, "/grounding-api-redirect/") {
+		if err != nil || u.Scheme != "https" && u.Scheme != "http" || !groundingRedirectHost(u.Hostname()) || !strings.HasPrefix(u.Path, "/grounding-api-redirect/") {
 			continue
 		}
 		wg.Add(1)

@@ -50,6 +50,12 @@ func origin(r *session.SessionRecord) string {
 	return r.Origin
 }
 
+// personal reports whether r is a person's own conversation: not a
+// snapshot, nor a job's, background, workflow or eval run.
+func personal(r *session.SessionRecord) bool {
+	return r.Name == "" && origin(r) == ""
+}
+
 func sessionInfos(list []*session.SessionRecord) []api.SessionInfo {
 	out := make([]api.SessionInfo, len(list))
 	for i, r := range list {
@@ -252,8 +258,9 @@ func selectSession(st *session.Storage, resume string, cont bool, title, agent s
 		if err != nil {
 			return nil, false, err
 		}
-		// Snapshots are saved copies, not conversations to carry on.
-		list = slices.DeleteFunc(list, func(r *session.SessionRecord) bool { return r.Name != "" })
+		// Snapshots are saved copies, and runs (a job's, a background or
+		// workflow run, an eval's) aren't conversations to carry on.
+		list = slices.DeleteFunc(list, func(r *session.SessionRecord) bool { return !personal(r) })
 		if len(list) == 0 {
 			return nil, false, &api.ResumeError{Err: errNoSavedSessions(st.Workspace())}
 		}

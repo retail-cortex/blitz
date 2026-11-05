@@ -29,10 +29,10 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/retail-cortex/blitz/pkg/secrets"
-	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
 
 // AgencyLevel determines how autonomously the agent operates.
@@ -128,6 +128,11 @@ type Config struct {
 	// ProjectPermissions are the project files' rules, kept apart from
 	// the user's so they're listed as the project's.
 	ProjectPermissions PermissionsConfig `toml:"-"`
+	// Warnings are what the settings files say that loading didn't use or
+	// couldn't read (unknown settings, settings in the wrong file, an
+	// organization policy that can't be read), for the person to see when
+	// a workspace opens and in blitz doctor.
+	Warnings []string `toml:"-"`
 }
 
 // BlitzConfig controls the core behaviour settings.
@@ -149,7 +154,8 @@ type BlitzConfig struct {
 	// AutoApprove is the older spelling of PermissionMode = "bypass".
 	AutoApprove bool `toml:"auto_approve"`
 	// PermissionMode is the starting permission mode: default,
-	// accept-edits, plan, dont-ask or bypass (which needs the OS sandbox).
+	// accept-edits, plan, auto, dont-ask or bypass (which needs the OS
+	// sandbox).
 	PermissionMode string `toml:"permission_mode"`
 	// PlanReview decides when the agent plans for approval before changing
 	// anything: always (every prompt), agent-decides (it may choose to, with
@@ -503,6 +509,27 @@ type WorkerPolicy struct {
 	MaxConcurrent int `toml:"max_concurrent"`
 }
 
+// DefaultWorkerTimeout is [workers.policy] default_timeout as shipped,
+// which a job runs under when the setting can't be read.
+const DefaultWorkerTimeout = "30m"
+
+// Problems are the policy's durations that can't be read (a Go duration
+// such as 30m or 1h30m, above zero): never "no limit", they're reported
+// (spec_023 WK-22a).
+func (p WorkerPolicy) Problems() []string {
+	var probs []string
+	for key, v := range map[string]string{"default_timeout": p.DefaultTimeout, "max_timeout": p.MaxTimeout} {
+		if v == "" {
+			continue
+		}
+		if d, err := time.ParseDuration(v); err != nil || d <= 0 {
+			probs = append(probs, fmt.Sprintf("workers.policy.%s = %q isn't a duration such as 30m or 1h30m; %s is used", key, v, DefaultWorkerTimeout))
+		}
+	}
+	slices.Sort(probs)
+	return probs
+}
+
 // SkillPolicy is the host's limit on what skills' scripts may do. For each
 // setting the stricter of the skill's request and this policy applies.
 type SkillPolicy struct {
@@ -513,7 +540,8 @@ type SkillPolicy struct {
 	// AllowHITLBypass lets a skill that declares tier 0 and
 	// allow_hitl_bypass skip approval (e.g. in CI). Off: tier 0 is tier 3.
 	AllowHITLBypass bool `toml:"allow_hitl_bypass"`
-	// Languages are the script languages that may run: python, typescript.
+	// Languages are the script languages that may run (ScriptLanguages;
+	// all six by default).
 	Languages []string `toml:"languages"`
 	// Sandbox runs scripts under gvisor, the OS sandbox (os), or whichever
 	// is available (auto).
@@ -886,7 +914,7 @@ func DefaultConfig() *Config {
 				// that wants a cap sets max_*.
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
-				DefaultTimeout:    "30m",
+				DefaultTimeout:    DefaultWorkerTimeout,
 				MaxConcurrent:     2,
 			},
 		},
@@ -907,8 +935,8 @@ func DefaultConfig() *Config {
 			},
 		},
 		Tools: ToolsConfig{
-			ShellTimeoutSeconds: 120,
-			MaxFileSizeBytes:    10 * 1024 * 1024, // 10MB
+			ShellTimeoutSeconds: DefaultShellTimeoutSeconds,
+			MaxFileSizeBytes:    DefaultMaxFileSizeBytes,
 			WorkspaceDir:        ".",
 			AutoApproveCommands: false,
 			MaxParallel:         8,
@@ -921,6 +949,9 @@ func DefaultConfig() *Config {
 			StorageDir: filepath.Join(homeDir, ".blitz", "sessions"),
 			AutoSave:   true,
 		},
+		// The engine's defaults (tools.DefaultProcessLimits), here so the
+		// settings reference shows them.
+		Processes: ProcessesConfig{CPUPercent: 90, BusyFor: "2m", MemoryMB: 2048, GrowthWindow: "10m", LeftAfter: "2h"},
 		Sandbox: SandboxConfig{
 			BlockedPaths:       append([]string(nil), DefaultBlockedPaths...),
 			ShellWritablePaths: []string{"~/.cache", "~/go/pkg/mod", "~/.npm"},
@@ -936,7 +967,7 @@ func DefaultConfig() *Config {
 	return cfg
 }
 
-// Load loads configuration using modenv from a trusted directory, falling back
+// Load loads configuration from .env.toml in a trusted directory, falling back
 // to DefaultConfig with environment variable overrides.
 //
 // The config directory is, in order: prefixDir (the --config flag), the
@@ -962,11 +993,14 @@ func load(prefixDir, workspace string) (*Config, error) {
 		return nil, fmt.Errorf("failed to set MODENV_PREFIX: %w", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ".env.toml")); err == nil {
-		// Load hierarchical configuration and decrypt secrets via modenv
-		_, loadErr := modenv.Load(cfg)
-		if loadErr != nil {
-			return nil, fmt.Errorf("failed to load configuration via modenv: %w", loadErr)
+	if path := filepath.Join(dir, ".env.toml"); exists(path) {
+		md, err := decodeSettings(path, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load configuration: %w", err)
+		}
+		cfg.Warnings = append(cfg.Warnings, unknownSettings(path, md)...)
+		if md.IsDefined("mcp", "off") {
+			cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("%s: [mcp] off is ignored here: only a workspace's settings turn servers off", path))
 		}
 	}
 	for i := range cfg.MCP.Servers {
@@ -980,6 +1014,7 @@ func load(prefixDir, workspace string) (*Config, error) {
 
 	// Apply direct environment variable fallbacks if not populated
 	applyEnvOverrides(cfg)
+	cfg.Warnings = append(cfg.Warnings, fixChoices(cfg, true)...)
 
 	cfg.Dir = dir
 	if workspace != "" {
@@ -994,6 +1029,12 @@ func load(prefixDir, workspace string) (*Config, error) {
 	applyManaged(cfg)
 	applyOrg(cfg, prefixDir)
 	return cfg, nil
+}
+
+// exists reports whether there's a file at path.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ConfigDir returns the trusted directory to load .env.toml from, or "" if none.
@@ -1121,3 +1162,42 @@ const (
 	PlanReviewAgent  = "agent-decides"
 	PlanReviewNever  = "never"
 )
+
+// choices are the settings that take one of a few words, with the words
+// (the first is the default).
+var choices = []struct {
+	key   string
+	words []string
+	field func(*Config) *string
+}{
+	{"blitz.plan_review", []string{PlanReviewAgent, PlanReviewAlways, PlanReviewNever}, func(c *Config) *string { return &c.Blitz.PlanReview }},
+	{"ui.notify", []string{"both", "bell", "desktop", "off"}, func(c *Config) *string { return &c.UI.Notify }},
+	{"ui.task_alerts", []string{"notify", "open", "off"}, func(c *Config) *string { return &c.UI.TaskAlerts }},
+	{"ui.editor", []string{"emacs", "vim"}, func(c *Config) *string { return &c.UI.Editor }},
+}
+
+// fixChoices checks the settings that take one of a few words: a word in
+// another case is taken as it, and one that isn't among them gives way to
+// the default, with a warning, rather than acting as whatever the code
+// compares it against last (plan_review = "Always" meaning never). With
+// fix false it only reports.
+func fixChoices(c *Config, fix bool) []string {
+	var out []string
+	for _, ch := range choices {
+		p := ch.field(c)
+		if *p == "" {
+			continue
+		}
+		if i := slices.IndexFunc(ch.words, func(w string) bool { return strings.EqualFold(w, *p) }); i >= 0 {
+			if fix {
+				*p = ch.words[i]
+			}
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s = %q isn't one of %s: %q is used", ch.key, *p, strings.Join(ch.words, ", "), ch.words[0]))
+		if fix {
+			*p = ch.words[0]
+		}
+	}
+	return out
+}

@@ -60,6 +60,11 @@ func generated(ref, head string) bool {
 	return strings.Contains(first, "Code generated") && strings.Contains(first, "DO NOT EDIT")
 }
 
+// ErrBadDescription is an Enricher's error for a model reply it can't
+// read: the call was made (and paid for), so the item is marked done
+// without a description rather than asked about again at every scan.
+var ErrBadDescription = errors.New("the model's description can't be read")
+
 // enriched is how many items have a summary.
 func (x *Index) enriched() (int, error) {
 	var n int
@@ -140,11 +145,17 @@ func (x *Index) enrichPending(ctx context.Context) error {
 				}
 				continue
 			}
+			// Every call counts against the day's budget, whatever its
+			// result (N26 engine-sub-2#20): a reply that can't be read
+			// was paid for too.
 			d, err := x.enricher.Describe(ctx, it.title, text)
-			if err != nil {
-				return err
-			}
 			used++
+			switch {
+			case errors.Is(err, ErrBadDescription):
+				d = Description{} // done, without one, until the file changes
+			case err != nil:
+				return errors.Join(err, x.spend(day, used))
+			}
 			if err := errors.Join(x.setAbout(it.id, it.hash, d), x.spend(day, used)); err != nil {
 				return err
 			}

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -116,7 +117,7 @@ func Parse(name, path string, data []byte) Rule {
 		r.Problem = fmt.Sprintf("front matter: %v", err)
 		return r
 	}
-	r.When, r.Order, r.Agents, r.Action, r.Description = strings.TrimSpace(m.When), m.Order, m.Agents, strings.TrimSpace(m.Action), m.Description
+	r.When, r.Order, r.Agents, r.Action, r.Description = strings.ToLower(strings.TrimSpace(m.When)), m.Order, m.Agents, strings.ToLower(strings.TrimSpace(m.Action)), m.Description
 	switch v := m.Paths.(type) {
 	case string:
 		r.Paths = []string{v}
@@ -128,6 +129,10 @@ func Parse(name, path string, data []byte) Rule {
 		}
 	}
 	switch {
+	case r.When == "" && gateKey(front) != "":
+		// A gate whose when: is misspelt would be an instruction rule,
+		// gating nothing.
+		r.Problem = fmt.Sprintf("%s is a gate's: add when: before_agent or after_agent (or take it out for an instruction rule)", gateKey(front))
 	case r.When != "" && r.When != BeforeAgent && r.When != AfterAgent:
 		r.Problem = fmt.Sprintf("when %q: before_agent or after_agent", r.When)
 	case r.When != "" && r.Action == "":
@@ -140,6 +145,22 @@ func Parse(name, path string, data []byte) Rule {
 	return r
 }
 
+// gateKey is the first of a gate's keys in a front matter without
+// when: (a when: in another case, wen:, action:, order:), "" for none.
+func gateKey(front []byte) string {
+	var top map[string]any
+	if yaml.Unmarshal(front, &top) != nil {
+		return ""
+	}
+	for _, k := range slices.Sorted(maps.Keys(top)) {
+		switch strings.ToLower(k) {
+		case "when", "wen", "whne", "action", "order":
+			return k
+		}
+	}
+	return ""
+}
+
 // Load reads every rule file (*.md, recursively) in dirs; a name in an
 // earlier folder wins. Gates come first, by when (before, then after),
 // order and name; then instruction rules by name.
@@ -148,7 +169,16 @@ func Load(dirs ...string) []Rule {
 	seen := map[string]bool{}
 	for _, dir := range dirs {
 		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
+			if err != nil {
+				// A folder that can't be read: Studio says so (one that
+				// isn't there has no rules).
+				if !errors.Is(err, fs.ErrNotExist) {
+					rel, _ := filepath.Rel(dir, p)
+					out = append(out, Rule{Name: filepath.ToSlash(rel), Path: p, Problem: "couldn't read it: " + err.Error()})
+				}
+				return nil
+			}
+			if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 				return nil
 			}
 			rel, _ := filepath.Rel(dir, p)
@@ -156,11 +186,12 @@ func Load(dirs ...string) []Rule {
 			if seen[name] {
 				return nil
 			}
+			seen[name] = true
 			data, err := os.ReadFile(p)
 			if err != nil {
+				out = append(out, Rule{Name: name, Path: p, Problem: "couldn't read it: " + err.Error()})
 				return nil
 			}
-			seen[name] = true
 			out = append(out, Parse(name, p, data))
 			return nil
 		})

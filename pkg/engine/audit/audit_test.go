@@ -19,8 +19,10 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,6 +121,38 @@ func TestLogSkipsBadEntries(t *testing.T) {
 	assert.NoError(t, l.Close(), "closing without an open file")
 }
 
+// TestLogReportsOnce checks that the first failure of any kind is
+// reported, and later ones aren't (N26 engine-sub-1 #9).
+func TestLogReportsOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(l *Logger, dir string)
+		entry Entry
+	}{
+		{"an entry that isn't JSON", func(*Logger, string) {}, Entry{Kind: KindToolCall, Args: map[string]any{"x": math.NaN()}}},
+		{"a folder that's gone", func(_ *Logger, dir string) { require.NoError(t, os.RemoveAll(dir)) }, Entry{Kind: KindPrompt}},
+		{"a file that can't be written", func(l *Logger, _ string) {
+			l.Log(Entry{Kind: KindPrompt})
+			require.NoError(t, l.f.Close())
+		}, Entry{Kind: KindPrompt}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out strings.Builder
+			old := stderr
+			stderr = &out
+			t.Cleanup(func() { stderr = old })
+			dir := t.TempDir()
+			l, err := Open(dir, nil)
+			require.NoError(t, err)
+			tc.setup(l, dir)
+			l.Log(tc.entry)
+			l.Log(tc.entry)
+			assert.Equal(t, 1, strings.Count(out.String(), "audit: "), out.String())
+			assert.Contains(t, out.String(), "entry wasn't written")
+		})
+	}
+}
+
 // TestCloseClosesTheFile checks that Close releases the open day file.
 func TestCloseClosesTheFile(t *testing.T) {
 	l, err := Open(t.TempDir(), nil)
@@ -150,6 +184,21 @@ func TestRead(t *testing.T) {
 	}
 	assert.Equal(t, []string{"yesterday", "any workspace"}, got, "since then, this workspace's and no workspace's, in order; a bad line skipped")
 	assert.Empty(t, Read("", "/w", now.Add(-time.Hour)), "no log")
+
+	// A line past the longest read is skipped, and the day's later
+	// entries are still read (N26 engine-sub-1 #8).
+	old := maxLine
+	maxLine = 200
+	t.Cleanup(func() { maxLine = old })
+	day := filepath.Join(dir, "audit-"+now.Format(time.DateOnly)+".jsonl")
+	big, _ := json.Marshal(Entry{Time: now, Kind: KindToolCall, Detail: strings.Repeat("x", 300), Workspace: "/w"})
+	after, _ := json.Marshal(Entry{Time: now, Kind: KindPrompt, Detail: "after the long one", Workspace: "/w"})
+	require.NoError(t, os.WriteFile(day, append(append(append(mustRead(t, day), big...), '\n'), append(after, '\n')...), 0o600))
+	got = nil
+	for _, e := range Read(dir, "/w", now.Add(-40*time.Hour)) {
+		got = append(got, e.Detail)
+	}
+	assert.Equal(t, []string{"yesterday", "any workspace", "after the long one"}, got)
 	assert.Empty(t, Read(filepath.Join(dir, "missing"), "/w", now.Add(-time.Hour)))
 }
 

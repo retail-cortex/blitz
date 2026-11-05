@@ -230,3 +230,33 @@ func TestSnapshotLookupsFailWithoutDirectory(t *testing.T) {
 	_, _, err = st.Open("snap")
 	assert.Error(t, err)
 }
+
+// A session whose metadata doesn't parse but whose transcript is intact
+// stays in the history and can be continued, its metadata rebuilt (N26
+// engine-sub-2#16).
+func TestCorruptMetadataWithATranscript(t *testing.T) {
+	s, dir := newStorage(t)
+	rec, err := s.CreateSession("", "", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, s.AddMessage("user", "plan the release"))
+	require.NoError(t, s.AddMessage("model", "here's a plan"))
+	s.Release()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, rec.ID+metaSuffix), []byte("{torn"), filePerm))
+
+	list, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, rec.ID, list[0].ID)
+	assert.Equal(t, 2, list[0].MessageCount)
+	assert.Equal(t, "plan the release", list[0].Title)
+
+	loaded, err := s.Load(rec.ID)
+	require.NoError(t, err)
+	assert.Len(t, loaded.Messages, 2)
+	require.NoError(t, s.AddMessage("user", "go on"))
+	fresh, err := NewStorage(dir)
+	require.NoError(t, err)
+	again, err := fresh.Get(rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, again.MessageCount, "the metadata is written whole again")
+}

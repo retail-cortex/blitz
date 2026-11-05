@@ -60,3 +60,30 @@ func TestOnlyTheOwnerWritesMetadata(t *testing.T) {
 	assert.Equal(t, 2, loaded.MessageCount)
 	assert.Equal(t, "⏰ deps", loaded.Title)
 }
+
+// A message another storage appends to a session that one has active goes
+// through the owner, so its count, title and a rewind keep it (N26
+// engine-sub-2#13).
+func TestAppendToGoesThroughTheOwner(t *testing.T) {
+	dir := t.TempDir()
+	workspace, err := NewStorage(dir)
+	require.NoError(t, err)
+	run, err := NewStorage(dir)
+	require.NoError(t, err)
+	rec, err := run.CreateSession("", "", "blitz")
+	require.NoError(t, err)
+
+	require.NoError(t, workspace.AppendTo(rec.ID, Message{Role: "user", Content: "check the modules"}))
+	require.NoError(t, run.AddMessage("model", "all current"))
+	assert.Len(t, run.Active().Messages, 2, "the owner holds it")
+
+	require.NoError(t, run.Truncate(2), "a rewind writes the transcript from memory")
+	fresh, err := NewStorage(dir)
+	require.NoError(t, err)
+	loaded, err := fresh.Load(rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, loaded.MessageCount)
+	require.Len(t, loaded.Messages, 2)
+	assert.Equal(t, "check the modules", loaded.Messages[0].Content)
+	assert.Equal(t, "check the modules", loaded.Title)
+}

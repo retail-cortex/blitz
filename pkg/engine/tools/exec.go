@@ -55,8 +55,9 @@ type Credential struct {
 }
 
 // credentialsDir holds the copies, one directory per process, removed
-// when it ends: beside the service's socket, which sandboxed commands can
-// read but not write. Not the cache directory, which they can write: a
+// when it ends: beside the service's socket, in the run folder sandboxed
+// commands can read but not write or connect in (bubblewrap binds only
+// this folder back into it). Not the cache directory, which they can write: a
 // command could put a link there, and Blitz, unsandboxed, would follow it
 // (privateDir checks). Tests replace it.
 var credentialsDir = func() (string, error) {
@@ -269,16 +270,20 @@ func scrubEnv(env, patterns []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
-		drop := false
-		for _, p := range patterns {
-			if ok, _ := path.Match(strings.ToUpper(p), strings.ToUpper(name)); ok {
-				drop = true
-				break
-			}
-		}
-		if !drop {
+		if !scrubbed(name, patterns) {
 			out = append(out, kv)
 		}
 	}
 	return out
+}
+
+// scrubbed reports whether the variable name matches one of the
+// sandbox.scrub_env patterns (case doesn't matter).
+func scrubbed(name string, patterns []string) bool {
+	for _, p := range patterns {
+		if ok, _ := path.Match(strings.ToUpper(p), strings.ToUpper(name)); ok {
+			return true
+		}
+	}
+	return false
 }

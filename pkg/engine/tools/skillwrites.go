@@ -41,7 +41,7 @@ const (
 )
 
 // errWorkspaceTooBig refuses a copy past the bounds.
-var errWorkspaceTooBig = errors.New("the workspace is too large to copy for a script that writes it")
+var errWorkspaceTooBig = fmt.Errorf("the workspace is too large to copy for a script that writes it (over %d MiB or %d files)", wsCopyMaxBytes>>20, wsCopyMaxFiles)
 
 // wsCopy is a workspace's copy for a script: the files as copied, by
 // relative path, with their hashes.
@@ -163,21 +163,58 @@ func (c *wsCopy) diff(ws *Workspace, changes []wsChange) string {
 	return sb.String()
 }
 
+// unchanged checks that the workspace's rel is as it was when the copy
+// was made: the same content, or still missing. One the workspace won't
+// read (blocked, too large) is left to the write, which says why.
+func (c *wsCopy) unchanged(ws *Workspace, rel string) error {
+	before, existed := c.hashes[rel]
+	data, err := ws.ReadFile(filepath.FromSlash(rel))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if !existed {
+			return nil
+		}
+	case err != nil:
+		return nil
+	case existed && sha256.Sum256(data) == before:
+		return nil
+	}
+	return fmt.Errorf("%s %w", rel, errChangedDuringApproval)
+}
+
 // keepChanges asks to keep what a script changed and, approved, writes it
 // through the workspace (checkpointed with the call's turn). It returns
 // the files written.
 func (c *wsCopy) keepChanges(ctx context.Context, ws *Workspace, hooks *Hooks, skill string, changes []wsChange) ([]string, error) {
-	var files []string
+	var files, deleted, paths []string
 	for _, ch := range changes {
 		files = append(files, ch.path)
+		paths = append(paths, filepath.FromSlash(ch.path))
+		if ch.deleted {
+			deleted = append(deleted, ch.path)
+		}
 	}
+	// As the file tools do: the paths are held while the user decides, and
+	// nothing is written if one changed since the copy was made (by the
+	// user or a command while the script ran or the question waited).
+	unlock, err := ws.lockPaths(ctx, paths...)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if err := hooks.Approve(ctx, api.ApprovalRequest{
 		Tool: "run_skill_script", Kind: api.ActionWrite, MustAsk: true, // as tier 3: every time
 		Detail:  fmt.Sprintf("Keep the changes skill %s's script made: %s", skill, strings.Join(files, ", ")),
 		Diff:    c.diff(ws, changes),
 		Targets: files,
+		Deletes: deleted,
 	}); err != nil {
 		return nil, err
+	}
+	for _, ch := range changes {
+		if err := c.unchanged(ws, ch.path); err != nil {
+			return nil, err
+		}
 	}
 	var written []string
 	var errs []error

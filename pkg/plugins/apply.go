@@ -15,6 +15,7 @@
 package plugins
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -95,11 +96,12 @@ func add(cfg *config.Config, p *Plugin) []string {
 	cfg.Hooks = config.AppendHooks(cfg.Hooks, config.WithSource(rooted(p.Hooks, p.Dir), source))
 	for _, s := range p.MCP {
 		s = rootedServer(s, p.Dir)
-		if slices.ContainsFunc(cfg.MCP.Servers, func(u config.MCPServerConfig) bool { return u.Name == s.Name }) {
+		switch err := cfg.AddMCPServer(s); {
+		case errors.Is(err, config.ErrOrgMCP):
+			problems = append(problems, fmt.Sprintf("plugin %s: MCP server %s isn't used: %v", p.Name, s.Name, err))
+		case err != nil:
 			problems = append(problems, fmt.Sprintf("plugin %s: an MCP server named %s exists already; the plugin's isn't used", p.Name, s.Name))
-			continue
 		}
-		cfg.MCP.Servers = append(cfg.MCP.Servers, s)
 	}
 	return problems
 }

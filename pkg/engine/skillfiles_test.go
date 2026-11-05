@@ -56,7 +56,7 @@ func TestSkillMentions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			note := w.skillMentionNote(tt.text)
+			note := w.skillMentionNote(tt.text, w.ActiveAgent().Name)
 			if tt.none {
 				assert.Empty(t, note)
 				return

@@ -38,11 +38,16 @@ esac
 `
 
 // fakeSecurity emulates macOS's security tool the same way: exit 44 is
-// errSecItemNotFound, and -i reads add-generic-password with the value in hex.
+// errSecItemNotFound, -i reads add-generic-password with the value in hex,
+// and find-generic-password -w prints a value with anything but printable
+// ASCII in it (a new line) in hex, as the real one does.
 const fakeSecurity = `#!/bin/bash
 [ -n "$FAKE_FAIL" ] && { echo "security: error" >&2; exit 2; }
 case "$1" in
-find-generic-password) [ -f "$FAKE_STORE/$5" ] || exit 44; cat "$FAKE_STORE/$5"; echo ;;
+find-generic-password)
+  [ -f "$FAKE_STORE/$5" ] || exit 44
+  if LC_ALL=C grep -q '[^ -~]' "$FAKE_STORE/$5"; then od -An -tx1 "$FAKE_STORE/$5" | tr -d ' \n'; else cat "$FAKE_STORE/$5"; fi
+  echo ;;
 delete-generic-password) [ -f "$FAKE_STORE/$5" ] || exit 44; rm "$FAKE_STORE/$5" ;;
 -i)
   read -r line
@@ -75,6 +80,15 @@ func TestKeychain(t *testing.T) {
 	fakeTools(t)
 	assert.Equal(t, "macOS Keychain", keychain{}.Kind())
 	exercise(t, keychain{}, "a")
+
+	// A value security prints in hex comes back as it was written; one
+	// that only looks like hex is kept (N26 safety-enterprise#20).
+	for _, v := range []string{"{\n  \"type\": \"service_account\"\n}", "-----BEGIN KEY-----\nMIIE\n-----END KEY-----", "naïve", "deadbeef00ff", "0a0b0c0d", "plain"} {
+		require.NoError(t, keychain{}.Set("multi", v))
+		got, err := keychain{}.Get("multi")
+		require.NoError(t, err)
+		assert.Equal(t, v, got)
+	}
 }
 
 // TestKeychainErrors checks failures other than a missing item are reported.

@@ -9,6 +9,8 @@ Spec: [configuration](../about/specs/spec_002_config.md).
 
 Blitz reads one TOML file, `~/.blitz/.env.toml`, or the directory in `$MODENV_PREFIX`, or the one given with `--config DIR`. `blitz config init` writes a commented copy with every setting at its default; `blitz config path` says which file is in use and `blitz config show` prints the settings in effect.
 
+Only that file is read: a `.env.local.toml` or `.env.<runtime>.toml` beside it isn't. A setting Blitz doesn't know (a typo such as `denny` for `deny`), one in the wrong file (`[mcp] off` in the global one, `[enterprise]` in a workspace's) or a word a setting doesn't take (`plan_review = "sometimes"`) is ignored with a warning when a run starts and in `blitz doctor`, so a rule you meant to write isn't silently missing.
+
 A `.env.toml` inside a project is **ignored** unless you pass `--config .`: a cloned repository must not be able to redirect your API key or turn off approvals.
 
 Each workspace can have its own settings, kept in `~/.blitz/workspaces/<name>-<hash>/.env.toml` (never in the folder itself) and laid over the global ones, so a workspace can use its own key, provider or model. The desktop app edits both in **Settings**: forms for providers and keys, and the settings file itself.

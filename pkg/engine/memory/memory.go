@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"gopkg.in/yaml.v3"
 )
@@ -80,6 +81,9 @@ func (r *Rule) Matches(abs string) bool {
 type Loaded struct {
 	Docs  []Doc  // always in the prompt (unscoped rules included)
 	Rules []Rule // scoped rules, handed out by path
+	// Problems are the rule files left out, and why: front matter that
+	// doesn't parse, or paths none of which can be read as a glob.
+	Problems []string
 }
 
 // Options refine loading.
@@ -236,7 +240,13 @@ func (l *loader) rules(dir, root, base string) {
 		if !ok {
 			continue
 		}
-		paths, gate, body := splitRule(text)
+		paths, gate, body, err := splitRule(text)
+		if err != nil {
+			// Never an instruction in every prompt: a rule meant for some
+			// files (paths: *.go unquoted) or a gate with a typo would be.
+			l.out.Problems = append(l.out.Problems, fmt.Sprintf("%s: the front matter can't be read, so the rule isn't used (quote globs: paths: \"*.go\"): %v", f, err))
+			continue
+		}
 		if gate {
 			continue // a gate (when:), judged around the turn, not an instruction (spec_041_gates)
 		}
@@ -266,35 +276,27 @@ func (l *loader) rules(dir, root, base string) {
 		}
 		if len(r.res) > 0 {
 			l.out.Rules = append(l.out.Rules, r)
+		} else {
+			l.out.Problems = append(l.out.Problems, fmt.Sprintf("%s: none of its paths can be read as a glob, so the rule isn't used", f))
 		}
 	}
 }
 
 // splitRule reads a rule file's optional frontmatter ("paths": a glob or a
 // list of globs; "when": the rule gates turns) and returns the paths,
-// whether it's a gate, and the body.
-func splitRule(text string) (paths []string, gate bool, body string) {
-	s := strings.TrimLeft(strings.TrimPrefix(text, "\ufeff"), " \t\r\n")
-	if !strings.HasPrefix(s, "---") {
-		return nil, false, text
-	}
-	end := strings.Index(s[3:], "\n---")
-	if end < 0 {
-		return nil, false, text
-	}
-	fm := s[3 : 3+end]
-	rest := s[3+end+4:]
-	if i := strings.IndexByte(rest, '\n'); i >= 0 {
-		rest = rest[i+1:]
-	} else {
-		rest = ""
+// whether it's a gate, and the body; err when the front matter isn't
+// YAML (N26 engine-sub-2#18).
+func splitRule(text string) (paths []string, gate bool, body string, err error) {
+	fm, rest, ok := frontmatter.Split([]byte(text))
+	if !ok {
+		return nil, false, text, nil
 	}
 	var meta struct {
 		Paths any    `yaml:"paths"`
 		When  string `yaml:"when"`
 	}
-	if yaml.Unmarshal([]byte(fm), &meta) != nil {
-		return nil, false, text
+	if err := yaml.Unmarshal(fm, &meta); err != nil {
+		return nil, false, text, err
 	}
 	switch v := meta.Paths.(type) {
 	case string:
@@ -306,7 +308,7 @@ func splitRule(text string) (paths []string, gate bool, body string) {
 			}
 		}
 	}
-	return paths, strings.TrimSpace(meta.When) != "", rest
+	return paths, strings.TrimSpace(meta.When) != "", string(rest), nil
 }
 
 // importRE finds @path tokens: at the start of a line or after

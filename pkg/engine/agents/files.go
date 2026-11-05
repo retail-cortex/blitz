@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -79,6 +78,19 @@ func ListFiles(dir string, builtin func(string) bool) ([]File, error) {
 		out = append(out, f)
 		return nil
 	})
+	// Two files of one name: the later is used (N26 engine-sub-1 #6).
+	last := map[string]string{}
+	for i := len(out) - 1; i >= 0; i-- {
+		f := &out[i]
+		if f.Spec == nil || f.Problem != "" {
+			continue
+		}
+		if used, ok := last[f.Spec.Name]; ok {
+			f.Problem = fmt.Sprintf("agent name %q is defined again in %s, which is used", f.Spec.Name, used)
+			continue
+		}
+		last[f.Spec.Name] = f.Path
+	}
 	return out, err
 }
 
@@ -92,17 +104,11 @@ func Save(dir string, spec *AgentSpec, previous string, builtin func(string) boo
 		return "", nil, err
 	}
 	m := spec.AgentMetadata
-	switch {
-	case !ValidName(m.Name):
-		problems = append(problems, fmt.Sprintf("name %q: use lowercase letters, digits, - and _", m.Name))
-	case builtin(m.Name):
+	if builtin(m.Name) {
 		problems = append(problems, fmt.Sprintf("name %q is a built-in agent's", m.Name))
 	}
 	if strings.TrimSpace(m.Description) == "" {
 		problems = append(problems, "description: say what the agent is for")
-	}
-	if m.AgencyLevel != "" && !slices.Contains(AgencyLevels, m.AgencyLevel) {
-		problems = append(problems, fmt.Sprintf("agency_level: %q (one of %s)", m.AgencyLevel, strings.Join(AgencyLevels, ", ")))
 	}
 	if err := m.Check(); err != nil {
 		problems = append(problems, err.Error())

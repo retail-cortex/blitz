@@ -145,9 +145,11 @@ type HookFailure struct {
 // maxHookFailures is how many failures /hooks keeps per hook.
 const maxHookFailures = 5
 
-// ScriptHooks runs user-configured commands at lifecycle points. Hooks run
-// through the same ExecEnv as shell commands (sandboxed, guarded, scrubbed
-// environment) in the workspace directory.
+// ScriptHooks runs user-configured commands at lifecycle points, in the
+// workspace directory, through the ExecEnv they're given: the registry's
+// is unsandboxed with the user's full environment (spec_010 HK-02: hooks
+// come from the user's own settings), and they're still killed with
+// Blitz.
 type ScriptHooks struct {
 	hooks map[string][]config.HookConfig // by event
 	exec  *ExecEnv
@@ -612,11 +614,18 @@ func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool 
 
 // readReply reads what a hook answered: JSON with a decision and the rest,
 // or plain text, which is context for the agent where an event takes any.
+// A reply that starts like JSON but doesn't parse, or names a decision
+// there isn't, is the hook failing (HK-53a), not silence: audited, warned,
+// and a block when the hook is fail_closed.
 func readReply(event, text string) (Outcome, string, error) {
 	var reply hookReply
-	if strings.HasPrefix(text, "{") && json.Unmarshal([]byte(text), &reply) == nil {
+	if strings.HasPrefix(text, "{") {
+		if err := json.Unmarshal([]byte(text), &reply); err != nil {
+			return Outcome{}, "", fmt.Errorf("its reply isn't valid JSON: %v", err)
+		}
 		out := Outcome{Reason: reply.Reason, Continue: reply.Continue, Context: reply.AdditionalContext, UpdatedArgs: reply.UpdatedArgs}
-		switch d := strings.ToLower(reply.Decision); d {
+		switch d := strings.ToLower(strings.TrimSpace(reply.Decision)); d {
+		case "":
 		case "block":
 			out.Blocked = true
 		case "deny":
@@ -627,6 +636,8 @@ func readReply(event, text string) (Outcome, string, error) {
 			}
 		case "allow", "ask":
 			out.Decision = d
+		default:
+			return Outcome{}, "", fmt.Errorf("its reply's decision %q isn't one of block, deny, allow or ask", reply.Decision)
 		}
 		if out.Blocked && out.Reason == "" {
 			out.Reason = "blocked by hook"
@@ -678,8 +689,12 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "blitz-hooks")
+	var scrub []string
+	if s.exec != nil {
+		scrub = s.exec.ScrubEnv
+	}
 	for k, v := range h.Headers {
-		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars))
+		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars, scrub))
 	}
 	resp, err := s.HTTP.Do(req)
 	if err != nil {
@@ -697,10 +712,12 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 }
 
 // expandAllowed replaces $VAR and ${VAR} in v with the environment's value
-// for the names allowed; others stay as written.
-func expandAllowed(v string, allowed []string) string {
+// for the names allowed; others stay as written. A name sandbox.scrub_env
+// withholds (scrub) is never sent, allowed or not: a hook can't carry
+// what commands aren't given (N26 api-client-config#2).
+func expandAllowed(v string, allowed, scrub []string) string {
 	return os.Expand(v, func(name string) string {
-		if slices.Contains(allowed, name) {
+		if slices.Contains(allowed, name) && !scrubbed(name, scrub) {
 			return os.Getenv(name)
 		}
 		return "${" + name + "}"

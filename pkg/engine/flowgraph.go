@@ -531,9 +531,11 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 	return res, nil
 }
 
-// fillStep is n with its templates filled in.
+// fillStep is n with its templates filled in, and the secrets its own
+// settings name (WF-14: only those are put into its call).
 func fillStep(n flows.Node, vars flows.Vars) (flows.Node, error) {
 	var err error
+	n.Secrets = namedSecrets(n) // as written, before anything is filled in
 	if n.Instructions, err = flows.Fill(n.Instructions, vars); err != nil {
 		return n, err
 	}

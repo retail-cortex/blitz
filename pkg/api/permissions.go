@@ -26,7 +26,8 @@ type PermissionRule struct {
 	Effect string // allow, ask or deny
 	Rule   string // kind(pattern), or a tool name
 	// Source is "global" or "workspace" (the settings file it's in),
-	// "built-in" (read_only_defaults), "flag" or "session".
+	// "project" (a trusted project file's), "built-in"
+	// (read_only_defaults), "flag" or "session".
 	Source string
 }
 
@@ -82,6 +83,10 @@ type ApprovalRequest struct {
 	// provider, or the MCP tool as "server:tool". Empty when nothing can
 	// match, which such policies refuse.
 	Targets []string
+	// Deletes are the Targets a write deletes (a patch's deleted files and
+	// moved-away sources, a script's removed files): delete(...) permission
+	// rules govern them as well as write(...) rules.
+	Deletes []string
 	// MustAsk means an ask rule covers the action, so the user is asked even
 	// when a mode, an allow rule or a remembered approval would let it through
 	// (and refused where nobody can be asked).

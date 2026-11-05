@@ -277,7 +277,7 @@ func (h configService) SaveOrgSync(ctx context.Context, r req[pb.SaveOrgSyncRequ
 // syncMsg is a sync's state for the window: why it isn't saved, in Git's
 // words, only when it isn't.
 func syncMsg(st orgsync.State) (state, why string, pairs []*pb.OrgSyncPair) {
-	if st.State == orgsync.Offline || st.State == orgsync.Refused || st.State == orgsync.SignedOut {
+	if st.State == orgsync.Offline || st.State == orgsync.Refused || st.State == orgsync.SignedOut || st.State == orgsync.Secrets {
 		why = st.Err
 	}
 	for _, p := range st.Pairs {

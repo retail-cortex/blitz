@@ -117,7 +117,7 @@ func (w *Workspace) openSearch(ctx context.Context) {
 		if e, err := newEmbedder(ctx, w.cfg, ref); err != nil {
 			st.problems = append(st.problems, i18n.T("search.embed_failed", "model", ref, "error", err))
 		} else {
-			opts = append(opts, search.WithEmbedder(e))
+			opts = append(opts, search.WithEmbedder(redactingEmbedder{Embedder: e, redact: w.secretRedactor()}))
 		}
 	}
 	if sc.Enrich {
@@ -603,6 +603,23 @@ tags: 3 to 8 lowercase keywords for its subject and domain, including words some
 columns: every column, in order, with its exact name and, in a few words, what it holds and its unit if it has one ("water temperature, °C"; "station identifier"). Say "unclear" rather than guess.
 Never repeat secrets, keys or credentials, even if the samples hold some.`
 
+// redactingEmbedder sends texts (chunks, and a semantic search's query)
+// to the embedding model with secrets redacted, as the describer does
+// (SRCH-50a): the two ways workspace text leaves for a model treat
+// secrets alike.
+type redactingEmbedder struct {
+	search.Embedder
+	redact interface{ String(string) string }
+}
+
+func (e redactingEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	out := make([]string, len(texts))
+	for i, t := range texts {
+		out[i] = e.redact.String(t)
+	}
+	return e.Embedder.Embed(ctx, out)
+}
+
 // maxDescribeChars is how much of a file the describer sends.
 const maxDescribeChars = 24_000
 
@@ -632,17 +649,21 @@ func (d describer) Describe(ctx context.Context, title, text string) (search.Des
 			}
 		}
 	}
-	if len(input) > maxDescribeChars {
-		input = input[:maxDescribeChars]
-	}
-	reply, served, usage, err := runtime.Ask(ctx, d.llm, instruction, "Path: "+title+"\n\n"+d.redact.String(input))
+	// Redacted before it's cut, so a secret across the cut is still
+	// whole when it's matched; cut on a rune.
+	input = textutil.Ellipsize(d.redact.String(input), maxDescribeChars)
+	reply, served, usage, err := runtime.Ask(ctx, d.llm, instruction, "Path: "+title+"\n\n"+input)
 	if err != nil {
 		return search.Description{}, err
 	}
 	if usage != nil {
 		slog.Info("file described for search", "file", title, "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)
 	}
-	return parseDescription(reply, columns)
+	desc, err := parseDescription(reply, columns)
+	if err != nil {
+		return desc, fmt.Errorf("%w: %w", search.ErrBadDescription, err)
+	}
+	return desc, nil
 }
 
 // parseDescription reads the describer's JSON, fenced or not: a summary of

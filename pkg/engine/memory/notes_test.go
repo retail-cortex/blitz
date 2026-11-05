@@ -138,3 +138,32 @@ func TestRenderNotesIsBounded(t *testing.T) {
 	assert.Less(t, len(out), maxNotesBytes+1000)
 	assert.Contains(t, out, "older notes left out")
 }
+
+// A note or a summary written with CRLF lines or a BOM keeps its front
+// matter (N26 engine-sub-2#25).
+func TestFrontMatterWithCRLFAndBOM(t *testing.T) {
+	tests := map[string]string{
+		"CRLF": "---\r\nkind: preference\r\nsaved: 2026-11-05T10:00:00Z\r\n---\r\nTabs, not spaces.\r\n",
+		"BOM":  "\ufeff---\nkind: preference\nsaved: 2026-11-05T10:00:00Z\n---\nTabs, not spaces.\n",
+	}
+	for name, doc := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "tabs.md"), []byte(doc), 0o600))
+			notes, err := Notes(dir)
+			require.NoError(t, err)
+			require.Len(t, notes, 1)
+			assert.Equal(t, NotePreference, notes[0].Kind)
+			assert.Equal(t, 2026, notes[0].Time.Year())
+			assert.Equal(t, "Tabs, not spaces.", notes[0].Text)
+
+			sdir := t.TempDir()
+			summary := strings.NewReplacer("kind: preference", "title: \"Release plan\"", "saved:", "updated:").Replace(doc)
+			require.NoError(t, os.WriteFile(filepath.Join(sdir, "s1.md"), []byte(summary), 0o600))
+			sums, err := Summaries(sdir)
+			require.NoError(t, err)
+			require.Len(t, sums, 1)
+			assert.Equal(t, "Release plan", sums[0].Title)
+		})
+	}
+}

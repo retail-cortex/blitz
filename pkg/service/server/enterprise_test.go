@@ -134,8 +134,12 @@ func TestEnterpriseJourney(t *testing.T) {
 		assert.True(t, done.State.SignedIn)
 	})
 	t.Run("one sign-in at a time", func(t *testing.T) {
-		s.ent.signingIn.Lock()
-		defer s.ent.signingIn.Unlock()
+		wait := signInWait
+		signInWait = 10 * time.Millisecond
+		defer func() { signInWait = wait }()
+		end, ok := s.ent.beginSignIn(context.Background())
+		require.True(t, ok)
+		defer end()
 		_, _, err := signIn(false)
 		code, info := errorReason(t, err)
 		assert.Equal(t, "SIGN_IN_RUNNING", info.Reason)
@@ -1131,7 +1135,7 @@ func TestShareWithOrganization(t *testing.T) {
 			return dir
 		}
 		// Too many files to check, in its changes or its history: nothing
-		// shared, nothing committed (EN-66).
+		// shared, nothing committed (EN-66, N26 safety-enterprise#9).
 		defer func(n int, size int64) { maxShareScan, largeShareFile = n, size }(maxShareScan, largeShareFile)
 		maxShareScan = 1
 		big := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
@@ -1140,8 +1144,9 @@ func TestShareWithOrganization(t *testing.T) {
 		_, err := share(big, "Big", false)
 		code, info := errorReason(t, err)
 		assert.Equal(t, connect.CodeFailedPrecondition, code)
-		assert.Equal(t, "TOO_LARGE_TO_CHECK", info.Reason)
+		assert.Equal(t, "SECRETS_UNCHECKED", info.Reason)
 		assert.Equal(t, "1", info.Metadata["max_files"])
+		assert.ErrorContains(t, err, "more than 1 files")
 		_, noHead := exec.Command("git", "-C", big, "rev-parse", "--verify", "-q", "HEAD").Output()
 		assert.Error(t, noHead, "nothing committed")
 		long := folder(map[string]string{"a.md": "a"})
@@ -1153,7 +1158,7 @@ func TestShareWithOrganization(t *testing.T) {
 		git(long, "commit", "-q", "-m", "second")
 		_, err = share(long, "Long", false)
 		_, info = errorReason(t, err)
-		assert.Equal(t, "TOO_LARGE_TO_CHECK", info.Reason, "a history past the limit")
+		assert.Equal(t, "SECRETS_UNCHECKED", info.Reason, "a history past the limit")
 
 		// A large file, and a remote called organization already there.
 		maxShareScan, largeShareFile = 50_000, 4
@@ -1296,13 +1301,14 @@ func TestPublishToOrganization(t *testing.T) {
 	_, err = publish()
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
-	// A key in what would be published: nothing goes (EN-36a).
-	leaky := filepath.Join(ws, ".agents", "agents", "leaky.md")
-	require.NoError(t, os.WriteFile(leaky, []byte("---\nname: leaky\ndescription: Deploys\n---\nUse KEY = 'AKIAIOSFODNN7EXAMPLE'.\n"), 0o644))
-	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "leaky"})
+	// A key in what would be published, in a skill's script (the catalog's
+	// own check reads only the items): nothing goes (EN-36a).
+	leaky := filepath.Join(ws, ".agents", "skills", "go", "deploy.sh")
+	require.NoError(t, os.WriteFile(leaky, []byte("#!/bin/sh\nKEY='AKIAIOSFODNN7EXAMPLE' make deploy\n"), 0o644))
+	_, err = publish(&pb.PublishItem{Kind: "skill", Name: "go"})
 	_, info = errorReason(t, err)
 	assert.Equal(t, "SECRETS_FOUND", info.Reason)
-	assert.Contains(t, err.Error(), ".agents/agents/leaky.md:5")
+	assert.Contains(t, err.Error(), ".agents/skills/go/deploy.sh:2")
 	require.NoError(t, os.Remove(leaky))
 
 	// The workspace named as every workspace call's is: never "" (blitzd's

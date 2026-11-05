@@ -30,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/commands"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
@@ -54,6 +55,18 @@ func (w *Workspace) commandDirs() []struct{ dir, source string } {
 	return out
 }
 
+// skillTools are the tools /skill-name allows (SK-82a): the skill's
+// allowed-tools (or Castor's allowed_tools), read as a command's, and the
+// skill tools that read its files and run its scripts; none when it names
+// none (no limit).
+func skillTools(s *skills.Skill) []string {
+	list := commands.ToolList(cmp.Or(s.AllowedTools, s.AllowedToolsLegacy))
+	if len(list) == 0 {
+		return nil
+	}
+	return append(list, "activate_skill", "read_skill_file", "run_skill_script")
+}
+
 // commands returns every command by name: bundled, then skills (as
 // /skill-name), then the user's and the project's, a later one winning.
 // Files are read each time, so a new command works without restarting.
@@ -69,7 +82,8 @@ func (w *Workspace) commands() (map[string]commands.Command, error) {
 		}
 		byName[name] = commands.Command{
 			Name: name, Description: s.Description, Source: "skill",
-			Body: fmt.Sprintf("Use the skill %q for this request: $ARGUMENTS\n\nThe skill's instructions:\n\n%s", s.Name, s.Content),
+			Body:         fmt.Sprintf("Use the skill %q for this request: $ARGUMENTS\n\nThe skill's instructions:\n\n%s", s.Name, s.Content),
+			AllowedTools: skillTools(s),
 		}
 	}
 	var errs []error
@@ -150,7 +164,7 @@ func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.E
 		}
 		opts = append(opts, runtime.WithModel(llm))
 	}
-	if len(c.AllowedTools) > 0 {
+	if c.AllowedTools != nil {
 		opts = append(opts, runtime.WithAllowedTools(c.AllowedTools))
 	}
 	return opts, nil

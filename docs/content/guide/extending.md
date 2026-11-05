@@ -11,7 +11,7 @@ Specs: [memory](../about/specs/spec_012_memory.md), [MCP](../about/specs/spec_00
 
 A line can import another file with `@docs/style.md`: relative to the file, at most five deep, never from outside the repository (or `~/.blitz` for your own files), and never a blocked path.
 
-Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
+Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. Quote globs (`paths: "*.go"`): a file whose front matter isn't valid YAML isn't used, and Blitz says so. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
 
 A rule can also be checked rather than followed. Give it `when: before_agent` (it judges your prompt before the agent runs) or `when: after_agent` (it judges the answer and the changes before the turn ends), and say what a failure does:
 
@@ -34,14 +34,14 @@ Rules are about the quality of the work. **Guardrails** are about safety and lim
 builtin: limits
 limits:
   max_cost_usd: 2        # per turn (0: no ceiling)
-  max_turns: 40          # model calls per turn (0: no ceiling)
+  max_turns: 40          # model calls per turn, its continuations included (0: no ceiling)
   max_files_changed: 20
   allowed_domains: [example.com]
   commands: [defaults, "dropdb *"]
 ---
 ```
 
-Without a file, `limits` refuses force pushes (`--force`, `-f` or a `+branch`; `--force-with-lease` is allowed, since it won't overwrite commits you haven't seen), deleting `/` or your home folder (`rm -r` or `rm -rf`, with its flags in any order, `$HOME` and `/*` too, even after `sudo` or inside `cd x && …`), `mkfs` and `dd` onto a disk; a file's `commands` replaces that list, and `defaults` in it stands for that list as your version of Blitz has it, so `commands: [defaults, "dropdb *"]` adds to it and keeps up with updates (no `commands` keeps the defaults; `commands: []` refuses none). Each pattern is matched against the whole line and against each command in it. A turn also stops at 200 model calls or $10 unless the file sets `max_turns` or `max_cost_usd` under `limits:` (0: no ceiling); when it stops, it says which guardrail set the limit and where to change it, and you can send “continue” to carry on where it stopped. A refused domain, command or file says which setting refused it, and in which file. `allowed_domains` holds web fetches, the browser (its scripts are refused while it's set, and a page a click takes off the list is withheld) and workflows' API and remote agent calls; MCP servers reach what their own settings let them. A mistake in the file (a setting outside `limits:`, an action it doesn't have) shows in Studio, and the guardrail runs with its defaults until it's fixed. `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent: a fast model confirms each match first, so a page that only quotes or discusses injection passes (`judge: false` acts on the pattern alone), and then `action: redact` (the default) takes the instructions out and keeps the rest of the page, `warn` tells the agent it's data, not orders, and `block` withholds it all. `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
+Without a file, `limits` refuses force pushes (`--force`, `-f` or a `+branch`; `--force-with-lease` is allowed, since it won't overwrite commits you haven't seen), deleting `/` or your home folder (`rm -r` or `rm -rf`, with its flags in any order, `$HOME` and `/*` too, even after `sudo -u root`, `env` or `nohup`, inside `cd x && …`, `$(…)` or `bash -c "…"`; a push as `git -C dir push -uf` too), `mkfs` and `dd` onto a disk; a file's `commands` replaces that list, and `defaults` in it stands for that list as your version of Blitz has it, so `commands: [defaults, "dropdb *"]` adds to it and keeps up with updates (no `commands` keeps the defaults; `commands: []` refuses none). Each pattern is matched against the whole line and against each command in it. A turn also stops at 200 model calls or $10 unless the file sets `max_turns` or `max_cost_usd` under `limits:` (0: no ceiling); when it stops, it says which guardrail set the limit and where to change it, and you can send “continue” to carry on where it stopped. A refused domain, command or file says which setting refused it, and in which file. `allowed_domains` holds web fetches, the browser (its scripts are refused while it's set, and a page a click takes off the list is withheld) and workflows' API and remote agent calls; MCP servers reach what their own settings let them. A mistake in the file (a setting outside `limits:`, a setting Blitz doesn't know, such as a misspelt `allowed_domain`, an action it doesn't have) shows in Studio, and the guardrail runs with its defaults until it's fixed. `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent: a fast model confirms each match first, so a page that only quotes or discusses injection passes (`judge: false` acts on the pattern alone), and then `action: redact` (the default) takes the instructions out and keeps the rest of the page, `warn` tells the agent it's data, not orders, and `block` withholds it all. `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
 
 ```markdown
 ---
@@ -151,11 +151,13 @@ type   = "prompt"
 prompt = "Deny anything that deletes outside the workspace or touches production."
 ```
 
+An http hook's headers get only the variables `allowed_env_vars` names, and never one `sandbox.scrub_env` withholds from commands (`*_API_KEY`, `*_TOKEN`, … by default): to send such a token, take its pattern out of `scrub_env`. Before you trust a project's hooks, Blitz shows the headers and variables each http hook would send.
+
 `if` takes a permission rule: `shell(…)` is checked against each command of the script (one Blitz can't parse runs the hook, so it can decide), `read`, `write` and `delete(…)` against the files a call reads, writes or deletes (for `apply_patch`, the files in its patch), and `web(…)` against a page's host.
 
 `/hooks` lists them all, where each came from, and their recent failures.
 
-Other failures warn unless `fail_closed = true`. Hooks come from your own trusted settings, so they run outside the OS sandbox with your environment; they're still killed with Blitz.
+Other failures, a reply that starts with `{` but isn't valid JSON or names a decision Blitz doesn't know among them, warn unless `fail_closed = true`. Hooks come from your own trusted settings, so they run outside the OS sandbox with your environment; they're still killed with Blitz.
 
 ## Custom commands
 
@@ -172,6 +174,8 @@ mode: plan                                 # read-only
 ---
 Fix issue #$1: read it with `gh issue view $1`, find the cause, fix it and add a test.
 ```
+
+Without `allowed-tools` the turn may use every tool; `allowed-tools: []` allows none. A key Blitz doesn't know (`allowed_tools`, say) or an `allowed-tools` it can't read is the command's problem, reported, and the command doesn't run.
 
 `/review`, `/security-review` (both read-only), `/simplify` and `/verify` are bundled, and every skill is a command too. Built-in commands win name clashes; `/help` lists the custom ones.
 

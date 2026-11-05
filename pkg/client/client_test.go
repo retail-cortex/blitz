@@ -112,9 +112,6 @@ func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 	assert.True(t, r.ImagesEnabled(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 	assert.Empty(t, r.Processes().Running(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 	assert.NotEqual(t, 0, len(r.SandboxSummary()), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
-	st, err := r.GitStatus(ctx)
-	require.NoError(t, err, "git status")
-	assert.False(t, st.Repo, "the test workspace isn't a repository: %+v", st)
 }
 
 func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
@@ -122,9 +119,11 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 	ask := call("ask_user_question", map[string]any{"question": "Tabs or spaces?"})
 	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default" }, create, ask, text("all done"))
 	var asked []string
+	var approval api.ApprovalRequest
 	r.SetUI(
 		func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
 			asked = append(asked, "approve:"+string(req.Kind))
+			approval = req
 			return api.DecisionOnce, nil
 		},
 		func(_ context.Context, q string, _ []string) (string, error) {
@@ -148,6 +147,12 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 	})
 	require.NoError(t, err, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
 	require.Equal(t, "all done", res.Output, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
+	// What an attached front end needs to offer "for this session" and
+	// "always", and stream-json's targets, come over the API as a local
+	// workspace's do (N26 api-client-config#3).
+	assert.NotEmpty(t, approval.Key, "%+v", approval)
+	assert.NotEmpty(t, approval.KeyLabel, "%+v", approval)
+	assert.Equal(t, []string{"made.txt"}, approval.Targets, "%+v", approval)
 	require.True(t, accepted, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
 	require.True(t, finished, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
 	assert.Equal(t, []string{"approve:write_file", "ask:Tabs or spaces?"}, asked, "asked %v", asked)

@@ -285,7 +285,11 @@ func startWith(ctx context.Context, env connectors.Env, k *connectors.Kind, c co
 		return err
 	}
 	scope := env.SecretScope(c.Scope)
-	vars := Vars([]string{file}, secrets.AnyScope, config.Vault(env.Prefix).Resolve(scope))
+	reach := secrets.AnyScope
+	if c.Scope != connectors.ScopeGlobal && !connectors.IsOrg(c.Scope) && !env.Trusted {
+		reach = secrets.OnlyWorkspace // an untrusted workspace file's (CON-09)
+	}
+	vars := Vars([]string{file}, reach, config.Vault(env.Prefix).Resolve(scope))
 	for key, v := range env.Values {
 		if v != "" {
 			vars[connectors.SecretKey(env.Category, c.Name, key)] = v

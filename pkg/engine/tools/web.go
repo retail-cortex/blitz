@@ -28,11 +28,12 @@ import (
 	"path"
 	"slices"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -69,14 +70,48 @@ var ErrBlockedAddress = errors.New("destination address is not allowed")
 // cgnat is 100.64.0.0/10 (carrier-grade NAT), not covered by netip.IsPrivate.
 var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
+// reserved are ranges netip doesn't flag that aren't public either:
+// carrier-grade NAT, "this network", IETF protocol assignments,
+// benchmarking, the reserved class E (and broadcast); local-use NAT64,
+// whose embedding varies; and Teredo, whose embedded address is hidden.
+var reserved = []netip.Prefix{
+	cgnat,
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2001::/32"),
+}
+
+// IPv6 forms that carry an IPv4 address: NAT64 (64:ff9b::/96, the last 4
+// bytes) and 6to4 (2002::/16, bytes 2 to 5). On a DNS64/NAT64 network
+// 64:ff9b::a9fe:a9fe is 169.254.169.254.
+var (
+	nat64     = netip.MustParsePrefix("64:ff9b::/96")
+	sixToFour = netip.MustParsePrefix("2002::/16")
+)
+
 // publicAddr reports whether addr is a routable public address. Loopback,
 // private, link-local (including cloud metadata at 169.254.169.254),
-// multicast, and unspecified addresses are rejected.
+// multicast, unspecified and reserved addresses are rejected, and so is an
+// IPv6 address whose embedded IPv4 one would be.
 func publicAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
+	switch b := addr.As16(); {
+	case nat64.Contains(addr):
+		return publicAddr(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(addr):
+		return publicAddr(netip.AddrFrom4([4]byte(b[2:6])))
+	}
+	for _, p := range reserved {
+		if p.Contains(addr) {
+			return false
+		}
+	}
 	return addr.IsValid() && !addr.IsLoopback() && !addr.IsPrivate() && !addr.IsLinkLocalUnicast() &&
 		!addr.IsLinkLocalMulticast() && !addr.IsInterfaceLocalMulticast() && !addr.IsMulticast() &&
-		!addr.IsUnspecified() && !cgnat.Contains(addr) && !(addr.Is4() && addr.As4()[0] == 0)
+		!addr.IsUnspecified()
 }
 
 type webFetcher struct {
@@ -88,10 +123,10 @@ type webFetcher struct {
 
 func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 	if cfg.MaxBytes <= 0 {
-		cfg.MaxBytes = 2 << 20
+		cfg.MaxBytes = config.DefaultWebMaxBytes
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 20 * time.Second
+		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
 	f := &webFetcher{cfg: cfg}
 	f.allowAddr = func(ap netip.AddrPort) bool { return cfg.AllowPrivate || publicAddr(ap.Addr()) }
@@ -114,8 +149,9 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 	}
 	// Through a proxy (HTTPS_PROXY and the like), the proxy connects, so the
 	// host is resolved and checked here first; the proxy's own address,
-	// often a private one, is let through.
-	var proxyAddrs sync.Map // host:port of proxies in use
+	// often a private one, is let through for that request only: each
+	// request carries its route (routedTransport), so a request straight
+	// to the proxy's address (localhost is never proxied) is checked.
 	transport := &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			p, err := proxyFromEnv(req)
@@ -125,12 +161,16 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 			if err := f.checkResolved(req.Context(), req.URL.Hostname()); err != nil {
 				return nil, err
 			}
-			proxyAddrs.Store(canonicalAddr(p), true)
+			if r, ok := req.Context().Value(routeKey{}).(*route); ok {
+				r.proxy.Store(canonicalAddr(p))
+			}
 			return p, nil
 		},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if _, ok := proxyAddrs.Load(addr); ok {
-				return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, addr)
+			if r, ok := ctx.Value(routeKey{}).(*route); ok {
+				if p, _ := r.proxy.Load().(string); p != "" && p == addr {
+					return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, addr)
+				}
 			}
 			return dialer.DialContext(ctx, network, addr)
 		},
@@ -141,7 +181,7 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 		IdleConnTimeout:       30 * time.Second,
 	}
 	f.client = &http.Client{
-		Transport: transport,
+		Transport: routedTransport{transport},
 		Timeout:   cfg.Timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= webMaxRedirects {
@@ -152,14 +192,41 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 			}
 			// A redirect to another host must be independently allowed;
 			// otherwise the model should request it explicitly (and be approved).
-			first := via[0].URL.Hostname()
-			if !strings.EqualFold(req.URL.Hostname(), first) && !matchDomain(f.cfg.AllowDomains, req.URL.Hostname()) {
-				return fmt.Errorf("redirected from %s to %s; fetch that URL directly if needed", first, req.URL.Hostname())
+			// The permission rules come first, as for a fetch: web(host) deny
+			// refuses, and ask needs the question a direct fetch asks.
+			first, host := via[0].URL.Hostname(), req.URL.Hostname()
+			if strings.EqualFold(host, first) {
+				return nil
+			}
+			switch eff, r := f.cfg.Rules.Decide(RuleWeb, []string{host}); eff {
+			case EffectDeny:
+				return fmt.Errorf("redirected from %s to %s, which the permission rule deny %s refuses", first, host, r)
+			case EffectAsk:
+				return fmt.Errorf("redirected from %s to %s, which the permission rule ask %s asks about; fetch that URL directly if needed", first, host, r)
+			}
+			if !matchDomain(f.cfg.AllowDomains, host) {
+				return fmt.Errorf("redirected from %s to %s; fetch that URL directly if needed", first, host)
 			}
 			return nil
 		},
 	}
 	return f
+}
+
+// routeKey keys a request's route in its context.
+type routeKey struct{}
+
+// route is the proxy one request goes through ("" for none): the dialer
+// lets that address through unchecked for that request alone.
+type route struct{ proxy atomic.Value }
+
+// routedTransport gives each request (each redirect hop is its own) a
+// route of its own before the transport picks a proxy and dials.
+type routedTransport struct{ t *http.Transport }
+
+// RoundTrip sends req with a fresh route in its context.
+func (rt routedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt.t.RoundTrip(req.WithContext(context.WithValue(req.Context(), routeKey{}, &route{})))
 }
 
 // proxyFromEnv is the proxy for a request from the environment, and

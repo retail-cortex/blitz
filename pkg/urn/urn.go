@@ -67,9 +67,6 @@ func New(k Kind, id ...string) (Name, error) {
 	return n, n.check()
 }
 
-// Collection is the name of every thing of kind k (RN-03).
-func Collection(k Kind) Name { return Name{Kind: k} }
-
 // File is the name of a file under n, an artifacts name (RN-12).
 func (n Name) File(path string) (Name, error) {
 	f := Name{Kind: n.Kind, IDs: n.IDs, Path: path}

@@ -69,7 +69,10 @@ type Registry struct {
 	// modeNote is why the configured permission mode couldn't be used
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
-	rules    *PermissionRules
+	// checkpointsErr is why the checkpoints on disk couldn't be opened (they
+	// are kept in memory only), or nil.
+	checkpointsErr error
+	rules          *PermissionRules
 
 	browser *browserTool // nil: no browser tool
 	page    pageTool     // open_page (spec_050_agent_browser AB-10)
@@ -164,6 +167,10 @@ func (r *Registry) CommandPolicy() *CommandPolicy { return r.policy }
 // ModeNote is why the configured permission mode wasn't used, or nil.
 func (r *Registry) ModeNote() error { return r.modeNote }
 
+// CheckpointsErr is why the checkpoints /undo uses couldn't be opened on
+// disk, so they last only as long as this process, or nil.
+func (r *Registry) CheckpointsErr() error { return r.checkpointsErr }
+
 // NewRegistry initializes all standard Blitz tools. Call Close when done
 // to stop background processes and release the workspace handle.
 func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skills.Provider) (*Registry, error) {
@@ -196,6 +203,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		return nil, fmt.Errorf("failed to open workspace: %w", err)
 	}
+	rules.SetWorkspace(ws.Dir())
 
 	policy, err := NewCommandPolicy(CommandPolicyConfig{
 		Allow:       sb.Commands.Allow,
@@ -228,6 +236,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		ws.Close()
 		return nil, err
+	}
+	if cfg.Tools.ShellTimeoutSeconds > int(maxShellTimeout/time.Second) {
+		slog.Warn("tools.shell_timeout_seconds is over the limit", "set", cfg.Tools.ShellTimeoutSeconds, "used", int(maxShellTimeout/time.Second))
 	}
 	env := &ExecEnv{Sandbox: osb, ScrubEnv: sb.ScrubEnv, Dir: ws.Dir()}
 	// Signed in with Google's ADC, and sharing it (sandbox.share_adc): the
@@ -285,9 +296,8 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			sum := sha256.Sum256([]byte(ws.Dir()))
 			opts.Dir = filepath.Join(config.ExpandHome(cfg.Checkpoints.Dir), hex.EncodeToString(sum[:12]))
 		}
-		var err error
-		if r.checkpoints, err = OpenCheckpoints(ws, opts); err != nil {
-			slog.Warn("checkpoints", "error", err)
+		if r.checkpoints, r.checkpointsErr = OpenCheckpoints(ws, opts); r.checkpointsErr != nil {
+			slog.Warn("checkpoints", "error", r.checkpointsErr)
 		}
 	}
 	if cfg.Images.Enabled {
@@ -354,17 +364,15 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if cfg.Blitz.PlanReview == config.PlanReviewAgent {
 		entries = append(entries, entry{[]string{"enter_plan_mode"}, func() (tool.Tool, error) { return NewEnterPlanModeTool(r.hooks) }})
 	}
+	// The web settings, once: web_fetch, the browser and skill scripts'
+	// fetches start from them.
+	r.web = WebFetchConfig{
+		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
+		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
+	}
 	if cfg.Web.Enabled {
 		entries = append(entries, entry{[]string{"web_fetch"}, func() (tool.Tool, error) {
-			wc := WebFetchConfig{
-				AllowDomains: cfg.Web.AllowDomains,
-				DenyDomains:  cfg.Web.DenyDomains,
-				AllowPrivate: cfg.Web.AllowPrivate,
-				AllowNetwork: sb.AllowNetwork,
-				MaxBytes:     cfg.Web.MaxBytes,
-				Rules:        rules,
-				Timeout:      time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-			}
+			wc := r.web
 			// The browser is made below, before this runs.
 			if cfg.Web.BrowserFallback && r.browser != nil {
 				wc.Browser = r.browser.pageText
@@ -375,19 +383,16 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	r.fetch = cfg.Web.Enabled
 	r.webOn = cfg.Web.Enabled
 	r.page.open = cfg.Browser.Open
-	r.web = WebFetchConfig{
-		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
-		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
-	}
 	if cfg.Web.Enabled && cfg.Browser.Enabled {
 		timeout := time.Duration(cfg.Web.TimeoutSeconds) * time.Second
 		if timeout < 30*time.Second {
 			timeout = 30 * time.Second // a page with scripts takes longer than a fetch
 		}
-		r.browser = newBrowserTool(r, cfg.Browser, WebFetchConfig{
-			AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains,
-			AllowNetwork: sb.AllowNetwork, Rules: rules,
-		}, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
+		// The browser goes by the domains, the rules and the network
+		// setting; local pages are its own setting (browser.allow_local).
+		bw := r.web
+		bw.AllowPrivate, bw.MaxBytes, bw.Timeout = false, 0, 0
+		r.browser = newBrowserTool(r, cfg.Browser, bw, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
 		entries = append(entries, entry{[]string{"browser"}, func() (tool.Tool, error) { return NewBrowserTool(r.browser) }})
 	}
 	// Always there, for a speech model set later; agents have it only while
@@ -423,17 +428,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			NewPyEnvs("", cfg.Skills.Policy.Packages),
 			ScriptBoxConfig{Mode: cfg.Skills.Policy.Sandbox, Blocked: ws.Blocked()})
 		if cfg.Web.Enabled {
-			r.skillScripts.SetWeb(WebFetchConfig{
-				AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
-				AllowNetwork: sb.AllowNetwork, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second, Rules: rules,
-			})
+			r.skillScripts.SetWeb(r.web)
 		}
 		entries = append(entries, entry{[]string{"run_skill_script"}, func() (tool.Tool, error) { return NewRunSkillScriptTool(r.skillScripts) }})
 	}
 	if skillProv != nil {
 		entries = append(entries,
 			entry{[]string{"list_or_search_skills"}, func() (tool.Tool, error) { return NewListSkillsTool(skillProv) }},
-			entry{[]string{"activate_skill"}, func() (tool.Tool, error) { return NewActivateSkillTool(skillProv, &cfg.Skills.Policy) }},
+			entry{[]string{"activate_skill"}, func() (tool.Tool, error) { return NewActivateSkillTool(skillProv, &cfg.Skills.Policy, r.rules) }},
 			entry{[]string{"read_skill_file"}, func() (tool.Tool, error) { return NewReadSkillFileTool(skillProv) }},
 		)
 	}
@@ -477,6 +479,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 	if r.tools["search_workspace"], err = NewSearchWorkspaceTool(r); err != nil {
+		r.Close()
 		return nil, fmt.Errorf("failed to create the search_workspace tool: %w", err)
 	}
 	r.tools["remember"], err = NewRememberTool(r)

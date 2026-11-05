@@ -491,3 +491,40 @@ func TestNoSources(t *testing.T) {
 	assert.Empty(t, hits)
 	assert.Empty(t, x.Sources())
 }
+
+// cancellingSource stops the scan while it reads ref, as the service
+// stopping during a long PDF extraction would.
+type cancellingSource struct {
+	*memSource
+	ref    string
+	cancel context.CancelFunc
+}
+
+func (c cancellingSource) Read(ctx context.Context, ref string) (Doc, error) {
+	if ref == c.ref {
+		c.cancel()
+		return Doc{}, ctx.Err()
+	}
+	return c.memSource.Read(ctx, ref)
+}
+
+// An item whose read a scan's end cut short isn't recorded as
+// unreadable: the next scan reads it (N26 engine-sub-2#19).
+func TestScanStoppedMidReadReadsAgain(t *testing.T) {
+	files := newSource("files")
+	files.set("slow.pdf", "quarterly zeppelin revenue", t0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src := cancellingSource{memSource: files, ref: "slow.pdf", cancel: cancel}
+	x, err := Open(t.TempDir(), []Source{src}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { x.Close() })
+	_ = x.Scan(ctx)
+
+	x.sources = []Source{files}
+	require.NoError(t, x.Scan(context.Background()))
+	hits, err := x.Search(context.Background(), Query{Text: "zeppelin"})
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	assert.Equal(t, "slow.pdf", hits[0].Ref)
+}

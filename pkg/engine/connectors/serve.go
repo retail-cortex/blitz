@@ -48,7 +48,7 @@ func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerCo
 		type group struct{ global, local []string }
 		groups := map[string]*group{}
 		var order []string
-		rules := rulesFor(o.Dirs, c.ID)
+		rules := rulesFor(o.Dirs, cat, c)
 		for _, scope := range Scopes {
 			for _, f := range o.Files(scope, c.ID) {
 				// The organization's locked ones can't be turned off (EN-31).
@@ -60,7 +60,7 @@ func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerCo
 					warn(o.Warn, fmt.Sprintf("%s isn't served: %v", f, err))
 					continue
 				}
-				if why := rules.refusal(scope, idOf(f), KindOf(string(text))); why != "" {
+				if why := rules.refusal(scope, idOf(f), string(text)); why != "" {
 					warn(o.Warn, fmt.Sprintf("%s isn't served: %s", f, why))
 					continue
 				}
@@ -84,7 +84,7 @@ func With(servers []config.MCPServerConfig, o ServeOptions) []config.MCPServerCo
 		for _, id := range order {
 			b, _ := BackendOf(id)
 			g := groups[id]
-			for _, s := range b.Serve(Serving{Category: c, Dirs: o.Dirs, Global: g.global, Local: g.local, Trusted: o.Trusted}) {
+			for _, s := range b.Serve(Serving{Category: c, Dirs: o.Dirs, Global: g.global, Local: g.local, Trusted: o.Trusted, Warn: o.Warn}) {
 				if slices.ContainsFunc(out, func(u config.MCPServerConfig) bool { return u.Name == s.Name }) {
 					warn(o.Warn, fmt.Sprintf("an MCP server is named %q: the %s connectors aren't served", s.Name, c.ID))
 					continue

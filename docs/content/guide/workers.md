@@ -65,14 +65,14 @@ blitz jobs enable deps     # shows what it may do, then asks
 | `model` | the workspace's model | `provider/model`, for its runs only |
 | `workflow` | none | Run this [workflow](workflows.md) instead of a prompt; the text after the front matter, optional then, is its input |
 | `permissions` | none: read only | What it may do (below) |
-| `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout` |
+| `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout`. `0` means the default, not "no limit" (unlike a guardrail's `limits.md`): ask for a higher number instead |
 | `catch_up` | `none` | `once`: when the service starts or the job is enabled, run once if a scheduled time passed since its last run |
 | `overlap` | `skip` | A run that's due while one is still going is skipped |
 | `runs_on` | `here` | `service`: your organization's Blitz service runs it, on its own schedule, and this computer doesn't ([Jobs on the service](#jobs-on-the-service)) |
 | `on_request` | `refuse` here, `pause` on the service | What a run does when it needs something its permissions don't allow: `refuse` it and go on without, or `pause` and wait for its owner's answer |
 | `merge` | `main` | Where a run on the service leaves its changes: `main` adds them to the workspace's main when they merge cleanly, so they reach everyone's folder; `never` keeps them on the run's own branch for someone to add |
 
-**Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
+**Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `every 3 days` (every 72 hours from when the schedule starts), `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
 
 ## What a job may do
 
@@ -80,7 +80,7 @@ Nobody is there to approve anything, so a job gets exactly the permissions it li
 
 | Permission | Allows |
 |---|---|
-| `shell:go test ./...` | That command (a `*` glob matches any words) |
+| `shell:go test ./...` | That command exactly. A `*` matches any words but stops at a `/`: `shell:git add *` allows `git add notes.md`, not `git add reports/deps.md` (write `shell:git add reports/*`, or name the command in full) |
 | `write:reports/` or `write:reports/**` | Writing files anywhere under `reports/`, in folders too (`*` alone stays in one folder: `write:reports/*` is only the files directly in it) |
 | `delete:tmp/*.log` | Deleting matching files |
 | `web:api.github.com` | Fetching from that host (or using that search provider) |
@@ -89,6 +89,8 @@ Nobody is there to approve anything, so a job gets exactly the permissions it li
 Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`, backquotes or redirection is allowed only by a permission that spells it exactly. Your `deny` rules still apply, an `ask` rule refuses, and permission modes and remembered approvals don't apply. A job can't ask you questions or start background agents. Every refusal is recorded in its run.
 
 `[workers.policy]` in your settings governs every job: which kinds of permission are allowed at all, the limits a job that sets none gets (50 calls, $1, 30 minutes), an optional cap on what one may ask for (`max_turns`, `max_cost_usd`, `max_timeout`; none by default since v0.8.4, so a job may set more than the defaults), and how many runs at once across workspaces (`max_concurrent`, 2).
+
+A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Library › Jobs**, or the guardrail's file.
 
 ## Enabling, editing and running
 

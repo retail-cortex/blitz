@@ -16,8 +16,9 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -181,33 +182,23 @@ func NewExitPlanModeTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // savePlan writes an approved plan to .blitz/plans/<session>-<n>.md in the
-// workspace and returns its workspace-relative path.
+// workspace and returns its workspace-relative path. It goes through the
+// workspace like the file tools: not in a read-only workspace, and not
+// through a link out of it.
 func savePlan(ws *Workspace, session, plan string) (string, error) {
-	dir := filepath.Join(ws.Dir(), ".blitz", "plans")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	base := unsafeName.ReplaceAllString(session, "_")
 	if base == "" {
 		base = "plan"
 	}
 	for n := 1; ; n++ {
-		name := fmt.Sprintf("%s-%d.md", base, n)
-		f, err := os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if os.IsExist(err) {
+		rel := filepath.Join(".blitz", "plans", fmt.Sprintf("%s-%d.md", base, n))
+		err := ws.CreateExclusive(context.Background(), rel, []byte(plan+"\n"))
+		if errors.Is(err, fs.ErrExist) {
 			continue
 		}
 		if err != nil {
 			return "", err
 		}
-		_, err = f.WriteString(plan + "\n")
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			os.Remove(f.Name()) // no half-written plan to point at
-			return "", err
-		}
-		return filepath.ToSlash(filepath.Join(".blitz", "plans", name)), nil
+		return filepath.ToSlash(rel), nil
 	}
 }

@@ -96,7 +96,7 @@ func TestStorageURIScripts(t *testing.T) {
 func TestActivateListsAssets(t *testing.T) {
 	r, _ := remoteFixture(t, hexSHA256([]byte(remoteSource)), false)
 	p := config.DefaultConfig().Skills.Policy
-	out := runTool(t, toolOf(t)(NewActivateSkillTool(r.provider, &p)), map[string]any{"skill_name": "remote"})
+	out := runTool(t, toolOf(t)(NewActivateSkillTool(r.provider, &p, nil)), map[string]any{"skill_name": "remote"})
 	assets, _ := out["assets"].([]any)
 	require.Len(t, assets, 2, "%v", out)
 	guide := assets[0].(map[string]any)

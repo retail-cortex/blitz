@@ -125,6 +125,14 @@ func TestInstallAndApply(t *testing.T) {
 	_, problems = Apply(cfg, store)
 	assert.Contains(t, strings.Join(problems, "\n"), "an MCP server named lintd exists already")
 
+	// The organization doesn't allow MCP servers of the person's own: the
+	// plugin's isn't used either (EN-35; N26 api-client-config#1).
+	cfg = config.DefaultConfig()
+	cfg.Org = config.OrgLayer{Defaults: t.TempDir()}
+	_, problems = Apply(cfg, store)
+	assert.Empty(t, cfg.MCP.Servers)
+	assert.Contains(t, strings.Join(problems, "\n"), "plugin lint-kit: MCP server lintd isn't used: your organization's policy")
+
 	// Disabled: by the user, then enabled for a workspace, and disabled there.
 	require.NoError(t, store.SetEnabled("lint-kit", false))
 	for _, tt := range []struct {

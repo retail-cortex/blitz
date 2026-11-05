@@ -38,6 +38,11 @@ func TestParseGuardrail(t *testing.T) {
 		{"a custom one can't redact", "---\nstage: output\naction: redact\n---\nX", StageOutput, Redact, `action "redact": block or warn (redact is the secrets guardrail's)`},
 		{"a custom one needs a stage", "No stage.", "", "", `stage "": input, tool_result, output or action`},
 		{"an empty custom one", "---\nstage: input\n---\n", StageInput, Block, "the guardrail is empty: say what to catch"},
+		// N26 safety-enterprise#6, #7.
+		{"values in capitals", "---\nstage: Action\naction: Block\n---\nNo deleting branches.", StageAction, Block, ""},
+		{"a misspelt setting", "---\nstage: action\nactoin: warn\n---\nX", StageAction, Block, "actoin: not a guardrail's setting (builtin, stage, action, agents, tools, description, pii, judge, limits, enabled)"},
+		{"a misspelt limit", "---\nbuiltin: limits\nlimits:\n  allowed_domain: [example.com]\n---\n", StageAction, Block, "limits: allowed_domain: not a limit (max_cost_usd, max_turns, max_files_changed, allowed_domains, commands)"},
+		{"the catalog's lock and groups", "---\nstage: input\nlock: locked\ngroups: [eng]\n---\nX", StageInput, Block, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -82,6 +87,49 @@ func TestLoadAndActive(t *testing.T) {
 	g.Tools = []string{"read_file"}
 	assert.True(t, g.Checks("read_file", false))
 	assert.True(t, Guardrail{Stage: StageAction}.Checks("anything", false))
+}
+
+// A guardrail or rule that can't be read is listed with why, not left
+// out without a word; a folder that isn't there has none (N26
+// safety-enterprise#26).
+func TestUnreadable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	dir := t.TempDir()
+	write(t, dir, "no-prod.md", "---\nstage: action\n---\nX")
+	write(t, dir, "limits.md", "---\nbuiltin: limits\nlimits:\n  max_turns: 5\n---\n")
+	write(t, dir, "rules/style.md", "Tabs.")
+	write(t, dir, "rules/gate.md", "---\nwhen: before_agent\n---\nX")
+	for _, f := range []string{"no-prod.md", "limits.md", "rules/gate.md"} {
+		require.NoError(t, os.Chmod(filepath.Join(dir, f), 0))
+	}
+	all := LoadGuardrails(dir, filepath.Join(dir, "missing"))
+	byName := map[string]Guardrail{}
+	for _, g := range all {
+		byName[g.Name] = g
+	}
+	assert.Contains(t, byName["no-prod"].Problem, "couldn't read it")
+	assert.Contains(t, byName["limits"].Problem, "couldn't read it")
+	assert.Equal(t, []Guardrail{BuiltinDefault(Builtins[2])}, Active(all, StageAction, ""), "limits runs with its defaults")
+
+	rules := Load(filepath.Join(dir, "rules"), filepath.Join(dir, "missing"))
+	require.Len(t, rules, 2)
+	for _, r := range rules {
+		if r.Name == "gate" {
+			assert.Contains(t, r.Problem, "couldn't read it")
+		} else {
+			assert.Empty(t, r.Problem)
+		}
+	}
+
+	locked := filepath.Join(dir, "locked")
+	write(t, locked, "x.md", "---\nstage: input\n---\nX")
+	require.NoError(t, os.Chmod(locked, 0))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	all = LoadGuardrails(locked)
+	assert.Contains(t, all[len(all)-1].Problem, "couldn't read the folder")
+	assert.NotEmpty(t, Load(locked)[0].Problem)
 }
 
 func TestInjection(t *testing.T) {
@@ -137,6 +185,52 @@ func TestDomainsAndCommands(t *testing.T) {
 		assert.Empty(t, CommandDenied(c, DefaultCommands), c)
 	}
 	assert.Equal(t, []string{DefaultsEntry}, BuiltinDefault(Builtins[2]).Limits.Commands, "limits refuses the defaults without a file")
+}
+
+// The spellings the guide promises are refused: bundled short flags,
+// git's own options, sudo's and env's options, shells and subshells
+// (N26 safety-enterprise#3).
+func TestCommandDeniedSpellings(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		refused bool
+	}{
+		{"git push -uf origin main", true},
+		{"git push -fu origin main", true},
+		{"git push -fq", true},
+		{"git -C . push -f", true},
+		{"git -C ../repo push --force origin main", true},
+		{"git -c core.askPass=x push -f", true},
+		{"git --no-pager push --force", true},
+		{"git --git-dir=.git push origin +main", true},
+		{"/usr/bin/git push -f", true},
+		{"sudo -u root rm -rf ~", true},
+		{"sudo -E rm -rf /", true},
+		{"sudo -Eu root rm -rf ~", true},
+		{"sudo --user=root rm -rf /", true},
+		{"env -i rm -rf ~", true},
+		{"env -u PATH FOO=1 rm -rf /", true},
+		{"nice -n 10 rm -rf ~", true},
+		{"nohup rm -rf / &", true},
+		{"time rm -rf ~", true},
+		{`bash -c "rm -rf ~"`, true},
+		{`sh -c 'cd /tmp && rm -rf /'`, true},
+		{`bash -lc "git push -f"`, true},
+		{"echo $(rm -rf ~)", true},
+		{"echo `rm -rf ~`", true},
+		{"git -C . push -u origin main", false},
+		{"git push -u origin main", false},
+		{"git -c push.default=current push", false},
+		{"git commit -f -m x", false},
+		{"sudo -u root rm -rf /tmp/build", false},
+		{"env -i make test", false},
+		{`bash -c "rm -rf ./dist"`, false},
+		{"echo $(date)", false},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			assert.Equal(t, tc.refused, CommandDenied(tc.command, DefaultCommands) != "")
+		})
+	}
 	assert.Equal(t, DefaultCommands, ExpandCommands([]string{DefaultsEntry}))
 	assert.Equal(t, append(slices.Clone(DefaultCommands), "dropdb *"), ExpandCommands([]string{"Defaults", "dropdb *"}), "the defaults and its own")
 }
@@ -213,7 +307,7 @@ func TestDescribe(t *testing.T) {
 	}{
 		{"injection", BuiltinDefault(Builtins[0]), []string{"builtin: prompt_injection", "web_fetch, web_search, the browser and MCP servers", "ignore|disregard", "judge: true", "action: redact", "takes each matching phrase out", "warn: lets it through", "block: stops it"}},
 		{"injection unjudged, some tools", Guardrail{Builtin: BuiltinInjection, Action: Block, Tools: []string{"read_file"}}, []string{"what read_file bring back", "judge: false", "action: block", "redact: masks"}},
-		{"secrets", BuiltinDefault(Builtins[1]), []string{"stage output", "private keys", "pii: false", "action: redact", "block: stops it"}},
+		{"secrets", BuiltinDefault(Builtins[1]), []string{"stage output", "private keys, AWS access keys", "GitLab tokens, Slack tokens, Stripe keys", "pii: false", "action: redact", "block: stops it"}},
 		{"secrets with personal data", Guardrail{Builtin: BuiltinSecrets, PII: true, Agents: []string{"qa"}}, []string{"for qa", "email addresses"}},
 		{"limits", BuiltinDefault(Builtins[2]), []string{"defaults", "git push* --force", "rm -rf ~", "cost per turn (the turn stops there): $10.00", "model calls per turn (the turn stops there): 200", "files changed per turn: no limit", "action: block"}},
 		{"limits set", Guardrail{Builtin: BuiltinLimits, Limits: Limits{MaxCostUSD: 2, MaxTurns: 9, MaxFilesChanged: 4, AllowedDomains: []string{"go.dev"}}, Off: true}, []string{"$2.00", "model calls per turn (the turn stops there): 9", "files changed per turn: 4", "go.dev", "commands: none refused", "enabled: false"}},
@@ -252,6 +346,30 @@ func TestBrokenBuiltinFileRunsTheDefaults(t *testing.T) {
 			assert.Contains(t, all[i].Problem, tc.problem, "shown where the file is")
 			assert.Equal(t, BuiltinLimits, all[i].For())
 			assert.Equal(t, []Guardrail{BuiltinDefault(Builtins[2])}, Active(all, StageAction, ""), "the defaults hold")
+		})
+	}
+
+	// A file named after a built-in that's another guardrail is a problem
+	// (N26 safety-enterprise#2): the built-in still runs, with its
+	// defaults, and the other built-ins too.
+	for _, tc := range []struct{ file, body string }{
+		{"limits.md", "---\nstage: action\naction: block\ntools: [run_shell_command]\n---\nDropping a table."},
+		{"secrets.md", "---\nstage: output\n---\nNo customer names."},
+		{"prompt_injection.md", "---\nstage: tool_result\naction: warn\n---\nNothing odd."},
+		{"limits.md", "---\nbuiltin: secrets\n---\n"},
+	} {
+		t.Run("a custom one named "+tc.file+" "+tc.body[:12], func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, tc.file, tc.body)
+			all := LoadGuardrails(dir)
+			name := tc.file[:len(tc.file)-3]
+			i := slices.IndexFunc(all, func(g Guardrail) bool { return g.Name == name })
+			require.GreaterOrEqual(t, i, 0)
+			assert.Equal(t, name+".md is the built-in "+name+" guardrail's file: add builtin: "+name+", or rename it", all[i].Problem)
+			assert.Equal(t, name, all[i].For())
+			for _, b := range Builtins {
+				assert.Contains(t, Active(all, b.Stage, ""), BuiltinDefault(b), b.ID+" runs with its defaults")
+			}
 		})
 	}
 

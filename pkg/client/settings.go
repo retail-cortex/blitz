@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"errors"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -24,8 +25,8 @@ import (
 )
 
 // Settings is the service's ConfigService for a front end that has no
-// workspace open: the models the providers offer, and checking a
-// permission rule.
+// workspace open: the providers and their models, the settings files,
+// permission rules, sign-in and the organization (enterprise).
 type Settings struct {
 	c pb.ConfigServiceClient
 }
@@ -171,7 +172,7 @@ func (s *Settings) SignIn(ctx context.Context, dir, provider, profile string, on
 	if err := stream.Err(); err != nil {
 		return SignInStatus{}, fromAPI(err)
 	}
-	return SignInStatus{}, errors.New("the service ended the sign-in without a result")
+	return SignInStatus{}, errors.New(i18n.T("attached.sign_in_unfinished"))
 }
 
 // SignOut signs out of provider in the service and returns its sign-in

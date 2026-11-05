@@ -27,17 +27,29 @@ import (
 
 const mask = "[REDACTED]"
 
-// patterns match common credential formats. Each is replaced whole, except
-// assignment-style matches, where only the value is masked.
-var patterns = []*regexp.Regexp{
-	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`),
-	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),                                            // AWS access key id
-	regexp.MustCompile(`\bsk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}`),                         // OpenAI / Anthropic
-	regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{35}\b`),                                      // Google API key
-	regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b`),                    // GitHub tokens
-	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{40,}\b`),                                // GitHub fine-grained
-	regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9\-]{10,}`),                                 // Slack
-	regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}`), // JWT
+// Format is a credential format: what it is, and a pattern that matches
+// one whole.
+type Format struct {
+	Kind    string
+	Pattern *regexp.Regexp
+}
+
+// Formats are the credential formats Blitz knows, the one table the
+// redactor, the secrets guardrail's description and the secret scan
+// (pkg/secretscan, its hook's pattern too) read.
+var Formats = []Format{
+	{"private key", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`)},
+	{"AWS access key", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
+	{"Anthropic API key", regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_\-]{20,}`)},
+	{"OpenAI API key", regexp.MustCompile(`\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_\-]{20,}`)},
+	{"Google API key", regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{35}\b`)},
+	{"GitHub token", regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b`)},
+	{"GitHub token", regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{60,}\b`)},
+	{"GitLab token", regexp.MustCompile(`\bglpat-[A-Za-z0-9_\-]{20,}\b`)},
+	{"Slack token", regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9\-]{10,}`)},
+	{"Stripe key", regexp.MustCompile(`\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b`)},
+	{"Hugging Face token", regexp.MustCompile(`\bhf_[A-Za-z0-9]{30,}\b`)},
+	{"JWT", regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}`)},
 }
 
 // assignment masks the value in "password=...", "api_key: ...", etc.
@@ -114,6 +126,23 @@ func Mask(s string) string {
 	return s
 }
 
+// Longest is the length of the longest value r masks, its own or
+// remembered (0 for none): text streamed in pieces is held at least this
+// long so a value is whole when it's checked. A nil Redactor has the
+// remembered ones.
+func (r *Redactor) Longest() int {
+	n := 0
+	if r != nil && len(r.values) > 0 {
+		n = len(r.values[0])
+	}
+	remembered.RLock()
+	defer remembered.RUnlock()
+	if len(remembered.values) > 0 {
+		n = max(n, len(remembered.values[0]))
+	}
+	return n
+}
+
 // String masks secrets in s. A nil Redactor still applies the built-in
 // patterns and the remembered values.
 func (r *Redactor) String(s string) string {
@@ -126,8 +155,8 @@ func (r *Redactor) String(s string) string {
 		}
 	}
 	s = Mask(s)
-	for _, re := range patterns {
-		s = re.ReplaceAllString(s, mask)
+	for _, f := range Formats {
+		s = f.Pattern.ReplaceAllString(s, mask)
 	}
 	return assignment.ReplaceAllString(s, "${1}${2}"+mask)
 }

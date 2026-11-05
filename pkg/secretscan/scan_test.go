@@ -24,6 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
 // The keys are put together here so this file holds none a scanner
@@ -264,6 +266,24 @@ func TestStaged(t *testing.T) {
 	assert.Equal(t, map[string][]byte{"a.txt": []byte("staged\n")}, got, "what's staged, as staged")
 	_, err = Staged(context.Background(), t.TempDir())
 	assert.ErrorIs(t, err, ErrNotARepository)
+}
+
+// The hook's own search is the redactor's table of formats, as grep -E
+// reads it: one list, so the scan, the hook and the secrets guardrail
+// don't drift (N26 safety-enterprise#8).
+func TestHookPatternIsTheTable(t *testing.T) {
+	ere := strings.NewReplacer(`\b`, "", "(?:", "(", `\-`, "-")
+	parts := []string{pemHeader.String()}
+	for _, f := range redact.Formats {
+		if f.Kind != "private key" {
+			parts = append(parts, ere.Replace(f.Pattern.String()))
+		}
+	}
+	assert.Contains(t, HookScript, "pattern='"+strings.Join(parts, "|")+"'\n")
+	for _, key := range []string{"glpat-" + strings.Repeat("a1", 12), "sk_live_" + strings.Repeat("Ab3", 8), "ASIA" + strings.Repeat("B", 16), "eyJ" + "hbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmN"} {
+		assert.NotEmpty(t, Scan("main.go", []byte("x := \""+key+"\"")), key)
+		assert.NotContains(t, redact.New().String(key), key, "the guardrail masks what the scan finds")
+	}
 }
 
 func TestMaskShort(t *testing.T) {

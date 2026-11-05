@@ -123,7 +123,8 @@ func TestPyEnvEnsureWithUV(t *testing.T) {
 	assert.Contains(t, box.reqs[1].ReadOnly, filepath.Dir(uv), "uv is mounted")
 	assert.Contains(t, box.reqs[1].ReadOnly, "/opt/py", "so is the interpreter")
 	assert.Contains(t, box.reqs[1].Env, "UV_PYTHON_DOWNLOADS=never")
-	assert.Contains(t, m.InstallCommands([]string{"rich"}), "pip install --index-url https://mirror.example/simple --only-binary :all: -- rich")
+	// What the prompt shows is what runs (N26 engine-tools-2#25).
+	assert.Equal(t, "uv pip install --quiet --python <env>/bin/python --index-url https://mirror.example/simple --only-binary :all: -- rich", m.InstallCommands([]string{"rich"}))
 }
 
 // List shows complete and interrupted environments, newest use first;
@@ -178,7 +179,10 @@ func TestNewPyEnvsDefaults(t *testing.T) {
 	m := NewPyEnvs("", config.PackagePolicy{})
 	assert.Equal(t, filepath.Join(home, ".blitz", "envs"), m.dir)
 	assert.Equal(t, "https://pypi.org/simple", m.index)
-	assert.Equal(t, "pip install --index-url https://pypi.org/simple -- a b", m.InstallCommands([]string{"a", "b"}))
+	old := findUV
+	findUV = func() (string, error) { return "", errors.New("uv not found") }
+	t.Cleanup(func() { findUV = old })
+	assert.Equal(t, "<env>/bin/python -m pip install --quiet --index-url https://pypi.org/simple a b", m.InstallCommands([]string{"a", "b"}), "without uv, pip's own words")
 	assert.Equal(t, "a\nb", lastLines("x\na\nb\n", 2))
 	assert.Equal(t, "x\na", lastLines("x\na", 5))
 }

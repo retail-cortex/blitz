@@ -59,6 +59,11 @@ func createTestToolContextWith(ctx context.Context) agent.Context {
 
 // --- shared helpers ---
 
+// NewWorkspace opens dir as a single read-write root with no blocked paths.
+func NewWorkspace(dir string, maxFileSize int64) (*Workspace, error) {
+	return OpenWorkspace(WorkspaceOptions{Dir: dir, MaxFileSize: maxFileSize})
+}
+
 func newTestWorkspace(t *testing.T) (*Workspace, string) {
 	t.Helper()
 	dir := t.TempDir()

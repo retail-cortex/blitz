@@ -145,6 +145,16 @@ func TestLoadToleratesTornLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, loaded.Messages, 1, "expected torn line skipped, got %+v", loaded.Messages)
 	assert.Equal(t, "complete", loaded.Messages[0].Content, "expected torn line skipped, got %+v", loaded.Messages)
+
+	// The next message after the crash isn't lost with the torn one (N26
+	// engine-sub-2#8).
+	s2, err := NewStorage(dir)
+	require.NoError(t, err)
+	require.NoError(t, s2.AppendTo(rec.ID, Message{Role: "user", Content: "after"}))
+	loaded, err = s2.Load(rec.ID)
+	require.NoError(t, err)
+	require.Len(t, loaded.Messages, 2, "%+v", loaded.Messages)
+	assert.Equal(t, "after", loaded.Messages[1].Content)
 }
 
 func TestListMetadataAndLegacy(t *testing.T) {

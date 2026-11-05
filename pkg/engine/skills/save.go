@@ -29,6 +29,8 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
+
+	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // Writing a skill from Studio's form (spec_013_skills SK-100): SKILL.md's
@@ -274,19 +276,7 @@ func openSkill(dir, name, rel string) (*os.Root, string, error) {
 	return root, rel, nil
 }
 
-// writeAtomic writes data to p through a temporary file beside it.
-func writeAtomic(p string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(p), ".SKILL-*.md")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), p)
-}
+// writeAtomic writes data to p through a temporary file beside it,
+// readable as the skill's other files are (0644; a temporary file's 0600
+// made a skill saved in Studio owner-only).
+func writeAtomic(p string, data []byte) error { return atomicfile.Write(p, data, 0o644) }

@@ -36,6 +36,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -99,6 +100,29 @@ func TestFlowAPIStepCases(t *testing.T) {
 		})
 	}
 
+	// A filled-in value that names a secret isn't expanded: only what the
+	// step's own settings name is (N26 engine-sub-1 #28).
+	for _, c := range []struct {
+		name string
+		node flows.Node
+		want string
+	}{
+		{name: "a step's output naming a secret", node: flows.Node{URL: srv.URL + "/a", Method: "POST", Body: "{{ input }}"}, want: "POST   : leak {secrets:shop}"},
+		{name: "in a JSON value", node: flows.Node{URL: srv.URL + "/a", Method: "POST", JSON: map[string]any{"v": "{{ input }}"}}, want: `POST   : {"v":"leak {secrets:shop}"}`},
+		{name: "the step's own still is", node: flows.Node{URL: srv.URL + "/a", Method: "POST", Body: "{secrets:bank} {{ input }}"}, want: "POST   : bank-87654321 leak {secrets:shop}"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got = nil
+			require.NoError(t, config.Vault("").Set(secrets.GlobalScope, "bank", "bank-87654321"))
+			filled, err := fillStep(c.node, flows.Vars{Input: "leak {secrets:shop}"})
+			require.NoError(t, err)
+			_, err = w.apiStep(context.Background(), filled, "")
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, c.want, got[0])
+		})
+	}
+
 	fails := []struct {
 		name string
 		node flows.Node
@@ -124,7 +148,7 @@ func TestFlowAPIStepCases(t *testing.T) {
 	assert.Error(t, err)
 
 	off, _ := openTestWith(t, configtest.RunTools)
-	err = off.authorize(context.Background(), httptest.NewRequest("GET", "/", nil), &flows.Auth{Type: "oauth2", TokenURL: srv.URL})
+	err = off.authorize(context.Background(), httptest.NewRequest("GET", "/", nil), &flows.Auth{Type: "oauth2", TokenURL: srv.URL}, off.stepSecrets(flows.Node{}))
 	assert.Error(t, err, "nobody can approve it")
 }
 

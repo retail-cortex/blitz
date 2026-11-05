@@ -72,14 +72,10 @@ func (v workspaceView) workspace() Workspace {
 
 // Workspaces are the organization's workspaces the person has a role in.
 func (c *Client) Workspaces(ctx context.Context) ([]Workspace, error) {
-	token, err := c.AccessToken(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var out struct {
 		Workspaces []workspaceView `json:"workspaces"`
 	}
-	if err := call(ctx, c.hc, http.MethodGet, c.url+"/api/v1/workspaces", token, nil, &out); err != nil {
+	if err := c.signedCall(ctx, http.MethodGet, "/api/v1/workspaces", nil, &out); err != nil {
 		return nil, err
 	}
 	list := make([]Workspace, 0, len(out.Workspaces))
@@ -95,12 +91,8 @@ func (c *Client) Workspaces(ctx context.Context) ([]Workspace, error) {
 // owner; handle "" lets the service make one from the name. A personal
 // one's handle is ~<the person>/<handle> (blitz-enterprise WS-01).
 func (c *Client) CreateWorkspace(ctx context.Context, name, handle string, personal bool) (Workspace, error) {
-	token, err := c.AccessToken(ctx)
-	if err != nil {
-		return Workspace{}, err
-	}
 	var v workspaceView
-	if err := call(ctx, c.hc, http.MethodPost, c.url+"/api/v1/workspaces", token, map[string]any{"name": name, "handle": handle, "personal": personal}, &v); err != nil {
+	if err := c.signedCall(ctx, http.MethodPost, "/api/v1/workspaces", map[string]any{"name": name, "handle": handle, "personal": personal}, &v); err != nil {
 		return Workspace{}, err
 	}
 	if !ValidHandle(v.Workspace.Handle) {
@@ -154,7 +146,9 @@ func (c *Client) events(ctx context.Context, path string, on func(data string)) 
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return refusal(res)
+		err := refusal(res)
+		c.refused(err)
+		return err
 	}
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {

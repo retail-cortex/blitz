@@ -213,10 +213,13 @@ func TestReadEvents(t *testing.T) {
 	_, err = ReadEvents(dir, "../x")
 	assert.Error(t, err, "an unsafe ID")
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "torn"+eventsSuffix), []byte("{\"id\":\"e1\"}\n{bad"), filePerm))
+	// Bad and torn lines are skipped, as replay skips them (N26
+	// engine-sub-2#15).
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "torn"+eventsSuffix), []byte("{\"id\":\"e1\"}\n{bad\n{\"id\":\"e2\"}\n{\"id\":\"e3"), filePerm))
 	evs, err = ReadEvents(dir, "torn")
-	assert.Error(t, err)
-	assert.Len(t, evs, 1, "what was read before the bad line")
+	require.NoError(t, err)
+	require.Len(t, evs, 2)
+	assert.Equal(t, "e2", evs[1].ID)
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "locked"+eventsSuffix), nil, 0o000))
 	if _, err := os.ReadFile(filepath.Join(dir, "locked"+eventsSuffix)); err == nil {

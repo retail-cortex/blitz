@@ -54,6 +54,48 @@ func TestReadReply(t *testing.T) {
 	}
 }
 
+// A reply that looks like JSON but isn't, or names no decision Blitz
+// knows, is a failed hook, not silence (N26 engine-tools-2#6).
+func TestReadReplyFails(t *testing.T) {
+	tests := []struct {
+		name, text, wantErr string
+	}{
+		{"an unescaped quote", `{"decision": "block", "reason": "no "force" pushes"}`, "isn't valid JSON"},
+		{"cut short", `{"decision": "block"`, "isn't valid JSON"},
+		{"an unknown decision", `{"decision": "refuse"}`, `"refuse" isn't one of`},
+		{"another spelling", `{"decision": "blocked"}`, `"blocked" isn't one of`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := readReply("pre_tool", tt.text)
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+	got, _, err := readReply("pre_tool", `{"decision": "block "}`)
+	require.NoError(t, err, "spaces around a decision are fine")
+	assert.True(t, got.Blocked)
+}
+
+// A hook whose reply doesn't parse is warned about, and blocks the call
+// when it's fail_closed.
+func TestHookWithABadReply(t *testing.T) {
+	for _, failClosed := range []bool{true, false} {
+		t.Run(fmt.Sprintf("fail_closed %v", failClosed), func(t *testing.T) {
+			h, warnings := newHooks(t, config.HooksConfig{PreTool: []config.HookConfig{
+				{Args: []string{"echo", `{"decision": "block", "reason": "no "force" pushes"}`}, FailClosed: failClosed},
+			}})
+			out := h.PreTool(context.Background(), "s", "run_shell_command", map[string]any{"command": "git push --force"})
+			assert.Equal(t, failClosed, out.Blocked, "%+v", out)
+			if failClosed {
+				assert.Contains(t, out.Reason, "fail_closed")
+			} else {
+				require.Len(t, *warnings, 1)
+				assert.Contains(t, (*warnings)[0], "isn't valid JSON")
+			}
+		})
+	}
+}
+
 func TestHookValidation(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -226,4 +268,28 @@ func TestCallGrants(t *testing.T) {
 	assert.Error(t, hooks.Approve(ctx, write("a.txt")))
 	assert.Len(t, *reqs, 6, "asked: before the grant, the empty ID, the other call, the other session's, the ask rule, after it ended")
 	assert.Equal(t, "", CallID(context.Background()))
+}
+
+// An http hook's headers carry only the variables it allows, and never
+// one sandbox.scrub_env withholds, allowed or not: a project's hook can't
+// send the person's API key (N26 api-client-config#2).
+func TestExpandAllowed(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-secret")
+	t.Setenv("HOOK_TOKEN", "t0ken")
+	scrub := config.DefaultScrubEnv
+	cases := []struct {
+		name, value string
+		allowed     []string
+		want        string
+	}{
+		{name: "allowed", value: "Bearer $HOOK_TOKEN", allowed: []string{"HOOK_TOKEN"}, want: "Bearer t0ken"},
+		{name: "not allowed", value: "Bearer ${HOOK_TOKEN}", want: "Bearer ${HOOK_TOKEN}"},
+		{name: "allowed but scrubbed", value: "$ANTHROPIC_API_KEY", allowed: []string{"ANTHROPIC_API_KEY"}, want: "${ANTHROPIC_API_KEY}"},
+		{name: "scrubbed, any case", value: "$anthropic_api_key", allowed: []string{"anthropic_api_key"}, want: "${anthropic_api_key}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, expandAllowed(tc.value, tc.allowed, scrub))
+		})
+	}
 }

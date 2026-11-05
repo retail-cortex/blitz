@@ -158,8 +158,8 @@ func (w *Workspace) Suggestions(ctx context.Context) api.Suggestions {
 }
 
 // recentSessions are the workspace's latest conversations with messages,
-// newest first: not snapshots, not workers' runs, not the empty chat the
-// welcome screen shows in.
+// newest first: the person's own (not snapshots or runs), not the empty
+// chat the welcome screen shows in.
 func (w *Workspace) recentSessions() []*session.SessionRecord {
 	list, err := w.storage.ListWorkspace(w.Dir())
 	if err != nil {
@@ -167,7 +167,7 @@ func (w *Workspace) recentSessions() []*session.SessionRecord {
 	}
 	var out []*session.SessionRecord
 	for _, s := range list {
-		if s.MessageCount > 0 && s.Name == "" && !strings.HasPrefix(s.Title, "⏰") {
+		if s.MessageCount > 0 && personal(s) {
 			out = append(out, s)
 		}
 	}
@@ -313,7 +313,8 @@ func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecor
 	if st, err := w.GitStatus(ctx); err == nil && st.Repo {
 		fmt.Fprintf(&b, "\nGit: branch %s, %d uncommitted files.\n", st.Branch, st.Changed)
 	}
-	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.replyIn()), b.String())
+	// Keys pasted into a chat don't go to the suggestions model.
+	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.replyIn()), w.secretRedactor().String(b.String()))
 	if err != nil {
 		return nil, err
 	}

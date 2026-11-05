@@ -143,10 +143,15 @@ func TestUntrustedConnector(t *testing.T) {
 	list := w.Connectors()
 	require.Len(t, list, 1)
 	assert.False(t, list[0].Trusted)
+	// Studio's Test of it gets the workspace's secrets alone (N26
+	// engine-sub-1 #20); a new one typed in the form, any.
+	assert.False(t, w.connectorEnv(list[0], nil).Trusted)
+	assert.True(t, w.connectorEnv(connectors.Connection{Name: "fresh", Category: "databases", Scope: connectors.ScopeWorkspace}, nil).Trusted)
 
 	_, _, err = w.SaveConnector(ctx, list[0], nil, "kitchen")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"kitchen_count"}, readOnlyTools(w), "saved: trusted again")
+	assert.True(t, w.connectorEnv(list[0], nil).Trusted)
 
 	require.NoError(t, os.WriteFile(saved.Path, append(text, '\n', '\n'), 0o600))
 	w.project.Loaded = true

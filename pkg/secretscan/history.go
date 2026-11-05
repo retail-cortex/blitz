@@ -28,7 +28,10 @@ import (
 // History finds the secrets in every file of the history ref has in the
 // repository at dir (each version of each file once, those under 1 MB),
 // for a repository about to be shared: its past commits go with it. At
-// most maxFiles are read; complete says whether that was all of them.
+// most maxFiles files are read (folders don't count); complete says
+// whether that was all of them. A version seen at several paths is read
+// as a settings file when one of them is one (.env, a .json…), where a
+// long random value assigned to a key-like name is a secret.
 func History(ctx context.Context, dir, ref string, maxFiles int) (found []Finding, complete bool, err error) {
 	list, err := gitIn(ctx, dir, "rev-list", "--objects", "--filter=blob:limit=1m", "--filter-provided-objects", ref)
 	if err != nil {
@@ -37,7 +40,7 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 			return nil, false, err
 		}
 	}
-	// Each object once, with the first path it's seen at.
+	// Each object once, with the path it's read as.
 	paths := map[string]string{}
 	var order []string
 	for _, line := range strings.Split(list, "\n") {
@@ -45,11 +48,16 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 		if !ok || path == "" {
 			continue // a commit, or the root tree
 		}
-		if _, seen := paths[sha]; !seen {
-			paths[sha] = path
+		first, seen := paths[sha]
+		if !seen {
 			order = append(order, sha)
 		}
+		if !seen || !configFile(first) && configFile(path) {
+			paths[sha] = path
+		}
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "cat-file", "--batch")
 	cmd.Dir = dir
 	in, err := cmd.StdinPipe()
@@ -63,8 +71,6 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 	if err := cmd.Start(); err != nil {
 		return nil, false, err
 	}
-	complete = len(order) <= maxFiles
-	order = order[:min(len(order), maxFiles)]
 	go func() {
 		defer in.Close()
 		for _, sha := range order {
@@ -73,6 +79,8 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 			}
 		}
 	}()
+	complete = true
+	files := 0
 	r := bufio.NewReader(out)
 	for {
 		head, err := r.ReadString('\n')
@@ -87,6 +95,13 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 		if len(f) < 3 {
 			continue
 		}
+		if f[1] == "blob" && files == maxFiles {
+			// One more file than it reads: the rest isn't read at all.
+			complete = false
+			cancel()
+			_ = cmd.Wait()
+			return found, complete, nil
+		}
 		size, _ := strconv.Atoi(f[2])
 		body := make([]byte, size+1) // its content and a newline
 		if _, err := io.ReadFull(r, body); err != nil {
@@ -94,6 +109,7 @@ func History(ctx context.Context, dir, ref string, maxFiles int) (found []Findin
 			return nil, false, err
 		}
 		if f[1] == "blob" {
+			files++
 			found = append(found, Scan(paths[f[0]], bytes.TrimSuffix(body, []byte("\n")))...)
 		}
 	}

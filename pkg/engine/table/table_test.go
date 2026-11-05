@@ -16,6 +16,7 @@ package table
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -162,6 +163,9 @@ func TestRead(t *testing.T) {
 		{"empty cells last", Query{Sort: 2}, []int{4, 2, 3, 1, 5}, 5, true},
 		{"sorted by text", Query{Sort: 5, Limit: 3}, []int{4, 5, 1}, 5, true},
 		{"sorted, a page", Query{Sort: 1, Offset: 4}, []int{5}, 5, true},
+		// N26 engine-sub-2#23: what a client sends is checked.
+		{"sorted, a negative offset", Query{Sort: 1, Offset: -3, Limit: 2}, []int{1, 2}, 5, true},
+		{"a negative offset", Query{Sort: -1, Offset: -3, Limit: 2}, []int{1, 2}, 5, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := read(t, ocean, tc.q)
@@ -217,4 +221,19 @@ func TestReadFailures(t *testing.T) {
 	cancel()
 	_, err = Read(ctx, Reader(strings.NewReader(b.String()), Format{Delimiter: ','}), Query{Sort: -1})
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// A page holds at most MaxPage rows, sorted or not, whatever the query
+// asks (N26 engine-sub-2#23).
+func TestReadCapsThePage(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("n\n")
+	for i := range MaxPage + 5 {
+		fmt.Fprintf(&b, "%d\n", i)
+	}
+	for _, sort := range []int{-1, 0} {
+		p := read(t, b.String(), Query{Sort: sort, Limit: 10_000_000})
+		assert.Len(t, p.Rows, MaxPage)
+		assert.Equal(t, MaxPage+5, p.Matched)
+	}
 }

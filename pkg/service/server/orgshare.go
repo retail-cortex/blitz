@@ -129,9 +129,9 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 			findings(found), secretscan.AllowMarker))
 	}
 	if !complete {
-		// What wasn't read could hold a key: nothing goes unread.
-		return nil, apiError(connect.CodeFailedPrecondition, "TOO_LARGE_TO_CHECK", fmt.Errorf(
-			"nothing was shared: the folder and its history hold more than %d files, too many to check for secrets", maxShareScan),
+		// What wasn't read could hold a key: nothing goes unread (EN-66).
+		return nil, apiError(connect.CodeFailedPrecondition, "SECRETS_UNCHECKED", fmt.Errorf(
+			"nothing was shared: the folder and its history hold more than %d files, too many to check for secrets. Share a copy of the folder without its history (a new repository)", maxShareScan),
 			"max_files", strconv.Itoa(maxShareScan))
 	}
 

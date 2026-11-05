@@ -589,6 +589,7 @@ func TestPrintOrgSync(t *testing.T) {
 		{client.OrgSync{State: "offline", Error: "could not resolve host"}, "Not saved: the service can't be reached, so the changes wait on this computer\n  could not resolve host\n", true},
 		{client.OrgSync{State: "signed_out"}, "Not saved: signed out (blitz enterprise login)\n", true},
 		{client.OrgSync{State: "refused", Error: "remote unpack failed"}, "Not saved: the service refused it\n  remote unpack failed\n", true},
+		{client.OrgSync{State: "secrets", Error: ".env:1 (AWS access key AKIA••••)"}, "Not saved: it holds what looks like a secret, so the changes wait on this computer\n  .env:1 (AWS access key AKIA••••)\n", true},
 		{client.OrgSync{State: "conflicts", Pairs: [][2]string{{"plan.md", "plan (conflict, Ana).md"}}}, "Saved, with both versions of these files kept:\n  plan.md (yours: plan (conflict, Ana).md)\n", false},
 		{client.OrgSync{State: "later"}, "later\n", false},
 	} {

@@ -59,6 +59,7 @@ go_test(
         "//pkg/config",
         "//pkg/engine/connectors",
         "//pkg/secrets",
+        "//third_party/mcp-toolbox/embed",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,6 +27,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+
+	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // entry is what the store keeps for one worker.
@@ -97,10 +100,12 @@ func (s *Store) Enable(dir string, w *Worker, hash string) error {
 // Disable turns the named worker off.
 func (s *Store) Disable(dir, name string) error {
 	s.mu.Lock()
-	e := s.workspaces[dir][name]
-	s.mu.Unlock()
-	e.Enabled, e.Changed = false, time.Now()
-	return s.set(dir, name, e)
+	defer s.mu.Unlock()
+	return s.commitLocked(func(ws map[string]map[string]entry) {
+		e := ws[dir][name]
+		e.Enabled, e.Changed = false, time.Now()
+		put(ws, dir, name, e)
+	})
 }
 
 // Forget drops what the store knows of the named worker (it was deleted).
@@ -110,11 +115,12 @@ func (s *Store) Forget(dir, name string) error {
 	if _, ok := s.workspaces[dir][name]; !ok {
 		return nil
 	}
-	delete(s.workspaces[dir], name)
-	if len(s.workspaces[dir]) == 0 {
-		delete(s.workspaces, dir)
-	}
-	return s.saveLocked()
+	return s.commitLocked(func(ws map[string]map[string]entry) {
+		delete(ws[dir], name)
+		if len(ws[dir]) == 0 {
+			delete(ws, dir)
+		}
+	})
 }
 
 // ForgetWorkspace drops what the store knows of every worker of dir
@@ -125,8 +131,7 @@ func (s *Store) ForgetWorkspace(dir string) error {
 	if _, ok := s.workspaces[dir]; !ok {
 		return nil
 	}
-	delete(s.workspaces, dir)
-	return s.saveLocked()
+	return s.commitLocked(func(ws map[string]map[string]entry) { delete(ws, dir) })
 }
 
 // Known is every worker the store has a record of, by workspace
@@ -165,35 +170,44 @@ func (s *Store) Workspaces() []string {
 func (s *Store) set(dir, name string, e entry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.workspaces[dir] == nil {
-		s.workspaces[dir] = map[string]entry{}
-	}
-	s.workspaces[dir][name] = e
-	return s.saveLocked()
+	return s.commitLocked(func(ws map[string]map[string]entry) { put(ws, dir, name, e) })
 }
 
-// saveLocked writes the store atomically; s.mu must be held.
-func (s *Store) saveLocked() error {
+// put sets ws's entry for the named worker of dir.
+func put(ws map[string]map[string]entry, dir, name string, e entry) {
+	if ws[dir] == nil {
+		ws[dir] = map[string]entry{}
+	}
+	ws[dir][name] = e
+}
+
+// commitLocked applies change to a copy of the store and writes it; the
+// store takes the copy only once it's written, so a write that fails
+// (disk full) leaves a job as it was rather than enabled until the
+// service restarts (N26 engine-sub-2#12). s.mu must be held.
+func (s *Store) commitLocked(change func(map[string]map[string]entry)) error {
+	next := make(map[string]map[string]entry, len(s.workspaces))
+	for d, m := range s.workspaces {
+		next[d] = maps.Clone(m)
+	}
+	change(next)
+	if err := s.save(next); err != nil {
+		return err
+	}
+	s.workspaces = next
+	return nil
+}
+
+// save writes ws as the store, atomically.
+func (s *Store) save(ws map[string]map[string]entry) error {
 	data, err := json.MarshalIndent(struct {
 		Workspaces map[string]map[string]entry `json:"workspaces"`
-	}{s.workspaces}, "", "  ")
+	}{ws}, "", "  ")
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".workers-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), s.path)
+	return atomicfile.Write(s.path, append(data, '\n'), 0o600)
 }

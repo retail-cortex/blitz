@@ -17,6 +17,8 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,4 +79,103 @@ func TestLoadExternalAgentsReportsUnreadable(t *testing.T) {
 	assert.ErrorContains(t, err, "dangling.md")
 	_, ok := reg.Get("ok-agent")
 	assert.True(t, ok, "the readable spec still loads")
+}
+
+// TestLockedAgentsKeepTheirNames checks that an agent of the
+// organization's locked folder isn't replaced by a later folder's, such
+// as a plugin's, and that the clash is reported (N26 pkg-small-2 #1).
+func TestLockedAgentsKeepTheirNames(t *testing.T) {
+	root := t.TempDir()
+	user, locked, plugin := filepath.Join(root, "user"), filepath.Join(root, "org", "locked", "agents"), filepath.Join(root, "plugin")
+	writeAgent(t, user, "reviewer.md", "reviewer", "Mine")
+	writeAgent(t, locked, "reviewer.md", "reviewer", "Locked")
+	writeAgent(t, plugin, "reviewer.md", "reviewer", "Plugin")
+	writeAgent(t, plugin, "helper.md", "helper", "Plugin helper")
+	cases := []struct {
+		name  string
+		lock  bool
+		want  string
+		clash bool
+	}{
+		{"locked", true, "Locked", true},
+		{"not locked: the later folder wins", false, "Plugin", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reg, err := NewRegistry()
+			require.NoError(t, err)
+			if c.lock {
+				reg.Lock(locked)
+			}
+			require.NoError(t, reg.LoadExternalAgents(user, locked))
+			err = reg.LoadExternalAgents(plugin) // the plugins come later
+			spec, _ := reg.Get("reviewer")
+			assert.Equal(t, c.want, spec.DisplayName)
+			_, ok := reg.Get("helper")
+			assert.True(t, ok, "a new name still loads")
+			if !c.clash {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, "locked")
+
+			// A reload keeps the locked one too.
+			reg.Invalidate()
+			_, err = reg.Refresh()
+			assert.ErrorContains(t, err, "locked")
+			spec, _ = reg.Get("reviewer")
+			assert.Equal(t, "Locked", spec.DisplayName)
+		})
+	}
+}
+
+// TestDuplicateNamesInOneFolder checks that two files of one name in one
+// folder are reported, at load and in the listing (N26 engine-sub-1 #6).
+func TestDuplicateNamesInOneFolder(t *testing.T) {
+	dir := t.TempDir()
+	writeAgent(t, filepath.Join(dir, "old"), "reviewer.md", "reviewer", "Old")
+	writeAgent(t, dir, "reviewer.md", "reviewer", "New")
+
+	reg, err := NewRegistry()
+	require.NoError(t, err)
+	err = reg.LoadExternalAgents(dir)
+	assert.ErrorContains(t, err, "also defined in")
+
+	files, err := ListFiles(dir, reg.IsBuiltin)
+	require.NoError(t, err)
+	require.Len(t, files, 2)
+	spec, _ := reg.Get("reviewer")
+	for _, f := range files {
+		if f.Path == spec.Path {
+			assert.Empty(t, f.Problem, "the one used")
+		} else {
+			assert.Contains(t, f.Problem, "defined again in "+spec.Path)
+		}
+	}
+}
+
+// TestRefreshWhileLoading checks that reloads and loads at once don't race
+// (N26 engine-sub-1 #7; the race detector checks it).
+func TestRefreshWhileLoading(t *testing.T) {
+	reg, err := NewRegistry()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	writeAgent(t, dir, "a.md", "a", "A")
+	require.NoError(t, reg.LoadExternalAgents(dir))
+	var wg sync.WaitGroup
+	for i := range 4 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			reg.Invalidate()
+			_, _ = reg.Refresh()
+		}()
+		go func() {
+			defer wg.Done()
+			_ = reg.LoadExternalAgents(filepath.Join(dir, "missing", strconv.Itoa(i)))
+		}()
+	}
+	wg.Wait()
+	_, ok := reg.Get("a")
+	assert.True(t, ok)
 }

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -64,12 +65,33 @@ func (w *Workspace) ruleDirs() []string {
 }
 
 // Rules are the workspace's rules, gates first (in the order they run),
-// then instruction rules, read afresh.
+// then instruction rules, read afresh. With [memory] off, instruction
+// rules are left out as instruction files are, but gates still judge:
+// they're checks, not instructions, and the organization's locked ones
+// can't be switched off (spec_053 EN-31).
 func (w *Workspace) Rules() []gates.Rule {
+	all := gates.Load(w.ruleDirs()...)
 	if !w.cfg.Memory.Enabled {
-		return nil
+		all = slices.DeleteFunc(all, func(r gates.Rule) bool { return !r.IsGate() })
 	}
-	return gates.Load(w.ruleDirs()...)
+	return all
+}
+
+type turnAgentKey struct{}
+
+// withTurnAgent is ctx in a turn run by agent (a job's, a workflow
+// step's, an eval's), not the active agent.
+func withTurnAgent(ctx context.Context, agent string) context.Context {
+	return context.WithValue(ctx, turnAgentKey{}, agent)
+}
+
+// turnAgent is the agent ctx's turn runs as: its own, else the active
+// agent. Its guardrails and rules are those offered to that agent.
+func (w *Workspace) turnAgent(ctx context.Context) string {
+	if a, _ := ctx.Value(turnAgentKey{}).(string); a != "" {
+		return a
+	}
+	return w.engine.ActiveAgent()
 }
 
 // ruleAsker asks the suggestions model (else auto mode's, else the
@@ -104,7 +126,7 @@ func (w *Workspace) auditRule(ctx context.Context, r gates.Rule, decision, reaso
 // why and lets the prompt through.
 func (w *Workspace) beforeRules(ctx context.Context, text string, notice func(string, bool)) (guidance string, err error) {
 	var lines []string
-	for _, r := range gates.Gates(w.Rules(), gates.BeforeAgent, w.engine.ActiveAgent()) {
+	for _, r := range gates.Gates(w.Rules(), gates.BeforeAgent, w.turnAgent(ctx)) {
 		v, err := w.JudgeRule(ctx, r, text)
 		switch {
 		case err != nil:
@@ -131,7 +153,7 @@ func (w *Workspace) beforeRules(ctx context.Context, text string, notice func(st
 // failing revise rules ask (the agent's next pass); block and warn rules
 // say so in the conversation, block as an error.
 func (w *Workspace) afterRules(ctx context.Context, sessionID, answer string, notice func(string, bool)) []string {
-	rules := gates.Gates(w.Rules(), gates.AfterAgent, w.engine.ActiveAgent())
+	rules := gates.Gates(w.Rules(), gates.AfterAgent, w.turnAgent(ctx))
 	if len(rules) == 0 {
 		return nil
 	}

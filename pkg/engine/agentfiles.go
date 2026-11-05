@@ -121,6 +121,7 @@ func (w *Workspace) Reload(ctx context.Context) (api.ReloadResult, error) {
 	for _, r := range w.memory.Rules {
 		files = append(files, r.Path)
 	}
+	out.Problems = append(out.Problems, w.memory.Problems...)
 	w.memoryMu.Unlock()
 	if err != nil {
 		return out, err

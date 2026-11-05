@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -44,35 +45,29 @@ import (
 // refused prompt is a *BlockedError. A turn that fails part way still
 // returns what it produced.
 func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
-	var opts []runtime.ExecOption
-	if t.Command {
-		// A workflow runs as this turn, step by step (spec_043_workflows).
-		if f, input, ok := w.flowCommand(t.Text); ok {
-			return w.runFlow(ctx, sessionID, f, input, on)
-		}
-		var err error
-		if opts, err = w.expandCommand(ctx, &t); err != nil {
-			return api.TurnResult{}, err
-		}
+	tt, opts, f, err := w.prepareTurn(ctx, t)
+	if err != nil {
+		return api.TurnResult{}, err
 	}
-	// Plan permission mode, and plan_review = always, plan every prompt
-	// first; side questions and read-only turns are read-only already.
-	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	if f != nil {
+		// A workflow runs as this turn, step by step (spec_043_workflows).
+		return w.runFlow(ctx, sessionID, f.flow, f.input, on)
+	}
 	start := time.Now()
-	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
-	if t.Command && isReflect(t.Text) && err == nil {
+	res, err := w.run(ctx, sessionID, tt, on, w.storage, opts...)
+	if tt.Command && isReflect(tt.Text) && err == nil {
 		// The next reflection's evidence starts where this one began
 		// (spec_048_harness_learning HE-04).
 		w.reflected(start)
 	}
-	if t.Command && (isSetup(t.Text) || isReflect(t.Text)) {
+	if tt.Command && (isSetup(tt.Text) || isReflect(tt.Text)) {
 		// The instructions and experience it wrote apply from the next
 		// prompt.
 		if _, rerr := w.ReloadMemory(context.WithoutCancel(ctx)); rerr != nil {
 			w.warn(rerr.Error())
 		}
 	}
-	if err == nil && !t.Command && !t.Aside && tools.Attended(ctx) {
+	if err == nil && !tt.Command && !tt.Aside && tools.Attended(ctx) {
 		// Time to learn from the runs? Said in the chat (HE-63).
 		w.offerReflect(on, time.Now())
 	}
@@ -112,22 +107,43 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		started(rec.ID)
 	}
 	w.sessionStarted(rec.ID, "background")
-	var opts []runtime.ExecOption
-	if t.Command {
-		// A workflow (spec_043_workflows WF-10) or a command runs as it
-		// would in a chat.
-		if f, input, ok := w.flowCommand(t.Text); ok {
-			return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f, input, on)
-		}
-		if opts, err = w.expandCommand(ctx, &t); err != nil {
-			return api.TurnResult{}, err
-		}
+	// A workflow (spec_043_workflows WF-10) or a command runs as it would
+	// in a chat.
+	tt, opts, f, err := w.prepareTurn(ctx, t)
+	if err != nil {
+		return api.TurnResult{}, err
 	}
-	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st, opts...)
+	if f != nil {
+		return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f.flow, f.input, on)
+	}
+	res, err := w.run(ctx, rec.ID, tt, on, st, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	w.auditTurnEnd(rec.ID, err)
 	return res, err
+}
+
+// flowTurn is the workflow a command turn runs, with its input.
+type flowTurn struct {
+	flow  flows.Flow
+	input string
+}
+
+// prepareTurn is t as the engine runs it, for Run and RunDetached alike:
+// a command expanded (its options for the run) or the workflow it names
+// (f, run instead of a turn), and planned first in plan permission mode
+// or with plan_review = always (side questions and read-only turns are
+// read-only already).
+func (w *Workspace) prepareTurn(ctx context.Context, t api.Turn) (tt turn, opts []runtime.ExecOption, f *flowTurn, err error) {
+	if t.Command {
+		if fl, input, ok := w.flowCommand(t.Text); ok {
+			return turn{}, nil, &flowTurn{flow: fl, input: input}, nil
+		}
+		if opts, err = w.expandCommand(ctx, &t); err != nil {
+			return turn{}, nil, nil, err
+		}
+	}
+	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	return turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, opts, nil, nil
 }
 
 // UsageOf returns a session's usage, whichever is active.
@@ -181,9 +197,12 @@ type turn struct {
 	// run is the worker run the turn is: its file changes are the run's
 	// own checkpoint (blitz workers undo), not the sessions' /undo.
 	run string
-	// ownLimit says what set the turn's own MaxTurns, for a turn stopped
-	// at it ("": nothing to say).
-	ownLimit string
+	// limits say where its own MaxTurns and MaxCostUSD came from, for
+	// the error when it stops at one.
+	limits limitHints
+	// agent is the agent it runs as when that isn't the active one (a
+	// job's, a workflow step's, an eval's: the run's WithAgent).
+	agent string
 }
 
 // run is Run recording the transcript in st, which holds the session as
@@ -200,14 +219,20 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
+	// Its guardrails, rules and \skill mentions are those of the agent it
+	// runs as: a job's, a workflow step's or an eval's own, else the
+	// active one.
+	if t.agent != "" {
+		ctx = withTurnAgent(ctx, t.agent)
+	}
 	// What before-agent rules said, and guardrails that can't run, shown
 	// once the prompt is recorded.
 	var ruleNotices []api.Notice
 	// The turn's guardrails, read now; their turn and cost limits apply.
 	var lim turnLimits
 	if !t.Aside {
-		lim = w.startGuardrails(sessionID, &t.Turn)
-		defer w.guards.turns.Delete(sessionID)
+		lim = w.startGuardrails(sessionID, &t.Turn, t.agent)
+		defer w.guards.end(sessionID)
 		ruleNotices = w.guardrailProblems(sessionID)
 	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
@@ -245,7 +270,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = runtime.PlanPrompt(prompt)
 	}
 	// \skill-name in the prompt: those skills' instructions go with it.
-	prompt += w.skillMentionNote(t.Text)
+	prompt += w.skillMentionNote(t.Text, w.turnAgent(ctx))
 	// A conversation's first prompt says where the workspace stands and
 	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
 	first := false
@@ -298,9 +323,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		}
 		if t.MaxCostUSD > 0 {
 			inner := on
+			spent := w.costSince(sessionID, res.Before.CostUSD)
 			on = func(e api.Event) {
 				inner(e)
-				if w.engine.Usage(sessionID).CostUSD-res.Before.CostUSD > t.MaxCostUSD {
+				if spent() > t.MaxCostUSD {
 					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, t.MaxCostUSD))
 				}
 			}
@@ -346,13 +372,17 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		untracked = w.untrackedNow(ctx)
 	}
 	var err error
+	// The turn's model calls are counted together, across its runs (an
+	// approved plan's, a stop hook's, a goal's and a rule's): max_turns is
+	// the turn's (spec_017 SES-19). A job's workflow step's count toward
+	// the job's run too.
+	job := jobRunFrom(ctx)
+	budget := runtime.NewBudget(t.MaxTurns, job.turnBudget())
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
 		base := append([]runtime.ExecOption(nil), extra...)
-		if t.MaxTurns > 0 {
-			base = append(base, runtime.WithMaxTurns(t.MaxTurns))
-		}
+		base = append(base, runtime.WithBudget(budget))
 		if t.ReadOnly != "" {
 			base = append(base, runtime.WithReadOnly(t.ReadOnly))
 		}
@@ -368,9 +398,14 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		// An approved plan is carried out in the same turn (a few times at
 		// most, should the agent plan again).
 		carried := false
-		for i := 0; err == nil && i < maxPlanRounds; i++ {
+		for i := 0; err == nil; i++ {
 			_, path, mode, ok := gate.Take()
 			if !ok {
+				break
+			}
+			if i == maxPlanRounds {
+				// Said, not left to look as if the turn simply ended.
+				on(api.Event{Notice: &api.Notice{Text: i18n.T("turn.plan_cap", "n", maxPlanRounds), Error: true}})
 				break
 			}
 			carried = true
@@ -382,9 +417,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			err = w.engine.Execute(ctx, sessionID, goAhead, handler, carryOut...)
 		}
 		// stop hooks may ask the agent to keep going, a few times at most.
-		for i := 0; err == nil && i < maxStopContinues; i++ {
+		for i := 0; err == nil; i++ {
 			out := w.tools.ScriptHooks().Run(ctx, "stop", "", tools.HookEvent{SessionID: sessionID, StopHookActive: i > 0})
 			if !out.Blocked && !out.Continue {
+				break
+			}
+			if i == maxStopContinues {
+				on(api.Event{Notice: &api.Notice{Text: i18n.T("turn.stop_hook_cap", "n", maxStopContinues), Error: true}})
 				break
 			}
 			reason := strings.TrimSpace(out.Reason)
@@ -427,7 +466,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
-	err = w.limitSource(err, lim, tools.Attended(ctx), t.ownLimit)
+	hints := t.limits
+	if job.stoppedRun(err) {
+		// The job's whole run is at its limit, not this step's turn.
+		lim, hints = turnLimits{}, job.limits
+	}
+	err = w.limitSource(err, lim, tools.Attended(ctx), hints)
 	if !t.Aside {
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
@@ -460,6 +504,28 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 	// Too late (the turn collected its unread messages, or none runs): the
 	// caller sends it as the next prompt, already recorded (BL-SVC-10).
 	return w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
+}
+
+// costSince is what the session has spent since its cost was before,
+// less what its background tasks spent meanwhile: they have limits of
+// their own (spec_032 BGA-06), and one started by an earlier turn mustn't
+// use up this turn's (spec_018 WS-29).
+func (w *Workspace) costSince(sessionID string, before float64) func() float64 {
+	tasks := func() float64 {
+		var sum float64
+		for _, t := range w.engine.ListTasks([]string{sessionID}) {
+			sum += t.Usage.CostUSD
+		}
+		return sum
+	}
+	tasksBefore := tasks()
+	return func() float64 {
+		spent := w.engine.Usage(sessionID).CostUSD - before
+		if spent <= 0 {
+			return spent
+		}
+		return spent - (tasks() - tasksBefore)
+	}
 }
 
 // maxStopContinues bounds how often stop hooks can make one prompt go on.

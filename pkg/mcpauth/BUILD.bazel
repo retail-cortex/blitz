@@ -20,6 +20,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/mcpauth",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/i18n",
         "//pkg/secrets",
         "//pkg/signedin",
         "@com_github_modelcontextprotocol_go_sdk//auth",

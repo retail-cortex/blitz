@@ -17,6 +17,8 @@ package enterprise
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,7 +34,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -217,6 +221,44 @@ func TestRenewal(t *testing.T) {
 		assert.True(t, c.Status().SignedIn)
 		s.Offline = false
 	})
+	// A renewal answered without its tokens keeps the sign-in as it was;
+	// one without the person keeps who's signed in (N26
+	// safety-enterprise#16).
+	for _, tc := range []struct {
+		name, answer string
+		ok           bool
+	}{
+		{"no refresh token", `{"access_token":"at-x","expires_in":600}`, false},
+		{"no access token", `{"refresh_token":"rt-x","expires_in":600}`, false},
+		{"no person", `{"access_token":"at-y","refresh_token":"rt-y","expires_in":600}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := c.Status().Person
+			require.NotEmpty(t, before.Email)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/session/refresh", r.URL.Path)
+				_, _ = io.WriteString(w, tc.answer)
+			}))
+			defer srv.Close()
+			kept, err := store.Get(secretName)
+			require.NoError(t, err)
+			c2 := New(srv.URL, store, Options{Now: func() time.Time { return *now }})
+			require.NoError(t, store.Set(secretName, strings.Replace(kept, s.URL, srv.URL, 1)))
+			tok, err := c2.AccessToken(ctx)
+			if !tc.ok {
+				assert.ErrorContains(t, err, "without its tokens")
+				after, _ := store.Get(secretName)
+				assert.Contains(t, after, `"refresh_token":"rt-`, "the record as it was")
+				assert.NotContains(t, after, "rt-x")
+				assert.True(t, c2.Status().SignedIn)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, "at-y", tok)
+			}
+			assert.Equal(t, before, c2.Status().Person, "still who's signed in")
+			require.NoError(t, store.Set(secretName, kept))
+		})
+	}
 	t.Run("terms to accept", func(t *testing.T) {
 		s.Terms = "2026-11"
 		c.Invalidate()
@@ -286,6 +328,27 @@ func TestSignInDevice(t *testing.T) {
 	})
 }
 
+// The page the browser ends on is in the person's language (N26
+// safety-enterprise#30).
+func TestSignInPageLocale(t *testing.T) {
+	_, _, c, _, _ := setup(t)
+	i18n.Setup("", "fr-CA", func(string) {})
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	page := make(chan string, 1)
+	show := func(pr Prompt) {
+		go func() {
+			res, err := http.Get(pr.URL)
+			if assert.NoError(t, err) {
+				body, _ := io.ReadAll(res.Body)
+				res.Body.Close()
+				page <- string(body)
+			}
+		}()
+	}
+	require.NoError(t, c.SignInBrowser(context.Background(), show, nil))
+	assert.Contains(t, <-page, "Vous êtes connecté")
+}
+
 func TestSignInBrowserPasted(t *testing.T) {
 	_, _, c, _, _ := setup(t)
 	pasted := make(chan string, 2)
@@ -346,6 +409,15 @@ func TestSignInRefused(t *testing.T) {
 		assert.Equal(t, "unauthenticated", ref.Code)
 		assert.Equal(t, "The sign-in couldn't be checked.", err.Error())
 		assert.False(t, c.Status().SignedIn)
+	})
+	t.Run("an ID token for another sign-in", func(t *testing.T) {
+		p, s, c, _, _ := setup(t)
+		claims := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"ana","nonce":"from-another-sign-in"}`))
+		p.IDToken = "eyJhbGciOiJub25lIn0." + claims + ".sig"
+		assert.ErrorContains(t, c.SignInBrowser(ctx, browse(t), nil), "isn't for this sign-in")
+		assert.Empty(t, s.SignIns, "not sent to the service")
+		assert.True(t, nonceMatches("eyJhbGciOiJub25lIn0."+base64.RawURLEncoding.EncodeToString([]byte(`{"nonce":"n1"}`))+".x", "n1"))
+		assert.True(t, nonceMatches("opaque", "n1"), "nothing to compare")
 	})
 	t.Run("no ID token", func(t *testing.T) {
 		p, _, c, _, _ := setup(t)
@@ -710,7 +782,7 @@ func TestCatalog(t *testing.T) {
 		"skills/deploy/SKILL.md": {Kind: "skill", Name: "deploy", Lock: "default", Data: "---\nname: deploy\n---\nDeploy."},
 		"skills/deploy/run.sh":   {Kind: "skill_file", Name: "deploy", Lock: "default", Data: "echo hi"},
 	}
-	s.CatalogPolicy = map[string]any{"models": map[string]any{"own_providers": true}, "tools": map[string]any{"off": []string{"web_fetch"}}}
+	s.CatalogPolicy = map[string]any{"models": map[string]any{"own_providers": true}, "tools": map[string]any{"off": []string{"web_fetch"}}, "connectors": map[string]any{"own": true, "kinds": []string{"postgres"}}}
 	s.CatalogExpiry = time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
 	m, changed, err = c.RefreshCatalog(ctx, dir)
 	require.NoError(t, err)
@@ -730,6 +802,13 @@ func TestCatalog(t *testing.T) {
 	policy, err := os.ReadFile(filepath.Join(dir, PolicyFile))
 	require.NoError(t, err)
 	assert.Contains(t, string(policy), `"own_providers":true`)
+	// What config reads from policy.json is what the service sent,
+	// connections too (N26 safety-enterprise#4).
+	var st struct{ Policy config.OrgPolicy }
+	require.NoError(t, json.Unmarshal(policy, &st))
+	assert.True(t, st.Policy.Connectors.Own)
+	assert.Equal(t, []string{"postgres"}, st.Policy.Connectors.Kinds)
+	assert.Equal(t, []string{"web_fetch"}, st.Policy.Tools.Off)
 	assert.Equal(t, m, LoadCatalog(dir))
 
 	again, changed, err := c.RefreshCatalog(ctx, dir)
@@ -789,13 +868,27 @@ func TestCatalog(t *testing.T) {
 		assert.Error(t, <-done)
 	})
 
+	// An unsigned 404 (a proxy, a misrouted deploy) leaves the kept
+	// catalog and its policy as they are (N26 safety-enterprise#5).
 	s.Catalog = nil
+	kept, changed, err := c.RefreshCatalog(ctx, dir)
+	var refusal *Refusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, http.StatusNotFound, refusal.Status)
+	assert.False(t, changed)
+	require.NotNil(t, kept)
+	assert.Len(t, kept.Files, 4)
+	assert.FileExists(t, filepath.Join(dir, PolicyFile))
+	assert.DirExists(t, filepath.Join(dir, "catalog"))
+
+	// A signed manifest with nothing in it withdraws the catalog.
+	s.Catalog = map[string]enterprisetest.CatalogFile{}
 	m, changed, err = c.RefreshCatalog(ctx, dir)
 	require.NoError(t, err)
-	assert.Nil(t, m, "withdrawn")
+	assert.Empty(t, m.Files, "withdrawn")
 	assert.True(t, changed)
-	assert.Nil(t, LoadCatalog(dir))
-	assert.NoDirExists(t, filepath.Join(dir, "catalog"))
+	assert.NoFileExists(t, filepath.Join(defaults, "agents", "reviewer.md"))
+	assert.NoFileExists(t, filepath.Join(locked, "agents", "reviewer.md"))
 
 	t.Run("signed out of the stream", func(t *testing.T) {
 		_, _, c2, _, _ := setup(t)
@@ -847,7 +940,25 @@ func TestCatalogFailures(t *testing.T) {
 		s.Access = map[string]string{}
 		s.Mu.Unlock()
 		assert.Error(t, c.WatchCatalog(ctx, func() {}), "the stream refused")
-		c.Invalidate()
+		_, _, err = c.RefreshCatalog(ctx, dir)
+		assert.NoError(t, err, "the stream's refusal renews it too")
+	})
+	t.Run("a call the service refuses the token for: renewed and asked again", func(t *testing.T) {
+		before := s.Refreshes
+		s.Mu.Lock()
+		s.Access = map[string]string{}
+		s.Mu.Unlock()
+		_, err := c.Workspaces(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, before+1, s.Refreshes)
+		s.Mu.Lock()
+		s.Access = map[string]string{}
+		s.Mu.Unlock()
+		_, err = c.OpenResource(ctx, "urn:blitz:x")
+		assert.Error(t, err)
+		_, err = c.Terms(ctx)
+		require.NoError(t, err, "renewed after the refusal")
+		assert.Equal(t, before+2, s.Refreshes)
 	})
 	t.Run("a file the service won't give", func(t *testing.T) {
 		s.Catalog["rules/b.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "b", Lock: "default", Data: "B.", Missing: true}
@@ -855,9 +966,6 @@ func TestCatalogFailures(t *testing.T) {
 		assert.ErrorContains(t, err, "rules/b.md")
 		assert.Len(t, got.Files, 1)
 		delete(s.Catalog, "rules/b.md")
-	})
-	t.Run("forgetting what isn't there", func(t *testing.T) {
-		assert.NoError(t, ForgetCatalog(t.TempDir()))
 	})
 	t.Run("the organization's workspaces, signed out", func(t *testing.T) {
 		_, _, c2, _, _ := setup(t)

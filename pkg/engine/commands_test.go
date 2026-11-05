@@ -166,3 +166,28 @@ func TestSkillsAsCommandsSkipClashes(t *testing.T) {
 	_, ok := byName["bad_name!"]
 	assert.False(t, ok, "an invalid name became a command")
 }
+
+// A skill's allowed-tools hold /skill-name to them, as a command's do,
+// with the skill tools its files and scripts need; none means no limit
+// (N26 engine-sub-2#17).
+func TestSkillCommandAllowedTools(t *testing.T) {
+	w := openTest(t)
+	dir := t.TempDir()
+	writeCommand(t, dir, "notes/SKILL.md", "---\nname: notes\ndescription: d\nallowed-tools: Read, Bash(git *)\n---\nDo it.")
+	writeCommand(t, dir, "legacy/SKILL.md", "---\nname: legacy\ndescription: d\nallowed_tools: Grep\n---\nDo it.")
+	writeCommand(t, dir, "open/SKILL.md", "---\nname: open\ndescription: d\n---\nDo it.")
+	require.NoError(t, w.Skills().DiscoverExternal([]string{dir}))
+	byName, err := w.commands()
+	require.NoError(t, err)
+	skillTools := []string{"activate_skill", "read_skill_file", "run_skill_script"}
+	tests := map[string][]string{
+		"notes":  append([]string{"Read", "Bash(git *)"}, skillTools...),
+		"legacy": append([]string{"Grep"}, skillTools...),
+		"open":   nil,
+	}
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, want, byName[name].AllowedTools)
+		})
+	}
+}

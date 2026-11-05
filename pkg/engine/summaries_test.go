@@ -90,7 +90,7 @@ func TestSessionSummaries(t *testing.T) {
 
 	first, err := w.NewSession()
 	require.NoError(t, err)
-	for _, p := range []string{"fix the coupon rounding", "and the tests"} {
+	for _, p := range []string{"fix the coupon rounding, the key is " + key, "and the tests"} {
 		_, err = w.Run(ctx, first.ID, api.Turn{Text: p}, func(api.Event) {})
 		require.NoError(t, err)
 	}
@@ -100,6 +100,7 @@ func TestSessionSummaries(t *testing.T) {
 	require.Equal(t, 1, small.Calls(), "written once the person moved on")
 	assert.Contains(t, asked(0), "User: fix the coupon rounding")
 	assert.Contains(t, asked(0), "Agent: tested")
+	assert.NotContains(t, asked(0), key, "a key pasted into the chat isn't sent (N26 engine-top-2#12)")
 	s, err := memory.FindSummary(w.summariesDir(), first.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, s.Text, key, "secrets are never kept")

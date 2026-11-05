@@ -214,11 +214,38 @@ func TestParseMarkdownSpecRejects(t *testing.T) {
 		"bad permission mode":  {"---\nname: x\npermission_mode: wild\n---\nbody", "permission_mode"},
 		"negative max turns":   {"---\nname: x\nmax_turns: -1\n---\nbody", "max_turns"},
 		"bad isolation":        {"---\nname: x\nisolation: vm\n---\nbody", "isolation"},
+		// N26 engine-sub-1 #1: a key it doesn't know isn't dropped.
+		"a misspelt mode":       {"---\nname: x\npermissionMode: plan\n---\nbody", `unknown key "permissionMode"`},
+		"a command's model key": {"---\nname: x\nmodel: anthropic/claude-haiku-4-5\n---\nbody", `unknown key "model"`},
+		// #3: checked on load, not only on save.
+		"an unknown agency":  {"---\nname: x\nagency_level: maximal\n---\nbody", "agency_level"},
+		"a name with spaces": {"---\nname: My Reviewer\n---\nbody", "lowercase"},
+		// #5: invoke_agent would refuse it on every call.
+		"isolation without background": {"---\nname: x\nisolation: worktree\n---\nbody", "needs background"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := ParseMarkdownSpec([]byte(tc.spec))
 			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+// TestParseMarkdownSpecDelimiter checks that only a --- line ends the
+// front matter, and a byte order mark is skipped (N26 engine-sub-1 #2).
+func TestParseMarkdownSpecDelimiter(t *testing.T) {
+	cases := []struct {
+		name, in, description, prompt string
+	}{
+		{"--- inside a value", "---\nname: x\ndescription: Reviews code --- strictly\n---\nThe prompt.", "Reviews code --- strictly", "The prompt."},
+		{"a byte order mark", "\ufeff---\nname: x\ndescription: d\n---\nP", "d", "P"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			spec, err := ParseMarkdownSpec([]byte(c.in))
+			require.NoError(t, err)
+			assert.Equal(t, c.description, spec.Description)
+			assert.Equal(t, c.prompt, spec.SystemPrompt)
 		})
 	}
 }

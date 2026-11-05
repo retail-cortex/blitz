@@ -19,6 +19,7 @@
 package commands
 
 import (
+	"bytes"
 	"embed"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,7 +47,8 @@ type Command struct {
 	// model ("" for the session's).
 	Agent string
 	Model string
-	// AllowedTools limits the turn to these tools (empty: no limit).
+	// AllowedTools limits the turn to these tools: nil is no limit, and
+	// empty (an allowed-tools with nothing in it) is no tools.
 	AllowedTools []string
 	// Plan runs the command as a plan: tools that change anything are
 	// refused.
@@ -57,13 +60,22 @@ type Command struct {
 	Path   string
 }
 
-type frontmatter struct {
-	Description  string `yaml:"description"`
-	ArgumentHint string `yaml:"argument-hint"`
-	Agent        string `yaml:"agent"`
-	Model        string `yaml:"model"`
-	AllowedTools any    `yaml:"allowed-tools"`
-	Mode         string `yaml:"mode"`
+// meta is a command's front matter. A key it doesn't have is an error
+// (a misspelt allowed-tools would otherwise allow every tool).
+type meta struct {
+	Description  string    `yaml:"description"`
+	ArgumentHint string    `yaml:"argument-hint"`
+	Agent        string    `yaml:"agent"`
+	Model        string    `yaml:"model"`
+	AllowedTools yaml.Node `yaml:"allowed-tools"`
+	Mode         string    `yaml:"mode"`
+	// DisableModelInvocation is Claude Code's, accepted and ignored: a
+	// command here runs only when typed.
+	DisableModelInvocation any `yaml:"disable-model-invocation"`
+	// Lock and Groups are how an organization's catalog applies the
+	// command (spec_053 EN-30); read by the catalog, accepted here.
+	Lock   string   `yaml:"lock"`
+	Groups []string `yaml:"groups"`
 }
 
 // validName is a command name: letters, digits, "-", "_", "." and ":"
@@ -76,26 +88,20 @@ func ValidName(name string) bool { return validName.MatchString(name) }
 // Parse reads a command file's frontmatter (optional) and body.
 func Parse(name, source, path string, data []byte) (Command, error) {
 	c := Command{Name: name, Source: source, Path: path}
-	text := strings.TrimPrefix(string(data), "\uFEFF") // a byte-order mark
-	body := text
-	if t := strings.TrimLeft(text, " \t\r\n"); strings.HasPrefix(t, "---") {
-		end := strings.Index(t[3:], "\n---")
-		if end < 0 {
-			return c, errors.New("missing the --- line that ends the frontmatter")
-		}
-		var fm frontmatter
-		if err := yaml.Unmarshal([]byte(t[3:3+end]), &fm); err != nil {
+	front, body, ok := frontmatter.Split(data)
+	if !ok && bytes.HasPrefix(bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\uFEFF"))), []byte("---")) {
+		return c, errors.New("missing the --- line that ends the frontmatter")
+	}
+	if ok {
+		var fm meta
+		if err := frontmatter.Strict(front, &fm); err != nil {
 			return c, fmt.Errorf("frontmatter: %w", err)
 		}
-		rest := t[3+end+4:]
-		if i := strings.IndexByte(rest, '\n'); i >= 0 {
-			rest = rest[i+1:]
-		} else {
-			rest = ""
-		}
-		body = rest
 		c.Description, c.ArgumentHint, c.Agent, c.Model = fm.Description, fm.ArgumentHint, fm.Agent, fm.Model
-		c.AllowedTools = toolList(fm.AllowedTools)
+		var err error
+		if c.AllowedTools, err = toolList(fm.AllowedTools); err != nil {
+			return c, err
+		}
 		switch strings.ToLower(strings.TrimSpace(fm.Mode)) {
 		case "", "default":
 		case "plan":
@@ -104,7 +110,7 @@ func Parse(name, source, path string, data []byte) (Command, error) {
 			return c, fmt.Errorf("mode %q: only plan is supported", fm.Mode)
 		}
 	}
-	c.Body = strings.TrimSpace(body)
+	c.Body = strings.TrimSpace(string(body))
 	if c.Body == "" {
 		return c, errors.New("the command has no prompt")
 	}
@@ -114,12 +120,19 @@ func Parse(name, source, path string, data []byte) (Command, error) {
 	return c, nil
 }
 
-// toolList reads allowed-tools as a list or a space/comma-separated string.
-func toolList(v any) []string {
-	var out []string
-	switch t := v.(type) {
-	case string:
+// toolList reads allowed-tools as a list or a space/comma-separated
+// string: nil when there's no such key (no limit), empty when it holds
+// nothing (no tools), and an error when it's something else, never all
+// tools.
+func toolList(n yaml.Node) ([]string, error) {
+	out := []string{}
+	switch {
+	case n.Kind == 0: // no allowed-tools
+		return nil, nil
+	case n.Kind == yaml.ScalarNode && n.Tag == "!!null":
+	case n.Kind == yaml.ScalarNode && n.Tag == "!!str":
 		// Split on commas and spaces outside parentheses: "Read, Bash(git *)".
+		t := n.Value
 		depth, start := 0, 0
 		flush := func(end int) {
 			if w := strings.TrimSpace(t[start:end]); w != "" {
@@ -138,13 +151,28 @@ func toolList(v any) []string {
 			}
 		}
 		flush(len(t))
-	case []any:
-		for _, x := range t {
-			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
-				out = append(out, strings.TrimSpace(s))
+	case n.Kind == yaml.SequenceNode:
+		for _, x := range n.Content {
+			if x.Kind != yaml.ScalarNode || x.Tag != "!!str" {
+				return nil, fmt.Errorf("allowed-tools: line %d: a tool's name, not %s", x.Line, x.ShortTag())
+			}
+			if s := strings.TrimSpace(x.Value); s != "" {
+				out = append(out, s)
 			}
 		}
+	default:
+		return nil, fmt.Errorf("allowed-tools: line %d: a list of tools or a comma-separated string, not %s", n.Line, n.ShortTag())
 	}
+	return out, nil
+}
+
+// ToolList reads a skill's allowed-tools (a space- or comma-separated
+// string, "Bash(git *)" kept whole) as toolList does: "" is nil, no limit.
+func ToolList(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	out, _ := toolList(yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s})
 	return out
 }
 
@@ -227,6 +255,7 @@ func Load(dir, source string) ([]Command, error) {
 			if p == dir && errors.Is(err, fs.ErrNotExist) {
 				return fs.SkipAll
 			}
+			errs = append(errs, err) // an unreadable folder's commands are missing
 			return nil
 		}
 		if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {

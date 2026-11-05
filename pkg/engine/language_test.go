@@ -15,8 +15,10 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,7 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 	w := openProject(t, ws, Options{})
 	defer w.Close()
 	assert.False(t, w.LanguageTrusted())
-	info, err := w.OpenDocument("w", "main.go", "package main\n", 1, nil)
+	info, err := w.OpenDocument(context.Background(), "w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.Equal(t, LanguageUntrusted, info.State)
 	assert.Empty(t, info.ID)
@@ -37,14 +39,47 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 
 	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
 	assert.True(t, w.LanguageTrusted())
-	info, err = w.OpenDocument("w", "main.go", "package main\n", 1, nil)
+	info, err = w.OpenDocument(context.Background(), "w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, LanguageUntrusted, info.State)
 	assert.NotEmpty(t, info.ID)
 	require.NoError(t, w.CloseDocument(info.ID))
 
-	_, err = w.OpenDocument("w", "../out.go", "", 1, nil)
+	_, err = w.OpenDocument(context.Background(), "w", "../out.go", "", 1, nil)
 	assert.ErrorIs(t, err, ErrBadPath)
+}
+
+// Whether the project's files may act (language servers, a browser
+// profile) follows trust as it is now, and a run that trusts them
+// (--trust-project) counts (N26 engine-top-2#20).
+func TestProjectTrusted(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		o      Options
+		trust  bool // trusted after it opened
+		forget bool // trusted, then forgotten
+		want   bool
+	}{
+		{name: "waiting for trust", want: false},
+		{name: "this run trusts it", o: Options{TrustProject: true}, want: true},
+		{name: "trusted since", trust: true, want: true},
+		{name: "trusted, then forgotten", trust: true, forget: true, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws := projectWorkspace(t)
+			w := openProject(t, ws, tc.o)
+			defer w.Close()
+			if tc.trust {
+				require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
+			}
+			if tc.forget {
+				w.project.State = api.TrustTrusted // as if it opened trusted
+				require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, false))
+			}
+			assert.Equal(t, tc.want, w.LanguageTrusted())
+			assert.Equal(t, tc.want, w.projectTrusted())
+		})
+	}
 }
 
 // A Markdown file's code block opens as a document of its own; one
@@ -54,14 +89,14 @@ func TestOpenCodeBlock(t *testing.T) {
 	w := openProject(t, ws, Options{})
 	defer w.Close()
 	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
-	info, err := w.OpenDocument("w", "notes.md", "x := 1\n", 1, &CodeBlock{Extension: ".GO", ID: "b1"})
+	info, err := w.OpenDocument(context.Background(), "w", "notes.md", "x := 1\n", 1, &CodeBlock{Extension: ".GO", ID: "b1"})
 	require.NoError(t, err)
 	assert.NotEmpty(t, info.ID)
 	assert.Equal(t, "go", info.Language)
 	require.NoError(t, w.CloseDocument(info.ID))
 
 	for _, block := range []*CodeBlock{{Extension: "go", ID: "b1"}, {Extension: ".go"}, {Extension: "../x", ID: "b1"}} {
-		_, err = w.OpenDocument("w", "notes.md", "", 1, block)
+		_, err = w.OpenDocument(context.Background(), "w", "notes.md", "", 1, block)
 		assert.ErrorIs(t, err, ErrBadPath)
 	}
 }

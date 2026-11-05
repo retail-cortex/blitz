@@ -246,6 +246,10 @@ func TestDoctorSettingsFile(t *testing.T) {
 	require.NoError(t, os.Chmod(path, 0o644))
 	assertChecks(t, Run(context.Background(), Options{Dir: ws, Online: false}), []wantCheck{{"config file", statusWarn, "readable by others"}})
 
+	// A setting Blitz doesn't know is said, not dropped (CFG-48).
+	require.NoError(t, os.WriteFile(path, []byte("[permissions]\ndenny = [\"shell(rm*)\"]\n"), 0o600))
+	assertChecks(t, Run(context.Background(), Options{Dir: ws, Online: false}), []wantCheck{{"settings", statusWarn, "unknown setting permissions.denny"}})
+
 	require.NoError(t, os.WriteFile(path, []byte("[llm\n"), 0o600))
 	checks := Run(context.Background(), Options{Dir: ws, Online: false})
 	assertChecks(t, checks, []wantCheck{{"config parse", statusFail, ""}})

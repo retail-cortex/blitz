@@ -49,8 +49,11 @@ func TestOrgLayer(t *testing.T) {
 	require.NoError(t, err)
 	cfg, err := Load("")
 	require.NoError(t, err)
-	assert.False(t, cfg.Org.Active(), "connected, but no catalog yet")
-	assert.Equal(t, []string{ExpandHome(UserAgentsDir)}, cfg.AgentSearchPaths("")[:1])
+	assert.True(t, cfg.Org.Active(), "connected, but no policy yet: the strictest applies (EN-33)")
+	assert.Equal(t, "not fetched yet", cfg.Org.Problem)
+	assert.True(t, cfg.Org.Expired(time.Now()), "the organization's work waits")
+	require.Len(t, cfg.Warnings, 1)
+	assert.Contains(t, cfg.Warnings[0], "policy.json) can't be read (not fetched yet)")
 
 	f, err := os.OpenFile(filepath.Join(home, ".blitz", ".env.toml"), os.O_APPEND|os.O_WRONLY, 0o600)
 	require.NoError(t, err)
@@ -84,7 +87,7 @@ func TestOrgLayer(t *testing.T) {
 	assert.Equal(t, "default", cfg.Org.LockOf(filepath.Join(dir, "catalog", "default", "agents", "a.md")))
 	assert.Equal(t, "", cfg.Org.LockOf(filepath.Join(home, ".blitz", "agents", "a.md")))
 	assert.Equal(t, "", OrgLayer{}.LockOf("/x"))
-	cmds := cfg.Org.Around("commands", []string{"mine"})
+	cmds := cfg.Org.around("commands", []string{"mine"})
 	assert.Equal(t, "mine", cmds[1])
 
 	names := map[string]string{}
@@ -106,15 +109,83 @@ func TestOrgLayer(t *testing.T) {
 		assert.Equal(t, "jira", names["jira"])
 		assert.False(t, cfg.Org.Expired(time.Now()), "no expiry")
 	})
-	t.Run("a policy file that isn't JSON", func(t *testing.T) {
-		writeOrg(t, home, `nope`, nil)
+	t.Run("a locked MCP server that doesn't decode", func(t *testing.T) {
+		writeOrg(t, home, `{"policy":{"mcp":{"own":true}}}`, map[string]string{"locked/mcp/broken.toml": "command = \"x\"\nnope\n"})
 		cfg, err := Load("")
 		require.NoError(t, err)
-		assert.False(t, cfg.Org.Active())
+		require.Len(t, cfg.Warnings, 1, "said, not dropped silently (N26 api-client-config#16)")
+		assert.Contains(t, cfg.Warnings[0], "MCP server")
+		assert.Contains(t, cfg.Warnings[0], "broken.toml isn't used")
+		require.NoError(t, os.Remove(filepath.Join(home, ".blitz", "enterprise", "blitz.acme.com", "catalog", "locked", "mcp", "broken.toml")))
+	})
+	t.Run("a policy file that isn't JSON", func(t *testing.T) {
+		writeOrg(t, home, `{"policy":{"mcp":{"own":true},"tools":{"shell_commands":true}}`, nil)
+		cfg, err := Load("")
+		require.NoError(t, err)
+		require.True(t, cfg.Org.Active(), "never without the organization's rules (EN-33)")
+		assert.NotEmpty(t, cfg.Org.Problem)
+		assert.True(t, cfg.Org.Expired(time.Now()))
+		assert.Equal(t, OrgPolicy{}, cfg.Org.Policy, "the strictest policy, not the damaged file's")
+		assert.Equal(t, cfg.Org, OrgLayerFor(""), "the connectors see it too")
+		names := map[string]string{}
+		for _, s := range cfg.MCP.Servers {
+			names[s.Name] = s.Command
+		}
+		assert.NotContains(t, names, "notes", "the person's own servers are dropped")
+		assert.Len(t, cfg.Warnings, 1)
 	})
 	t.Run("the organization's folder", func(t *testing.T) {
 		assert.Equal(t, "", EnterpriseDir("", ""))
 		assert.Equal(t, "", EnterpriseDir("", "::nope"))
 		assert.Equal(t, filepath.Join(home, ".blitz", "enterprise", "127.0.0.1_8443"), EnterpriseDir("", "http://127.0.0.1:8443"))
+	})
+}
+
+// MCP servers that come after the settings load (a trusted project's, a
+// plugin's) go through one check of the organization's policy: with
+// mcp.own false, none is added (EN-35; N26 api-client-config#1).
+func TestAddMCPServer(t *testing.T) {
+	org := func(own bool) OrgLayer {
+		o := OrgLayer{Defaults: "/org/default", Locked: "/org/locked"}
+		o.Policy.MCP.Own = own
+		return o
+	}
+	cases := []struct {
+		name    string
+		org     OrgLayer
+		have    []MCPServerConfig
+		wantErr error
+	}{
+		{name: "no organization", org: OrgLayer{}},
+		{name: "the organization allows the person's own", org: org(true)},
+		{name: "the organization doesn't", org: org(false), wantErr: ErrOrgMCP},
+		{name: "a server of the name is there", have: []MCPServerConfig{{Name: "db", Command: "mine"}}, wantErr: ErrMCPNameTaken},
+		{name: "a policy that can't be read", org: OrgLayer{Defaults: "/org/default", Problem: "not fetched yet"}, wantErr: ErrOrgMCP},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Org, cfg.MCP.Servers = tc.org, tc.have
+			err := cfg.AddMCPServer(MCPServerConfig{Name: "db", Command: "npx", Args: []string{"@evil/mcp"}})
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.Len(t, cfg.MCP.Servers, len(tc.have), "nothing added")
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, cfg.MCP.Servers, 1)
+			assert.Equal(t, "npx", cfg.MCP.Servers[0].Command)
+		})
+	}
+
+	t.Run("a trusted project's", func(t *testing.T) {
+		ws := t.TempDir()
+		writeProject(t, ws, map[string]string{".mcp.json": `{"mcpServers": {"db": {"command": "npx", "args": ["@evil/mcp"]}}}`})
+		p := LoadProject(ws)
+		cfg := DefaultConfig()
+		cfg.Org = org(false)
+		p.ApplyTrusted(cfg)
+		assert.Empty(t, cfg.MCP.Servers, "the organization's policy holds after trust")
+		assert.Equal(t, []ProjectItem{{File: ".mcp.json", Kind: ProjectMCP, Key: "db", Reason: ReasonOrgPolicy}}, p.Ignored)
 	})
 }

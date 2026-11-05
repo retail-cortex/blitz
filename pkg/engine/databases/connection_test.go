@@ -142,3 +142,25 @@ func TestBackend(t *testing.T) {
 	assert.True(t, ReadsOnly("SELECT 1"))
 	assert.False(t, ReadsOnly("DELETE FROM x"))
 }
+
+// A tool that writes isn't offered on a read-only connection, whatever
+// the form says (N26 engine-sub-1 #21).
+func TestRenderReadOnlyLeavesOutWrites(t *testing.T) {
+	_, cat, _ := catalog(t)
+	for _, tc := range []struct {
+		name     string
+		readOnly bool
+		offered  bool
+	}{
+		{"read-only", true, false},
+		{"read and write", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := connectors.Connection{Name: "notes", Kind: "sqlite", Settings: map[string]string{"database": "/data/notes.db"}, ReadOnly: tc.readOnly, Tools: []string{"execute_sql", "list_tables"}}
+			text, err := Backend{}.Render(cat, kindOf(t, "sqlite"), c)
+			require.NoError(t, err)
+			assert.Equal(t, tc.offered, strings.Contains(text, "name: notes_execute_sql"))
+			assert.Contains(t, text, "name: notes_list_tables")
+		})
+	}
+}

@@ -40,6 +40,7 @@ go_library(
         "//pkg/api",
         "//pkg/config",
         "//pkg/engine/agents/builtin",
+        "//pkg/engine/frontmatter",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

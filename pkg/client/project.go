@@ -24,12 +24,12 @@ import (
 
 // ProjectSettings are the workspace's project settings in the service
 // (WorkspaceService.GetProjectSettings); on failure warn is told and they
-// are empty.
+// are empty, in state TrustUnknown (not "nothing to trust").
 func (r *Remote) ProjectSettings() api.ProjectSettings {
 	res, err := r.workspaces.GetProjectSettings(context.Background(), connect.NewRequest(&pb.GetProjectSettingsRequest{Workspace: r.dir}))
 	if err != nil {
 		r.failed("reading the project settings", err)
-		return api.ProjectSettings{State: api.TrustNone}
+		return api.ProjectSettings{State: api.TrustUnknown}
 	}
 	return projectSettings(res.Msg.Settings)
 }
@@ -133,8 +133,11 @@ func (r *Remote) ListStyles() []api.StyleInfo {
 // TakeProcessNotices are what the session's watched processes reported
 // while it was idle (WorkspaceService.TakeProcessNotices).
 func (r *Remote) TakeProcessNotices(session string) []string {
-	res, err := r.workspaces.TakeProcessNotices(context.Background(), connect.NewRequest(&pb.TakeProcessNoticesRequest{Workspace: r.dir, SessionId: session}))
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.TakeProcessNotices(ctx, connect.NewRequest(&pb.TakeProcessNoticesRequest{Workspace: r.dir, SessionId: session}))
 	if err != nil {
+		r.failed("taking the processes' notices", err)
 		return nil
 	}
 	return res.Msg.Notices

@@ -27,11 +27,10 @@ import (
 var skillMentionRE = regexp.MustCompile(`(?:^|[\s(\[{"'])\\([a-z0-9]+(?:-[a-z0-9]+)*)`)
 
 // skillMentions are the skills a prompt names as \skill-name, in order,
-// once each: those the workspace has and offers to the active agent.
-func (w *Workspace) skillMentions(text string) []*skills.Skill {
+// once each: those the workspace has and offers to agent, the turn's.
+func (w *Workspace) skillMentions(text, agent string) []*skills.Skill {
 	var out []*skills.Skill
 	seen := map[string]bool{}
-	agent := w.engine.ActiveAgent()
 	for _, m := range skillMentionRE.FindAllStringSubmatch(text, -1) {
 		name := m[1]
 		if seen[name] {
@@ -49,8 +48,8 @@ func (w *Workspace) skillMentions(text string) []*skills.Skill {
 // skills as \skill-name: each one's instructions, as /skill-name sends
 // them, and a meta skill's members to activate. The transcript keeps the
 // prompt as typed. "" when it names none.
-func (w *Workspace) skillMentionNote(text string) string {
-	return skillNote(w.skillMentions(text))
+func (w *Workspace) skillMentionNote(text, agent string) string {
+	return skillNote(w.skillMentions(text, agent))
 }
 
 // skillNote gives the agent each skill in list (its instructions, its

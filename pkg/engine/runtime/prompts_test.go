@@ -71,4 +71,9 @@ func TestRunRefusals(t *testing.T) {
 	assert.Nil(t, allowedRefusal(st, "view_image"))
 	assert.Nil(t, allowedRefusal(nil, "anything"))
 	assert.Contains(t, allowedRefusal(st, "create_file")["error"], "create_file isn't among the tools")
+
+	// An allowed-tools with nothing in it allows nothing (N26 engine-sub-1 #12).
+	st = &runState{}
+	WithAllowedTools([]string{})(st)
+	assert.Contains(t, allowedRefusal(st, "read_file")["error"], "allows no tools")
 }

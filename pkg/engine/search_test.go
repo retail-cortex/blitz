@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -413,6 +414,48 @@ func TestSemanticWorkspaceSearch(t *testing.T) {
 	assert.ErrorIs(t, err, api.ErrNoEmbeddings)
 }
 
+// recordingEmbedder keeps every text it's sent.
+type recordingEmbedder struct {
+	synonymEmbedder
+	mu    *sync.Mutex
+	texts *[]string
+}
+
+func (r recordingEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	r.mu.Lock()
+	*r.texts = append(*r.texts, texts...)
+	r.mu.Unlock()
+	return r.synonymEmbedder.Embed(ctx, texts)
+}
+
+// Text sent for embedding, the chunks and a semantic query, has its
+// secrets redacted as enrichment's has (N26 engine-sub-2#21).
+func TestEmbeddingRedactsSecrets(t *testing.T) {
+	const key = "sk-proj-embedding-secret-0123456789"
+	var mu sync.Mutex
+	var texts []string
+	old := newEmbedder
+	t.Cleanup(func() { newEmbedder = old })
+	newEmbedder = func(context.Context, *config.Config, string) (search.Embedder, error) {
+		return recordingEmbedder{mu: &mu, texts: &texts}, nil
+	}
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.LLM.OpenAI.APIKey = key
+		c.Search.EmbeddingModel = "fake/synonyms"
+		write(t, c.Tools.WorkspaceDir, "docs/setup.md", "The dirigible client uses "+key+" to sign in.\n")
+	})
+	waitScanned(t, w, time.Time{})
+	_, err := w.Search(context.Background(), api.SearchQuery{Text: "dirigible " + key, Mode: api.SearchSemantic})
+	require.NoError(t, err)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, texts, 2, "the chunk and the query: %q", texts)
+	for _, s := range texts {
+		assert.NotContains(t, s, key)
+		assert.Contains(t, s, "dirigible")
+	}
+}
+
 // The describer's reply is read fenced or not; its summary is cut and its
 // tags cleaned (lowercase, short, no repeats, ten at most); a reply with
 // no JSON, or bad JSON, is an error.
@@ -529,6 +572,35 @@ func TestSearchModelsUnavailable(t *testing.T) {
 	d := describer{llm: failingLLM{}, redact: SecretRedactor(cfg)}
 	_, err = d.Describe(ctx, "big.md", strings.Repeat("a", maxDescribeChars+10))
 	assert.ErrorContains(t, err, "model unavailable")
+}
+
+// A secret across the describer's cut is redacted before the cut, so no
+// part of it is sent (N26 engine-top-2#13).
+func TestDescribeRedactsBeforeTheCut(t *testing.T) {
+	secret := "sk-abcdefghijklmnopqrstuvwxyz0123456789"
+	for _, tc := range []struct {
+		name string
+		at   int // where the secret starts
+	}{
+		{name: "across the cut", at: maxDescribeChars - 12},
+		{name: "before the cut", at: 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			llm := runtime.NewMockLLM("describer", genai.NewContentFromText(`{"summary": "s", "tags": []}`, genai.RoleModel))
+			d := describer{llm: llm, redact: SecretRedactor(config.DefaultConfig())}
+			text := strings.Repeat(" ", tc.at) + secret + strings.Repeat(" ", maxDescribeChars)
+			_, err := d.Describe(context.Background(), "a.md", text)
+			require.NoError(t, err)
+			require.Len(t, llm.Requests, 1)
+			var sent strings.Builder
+			for _, c := range llm.Requests[0].Contents {
+				for _, p := range c.Parts {
+					sent.WriteString(p.Text)
+				}
+			}
+			assert.NotContains(t, sent.String(), secret[:12], "a part of the secret was sent")
+		})
+	}
 }
 
 // Search settings apply while the workspace is open: turned off and on

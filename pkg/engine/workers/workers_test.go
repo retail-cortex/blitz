@@ -49,7 +49,9 @@ func TestParseSchedule(t *testing.T) {
 		"weekends at noon":          "0 12 * * 0,6",
 		"Every Monday at 8 PM":      "0 20 * * 1",
 		"on fridays at midnight":    "0 0 * * 5",
-		"every 2 days":              "0 0 */2 * *",
+		"every 2 days":              "@every 48h", // N26 safety-enterprise#29: not */2, which runs the 31st and the 1st
+		"every 10 days":             "@every 240h",
+		"every day":                 "@daily",
 		"daily at 12 am":            "0 0 * * *",
 		"Every Sunday at 7:15 a.m.": "15 7 * * 0",
 		"weekly":                    "@weekly",

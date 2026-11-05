@@ -129,6 +129,7 @@ func TestProjectNotice(t *testing.T) {
 		{"applied only", api.ProjectSettings{Applied: pendingProject.Applied}, "1 applied"},
 		{"waiting", pendingProject, "2 waiting for your trust"},
 		{"loaded", api.ProjectSettings{Applied: pendingProject.Applied, Pending: pendingProject.Pending, Loaded: true}, "1 applied"},
+		{"couldn't be checked", api.ProjectSettings{State: api.TrustUnknown}, "couldn't be checked"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

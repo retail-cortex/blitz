@@ -257,7 +257,12 @@ func (c *conn) call(ctx context.Context, method string, params, out any) error {
 	}
 }
 
-// notify sends a notification.
+// send sends a notification.
 func (c *conn) send(method string, params any) error {
 	return c.write(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
+}
+
+// sendCtx is send, given up when ctx ends (writeCtx).
+func (c *conn) sendCtx(ctx context.Context, method string, params any) error {
+	return c.writeCtx(ctx, map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 }

@@ -33,9 +33,11 @@ import (
 // PNG is the screenshot the fake takes: a PNG signature and nothing more.
 var PNG = []byte("\x89PNG\r\n\x1a\nfake")
 
-// Page is a fake page. Navigating loads Title at the URL (after sending a
-// main-frame document request through Fetch.requestPaused, answered by the
-// browser's navigation decision); Away is a link going to another URL.
+// Page is a fake page. Navigating sends a main-frame document request
+// through Fetch.requestPaused and, as Chrome does, answers only once the
+// browser decides: continued, it loads Title at the URL; failed, the
+// navigation's answer is its error and nothing loads. Away is a link
+// going to another URL.
 type Page struct {
 	// URL is the DevTools WebSocket address to Attach to.
 	URL string
@@ -45,6 +47,9 @@ type Page struct {
 	page    struct{ URL, Title string }
 	paused  map[string]string // request ID → URL waiting for a decision
 	decided map[string]string // request ID → continue or fail
+	// navigating are the Page.navigate commands waiting for a decision,
+	// by request ID.
+	navigating map[string]int64
 }
 
 // Title is every page's title.
@@ -52,7 +57,7 @@ const Title = "Fake page"
 
 // New starts a fake page, closed with the test.
 func New(t testing.TB) *Page {
-	p := &Page{paused: map[string]string{}, decided: map[string]string{}}
+	p := &Page{paused: map[string]string{}, decided: map[string]string{}, navigating: map[string]int64{}}
 	p.page.URL, p.page.Title = "about:blank", ""
 	up := websocket.Upgrader{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,13 +112,14 @@ func (p *Page) serve(ws *websocket.Conn) {
 		event("Page.loadEventFired", map[string]any{})
 	}
 	requestID := 0
-	pause := func(url string) {
+	pause := func(url string) string {
 		requestID++
 		id := "r" + strconv.Itoa(requestID)
 		p.mu.Lock()
 		p.paused[id] = url
 		p.mu.Unlock()
 		event("Fetch.requestPaused", map[string]any{"requestId": id, "frameId": "main", "resourceType": "Document", "request": map[string]any{"url": url}})
+		return id
 	}
 	for {
 		var m msg
@@ -130,15 +136,28 @@ func (p *Page) serve(ws *websocket.Conn) {
 			reply(m.ID, map[string]any{"frameTree": map[string]any{"frame": map[string]any{"id": "main"}}})
 		case "Page.navigate":
 			url, _ := params["url"].(string)
-			reply(m.ID, map[string]any{"frameId": "main"})
-			pause(url)
-			load(url)
+			id := pause(url)
+			p.mu.Lock()
+			p.navigating[id] = m.ID // answered once the browser decides
+			p.mu.Unlock()
 		case "Fetch.continueRequest", "Fetch.failRequest":
 			id, _ := params["requestId"].(string)
+			decision := map[string]string{"Fetch.continueRequest": "continue", "Fetch.failRequest": "fail"}[m.Method]
 			p.mu.Lock()
-			p.decided[id] = map[string]string{"Fetch.continueRequest": "continue", "Fetch.failRequest": "fail"}[m.Method]
+			p.decided[id] = decision
+			nav, navigating := p.navigating[id]
+			delete(p.navigating, id)
+			url := p.paused[id]
 			p.mu.Unlock()
 			reply(m.ID, map[string]any{})
+			switch {
+			case !navigating:
+			case decision == "continue":
+				reply(nav, map[string]any{"frameId": "main"})
+				load(url)
+			default:
+				reply(nav, map[string]any{"frameId": "main", "errorText": "net::ERR_BLOCKED_BY_CLIENT"})
+			}
 		case "Runtime.evaluate":
 			reply(m.ID, p.evaluate(params["expression"].(string), pause, load))
 		case "Page.captureScreenshot":
@@ -155,7 +174,7 @@ func (p *Page) serve(ws *websocket.Conn) {
 }
 
 // evaluate answers the scripts package browser runs, by what they contain.
-func (p *Page) evaluate(expr string, pause func(string), load func(string)) map[string]any {
+func (p *Page) evaluate(expr string, pause func(string) string, load func(string)) map[string]any {
 	value := func(v any) map[string]any {
 		t := "string"
 		switch v.(type) {

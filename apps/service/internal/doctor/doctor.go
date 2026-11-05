@@ -90,6 +90,9 @@ func Run(ctx context.Context, o Options) []Check {
 		return checks
 	}
 	add("config parse", statusOK, "provider %s, model %s, agent %s", cfg.LLM.Provider, cfg.ModelName(), cfg.Blitz.DefaultAgent)
+	for _, w := range cfg.Warnings {
+		add("settings", statusWarn, "%s", w)
+	}
 	checkProject(cfg, add)
 	checkSkills(cfg, add)
 
@@ -341,7 +344,11 @@ func Run(ctx context.Context, o Options) []Check {
 		add("audit log", statusWarn, "disabled")
 	}
 
-	if mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory); len(mem.Docs)+len(mem.Rules) > 0 {
+	mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory)
+	for _, p := range mem.Problems {
+		add("rule", statusWarn, "%s", p)
+	}
+	if len(mem.Docs)+len(mem.Rules) > 0 {
 		var paths []string
 		for _, d := range mem.Docs {
 			paths = append(paths, d.Path)
@@ -514,9 +521,13 @@ func refPrefix(ref string) string {
 	return ref + ": "
 }
 
-// checkSkills reports skills that don't load, the skills policy's own
-// problems, and skills whose scripts the policy blocks.
+// checkSkills reports the jobs policy's durations that can't be read,
+// skills that don't load, the skills policy's own problems, and skills
+// whose scripts the policy blocks.
 func checkSkills(cfg *config.Config, add func(name string, st checkStatus, format string, args ...any)) {
+	for _, p := range cfg.Workers.Policy.Problems() {
+		add("jobs policy", statusWarn, "%s", p)
+	}
 	if !cfg.Skills.Enabled {
 		return
 	}

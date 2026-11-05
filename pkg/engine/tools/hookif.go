@@ -74,7 +74,7 @@ func CallTargets(tool string, args map[string]any) map[string][]string {
 		if u, err := url.Parse(raw); err == nil {
 			add(RuleWeb, strings.ToLower(u.Hostname()))
 		}
-	case "activate_skill", "run_skill_script":
+	case "activate_skill", "run_skill_script", "read_skill_file":
 		add(RuleSkill, str("skill_name", "skill", "name"))
 	case "invoke_agent":
 		add(RuleAgent, str("agent_name", "agent"))

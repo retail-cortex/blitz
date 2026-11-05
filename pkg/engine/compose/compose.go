@@ -48,6 +48,9 @@ type Turn struct {
 	Text string `json:"text"`
 	// Options are a question's suggested answers.
 	Options []string `json:"options,omitempty"`
+	// Drafted marks the composer's turn that handed on a draft (its
+	// summary): not a question.
+	Drafted bool `json:"drafted,omitempty"`
 }
 
 // Draft is the component as the composer wrote it.
@@ -148,7 +151,7 @@ func Prompt(r Recipe, context string, s *Session, problems []string) string {
 func (s *Session) questions() int {
 	n := 0
 	for _, t := range s.Turns {
-		if t.Role == "composer" {
+		if t.Role == "composer" && !t.Drafted {
 			n++
 		}
 	}
@@ -279,6 +282,14 @@ func Step(ctx context.Context, r Recipe, context string, s *Session, ask Asker) 
 			if last != nil {
 				break // asked instead of fixing: the draft as it was
 			}
+			if s.questions() >= MaxQuestions {
+				// Past the last question: sent back for a draft.
+				if try == fixes {
+					return fmt.Errorf("%w: it asked again after %d questions", ErrNoReply, MaxQuestions)
+				}
+				problems = []string{fmt.Sprintf("you've asked %d questions, the most there may be: draft it now, with what you know", MaxQuestions)}
+				continue
+			}
 			s.Turns = append(s.Turns, Turn{Role: "composer", Text: strings.TrimSpace(rep.Question), Options: rep.Options})
 			s.Updated = time.Now()
 			return nil
@@ -293,7 +304,7 @@ func Step(ctx context.Context, r Recipe, context string, s *Session, ask Asker) 
 		problems = d.Problems
 	}
 	s.Draft = last
-	s.Turns = append(s.Turns, Turn{Role: "composer", Text: last.Summary})
+	s.Turns = append(s.Turns, Turn{Role: "composer", Text: last.Summary, Drafted: true})
 	s.Updated = time.Now()
 	return nil
 }

@@ -159,7 +159,7 @@ func (s Set) ToolResult(ctx context.Context, tool string, external bool, text st
 				continue
 			}
 			if g.Judge && s.Ask != nil {
-				if v, err := gates.ConfirmInjection(ctx, s.Ask, out); err == nil && v.Pass {
+				if v, err := gates.ConfirmInjection(ctx, s.Ask, s.Redactor.String(out)); err == nil && v.Pass {
 					fs = append(fs, Finding{g.Name, "pass", v.Reason})
 					continue // quoted, not aimed at the agent
 				}
@@ -187,14 +187,15 @@ func (s Set) ToolResult(ctx context.Context, tool string, external bool, text st
 }
 
 // judge is whether text passes custom guardrail g, and why not. One that
-// can't be judged passes, unless it blocks.
+// can't be judged doesn't pass: a blocking one refuses, a warning one
+// says it couldn't check (GT-25).
 func (s Set) judge(ctx context.Context, g Guardrail, text string) (bool, string) {
 	if s.Ask == nil {
-		return g.Action != Block, "it can't be judged here"
+		return false, "it can't be judged here"
 	}
 	v, err := gates.JudgeGuardrail(ctx, s.Ask, g, s.Redactor.String(text))
 	if err != nil {
-		return g.Action != Block, "it couldn't be judged: " + err.Error()
+		return false, "it couldn't be judged: " + err.Error()
 	}
 	return v.Pass, v.Reason
 }

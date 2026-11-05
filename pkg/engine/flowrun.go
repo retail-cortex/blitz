@@ -172,7 +172,15 @@ var stepPrompts = map[string]string{
 // didn't: a failing block rule stops the workflow, revise asks once for a
 // better answer, warn says so.
 func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flow, n flows.Node, in string, on func(api.Event)) (string, error) {
+	// A job's workflow: its steps are the job's run, on its agent and
+	// model (WK-43); a step's own agent comes after, so it wins.
+	job := jobRunFrom(ctx)
 	var opts []runtime.ExecOption
+	var run string
+	agent := n.Agent // "": the active agent's
+	if job != nil {
+		opts, run, agent = slices.Clone(job.opts), job.id, cmp.Or(n.Agent, job.agent)
+	}
 	if n.Agent != "" {
 		if _, ok := w.agents.Get(n.Agent); !ok {
 			return "", fmt.Errorf("agent %q isn't defined", n.Agent)
@@ -194,14 +202,14 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 	b.WriteString(skillNote(list))
 	label := fmt.Sprintf("/%s › %s", f.Name, cmp.Or(n.Title, n.ID))
 	st := flowStorage(ctx, w)
-	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}}, on, st, opts...)
-	w.meterTurn(ctx, n.Agent, res)
+	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}, run: run, agent: agent}, on, st, opts...)
+	w.meterTurn(ctx, agent, res)
 	if err != nil {
 		return "", err
 	}
 	out := res.Output
 	judged := map[string]bool{}
-	for _, g := range gates.Gates(w.Rules(), gates.AfterAgent, cmp.Or(n.Agent, w.engine.ActiveAgent())) {
+	for _, g := range gates.Gates(w.Rules(), gates.AfterAgent, cmp.Or(agent, w.engine.ActiveAgent())) {
 		judged[g.Name] = true
 	}
 	for _, name := range n.Rules {
@@ -221,8 +229,8 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 		case r.Action == gates.Block:
 			return "", errors.New(i18n.T("flow.rule_blocked", "rule", r.Name, "reason", v.Reason))
 		case r.Action == gates.Revise:
-			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}}, on, st, opts...)
-			w.meterTurn(ctx, n.Agent, again)
+			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}, run: run, agent: agent}, on, st, opts...)
+			w.meterTurn(ctx, agent, again)
 			if err != nil {
 				return "", err
 			}

@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,6 +35,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
@@ -68,6 +70,7 @@ func Load(store secrets.Store, server string) (*Record, error) {
 	}
 	var r Record
 	if err := json.Unmarshal([]byte(v), &r); err != nil || r.Token == nil {
+		slog.Warn("the MCP server's kept sign-in can't be read: sign in again with blitz mcp login", "server", server, "error", err)
 		return nil, ErrNotSignedIn
 	}
 	return &r, nil
@@ -119,7 +122,11 @@ func (s *saving) Token() (*oauth2.Token, error) {
 	if t.AccessToken != s.last {
 		s.last = t.AccessToken
 		s.record.Token = t
-		_ = Save(s.store, s.server, &s.record) // the token works either way
+		// The token works either way; unkept, a server that rotates its
+		// refresh tokens asks to sign in again at the next start.
+		if err := Save(s.store, s.server, &s.record); err != nil {
+			slog.Warn("couldn't keep the MCP server's refreshed sign-in: the next start may ask for blitz mcp login", "server", s.server, "store", s.store.Kind(), "error", err)
+		}
 	}
 	return t, nil
 }
@@ -162,7 +169,8 @@ func NeedsLogin(server string) auth.OAuthHandler {
 // server's authorization server, has the user authorize it in a browser
 // (show gets the URL to open), and receives the code on a local callback,
 // or from pasted when the browser is elsewhere (an SSH session: paste the
-// address the browser ends on, or the code). The sign-in is saved in store.
+// address the browser ends on, whose state is checked; a code alone isn't
+// taken, as its state can't be). The sign-in is saved in store.
 func Login(ctx context.Context, store secrets.Store, server, serverURL string, show func(authURL string), pasted <-chan string) error {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -179,12 +187,12 @@ func Login(ctx context.Context, store secrets.Store, server, serverURL string, s
 		}
 		res := resultFrom(r.URL.Query())
 		if res == nil {
-			signedin.Write(w, http.StatusBadRequest, signedin.Page{Title: "The sign-in didn't go through", Failed: true,
-				Message: "The server sent no code back. Try blitz mcp login " + server + " again."})
+			signedin.Write(w, http.StatusBadRequest, signedin.Page{Title: i18n.T("signin.page.failed_title"), Failed: true,
+				Message: i18n.T("signin.page.mcp_no_code", "server", server)})
 			return
 		}
-		signedin.Write(w, http.StatusOK, signedin.Page{Title: "You're signed in",
-			Message: "Blitz is signed in to " + server + ". Go back to your terminal; you can close this page."})
+		signedin.Write(w, http.StatusOK, signedin.Page{Title: i18n.T("signin.page.done_title"),
+			Message: i18n.T("signin.page.mcp_done", "server", server)})
 		select {
 		case results <- res:
 		default:

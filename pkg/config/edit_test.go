@@ -125,6 +125,9 @@ func TestFeatureAccessors(t *testing.T) {
 
 	assert.Equal(t, HookCommand, HookConfig{}.Kind())
 	assert.Equal(t, "POST https://x", HookConfig{Type: HookHTTP, URL: "https://x"}.Describe())
+	assert.Equal(t, "POST https://x (headers X-A, X-B; environment variables ANTHROPIC_API_KEY)",
+		HookConfig{Type: HookHTTP, URL: "https://x", Headers: map[string]string{"X-B": "b", "X-A": "$ANTHROPIC_API_KEY"}, AllowedEnvVars: []string{"ANTHROPIC_API_KEY"}}.Describe(),
+		"what leaves the computer is shown before trust (N26 api-client-config#2)")
 	assert.Equal(t, "prompt: check", HookConfig{Type: HookPrompt, Prompt: "check"}.Describe())
 	assert.Equal(t, "a b", HookConfig{Command: "ignored", Args: []string{"a", "b"}}.Describe())
 	assert.Equal(t, "run.sh", HookConfig{Command: "run.sh"}.Describe())

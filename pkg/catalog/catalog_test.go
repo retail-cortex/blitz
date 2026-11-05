@@ -72,24 +72,41 @@ func TestCheck(t *testing.T) {
 	assert.Equal(t, Default, it.Lock, "a default unless it says")
 
 	bad := map[string]struct{ data, says string }{
-		"agents/broken.md":      {"no front matter", "frontmatter"},
-		"agents/hot.md":         {"---\nname: hot\ntemperature: 9\n---\nx", "temperature"},
-		"rules/odd.md":          {"---\nwhen: sometimes\n---\nx", "before_agent or after_agent"},
-		"guardrails/odd.md":     {"---\nstage: nowhere\n---\nx", "nowhere"},
-		"commands/open.md":      {"---\ndescription: x\nno end", "frontmatter"},
-		"skills/go/SKILL.md":    {"---\nname: rust\ndescription: d\n---\nx", "isn't its folder's"},
-		"skills/py/SKILL.md":    {"---\ndescription: d\n---\nx", "must specify a name"},
-		"mcp/both.toml":         {"command = \"x\"\nurl = \"https://x\"\n", "not both"},
-		"mcp/none.toml":         {"args = []\n", "a command"},
-		"mcp/typo.toml":         {"comand = \"x\"\n", "unknown setting"},
-		"mcp/leak.toml":         {"command = \"x\"\n[env]\nTOKEN = \"ghp_" + strings.Repeat("a", 36) + "\"\n", "holds a secret"},
-		"mcp/half.toml":         {"command = \"x\"\n[env]\nTOKEN = \"Bearer {secrets:t}\"\n", "whole value"},
-		"mcp/notoml.toml":       {"= x", "toml"},
-		"connectors/x/bad.yaml": {"a: [", "connectors/x/bad.yaml"},
-		"agents/locky.md":       {"---\nname: locky\nlock: maybe\n---\nx", "locked or default"},
-		"agents/bad name!.md":   {"---\nname: x\n---\nx", "the name"},
-		"agents/badfm.md":       {"---\nname: [\n---\nx", "yaml"},
-		"policy.toml":           {"schema = 1", "not a catalog item"},
+		"agents/broken.md":     {"no front matter", "frontmatter"},
+		"agents/hot.md":        {"---\nname: hot\ntemperature: 9\n---\nx", "temperature"},
+		"rules/odd.md":         {"---\nwhen: sometimes\n---\nx", "before_agent or after_agent"},
+		"guardrails/odd.md":    {"---\nstage: nowhere\n---\nx", "nowhere"},
+		"guardrails/limits.md": {"---\nstage: action\nlock: locked\n---\nDropping a table.", "add builtin: limits"},
+		"commands/open.md":     {"---\ndescription: x\nno end", "frontmatter"},
+		"skills/go/SKILL.md":   {"---\nname: rust\ndescription: d\n---\nx", "isn't its folder's"},
+		"skills/py/SKILL.md":   {"---\ndescription: d\n---\nx", "must specify a name"},
+		"mcp/both.toml":        {"command = \"x\"\nurl = \"https://x\"\n", "not both"},
+		"mcp/none.toml":        {"args = []\n", "a command"},
+		"mcp/typo.toml":        {"comand = \"x\"\n", "unknown setting"},
+		"mcp/leak.toml":        {"command = \"x\"\n[env]\nTOKEN = \"ghp_" + strings.Repeat("a", 36) + "\"\n", "holds a secret"},
+		"mcp/half.toml":        {"command = \"x\"\n[env]\nTOKEN = \"Bearer {secrets:t}\"\n", "whole value"},
+		"mcp/notoml.toml":      {"= x", "toml"},
+		// N26 safety-enterprise#15: a secret anywhere in what every
+		// person gets.
+		"mcp/arg.toml":            {"command = \"x\"\nargs = [\"--api-key\", \"opaque-value-123\"]\n", "args[1], after --api-key, holds a secret"},
+		"mcp/argeq.toml":          {"command = \"x\"\nargs = [\"--token=glpat-" + strings.Repeat("a1", 12) + "\"]\n", "holds a secret"},
+		"mcp/userinfo.toml":       {"url = \"https://ana:hunter22@mcp.example.com/\"\n", "url holds a password"},
+		"mcp/query.toml":          {"url = \"https://mcp.example.com/?token=abc123\"\n", "url's token holds a secret"},
+		"connectors/db/prod.yaml": {"kind: source\nname: prod\npassword: Zq8" + "rT4vL2mN7pX1wK9s\n", "line 3 holds what looks like a secret"},
+		"agents/leaky.md":         {"---\nname: leaky\n---\nUse AKIA" + "Q3EXAMPLEZ7Y4WXN for S3.", "line 4 holds what looks like a secret (AWS access key"},
+		"connectors/x/bad.yaml":   {"a: [", "connectors/x/bad.yaml"},
+		"agents/locky.md":         {"---\nname: locky\nlock: maybe\n---\nx", "locked or default"},
+		"agents/bad name!.md":     {"---\nname: x\n---\nx", "the name"},
+		"agents/badfm.md":         {"---\nname: [\n---\nx", "yaml"},
+		"policy.toml":             {"schema = 1", "not a catalog item"},
+	}
+	for _, ok := range []struct{ path, data string }{
+		{"mcp/ref.toml", "command = \"x\"\nargs = [\"--api-key\", \"{secrets:key}\"]\n"},
+		{"mcp/qref.toml", "url = \"https://mcp.example.com/?token={secrets:t}\"\n"},
+		{"connectors/db/ok.yaml", "kind: source\nname: ok\npassword: \"{secrets:db_password_2}\"\n"},
+	} {
+		_, problems := Check(ok.path, []byte(ok.data))
+		assert.Empty(t, problems, ok.path)
 	}
 	for p, c := range bad {
 		_, problems := Check(p, []byte(c.data))

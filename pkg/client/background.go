@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"connectrpc.com/connect"
@@ -105,10 +106,14 @@ func (b *Background) Logs(ctx context.Context, id string, follow bool, on func(a
 func (r *Remote) StartBackground(ctx context.Context, t api.Turn) (api.BackgroundRun, error) {
 	turn := &pb.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly,
-		MaxTurns: int32(t.MaxTurns), MaxCostUsd: t.MaxCostUSD, Command: t.Command,
+		MaxTurns: int32(t.MaxTurns), MaxCostUsd: t.MaxCostUSD, Command: t.Command, FetchGrants: t.FetchGrants,
+		Context: contextMsgs(t.Context),
 	}
 	if t.Timeout > 0 {
 		turn.Timeout = durationpb.New(t.Timeout)
+	}
+	for _, img := range t.Images {
+		turn.ImageIds = append(turn.ImageIds, img.SHA256)
 	}
 	res, err := r.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: r.dir, Turn: turn}))
 	if err != nil {
@@ -147,7 +152,7 @@ func (r *Remote) FollowBackground(ctx context.Context, id string, on func(api.Ev
 	if err := stream.Err(); err != nil {
 		return api.TurnResult{}, fromAPI(err)
 	}
-	return api.TurnResult{}, errors.New("the service stopped showing the run before it ended")
+	return api.TurnResult{}, errors.New(i18n.T("attached.run_unfinished"))
 }
 
 func finished(f *pb.TurnFinished) api.TurnResult {

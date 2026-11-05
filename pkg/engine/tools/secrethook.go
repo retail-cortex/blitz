@@ -43,6 +43,11 @@ func NewInstallSecretHookTool(r *Registry) (tool.Tool, error) {
 		func(ctx agent.Context, _ struct{}) (InstallSecretHookOutput, error) {
 			dir := r.Workspace().Dir()
 			hook := filepath.Join(dir, secretscan.HooksDir, "pre-commit")
+			// Written outside the file tools, so checked as they would:
+			// not in a read-only workspace, nor through a link out of it.
+			if err := r.Workspace().CheckOwnFile(hook); err != nil {
+				return InstallSecretHookOutput{Error: err.Error()}, nil
+			}
 			if err := r.hooks.Approve(ctx, api.ApprovalRequest{
 				Tool: "install_secret_hook", Kind: api.ActionWrite,
 				Detail:  "Add a pre-commit hook that stops commits adding API keys or other secrets, and set core.hooksPath to .githooks",

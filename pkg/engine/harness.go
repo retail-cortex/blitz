@@ -425,6 +425,11 @@ func (w *Workspace) ReflectDue(now time.Time) bool {
 	}
 	sched, err := workers.ParseSchedule(s, "")
 	if err != nil {
+		// Never due: why shows where a skipped reflection's reason does.
+		why := "reflect_schedule can't be read: " + err.Error()
+		if w.harnessState().Skipped != why {
+			w.updateHarnessState(func(st *harnessState) { st.Skipped = why })
+		}
 		return false
 	}
 	st := w.harnessState()

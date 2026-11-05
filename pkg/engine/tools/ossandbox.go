@@ -23,6 +23,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // ShellSandboxMode selects OS-level sandboxing for shell commands.
@@ -45,6 +47,29 @@ type OSSandboxSpec struct {
 	ReadOnlyDirs []string // never writable, even when inside a writable dir
 	Blocked      *PathMatcher
 	AllowNetwork bool
+
+	// shared, when set, is kept by the caller across sandboxes it builds
+	// one after another (a skill script box, one per run): the platform
+	// is probed once, and bubblewrap's blocked-path scan is reused.
+	shared *sharedSandbox
+}
+
+// sharedSandbox is what sandboxes built for the same caller share.
+type sharedSandbox struct {
+	probed atomic.Bool
+	scan   *blockedScan // built on first use, for the caller's blocked paths
+	mu     sync.Mutex
+}
+
+// blockedScan returns the shared scan, made for spec's blocked paths the
+// first time.
+func (s *sharedSandbox) blockedScan(spec OSSandboxSpec) *blockedScan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scan == nil {
+		s.scan = newBlockedScan(OSSandboxSpec{Blocked: spec.Blocked})
+	}
+	return s.scan
 }
 
 // OSSandbox wraps command argv so they run under the platform sandbox.
@@ -119,11 +144,6 @@ func (s *OSSandbox) Status() string {
 	}
 }
 
-func (s *OSSandbox) wrap(argv []string) []string {
-	out, _ := s.wrapCtx(context.Background(), argv) // never cancelled, so no error
-	return out
-}
-
 // wrapCtx is argv sandboxed, or ctx's error if ctx ends while the sandbox
 // gets ready for it.
 func (s *OSSandbox) wrapCtx(ctx context.Context, argv []string) ([]string, error) {
@@ -188,7 +208,28 @@ func seatbeltProfile(spec OSSandboxSpec) string {
 	if !spec.AllowNetwork {
 		sb.WriteString("(deny network*)\n(allow network* (remote unix-socket))\n")
 	}
+	denyServiceSockets(&sb)
 	return sb.String()
+}
+
+// denyServiceSockets keeps commands from connecting to the service's
+// sockets and anything in Blitz's run folder, or writing (moving a socket
+// away) there, whatever the network setting: last, so it wins over the
+// Unix sockets allowed above. The copies of credentials in the run folder
+// stay readable.
+func denyServiceSockets(sb *strings.Builder) {
+	dirs, socks := serviceSockets()
+	if len(dirs)+len(socks) == 0 {
+		return
+	}
+	sb.WriteString("(deny network-outbound file-write*\n")
+	for _, d := range dirs {
+		fmt.Fprintf(sb, "  (subpath %s)\n", sbplString(d))
+	}
+	for _, s := range socks {
+		fmt.Fprintf(sb, "  (literal %s)\n", sbplString(s))
+	}
+	sb.WriteString(")\n")
 }
 
 // privateDirs are the folders macOS guards with a prompt ("Blitz would like

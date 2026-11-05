@@ -233,6 +233,37 @@ func TestOpenSessionSetsAuditContextAndMapsResumeErrors(t *testing.T) {
 	assert.Equal(t, rec.ID, got.ID, "resume by id: %+v %v %v", got, resumed, err)
 }
 
+// --continue and --resume latest carry on the person's latest chat, not a
+// newer job's, background or eval run (spec_017 SES-31; N26
+// engine-top-2#8).
+func TestSelectSessionSkipsRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name, title, origin string
+	}{
+		{name: "a job's run", title: "⏰ daily 2026-11-04 06:00", origin: session.OriginWorker},
+		{name: "a job's run saved before origins", title: "⏰ daily 2026-11-04 06:00"},
+		{name: "a background run", title: "check", origin: session.OriginBackground},
+		{name: "an eval's case", title: "eval x c1", origin: session.OriginEval},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, err := session.NewStorage(t.TempDir())
+			require.NoError(t, err)
+			mine, _, err := selectSession(st, "", false, "mine", "a")
+			require.NoError(t, err)
+			require.NoError(t, st.AddMessage("user", "hello"))
+			time.Sleep(10 * time.Millisecond) // a newer update time
+			run, err := st.CreateSession(session.NewSessionID(), tc.title, "a")
+			require.NoError(t, err)
+			run.Origin = tc.origin
+			require.NoError(t, st.AddMessage("user", "the run's prompt"))
+			got, resumed, err := selectSession(st, "", true, "", "")
+			require.NoError(t, err)
+			assert.True(t, resumed)
+			assert.Equal(t, mine.ID, got.ID)
+		})
+	}
+}
+
 func TestSelectSession(t *testing.T) {
 	st, err := session.NewStorage(t.TempDir())
 	require.NoError(t, err)
@@ -525,6 +556,15 @@ func TestOpenWarnings(t *testing.T) {
 			require.NoError(t, os.WriteFile(file, nil, 0o644))
 			c.Audit.Enabled, c.Audit.Dir = true, filepath.Join(file, "audit")
 		}, want: "audit log disabled"},
+		// N26 engine-tools-2#18: said at the start, not found out at /undo.
+		{name: "checkpoints that can't be kept on disk", mutate: func(t *testing.T, c *config.Config) {
+			file := filepath.Join(t.TempDir(), "file")
+			require.NoError(t, os.WriteFile(file, nil, 0o644))
+			c.Checkpoints.Enabled, c.Checkpoints.Dir = true, filepath.Join(file, "checkpoints")
+		}, want: "checkpoints are kept in memory only"},
+		// N26 engine-tools-2#28: a setting that's ignored says so.
+		{name: "a process limit that isn't a duration", mutate: func(_ *testing.T, c *config.Config) { c.Processes.BusyFor = "2 minutes" },
+			want: `processes.busy_for = "2 minutes" isn't a duration`},
 		{name: "old images are pruned", mutate: func(_ *testing.T, c *config.Config) { c.Images.Enabled, c.Images.RetainDays = true, 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
