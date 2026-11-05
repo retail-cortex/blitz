@@ -60,6 +60,8 @@ type Serving struct {
 	// asking. An untrusted one gets only the workspace's own secrets, and
 	// every tool asks first. Nil trusts none.
 	Trusted func(file string) bool
+	// Warn says why a file isn't served (nil: nowhere).
+	Warn func(string)
 }
 
 // Split is the workspace's files, trusted and not.
@@ -81,6 +83,10 @@ type Env struct {
 	Dirs
 	Category Category
 	Values   map[string]string
+	// Trusted lets a workspace connection's ${NAME}s reach the global
+	// secrets: false for one whose file the person hasn't trusted (CON-09),
+	// which gets the workspace's own alone.
+	Trusted bool
 }
 
 // Tester connects to a connection as written and lists its tools.
@@ -99,6 +105,14 @@ type Tryer interface {
 // when it can read none.
 type SchemaReader interface {
 	ReadSchema(ctx context.Context, env Env, k *Kind, c Connection) ([]Table, error)
+}
+
+// SourceLister says what a connection file connects to: the backend's
+// own source types (Kind.Source) of every source in it, so the
+// organization's kinds are checked by what a file is, not by its
+// comment. An error when it can't tell.
+type SourceLister interface {
+	SourceTypes(text string) ([]string, error)
 }
 
 var (

@@ -32,7 +32,7 @@ A workspace's Studio only changes that workspace's connections. Your global ones
 
 Passwords and other secret settings go into your system's keychain as [secrets](../about/specs/spec_039_secrets.md), never into the file, so a workspace's connections are safe to commit.
 
-**A connection that came with the workspace**, one you didn't save yourself, is served, but it can use only this workspace's secrets, and every tool asks before it runs. Open it in Studio and press **Save and trust** once you've read it; trusting the project's settings trusts it too. That way a cloned repository can't point one of your passwords at a server of its own.
+**A connection that came with the workspace**, one you didn't save yourself, is served, but it can use only this workspace's secrets, and every tool asks before it runs. Open it in Studio and press **Save and trust** once you've read it; trusting the project's settings trusts it too. That way a cloned repository can't point one of your passwords at a server of its own. The same goes for **Test**, **Try it** and **Read the tables** on it. A file of the workspace's that doesn't load is left out with a warning, and your other connections are still served.
 
 ## Choose what each workspace can reach
 

@@ -88,7 +88,7 @@ func (g GlobalConnectors) Delete(_ context.Context, r connectors.Ref) error {
 // env is where a global connection is tested: the secret values typed,
 // else the global ones.
 func (g GlobalConnectors) env(values map[string]string) connectors.Env {
-	return connectors.Env{Dirs: g.Dirs(), Values: values}
+	return connectors.Env{Dirs: g.Dirs(), Values: values, Trusted: true}
 }
 
 // global is c as a global connection.

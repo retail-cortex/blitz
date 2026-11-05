@@ -57,6 +57,16 @@ func (d Dirs) Files(scope, category string) []string {
 	return nil
 }
 
+// File is the file of the connection name in scope's category folder;
+// "" when there's none.
+func (d Dirs) File(scope, category, name string) string {
+	dir := d.ConnectionDir(scope, category)
+	if dir == "" {
+		return ""
+	}
+	return file(dir, name)
+}
+
 // SecretScope is the secrets scope of a connection scope's.
 func (d Dirs) SecretScope(scope string) string {
 	if scope != ScopeWorkspace { // the organization's use the person's global secrets
@@ -146,10 +156,11 @@ func List(cat Catalog, d Dirs) []Connection {
 	for i, conn := range out {
 		r, ok := rules[conn.Category]
 		if !ok {
-			r = rulesFor(d, conn.Category)
+			c, _ := cat.Category(conn.Category)
+			r = rulesFor(d, cat, c)
 			rules[conn.Category] = r
 		}
-		if why := r.refusal(conn.Scope, conn.Name, conn.Kind); why != "" && conn.Problem == "" {
+		if why := r.refusal(conn.Scope, conn.Name, conn.Text); why != "" && conn.Problem == "" {
 			out[i].Problem = why
 		}
 	}
@@ -334,8 +345,6 @@ func planSave(cat Catalog, d Dirs, conn Connection, values map[string]string, pr
 	problems := Check(b, k, conn)
 	if conn.Scope != ScopeGlobal && conn.Scope != ScopeWorkspace {
 		problems = append(problems, fmt.Sprintf("scope %q: workspace or global", conn.Scope))
-	} else if why := rulesFor(d, c.ID).refusal(conn.Scope, conn.Name, conn.Kind); why != "" {
-		problems = append(problems, why)
 	}
 	dir := d.ConnectionDir(conn.Scope, c.ID)
 	if dir == "" {
@@ -369,6 +378,10 @@ func planSave(cat Catalog, d Dirs, conn Connection, values map[string]string, pr
 	p.conn = withSecretRefs(c, k, conn, func(f Field) bool { return values[f.Key] != "" || kept(f) })
 	if p.text, err = b.Render(c, k, p.conn); err != nil {
 		return saving{}, nil, err
+	}
+	// By what it would write: a custom file's kind is what it connects to.
+	if why := rulesFor(d, cat, c).refusal(conn.Scope, conn.Name, p.text); why != "" {
+		return saving{}, []string{why}, nil
 	}
 	return p, nil, nil
 }

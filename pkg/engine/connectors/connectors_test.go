@@ -389,7 +389,9 @@ func TestWith(t *testing.T) {
 	assert.Equal(t, []config.MCPServerConfig{user}, connectors.With([]config.MCPServerConfig{user, stale}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}}), "no files: none")
 
 	file := filepath.Join(connectors.WorkspaceDir(ws), "databases", "scratch.yaml")
-	write(t, file, "kind: source\nname: scratch\ntype: sqlite\ndatabase: /tmp/none.db\n")
+	db := filepath.Join(t.TempDir(), "scratch.db")
+	write(t, db, "")
+	write(t, file, "kind: source\nname: scratch\ntype: sqlite\ndatabase: "+db+"\n")
 	write(t, filepath.Join(connectors.WorkspaceDir(ws), "databases", "notes.md"), "not a connection file")
 	out := connectors.With([]config.MCPServerConfig{user, stale}, connectors.ServeOptions{Dirs: connectors.Dirs{Workspace: ws}})
 	require.Len(t, out, 2)
@@ -684,4 +686,81 @@ func TestOrgConnections(t *testing.T) {
 	_, err = config.Load("")
 	require.NoError(t, err)
 	assert.Len(t, connectors.List(cat, d), 2, "disconnected: the person's own alone")
+}
+
+// TestOrgKindsByWhatAFileIs checks that the organization's kinds are
+// judged by the sources a file connects to, not by its "# kind:" comment,
+// and that a file whose sources can't be told isn't allowed (N26
+// engine-sub-1 #17), and that an unreadable file of the person's doesn't
+// push the organization's default aside (#18).
+func TestOrgKindsByWhatAFileIs(t *testing.T) {
+	ws := home(t)
+	const url = "https://blitz.acme.com"
+	_, err := config.SetEnterpriseURL("", url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = config.SetEnterpriseURL("", "") })
+	org := config.EnterpriseDir("", url)
+	data, err := json.Marshal(map[string]any{"policy": map[string]any{"connectors": map[string]any{"own": true, "kinds": []string{"postgres"}}}})
+	require.NoError(t, err)
+	write(t, filepath.Join(org, "policy.json"), string(data))
+	_, err = config.Load("")
+	require.NoError(t, err)
+	pg := "kind: source\nname: %s\ntype: postgres\nhost: db\nport: 5432\nuser: u\npassword: p\ndatabase: d\n"
+	bq := "kind: source\nname: %s\ntype: bigquery\nproject: p\n"
+	named := func(f, name string) string { return strings.ReplaceAll(f, "%s", name) }
+	cases := []struct {
+		name, text, problem string
+	}{
+		{"postgres, no comment", named(pg, "a"), ""},
+		{"postgres, with its comment", "# kind: postgres\n" + named(pg, "b"), ""},
+		{"bigquery, no comment", named(bq, "c"), "doesn't allow bigquery connections"},
+		{"bigquery, saying postgres", "# kind: postgres\n" + named(bq, "d"), "doesn't allow bigquery connections"},
+		{"postgres and bigquery", named(pg, "e") + "---\n" + named(bq, "e2"), "doesn't allow bigquery connections"},
+		{"a source with no type", "kind: source\nname: f\nhost: db\n", "can't be told"},
+		{"a document with no kind", "sources:\n  g:\n    kind: bigquery\n", "can't be told"},
+		{"not YAML", "kind: [\n", "can't be told"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
+			require.NoError(t, os.RemoveAll(dir))
+			write(t, filepath.Join(dir, "x.yaml"), c.text)
+			d := connectors.Dirs{Workspace: ws}
+			cat := connectors.Load("", ws)
+			list := connectors.List(cat, d)
+			require.Len(t, list, 1)
+			var warned []string
+			connectors.With(nil, connectors.ServeOptions{Dirs: d, Warn: func(s string) { warned = append(warned, s) }})
+			if c.problem == "" {
+				assert.Empty(t, list[0].Problem)
+				assert.Empty(t, warned)
+				return
+			}
+			assert.NotEmpty(t, list[0].Problem) // a file that isn't YAML says so first
+			require.NotEmpty(t, warned, "not served")
+			assert.Contains(t, warned[0], c.problem)
+		})
+	}
+
+	t.Run("saving a custom file", func(t *testing.T) {
+		d := connectors.Dirs{Workspace: ws}
+		cat := connectors.Load("", ws)
+		_, refused, err := connectors.Save(cat, d, connectors.Connection{Name: "custom", Category: "databases", Scope: connectors.ScopeWorkspace, Custom: true, Text: "# kind: postgres\n" + named(bq, "custom")}, nil, "")
+		require.NoError(t, err)
+		assert.Contains(t, refused, "your organization doesn't allow bigquery connections")
+	})
+
+	t.Run("an unreadable file of the person's", func(t *testing.T) {
+		dir := filepath.Join(connectors.WorkspaceDir(ws), "databases")
+		require.NoError(t, os.RemoveAll(dir))
+		write(t, filepath.Join(org, "catalog", "default", "connectors", "databases", "notes.yaml"), named(pg, "notes"))
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.Symlink(filepath.Join(dir, "gone"), filepath.Join(dir, "notes.yaml")))
+		d := connectors.Dirs{Workspace: ws}
+		for _, c := range connectors.List(connectors.Load("", ws), d) {
+			if c.Scope == connectors.ScopeOrgDefault {
+				assert.Empty(t, c.Problem, "the organization's default is used")
+			}
+		}
+	})
 }
