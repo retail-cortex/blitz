@@ -31,6 +31,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -471,7 +472,9 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		w.runsMu.Unlock()
 	}()
 
-	eff := workers.Apply(wk, w.workerPolicy())
+	policy := w.workerPolicy()
+	eff := workers.Apply(wk, policy)
+	hints := w.jobLimitHints(wk, policy)
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}
 
@@ -543,13 +546,33 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 			runErr = fmt.Errorf("there's no workflow %q", wk.Flow)
 			break
 		}
-		fctx := withFlowOrigin(withFlowStorage(runCtx, st), "worker")
+		// Its steps are the run's: within its limits, on its agent and
+		// model, their changes its checkpoint (WK-43, WK-54).
+		job := &jobRun{id: run.ID, agent: wk.Agent, opts: opts, limits: hints, budget: runtime.NewBudget(eff.Limits.MaxTurns, nil)}
+		fctx, cancel := context.WithCancelCause(withJobRun(withFlowOrigin(withFlowStorage(runCtx, st), "worker"), job))
+		defer cancel(nil)
 		if eff.Limits.Timeout > 0 {
-			var cancel context.CancelFunc
-			fctx, cancel = context.WithTimeout(fctx, eff.Limits.Timeout)
-			defer cancel()
+			var stop context.CancelFunc
+			fctx, stop = context.WithTimeoutCause(fctx, eff.Limits.Timeout, fmt.Errorf("%w (%s)", api.ErrTimeLimit, eff.Limits.Timeout))
+			defer stop()
 		}
-		_, runErr = w.runFlow(fctx, rec.ID, f, wk.Prompt, on)
+		flowOn := on
+		if max := eff.Limits.MaxCostUSD; max > 0 {
+			spent := w.costSince(rec.ID, w.engine.Usage(rec.ID).CostUSD)
+			flowOn = func(e api.Event) {
+				on(e)
+				if spent() > max {
+					job.costHit.Store(true)
+					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, max))
+				}
+			}
+		}
+		_, runErr = w.runFlow(fctx, rec.ID, f, wk.Prompt, flowOn)
+		if cause := context.Cause(fctx); runErr != nil && api.IsLimit(cause) {
+			// Stopped by the run's time or cost limit: said as that limit,
+			// with what set it.
+			runErr = w.limitSource(cause, turnLimits{}, false, hints)
+		}
 	default:
 		text, prompt := wk.Prompt, fmt.Sprintf(unattendedPreamble, name)+wk.Prompt
 		if o.Prompt != "" {
@@ -558,7 +581,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		_, runErr = w.run(runCtx, rec.ID, turn{Turn: api.Turn{
 			Text: text, Prompt: prompt,
 			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,
-		}, run: run.ID}, on, st, opts...)
+		}, run: run.ID, limits: hints}, on, st, opts...)
 	}
 
 	w.auditTurnEnd(rec.ID, runErr)
@@ -585,6 +608,50 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		w.notifyRun(run)
 	}
 	return run, nil
+}
+
+// jobRun is the job's run a workflow's steps are part of (spec_023
+// WK-43): each agent step's turn is the run's (its changes go into the
+// run's checkpoint), on the job's agent and model unless the step names
+// its own, and its model calls count toward the run's budget.
+type jobRun struct {
+	id     string
+	agent  string               // the job's agent ("": the active one)
+	opts   []runtime.ExecOption // the job's agent and model
+	limits limitHints
+	budget *runtime.Budget
+	// costHit is set once the run's spend passed its max_cost_usd.
+	costHit atomic.Bool
+}
+
+type jobRunKey struct{}
+
+// withJobRun is ctx running the steps of job's workflow.
+func withJobRun(ctx context.Context, job *jobRun) context.Context {
+	return context.WithValue(ctx, jobRunKey{}, job)
+}
+
+// jobRunFrom is the job's run ctx's workflow steps are part of (nil: none).
+func jobRunFrom(ctx context.Context) *jobRun {
+	job, _ := ctx.Value(jobRunKey{}).(*jobRun)
+	return job
+}
+
+// turnBudget is the run's model-call budget (nil without a run).
+func (j *jobRun) turnBudget() *runtime.Budget {
+	if j == nil {
+		return nil
+	}
+	return j.budget
+}
+
+// stoppedRun reports whether err is the run reaching its own limit, not
+// the step's turn reaching the turn's.
+func (j *jobRun) stoppedRun(err error) bool {
+	if j == nil {
+		return false
+	}
+	return errors.Is(err, api.ErrMaxTurns) && j.budget.Exhausted() || errors.Is(err, api.ErrCostLimit) && j.costHit.Load()
 }
 
 // runFailed records run as failed with err before it started, and tells

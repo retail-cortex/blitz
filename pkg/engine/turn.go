@@ -181,9 +181,9 @@ type turn struct {
 	// run is the worker run the turn is: its file changes are the run's
 	// own checkpoint (blitz workers undo), not the sessions' /undo.
 	run string
-	// ownLimit says what set the turn's own MaxTurns, for a turn stopped
-	// at it ("": nothing to say).
-	ownLimit string
+	// limits say where its own MaxTurns and MaxCostUSD came from, for
+	// the error when it stops at one.
+	limits limitHints
 }
 
 // run is Run recording the transcript in st, which holds the session as
@@ -298,9 +298,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		}
 		if t.MaxCostUSD > 0 {
 			inner := on
+			spent := w.costSince(sessionID, res.Before.CostUSD)
 			on = func(e api.Event) {
 				inner(e)
-				if w.engine.Usage(sessionID).CostUSD-res.Before.CostUSD > t.MaxCostUSD {
+				if spent() > t.MaxCostUSD {
 					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, t.MaxCostUSD))
 				}
 			}
@@ -346,13 +347,17 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		untracked = w.untrackedNow(ctx)
 	}
 	var err error
+	// The turn's model calls are counted together, across its runs (an
+	// approved plan's, a stop hook's, a goal's and a rule's): max_turns is
+	// the turn's (spec_017 SES-19). A job's workflow step's count toward
+	// the job's run too.
+	job := jobRunFrom(ctx)
+	budget := runtime.NewBudget(t.MaxTurns, job.turnBudget())
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
 		base := append([]runtime.ExecOption(nil), extra...)
-		if t.MaxTurns > 0 {
-			base = append(base, runtime.WithMaxTurns(t.MaxTurns))
-		}
+		base = append(base, runtime.WithBudget(budget))
 		if t.ReadOnly != "" {
 			base = append(base, runtime.WithReadOnly(t.ReadOnly))
 		}
@@ -427,7 +432,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
-	err = w.limitSource(err, lim, tools.Attended(ctx), t.ownLimit)
+	hints := t.limits
+	if job.stoppedRun(err) {
+		// The job's whole run is at its limit, not this step's turn.
+		lim, hints = turnLimits{}, job.limits
+	}
+	err = w.limitSource(err, lim, tools.Attended(ctx), hints)
 	if !t.Aside {
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
@@ -460,6 +470,28 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 	// Too late (the turn collected its unread messages, or none runs): the
 	// caller sends it as the next prompt, already recorded (BL-SVC-10).
 	return w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
+}
+
+// costSince is what the session has spent since its cost was before,
+// less what its background tasks spent meanwhile: they have limits of
+// their own (spec_032 BGA-06), and one started by an earlier turn mustn't
+// use up this turn's (spec_018 WS-29).
+func (w *Workspace) costSince(sessionID string, before float64) func() float64 {
+	tasks := func() float64 {
+		var sum float64
+		for _, t := range w.engine.ListTasks([]string{sessionID}) {
+			sum += t.Usage.CostUSD
+		}
+		return sum
+	}
+	tasksBefore := tasks()
+	return func() float64 {
+		spent := w.engine.Usage(sessionID).CostUSD - before
+		if spent <= 0 {
+			return spent
+		}
+		return spent - (tasks() - tasksBefore)
+	}
 }
 
 // maxStopContinues bounds how often stop hooks can make one prompt go on.

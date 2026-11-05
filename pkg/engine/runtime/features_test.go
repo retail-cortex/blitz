@@ -163,6 +163,47 @@ func TestEngineMaxTurns(t *testing.T) {
 	assert.NoError(t, err, "run within limit failed")
 }
 
+// TestBudgetSpansRuns: runs that share a budget count their model calls
+// together, and a budget within another stops at whichever runs out first.
+func TestBudgetSpansRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		own, outer    int
+		calls         int  // the first run's calls, all within the budgets
+		ownExhausted  bool // the second run is stopped by the budget's own limit
+		secondAllowed int  // model calls the second run makes before it's stopped
+	}{
+		{name: "one budget", own: 3, calls: 2, ownExhausted: true, secondAllowed: 1},
+		{name: "the outer budget runs out first", own: 10, outer: 3, calls: 2, secondAllowed: 1},
+		{name: "the own budget runs out first", own: 3, outer: 10, calls: 2, ownExhausted: true, secondAllowed: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var contents []*genai.Content
+			for i := 0; i < tc.calls-1; i++ {
+				contents = append(contents, toolCall("list_files", map[string]any{}))
+			}
+			contents = append(contents, textContent("done"))
+			for i := 0; i < 6; i++ {
+				contents = append(contents, toolCall("list_files", map[string]any{}))
+			}
+			f := newEngineWith(t, fixtureOpts{}, contents...)
+			var outer *Budget
+			if tc.outer > 0 {
+				outer = NewBudget(tc.outer, nil)
+			}
+			b := NewBudget(tc.own, outer)
+			_, err := functionResponses(t, f.eng, "s", "first", WithBudget(b))
+			require.NoError(t, err)
+			require.Equal(t, tc.calls, f.llm.Calls())
+			_, err = functionResponses(t, f.eng, "s", "second", WithBudget(b))
+			require.ErrorIs(t, err, api.ErrMaxTurns)
+			assert.Equal(t, tc.calls+tc.secondAllowed, f.llm.Calls(), "the second run's calls count after the first's")
+			assert.Equal(t, tc.ownExhausted, b.Exhausted())
+			assert.Equal(t, tc.outer > 0 && !tc.ownExhausted, outer.Exhausted())
+		})
+	}
+}
+
 func TestEngineResumesPersistedSession(t *testing.T) {
 	dir := t.TempDir()
 	svc1, _ := cpsession.NewPersistentService(dir)

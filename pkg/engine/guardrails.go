@@ -33,6 +33,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -127,31 +128,32 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 	return lim
 }
 
-// limitSource adds to a turn stopped at a limit a guardrail set which
-// guardrail set it and how to change it (or that its file has a problem,
-// so its defaults run), and, where someone can answer (not a job's run,
-// an eval, a skill's scenario or the reflection), that "continue" carries
-// on: a long coding turn reaches 200 model calls easily, and "maximum
-// turns reached" alone sends people looking for a setting. own says what
-// set the turn's own model-call limit, when no guardrail did ("": none).
-func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own string) error {
+// limitHints say what set a turn's own limits when no guardrail did (a
+// job's file, the jobs' defaults or cap, an eval's fixed limit, [harness]
+// max_cost_usd), and how to change them; "" says nothing.
+type limitHints struct{ turns, cost string }
+
+// limitSource adds to a turn stopped at a limit what set it and how to
+// change it: the guardrail that set it (or that its file has a problem,
+// so its defaults run), else the turn's own hint; and, where someone can
+// answer (not a job's run, an eval, a skill's scenario or the
+// reflection), that "continue" carries on: a long coding turn reaches 200
+// model calls easily, and "maximum turns reached" alone sends people
+// looking for a setting.
+func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own limitHints) error {
 	var g *gates.Guardrail
-	var key string
+	var key, hint string
 	switch {
 	case errors.Is(err, api.ErrMaxTurns):
-		g, key = lim.turns, "max_turns"
+		g, key, hint = lim.turns, "max_turns", own.turns
 	case errors.Is(err, api.ErrCostLimit):
-		g, key = lim.cost, "max_cost_usd"
-	}
-	if g == nil {
-		if own != "" && errors.Is(err, api.ErrMaxTurns) {
-			return fmt.Errorf("%w: %s", err, own)
-		}
+		g, key, hint = lim.cost, "max_cost_usd", own.cost
+	default:
 		return err
 	}
 	rel := w.workspaceRel
-	var hint string
 	switch {
+	case g == nil:
 	case g.Path == "" && lim.broken != nil:
 		hint = i18n.T("guardrail.limit_broken", "name", g.Name, "key", key, "path", rel(lim.broken.Path),
 			"problem", strings.Join(strings.Fields(lim.broken.Problem), " "))
@@ -160,6 +162,9 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own st
 			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
 	default:
 		hint = i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", rel(g.Path))
+	}
+	if hint == "" {
+		return err
 	}
 	if attended {
 		hint += " " + i18n.T("guardrail.limit_continue")
@@ -197,6 +202,29 @@ func (w *Workspace) limitSetting(gr gates.Guardrail, key string) string {
 		return i18n.T("guardrail.limit_setting_default", "key", key, "path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
 	}
 	return i18n.T("guardrail.limit_setting", "key", key, "path", w.workspaceRel(gr.Path))
+}
+
+// jobLimitHints say where a job's run's limits came from: the job's
+// WORKER.md, the jobs' defaults or their cap (Settings › Library › Jobs).
+func (w *Workspace) jobLimitHints(wk *workers.Worker, p config.WorkerPolicy) limitHints {
+	path := w.workspaceRel(wk.Path)
+	hint := func(key string, own, def, cap float64) string {
+		set := own
+		if set == 0 {
+			set = def
+		}
+		switch {
+		case cap > 0 && set > cap:
+			return i18n.T("guardrail.limit_job_cap", "key", key)
+		case own == 0:
+			return i18n.T("guardrail.limit_job_default", "key", key, "path", path)
+		}
+		return i18n.T("guardrail.limit_job", "key", key, "path", path)
+	}
+	return limitHints{
+		turns: hint("max_turns", float64(wk.Limits.MaxTurns), float64(p.DefaultMaxTurns), float64(p.MaxTurns)),
+		cost:  hint("max_cost_usd", wk.Limits.MaxCostUSD, p.DefaultMaxCostUSD, p.MaxCostUSD),
+	}
 }
 
 // guardsFor are the guardrails of the session's turn. A call outside one

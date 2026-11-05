@@ -103,8 +103,9 @@ type runState struct {
 	// failures counts the run's failed calls by tool, arguments and error
 	// (*atomic.Int32), to tell the agent when it repeats one.
 	failures sync.Map
-	// parent is the run a sub-agent with its own budget was called from:
-	// its model calls count toward each run up the chain too.
+	// parent is the run a sub-agent with its own budget was called from,
+	// or a budget several runs share (see Budget): its model calls count
+	// toward each run up the chain too.
 	parent *runState
 }
 
@@ -119,6 +120,36 @@ func (st *runState) child(maxTurns int) *runState {
 		c.agent, c.model, c.models, c.taskID = st.agent, st.model, st.models, st.taskID
 	}
 	return c
+}
+
+// Budget is a model-call budget several Execute calls share: the runs of
+// one turn (its first, an approved plan's, a stop hook's, a goal's or a
+// rule's continuation), or a job's workflow steps.
+type Budget struct{ st *runState }
+
+// NewBudget is a budget of max model calls (0: no limit of its own) whose
+// calls count toward within too (nil: none).
+func NewBudget(max int, within *Budget) *Budget {
+	b := &Budget{st: &runState{maxTurns: max}}
+	if within != nil {
+		b.st.parent = within.st
+	}
+	return b
+}
+
+// Exhausted reports whether a run was stopped at this budget's own limit
+// (not one it counts toward).
+func (b *Budget) Exhausted() bool {
+	return b != nil && b.st.maxTurns > 0 && b.st.turns.Load() > int64(b.st.maxTurns)
+}
+
+// WithBudget counts the run's model calls toward b (nil: none).
+func WithBudget(b *Budget) ExecOption {
+	return func(s *runState) {
+		if b != nil {
+			s.parent = b.st
+		}
+	}
 }
 
 // repeatWarnAt is how many times the same call may fail the same way in a

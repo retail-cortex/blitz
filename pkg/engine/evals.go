@@ -319,7 +319,11 @@ func (w *Workspace) unattended(ctx context.Context, label, agent string, t api.T
 		own = i18n.T("guardrail.limit_eval", "n", evalMaxTurns)
 	}
 	t.MaxTurns, t.Timeout = cmp.Or(t.MaxTurns, evalMaxTurns), cmp.Or(t.Timeout, evalTimeout)
-	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: t, ownLimit: own}, on, st, runtime.WithAgent(agent))
+	// An eval's or a scenario's model-call limit is fixed; a scheduled
+	// reflection's cost is [harness] max_cost_usd, the only one of them
+	// with a cost limit.
+	hints := limitHints{turns: own, cost: i18n.T("guardrail.limit_harness")}
+	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: t, limits: hints}, on, st, runtime.WithAgent(agent))
 	costUSD = w.engine.Usage(rec.ID).CostUSD
 	mu.Lock()
 	defer mu.Unlock()
