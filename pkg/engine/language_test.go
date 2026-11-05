@@ -17,6 +17,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,39 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 
 	_, err = w.OpenDocument("w", "../out.go", "", 1, nil)
 	assert.ErrorIs(t, err, ErrBadPath)
+}
+
+// Whether the project's files may act (language servers, a browser
+// profile) follows trust as it is now, and a run that trusts them
+// (--trust-project) counts (N26 engine-top-2#20).
+func TestProjectTrusted(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		o      Options
+		trust  bool // trusted after it opened
+		forget bool // trusted, then forgotten
+		want   bool
+	}{
+		{name: "waiting for trust", want: false},
+		{name: "this run trusts it", o: Options{TrustProject: true}, want: true},
+		{name: "trusted since", trust: true, want: true},
+		{name: "trusted, then forgotten", trust: true, forget: true, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws := projectWorkspace(t)
+			w := openProject(t, ws, tc.o)
+			defer w.Close()
+			if tc.trust {
+				require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
+			}
+			if tc.forget {
+				w.project.State = api.TrustTrusted // as if it opened trusted
+				require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, false))
+			}
+			assert.Equal(t, tc.want, w.LanguageTrusted())
+			assert.Equal(t, tc.want, w.projectTrusted())
+		})
+	}
 }
 
 // A Markdown file's code block opens as a document of its own; one

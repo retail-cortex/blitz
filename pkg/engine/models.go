@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -144,8 +145,13 @@ func (w *Workspace) saveAgentModel(agent, ref string) api.Saved {
 		path, err := config.SaveAgentModel(dir, agent, ref)
 		return api.Saved{Path: path, Err: err}
 	}
-	global, _ := config.Load("")
-	masking := global != nil && global.AgentModels[agent] != ""
+	global, err := config.Load("")
+	if err != nil {
+		// Unknown whether a global pin needs masking: unpinning blind could
+		// let it come back at the next open.
+		return api.Saved{Err: fmt.Errorf("reading the global settings: %w", err)}
+	}
+	masking := global.AgentModels[agent] != ""
 	path, err := config.UnpinAgentModel(dir, agent, masking)
 	return api.Saved{Path: path, Err: err}
 }

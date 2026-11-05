@@ -251,7 +251,7 @@ func (w *Workspace) runScenario(ctx context.Context, s *skills.Skill, sc skills.
 	}
 	r.Status = api.EvalPass
 	if why != "" || near < sc.Threshold {
-		r.Status = evals.Fail
+		r.Status = api.EvalFail
 	}
 	return r
 }

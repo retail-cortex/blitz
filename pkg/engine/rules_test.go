@@ -189,3 +189,27 @@ func lastPrompt(llm *runtime.MockLLM) string {
 	}
 	return ""
 }
+
+// [memory] enabled = false leaves out instruction rules, as it does
+// instruction files, but gates still judge (N26 engine-top-2#4).
+func TestRulesWithMemoryOff(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		memory bool
+		want   []string
+	}{
+		{name: "memory on", memory: true, want: []string{"polite", "style"}},
+		{name: "memory off", memory: false, want: []string{"polite"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Memory.Enabled = tc.memory })
+			writeRule(t, w, "polite", "---\nwhen: after_agent\naction: block\n---\nThe answer is polite.\n")
+			writeRule(t, w, "style", "---\ndescription: House style\n---\nUse short sentences.\n")
+			var got []string
+			for _, r := range w.Rules() {
+				got = append(got, r.Name)
+			}
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}

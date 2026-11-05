@@ -276,7 +276,9 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 	defer func() {
 		st := store.State()
 		st.LastCheck, st.LastCost, st.Skipped, st.Judged, st.Errors = time.Now(), costUSD, "", judged, failed
-		_ = store.SetState(st)
+		if err := store.SetState(st); err != nil {
+			w.warn("saving the health check's state: " + err.Error())
+		}
 	}()
 	if len(items) == 0 {
 		return 0, 0, nil
@@ -442,7 +444,7 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 		in.Workflows = append(in.Workflows, s)
 	}
 
-	list, _ := w.ListWorkers()
+	list, _ := w.listWorkers()
 	for _, wk := range list {
 		s := health.Source{Name: wk.Name, Path: wk.Path, Detail: wk.Workflow, Hash: wk.Hash, Off: wk.State != api.StateEnabled}
 		if len(wk.Problems) > 0 && wk.State != api.StateEnabled {
@@ -476,7 +478,6 @@ func (w *Workspace) healthInputs(ctx context.Context) health.Inputs {
 			in.Audit = append(in.Audit, e)
 		}
 	}
-	_ = ctx
 	return in
 }
 

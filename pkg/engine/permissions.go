@@ -16,6 +16,9 @@ package engine
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -87,13 +90,26 @@ func (w *Workspace) AddPermissionRule(effect, rule string, save api.Scope) (api.
 }
 
 // RemovePermissionRule removes a rule (any effect) for this session and,
-// with a scope, from that settings file.
+// with a scope, from that settings file. A project file's rule or a
+// built-in one isn't removed: it's refused, naming where it's changed
+// (spec_031 PRJ-41).
 func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.PermissionChange, error) {
-	out := api.PermissionChange{Rule: rule}
+	out := api.PermissionChange{Rule: strings.TrimSpace(rule)}
 	if r, err := tools.ParsePermissionRule(tools.EffectDeny, rule, ""); err == nil {
 		out.Rule = r.String()
 	}
-	out.Removed = w.tools.Rules().Remove(rule, "")
+	for _, r := range w.tools.Rules().List() {
+		if r.String() != out.Rule {
+			continue
+		}
+		switch r.Source {
+		case tools.SourceProject:
+			return out, fmt.Errorf("%s comes from the project's %s: change it there", out.Rule, filepath.Join(".blitz", "settings.toml"))
+		case tools.SourceBuiltIn:
+			return out, fmt.Errorf("%s is one of the built-in read-only rules: turn them off with read_only_defaults = false under [permissions]", out.Rule)
+		}
+	}
+	out.Removed = w.tools.Rules().Remove(rule, "", tools.SourceConfig, tools.SourceFlag, tools.SourceSession)
 	if save != api.ScopeSession {
 		out.Saved.Path, _, out.Saved.Err = config.RemovePermissionRule("", w.scopeDir(save), out.Rule)
 		_ = w.reloadSavedPermissions() // the rule is gone already; it warns

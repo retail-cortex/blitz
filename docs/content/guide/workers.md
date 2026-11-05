@@ -90,6 +90,8 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 `[workers.policy]` in your settings governs every job: which kinds of permission are allowed at all, the limits a job that sets none gets (50 calls, $1, 30 minutes), an optional cap on what one may ask for (`max_turns`, `max_cost_usd`, `max_timeout`; none by default since v0.8.4, so a job may set more than the defaults), and how many runs at once across workspaces (`max_concurrent`, 2).
 
+A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Library › Jobs**, or the guardrail's file.
+
 ## Enabling, editing and running
 
 - **Rewrite with AI:** in the job form, **Rewrite with AI** turns rough instructions into ones that run well unattended. It names the sources, says exactly what file to write and in what format, and says what to do when a step fails. It also suggests the narrowest permissions those instructions need. You review it first: **Use these** fills in the form, **Keep mine** leaves it as it was, and nothing is saved until you Save.

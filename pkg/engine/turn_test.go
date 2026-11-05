@@ -17,9 +17,14 @@ package engine
 import (
 	"context"
 	"errors"
+	"iter"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -248,6 +253,118 @@ func TestRunWithImagesAndFetchGrants(t *testing.T) {
 	assert.Equal(t, 1, inline, "the image was sent")
 	assert.Equal(t, "\n[images: shot.png]", AttachmentNote([]*images.Image{img}))
 	assert.Equal(t, "", AttachmentNote(nil))
+}
+
+// A turn's max_turns counts its model calls across its runs: a stop
+// hook's continuations don't each start from zero (spec_017 SES-19; N26
+// engine-top-2#1).
+func TestMaxTurnsSpansTheTurn(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		maxTurns int
+		calls    int
+		limited  bool
+	}{
+		{name: "stopped across continuations", maxTurns: 3, calls: 3, limited: true},
+		{name: "within the limit", maxTurns: 10, calls: 1 + maxStopContinues},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, llm := openTestWith(t, func(c *config.Config) {
+				c.Hooks.Stop = []config.HookConfig{{Command: `cat >/dev/null; echo '{"continue": true}'`}}
+			})
+			_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "go", MaxTurns: tc.maxTurns}, ignore)
+			if tc.limited {
+				require.ErrorIs(t, err, api.ErrMaxTurns)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.calls, llm.Calls())
+		})
+	}
+}
+
+// A stop hook still asking to go on at the cap says the turn stops there
+// (N26 engine-top-2#15).
+func TestStopHookCapSaysSo(t *testing.T) {
+	for _, tc := range []struct {
+		name, hook string
+		notice     bool
+	}{
+		{name: "always asks", hook: `cat >/dev/null; echo '{"continue": true}'`, notice: true},
+		{name: "asks once", hook: `input=$(cat); case "$input" in *'"stop_hook_active":true'*) ;; *) echo '{"continue": true}';; esac`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Hooks.Stop = []config.HookConfig{{Command: tc.hook}} })
+			var notices []string
+			_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "go"}, func(e api.Event) {
+				if e.Notice != nil {
+					notices = append(notices, e.Notice.Text)
+				}
+			})
+			require.NoError(t, err)
+			said := slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, "stop hook still asks") })
+			assert.Equal(t, tc.notice, said, "notices %q", notices)
+		})
+	}
+}
+
+// heldModel answers once released, with a priced usage.
+type heldModel struct {
+	release chan struct{}
+	once    sync.Once
+}
+
+func (m *heldModel) Name() string { return "gemini-3.8-flash" }
+func (m *heldModel) open()        { m.once.Do(func() { close(m.release) }) }
+func (m *heldModel) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		select {
+		case <-m.release:
+			yield(&model.LLMResponse{
+				Content:       genai.NewContentFromText("checked", genai.RoleModel),
+				UsageMetadata: &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100000, CandidatesTokenCount: 1000},
+			}, nil)
+		case <-ctx.Done():
+			yield(nil, ctx.Err())
+		}
+	}
+}
+
+// A background task an earlier turn started spends on its own account:
+// what it spends while the next turn runs doesn't count toward that
+// turn's cost limit (spec_018 WS-29, spec_032 BGA-06; N26 engine-top-2#9).
+func TestCostLimitLeavesOutBackgroundTasks(t *testing.T) {
+	start := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "invoke_agent",
+		Args: map[string]any{"agent_name": "checker", "prompt": "check", "background": true}}}}}
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	w, _ := openTestWith(t, nil, start, text("started"), list, list, text("done"))
+	held := &heldModel{release: make(chan struct{})}
+	t.Cleanup(held.open)
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return held, nil }
+	require.NoError(t, os.MkdirAll(w.ProjectAgentsDir(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.ProjectAgentsDir(), "checker.md"),
+		[]byte("---\nname: checker\ndescription: Checks\ntools: []\ndefault_model: gemini-3.8-flash\n---\nYou check.\n"), 0o644))
+	s := newSession(t, w)
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "start a check"}, ignore)
+	require.NoError(t, err)
+	tasks := w.engine.ListTasks([]string{s.ID})
+	require.Len(t, tasks, 1)
+
+	// The task spends while the next turn runs; the turn itself spends
+	// nothing (the main model reports no usage).
+	spentByTask := func() bool {
+		list := w.engine.ListTasks([]string{s.ID})
+		return len(list) == 1 && list[0].Usage.CostUSD > 0
+	}
+	first := true
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "look around", MaxCostUSD: 1e-9}, func(api.Event) {
+		if first {
+			first = false
+			held.open()
+			require.Eventually(t, spentByTask, 2*time.Second, 5*time.Millisecond)
+		}
+	})
+	assert.NoError(t, err, "the task's spending stopped the turn")
 }
 
 // A stop hook that asks to go on without saying why gets a default

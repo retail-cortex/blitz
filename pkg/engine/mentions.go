@@ -24,6 +24,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
@@ -35,6 +37,25 @@ const (
 	mentionMaxTotal   = 256 << 10
 	mentionMaxEntries = 200 // of one folder's listing
 )
+
+// guardResource is an @server:uri resource's text after the tool-result
+// guardrails, as read_mcp_resource's would be (spec_041 GT-22, GT-24):
+// injected instructions redacted, a warning put first, or the whole
+// withheld.
+func (w *Workspace) guardResource(ctx context.Context, content string) string {
+	v := guard{w}.ToolResult(ctx, runtime.GuardCall{Session: audit.SessionFrom(ctx), Agent: w.turnAgent(ctx), Tool: "read_mcp_resource"}, map[string]any{"content": content})
+	if v.Result == nil {
+		return content
+	}
+	if e, ok := v.Result["error"].(string); ok {
+		return e
+	}
+	text, _ := v.Result["content"].(string)
+	if note, ok := v.Result["guardrail"].(string); ok {
+		text = note + "\n\n" + text
+	}
+	return text
+}
 
 // withMentions adds what the prompt's @paths name (text as typed) to the
 // prompt for the agent: a file's content (up to mentionMaxBytes, else its
@@ -56,7 +77,7 @@ func (w *Workspace) withMentions(ctx context.Context, prompt, text string) strin
 			if err != nil {
 				block += "(couldn't be read: " + err.Error() + ")\n"
 			} else {
-				block += textutil.Ellipsize(content, min(mentionMaxBytes, mentionMaxTotal-total)) + "\n"
+				block += textutil.Ellipsize(w.guardResource(ctx, content), min(mentionMaxBytes, mentionMaxTotal-total)) + "\n"
 			}
 			block += "</resource>\n"
 			b.WriteString(block)

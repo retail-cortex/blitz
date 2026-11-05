@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -89,11 +91,44 @@ func (w *Workspace) Guardrails() []gates.Guardrail {
 type guardState struct {
 	all  []gates.Guardrail
 	said sync.Map
+	// turns is how many turns in the session hold it (a workflow's
+	// parallel steps share one); guarding.mu guards it.
+	turns int
 }
 
 // guarding holds the current turns' guardrails, by session.
 type guarding struct {
+	mu    sync.Mutex
 	turns sync.Map // session ID → *guardState
+}
+
+// begin is the guardrails of a turn starting in the session: those of a
+// turn already running there (a workflow's parallel steps: one set, its
+// notices once), else read reads them.
+func (g *guarding) begin(sessionID string, read func() []gates.Guardrail) *guardState {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if v, ok := g.turns.Load(sessionID); ok {
+		st := v.(*guardState)
+		st.turns++
+		return st
+	}
+	st := &guardState{all: read(), turns: 1}
+	g.turns.Store(sessionID, st)
+	return st
+}
+
+// end lets go of the session's guardrails once its last turn ends.
+func (g *guarding) end(sessionID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if v, ok := g.turns.Load(sessionID); ok {
+		if st := v.(*guardState); st.turns > 1 {
+			st.turns--
+			return
+		}
+		g.turns.Delete(sessionID)
+	}
 }
 
 // turnLimits are the limits guardrails that set a turn's model-call and
@@ -102,10 +137,10 @@ type guarding struct {
 type turnLimits struct{ turns, cost, broken *gates.Guardrail }
 
 // startGuardrails reads the guardrails for a turn in the session, and
-// applies the limits guardrail's turn and cost limits to t.
-func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
-	st := &guardState{all: w.Guardrails()}
-	w.guards.turns.Store(sessionID, st)
+// applies the limits guardrail's turn and cost limits to t, as they
+// apply to agent, the turn's ("": the active agent).
+func (w *Workspace) startGuardrails(sessionID string, t *api.Turn, agent string) turnLimits {
+	st := w.guards.begin(sessionID, w.Guardrails)
 	var lim turnLimits
 	for _, g := range st.all {
 		if g.Problem != "" && g.For() == gates.BuiltinLimits {
@@ -113,7 +148,7 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 			break
 		}
 	}
-	for _, g := range gates.Active(st.all, gates.StageAction, w.engine.ActiveAgent()) {
+	for _, g := range gates.Active(st.all, gates.StageAction, cmp.Or(agent, w.engine.ActiveAgent())) {
 		if g.Builtin != gates.BuiltinLimits {
 			continue
 		}
@@ -127,31 +162,32 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 	return lim
 }
 
-// limitSource adds to a turn stopped at a limit a guardrail set which
-// guardrail set it and how to change it (or that its file has a problem,
-// so its defaults run), and, where someone can answer (not a job's run,
-// an eval, a skill's scenario or the reflection), that "continue" carries
-// on: a long coding turn reaches 200 model calls easily, and "maximum
-// turns reached" alone sends people looking for a setting. own says what
-// set the turn's own model-call limit, when no guardrail did ("": none).
-func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own string) error {
+// limitHints say what set a turn's own limits when no guardrail did (a
+// job's file, the jobs' defaults or cap, an eval's fixed limit, [harness]
+// max_cost_usd), and how to change them; "" says nothing.
+type limitHints struct{ turns, cost string }
+
+// limitSource adds to a turn stopped at a limit what set it and how to
+// change it: the guardrail that set it (or that its file has a problem,
+// so its defaults run), else the turn's own hint; and, where someone can
+// answer (not a job's run, an eval, a skill's scenario or the
+// reflection), that "continue" carries on: a long coding turn reaches 200
+// model calls easily, and "maximum turns reached" alone sends people
+// looking for a setting.
+func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own limitHints) error {
 	var g *gates.Guardrail
-	var key string
+	var key, hint string
 	switch {
 	case errors.Is(err, api.ErrMaxTurns):
-		g, key = lim.turns, "max_turns"
+		g, key, hint = lim.turns, "max_turns", own.turns
 	case errors.Is(err, api.ErrCostLimit):
-		g, key = lim.cost, "max_cost_usd"
-	}
-	if g == nil {
-		if own != "" && errors.Is(err, api.ErrMaxTurns) {
-			return fmt.Errorf("%w: %s", err, own)
-		}
+		g, key, hint = lim.cost, "max_cost_usd", own.cost
+	default:
 		return err
 	}
 	rel := w.workspaceRel
-	var hint string
 	switch {
+	case g == nil:
 	case g.Path == "" && lim.broken != nil:
 		hint = i18n.T("guardrail.limit_broken", "name", g.Name, "key", key, "path", rel(lim.broken.Path),
 			"problem", strings.Join(strings.Fields(lim.broken.Problem), " "))
@@ -160,6 +196,9 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own st
 			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
 	default:
 		hint = i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", rel(g.Path))
+	}
+	if hint == "" {
+		return err
 	}
 	if attended {
 		hint += " " + i18n.T("guardrail.limit_continue")
@@ -197,6 +236,29 @@ func (w *Workspace) limitSetting(gr gates.Guardrail, key string) string {
 		return i18n.T("guardrail.limit_setting_default", "key", key, "path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
 	}
 	return i18n.T("guardrail.limit_setting", "key", key, "path", w.workspaceRel(gr.Path))
+}
+
+// jobLimitHints say where a job's run's limits came from: the job's
+// WORKER.md, the jobs' defaults or their cap (Settings › Library › Jobs).
+func (w *Workspace) jobLimitHints(wk *workers.Worker, p config.WorkerPolicy) limitHints {
+	path := w.workspaceRel(wk.Path)
+	hint := func(key string, own, def, cap float64) string {
+		set := own
+		if set == 0 {
+			set = def
+		}
+		switch {
+		case cap > 0 && set > cap:
+			return i18n.T("guardrail.limit_job_cap", "key", key)
+		case own == 0:
+			return i18n.T("guardrail.limit_job_default", "key", key, "path", path)
+		}
+		return i18n.T("guardrail.limit_job", "key", key, "path", path)
+	}
+	return limitHints{
+		turns: hint("max_turns", float64(wk.Limits.MaxTurns), float64(p.DefaultMaxTurns), float64(p.MaxTurns)),
+		cost:  hint("max_cost_usd", wk.Limits.MaxCostUSD, p.DefaultMaxCostUSD, p.MaxCostUSD),
+	}
 }
 
 // guardsFor are the guardrails of the session's turn. A call outside one
@@ -307,7 +369,7 @@ type guard struct{ w *Workspace }
 // external reports whether a tool brings in outside content: the web,
 // the browser, an MCP server, a workflow's call step.
 func (g guard) external(tool string) bool {
-	if slices.Contains([]string{"web_fetch", "web_search", "browser", "mcp_call", "api_call", "a2a_call"}, tool) {
+	if slices.Contains([]string{"web_fetch", "web_search", "browser", "mcp_call", "read_mcp_resource", "api_call", "a2a_call"}, tool) {
 		return true
 	}
 	_, _, ok := g.w.tools.MCP().Lookup(tool)
@@ -583,7 +645,7 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 // order: one that fails, or can't be judged, and blocks refuses the
 // prompt; one that warns says so.
 func (w *Workspace) inputGuardrails(ctx context.Context, sessionID, text string, notice func(string, bool)) error {
-	for _, gr := range gates.Active(w.guardsFor(sessionID).all, gates.StageInput, w.engine.ActiveAgent()) {
+	for _, gr := range gates.Active(w.guardsFor(sessionID).all, gates.StageInput, w.turnAgent(ctx)) {
 		verdict, err := w.judgeGuardrail(ctx, gr, text)
 		switch {
 		case err != nil && gr.Action == gates.Block:

@@ -346,6 +346,9 @@ func TestReflectDue(t *testing.T) {
 			w, _ := openTestWith(t, func(c *config.Config) { c.Harness.ReflectSchedule = tt.schedule })
 			w.saveHarnessState(tt.state)
 			assert.Equal(t, tt.want, w.ReflectDue(now))
+			if tt.name == "not a schedule" {
+				assert.Contains(t, w.harnessState().Skipped, "reflect_schedule can't be read", "why it never runs (N26 engine-top-2#17)")
+			}
 			if tt.name == "first seen: counts from now" {
 				assert.True(t, now.Equal(w.harnessState().LastScheduled), "it starts counting")
 				assert.False(t, w.ReflectDue(now.Add(time.Second)))

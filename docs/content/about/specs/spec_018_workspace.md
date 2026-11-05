@@ -49,6 +49,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 `Turn` fields: `Text`, `Prompt` (sent instead of Text), `Plan`, `ReadOnly` (mode name), `Aside` (/btw), `Accepted`, `Images`, `MaxTurns`, `MaxCostUSD`, `Timeout`, `FetchGrants`, `OnAccepted`, `OnFinished`.
 
 - **WS-29** Limits: `MaxTurns` (model calls; `ErrMaxTurns`), `MaxCostUSD` (checked after every event against the session's cost since the turn began; needs a priced model; `ErrCostLimit`, message "the turn reached its cost limit ($x)"), `Timeout` (`ErrTimeLimit`). The cost and time limits cancel the turn's context with the limit as the cause, and the turn returns that cause. `IsLimit(err)` matches all three; jobs use the same fields for their `limits`.
+- **WS-29a** *2026-11-05 (scan N26-engine-top-2#1, #9: `MaxTurns` counted per run of the turn; a background task an earlier turn started used up the next turn's cost limit).* `MaxTurns` counts the whole turn's model calls (SES-19a). `MaxCostUSD` is checked against the turn's own spend: the session's cost since the turn began less what its background tasks spent meanwhile (they have their own limits, spec_032 BGA-06).
 
 - **WS-20** Unless `Accepted`, the text passes `prompt_submit` hooks first; a refusal returns `*BlockedError{Reason}` with nothing recorded or sent. Accepted prompts are audited (`prompt`).
 - **WS-21** The sent prompt is `Prompt` if set, else `Text`. With `Plan`, the prompt is wrapped by `runtime.PlanPrompt` and the transcript records `/plan <Text>`.

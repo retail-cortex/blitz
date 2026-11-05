@@ -200,6 +200,27 @@ func TestSetScheduleValues(t *testing.T) {
 	assert.Error(t, err)
 	_, err = SetValue("", ws, "harness.reflect_threshold", "-1")
 	assert.Error(t, err, "0 or more")
+	// A schedule that can't be read is refused when it's saved, not left
+	// to never run (N26 engine-top-2#17).
+	for _, tc := range []struct {
+		key, value string
+		ok         bool
+	}{
+		{"health.schedule", "whenever", false},
+		{"harness.reflect_schedule", "every blue moon", false},
+		{"harness.reflect_schedule", "off", true},
+		{"health.schedule", "30 9 * * 1-5", true},
+		{"health.schedule", "", true},
+	} {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			_, err := SetValue("", ws, tc.key, tc.value)
+			if tc.ok {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tc.key)
+			}
+		})
+	}
 }
 
 // The form's provider, model and key are saved together, or not at all.

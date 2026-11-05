@@ -34,7 +34,7 @@ Rules are about the quality of the work. **Guardrails** are about safety and lim
 builtin: limits
 limits:
   max_cost_usd: 2        # per turn (0: no ceiling)
-  max_turns: 40          # model calls per turn (0: no ceiling)
+  max_turns: 40          # model calls per turn, its continuations included (0: no ceiling)
   max_files_changed: 20
   allowed_domains: [example.com]
   commands: [defaults, "dropdb *"]

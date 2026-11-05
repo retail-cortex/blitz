@@ -632,10 +632,10 @@ func (d describer) Describe(ctx context.Context, title, text string) (search.Des
 			}
 		}
 	}
-	if len(input) > maxDescribeChars {
-		input = input[:maxDescribeChars]
-	}
-	reply, served, usage, err := runtime.Ask(ctx, d.llm, instruction, "Path: "+title+"\n\n"+d.redact.String(input))
+	// Redacted before it's cut, so a secret across the cut is still
+	// whole when it's matched; cut on a rune.
+	input = textutil.Ellipsize(d.redact.String(input), maxDescribeChars)
+	reply, served, usage, err := runtime.Ask(ctx, d.llm, instruction, "Path: "+title+"\n\n"+input)
 	if err != nil {
 		return search.Description{}, err
 	}

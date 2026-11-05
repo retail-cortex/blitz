@@ -116,9 +116,11 @@ func TestSuggestions(t *testing.T) {
  {"title": "", "prompt": "dropped: no title"},
  {"title": "Add tests for discounts", "prompt": "Write tests for discount.go."}]
 ` + "```"
+	var ideas *runtime.MockLLM
 	w.newModel = func(_ context.Context, _ *config.Config, ref string) (model.LLM, error) {
 		asked = append(asked, ref)
-		return runtime.NewMockLLM("ideas", text(reply), text(reply)), nil
+		ideas = runtime.NewMockLLM("ideas", text(reply), text(reply))
+		return ideas, nil
 	}
 
 	s := w.Suggestions(ctx)
@@ -146,11 +148,15 @@ func TestSuggestions(t *testing.T) {
 	w.Suggestions(ctx)
 	assert.Len(t, asked, 1, "kept until the conversations change")
 
-	_, err = w.Run(ctx, sess.ID, api.Turn{Text: "and the tests"}, func(api.Event) {})
+	const secret = "sk-abcdefghijklmnopqrstuvwxyz0123456789"
+	_, err = w.Run(ctx, sess.ID, api.Turn{Text: "and the tests, token=" + secret}, func(api.Event) {})
 	require.NoError(t, err)
 	assert.True(t, w.Suggestions(ctx).Pending, "a new message: written again")
 	waitIdeas(t, w)
 	assert.Len(t, asked, 2)
+	require.Len(t, ideas.Requests, 1)
+	assert.Contains(t, requestText(ideas.Requests[0]), "and the tests")
+	assert.NotContains(t, requestText(ideas.Requests[0]), secret, "a key pasted into a chat isn't sent (N26 engine-top-2#12)")
 
 	w.cfg.Suggestions.Ideas = false
 	assert.Equal(t, []api.SuggestionKind{api.SuggestContinue}, kinds(w.Suggestions(ctx)), "ideas off")
