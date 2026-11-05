@@ -25,10 +25,12 @@ import (
 	"regexp"
 	goruntime "runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/mcpauth"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -85,7 +87,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Added MCP server %q to %s.\n", s.Name, path)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("mcp.added", "name", strconv.Quote(s.Name), "path", path))
 			restartHint(cmd.OutOrStdout())
 			return nil
 		},
@@ -110,19 +112,19 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(list) == 0 {
-				fmt.Fprintln(out, "No MCP servers. Add one with: blitz mcp add <name> <command|url>")
+				fmt.Fprintln(out, i18n.T("mcp.cli_none"))
 				return nil
 			}
 			for _, s := range list {
 				state := ""
 				switch {
 				case s.OffHere:
-					state = " (off here)"
+					state = i18n.T("mcp.state_off_here")
 				case s.Disabled:
-					state = " (disabled)"
+					state = i18n.T("mcp.state_disabled")
 				default:
 					if _, err := mcpauth.Load(secrets.Default(config.ConfigDir(g.config)), s.Name); err == nil {
-						state = " (signed in)"
+						state = i18n.T("mcp.state_signed_in")
 					}
 				}
 				if dir == "" {
@@ -149,36 +151,36 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "name:     %s\n", s.Name)
+			fmt.Fprintln(out, i18n.T("mcp.get_name", "value", s.Name))
 			if dir != "" {
-				fmt.Fprintf(out, "scope:    %s\n", s.Scope)
+				fmt.Fprintln(out, i18n.T("mcp.get_scope", "value", s.Scope))
 			}
 			if s.Command != "" {
-				fmt.Fprintf(out, "command:  %s\n", target(s))
+				fmt.Fprintln(out, i18n.T("mcp.get_command", "value", target(s)))
 			} else {
-				fmt.Fprintf(out, "url:      %s\n", s.URL)
+				fmt.Fprintln(out, i18n.T("mcp.get_url", "value", s.URL))
 			}
-			fmt.Fprintf(out, "enabled:  %v\n", !s.Disabled)
+			fmt.Fprintln(out, i18n.T("mcp.get_enabled", "value", !s.Disabled))
 			if s.OffHere {
-				fmt.Fprintln(out, "          (off in this workspace; on elsewhere)")
+				fmt.Fprintln(out, i18n.T("mcp.get_off_here"))
 			}
 			for _, k := range sortedKeys(s.Env) {
-				fmt.Fprintf(out, "env:      %s=%s\n", k, mask(s.Env[k]))
+				fmt.Fprintln(out, i18n.T("mcp.get_env", "name", k, "value", mask(s.Env[k])))
 			}
 			for _, k := range sortedKeys(s.Headers) {
-				fmt.Fprintf(out, "header:   %s: %s\n", k, mask(s.Headers[k]))
+				fmt.Fprintln(out, i18n.T("mcp.get_header", "name", k, "value", mask(s.Headers[k])))
 			}
 			if s.Prefix != "" {
-				fmt.Fprintf(out, "prefix:   %s\n", s.Prefix)
+				fmt.Fprintln(out, i18n.T("mcp.get_prefix", "value", s.Prefix))
 			}
 			if len(s.Agents) > 0 {
-				fmt.Fprintf(out, "agents:   %s\n", strings.Join(s.Agents, ", "))
+				fmt.Fprintln(out, i18n.T("mcp.get_agents", "value", strings.Join(s.Agents, ", ")))
 			}
 			return nil
 		},
 	}
 
-	edit := func(use, short, done string, f func(dir, name string) (string, error)) *cobra.Command {
+	edit := func(use, short, doneKey string, f func(dir, name string) (string, error)) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <name>",
 			Short: short,
@@ -195,15 +197,15 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s MCP server %q in %s.\n", done, args[0], path)
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T(doneKey, "name", strconv.Quote(args[0]), "path", path))
 				restartHint(cmd.OutOrStdout())
 				return nil
 			},
 		}
 	}
-	remove := edit("remove", "Remove an MCP server", "Removed", func(dir, n string) (string, error) { return config.RemoveMCPServer(g.config, dir, n) })
-	enable := edit("enable", "Start an MCP server again (with --workspace, a global one there)", "Enabled", func(dir, n string) (string, error) { return config.SetMCPServerEnabled(g.config, dir, n, true) })
-	disable := edit("disable", "Keep an MCP server configured without starting it (with --workspace, a global one off there alone)", "Disabled", func(dir, n string) (string, error) {
+	remove := edit("remove", "Remove an MCP server", "mcp.removed", func(dir, n string) (string, error) { return config.RemoveMCPServer(g.config, dir, n) })
+	enable := edit("enable", "Start an MCP server again (with --workspace, a global one there)", "mcp.enabled_in", func(dir, n string) (string, error) { return config.SetMCPServerEnabled(g.config, dir, n, true) })
+	disable := edit("disable", "Keep an MCP server configured without starting it (with --workspace, a global one off there alone)", "mcp.disabled_in", func(dir, n string) (string, error) {
 		return config.SetMCPServerEnabled(g.config, dir, n, false)
 	})
 	makeGlobal := &cobra.Command{
@@ -222,7 +224,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Moved MCP server %q to %s: every workspace has it now.\n", args[0], path)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("mcp.made_global", "name", strconv.Quote(args[0]), "path", path))
 			restartHint(cmd.OutOrStdout())
 			return nil
 		},
@@ -265,13 +267,13 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 				}
 			}()
 			show := func(u string) {
-				fmt.Fprintf(out, "Open this address to sign in to %s:\n\n  %s\n\nWaiting for the browser. If it's on another machine, paste the address it ends on here.\n", s.Name, u)
+				fmt.Fprintln(out, i18n.T("mcp.login_open", "name", s.Name, "url", u))
 				openBrowser(u)
 			}
 			if err := mcpauth.Login(ctx, store, s.Name, s.URL, show, pasted); err != nil {
 				return fmt.Errorf("signing in to %s: %w", s.Name, err)
 			}
-			fmt.Fprintf(out, "Signed in to %s; the sign-in is kept in the %s.\n", s.Name, store.Kind())
+			fmt.Fprintln(out, i18n.T("mcp.signed_in", "name", s.Name, "store", store.Kind()))
 			restartHint(out)
 			return nil
 		},
@@ -284,7 +286,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			if err := mcpauth.Forget(secrets.Default(config.ConfigDir(g.config)), args[0]); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Signed out of %s.\n", args[0])
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("mcp.signed_out", "name", args[0]))
 			return nil
 		},
 	}
@@ -411,6 +413,6 @@ func sortedKeys(m map[string]string) []string {
 // workspaces open again.
 func restartHint(out io.Writer) {
 	if socket.Running(socket.DefaultSocket()) {
-		fmt.Fprintln(out, "The Blitz service picks it up when it restarts: blitz service restart (or the desktop app's Settings › Service).")
+		fmt.Fprintln(out, i18n.T("mcp.restart_hint"))
 	}
 }

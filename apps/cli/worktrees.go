@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/worktree"
 	"github.com/spf13/cobra"
 )
@@ -45,7 +46,7 @@ func enterWorktree(g *globalFlags) error {
 		return fmt.Errorf("--worktree: %w", err)
 	}
 	g.dir = w.Path
-	fmt.Fprintf(os.Stderr, "%sIn the worktree %s, on the branch %s (blitz worktrees remove %s when done).%s\n", tui.Dim, w.Path, w.Branch, w.Name, tui.Reset)
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("worktree.in", "path", w.Path, "branch", w.Branch, "name", w.Name), tui.Reset)
 	return nil
 }
 
@@ -70,16 +71,16 @@ func newWorktreesCommand(g *globalFlags) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(all) == 0 {
-				fmt.Fprintln(out, "No worktrees. Start one with: blitz --worktree[=name]")
+				fmt.Fprintln(out, i18n.T("worktree.none"))
 				return nil
 			}
 			for _, w := range all {
 				state := ""
 				switch {
 				case w.Missing:
-					state = " (folder gone: blitz worktrees prune)"
+					state = i18n.T("worktree.state_gone")
 				case worktree.Dirty(w):
-					state = " (changes not committed)"
+					state = i18n.T("worktree.state_dirty")
 				}
 				fmt.Fprintf(out, "%s\t%s\t%s%s\n", w.Name, w.Branch, w.Path, state)
 			}
@@ -96,7 +97,7 @@ func newWorktreesCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed the worktree %s; its branch %s stays.\n", w.Name, w.Branch)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("worktree.removed", "name", w.Name, "branch", w.Branch))
 			return nil
 		},
 	}
@@ -109,7 +110,7 @@ func newWorktreesCommand(g *globalFlags) *cobra.Command {
 			if err := worktree.Prune(dir()); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Pruned.")
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("worktree.pruned"))
 			return nil
 		},
 	}

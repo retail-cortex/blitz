@@ -36,15 +36,23 @@ var wordRE = regexp.MustCompile(`[A-Za-z]{3,}`)
 // command (not shown).
 var lintAllowed = []string{"Blitz Go (Google ADK) version", "Blitz Go", "Ctrl+C", "mcp:", "display notification %s with title %s"}
 
-// TestNoUntranslatedOutput fails when user-facing output in the REPL, or
-// in the subcommands translated so far (spec_053 EN-51a), is a literal
-// English string instead of an i18n.T lookup: an argument to a print or a
-// Sprintf, or a piece of one joined with +. Doctor, --help and CLI errors
-// are deliberately English and not scanned.
+// English sources: doctor's report (English by policy, spec_020 CLI-30)
+// and headless.go's stream-json protocol, which programs read.
+var lintEnglish = map[string]bool{"doctor.go": true, "headless.go": true}
+
+// TestNoUntranslatedOutput fails when user-facing output in the REPL or a
+// subcommand (spec_020 CLI-30b) is a literal English string instead of an
+// i18n.T lookup: an argument to a print or a Sprintf, or a piece of one
+// joined with +. Doctor, --help, errors and stream-json are deliberately
+// English: errors and --help aren't printed with fmt, so aren't scanned.
 func TestNoUntranslatedOutput(t *testing.T) {
 	files, _ := filepath.Glob("*.go")
-	for _, f := range []string{"main.go", "enterprise.go", "enterprisesync.go", "agents.go", "auth.go"} {
-		files = append(files, filepath.Join("..", "..", f))
+	cli, _ := filepath.Glob(filepath.Join("..", "..", "*.go"))
+	require.Greater(t, len(cli), 20, "the CLI's sources aren't in the test's data")
+	for _, f := range cli {
+		if !lintEnglish[filepath.Base(f)] {
+			files = append(files, f)
+		}
 	}
 	printers := map[string]bool{"Print": true, "Println": true, "Printf": true, "Fprint": true, "Fprintln": true, "Fprintf": true, "Sprintf": true}
 	fset := token.NewFileSet()

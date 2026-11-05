@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/spf13/cobra"
 )
@@ -151,7 +152,7 @@ func workersStop(cmd *cobra.Command, g *globalFlags, which string) error {
 			if err := ops.StopWorkerRun(r.ID); err != nil {
 				return workerErr(err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Stopping %s (run %s).\n", r.Worker, r.ID)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.stopping", "name", r.Worker, "run", r.ID))
 			return nil
 		}
 	}
@@ -165,7 +166,7 @@ func workersUndo(cmd *cobra.Command, g *globalFlags, runID string, force bool) e
 	}
 	restored, err := ops.UndoWorkerRun(runID, force)
 	if len(restored) > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "Restored %s.\n", strings.Join(restored, ", "))
+		fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.restored", "files", strings.Join(restored, ", ")))
 	}
 	if errors.Is(err, api.ErrUndoConflict) || errors.Is(err, api.ErrNothingToUndo) {
 		return withCode(exitUsage, err)
@@ -184,13 +185,13 @@ func workersList(cmd *cobra.Command, g *globalFlags) error {
 	}
 	out := cmd.OutOrStdout()
 	if len(list) == 0 {
-		fmt.Fprintln(out, "No jobs: add .agents/workers/<name>/WORKER.md to the workspace.")
+		fmt.Fprintln(out, i18n.T("jobs.none"))
 		return nil
 	}
 	for _, w := range list {
 		next := ""
 		if !w.Next.IsZero() {
-			next = "  next " + w.Next.Local().Format("Mon Jan 2 15:04")
+			next = i18n.T("jobs.next", "time", w.Next.Local().Format("Mon Jan 2 15:04"))
 		}
 		fmt.Fprintf(out, "%-20s %-9s %s (%s)%s\n", w.Name, w.State, w.Schedule, w.Cron, next)
 		if w.Description != "" {
@@ -209,31 +210,31 @@ func describeWorker(out io.Writer, w api.WorkerInfo) {
 	if w.Description != "" {
 		fmt.Fprintf(out, "  %s\n", w.Description)
 	}
-	fmt.Fprintf(out, "  schedule:    %s = %s (%s)\n", w.Schedule, w.Cron, w.Timezone)
+	fmt.Fprintln(out, i18n.T("jobs.describe_schedule", "schedule", w.Schedule, "cron", w.Cron, "timezone", w.Timezone))
 	if w.Agent != "" {
-		fmt.Fprintf(out, "  agent:       %s\n", w.Agent)
+		fmt.Fprintln(out, i18n.T("jobs.describe_agent", "value", w.Agent))
 	}
 	if w.Model != "" {
-		fmt.Fprintf(out, "  model:       %s\n", w.Model)
+		fmt.Fprintln(out, i18n.T("jobs.describe_model", "value", w.Model))
 	}
-	perms := "none (it can read, and write nothing)"
+	perms := i18n.T("jobs.no_permissions")
 	if len(w.Permissions) > 0 {
 		perms = strings.Join(w.Permissions, ", ")
 	}
-	fmt.Fprintf(out, "  may:         %s\n", perms)
-	fmt.Fprintf(out, "  limits:      %s\n", limitsText(w.Limits))
+	fmt.Fprintln(out, i18n.T("jobs.describe_may", "value", perms))
+	fmt.Fprintln(out, i18n.T("jobs.describe_limits", "value", limitsText(w.Limits)))
 	for _, p := range w.Problems {
 		fmt.Fprintf(out, "  ! %s\n", p)
 	}
-	fmt.Fprintf(out, "  content:     %s\n", w.Hash)
+	fmt.Fprintln(out, i18n.T("jobs.describe_content", "value", w.Hash))
 }
 
 // limitsText says a job's limits, each 0 (none) as "no limit" rather than
 // a limit of nothing (N26 cli-2#24).
 func limitsText(l api.Limits) string {
-	turns, cost, timeout := "no limit on model calls", "no cost limit", "no time limit"
+	turns, cost, timeout := i18n.T("jobs.no_turn_limit"), i18n.T("jobs.no_cost_limit"), i18n.T("jobs.no_time_limit")
 	if l.MaxTurns > 0 {
-		turns = fmt.Sprintf("%d model calls", l.MaxTurns)
+		turns = i18n.T("jobs.model_calls", "count", l.MaxTurns)
 	}
 	if l.MaxCostUSD > 0 {
 		cost = fmt.Sprintf("$%.2f", l.MaxCostUSD)
@@ -272,9 +273,9 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 	}
 	out := cmd.OutOrStdout()
 	describeWorker(out, w)
-	fmt.Fprintf(out, "\nRead %s before enabling: it runs unattended with the permissions above.\n", w.Path)
+	fmt.Fprintf(out, "\n%s\n", i18n.T("jobs.read_first", "path", w.Path))
 	if !yes {
-		fmt.Fprint(out, "Enable it as shown? [y/N] ")
+		fmt.Fprint(out, i18n.T("jobs.confirm"))
 		answer, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
 			return errors.New("not enabled")
@@ -285,13 +286,13 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 	if err != nil {
 		return workerErr(err)
 	}
-	next := "when the service runs"
+	next := i18n.T("jobs.when_service_runs")
 	if !on.Next.IsZero() {
 		next = on.Next.Local().Format("Mon Jan 2 15:04")
 	}
-	fmt.Fprintf(out, "✓ %s enabled; next run %s.\n", name, next)
+	fmt.Fprintln(out, i18n.T("jobs.enabled", "name", name, "next", next))
 	if !loginitem.Installed() { // a service started on demand stops when idle
-		fmt.Fprintln(out, "Jobs run in the Blitz service: keep it running with 'blitz service install'.")
+		fmt.Fprintln(out, i18n.T("jobs.service_hint"))
 	}
 	return nil
 }
@@ -304,7 +305,7 @@ func workersDisable(cmd *cobra.Command, g *globalFlags, name string) error {
 	if _, err := ops.DisableWorker(name); err != nil {
 		return workerErr(err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "%s disabled.\n", name)
+	fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.disabled", "name", name))
 	return nil
 }
 
@@ -337,7 +338,7 @@ func workersRuns(cmd *cobra.Command, g *globalFlags, name string, limit int) err
 		return workerErr(err)
 	}
 	if len(runs) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s hasn't run yet.\n", name)
+		fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.no_runs", "name", name))
 	}
 	for _, r := range runs {
 		printRun(cmd.OutOrStdout(), r)
@@ -346,17 +347,17 @@ func workersRuns(cmd *cobra.Command, g *globalFlags, name string, limit int) err
 }
 
 func printRun(out io.Writer, r api.Run) {
-	how := "scheduled"
+	how := i18n.T("jobs.scheduled")
 	if r.Manual {
-		how = "manual"
+		how = i18n.T("jobs.manual")
 	}
-	fmt.Fprintf(out, "%s  %-9s %s, %s, $%.4f, %d model calls  run %s  session %s\n",
-		r.Started.Local().Format("2006-01-02 15:04"), r.Status, how, r.Duration.Round(time.Second), r.CostUSD, r.Calls, r.ID, r.SessionID)
+	fmt.Fprintln(out, i18n.T("jobs.run_line", "time", r.Started.Local().Format("2006-01-02 15:04"), "status", fmt.Sprintf("%-9s", r.Status), "how", how,
+		"duration", r.Duration.Round(time.Second), "cost", fmt.Sprintf("$%.4f", r.CostUSD), "calls", r.Calls, "run", r.ID, "session", r.SessionID))
 	if len(r.Files) > 0 {
-		fmt.Fprintf(out, "    changed: %s ('blitz jobs undo %s' puts them back)\n", strings.Join(r.Files, ", "), r.ID)
+		fmt.Fprintln(out, i18n.T("jobs.run_changed", "files", strings.Join(r.Files, ", "), "run", r.ID))
 	}
 	for _, f := range r.Refusals {
-		fmt.Fprintf(out, "    refused: %s (%s)\n", f.Detail, f.Tool)
+		fmt.Fprintln(out, i18n.T("jobs.run_refused", "detail", f.Detail, "tool", f.Tool))
 	}
 	if r.Error != "" {
 		fmt.Fprintf(out, "    %s\n", r.Error)
@@ -392,6 +393,6 @@ func workersMove(cmd *cobra.Command, g *globalFlags, name string, anyway bool) e
 	if !moved {
 		return withCode(exitFailure, fmt.Errorf("%s stays on this computer: fix what's above, or move it with --anyway", name))
 	}
-	fmt.Fprintf(out, "✓ %s runs on your organization's service now (runs_on: service). Push it to the workspace's main for the service to pick it up.\n", name)
+	fmt.Fprintln(out, i18n.T("jobs.moved", "name", name))
 	return nil
 }

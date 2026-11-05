@@ -25,6 +25,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/skillreg"
 	"github.com/spf13/cobra"
 )
@@ -68,7 +69,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			if err != nil {
 				return withCode(exitUsage, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Added %s: %d skills. Search them with: blitz skills search\n", idx.Name, len(idx.Skills))
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("skills.cli_registry_added", "name", idx.Name, "count", len(idx.Skills)))
 			return nil
 		},
 	}
@@ -86,7 +87,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			}
 			out := cmd.OutOrStdout()
 			if len(regs) == 0 {
-				fmt.Fprintln(out, "No registries. Add one with: blitz skills registry add <url>")
+				fmt.Fprintln(out, i18n.T("skills.cli_no_registries"))
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
@@ -104,7 +105,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			if err := store.Remove(args[0]); err != nil {
 				return withCode(exitUsage, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed %s.\n", args[0])
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("skills.cli_registry_removed", "name", args[0]))
 			return nil
 		},
 	}
@@ -117,7 +118,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			found, err := store.Search(cmd.Context(), strings.Join(args, " "))
 			out := cmd.OutOrStdout()
 			if len(found) == 0 && err == nil {
-				fmt.Fprintln(out, "No skills found.")
+				fmt.Fprintln(out, i18n.T("skills.cli_none_found"))
 			}
 			tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 			for _, f := range found {
@@ -147,7 +148,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			if err != nil {
 				return withCode(exitUsage, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Installed %s %s from %s in %s. Sessions see it at once.\n", i.Name, i.Version, i.Registry, i.Dir)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("skills.cli_installed", "name", i.Name, "version", i.Version, "registry", i.Registry, "dir", i.Dir))
 			return nil
 		},
 	}
@@ -160,10 +161,10 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			done, err := store.Update(cmd.Context(), args...)
 			out := cmd.OutOrStdout()
 			for _, i := range done {
-				fmt.Fprintf(out, "Updated %s to %s.\n", i.Name, i.Version)
+				fmt.Fprintln(out, i18n.T("skills.cli_updated", "name", i.Name, "version", i.Version))
 			}
 			if len(done) == 0 && err == nil {
-				fmt.Fprintln(out, "Everything is up to date.")
+				fmt.Fprintln(out, i18n.T("skills.cli_up_to_date"))
 			}
 			return err
 		},
@@ -182,7 +183,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			if err != nil {
 				return withCode(exitUsage, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed %s from %s.\n", i.Name, i.Dir)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("skills.cli_uninstalled", "name", i.Name, "dir", i.Dir))
 			return nil
 		},
 	}
@@ -198,7 +199,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 			}
 			out := cmd.OutOrStdout()
 			if len(all) == 0 {
-				fmt.Fprintln(out, "No skills installed from registries. Find some with: blitz skills search")
+				fmt.Fprintln(out, i18n.T("skills.cli_none_installed"))
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
