@@ -101,6 +101,16 @@ func TestCheck(t *testing.T) {
 	assert.Contains(t, Parse("Bad", "", []byte("nodes: [{id: a, type: accumulate}]")).Problem, "name")
 }
 
+// A workflow file that can't be read is listed with why (N26 engine-sub-1 #26).
+func TestLoadListsUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "locked"+Suffix), []byte("x"), 0o000))
+	all := Load(dir)
+	require.Len(t, all, 1)
+	assert.Equal(t, "locked", all[0].Name)
+	assert.Contains(t, all[0].Problem, "permission denied")
+}
+
 // A workflow runs in auto unless it names another mode (WF-21).
 func TestModeOf(t *testing.T) {
 	for in, want := range map[string]api.PermissionMode{"": api.ModeAuto, "auto": api.ModeAuto, "default": api.ModeDefault, "acceptEdits": api.ModeAcceptEdits, "dont-ask": api.ModeDontAsk, "yolo": api.ModeAuto} {
@@ -149,4 +159,29 @@ func TestSaveLoadDelete(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.md"), []byte("a command"), 0o644))
 	assert.Len(t, Load(dir), 1, "the .md commands aren't workflows")
 	assert.True(t, IsFlow("x.FLOW.yaml"))
+}
+
+// What keeps a workflow from being saved is said by Check itself, not by
+// its words: a step not filled in is a draft, a bad link isn't (N26
+// engine-sub-1 #29).
+func TestSaveChecksDrafts(t *testing.T) {
+	tests := []struct {
+		name, in string
+		blocks   bool
+	}{
+		{"no steps", "description: x\n", false},
+		{"an agent step without instructions", "nodes: [{id: a, type: agent}]", false},
+		{"a call without its workflow", "nodes: [{id: a, type: workflow}]", false},
+		{"a file step without a path", "nodes: [{id: a, type: read_file}]", false},
+		{"a gateway with one link", "nodes: [{id: a, type: exclusive}, {id: b, type: accumulate}]\nedges: [{from: a, to: b}]", false},
+		{"a link to no step", "nodes: [{id: a, type: accumulate}]\nedges: [{from: a, to: b}]", true},
+		{"two steps, one ID", "nodes: [{id: a, type: accumulate}, {id: a, type: accumulate}]", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := Parse("x", "", []byte(tt.in))
+			require.NotEmpty(t, f.Problem)
+			assert.Equal(t, tt.blocks, len(saveChecks(f)) > 0, saveChecks(f))
+		})
+	}
 }

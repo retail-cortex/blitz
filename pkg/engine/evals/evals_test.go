@@ -67,6 +67,10 @@ func TestParseProblems(t *testing.T) {
 		{"bad near", "---\nnear: vibes\n---\n", `near "vibes"`},
 		{"bad allow", "---\nallow: [run_command]\n---\n", `allow "run_command"`},
 		{"a misspelt key", "---\nagent: support\n---\n", `unknown key "agent"`}, // N26 engine-sub-1 #24
+		// #25: a 0 written isn't the default, and rows count from the first case.
+		{"a zero threshold", "| ID | Prompt | Output | Threshold |\n|-|-|-|-|\n| a | b | c | 0 |\n", "threshold 0: above 0"},
+		{"a zero percent", "| ID | Prompt | Output | Threshold |\n|-|-|-|-|\n| a | b | c | 0% |\n", "threshold 0: above 0"},
+		{"the first row", "| ID | Prompt | Output | Threshold |\n|-|-|-|-|\n| a | b | c | lots |\n", "row 1:"},
 		{"case problems", "| ID | Prompt | Output | Type | Threshold | Scope |\n|-|-|-|-|-|-|\n| a | p | o | fuzzy | | |\n| a | | o | near | 2 | later |\n|  | p | o | exact | | |\n",
 			`case a: output type "fuzzy"`},
 	}
@@ -81,6 +85,17 @@ func TestParseProblems(t *testing.T) {
 	}
 	assert.Contains(t, Parse("Bad Name", "", nil).Problem, "name")
 	assert.Empty(t, Parse("empty", "", []byte("Nothing yet.")).Problem, "an eval with no table has no cases")
+}
+
+// An eval file that can't be read is listed with why (N26 engine-sub-1 #26).
+func TestLoadListsUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "locked.md")
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o000))
+	all := Load(dir)
+	require.Len(t, all, 1)
+	assert.Equal(t, "locked", all[0].Name)
+	assert.Contains(t, all[0].Problem, "permission denied")
 }
 
 func TestTableRoundTrips(t *testing.T) {
