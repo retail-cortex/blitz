@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { workspaces } from "../api";
+import { message } from "../errors";
 import type { HealthCheckScope, HealthDay, HealthItem, WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 import type { HealthCheckScopeSchema } from "../gen/blitz/v1/workspace_pb";
@@ -48,13 +49,13 @@ export const itemKey = (it: Pick<HealthItem, "kind" | "name">) => `${it.kind}/${
 /** How often the dashboard is asked for while shown. */
 export const pollMs = 5_000;
 /** How often it's asked for while a check runs. */
-export const checkingPollMs = 1_500;
+const checkingPollMs = 1_500;
 
 /**
  * The dashboard of a workspace, asked for while shown (every pollMs, more
- * often while a check runs); refresh asks again now. It's asked for rather
- * than streamed: the window has a few connections to the service, and a
- * stream would hold one for as long as Studio is open.
+ * often while a check runs); refresh asks again now. Each ask waits for
+ * the one before to answer. The service has no stream of it yet (a
+ * WatchWorkspaceHealth would replace this).
  */
 export function useWorkspaceHealth(workspace: string): { health?: WorkspaceHealth; error: string; refresh: () => void } {
   const [health, setHealth] = useState<WorkspaceHealth>();
@@ -72,7 +73,7 @@ export function useWorkspaceHealth(workspace: string): { health?: WorkspaceHealt
         setHealth(r.health);
         setError("");
       } catch (e) {
-        if (live) setError(String(e));
+        if (live) setError(message(e));
       }
       if (live) timer = setTimeout(ask, checking ? checkingPollMs : pollMs);
     };
@@ -176,9 +177,49 @@ export async function startCheck(workspace: string, scope: MessageInitShape<type
   await workspaces.startHealthCheck({ workspace, scope });
 }
 
-/** Stops the workspace's check after the item being judged. */
+/** Stops the workspace's check after the item being judged; a stop that fails throws, for the caller to say. */
 export async function stopCheck(workspace: string) {
-  await workspaces.stopHealthCheck({ workspace }).catch(() => {});
+  await workspaces.stopHealthCheck({ workspace });
+}
+
+/** Health settings as the dialog types them. */
+export interface HealthSettingsForm {
+  schedule: string;
+  maxCost: string;
+  model: string;
+  reflect: string;
+  reflectMaxCost: string;
+  threshold: string;
+}
+
+/** The dialog's fields for the workspace's settings as they are: a cost limit of 0 shows as 0 (no limit), not as empty. */
+export function healthSettingsForm(h: Pick<WorkspaceHealth, "schedule" | "maxCostUsd" | "model" | "reflectSchedule" | "reflectMaxCostUsd" | "reflectThreshold">): HealthSettingsForm {
+  return { schedule: h.schedule, maxCost: String(h.maxCostUsd), model: h.model, reflect: h.reflectSchedule, reflectMaxCost: String(h.reflectMaxCostUsd), threshold: String(h.reflectThreshold) };
+}
+
+/**
+ * The settings to write, [key, value], for the fields changed from was
+ * only, so a workspace keeps following the defaults it didn't change. An
+ * emptied cost limit, model or threshold is "" (taken out of the
+ * workspace's settings: the default again), never 0, which is no limit
+ * (a threshold's: never); an emptied schedule is "off".
+ */
+export function healthSettingsChanges(was: HealthSettingsForm, now: HealthSettingsForm): [string, string][] {
+  const keys: [keyof HealthSettingsForm, string][] = [
+    ["schedule", "health.schedule"],
+    ["maxCost", "health.max_cost_usd"],
+    ["model", "health.model"],
+    ["reflect", "harness.reflect_schedule"],
+    ["reflectMaxCost", "harness.max_cost_usd"],
+    ["threshold", "harness.reflect_threshold"],
+  ];
+  const out: [string, string][] = [];
+  for (const [field, key] of keys) {
+    const v = now[field].trim();
+    if (v === was[field].trim()) continue;
+    out.push([key, field === "schedule" || field === "reflect" ? v || "off" : v]);
+  }
+  return out;
 }
 
 /** Whether a check just ended: it was checking before and isn't now. */

@@ -94,14 +94,31 @@ describe("the connector form", () => {
     expect(can(undefined, "test")).toBe(false);
   });
 
+  // The same table as embed's TestReadsOnly (third_party/mcp-toolbox), so
+  // the page and the service judge a statement alike (N26 desktop-4#10).
   it.each([
     ["SELECT * FROM t", true],
-    ["  select\n count(*) from t;", true],
-    ["-- totals\nSELECT sum(n) FROM t", true],
+    ["  select\n  count(*) from t;", true],
+    ["-- the totals\nSELECT sum(n) FROM t", true],
+    ["/* a */ WITH x AS (SELECT 1) SELECT * FROM x", true],
     ["(SELECT 1)", true],
+    ["EXPLAIN SELECT 1", true],
+    ["PRAGMA table_info(t)", true],
+    ["SELECT replace(name, 'a', 'b') FROM t", true],
     ["WITH gone AS (DELETE FROM t RETURNING *) SELECT * FROM gone", false],
     ["DELETE FROM t", false],
+    ["insert into t values (1)", false],
+    ["UPDATE t SET n = 1", false],
+    ["DROP TABLE t", false],
     ["SELECT 1; DROP TABLE t", false],
+    ["SELECT setval('s', 1)", false],
+    ["SELECT nextval('s')", false],
+    ["SELECT pg_terminate_backend(42)", false],
+    ["SELECT lo_unlink(1234)", false],
+    ["SELECT dblink_exec('c', 'DELETE FROM t')", false],
+    ["PRAGMA writable_schema = 1", false],
+    ["pragma main.user_version=3", false],
+    ["SELECT nextval_note FROM t", true],
     ["", false],
   ])("judges %j reads only: %s", (sql, want) => {
     expect(readsOnly(sql)).toBe(want);

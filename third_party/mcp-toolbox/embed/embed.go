@@ -197,7 +197,9 @@ var (
 // no word that writes, no call to a function that writes or acts (setval,
 // pg_terminate_backend, lo_unlink, dblink_exec, …) and is no PRAGMA that
 // sets a value. It's a hint, not a guard: a read-only source is
-// what stops writes.
+// what stops writes. Studio's readsOnly (apps/desktop/web connectorForm.ts)
+// is a copy for a statement being typed, tested on the same table: change
+// both together.
 func ReadsOnly(statement string) bool {
 	s := sqlComment.ReplaceAllString(statement, " ")
 	words := strings.Fields(strings.ToLower(strings.TrimLeft(strings.TrimSpace(s), "(")))

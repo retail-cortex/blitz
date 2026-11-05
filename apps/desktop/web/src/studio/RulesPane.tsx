@@ -42,7 +42,7 @@ import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { GatesTitle } from "./RulesOrGuardrails";
-import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
+import { emptyRuleForm, formFromRule, knownAction, knownWhen, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
 import { OrgItems } from "./OrgItems";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
@@ -92,7 +92,8 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
     void refresh();
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
   }, [workspace, refresh]);
 
@@ -264,6 +265,23 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
             ))}
           </div>
         </section>
+        {sections.broken.length > 0 && (
+          <section className="stack rule-section" style={{ gap: 4 }}>
+            <span className="t-title-sm">{t("desktop.rules.broken")}</span>
+            <span className="t-body-sm muted">{t("desktop.rules.broken_hint")}</span>
+            <div className="list">
+              {sections.broken.map((r) => (
+                <button key={r.path} className="list-item" title={r.path} onClick={() => show(r)}>
+                  <Icon path={mdiAlertCircleOutline} className="error-text" />
+                  <span className="lines">
+                    <span className="ellipsis">{r.name}</span>
+                    <small className="ellipsis error-text">{r.problem}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         <OrgItems workspace={workspace} kind="rule" onCopied={() => void refresh()} />
       </aside>
       <section className="slide-detail" inert={open === null}>
@@ -279,6 +297,12 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
               <div className="card row small-card" style={{ gap: 8 }}>
                 <Icon path={mdiFileDocumentOutline} size="sm" />
                 <span className="t-body-sm">{t("desktop.rules.read_only", { path: current.path })}</span>
+              </div>
+            )}
+            {current?.problem && (
+              <div className="card error row small-card" style={{ gap: 8 }}>
+                <Icon path={mdiAlertCircleOutline} size="sm" />
+                <span className="t-body-sm">{t("desktop.rules.has_problem", { problem: current.problem })}</span>
               </div>
             )}
             <fieldset className="worker agent-form rule-form" disabled={!editable}>
@@ -304,7 +328,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                     setForm((f) => ({ ...f, when, order: open?.name === "" && when ? nextOrder(when === "after_agent" ? sections.after : sections.before) : f.order }));
                   }}
                 />
-                <span className="t-body-sm muted">{t(gate ? `desktop.rules.${form.when === "before_agent" ? "before" : "after"}_hint` : "desktop.rules.instructions_hint")}</span>
+                {knownWhen(form.when) && <span className="t-body-sm muted">{t(gate ? `desktop.rules.${form.when === "before_agent" ? "before" : "after"}_hint` : "desktop.rules.instructions_hint")}</span>}
               </div>
               {gate && (
                 <div className="stack" style={{ gap: 6 }}>
@@ -315,7 +339,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                     options={(["block", "warn", "revise"] as const).map((a) => ({ value: a, label: t(`desktop.rules.action.${a}`), icon: actionIcons[a] }))}
                     onChange={(v) => set("action", v as RuleAction)}
                   />
-                  <span className="t-body-sm muted">{t(`desktop.rules.action_hint.${form.when}.${form.action}`)}</span>
+                  {knownWhen(form.when) && knownAction(form.action) && <span className="t-body-sm muted">{t(`desktop.rules.action_hint.${form.when}.${form.action}`)}</span>}
                 </div>
               )}
               {gate ? (
@@ -337,7 +361,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                 {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.text} rows={6} placeholder={t(gate ? "desktop.rules.text_placeholder" : "desktop.rules.text_placeholder_instruction")} onValue={(v) => set("text", v)} workspace={workspace} />}
               </Field>
             </fieldset>
-            {gate && (
+            {gate && knownWhen(form.when) && (
               <div className="card outlined stack rule-try" style={{ gap: 8 }}>
                 <span className="t-title-sm">{t("desktop.rules.try")}</span>
                 <span className="t-body-sm muted">{t(form.when === "before_agent" ? "desktop.rules.try_before" : "desktop.rules.try_after")}</span>

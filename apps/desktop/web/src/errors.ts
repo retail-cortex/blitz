@@ -18,10 +18,23 @@
 // says which one it is.
 import { Code, ConnectError } from "@connectrpc/connect";
 import { ErrorInfoSchema } from "./gen/blitz/v1/turn_pb";
+import { t } from "./i18n";
 
-/** The text of an error: the service's message for its errors, else the error's own. */
+/**
+ * An SVC-30 reason in words (spec_021_service SVC-30a lists them), for an
+ * error the service sent without a message; a reason with no words of its
+ * own (an organization's code passed on) is shown as it is.
+ */
+export function reasonText(why: string): string {
+  if (!why) return "";
+  const key = `desktop.error.reason.${why}`;
+  const text = t(key);
+  return text === key ? why : text;
+}
+
+/** The text of an error: the service's message for its errors (its reason in words when it has none), else the error's own. */
 export function message(e: unknown): string {
-  if (e instanceof ConnectError) return e.rawMessage;
+  if (e instanceof ConnectError) return e.rawMessage || reasonText(reason(e)) || e.message;
   return e instanceof Error ? e.message : String(e);
 }
 

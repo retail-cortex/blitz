@@ -163,7 +163,7 @@ export function canSave(f: WorkerForm, s: { busy: boolean; editing: boolean; loa
 }
 
 /** A rewrite of a worker's instructions (WorkerService.RewriteWorker). */
-export interface WorkerRewrite {
+interface WorkerRewrite {
   prompt: string;
   permissions: string[];
 }

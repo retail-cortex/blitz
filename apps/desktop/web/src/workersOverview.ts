@@ -19,10 +19,11 @@
 // global workers run in, and the global limits' fields.
 
 import { workers } from "./api";
+import { ruleKinds } from "./workerForm";
 import type { WorkerPolicySettings, WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
 
 /** What's said of a workspace with workers: its folder is gone, it isn't one of the app's, or neither. */
-export type WorkspaceFlag = "missing" | "unlisted" | "listed";
+type WorkspaceFlag = "missing" | "unlisted" | "listed";
 
 /** Says whether a workspace's folder is gone, or it isn't among the app's workspaces (listed). */
 export function workspaceFlag(g: Pick<WorkspaceWorkers, "workspace" | "missing">, listed: readonly { dir: string }[]): WorkspaceFlag {
@@ -44,8 +45,8 @@ export function globalHome(): Promise<string> {
   return home;
 }
 
-/** The permission kinds a worker may be given (workers.policy.allow), in order. */
-export const permissionKinds = ["shell", "write", "delete", "web", "mcp"] as const;
+/** The permission kinds a worker may be given (workers.policy.allow), in order: the rule builder's (config.WorkerPermissionKinds). */
+export const permissionKinds = ruleKinds;
 
 /** A global limit's setting, under workers.policy. */
 export type LimitField = "max_concurrent" | "default_max_turns" | "max_turns" | "default_max_cost_usd" | "max_cost_usd" | "default_timeout" | "max_timeout";
@@ -75,11 +76,16 @@ export function refreshLimitFields(shown: Record<LimitField, string>, before: Re
   return out;
 }
 
-/** workers.policy.allow with kind turned on or off, in order ("none" when none is left). */
+/**
+ * workers.policy.allow with kind turned on or off, in order ("none" when
+ * none is left). A kind the page doesn't list (a newer service's) is kept,
+ * after the ones it does.
+ */
 export function toggleKind(allow: readonly string[], kind: string): string {
   const on = new Set(allow);
   if (on.has(kind)) on.delete(kind);
   else on.add(kind);
-  const out = permissionKinds.filter((k) => on.has(k));
+  const known: readonly string[] = permissionKinds;
+  const out = [...permissionKinds.filter((k) => on.has(k)), ...[...on].filter((k) => !known.includes(k) && k !== "none")];
   return out.length ? out.join(", ") : "none";
 }

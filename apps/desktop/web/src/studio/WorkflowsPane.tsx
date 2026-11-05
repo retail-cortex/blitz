@@ -64,7 +64,7 @@ import { parseForm, problemText, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
 import { ApprovalCard } from "../Conversation";
-import { message } from "../errors";
+import { message, reasonText } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { HumanTask, SkillInfo, WorkflowFile, WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import type { ItemIntent } from "../intent";
@@ -75,10 +75,11 @@ import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRun
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
 import { ComposeDialog } from "./ComposeDialog";
+import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
 import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "@blitz/webui";
-import { schedulePermissions, startsOnInput, addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
+import { untakenName, unknownSteps, startsOnInput, addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
 const typeIcons: Record<StepType, string> = {
@@ -282,7 +283,6 @@ export function WorkflowsPane({
   const [selectedLink, setSelectedLink] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [choosing, setChoosing] = useState(false);
   // The composer making a workflow from a conversation (spec_045_composer).
@@ -321,10 +321,12 @@ export function WorkflowsPane({
   }, [workspace]);
   useEffect(() => {
     void refresh();
-    workspaces.listAgents({ workspace }).then((r) => setAgents(r.agents.map((a) => a.name)), () => {});
-    workspaces.listSkills({ workspace }).then((r) => setSkills(r.skills), () => {});
-    workspaces.listRules({ workspace }).then((r) => setRules(r.rules.map((x) => x.name)), () => {});
-    workspaces.listMCPServers({ workspace }).then((r) => setMcpServers(r.servers.map((x) => x.name)), () => {});
+    // The lists the step settings offer: a failure is said, not taken for none.
+    const fail = (e: unknown) => snack(message(e), { error: true });
+    workspaces.listAgents({ workspace }).then((r) => setAgents(r.agents.map((a) => a.name)), fail);
+    workspaces.listSkills({ workspace }).then((r) => setSkills(r.skills), fail);
+    workspaces.listRules({ workspace }).then((r) => setRules(r.rules.map((x) => x.name)), fail);
+    workspaces.listMCPServers({ workspace }).then((r) => setMcpServers(r.servers.map((x) => x.name)), fail);
   }, [workspace, refresh]);
 
   const file = open ? list.find((w) => w.name === open) : undefined;
@@ -335,7 +337,8 @@ export function WorkflowsPane({
   useEffect(() => onCanvas?.(open !== null), [open, onCanvas]);
   useEffect(() => () => onCanvas?.(false), [onCanvas]);
 
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  // Discarding puts the canvas back to the workflow as saved before going on.
+  const { leave, discard } = useDiscardGuard(dirty, () => setForm(base));
   const show = (name: string, f: WorkflowForm, saved: boolean) =>
     leave(() => {
       setForm(f);
@@ -436,8 +439,10 @@ export function WorkflowsPane({
   };
   const link = form.links.find((l) => linkId(l) === selectedLink);
 
+  // A workflow with steps the canvas doesn't know isn't saved from here.
+  const unknown = file ? unknownSteps(file) : [];
   const save = async () => {
-    if (busy) return;
+    if (busy || unknown.length) return;
     setBusy(true);
     setProblems([]);
     try {
@@ -560,13 +565,29 @@ export function WorkflowsPane({
     );
   }, [open, workspace, endedCount, receipt?.status]);
 
+  // The streams following runs just started, until their first step:
+  // ended when the workflow or Studio closes, so a run that waits before
+  // its first step holds no stream open (the run itself goes on).
+  const following = useRef(new Set<AbortController>());
+  useEffect(() => {
+    const live = following.current;
+    return () => {
+      for (const ctl of live) ctl.abort();
+      live.clear();
+    };
+  }, [open]);
+
   // Runs the workflow as saved, in the background, as /name input: its
   // receipt shows as its first step starts. It goes on with Studio closed.
   const run = async (name: string) => {
     setAsking(false);
+    const ctl = new AbortController();
+    following.current.add(ctl);
     try {
       const started = await sessions.startBackground({ workspace, turn: { text: `/${name} ${input}`.trim(), command: true } });
-      for await (const res of sessions.watchBackground({ id: started.run?.id ?? "", follow: true })) {
+      const id = started.run?.id ?? "";
+      if (!id || ctl.signal.aborted) return;
+      for await (const res of sessions.watchBackground({ id, follow: true }, { signal: ctl.signal })) {
         const k = res.event?.kind;
         if (k?.case === "flowStep" && k.value.run) {
           dismissed.current.delete(k.value.run);
@@ -575,12 +596,14 @@ export function WorkflowsPane({
         }
         if (k?.case === "finished") {
           const err = k.value.error;
-          if (err) snack(err.message || err.reason, { error: true });
+          if (err) snack(err.message || reasonText(err.reason), { error: true });
           return;
         }
       }
     } catch (e) {
-      snack(message(e), { error: true });
+      if (!ctl.signal.aborted) snack(message(e), { error: true });
+    } finally {
+      following.current.delete(ctl);
     }
   };
   // Answers the human task the run waits on: it resumes in the background.
@@ -1055,7 +1078,7 @@ export function WorkflowsPane({
                     </Field>
                     <Field label={t("desktop.rules.description")}>{(id) => <input id={id} className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
                     <FlowModeField value={form.mode} workspaceMode={workspaceMode} onChange={(mode) => setForm((f) => ({ ...f, mode }))} />
-                    <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} permissions={schedulePermissions(form.steps)} needsInput={startsOnInput(form)} />
+                    <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} permissions={file?.schedulePermissions ?? []} needsInput={startsOnInput(form)} />
                     <span className="t-body-sm muted">{t("desktop.flows.canvas_hint")}</span>
                   </div>
                 )}
@@ -1071,6 +1094,11 @@ export function WorkflowsPane({
                     <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
                   </span>
                 ))}
+              </div>
+            )}
+            {unknown.length > 0 && (
+              <div className="card warn row small-card">
+                <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.flows.unknown_steps", { steps: unknown.join(", ") })}
               </div>
             )}
             {file?.problem && !dirty && (
@@ -1095,7 +1123,7 @@ export function WorkflowsPane({
               <Button onClick={close}>
                 {t("desktop.cancel")}
               </Button>
-              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || !form.name.trim() || (!dirty && !isNew)} onClick={() => void save()}>
+              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || !form.name.trim() || (!dirty && !isNew) || unknown.length > 0} onClick={() => void save()}>
                 {t("desktop.rules.save")}
               </Button>
             </div>
@@ -1111,8 +1139,7 @@ export function WorkflowsPane({
             setComposing(false);
             const f = d.workflow ? formFromWorkflow(d.workflow) : emptyWorkflowForm;
             const taken = list.map((w) => w.name);
-            let name = d.name || f.name;
-            for (let n = 2; name && taken.includes(name); n++) name = `${d.name}-${n}`;
+            const name = untakenName(d.name || f.name, taken);
             show("", { ...f, name, description: f.description || d.summary }, false);
           }}
         />
@@ -1183,53 +1210,12 @@ export function WorkflowsPane({
           </Dialog>,
           document.body,
         )}
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.flows.delete_title", { name: title })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.rules.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    setForm(base);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: title })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.flows.delete_title", { name: title })} icon={mdiDeleteOutline} confirm={t("desktop.rules.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(title)}
     </div>
   );
 }

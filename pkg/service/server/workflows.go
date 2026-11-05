@@ -29,7 +29,7 @@ import (
 // Studio's workflows (spec_043_workflows).
 
 func workflowMsg(f flows.Flow) *pb.WorkflowFile {
-	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode}
+	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode, SchedulePermissions: flows.SchedulePermissions(f)}
 	for _, n := range f.Nodes {
 		pn := &pb.FlowNode{Id: n.ID, Type: n.Type, Title: n.Title, X: n.Position.X, Y: n.Position.Y, Agent: n.Agent, Skills: n.Skills,
 			Instructions: n.Instructions, Rules: n.Rules, Skill: n.Skill, Script: n.ScriptName, Args: n.Args, Path: n.Path, Timeout: n.Timeout}

@@ -21,6 +21,7 @@ import type { JsonObject } from "@bufbuild/protobuf";
 import type { Message } from "./gen/blitz/v1/session_pb";
 import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { t } from "./i18n";
+import { reasonText } from "./errors";
 
 /**
  * A user message: a prompt (index is its place in the transcript, once
@@ -114,7 +115,7 @@ export function splitAttachments(text: string): { text: string; images?: { url: 
 }
 
 /** A saved session's tool call (ListSessionTools), as withTools takes it. */
-export interface SavedTool {
+interface SavedTool {
   turn: number;
   prompt: string;
   call?: { id: string; name: string; args?: JsonObject };
@@ -246,7 +247,7 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
     case "finished": {
       const err = k.value.error;
       const done = close(entries);
-      return err ? [...done, { kind: "notice", text: err.message || err.reason, tone: "error" }] : done;
+      return err ? [...done, { kind: "notice", text: err.message || reasonText(err.reason), tone: "error" }] : done;
     }
     default:
       return entries;

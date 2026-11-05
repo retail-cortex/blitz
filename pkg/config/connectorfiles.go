@@ -49,7 +49,8 @@ const (
 	ConnectorScopeOrgDefault = "org-default"
 )
 
-// connectorNameRE is a connection's (or a query's) name.
+// connectorNameRE is a connection's (or a query's) name; Studio's slugName
+// (apps/desktop/web connectorForm.ts) follows it.
 var connectorNameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // ValidConnectorName says whether name can name a connection or a query:

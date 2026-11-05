@@ -31,6 +31,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,6 +188,22 @@ func TestReasonsAreListed(t *testing.T) {
 	}
 	assert.Contains(t, text, "upper-cased", "the organization's codes passed on")
 	assert.Contains(t, text, "code's name", "a Connect error with no reason of its own")
+}
+
+// Every reason SVC-30 lists has words in the page's catalog
+// (desktop.error.reason.<REASON>), shown when an error comes without a
+// message (N26 desktop-4#25); the other languages' are checked with the
+// rest of their keys.
+func TestReasonsHaveWords(t *testing.T) {
+	_, listed := listedReasons(t)
+	b, errs := i18n.NewBundle()
+	require.Empty(t, errs)
+	en, ok := b.Catalog("en-US")
+	require.True(t, ok)
+	for reason := range listed {
+		_, ok := en.Messages["desktop.error.reason."+reason]
+		assert.True(t, ok, "spec_021 SVC-30 lists %s: add desktop.error.reason.%s to the catalogs", reason, reason)
+	}
 }
 
 // Every error a handler returns has an ErrorInfo: one that isn't a Connect

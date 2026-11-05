@@ -36,6 +36,7 @@ describe("toggleKind", () => {
     ["turns one on, in order", ["web", "shell"], "write", "shell, write, web"],
     ["the last one off: none", ["mcp"], "mcp", "none"],
     ["from none", [], "delete", "delete"],
+    ["keeps a kind it doesn't list", ["shell", "browser"], "write", "shell, write, browser"],
   ])("%s", (_, allow, kind, want) => {
     expect(toggleKind(allow, kind)).toBe(want);
   });

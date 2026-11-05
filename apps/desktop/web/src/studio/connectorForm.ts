@@ -25,10 +25,10 @@ import type { Connector, ConnectorKind, ConnectorQuery } from "../gen/blitz/v1/w
 export type ConnectorScope = "workspace" | "global";
 
 /** A capability a kind of connector has (spec_047_connectors). */
-export type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
+type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
 
 /** A query's parameter as the form holds it. */
-export interface ParamForm {
+interface ParamForm {
   name: string;
   type: string;
   description: string;
@@ -110,7 +110,7 @@ export function withKind(f: ConnectorForm, kind: ConnectorKind): ConnectorForm {
 let lastQueryKey = 0;
 
 /** A new key for a query in the form (QueryForm.key). */
-export function queryKey(): string {
+function queryKey(): string {
   return `q${++lastQueryKey}`;
 }
 
@@ -176,16 +176,24 @@ export function sameConnectorForm(a: ConnectorForm, b: ConnectorForm): boolean {
   return JSON.stringify(connectionFromForm(a)) === JSON.stringify(connectionFromForm(b));
 }
 
+// readsOnly is a copy of third_party/mcp-toolbox/embed ReadsOnly (the
+// service's judgement of a saved query, sent as its readsOnly), for a
+// statement still being typed: change both together.
+
 /** The words that start a statement that reads. */
 const readVerbs = new Set(["select", "with", "explain", "show", "pragma", "values", "describe", "table"]);
 /** Words that may make a statement write (WITH … DELETE). */
 const writeWords = /\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex)\b/i;
+/** Functions that write or act though a SELECT calls them (Postgres's sequences, large objects, backends, dblink). */
+const writeCalls = /\b(setval|nextval|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|lo_\w+|dblink_exec|dblink_send_query|set_config|pg_advisory_lock\w*|pg_switch_wal|pg_promote)\s*\(/i;
+/** A PRAGMA that sets its value (PRAGMA x = 1). */
+const pragmaSet = /^\s*pragma\s+[\w.]+\s*=/i;
 
 /** Whether a SQL statement only reads, as the service judges it (a hint: a read-only connection is the guard). */
 export function readsOnly(statement: string): boolean {
   const s = statement.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ");
   const first = s.trim().replace(/^\(+/, "").toLowerCase().split(/\s+/)[0]?.replace(/;+$/, "") ?? "";
-  return readVerbs.has(first) && !writeWords.test(s);
+  return readVerbs.has(first) && !writeWords.test(s) && !writeCalls.test(s) && !pragmaSet.test(s);
 }
 
 /** The parameters a statement refers to ($1, $2… or @name), for a new query's first draft. */
@@ -199,8 +207,9 @@ export function statementParams(statement: string): string[] {
 }
 
 /**
- * A connection's name as the service takes it (lower case, digits and
- * _, starting with a letter, at most 40), from whatever was typed: other
+ * A connection's name as the service takes it (pkg/config connectorNameRE:
+ * lower case, digits and _, starting with a letter, at most 40), from
+ * whatever was typed: other
  * characters become _, and runs of them one.
  */
 export function slugName(typed: string): string {
@@ -245,7 +254,7 @@ export function withSetting(f: ConnectorForm, key: string, value: string): Conne
 }
 
 /** A connection URL's parts, as a kind's fields name them. */
-export interface URLParts {
+interface URLParts {
   settings: Record<string, string>;
   secrets: Record<string, string>;
 }

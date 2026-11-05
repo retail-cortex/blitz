@@ -48,7 +48,7 @@ import { OverviewPane } from "./OverviewPane";
  * evals that prove it, what it follows (skills, rules, guardrails), what
  * runs (workflows, workers), and what it reaches (connectors, secrets).
  */
-export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
+const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
 /** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */

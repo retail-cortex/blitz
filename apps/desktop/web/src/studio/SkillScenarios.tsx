@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { mdiCheckCircleOutline, mdiCloseCircleOutline, mdiContentSaveOutline, mdiDeleteOutline, mdiPencilOutline, mdiPlay, mdiPlus, mdiStop, mdiTestTube } from "@mdi/js";
 import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
-import type { EvalResult, EvalRun, SkillFile, SkillScenario, TrySkillResponse } from "../gen/blitz/v1/workspace_pb";
+import type { SkillFile, SkillScenario, TrySkillResponse } from "../gen/blitz/v1/workspace_pb";
 import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "@blitz/webui";
-import { money, resultsCost } from "./evalForm";
+import { defaultThreshold, money, resultsCost } from "./evalForm";
+import { useEvalFollow } from "./evalFollow";
+import { ConfirmDialog } from "./paneParts";
 import { Results, statusClass, statusIcon } from "./EvalsPane";
 import { scenarioName } from "./skillForm";
 
@@ -59,9 +61,6 @@ export function SkillScenarios({ workspace, file, agents, changed, onChanged }: 
   const [editing, setEditing] = useState<{ form: ScenarioForm; previous: string } | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [deleting, setDeleting] = useState("");
-  const [live, setLive] = useState<{ run: EvalRun | null; results: EvalResult[]; total: number } | null>(null);
-  const following = useRef<AbortController | null>(null);
-  const running = !!live && !live.run?.status.match(/passed|failed|stopped/);
 
   const load = useCallback(async () => {
     try {
@@ -71,36 +70,15 @@ export function SkillScenarios({ workspace, file, agents, changed, onChanged }: 
     }
   }, [workspace, skill, snack]);
 
-  // Follows a run of the scenarios into live; leaving stops only the following.
-  const follow = useCallback(
-    async (total: number, events: (signal: AbortSignal) => AsyncIterable<{ event: { case?: string; value?: unknown } }>) => {
-      following.current?.abort();
-      const ctl = new AbortController();
-      following.current = ctl;
-      setLive({ run: null, results: [], total });
-      try {
-        for await (const res of events(ctl.signal)) {
-          const ev = res.event;
-          if (ev.case === "started") {
-            const run = ev.value as EvalRun;
-            setLive((l) => l && { ...l, run: { ...run, results: [] }, results: run.results });
-          } else if (ev.case === "result") setLive((l) => l && { ...l, results: [...l.results, ev.value as EvalResult] });
-          else if (ev.case === "finished") {
-            const run = ev.value as EvalRun;
-            setLive((l) => l && { ...l, run, results: run.results });
-            if (run.status !== "stopped") snack(t(run.status === "passed" ? "desktop.scenarios.passed" : "desktop.scenarios.failed", { name: skill }), { error: run.status !== "passed" });
-          }
-        }
-      } catch (e) {
-        if (ctl.signal.aborted) return; // left: the run goes on
-        setLive(null);
-        snack(message(e), { error: true });
-      } finally {
-        if (following.current === ctl) following.current = null;
-      }
+  // Follows a run of the scenarios (evalFollow); leaving stops only the
+  // following. As it ends, the scenarios are read again.
+  const { live, follow, stopFollowing, running } = useEvalFollow({
+    onFinished: (run) => {
+      if (run.status !== "stopped") snack(t(run.status === "passed" ? "desktop.scenarios.passed" : "desktop.scenarios.failed", { name: skill }), { error: run.status !== "passed" });
     },
-    [skill, snack],
-  );
+    onError: (e) => snack(message(e), { error: true }),
+    onDone: () => void load(),
+  });
 
   useEffect(() => {
     void load();
@@ -112,8 +90,8 @@ export function SkillScenarios({ workspace, file, agents, changed, onChanged }: 
       },
       () => {},
     );
-    return () => following.current?.abort();
-  }, [workspace, evalName, load, follow, file.skill?.scenarios]);
+    return stopFollowing;
+  }, [workspace, evalName, load, follow, stopFollowing, file.skill?.scenarios]);
 
   const tryIt = async () => {
     setTrying(true);
@@ -131,12 +109,12 @@ export function SkillScenarios({ workspace, file, agents, changed, onChanged }: 
     setProblems([]);
     setEditing({
       previous: "",
-      form: { name: scenarioName(prompt, list.map((s) => s.name)), description: "", prompt, executes: r.triggered, expected: r.triggered ? r.skillsUsed : [], threshold: 0.8, outcome: r.output },
+      form: { name: scenarioName(prompt, list.map((s) => s.name)), description: "", prompt, executes: r.triggered, expected: r.triggered ? r.skillsUsed : [], threshold: defaultThreshold, outcome: r.output },
     });
   };
   const startNew = () => {
     setProblems([]);
-    setEditing({ previous: "", form: { name: scenarioName(prompt || "scenario", list.map((s) => s.name)), description: "", prompt, executes: true, expected: [], threshold: 0.8, outcome: "" } });
+    setEditing({ previous: "", form: { name: scenarioName(prompt || "scenario", list.map((s) => s.name)), description: "", prompt, executes: true, expected: [], threshold: defaultThreshold, outcome: "" } });
   };
   const edit = (s: SkillScenario) => {
     setProblems([]);
@@ -339,25 +317,11 @@ export function SkillScenarios({ workspace, file, agents, changed, onChanged }: 
           </Dialog>,
           document.body,
         )}
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.scenarios.delete", { name: deleting })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting("")}
-            footer={
-              <>
-                <Button onClick={() => setDeleting("")}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove(deleting)}>
-                  {t("desktop.skills.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.scenarios.delete_body", { name: deleting })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.scenarios.delete", { name: deleting })} icon={mdiDeleteOutline} confirm={t("desktop.skills.delete")} onConfirm={() => void remove(deleting)} onClose={() => setDeleting("")}>
+          <p>{t("desktop.scenarios.delete_body", { name: deleting })}</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

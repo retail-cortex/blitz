@@ -106,11 +106,13 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
     void refresh();
     workspaces.listTools({ workspace, all: true }).then(
       (r) => setTools(r.tools.map((x) => x.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
   }, [workspace, refresh]);
 

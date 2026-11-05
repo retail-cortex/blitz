@@ -17,7 +17,14 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { GuardrailFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools, defaultsEntry, defaultLimits } from "./guardrailForm";
+import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools, defaultsEntry, defaultLimits, limitsProblems, noLimit } from "./guardrailForm";
+
+// The built-ins as ListGuardrails sends them (gates.Builtins).
+const builtins = {
+  prompt_injection: { id: "prompt_injection", stage: "tool_result", defaultAction: "redact" },
+  secrets: { id: "secrets", stage: "output", defaultAction: "redact" },
+  limits: { id: "limits", stage: "action", defaultAction: "block" },
+};
 
 describe("the guardrail form", () => {
   it("reads the limits guardrail and writes its limits back", () => {
@@ -44,14 +51,18 @@ describe("the guardrail form", () => {
     const f = formFromGuardrail(create(GuardrailFileSchema, { name: "secrets", builtin: "secrets", stage: "output", action: "warn", pii: true, off: true }));
     expect(f).toMatchObject({ off: true, action: "warn", pii: true });
     expect(specFromForm({ ...f, off: false })).toMatchObject({ off: false, action: "warn", pii: true });
-    expect(formForBuiltin("limits").off).toBe(false);
-    expect(specFromForm(formForBuiltin("limits")).limits).toMatchObject({ commands: [defaultsEntry], maxTurns: Number(defaultLimits.maxTurns), maxCostUsd: Number(defaultLimits.maxCostUsd) });
-    expect(formForBuiltin("prompt_injection")).toMatchObject({ action: "redact", judge: true });
+    expect(formForBuiltin(builtins.limits).off).toBe(false);
+    expect(specFromForm(formForBuiltin(builtins.limits)).limits).toMatchObject({ commands: [defaultsEntry], maxTurns: Number(defaultLimits.maxTurns), maxCostUsd: Number(defaultLimits.maxCostUsd) });
+    expect(formForBuiltin(builtins.prompt_injection)).toMatchObject({ action: "redact", judge: true });
+  });
+
+  it("takes a built-in's stage and default action from the service", () => {
+    expect(formForBuiltin({ id: "secrets", stage: "output", defaultAction: "warn" })).toMatchObject({ builtin: "secrets", stage: "output", action: "warn" });
   });
 
   it("keeps each built-in's own settings only", () => {
-    expect(specFromForm({ ...formForBuiltin("secrets"), pii: true, judge: true, tools: "x" })).toMatchObject({ builtin: "secrets", action: "redact", pii: true, judge: false, tools: [] });
-    expect(specFromForm({ ...formForBuiltin("prompt_injection"), judge: true, pii: true, tools: "read_file, web_fetch" })).toMatchObject({ action: "redact", judge: true, pii: false, tools: ["read_file", "web_fetch"] });
+    expect(specFromForm({ ...formForBuiltin(builtins.secrets), pii: true, judge: true, tools: "x" })).toMatchObject({ builtin: "secrets", action: "redact", pii: true, judge: false, tools: [] });
+    expect(specFromForm({ ...formForBuiltin(builtins.prompt_injection), judge: true, pii: true, tools: "read_file, web_fetch" })).toMatchObject({ action: "redact", judge: true, pii: false, tools: ["read_file", "web_fetch"] });
   });
 
   it("writes a custom guardrail, tools only for stages that check them", () => {
@@ -62,5 +73,36 @@ describe("the guardrail form", () => {
     expect(stageHasTools("input")).toBe(false);
     expect(sameGuardrailForm(f, { ...f, name: "careful" })).toBe(true);
     expect(sameGuardrailForm(f, { ...f, action: "warn" })).toBe(false);
+  });
+
+  describe("the limits' ceilings", () => {
+    const limits = formForBuiltin(builtins.limits);
+    it.each([
+      { name: "empty is the default, which the file then follows", cost: "", turns: " ", want: { maxCostUsd: 10, maxTurns: 200 } },
+      { name: "0 is no limit", cost: "0", turns: "0", want: { maxCostUsd: 0, maxTurns: 0 } },
+      { name: "a number is kept", cost: "2.5", turns: "20", want: { maxCostUsd: 2.5, maxTurns: 20 } },
+    ])("$name", ({ cost, turns, want }) => {
+      const f = { ...limits, maxCostUsd: cost, maxTurns: turns };
+      expect(limitsProblems(f)).toEqual({});
+      expect(specFromForm(f).limits).toMatchObject(want);
+    });
+
+    it.each([
+      { name: "text", field: "maxTurns" as const, value: "lots" },
+      { name: "a negative number", field: "maxCostUsd" as const, value: "-1" },
+      { name: "a fraction of a call", field: "maxTurns" as const, value: "2.5" },
+      { name: "a fraction of a file", field: "maxFilesChanged" as const, value: "1.5" },
+    ])("refuses $name", ({ field, value }) => {
+      expect(limitsProblems({ ...limits, [field]: value })).toEqual({ [field]: true });
+    });
+
+    it("reads a file's 0 as no limit, not as empty", () => {
+      const f = formFromGuardrail(create(GuardrailFileSchema, { name: "limits", builtin: "limits", limits: { maxTurns: 0, maxCostUsd: 0 } }));
+      expect(f).toMatchObject({ maxTurns: "0", maxCostUsd: "0" });
+      expect(noLimit(f.maxTurns)).toBe(true);
+      expect(noLimit("")).toBe(false);
+      expect(noLimit("200")).toBe(false);
+      expect(limitsProblems({ ...emptyGuardrailForm, maxTurns: "lots" })).toEqual({});
+    });
   });
 });

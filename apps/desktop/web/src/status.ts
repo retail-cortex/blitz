@@ -38,7 +38,7 @@ export interface Cursor {
 }
 
 /** A workspace's state for the status bar. */
-export interface WorkspaceStatus {
+interface WorkspaceStatus {
   settings?: GetSettingsResponse;
   /** The session's usage so far. */
   total?: Usage;

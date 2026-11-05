@@ -15,7 +15,6 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
@@ -51,7 +50,8 @@ import { t } from "../i18n";
 import type { SkillFile } from "../gen/blitz/v1/workspace_pb";
 import { Preview } from "../files/Preview";
 import { previewKind, previewOnly, type PreviewKind } from "../files/previewKind";
-import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "@blitz/webui";
+import { Button, Icon, IconButton, Segmented, useSnackbar } from "@blitz/webui";
+import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { CodeArea } from "./CodeArea";
 import { DraftButton } from "./Draft";
 import { activePackageFiles, filePath, languageOfScript, packageKind, packageTemplate, scriptLanguages, scriptTemplate, splitArgs, type ScriptLanguage } from "./skillForm";
@@ -101,7 +101,6 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
   const [adding, setAdding] = useState("");
   const [language, setLanguage] = useState<ScriptLanguage>("python");
   const [deleting, setDeleting] = useState("");
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [runOpen, setRunOpen] = useState(false);
   const [args, setArgs] = useState("");
   const [running, setRunning] = useState(false);
@@ -117,7 +116,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
   const kind = open ? previewKind(open) : null;
   const binary = previewOnly(kind) && rel !== "";
   const paths = folder === "references" ? skill.references : skill.scripts.filter((s) => s.source.startsWith("scripts/")).map((s) => s.source);
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(dirty);
 
   const openFile = (path: string, body: string) => {
     setOpen(path);
@@ -142,14 +141,18 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
     const r = await workspaces.writeSkillFile({ workspace, name, path, content });
     if (r.file) onFile(r.file);
   };
-  const save = async () => {
-    if (!open || !dirty) return;
+  // Saves the open file; whether it's saved now (a failure is said, and
+  // false: a Test run doesn't then run the file as it was on disk).
+  const save = async (): Promise<boolean> => {
+    if (!open || !dirty) return true;
     try {
       await write(open, encoder.encode(text));
       setBase(text);
       snack(t("desktop.skills.file_saved", { path: open }));
+      return true;
     } catch (e) {
       snack(message(e), { error: true });
+      return false;
     }
   };
   const create = () => {
@@ -209,7 +212,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
   };
   const testRun = async () => {
     if (!script) return;
-    if (dirty) await save();
+    if (dirty && !(await save())) return;
     setRunning(true);
     setRun(null);
     try {
@@ -224,52 +227,12 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
 
   const dialogs = (
     <>
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.skills.delete_file_title", { path: deleting })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting("")}
-            footer={
-              <>
-                <Button onClick={() => setDeleting("")}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.workers.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.skills.delete_file_body", { path: deleting })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: open })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.skills.delete_file_title", { path: deleting })} icon={mdiDeleteOutline} confirm={t("desktop.workers.delete")} onConfirm={() => void remove()} onClose={() => setDeleting("")}>
+          <p>{t("desktop.skills.delete_file_body", { path: deleting })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(open)}
     </>
   );
 
@@ -296,7 +259,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
               onChange={setView}
             />
           )}
-          {script && <DraftButton workspace={workspace} kind="script" name={script.name} description={skill.description} current={text} language={languageOfScript(open)} onUse={(v) => (setText(v), setView("source"), setRevision((n) => n + 1))} />}
+          {script && <DraftButton workspace={workspace} kind="script" name={script.name} description={skill.description} current={text} language={script.language || languageOfScript(open)} onUse={(v) => (setText(v), setView("source"), setRevision((n) => n + 1))} />}
           {binary && (
             <Button small icon={mdiUpload} onClick={() => upload.current?.click()}>
               {t("desktop.skills.replace")}
@@ -425,7 +388,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, o
         {folder === "scripts" &&
           skill.scripts.map((s) => {
             const editable = s.source.startsWith("scripts/");
-            const lang = (languageOfScript(s.source) || s.language) as ScriptLanguage;
+            const lang = (s.language || languageOfScript(s.source)) as ScriptLanguage; // the service's, else as named
             const known = lang in languageIcons;
             return (
               <div key={s.name} className="list-item" title={s.allowed ? s.source : s.reasons.join("; ")}>

@@ -16,24 +16,43 @@
 
 
 // Asking before the service is stopped or restarted while workflow runs
-// go on in it: stopping it stops them (spec_043_workflows WF-19).
+// or jobs' runs go on in it: stopping it stops them (spec_043_workflows
+// WF-19). An eval run is stopped too, and recorded as stopped (EV-07a);
+// the service has no list of them across workspaces to ask about.
 
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertOutline } from "@mdi/js";
+import { workers } from "./api";
 import { t, tn } from "./i18n";
 import { Button, Dialog } from "@blitz/webui";
 import { isGoing, useWorkflowRuns } from "./workflowRuns";
 
+/** The jobs whose runs are going in the service ([] when it can't say). */
+export async function runningJobs(): Promise<string[]> {
+  try {
+    return [...new Set((await workers.listRunningWorkerRuns({})).runs.map((r) => r.worker))];
+  } catch {
+    return [];
+  }
+}
+
 /**
- * guard runs action at once when no run is going, else after the user
- * says to stop the runs; dialog is what asks (render it).
+ * guard runs action at once when no run is going (a workflow's or a
+ * job's), else after the user says to stop the runs; dialog is what asks
+ * (render it).
  */
 export function useStopGuard(): { guard: (action: () => void) => void; dialog: ReactNode } {
   const { runs } = useWorkflowRuns();
   const going = runs.filter(isGoing);
+  const [jobs, setJobs] = useState<string[]>([]);
   const [pending, setPending] = useState<(() => void) | null>(null);
-  const guard = (action: () => void) => (going.length ? setPending(() => action) : action());
+  const guard = (action: () => void) =>
+    void runningJobs().then((names) => {
+      if (!going.length && !names.length) return action();
+      setJobs(names);
+      setPending(() => action);
+    });
   const close = () => setPending(null);
   const dialog =
     pending &&
@@ -58,12 +77,15 @@ export function useStopGuard(): { guard: (action: () => void) => void; dialog: R
           </>
         }
       >
-        <p>{tn("desktop.service.stop_runs_body", going.length)}</p>
+        <p>{tn("desktop.service.stop_runs_body", going.length + jobs.length)}</p>
         <ul>
           {going.map((r) => (
             <li key={r.id} className="mono">
               /{r.workflow}
             </li>
+          ))}
+          {jobs.map((name) => (
+            <li key={`job:${name}`}>{t("desktop.service.stop_runs_job", { name })}</li>
           ))}
         </ul>
       </Dialog>,

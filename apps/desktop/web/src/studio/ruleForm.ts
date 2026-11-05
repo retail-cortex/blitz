@@ -29,8 +29,10 @@ export type RuleAction = "block" | "warn" | "revise";
 export interface RuleForm {
   name: string;
   description: string;
-  when: RuleWhen;
-  action: RuleAction;
+  /** A RuleWhen, or the file's own when as written when it isn't one (a problem the form shows, kept so saving doesn't turn a gate into an instruction). */
+  when: RuleWhen | (string & {});
+  /** A RuleAction, or the file's own action when it isn't one. */
+  action: RuleAction | (string & {});
   order: number;
   agents: string[];
   paths: string;
@@ -40,11 +42,18 @@ export interface RuleForm {
 /** A new rule's form: a before-agent gate that warns. */
 export const emptyRuleForm: RuleForm = { name: "", description: "", when: "before_agent", action: "warn", order: 0, agents: [], paths: "", text: "" };
 
-/** The form for a rule as read. */
+/** Whether when is one the form offers. */
+export const knownWhen = (when: string): when is RuleWhen => when === "" || when === "before_agent" || when === "after_agent";
+/** Whether action is one the form offers. */
+export const knownAction = (action: string): action is RuleAction => action === "block" || action === "warn" || action === "revise";
+
+/**
+ * The form for a rule as read. A when or action the form doesn't know is
+ * kept as written (the rule's problem says why), so saving shows Go's
+ * problem again instead of rewriting a gate as an instruction rule.
+ */
 export function formFromRule(r: RuleFile): RuleForm {
-  const when = r.when === "before_agent" || r.when === "after_agent" ? r.when : "";
-  const action = r.action === "block" || r.action === "revise" ? r.action : "warn";
-  return { name: r.name, description: r.description, when, action, order: r.order, agents: [...r.agents], paths: r.paths.join(", "), text: r.text };
+  return { name: r.name, description: r.description, when: r.when, action: r.action || "warn", order: r.order, agents: [...r.agents], paths: r.paths.join(", "), text: r.text };
 }
 
 /** The form as SaveRule takes it. */
@@ -71,17 +80,23 @@ export function sameRuleForm(a: RuleForm, b: RuleForm): boolean {
   return JSON.stringify(specFromForm(a)) === JSON.stringify(specFromForm(b));
 }
 
-/** Whether name may name a rule file: lowercase letters, digits, single hyphens or underscores, up to 64. */
+/** Whether name may name a rule file: lowercase letters, digits, single hyphens or underscores, up to 64 (a copy of gates.ValidName, for the form to say at once; SaveRule checks it too). */
 export function validRuleName(name: string): boolean {
   return name.length <= 64 && /^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name);
 }
 
-/** The lists Studio shows: gates before the agent and after, in the order they run, then instruction rules. */
-export function ruleSections(rules: readonly RuleFile[]): { before: RuleFile[]; after: RuleFile[]; instructions: RuleFile[] } {
+/**
+ * The lists Studio shows: gates before the agent and after, in the order
+ * they run, instruction rules, and the rest, with a problem (a misspelt
+ * when, say), which don't run until their file is fixed.
+ */
+export function ruleSections(rules: readonly RuleFile[]): { before: RuleFile[]; after: RuleFile[]; instructions: RuleFile[]; broken: RuleFile[] } {
+  const gate = (r: RuleFile) => r.when === "before_agent" || r.when === "after_agent";
   return {
     before: rules.filter((r) => r.when === "before_agent"),
     after: rules.filter((r) => r.when === "after_agent"),
-    instructions: rules.filter((r) => r.when !== "before_agent" && r.when !== "after_agent"),
+    instructions: rules.filter((r) => !gate(r) && !r.problem),
+    broken: rules.filter((r) => !gate(r) && r.problem),
   };
 }
 

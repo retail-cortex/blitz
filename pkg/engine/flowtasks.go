@@ -389,7 +389,8 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 
 // resumedJobContext is ctx for resuming a workflow a job started (its run
 // chat sessionID): unattended, under that job's permissions as it has them
-// now, as its run was; none (everything refused) when the job is gone.
+// now (its workflow's steps' too, WF-20a), as its run was; none
+// (everything refused) when the job is gone.
 func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) context.Context {
 	var perms []workers.Permission
 	infos, _ := w.ListWorkers()
@@ -399,7 +400,7 @@ func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) con
 			continue
 		}
 		if wk, loadErr, err := w.worker(info.Name); err == nil && loadErr == nil {
-			perms = workers.Apply(wk, w.workerPolicy()).Permissions
+			perms = workers.Apply(withFlowGrants(wk, w.workflow), w.workerPolicy()).Permissions
 		}
 		break
 	}

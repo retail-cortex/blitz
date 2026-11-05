@@ -16,8 +16,7 @@
 
 import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiArrowLeft, mdiCalendarClock, mdiCalendarPlus, mdiDeleteOutline, mdiProgressClock, mdiRefresh, mdiStopCircleOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowLeft, mdiCalendarClock, mdiCalendarPlus, mdiDeleteOutline, mdiProgressClock, mdiRefresh, mdiStopCircleOutline } from "@mdi/js";
 import { workers } from "../api";
 import { message } from "../errors";
 import { t } from "../i18n";
@@ -26,7 +25,8 @@ import { runDetail } from "../runningWorkers";
 import { WorkerEditor } from "../WorkerEditor";
 import { savePauses } from "../workerForm";
 import { lastFailed, WorkerChip, WorkerView, workerStateLabel } from "../Workers";
-import { Button, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import type { ItemIntent } from "../intent";
 
 /** How often the pane asks for the workers and their runs again. */
@@ -72,7 +72,6 @@ export function WorkersPane({
   // a move waiting for the user to drop them.
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -84,11 +83,20 @@ export function WorkersPane({
       setError(message(e));
     }
   }, [dir]);
-  // WORKER.md files edited elsewhere show up (BL-DSK-50).
+  // WORKER.md files edited elsewhere show up (BL-DSK-50): asked again
+  // workersPollMs after each answer, so a slow one never overlaps the next.
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(refresh, workersPollMs);
-    return () => clearInterval(timer);
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = async () => {
+      await refresh();
+      if (live) timer = setTimeout(ask, workersPollMs);
+    };
+    void ask();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, [refresh]);
 
   const editing = open !== null && open.mode !== "read" && dirty;
@@ -108,7 +116,7 @@ export function WorkersPane({
   }, [intent, list]);
 
   // Runs go, asking first when the form has unsaved changes.
-  const leave = (go: () => void) => (editing ? setPending(() => go) : go());
+  const { leave, discard } = useDiscardGuard(editing);
   const back = () =>
     leave(() => {
       setDirty(false);
@@ -232,52 +240,12 @@ export function WorkersPane({
           </>
         )}
       </section>
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.workers.delete_title", { name: deleting })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting("")}
-            footer={
-              <>
-                <Button onClick={() => setDeleting("")}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.workers.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.workers.delete_body", { name: deleting, folder: doomed?.path.replace(/\/WORKER\.md$/, "") || `${folder}/${deleting}` })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: open?.name || t("desktop.agents.unnamed") })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.workers.delete_title", { name: deleting })} icon={mdiDeleteOutline} confirm={t("desktop.workers.delete")} onConfirm={() => void remove()} onClose={() => setDeleting("")}>
+          <p>{t("desktop.workers.delete_body", { name: deleting, folder: doomed?.path.replace(/\/WORKER\.md$/, "") || `${folder}/${deleting}` })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(open?.name ?? "")}
     </div>
   );
 }

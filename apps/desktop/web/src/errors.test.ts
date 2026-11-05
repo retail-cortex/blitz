@@ -17,10 +17,10 @@
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
-import { isUnavailable, reason } from "./errors";
+import { isUnavailable, message, reason, reasonText } from "./errors";
 import { ErrorInfoSchema } from "./gen/blitz/v1/turn_pb";
 
-const withReason = (code: Code, why: string) => new ConnectError("x", code, undefined, [{ desc: ErrorInfoSchema, value: create(ErrorInfoSchema, { reason: why }) }]);
+const withReason = (code: Code, why: string, text = "x") => new ConnectError(text, code, undefined, [{ desc: ErrorInfoSchema, value: create(ErrorInfoSchema, { reason: why }) }]);
 
 describe("isUnavailable", () => {
   it.each([
@@ -35,5 +35,19 @@ describe("isUnavailable", () => {
   });
   it("reads the reason", () => {
     expect(reason(withReason(Code.Unknown, "SERVER_FAILED"))).toBe("SERVER_FAILED");
+  });
+});
+
+describe("an SVC-30 reason in words", () => {
+  it.each([
+    ["a message is the service's", withReason(Code.Unavailable, "WORKSPACE_BUSY", "the workspace is busy indexing"), "the workspace is busy indexing"],
+    ["no message: the reason in words", withReason(Code.ResourceExhausted, "TOO_MANY_RUNS", ""), "Too many runs are going at once: try again when one ends."],
+    ["a reason with no words: as it is", withReason(Code.PermissionDenied, "SOME_ORG_CODE", ""), "SOME_ORG_CODE"],
+  ])("%s", (_, e, want) => {
+    expect(message(e)).toBe(want);
+  });
+  it("words each reason the page acts on", () => {
+    for (const why of ["SANDBOX_UNAVAILABLE", "EVAL_RUN_NOT_FOUND", "CONNECTOR_GLOBAL", "RUN_IN_PROGRESS", "WORKSPACE_BUSY"]) expect(reasonText(why)).not.toBe(why);
+    expect(reasonText("")).toBe("");
   });
 });

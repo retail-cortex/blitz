@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { flowModes, looser } from "../options";
-import { schedulePermissions, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { untakenName, unknownSteps, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -118,18 +118,24 @@ describe("the workflow canvas", () => {
     expect(fromTemplate("brief", (k) => k).steps.map((s) => s.type)).toEqual(["read_file", "browser", "accumulate", "agent", "save_file"]);
   });
 
-  it("lets a scheduled run do what its steps do: save their files, call their hosts, use their tools", () => {
-    const steps = [
-      { ...newStep("save_file", [], 0, 0), path: "drafts/draft.md" },
-      { ...newStep("save_file", [], 0, 0), id: "s2", path: "reports/{{date}}.md" },
-      { ...newStep("api_call", [], 0, 0), url: "https://api.example.com/v1/x" },
-      { ...newStep("api_call", [], 0, 0), id: "bad", url: "not a url" },
-      { ...newStep("mcp_call", [], 0, 0), server: "github", tool: "create_issue" },
-      { ...newStep("browser", [], 0, 0) },
-      { ...newStep("agent", [], 0, 0) },
-    ];
-    expect(schedulePermissions(steps)).toEqual(["write:drafts/draft.md", "write:reports/", "web:api.example.com", "mcp:github:create_issue", "web:*"]);
-    expect(schedulePermissions([{ ...newStep("agent", [], 0, 0) }])).toEqual([]);
+  it("won't save a workflow with a step it doesn't know", () => {
+    const w = create(WorkflowFileSchema, {
+      nodes: [
+        { id: "a", type: "agent" },
+        { id: "b", type: "vector_search" },
+        { id: "c", type: "extract", fields: [{ name: "n", type: "number" }, { name: "d", type: "date" }] },
+      ],
+    });
+    expect(unknownSteps(w)).toEqual(["b (vector_search)", "c (date)"]);
+    expect(unknownSteps(create(WorkflowFileSchema, { nodes: [{ id: "a", type: "save_file" }] }))).toEqual([]);
+  });
+
+  it.each([
+    { base: "brief", taken: [], want: "brief" },
+    { base: "brief", taken: ["brief", "brief-2"], want: "brief-3" },
+    { base: "", taken: [""], want: "" },
+  ])("names a drafted workflow $base past $taken: $want", ({ base, taken, want }) => {
+    expect(untakenName(base, taken)).toBe(want);
   });
 
   it("knows when a workflow starts on its input", () => {

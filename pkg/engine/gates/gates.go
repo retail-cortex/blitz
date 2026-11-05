@@ -301,6 +301,7 @@ type Spec struct {
 var nameRE = regexp.MustCompile(`^[a-z0-9]+([-_][a-z0-9]+)*$`)
 
 // ValidName reports whether name may name a rule file (without .md).
+// Studio's validRuleName (apps/desktop/web ruleForm.ts) is a copy.
 func ValidName(name string) bool { return len(name) <= 64 && nameRE.MatchString(name) }
 
 // ErrUnknown means there's no rule of that name.

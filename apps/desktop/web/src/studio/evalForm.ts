@@ -21,11 +21,11 @@
 import type { EvalCase, EvalFile, EvalResult, EvalRun } from "../gen/blitz/v1/workspace_pb";
 
 /** A case's output type. */
-export type CaseType = "exact" | "near";
+type CaseType = "exact" | "near";
 /** A case's scope: what its failure means. */
-export type CaseScope = "fail" | "warn" | "info";
+type CaseScope = "fail" | "warn" | "info";
 /** How near cases are scored. */
-export type NearMethod = "judge" | "embedding";
+type NearMethod = "judge" | "embedding";
 
 /** A case as the form holds it. */
 export interface CaseForm {
@@ -51,7 +51,7 @@ export interface EvalForm {
   cases: CaseForm[];
 }
 
-/** A near case's threshold when it has none. */
+/** A near case's threshold when it has none (evals.DefaultThreshold, which the service applies to a case saved without one). */
 export const defaultThreshold = 0.8;
 
 let keys = 0;

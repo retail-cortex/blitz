@@ -23,7 +23,7 @@ import { canUpdate, checkUpdate, downloadUpdate, restartToUpdate, type UpdateSta
 import { t } from "./i18n";
 
 /** A message and its values. */
-export type Line = { key: string; vars?: Record<string, string> };
+type Line = { key: string; vars?: Record<string, string> };
 
 /** What Settings says about the update. */
 export function updateLine(s: UpdateStatus | null): Line {

@@ -43,7 +43,7 @@ export type TileAction =
   | { type: "draft"; text: string }; // put text in the composer
 
 /** One welcome tile. */
-export interface Tile {
+interface Tile {
   key: string;
   icon: string;
   text: string;
@@ -57,7 +57,7 @@ export interface Tile {
 export const maxTiles = 4;
 
 /** The canned tiles: put in the composer, to edit before sending. */
-export function cannedTiles(): Tile[] {
+function cannedTiles(): Tile[] {
   return [
     { key: "explain", icon: mdiMagnify },
     { key: "bug", icon: mdiWrenchOutline },
@@ -67,7 +67,7 @@ export function cannedTiles(): Tile[] {
 }
 
 /** The setup tile. */
-export function setupTile(): Tile {
+function setupTile(): Tile {
   return { key: "setup", icon: mdiAutoFix, text: t("desktop.suggest.setup"), detail: t("desktop.suggest.setup_detail"), highlight: true, action: { type: "setup" } };
 }
 

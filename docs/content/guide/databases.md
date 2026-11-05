@@ -33,7 +33,7 @@ The password goes into your system's keychain as a [secret](../about/specs/spec_
 
 Each database offers **ready-made tools**, named `db__<database>_<tool>`: `db__shop_list_tables`, `db__shop_execute_sql`, and for BigQuery `list_datasets` and `table_info`. Switch off the ones you don't want.
 
-**Your queries** are better still: SQL you write once, with parameters, offered as a tool of its own. An agent asking for "the top 5 customers" calls `db__shop_top_customers` with `limit: 5` instead of writing SQL. Write the SQL, and Blitz drafts its parameters from `$1`, `$2` (PostgreSQL, SQLite) or `@name` (BigQuery); **Try it** runs it on the spot.
+**Your queries** are better still: SQL you write once, with parameters, offered as a tool of its own. An agent asking for "the top 5 customers" calls `db__shop_top_customers` with `limit: 5` instead of writing SQL. Write the SQL, and Blitz drafts its parameters from `$1`, `$2` (PostgreSQL, SQLite) or `@name` (BigQuery); **Try it** runs it on the spot (one that may write asks first: what it changes stays changed).
 
 ### Write a query from a description
 
@@ -97,6 +97,6 @@ parameters:
     description: How many
 ```
 
-`${NAME}` is the Blitz secret `NAME` (this workspace's, else the global one), never an environment variable. Its value goes in whole, whatever it holds: a password with `#`, `: `, quotes or a newline in it stays one value. In quotes it's always text; unquoted, a value such as `5432` reads as a number. A file that came with the workspace (one you didn't save in Studio) gets only this workspace's secrets, and its tools ask first, until you open it and press **Save and trust**. A file with more than Studio's form describes, such as several sources or other Toolbox tools, still works: Studio lists it as **Custom YAML** and lets you edit the text.
+`${NAME}` is the Blitz secret `NAME` (this workspace's, else the global one), never an environment variable. Its value goes in whole, whatever it holds: a password with `#`, `: `, quotes or a newline in it stays one value. In quotes it's always text; unquoted, a value such as `5432` reads as a number. A file that came with the workspace (one you didn't save in Studio) gets only this workspace's secrets, and its tools ask first, until you open it and press **Save and trust**. A file with more than Studio's form describes, such as several sources or other Toolbox tools, still works: Studio lists it as **Custom file** and lets you edit the text.
 
 All the files together are one MCP server, **databases**, which `/mcp` lists with its state. It connects the first time an agent needs it; if a database can't be reached, `/mcp` and Studio say why.

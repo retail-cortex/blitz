@@ -21,7 +21,7 @@
 import type { WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 
 /** A step's type, in the order the palette shows them. */
-export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "human_task", "timer", "exclusive", "inclusive", "parallel", "email", "data"] as const;
+const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "human_task", "timer", "exclusive", "inclusive", "parallel", "email", "data"] as const;
 /** A step's type. */
 export type StepType = (typeof stepTypes)[number];
 /** The palette's groups, in order. */
@@ -118,7 +118,7 @@ export interface FieldForm {
 export type LinkKind = "always" | "when" | "if" | "default" | "error";
 
 /** A link from one step to another. */
-export interface LinkForm {
+interface LinkForm {
   from: string;
   to: string;
   kind: LinkKind;
@@ -143,6 +143,23 @@ export interface WorkflowForm {
 export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", mode: "auto", steps: [], links: [] };
 
 const asType = (t: string): StepType => ((stepTypes as readonly string[]).includes(t) ? (t as StepType) : "agent");
+
+/**
+ * The steps of w the canvas can't hold as they are, as "id (type)": a
+ * step type it doesn't know (a newer Blitz's, or a typo), or an extract
+ * field's. The canvas would show them as an agent step or a text field,
+ * and saving would rewrite them, so Studio doesn't save such a workflow.
+ */
+export function unknownSteps(w: Pick<WorkflowFile, "nodes">): string[] {
+  const fieldTypes = ["", "string", "number", "boolean", "list"];
+  const out: string[] = [];
+  for (const n of w.nodes) {
+    const field = n.fields.find((f) => !fieldTypes.includes(f.type));
+    if (!(stepTypes as readonly string[]).includes(n.type)) out.push(`${n.id} (${n.type})`);
+    else if (field) out.push(`${n.id} (${field.type})`);
+  }
+  return out;
+}
 
 /** The canvas for a workflow as read. */
 export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
@@ -436,29 +453,11 @@ function authSpec(a: AuthForm) {
   }
 }
 
-/**
- * What a schedule's worker may do without asking, from the workflow's own
- * steps (WF-20): write the files its save steps save, reach the hosts its
- * service calls call, use the MCP tools its MCP steps use, and browse for
- * its browser steps. A scheduled run asks nobody, so without these a step
- * that writes or reaches out would be refused every time.
- */
-export function schedulePermissions(steps: Pick<StepForm, "type" | "path" | "url" | "server" | "tool">[]): string[] {
-  const out = new Set<string>();
-  for (const s of steps) {
-    if (s.type === "save_file" && s.path.trim() && !s.path.includes("{{")) out.add(`write:${s.path.trim()}`);
-    if (s.type === "save_file" && s.path.includes("{{")) out.add(`write:${s.path.slice(0, s.path.indexOf("{{")).replace(/[^/]*$/, "")}`);
-    if ((s.type === "api_call" || s.type === "a2a_call") && s.url.trim()) {
-      try {
-        out.add(`web:${new URL(s.url.trim()).hostname}`);
-      } catch {
-        // a URL still being written: nothing to allow yet
-      }
-    }
-    if (s.type === "mcp_call" && s.server && s.tool.trim()) out.add(`mcp:${s.server}:${s.tool.trim()}`);
-    if (s.type === "browser") out.add("web:*");
-  }
-  return [...out].filter((p) => p !== "write:");
+/** base, or base-2, base-3, … past the names taken ("" stays ""). */
+export function untakenName(base: string, taken: readonly string[]): string {
+  let name = base;
+  for (let n = 2; name && taken.includes(name); n++) name = `${base}-${n}`;
+  return name;
 }
 
 /**

@@ -41,7 +41,7 @@ import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_
 import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
-import { builtinDefaults, emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, sameGuardrailForm, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
+import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, limitsProblems, noLimit, sameGuardrailForm, defaultLimits, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
@@ -90,7 +90,8 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
     void refresh();
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
   }, [workspace, refresh]);
 
@@ -123,7 +124,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   // in its file, keeping its settings; on again removes it.
   const toggle = async (b: BuiltinGuardrail, on: boolean) => {
     try {
-      const f = b.file ? formFromGuardrail(b.file) : formForBuiltin(b.id as BuiltinId);
+      const f = b.file ? formFromGuardrail(b.file) : formForBuiltin(b);
       await workspaces.saveGuardrail({ workspace, guardrail: specFromForm({ ...f, off: !on }) });
       snack(t(on ? "desktop.guardrails.switched_on" : "desktop.guardrails.switched_off", { name: t(`desktop.guardrails.builtin.${b.id}`) }));
       await refresh();
@@ -132,7 +133,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
     }
   };
   const save = async () => {
-    if (busy) return;
+    if (busy || Object.keys(limitsProblems(form)).length) return;
     setBusy(true);
     setProblems([]);
     try {
@@ -174,8 +175,10 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   };
 
   const b = form.builtin;
-  const stage = b ? builtinDefaults[b].stage : form.stage;
-  const actions = b ? builtinDefaults[b].actions : ["block", "warn"];
+  const bad = limitsProblems(form);
+  // A built-in's stage and actions are the service's (BuiltinGuardrail).
+  const stage = b ? (builtinOpen?.stage ?? form.stage) : form.stage;
+  const actions = b ? (builtinOpen?.actions ?? []) : ["block", "warn"];
   const title = b ? t(`desktop.guardrails.builtin.${b}`) : form.name || t("desktop.guardrails.new");
   return (
     <div className={`slide-pane guardrails-pane ${open ? "is-open" : ""}`}>
@@ -205,7 +208,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               const on = !g.file?.off;
               return (
                 <div key={g.id} className="list-item guardrail-row">
-                  <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))}>
+                  <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(g))}>
                     <Icon path={builtinIcons[id]} className={on ? undefined : "muted"} />
                     <span className="lines spacer">
                       <span className="ellipsis">
@@ -215,7 +218,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
                     </span>
                   </button>
                   <span className="trailing">
-                    <IconButton icon={mdiTune} label={t("desktop.guardrails.settings", { name: t(`desktop.guardrails.builtin.${id}`) })} small onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))} />
+                    <IconButton icon={mdiTune} label={t("desktop.guardrails.settings", { name: t(`desktop.guardrails.builtin.${id}`) })} small onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(g))} />
                     <Switch label={t(`desktop.guardrails.builtin.${id}`)} checked={on} disabled={!!g.file && !g.file.editable} onChange={(v) => void toggle(g, v)} />
                   </span>
                 </div>
@@ -299,16 +302,12 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               {b === "limits" && (
                 <div className="stack" style={{ gap: 10 }}>
                   <div className="pair">
-                    <Field label={t("desktop.guardrails.max_cost")} supporting={t("desktop.guardrails.per_turn")}>
-                      {(id) => <input id={id} className="input" type="number" min={0} step={0.1} value={form.maxCostUsd} onChange={(e) => set("maxCostUsd", e.target.value)} />}
-                    </Field>
-                    <Field label={t("desktop.guardrails.max_turns")} supporting={t("desktop.guardrails.per_turn")}>
-                      {(id) => <input id={id} className="input" type="number" min={0} step={1} value={form.maxTurns} onChange={(e) => set("maxTurns", e.target.value)} />}
-                    </Field>
+                    <CeilingField label={t("desktop.guardrails.max_cost")} value={form.maxCostUsd} fallback={defaultLimits.maxCostUsd} decimal invalid={!!bad.maxCostUsd} onChange={(v) => set("maxCostUsd", v)} />
+                    <CeilingField label={t("desktop.guardrails.max_turns")} value={form.maxTurns} fallback={defaultLimits.maxTurns} invalid={!!bad.maxTurns} onChange={(v) => set("maxTurns", v)} />
                   </div>
                   <div className="pair">
-                    <Field label={t("desktop.guardrails.max_files")} supporting={t("desktop.guardrails.per_turn")}>
-                      {(id) => <input id={id} className="input" type="number" min={0} step={1} value={form.maxFilesChanged} onChange={(e) => set("maxFilesChanged", e.target.value)} />}
+                    <Field label={t("desktop.guardrails.max_files")} supporting={t("desktop.guardrails.per_turn")} error={bad.maxFilesChanged ? t("desktop.guardrails.limit_invalid") : undefined}>
+                      {(id) => <input id={id} className="input" inputMode="numeric" value={form.maxFilesChanged} onChange={(e) => set("maxFilesChanged", e.target.value)} />}
                     </Field>
                     <Field label={t("desktop.guardrails.domains")} supporting={t("desktop.guardrails.domains_hint")}>
                       {(id) => <input id={id} className="input mono" value={form.domains} placeholder={t("desktop.guardrails.domains_placeholder")} onChange={(e) => set("domains", e.target.value)} />}
@@ -377,7 +376,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               )}
               <Button onClick={close}>{editable ? t("desktop.cancel") : t("desktop.close")}</Button>
               {editable && (
-                <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || (!b && !form.name.trim()) || (!!file && !dirty && !isNew)} onClick={() => void save()}>
+                <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || (!b && !form.name.trim()) || Object.keys(bad).length > 0 || (!!file && !dirty && !isNew)} onClick={() => void save()}>
                   {t("desktop.rules.save")}
                 </Button>
               )}
@@ -392,5 +391,27 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
       )}
       {discard(title)}
     </div>
+  );
+}
+
+/**
+ * A limits ceiling (spec_041 GT-31): empty follows Blitz's default
+ * (fallback), No limit is 0, and text that isn't a number is an error
+ * the form shows instead of saving.
+ */
+function CeilingField({ label, value, fallback, decimal, invalid, onChange }: { label: string; value: string; fallback: string; decimal?: boolean; invalid: boolean; onChange: (v: string) => void }) {
+  const none = noLimit(value);
+  return (
+    <Field label={label} supporting={t("desktop.guardrails.limit_hint", { value: fallback })} error={invalid ? t("desktop.guardrails.limit_invalid") : undefined}>
+      {(id) => (
+        <div className="stack" style={{ gap: 4 }}>
+          <input id={id} className="input" inputMode={decimal ? "decimal" : "numeric"} disabled={none} placeholder={none ? t("desktop.guardrails.no_limit") : fallback} value={none ? "" : value} onChange={(e) => onChange(e.target.value)} />
+          <label className="row check">
+            <input type="checkbox" checked={none} onChange={(e) => onChange(e.target.checked ? "0" : "")} />
+            <span>{t("desktop.guardrails.no_limit")}</span>
+          </label>
+        </div>
+      )}
+    </Field>
   );
 }

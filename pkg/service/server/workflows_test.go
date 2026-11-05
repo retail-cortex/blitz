@@ -62,6 +62,15 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	assert.True(t, got.Edges[2].Error)
 	assert.Equal(t, "big", got.Edges[5].Label)
 	assert.Equal(t, "it's small", got.Edges[6].If)
+	assert.Empty(t, got.SchedulePermissions, "its steps only read")
+
+	// What its schedule may do comes from the service (WF-20, N26 desktop-4#19).
+	saver, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "saver", Nodes: []*pb.FlowNode{
+		{Id: "a", Type: "save_file", Path: "reports/{{ input }}.md"}, {Id: "b", Type: "save_file", Path: "/{{ input }}.md"}}, Edges: []*pb.FlowEdge{{From: "a", To: "b"}}}}))
+	require.NoError(t, err)
+	require.Empty(t, saver.Msg.Problems)
+	assert.Equal(t, []string{"write:reports/"}, saver.Msg.Workflow.SchedulePermissions)
+	require.NoError(t, unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: dir, Name: "saver"}))
 
 	draft, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "draft", Nodes: []*pb.FlowNode{{Id: "a", Type: "agent"}}}}))
 	require.NoError(t, err)
@@ -87,6 +96,7 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	assert.JSONEq(t, `{"n": 1}`, got2.Msg.Workflow.Nodes[1].JsonBody)
 	assert.Equal(t, "[1, 2]", got2.Msg.Workflow.Nodes[2].ForEach)
 	assert.Equal(t, int32(2), got2.Msg.Workflow.Nodes[2].Concurrency)
+	assert.Equal(t, []string{"mcp:shop:lookup", "web:api.example.com", "web:agents.example.com"}, got2.Msg.Workflow.SchedulePermissions)
 	badJSON, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "bad", Nodes: []*pb.FlowNode{{Id: "m", Type: "mcp_call", ArgumentsJson: "{nope"}}}}))
 	require.NoError(t, err)
 	assert.Contains(t, badJSON.Msg.Problems[0], "aren't a JSON object")

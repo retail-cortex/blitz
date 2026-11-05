@@ -26,7 +26,7 @@ import type { ApprovalRequest, Question } from "./gen/blitz/v1/turn_pb";
 export type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; q: Question };
 
 /** The ID the service knows a waiting request by. */
-export const pendingId = (p: Pending) => (p.kind === "approval" ? p.req.requestId : p.q.requestId);
+const pendingId = (p: Pending) => (p.kind === "approval" ? p.req.requestId : p.q.requestId);
 
 /** waits with p added last (once: a request seen again isn't added twice). */
 export const addWait = (waits: Pending[], p: Pending): Pending[] => (waits.some((w) => pendingId(w) === pendingId(p)) ? waits : [...waits, p]);

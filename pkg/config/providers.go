@@ -551,7 +551,8 @@ var typedValues = map[string]string{
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given
-// (workers.policy.allow).
+// (workers.policy.allow). The desktop page lists them too (workerForm.ts
+// ruleKinds), keeping a kind it doesn't list.
 var WorkerPermissionKinds = []string{"shell", "write", "delete", "web", "mcp"}
 
 // SearchSourceNames are the sources workspace search knows.

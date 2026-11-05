@@ -64,7 +64,7 @@ export function scenarioName(prompt: string, taken: readonly string[]): string {
   return name;
 }
 
-/** Whether name may name a skill: lowercase letters, digits and single hyphens, up to 64. */
+/** Whether name may name a skill: lowercase letters, digits and single hyphens, up to 64 (as the service checks it; SaveSkill refuses the rest). */
 export function validSkillName(name: string): boolean {
   return name.length <= 64 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name);
 }
@@ -82,7 +82,7 @@ export function skillName(text: string): string {
 }
 
 /** The kinds of skill (SK-97), in the order the form describes them. */
-export const skillKinds = ["simple", "references", "scripts", "meta"] as const;
+const skillKinds = ["simple", "references", "scripts", "meta"] as const;
 /** A kind of skill. */
 export type SkillKind = (typeof skillKinds)[number];
 
@@ -96,7 +96,7 @@ export const scriptLanguages = { python: ".py", typescript: ".ts", javascript: "
 /** A script's language. */
 export type ScriptLanguage = keyof typeof scriptLanguages;
 
-/** A script file's language, from its extension ("" for neither). */
+/** A script file's language, from its extension ("" for neither): for a file not yet saved; a saved script's is the service's (SkillScript.language). */
 export function languageOfScript(path: string): ScriptLanguage | "" {
   const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
   const by: Record<string, ScriptLanguage> = { ".py": "python", ".ts": "typescript", ".js": "javascript", ".mjs": "javascript", ".sh": "shell", ".cmd": "cmd", ".bat": "cmd", ".ps1": "powershell" };
