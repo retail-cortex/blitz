@@ -147,3 +147,46 @@ func TestKeepChangesDeletedAlready(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"never-there.txt"}, written)
 }
+
+// A script's changes aren't kept over a file that changed since the copy
+// was made: nothing is written (N26 engine-tools-2#13).
+func TestKeepChangesRefusesChangedFiles(t *testing.T) {
+	tests := []struct {
+		name      string
+		meanwhile func(t *testing.T, ws string)
+		change    wsChange
+		refused   bool
+	}{
+		{"edited meanwhile", func(t *testing.T, ws string) {
+			require.NoError(t, os.WriteFile(filepath.Join(ws, "report.md"), []byte("the user's edit"), 0o644))
+		}, wsChange{path: "report.md", after: []byte("the script's")}, true},
+		{"made meanwhile", func(t *testing.T, ws string) {
+			require.NoError(t, os.WriteFile(filepath.Join(ws, "new.md"), []byte("the user's"), 0o644))
+		}, wsChange{path: "new.md", after: []byte("the script's")}, true},
+		{"deleted meanwhile", func(t *testing.T, ws string) {
+			require.NoError(t, os.Remove(filepath.Join(ws, "report.md")))
+		}, wsChange{path: "report.md", after: []byte("the script's")}, true},
+		{"left alone", func(*testing.T, string) {}, wsChange{path: "report.md", after: []byte("the script's")}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newWriterFixture(t, approveAll)
+			require.NoError(t, os.WriteFile(filepath.Join(f.ws, "report.md"), []byte("before"), 0o644))
+			cp, err := copyWorkspace(f.r.ws)
+			require.NoError(t, err)
+			defer cp.remove()
+			tt.meanwhile(t, f.ws)
+			before, _ := os.ReadFile(filepath.Join(f.ws, tt.change.path))
+			written, err := cp.keepChanges(context.Background(), f.r.ws, f.r.hooks, "writer", []wsChange{tt.change})
+			after, _ := os.ReadFile(filepath.Join(f.ws, tt.change.path))
+			if tt.refused {
+				assert.ErrorIs(t, err, errChangedDuringApproval)
+				assert.Empty(t, written)
+				assert.Equal(t, string(before), string(after), "the file was overwritten")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, "the script's", string(after))
+		})
+	}
+}
