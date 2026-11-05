@@ -69,7 +69,10 @@ type Registry struct {
 	// modeNote is why the configured permission mode couldn't be used
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
-	rules    *PermissionRules
+	// checkpointsErr is why the checkpoints on disk couldn't be opened (they
+	// are kept in memory only), or nil.
+	checkpointsErr error
+	rules          *PermissionRules
 
 	browser *browserTool // nil: no browser tool
 	page    pageTool     // open_page (spec_050_agent_browser AB-10)
@@ -163,6 +166,10 @@ func (r *Registry) CommandPolicy() *CommandPolicy { return r.policy }
 
 // ModeNote is why the configured permission mode wasn't used, or nil.
 func (r *Registry) ModeNote() error { return r.modeNote }
+
+// CheckpointsErr is why the checkpoints /undo uses couldn't be opened on
+// disk, so they last only as long as this process, or nil.
+func (r *Registry) CheckpointsErr() error { return r.checkpointsErr }
 
 // NewRegistry initializes all standard Blitz tools. Call Close when done
 // to stop background processes and release the workspace handle.
@@ -282,9 +289,8 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			sum := sha256.Sum256([]byte(ws.Dir()))
 			opts.Dir = filepath.Join(config.ExpandHome(cfg.Checkpoints.Dir), hex.EncodeToString(sum[:12]))
 		}
-		var err error
-		if r.checkpoints, err = OpenCheckpoints(ws, opts); err != nil {
-			slog.Warn("checkpoints", "error", err)
+		if r.checkpoints, r.checkpointsErr = OpenCheckpoints(ws, opts); r.checkpointsErr != nil {
+			slog.Warn("checkpoints", "error", r.checkpointsErr)
 		}
 	}
 	if cfg.Images.Enabled {

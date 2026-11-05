@@ -525,6 +525,12 @@ func TestOpenWarnings(t *testing.T) {
 			require.NoError(t, os.WriteFile(file, nil, 0o644))
 			c.Audit.Enabled, c.Audit.Dir = true, filepath.Join(file, "audit")
 		}, want: "audit log disabled"},
+		// N26 engine-tools-2#18: said at the start, not found out at /undo.
+		{name: "checkpoints that can't be kept on disk", mutate: func(t *testing.T, c *config.Config) {
+			file := filepath.Join(t.TempDir(), "file")
+			require.NoError(t, os.WriteFile(file, nil, 0o644))
+			c.Checkpoints.Enabled, c.Checkpoints.Dir = true, filepath.Join(file, "checkpoints")
+		}, want: "checkpoints are kept in memory only"},
 		{name: "old images are pruned", mutate: func(_ *testing.T, c *config.Config) { c.Images.Enabled, c.Images.RetainDays = true, 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
