@@ -129,6 +129,10 @@ func (s *Server) gitHelper() string {
 // with an old sign-in, say) aren't asked, for Git run there by Changes,
 // the person or an agent.
 func (s *Server) setHelper(ctx context.Context, dir, url string) error {
+	// Opening a workspace and its sync's start both set it, at once: two
+	// git configs on one file, and the second can't take its lock.
+	s.ent.helperMu.Lock()
+	defer s.ent.helperMu.Unlock()
 	key := "credential." + url + ".helper"
 	if out, err := s.gitOut(ctx, dir, "config", "-z", "--get-all", key); err == nil && string(out) == "\x00"+s.gitHelper()+"\x00" {
 		return nil // as it should be: sharing and its sync's start both set it

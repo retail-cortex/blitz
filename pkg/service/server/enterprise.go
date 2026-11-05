@@ -39,6 +39,9 @@ import (
 type enterpriseConn struct {
 	mu sync.Mutex
 	c  *enterprise.Client
+	// helperMu makes setting a clone's credential helper one step at a
+	// time (setHelper).
+	helperMu sync.Mutex
 	// signingIn holds a token while a sign-in runs (beginSignIn).
 	signingIn chan struct{}
 	slotOnce  sync.Once
