@@ -92,6 +92,7 @@ import {
   filesTouched,
   loadSessionEvent,
   openSettings,
+  searchWorkspace,
   showPendingEvent,
   showView,
   startReflect,
@@ -122,6 +123,7 @@ import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
+import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
 
 /** A background task's approval request or question, waiting for an answer. */
@@ -294,6 +296,7 @@ export function Conversation({
   useEffect(() => setActivity(dir, { running, waiting: !!pending }), [dir, running, pending, setActivity]);
   // A closed (or remounted) workspace's activity goes with it.
   useEffect(() => () => setActivity(dir, null), [dir, setActivity]);
+  useLoopsEndWith(dir);
 
   // Tell the user, when they're looking elsewhere, that the agent waits or is done.
   const started = useRef(0);
@@ -764,6 +767,7 @@ export function Conversation({
       busy: () => latestRunning.current,
       settingsChanged: onSettingsChanged,
       openView: onOpenView,
+      openSearch: searchWorkspace,
       openSettings: (section, scope, connect) => openSettings({ section, scope, connect }),
       reviewProject: onReviewProject,
       reload,

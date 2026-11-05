@@ -33,11 +33,11 @@ import { Chip, Icon, IconButton, Segmented, useModal } from "@blitz/webui";
  * start). Each hit shows where it is and its passage, the words marked;
  * Enter or a click opens it: a file at its line, a chat, a plan.
  */
-export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string; initialQuery?: string; onClose: () => void }) {
+export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }: { dir: string; initialQuery?: string; initialSources?: SearchSource[]; onClose: () => void }) {
   const [query, setQuery] = useState(initialQuery);
   // Hidden files (dotfiles, ones git ignores) only when the Files shelf shows them.
   const hidden = useApp().prefs.show_hidden;
-  const [sources, setSources] = useState<SearchSource[]>(defaultSources);
+  const [sources, setSources] = useState<SearchSource[]>(initialSources?.length ? initialSources : defaultSources);
   // How to search: by meaning too, once an embedding model is set.
   const [mode, setMode] = useState<"hybrid" | "keyword" | "semantic">("hybrid");
   const [hits, setHits] = useState<SearchHit[]>([]);

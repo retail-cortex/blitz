@@ -25,6 +25,7 @@ import { checkService, type ServiceCheck, shownVersion } from "./serviceVersion"
 import { useStopGuard } from "./stopGuard";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
+import type { SearchSource } from "./search";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
@@ -231,7 +232,7 @@ function Shell() {
   useEffect(() => onAppMenu((item) => setSettingsAt({ section: item === "about" ? "about" : "appearance" })), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Workspace search, open with the query it starts with (null: closed).
-  const [searchOpen, setSearchOpen] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState<{ query: string; sources?: SearchSource[] } | null>(null);
   // Cmd/Ctrl+K opens the command palette, and Cmd/Ctrl+P (Go to file) the
   // same, files first; Cmd/Ctrl+, the settings; F11 (and ⌃⌘F on macOS)
   // makes the window full screen.
@@ -239,7 +240,7 @@ function Shell() {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
-        setSearchOpen("");
+        setSearchOpen({ query: "" });
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
@@ -258,7 +259,10 @@ function Shell() {
       }
     };
     const goTo = () => setPaletteOpen(true);
-    const search = (e: Event) => setSearchOpen((e as CustomEvent<{ query?: string }>).detail?.query ?? "");
+    const search = (e: Event) => {
+      const d = (e as CustomEvent<{ query?: string; sources?: SearchSource[] }>).detail;
+      setSearchOpen({ query: d?.query ?? "", sources: d?.sources });
+    };
     window.addEventListener("keydown", key);
     window.addEventListener(goToFileEvent, goTo);
     window.addEventListener(searchWorkspaceEvent, search);
@@ -428,7 +432,7 @@ function Shell() {
         <TasksDialog />
         <TaskAlerts />
         <FlowRunAlerts />
-        {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
+        {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen.query} initialSources={searchOpen.sources} onClose={() => setSearchOpen(null)} />}
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
         {confirmClose && (
           <Dialog
