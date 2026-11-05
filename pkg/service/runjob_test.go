@@ -109,6 +109,9 @@ func TestRunJob(t *testing.T) {
 	p := enterprisetest.NewProvider(t)
 	s := enterprisetest.NewService(t, p.URL)
 	s.AddWorkspace(t, "plans", "Plans", "owner")
+	// A run's files: fewer than the service's 1,000, to fill them quickly.
+	defer func(n int) { maxRunFiles = n }(maxRunFiles)
+	maxRunFiles, s.MaxRunFiles = 30, 30
 	git := func(dir string, args ...string) string {
 		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
 		cmd.Dir = dir
@@ -209,7 +212,7 @@ func TestRunJob(t *testing.T) {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
 		note, _ := s.Ends["r11"]["note"].(string)
-		assert.Regexp(t, `more than \d+ files in out/ \(a run keeps 1000, its log and session among them\)`, note)
+		assert.Regexp(t, `more than \d+ files in out/ \(a run keeps 30, its log and session among them\)`, note)
 		assert.Contains(t, note, "permission denied")
 		assert.NotContains(t, note, "too_many", "never more than the service keeps")
 		assert.NotContains(t, note, "session/", "its session kept")
@@ -361,6 +364,9 @@ func TestRunJobPauses(t *testing.T) {
 	p := enterprisetest.NewProvider(t)
 	s := enterprisetest.NewService(t, p.URL)
 	s.AddWorkspace(t, "plans", "Plans", "owner")
+	// A run's files: fewer than the service's 1,000, to fill them quickly.
+	defer func(n int) { maxRunFiles = n }(maxRunFiles)
+	maxRunFiles, s.MaxRunFiles = 30, 30
 	git := func(dir string, args ...string) string {
 		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
 		cmd.Dir = dir

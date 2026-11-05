@@ -499,8 +499,8 @@ func (r *jobRun) keep(ctx context.Context) error {
 }
 
 // maxRunFiles is how many files the service keeps a run, its log and
-// session among them.
-const maxRunFiles = 1000
+// session among them (a variable for tests).
+var maxRunFiles = 1000
 
 // How long a job's runner waits, past the run's own time limit for all
 // but the first (spec_009_jobs JB-10, JB-30).

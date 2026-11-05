@@ -21,6 +21,7 @@
 package enterprisetest
 
 import (
+	"cmp"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
@@ -227,6 +228,9 @@ type Service struct {
 	// refuses them all, as a service without a store does.
 	Kept        map[string]map[string]Artifact
 	KeepRefused bool
+	// MaxRunFiles is how many files the service keeps a run, a new one
+	// past it refused (blitz-enterprise's jobs.MaxRunFiles, 1,000, when 0).
+	MaxRunFiles int
 	// ServiceJobs are the jobs the service runs (GET /api/v1/jobs);
 	// ServiceRuns their runs, by job ID, newest first; Files the files
 	// under each resource name, and Contents each file's, by its name.
@@ -315,10 +319,6 @@ type File struct {
 	MediaType string `json:"media_type"`
 	Size      int64  `json:"size"`
 }
-
-// maxRunFiles is how many files the service keeps a run (blitz-enterprise's
-// jobs.MaxRunFiles): a new one past it is refused.
-const maxRunFiles = 1000
 
 // Artifact is one file a run kept.
 type Artifact struct {
@@ -1043,8 +1043,8 @@ func NewService(t testing.TB, issuer string) *Service {
 		if s.Kept[id] == nil {
 			s.Kept[id] = map[string]Artifact{}
 		}
-		if _, again := s.Kept[id][r.PathValue("path")]; !again && len(s.Kept[id]) >= maxRunFiles {
-			refuse(w, http.StatusRequestEntityTooLarge, "too_many", fmt.Sprintf("A run keeps at most %d files.", maxRunFiles))
+		if _, again := s.Kept[id][r.PathValue("path")]; !again && len(s.Kept[id]) >= cmp.Or(s.MaxRunFiles, 1000) {
+			refuse(w, http.StatusRequestEntityTooLarge, "too_many", fmt.Sprintf("A run keeps at most %d files.", cmp.Or(s.MaxRunFiles, 1000)))
 			return
 		}
 		s.Kept[id][r.PathValue("path")] = Artifact{MediaType: r.Header.Get("Content-Type"), Body: string(body)}

@@ -43,13 +43,13 @@ var (
 	_                                              = service.Options{Version: "", Network: &service.Network{
 		Listener: nil, TLS: nil, Plain: false, Auth: nil, Authz: nil, Routes: (*http.ServeMux)(nil), Wrap: func(http.Handler) http.Handler { return nil },
 	}}
-	_ func(func(string) string) (service.Job, error)               = service.JobFromEnv
-	_ func(context.Context, service.Job, service.JobOptions) error = service.RunJob
-	_                                                              = service.JobOptions{Client: ""}
-	_ service.Caller                                               = service.Caller{ID: "", Email: "", Roles: []string{}}
-	_ error                                                        = &service.Refusal{Status: 0, Code: "", Message: ""}
-	_ func(*http.Request) (service.Caller, error)                  = service.Authenticator(nil).Authenticate
-	_ func(context.Context, service.Caller, string) error          = service.Authorizer(nil).Authorize
+	_ func(func(string) string) (service.Job, error)                          = service.JobFromEnv
+	_ func(context.Context, service.Job, service.JobOptions) error            = service.RunJob
+	_                                                                         = service.JobOptions{Client: ""}
+	_ service.Caller                                                          = service.Caller{ID: "", Email: "", Roles: []string{}}
+	_ error                                                                   = &service.Refusal{Status: 0, Code: "", Message: ""}
+	_ func(service.Authenticator, *http.Request) (service.Caller, error)      = service.Authenticator.Authenticate
+	_ func(service.Authorizer, context.Context, service.Caller, string) error = service.Authorizer.Authorize
 )
 
 // pkg/urn, pkg/guardrails, pkg/catalog, pkg/secrets, pkg/jobspec and
