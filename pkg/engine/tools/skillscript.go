@@ -256,8 +256,8 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1")
 	}
 	if ev.Tier >= skills.Tier2AuditedWrite || ev.Bypass {
-		dir := filepath.Join(s.ws.Dir(), SkillOutputDir, skill.Name, fmt.Sprintf("%s-%s", sc.Name, time.Now().Format("20060102-150405.000")))
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		dir, err := s.ws.OwnDir(filepath.Join(SkillOutputDir, skill.Name, fmt.Sprintf("%s-%s", sc.Name, time.Now().Format("20060102-150405.000"))), 0o700)
+		if err != nil {
 			return fail("%v", err)
 		}
 		writable = append(writable, dir)

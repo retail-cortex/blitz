@@ -660,6 +660,40 @@ func (w *Workspace) Describe() []string {
 	return lines
 }
 
+// OwnDir makes the folder p (and its parents) for files Blitz itself puts
+// in the workspace, such as a skill script's output, and returns its
+// absolute path. It is checked like a file tool's write (refused in a
+// read-only workspace or root, or on a blocked path) and made through
+// os.Root, so a link in the way can't lead it out of the workspace.
+func (w *Workspace) OwnDir(p string, perm os.FileMode) (string, error) {
+	loc, err := w.resolve(p, true)
+	if err != nil {
+		return "", err
+	}
+	if err := loc.root.root.MkdirAll(loc.rel, perm); err != nil {
+		return "", err
+	}
+	return loc.abs(), nil
+}
+
+// CheckOwnFile checks that Blitz may write the file p itself, outside the
+// file tools (a git hook): as a file tool's write, and with its real
+// location, links resolved, inside the workspace.
+func (w *Workspace) CheckOwnFile(p string) error {
+	loc, err := w.resolve(p, true)
+	if err != nil {
+		return err
+	}
+	real, err := resolveExistingPrefix(loc.abs())
+	if err != nil {
+		return err
+	}
+	if _, ok := relIn(loc.root.dir, real); !ok {
+		return fmt.Errorf("%w: %s leads out of the workspace", ErrOutsideWorkspace, w.display(loc.abs()))
+	}
+	return nil
+}
+
 func mkdirParent(r *os.Root, rel string) error {
 	dir := filepath.Dir(rel)
 	if dir == "." {
