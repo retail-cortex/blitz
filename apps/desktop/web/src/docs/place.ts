@@ -49,3 +49,11 @@ export function savePlace(place: DocsPlace, storage: Pick<Storage, "setItem"> | 
     // storage refused: the guide starts on Tutorials next time
   }
 }
+
+/** A place in the guide's history: a page, the heading asked for, and how far down it was left. */
+export type Place = { page: string; anchor?: string; scroll?: number };
+
+/** The history with how far down its place at index was left (when leaving it, for back and forward). */
+export function keepScroll(history: Place[], index: number, scroll: number): Place[] {
+  return history.map((p, i) => (i === index ? { ...p, scroll } : p));
+}

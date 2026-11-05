@@ -38,6 +38,7 @@ import {
 import { config } from "./api";
 import { message, reason } from "./errors";
 import { useServiceRuns } from "./serviceRuns";
+import { formatBytes } from "./bytes";
 import { language, t } from "./i18n";
 import type { GetServiceJobResponse, ServiceJob, ServiceRun, ServiceRunFile } from "./gen/blitz/v1/config_pb";
 import type { Worker } from "./gen/blitz/v1/worker_pb";
@@ -52,14 +53,6 @@ const statusIcon: Record<string, string> = {
   skipped: mdiPauseCircleOutline,
   stopped: mdiStopCircleOutline,
 };
-
-/** A size in bytes, for people. */
-export function size(n: bigint | number): string {
-  const b = Number(n);
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / 1024 / 1024).toFixed(1)} MB`;
-}
 
 /** Sync states waiting won't clear: the person acts (signs in, resolves, fixes the file), then Check again. */
 const stuckSync = ["offline", "signed_out", "conflicts", "refused", "secrets"];
@@ -331,7 +324,7 @@ function ServiceRunRow({
         {files?.map((f) => (
           <span key={f.urn} className="row t-body-sm" style={{ gap: 4 }}>
             <code className="ellipsis spacer">{f.path}</code>
-            <span className="muted">{size(f.size)}</span>
+            <span className="muted">{formatBytes(f.size)}</span>
             <IconButton icon={mdiDownload} label={t("desktop.service_job.save", { name: f.path })} small onClick={() => void save(f)} />
           </span>
         ))}

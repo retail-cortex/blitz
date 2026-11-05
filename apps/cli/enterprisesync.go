@@ -71,16 +71,10 @@ func syncCmd(cmd *cobra.Command, g *globalFlags, save bool) error {
 		}
 	}
 	printOrgSync(cmd.OutOrStdout(), st)
-	if failedSync(st.State) {
+	if st.Failed {
 		return withCode(exitFailure, errors.New("not saved to the service yet"))
 	}
 	return nil
-}
-
-// failedSync is whether a sync's state means the service hasn't got this
-// computer's saves.
-func failedSync(state string) bool {
-	return state == "offline" || state == "signed_out" || state == "refused" || state == "secrets"
 }
 
 func printOrgSync(w io.Writer, st client.OrgSync) {

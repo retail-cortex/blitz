@@ -18,10 +18,13 @@
 // development build). It keeps a little state in memory and scripts turns
 // so every state of the conversation can be seen: streamed Markdown,
 // thinking, tool calls, a task list, an approval and a plan review.
-import { clone, create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
+import { clone, create, type DescService, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
+import { Code, ConnectError, createRouterTransport, type ConnectRouter } from "@connectrpc/connect";
 import { setTransport } from "../api";
+import { parseMessages } from "../a2ui/model";
+import { parseDuration } from "../workerForm";
+import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
 import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
@@ -94,6 +97,12 @@ const fakeBranches = [
   { name: "spike/lazy-totals", subject: "Compute totals on read", upstream: "" },
   { name: "origin/feature/gift-cards", subject: "Gift card balance lookup", upstream: "", remote: true },
 ];
+/** An invalid-argument error with the service's reason (INVALID_ARGUMENT, as its invalid() sends). */
+function fakeInvalid(msg: string, reason = "INVALID_ARGUMENT", metadata: Record<string, string> = {}): ConnectError {
+  const err = new ConnectError(msg, Code.InvalidArgument);
+  err.details.push({ desc: ErrorInfoSchema, value: { reason, metadata } });
+  return err;
+}
 /** A failed-precondition error with the service's reason, as the real one sends. */
 function fakeError(msg: string, reason: string): ConnectError {
   const err = new ConnectError(msg, Code.FailedPrecondition);
@@ -218,8 +227,9 @@ function saveAgent(workspace: string, scope: AgentScope, previous: string, a: Ag
   const dir = agentFolder(workspace, scope);
   const files = fakeAgentFiles.get(dir)!;
   const problems: string[] = [];
-  if (!/^[a-z0-9][a-z0-9_-]*$/.test(a.name)) problems.push(`name ${JSON.stringify(a.name)}: lowercase letters, digits, - and _`);
-  if (builtinAgents.includes(a.name)) problems.push(`agent name ${JSON.stringify(a.name)} is reserved by a built-in agent`);
+  // As agents.Save: a built-in's name, the description, then the file's own checks.
+  if (builtinAgents.includes(a.name)) problems.push(`name ${JSON.stringify(a.name)} is a built-in agent's`);
+  problems.push(...agentProblems(a));
   if (a.name !== previous && [...files.values()].some((f) => f.agent?.name === a.name)) problems.push(`an agent named ${JSON.stringify(a.name)} already exists in ${dir}`);
   if (problems.length) return { problems };
   for (const [p, f] of files) if (previous && f.agent?.name === previous) files.delete(p);
@@ -314,6 +324,16 @@ function fakeProject(s: State) {
 // reflection's tiles.
 const suggestionsAsked = new Map<string, number>();
 // The session's goal (/goal), the same for every workspace.
+// Each model's own settings ([models."<name>"]), as UpdateModelSettings left them.
+const fakeModelSettings = new Map<string, ModelSettings>([
+  ["gpt-5", { temperature: 1 }],
+  ["claude-opus-5-5", { reasoningEffort: "high" }],
+]);
+/** A model's settings as GetModelSettings gives them: its own, and the global ones that apply otherwise. */
+const fakeModelInfo = (ref: string) => {
+  const model = ref.split("/").pop() ?? ref;
+  return { model, provider: ref.includes("/") ? ref.split("/")[0] : "gemini", settings: { ...(fakeModelSettings.get(model) ?? {}) }, globalTemperature: 0.2, globalMaxTokens: 65536 };
+};
 let fakeGoal: { condition: string; continues: number; max: number; last: string } | undefined;
 function fakeSuggestions(dir: string) {
   if (!suggestionsAsked.has(dir)) suggestionsAsked.set(dir, Date.now());
@@ -555,6 +575,13 @@ type FakeWorker = Record<string, unknown> & { name: string; hash: string; state:
 const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
 // The home workspace the global workers run in (~/.blitz/home), and theirs.
 const fakeHome = "/home/me/.blitz/home";
+/** A workspace's jobs: the global ones in the home workspace, the shop's elsewhere. */
+const workersOf = (workspace: string) => (workspace === fakeHome ? fakeGlobal : fakeWorkers);
+/** A job's limits as the service lists them (a timeout as a Duration; none left out). */
+const fakeLimits = (w: { maxTurns: number; maxCostUsd: number; timeout: string }) => {
+  const ms = parseDuration(w.timeout);
+  return { maxTurns: w.maxTurns, maxCostUsd: w.maxCostUsd, timeout: ms ? { seconds: BigInt(Math.round(ms / 1000)) } : undefined };
+};
 const fakeGlobal: FakeWorker[] = [
   { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
 ];
@@ -564,9 +591,10 @@ const fakeElsewhere = [
   { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
   { workspace: "/home/me/old-site", home: false, missing: true, problem: "", workers: [{ workspace: "/home/me/old-site", name: "backup", state: WorkerState.ENABLED, problems: [], permissions: [] }] },
 ];
-// The global limits on every worker ([workers.policy]); the service still
-// runs two at once until it restarts.
-const fakePolicy = { allow: ["shell", "write", "web"], defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h", maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
+// The global limits on every worker ([workers.policy]), as shipped:
+// defaults and no caps (WK-73); jobs may not delete or use MCP here, and
+// the service still runs two at once until it restarts.
+const fakePolicy = { ...policyDefaults, allow: ["shell", "write", "web"], maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
 // Studio's skills: the workspace's own, with their files, and those it
 // sees elsewhere (yours, a plugin's, built in) to copy or reference.
 type FakeSkill = { name: string; description: string; tools: string; agents: string[]; members: string[]; instructions: string; files: Record<string, string>; triggers?: string[]; scenarios?: FakeScenario[] };
@@ -716,11 +744,7 @@ async function* followFakeEval(live: FakeLiveEval, signal: AbortSignal) {
 // Studio's guardrails: prompt injection with its defaults, secrets tuned,
 // limits switched off, and one of the workspace's own.
 type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
-const fakeBuiltinGuards = [
-  { id: "prompt_injection", stage: "tool_result", defaultAction: "redact", actions: ["redact", "warn", "block"] },
-  { id: "secrets", stage: "output", defaultAction: "redact", actions: ["redact", "warn", "block"] },
-  { id: "limits", stage: "action", defaultAction: "block", actions: ["block"] },
-];
+const fakeBuiltinGuards = guardBuiltins;
 const fakeGuards: FakeGuard[] = [
   { name: "secrets", builtin: "secrets", stage: "output", action: "redact", agents: [], tools: [], description: "", pii: true, judge: false, off: false, text: "" },
   { name: "limits", builtin: "limits", stage: "action", action: "block", agents: [], tools: [], description: "", pii: false, judge: false, off: true, limits: { maxCostUsd: 2, maxTurns: 40, maxFilesChanged: 0, allowedDomains: [], commands: ["git push --force*", "rm -rf /*"] }, text: "" },
@@ -1019,7 +1043,8 @@ function workspaceMCP(workspace: string): MCPServerConfig[] {
 }
 const mcpPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b3c4d/.env.toml` : "~/.blitz/.env.toml");
 const fakeMCP: MCPServerConfig[] = [
-  create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
+  // An allow-list and a prefix, which an edit must keep (the form sends them back).
+  create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" }, tools: ["search_issues", "get_pull_request", "create_issue"], prefix: "gh" }),
   create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),
   create(MCPServerConfigSchema, { name: "postgres", command: "postgres-mcp", args: ["--ro"], disabled: true }),
 ];
@@ -1202,9 +1227,9 @@ const fakeProcesses: MessageInitShape<typeof WorkspaceProcessSchema>[] = new URL
   : [];
 const fakeProcessOutput = Array.from({ length: 60 }, (_, i) => `[vite] ${String(10 + Math.floor(i / 6)).padStart(2, "0")}:${String((i * 7) % 60).padStart(2, "0")} hmr update /src/cart/${["Totals", "Coupon", "LineItem"][i % 3]}.tsx`).join("\n") + "\n";
 // The process stream: the running ones now, then whenever the list changes.
-async function* watchFakeProcesses(workspace: string) {
+async function* watchFakeProcesses(workspace: string, signal?: AbortSignal) {
   let last = "";
-  for (;;) {
+  while (!signal?.aborted) {
     const processes = fakeProcesses.filter((x) => !workspace || x.workspace === workspace);
     const sig = processes.map((x) => `${x.workspace}#${x.process?.id}`).join("|");
     if (sig !== last) {
@@ -1215,9 +1240,9 @@ async function* watchFakeProcesses(workspace: string) {
   }
 }
 // The task stream: the list now, then whenever it changes (as the service's).
-async function* watchFakeTasks(workspace: string) {
+async function* watchFakeTasks(workspace: string, signal?: AbortSignal) {
   let last = "";
-  for (;;) {
+  while (!signal?.aborted) {
     const tasks = fakeTasks.filter((x) => !workspace || x.workspace === workspace);
     const sig = fakeAlerts + tasks.map((x) => x.id).join("|");
     if (sig !== last) {
@@ -1354,9 +1379,9 @@ const fakeHealth: WorkspaceHealth = create(WorkspaceHealthSchema, {
 
 let fakeChecking = false;
 let fakeProgress: { item: string; index: number; total: number; costUsd: number } | undefined;
-async function* watchFakeHealth(): AsyncGenerator<{ health: WorkspaceHealth }> {
+async function* watchFakeHealth(signal?: AbortSignal): AsyncGenerator<{ health: WorkspaceHealth }> {
   let last = "";
-  for (;;) {
+  while (!signal?.aborted) {
     const sig = JSON.stringify([fakeHealth.items.map((i) => i.verdict?.overall ?? 0), fakeChecking, fakeHealth.lastCheck?.seconds.toString()]);
     if (sig !== last) {
       last = sig;
@@ -1517,9 +1542,9 @@ const summary = (r: WorkflowRun) => {
 };
 const receiptsFor = (workspace: string) => fakeReceipts.map((r) => (r.workspace ? r : Object.assign(r, { workspace: [...states.keys()][0] ?? workspace })));
 
-async function* watchFakeRuns(workspace: string) {
+async function* watchFakeRuns(workspace: string, signal?: AbortSignal) {
   let last = -1;
-  for (;;) {
+  while (!signal?.aborted) {
     if (receiptsVersion !== last) {
       last = receiptsVersion;
       const cutoff = Date.now() - 10 * 60_000;
@@ -1529,9 +1554,9 @@ async function* watchFakeRuns(workspace: string) {
   }
 }
 
-async function* watchFakeRun(id: string) {
+async function* watchFakeRun(id: string, signal?: AbortSignal) {
   let last = -1;
-  for (;;) {
+  while (!signal?.aborted) {
     const r = fakeReceipts.find((x) => x.id === id);
     if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
     if (receiptsVersion !== last) {
@@ -1587,10 +1612,28 @@ async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof Wat
   yield ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "CANCELLED", message: "stopped" }) } });
 }
 
+/**
+ * The router's service, its server streams passed on as the page server
+ * does (withKeepalives): an empty message whenever one is quiet, which a
+ * stream whose messages are the whole state must tell from an empty list.
+ */
+function keepalivesFor(router: ConnectRouter): ConnectRouter["service"] {
+  return ((def: DescService, impl: Record<string, unknown>, opts?: unknown) => {
+    const wrapped: Record<string, unknown> = { ...impl };
+    for (const m of def.methods) {
+      const f = impl[m.localName];
+      if (m.methodKind === "server_streaming" && typeof f === "function") wrapped[m.localName] = (req: unknown, ctx: { signal: AbortSignal }) => withKeepalives(f.call(impl, req, ctx) as AsyncIterable<unknown>, ctx.signal);
+    }
+    return router.service(def as never, wrapped as never, opts as never);
+  }) as ConnectRouter["service"];
+}
+
 /** Replaces the service with the in-page fake (development: ?fake). */
 export function installFake() {
   setTransport(
-    createRouterTransport(({ service }) => {
+    createRouterTransport((router) => {
+      // Every server stream with the page server's keepalives in it.
+      const service = keepalivesFor(router);
       service(SessionService, {
         // The slash commands' (slashCommands.ts): enough to see each answer.
         exportSession: ({ workspace }) => ({ markdown: `# ${active(state(workspace)).title || "Chat"}\n` }),
@@ -1716,8 +1759,8 @@ export function installFake() {
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
         // Workflows' human tasks, answered by their forms.
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
-        watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
-        watchProcesses: ({ workspace }) => watchFakeProcesses(workspace),
+        watchHumanTasks: ({ workspace }, ctx) => watchFakeTasks(workspace, ctx.signal),
+        watchProcesses: ({ workspace }, ctx) => watchFakeProcesses(workspace, ctx.signal),
         // A ! command: a few lines of output, then how it ended ("fail" in it exits 1; "sleep" runs until stopped).
         runShell: async function* ({ command }, ctx) {
           const start = Date.now();
@@ -1742,8 +1785,8 @@ export function installFake() {
           if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
           return { run: r };
         },
-        watchWorkflowRun: ({ id }) => watchFakeRun(id),
-        watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
+        watchWorkflowRun: ({ id }, ctx) => watchFakeRun(id, ctx.signal),
+        watchWorkflowRuns: ({ workspace }, ctx) => watchFakeRuns(workspace, ctx.signal),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
         // The composer: one question, then a three-step draft.
         startCompose: ({ request, kind }) =>
@@ -1807,7 +1850,7 @@ export function installFake() {
           })();
           return {};
         },
-        watchWorkspaceHealth: () => watchFakeHealth(),
+        watchWorkspaceHealth: (_req, ctx) => watchFakeHealth(ctx.signal),
         estimateHealthCheck: ({ scope }) => {
           const n = fakeDue(scope).length;
           return { items: n, costUsd: n * 0.0019, priced: true };
@@ -1825,11 +1868,14 @@ export function installFake() {
           if (bg) state(bg.workspace).pending.get(`${bg.id}-save`)?.("stop");
           return {};
         },
-        answerHumanTask: ({ taskId, actionJson }) => {
+        answerHumanTask: ({ taskId, actionJson, dataJson }) => {
           const i = fakeTasks.findIndex((x) => x.id === taskId);
           if (i < 0) throw new ConnectError("no such task", Code.NotFound);
-          // The service checks the answer against the form; the fake, that it's an action.
-          if (!(JSON.parse(actionJson || "{}") as { action?: unknown }).action) throw new ConnectError("the answer isn't accepted: not an action message", Code.InvalidArgument);
+          // Checked against the form, as the service's CheckAnswer does (WF-18).
+          const form = parseMessages(fakeTasks[i].a2uiJson).form;
+          if (!form) throw fakeError("a timer isn't answered: its run goes on at its time", "NOT_ANSWERABLE");
+          const r = checkAnswer(form, taskId, actionJson, dataJson);
+          if ("problems" in r) throw fakeInvalid(`the answer isn't accepted: ${r.problems.join("; ")}`, "ANSWER_INVALID", { problems: r.problems.join("\n") });
           fakeTasks.splice(i, 1);
           return {};
         },
@@ -1917,17 +1963,20 @@ export function installFake() {
           dir: `${workspace}/.agents/guardrails`,
           builtins: fakeBuiltinGuards.map((b) => {
             const g = fakeGuards.find((x) => x.builtin === b.id);
-            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true, limits: b.id === "limits" ? { maxCostUsd: 0, maxTurns: 0, maxFilesChanged: 0, allowedDomains: [], commands: ["git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"] } : undefined } };
+            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true, limits: b.id === "limits" ? builtinLimits() : undefined } };
           }),
           guardrails: fakeGuards.filter((g) => !g.builtin).map((g) => fakeGuardFile(workspace, g)),
         }),
         saveGuardrail: ({ workspace, previousName, guardrail }) => {
           const g = guardrail!;
-          const name = g.builtin || g.name;
-          if (!g.builtin && !/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name)) return { problems: [`name "${name}": lowercase letters, digits and single hyphens, up to 64`] };
-          if (!g.builtin && !g.text.trim()) return { problems: ["the guardrail is empty: say what to catch"] };
-          const next = { name, builtin: g.builtin, stage: g.builtin ? fakeBuiltinGuards.find((b) => b.id === g.builtin)!.stage : g.stage, action: g.action, agents: g.agents, tools: g.tools, description: g.description, pii: g.pii, judge: g.judge, limits: g.limits, text: g.text, off: g.off };
-          const i = fakeGuards.findIndex((x) => x.name === (g.builtin || previousName || name));
+          const name = (g.builtin || g.name).trim();
+          const problems = guardrailProblems({ ...g, name });
+          if (problems.length) return { problems };
+          const previous = g.builtin ? (fakeGuards.some((x) => x.name === g.builtin) ? g.builtin : "") : previousName;
+          if (previous !== name && fakeGuards.some((x) => x.name === name)) return { problems: [`name ${JSON.stringify(name)}: there's a guardrail by that name`] };
+          const b = fakeBuiltinGuards.find((x) => x.id === g.builtin);
+          const next = { name, builtin: g.builtin, stage: b ? b.stage : g.stage, action: g.action || b?.defaultAction || "block", agents: g.agents, tools: g.tools, description: g.description, pii: g.pii, judge: g.judge, limits: g.limits, text: g.text, off: g.off };
+          const i = fakeGuards.findIndex((x) => x.name === (previous || name));
           if (i >= 0) fakeGuards[i] = next;
           else fakeGuards.push(next);
           return { guardrail: fakeGuardFile(workspace, next) };
@@ -1998,8 +2047,8 @@ export function installFake() {
         listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
         saveRule: ({ workspace, previousName, rule }) => {
           const r = rule!;
-          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(r.name)) return { problems: [`name "${r.name}": lowercase letters, digits and single hyphens, up to 64`] };
-          if (!r.text.trim()) return { problems: ["the rule is empty: say what to check"] };
+          const problems = ruleProblems(r);
+          if (problems.length) return { problems };
           const i = fakeRules.findIndex((x) => x.name === previousName);
           const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text };
           if (i >= 0) fakeRules[i] = next;
@@ -2144,10 +2193,12 @@ export function installFake() {
         },
         setSetting: ({ workspace, key, value }) => {
           const s = state(workspace).settings;
-          if (key === "effort") s.effort = value === "auto" ? "" : value;
-          if (key === "agency") s.agency = value;
-          if (key === "style") s.style = value;
-          return { key };
+          const r = sessionSetting(key, value);
+          if ("error" in r) throw fakeInvalid(r.error, r.reason, r.reason === "UNKNOWN_SETTING" ? { key } : {});
+          if (r.key === "effort") s.effort = r.value;
+          if (r.key === "agency") s.agency = r.value;
+          if (r.key === "style") s.style = r.value;
+          return { key: r.key };
         },
         setPermissionMode: ({ workspace, mode }) => {
           if (mode === "bypass") {
@@ -2158,11 +2209,21 @@ export function installFake() {
           state(workspace).settings.mode = mode;
           return { mode };
         },
-        getModelSettings: ({ ref }) =>
-          ref
-            ? { model: { model: ref.split("/").pop(), provider: "gemini", settings: { temperature: 0.3 }, globalTemperature: 0.2, globalMaxTokens: 65536 } }
-            : { all: { "gpt-5": { temperature: 1 }, "claude-opus-5-5": { reasoningEffort: "high" } } },
-        updateModelSettings: ({ ref }) => ({ model: { model: ref, settings: {} }, unsupported: [] }),
+        // Each model's settings, as set (none at first: Default), and the global ones under them.
+        getModelSettings: ({ ref }) => (ref ? { model: fakeModelInfo(ref) } : { all: Object.fromEntries(fakeModelSettings) }),
+        updateModelSettings: ({ ref, reset, changes }) => {
+          const name = ref.split("/").pop() ?? ref;
+          let next: ModelSettings = reset ? {} : { ...(fakeModelSettings.get(name) ?? {}) };
+          for (const c of changes) {
+            const r = setModelSetting(next, c.key, c.value);
+            if (typeof r === "string") throw fakeInvalid(r);
+            next = r;
+          }
+          if (Object.keys(next).length) fakeModelSettings.set(name, next);
+          else fakeModelSettings.delete(name);
+          // Gemini takes no seed (the provider's: reported, still saved).
+          return { model: fakeModelInfo(ref), unsupported: changes.filter((c) => c.key === "seed" && c.value).map((c) => c.key) };
+        },
         listStyles: ({ workspace }) => ({
           styles: [
             { name: "concise", description: "Short answers; details only when asked", source: "built-in" },
@@ -2431,6 +2492,7 @@ export function installFake() {
         // Browser profiles (spec_049_browser_profiles), kept in the page.
         listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
         createBrowserProfile: ({ name }) => {
+          if (!validProfileName(name)) throw fakeInvalid(`profile name ${JSON.stringify(name)}: lowercase letters, digits, - and _, up to 32`);
           if (fakeProfiles.some((p) => p.name === name)) throw new ConnectError(`a browser profile named "${name}" exists`, Code.InvalidArgument);
           const p = { name, created: now(), allowDomains: [] as string[] };
           fakeProfiles.push(p);
@@ -2455,7 +2517,9 @@ export function installFake() {
         },
         openBrowserProfile: () => ({ browser: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }),
         listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
-        setSecret: ({ workspace, key }) => {
+        setSecret: ({ workspace, key, value }) => {
+          if (!validSecretKey(key)) throw fakeInvalid(`${JSON.stringify(key)} can't name a secret: use letters, digits, _, . and -`);
+          if (!value) throw fakeInvalid("a secret needs a value");
           const l = fakeSecrets.get(workspace) ?? [];
           if (!l.includes(key)) fakeSecrets.set(workspace, [...l, key].sort());
           return {};
@@ -2506,6 +2570,8 @@ export function installFake() {
           const i = list.findIndex((m) => m.name === name);
           if (!name && list.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
           if (name && i < 0) throw new ConnectError(`no MCP server by that name: ${name}`, Code.NotFound);
+          const why = mcpProblem({ name: server?.name ?? "", command: server?.command ?? "", url: server?.url ?? "" });
+          if (why) throw fakeInvalid(why);
           if (i >= 0) list[i] = server!;
           else list.push(server!);
           return { change: { path: mcpPath(workspace) } };
@@ -2725,11 +2791,15 @@ export function installFake() {
           rateLimits: [{ model: "claude-sonnet-5-5", personRpm: 20, tpm: 400_000 }],
           promptLogs: true,
         }),
-        listServiceApprovals: () => ({
+        listServiceApprovals: () => {
+          // As the service's: only while connected and signed in.
+          if (!fakeOrg.url || !fakeOrg.signedIn) throw new ConnectError("connect to your organization's service first", Code.FailedPrecondition);
+          return {
           runs: fakeServiceRuns
             .filter((r) => r.status === "paused")
             .map((run) => ({ run, jobId: fakeServiceJob.id, jobName: fakeServiceJob.name, workspace: "plans", dir: "/home/me/Blitz/Acme Assist/plans" })),
-        }),
+          };
+        },
         answerServiceRun: ({ runId }) => {
           const run = fakeServiceRuns.find((r) => r.id === runId && r.status === "paused");
           if (!run) throw new ConnectError("that run isn't waiting for an answer", Code.FailedPrecondition);
@@ -2779,11 +2849,11 @@ export function installFake() {
             ? fakeParam("conflict")
               ? { state: "conflicts", pairs: [{ shared: "plan.md", mine: "plan (conflict, Ana).md" }] }
               : fakeParam("refused")
-                ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" }
+                ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found", failed: true }
                 : { state: "saved", pairs: [] }
             : { state: "", pairs: [] },
         // Save now: the refused one stays refused, as the dev service did.
-        saveOrgSync: () => (fakeParam("refused") ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" } : { state: "saved", pairs: [] }),
+        saveOrgSync: () => (fakeParam("refused") ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found", failed: true } : { state: "saved", pairs: [] }),
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };
@@ -2840,10 +2910,10 @@ export function installFake() {
           scopeConfig(workspace).keys[provider] = workspace ? KeySource.INHERITED : KeySource.NONE;
           return change(workspace);
         },
-        setProvider: ({ workspace, provider, defaultModel, key, auth }) => {
-          if (key && !["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`${provider || "no provider"} takes no API key`, Code.InvalidArgument);
+        setProvider: ({ workspace, provider, defaultModel, key, auth, api }) => {
+          const why = providerProblem({ provider, key: key.trim(), auth: auth && { method: auth.method, profile: auth.profile }, api: api && { baseUrl: api.baseUrl, headers: api.headers.map((h) => ({ name: h.name, value: h.value })), tokenScript: api.tokenScript, tokenScriptLanguage: api.tokenScriptLanguage } });
+          if (why) throw fakeInvalid(why);
           const method = auth?.method === "api_key" ? "" : (auth?.method ?? "");
-          if (method && !({ gemini: ["adc"], anthropic: ["oauth", "adc"] }[provider] ?? []).includes(method)) throw new ConnectError(`${provider} doesn't sign in with ${method}`, Code.InvalidArgument);
           const c = scopeConfig(workspace);
           c.provider = provider;
           c.model = defaultModel;
@@ -2852,6 +2922,9 @@ export function installFake() {
           return change(workspace);
         },
         setConfigValue: ({ workspace, key, value }) => {
+          // Refused as the service refuses it (config.SetValue): a key it doesn't set this way, or a value not of its type.
+          const why = configValueProblem(key, value);
+          if (why) throw fakeInvalid(why);
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
@@ -2867,12 +2940,18 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
-          // Settings › Workers' limits.
-          if (key === "workers.policy.allow") fakePolicy.allow = value === "none" ? [] : value ? value.split(",").map((k) => k.trim()) : ["shell", "write", "delete", "web", "mcp"];
+          // Settings › Library › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
+          if (key === "workers.policy.allow")
+            fakePolicy.allow = value
+              ? value
+                  .split(",")
+                  .map((k) => k.trim())
+                  .filter((k) => k && k !== "none")
+              : [...policyDefaults.allow];
           const limit = { max_concurrent: "maxConcurrent", default_max_turns: "defaultMaxTurns", max_turns: "maxTurns", default_max_cost_usd: "defaultMaxCostUsd", max_cost_usd: "maxCostUsd" }[key.replace("workers.policy.", "")] as "maxConcurrent" | undefined;
-          if (key.startsWith("workers.policy.") && limit) fakePolicy[limit] = Number(value);
-          if (key === "workers.policy.default_timeout") fakePolicy.defaultTimeout = value || "30m";
-          if (key === "workers.policy.max_timeout") fakePolicy.maxTimeout = value || "2h";
+          if (key.startsWith("workers.policy.") && limit) fakePolicy[limit] = value ? Number(value) : policyDefaults[limit];
+          if (key === "workers.policy.default_timeout") fakePolicy.defaultTimeout = value || policyDefaults.defaultTimeout;
+          if (key === "workers.policy.max_timeout") fakePolicy.maxTimeout = value || policyDefaults.maxTimeout;
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
@@ -2903,15 +2982,20 @@ export function installFake() {
           return { rule: `${kind}(${pattern})`, kind, pattern, form, tested, matches, redirect };
         },
         addPermission: ({ workspace, effect, rule }) => {
+          if (!["allow", "ask", "deny"].includes(effect)) throw fakeInvalid(`unknown permission effect ${JSON.stringify(effect)} (allow, ask or deny)`);
           const p = scopePermissions(workspace);
           const canonical = rule.trim().replace(/^bash\(/i, "shell(");
-          if (!p.rules.some((r) => r.rule === canonical)) p.rules.push({ effect, rule: canonical });
+          // Each effect has its own list: the same rule may be in another (config.AddPermissionRule).
+          if (!p.rules.some((r) => r.rule === canonical && r.effect === effect)) p.rules.push({ effect, rule: canonical });
           return { ...change(workspace), rule: canonical };
         },
-        removePermission: ({ workspace, rule }) => {
+        removePermission: ({ workspace, rule, effect }) => {
+          // From the effect's list alone ("" every list), as config.RemovePermissionRuleFrom.
+          if (effect && !["allow", "ask", "deny"].includes(effect)) throw fakeInvalid(`unknown permission effect ${JSON.stringify(effect)} (allow, ask or deny)`);
           const p = scopePermissions(workspace);
           const before = p.rules.length;
-          p.rules = p.rules.filter((r) => r.rule !== rule);
+          const want = [rule.trim(), rule.trim().replace(/^bash\(/i, "shell(")];
+          p.rules = p.rules.filter((r) => !(want.includes(r.rule) && (!effect || r.effect === effect)));
           return { ...change(workspace), removed: before - p.rules.length };
         },
         setReadOnlyDefaults: ({ workspace, value }) => {
@@ -3152,11 +3236,13 @@ export function installFake() {
       });
       service(WorkerService, {
         createWorker: (r) => {
-          if (/^when/i.test(r.schedule)) return { problems: [`schedule "${r.schedule}": use a cron expression, a descriptor or plain text like "Daily at 6 AM"`] };
-          if (fakeWorkers.some((w) => w.name === r.name)) throw new ConnectError(`a worker named ${r.name} exists`, Code.AlreadyExists);
+          const problems = jobProblems(r);
+          if (problems.length) return { problems };
+          const list = workersOf(r.workspace);
+          if (list.some((w) => w.name === r.name)) throw new ConnectError(`a worker named ${r.name} exists`, Code.AlreadyExists);
           const { workspace, ...spec } = r;
-          const w: FakeWorker = { workspace, name: r.name, description: r.description, state: WorkerState.NEW, schedule: r.schedule, cron: "0 6 * * *", timezone: r.timezone, agent: r.agent, model: r.model, permissions: r.permissions, path: `${workspace}/.agents/workers/${r.name}/WORKER.md`, hash: "sha256:new", problems: [], spec };
-          fakeWorkers.unshift(w);
+          const w: FakeWorker = { workspace, name: r.name, description: r.description, state: WorkerState.NEW, schedule: r.schedule, cron: "0 6 * * *", timezone: r.timezone, agent: r.agent, model: r.model, permissions: r.permissions, limits: fakeLimits(r), path: `${workspace}/.agents/workers/${r.name}/WORKER.md`, hash: "sha256:new", problems: [], spec };
+          list.unshift(w);
           return { worker: w };
         },
         // A job moved to the organization's service (EN-40, EN-41): nightly-deps can't go as it is.
@@ -3206,22 +3292,23 @@ export function installFake() {
           return {};
         },
         // The file as written; an edit changes the hash, and suspends an enabled worker.
-        getWorkerSpec: ({ name }) => {
-          const w = fakeWorkers.find((x) => x.name === name);
+        getWorkerSpec: ({ workspace, name }) => {
+          const w = workersOf(workspace).find((x) => x.name === name);
           if (!w) throw new ConnectError(`no worker ${name}`, Code.NotFound);
           return { worker: w.spec, hash: w.hash };
         },
-        updateWorker: ({ hash, worker }) => {
-          const w = fakeWorkers.find((x) => x.name === worker?.name);
+        updateWorker: ({ workspace, hash, worker }) => {
+          const w = workersOf(workspace).find((x) => x.name === worker?.name);
           if (!w || !worker) throw new ConnectError(`no worker ${worker?.name}`, Code.NotFound);
           if (hash !== w.hash) {
             const err = new ConnectError(`${w.path} changed since it was loaded`, Code.FailedPrecondition);
             err.details.push({ desc: ErrorInfoSchema, value: { reason: "HASH_MISMATCH", metadata: {} } });
             throw err;
           }
-          if (/^when/i.test(worker.schedule)) return { problems: [`schedule "${worker.schedule}": use a cron expression, a descriptor or plain text like "Daily at 6 AM"`] };
+          const problems = jobProblems(worker);
+          if (problems.length) return { problems };
           w.spec = { ...worker };
-          Object.assign(w, { description: worker.description, schedule: worker.schedule, timezone: worker.timezone, agent: worker.agent, model: worker.model, permissions: worker.permissions, problems: [] });
+          Object.assign(w, { description: worker.description, schedule: worker.schedule, timezone: worker.timezone, agent: worker.agent, model: worker.model, permissions: worker.permissions, limits: fakeLimits(worker), problems: [] });
           w.hash = `sha256:${fakeVersion(JSON.stringify(worker))}`;
           w.state = w.state === WorkerState.ENABLED ? WorkerState.CHANGED : w.state === WorkerState.INVALID ? WorkerState.NEW : w.state;
           return { worker: w };

@@ -172,6 +172,7 @@ go_test(
         "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/mcpauth",
+        "//pkg/orgsync",
         "//pkg/plugins",
         "//pkg/sandboxsetup",
         "//pkg/secrets",

@@ -377,3 +377,17 @@ func TestSaveNow(t *testing.T) {
 	_, err = s.SaveNow(gone)
 	assert.ErrorIs(t, err, context.Canceled)
 }
+
+// Failed is the states in which the service hasn't got this computer's
+// saves, which GetOrgSync reports for the clients.
+func TestFailedSays(t *testing.T) {
+	for _, tt := range []struct {
+		state string
+		want  bool
+	}{
+		{Saved, false}, {Saving, false}, {Conflicts, false}, {"", false},
+		{Offline, true}, {SignedOut, true}, {Refused, true}, {Secrets, true},
+	} {
+		t.Run(tt.state, func(t *testing.T) { assert.Equal(t, tt.want, Failed(tt.state)) })
+	}
+}

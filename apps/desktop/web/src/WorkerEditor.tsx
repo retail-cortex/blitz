@@ -26,10 +26,9 @@ import { PermissionRules } from "./PermissionRules";
 import { SchedulePicker } from "./SchedulePicker";
 import { ComposeDialog } from "./studio/ComposeDialog";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "@blitz/webui";
-import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
+import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, overCaps, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
 import type { RewriteWorkerResponse, WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
 
-// An example of the permissions field (syntax, not prose).
 /** The worker a dialog edits: its name, its WORKER.md, and whether saving pauses it. */
 export interface WorkerEdit {
   name: string;
@@ -179,11 +178,14 @@ export function WorkerEditor({
   const reload = () => (edited(f, loaded) ? setConfirmReload(true) : void load());
 
   const hints = limitHints(policy);
-  const limitProps = (h: { def: string; cap: string }) => ({
-    placeholder: h.def ? t("desktop.newworker.default_value", { value: h.def }) : t("desktop.newworker.policy_default"),
-    hint: h.cap ? t("desktop.newworker.capped_at", { value: h.cap }) : undefined,
+  // A limit over the host's cap is held to the cap at run time: the field says so (WK-73b).
+  const over = overCaps(f, policy);
+  const limitProps = (key: "maxTurns" | "maxCostUSD" | "timeout") => ({
+    placeholder: hints[key].def ? t("desktop.newworker.default_value", { value: hints[key].def }) : t("desktop.newworker.policy_default"),
+    hint: hints[key].cap ? t(over.has(key) ? "desktop.newworker.over_cap" : "desktop.newworker.capped_at", { value: hints[key].cap }) : undefined,
+    invalid: over.has(key),
   });
-  const field = (key: keyof WorkerForm, props: { hint?: string; placeholder?: string; mono?: boolean; type?: string }) => (
+  const field = (key: keyof WorkerForm, props: { hint?: string; placeholder?: string; mono?: boolean; type?: string; invalid?: boolean }) => (
     <label className="field">
       <span className="t-label">{t(`desktop.newworker.${key}`)}</span>
       <input
@@ -192,9 +194,10 @@ export function WorkerEditor({
         value={f[key] as string}
         placeholder={props.placeholder}
         spellCheck={false}
+        aria-invalid={props.invalid || undefined}
         onChange={(e) => set(key, e.target.value)}
       />
-      {props.hint && <span className="t-body-sm muted">{props.hint}</span>}
+      {props.hint && <span className={`t-body-sm ${props.invalid ? "error-text" : "muted"}`}>{props.hint}</span>}
     </label>
   );
   const actions = (
@@ -326,9 +329,9 @@ export function WorkerEditor({
         </div>
         {/* The host's defaults fill in what's left empty; a job may ask for more, up to a cap the host set (WK-73). */}
         <div className="triple">
-          {field("maxTurns", { ...limitProps(hints.maxTurns), type: "number" })}
-          {field("maxCostUSD", { ...limitProps(hints.maxCostUSD), type: "number" })}
-          {field("timeout", { ...limitProps(hints.timeout), mono: true })}
+          {field("maxTurns", { ...limitProps("maxTurns"), type: "number" })}
+          {field("maxCostUSD", { ...limitProps("maxCostUSD"), type: "number" })}
+          {field("timeout", { ...limitProps("timeout"), mono: true })}
         </div>
         <div className="row" style={{ gap: 12 }}>
           <span className="t-label">{t("desktop.newworker.catchUp")}</span>

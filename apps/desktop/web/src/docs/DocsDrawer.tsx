@@ -27,7 +27,7 @@ import { Icon, IconButton } from "@blitz/webui";
 import { Drawer } from "@blitz/webui";
 import { docLink, docPicture, searchDocs, siteURLOf, type DocNode, type DocPage } from "./index";
 import { loadAppDocs, type AppDocs as Docs } from "./load";
-import { firstPage, lastPlace, savePlace } from "./place";
+import { firstPage, keepScroll, lastPlace, savePlace, type Place } from "./place";
 
 /**
  * Where the docs open: a page by its site path ("" the home page), at a
@@ -40,7 +40,6 @@ export interface DocsAt {
 
 // A place in the viewer's history: a page, a heading on it, and the
 // scroll to come back to (where the guide was left).
-type Place = { page: string; anchor?: string; scroll?: number };
 
 function Tree({ node, at, open, depth = 0 }: { node: DocNode; at: string; open: (path: string) => void; depth?: number }) {
   return (
@@ -80,25 +79,29 @@ export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () 
   const pane = useRef<HTMLDivElement>(null);
   // Screenshots follow the theme: a dark twin in dark mode (docPicture).
   const theme = useWindowTheme();
+  const [loadError, setLoadError] = useState("");
   useEffect(() => {
-    void loadAppDocs().then(setDocs);
+    loadAppDocs().then(setDocs, (e) => setLoadError(String(e?.message ?? e)));
   }, []);
   const at = history[index];
   // A page this release doesn't have (left in an older one) opens Tutorials.
   const page: DocPage | undefined = docs?.pages.get(at.page) ?? docs?.pages.get(firstPage) ?? docs?.pages.get("");
+  // Leaving a place keeps how far down it was, for back and forward.
+  const leave = () => setHistory((h) => keepScroll(h, index, pane.current?.scrollTop ?? 0));
   const go = (path: string, anchor?: string) => {
-    setHistory((h) => [...h.slice(0, index + 1), { page: path, anchor }]);
+    setHistory((h) => [...keepScroll(h, index, pane.current?.scrollTop ?? 0).slice(0, index + 1), { page: path, anchor }]);
     setIndex((i) => i + 1);
     setQuery("");
     setNavOpen(false);
   };
-  const back = () => setIndex((i) => Math.max(0, i - 1));
-  const forward = () => setIndex((i) => Math.min(history.length - 1, i + 1));
+  const back = () => (leave(), setIndex((i) => Math.max(0, i - 1)));
+  const forward = () => (leave(), setIndex((i) => Math.min(history.length - 1, i + 1)));
   // A new page starts at its top, or at the heading asked for.
   useEffect(() => {
     const el = pane.current;
     if (!el) return;
-    const h = at.anchor ? el.querySelector(`[data-anchor="${CSS.escape(at.anchor)}"]`) : null;
+    // A place gone back or forward to opens where it was left; a new one at its heading.
+    const h = at.anchor && at.scroll === undefined ? el.querySelector(`[data-anchor="${CSS.escape(at.anchor)}"]`) : null;
     if (h) h.scrollIntoView({ block: "start" });
     else el.scrollTop = at.scroll ?? 0;
     // A table's cells carry their column's name, for the narrow layout,
@@ -172,7 +175,9 @@ export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () 
           <button className="link-button docs-contents" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
             <Icon path={mdiFormatListBulleted} size="sm" /> {t("desktop.docs.contents")}
           </button>
-          {!docs ? (
+          {loadError ? (
+            <p className="error-text">{t("desktop.docs.failed", { error: loadError })}</p>
+          ) : !docs ? (
             <p className="muted">{t("desktop.checking")}</p>
           ) : hits ? (
             hits.length === 0 ? (

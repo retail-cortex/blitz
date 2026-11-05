@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { inboxCounts, isActive, runAge, runInSession } from "./backgroundRuns";
+import { inboxCounts, isActive, nextPoll, runAge, runInSession } from "./backgroundRuns";
 import type { BackgroundRun } from "./gen/blitz/v1/session_pb";
 
 const run = (id: string, sessionId: string, state: string) => ({ id, sessionId, state }) as BackgroundRun;
@@ -45,5 +45,16 @@ describe("inbox", () => {
     const start = new Date(0);
     expect(runAge(start, undefined, new Date(secs * 1000))).toBe(want);
     expect(runAge(start, new Date(secs * 1000), new Date(99999999))).toBe(want);
+  });
+});
+
+describe("nextPoll", () => {
+  it.each([
+    ["one going: soon", [{ state: "done" }, { state: "running" }], 4000],
+    ["one waiting: soon", [{ state: "waiting" }], 4000],
+    ["none going: less often", [{ state: "done" }], 20000],
+    ["none at all", [], 20000],
+  ])("%s", (_, list, want) => {
+    expect(nextPoll(list)).toBe(want);
   });
 });

@@ -64,6 +64,17 @@ export function limitFields(p: WorkerPolicySettings): Record<LimitField, string>
   };
 }
 
+/**
+ * The fields to show when the limits come again (the overview's poll):
+ * a field whose saved value didn't change keeps what's shown, so a
+ * value being typed isn't wiped; one that did change shows the new one.
+ */
+export function refreshLimitFields(shown: Record<LimitField, string>, before: Record<LimitField, string>, after: Record<LimitField, string>): Record<LimitField, string> {
+  const out = { ...shown };
+  for (const k of Object.keys(after) as LimitField[]) if (after[k] !== before[k]) out[k] = after[k];
+  return out;
+}
+
 /** workers.policy.allow with kind turned on or off, in order ("none" when none is left). */
 export function toggleKind(allow: readonly string[], kind: string): string {
   const on = new Set(allow);

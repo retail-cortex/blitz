@@ -82,7 +82,7 @@ export function Workspace({
   // changes, this session's or git's; history; Studio), and a dialog
   // over it (committing). Studio has its own state: a form with unsaved
   // changes asks before another view takes the drawer (the drawer closes
-  // the one it replaces).
+  // the one it replaces). Agents open in Studio.
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | { kind: "processes"; process?: number; processIn?: string } | null>(null);
   const [studio, setStudio] = useState<StudioOpen | null>(null);
   // The menu's Close Studio closes it as its ✕ does; its kinds, picked

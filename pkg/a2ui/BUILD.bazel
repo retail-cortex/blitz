@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -24,9 +25,18 @@ go_library(
 go_test(
     name = "a2ui_test",
     srcs = ["a2ui_test.go"],
+    data = [":testdata"],
     embed = [":a2ui"],
     deps = [
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+# The cases both copies of the catalog are tested against: this package
+# and the desktop page's (apps/desktop/web/src/a2ui/model.test.ts).
+copy_to_bin(
+    name = "testdata",
+    srcs = ["testdata/checks.json"],
+    visibility = ["//apps/desktop/web:__pkg__"],
 )

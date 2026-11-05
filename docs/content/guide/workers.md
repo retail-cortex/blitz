@@ -19,18 +19,21 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 
 ## Your first job
 
-**Desktop:** **Studio › Jobs**, then **New job** (the calendar icon), and fill in:
+**Desktop:** **Studio › Jobs**, then **New job** (the calendar icon). **Compose with AI**, at the top, drafts the job from a description after a few questions (when, in which time zone, where the results go, what it may reach) and fills the form for you to review. Or fill it in yourself:
 
 | Field | What to put |
 |---|---|
-| Description | What it does; the name follows from it |
-| Schedule | `Weekdays at 9:30`, `daily at 6 AM`, `every 2 hours`, or cron |
+| What it does | A line for the lists; the **Name** (its folder) follows from it |
+| Repeats | Every hour, Every day, Every weekday, Every week, Every month, or **Custom (text or cron)**: `Weekdays at 9:30`, `every 2 hours`, `0 6 * * *`. **At** and the days follow from the choice; **Next runs** shows when it will run |
 | Time zone | Pre-filled with yours; empty means the service machine's |
-| Agent, Model | Leave empty for the workspace's |
-| Workflow | The prompt, as you'd type it in the chat |
-| Permissions | What it may do, one per line (below) |
-| Max turns, Max cost, Timeout | Empty for the defaults: 50 model calls, $1, 30 minutes |
+| Agent, Model | Leave as **The default agent** and empty for the workspace's |
+| Runs | **Its prompt, as a turn**, or a [workflow](workflows.md) to run |
+| Prompt (or **Its input** for a workflow) | What it does on each run, as you'd type it in the chat; **Rewrite with AI** tightens it |
+| May do without asking | A rule per thing it may do, each a kind (shell, write, delete, web, MCP) and what it covers (below); none: read only |
+| Model calls a run, Cost a run (USD), Time a run | Empty for the defaults (50 calls, $1, 30 minutes); a cap set in Settings › Library › Jobs shows under each, and a value over it is marked |
 | Missed runs | Skip, or Run once |
+
+In an organization workspace the form also has **Runs on** (this computer or your organization's service), and for the service **When it needs more** and **Its changes** ([Organizations](organization.md)).
 
 **Create** saves it as `.agents/workers/<name>/WORKER.md`. It doesn't run yet: open it, read what it may do, and choose **Enable as shown**.
 

@@ -190,6 +190,34 @@ export function limitHints(p: { defaultMaxTurns: number; defaultMaxCostUsd: numb
   };
 }
 
+/**
+ * A length of time as Go writes one ("90s", "1h30m", "1.5h", "0"), in
+ * milliseconds; null when it isn't one, as time.ParseDuration says.
+ */
+export function parseDuration(text: string): number | null {
+  const unit: Record<string, number> = { ns: 1e-6, us: 1e-3, "µs": 1e-3, "μs": 1e-3, ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
+  const s = text.trim();
+  if (s === "0" || s === "+0" || s === "-0") return 0;
+  const m = /^([+-]?)((?:(?:\d+\.?\d*|\.\d+)(?:ns|us|µs|μs|ms|s|m|h))+)$/.exec(s);
+  if (!m) return null;
+  let ms = 0;
+  for (const [, n, u] of m[2].matchAll(/(\d+\.?\d*|\.\d+)(ns|us|µs|μs|ms|s|m|h)/g)) ms += Number(n) * unit[u];
+  return m[1] === "-" ? -ms : ms;
+}
+
+/** The limits a job's form asks for over the host's caps (WK-73): runs are held to the cap, so the field says so. */
+export function overCaps(f: Pick<WorkerForm, "maxTurns" | "maxCostUSD" | "timeout">, p: { maxTurns: number; maxCostUsd: number; maxTimeout: string } | undefined): Set<"maxTurns" | "maxCostUSD" | "timeout"> {
+  const out = new Set<"maxTurns" | "maxCostUSD" | "timeout">();
+  if (!p) return out;
+  const num = (v: string) => (v.trim() === "" ? NaN : Number(v));
+  if (p.maxTurns > 0 && num(f.maxTurns) > p.maxTurns) out.add("maxTurns");
+  if (p.maxCostUsd > 0 && num(f.maxCostUSD) > p.maxCostUsd) out.add("maxCostUSD");
+  const cap = parseDuration(p.maxTimeout);
+  const want = parseDuration(f.timeout);
+  if (cap && want !== null && want > cap) out.add("timeout");
+  return out;
+}
+
 /** A permission kind a job may be given, as the rule builder offers them (WK-71). */
 export const ruleKinds = ["shell", "write", "delete", "web", "mcp"] as const;
 /** One of ruleKinds. */

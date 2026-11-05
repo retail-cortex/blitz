@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useOnConfigChanged } from "./workspaceSettings";
+import { setEffort, sliderCommit, useOnConfigChanged } from "./workspaceSettings";
 import {
   mdiAlertCircleOutline,
   mdiBrain,
@@ -345,7 +345,7 @@ export function WorkspaceSettingsForm({
                 value={settings?.permissionMode ?? "auto"}
                 onChange={(e) => {
                   const mode = e.target.value;
-                  // Applied, then kept as the workspace's own: it opens in it again (WF-21).
+                  // Applied, then kept as the workspace's own: it opens in it again (spec_005 APR-14).
                   void act(async () => {
                     await workspaces.setPermissionMode({ workspace: dir, mode });
                     await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: mode });
@@ -434,7 +434,7 @@ export function WorkspaceSettingsForm({
             <Section id="thinking" icon={mdiBrain} title={t("desktop.rs.thinking")} summary={efforts().find((e) => e.value === (settings?.effort ?? ""))?.label} pairs>
               <Field label={t("desktop.rs.effort")} supporting={t("desktop.rs.effort_help")}>
                 {(id) => (
-                  <select id={id} className="select" value={settings?.effort ?? ""} onChange={(e) => act(() => workspaces.setSetting({ workspace: dir, key: "effort", value: e.target.value || "auto" }))}>
+                  <select id={id} className="select" value={settings?.effort ?? ""} onChange={(e) => act(() => setEffort(dir, e.target.value))}>
                     {efforts().map((e) => (
                       <option key={e.value} value={e.value}>
                         {e.label} — {e.detail}
@@ -635,6 +635,17 @@ function SliderSetting({
 }) {
   const [v, setV] = useState(value ?? fallback ?? min);
   useEffect(() => setV(value ?? fallback ?? min), [value, fallback, min]);
+  // Saved only once moved: a blur, click or Tab with no change keeps Default.
+  const moved = useRef(false);
+  const move = (n: number) => {
+    moved.current = true;
+    setV(n);
+  };
+  const commit = () => {
+    const out = sliderCommit(moved.current, v, value);
+    moved.current = false;
+    if (out !== undefined) onCommit(out);
+  };
   return (
     <div className="field">
       <label className="row">
@@ -647,11 +658,11 @@ function SliderSetting({
           max={max}
           step={step}
           value={Number(v.toFixed(2))}
-          onChange={(e) => setV(Number(e.target.value))}
-          onBlur={() => onCommit(String(v))}
+          onChange={(e) => move(Number(e.target.value))}
+          onBlur={commit}
         />
       </label>
-      <input type="range" aria-label={label} min={min} max={max} step={step} value={v} onChange={(e) => setV(Number(e.target.value))} onPointerUp={() => onCommit(String(v))} onKeyUp={() => onCommit(String(v))} />
+      <input type="range" aria-label={label} min={min} max={max} step={step} value={v} onChange={(e) => move(Number(e.target.value))} onPointerUp={commit} onKeyUp={commit} />
     </div>
   );
 }
@@ -685,7 +696,7 @@ function NumberSetting({
           min={min}
           step={step}
           value={v}
-          placeholder={placeholder || "default"}
+          placeholder={placeholder || t("desktop.rs.default")}
           onChange={(e) => setV(e.target.value)}
           onBlur={() => v !== (value === undefined ? "" : String(value)) && onCommit(v)}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}

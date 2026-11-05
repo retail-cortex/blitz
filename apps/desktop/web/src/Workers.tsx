@@ -44,6 +44,9 @@ import { useOpenRun } from "./FlowRunAlerts";
 import { ServiceJobView } from "./ServiceJob";
 import { cost, goingRun, ms, progress, took, useWorkflowRuns } from "./workflowRuns";
 
+/** How many runs a job's list shows at first, and adds with Show older runs. */
+const runPage = 20;
+
 const stateKeys: Record<WorkerState, string> = {
   [WorkerState.UNSPECIFIED]: "",
   [WorkerState.NEW]: "new",
@@ -119,9 +122,11 @@ export function WorkerView({
   const [liveId, setLiveId] = useState("");
   const [error, setError] = useState("");
 
+  // The latest runs, a page at a time (Show older runs asks for another).
+  const [shown, setShown] = useState(runPage);
   const refreshRuns = useCallback(async () => {
-    setRuns((await workers.listWorkerRuns({ workspace: dir, name: worker.name, limit: 20 })).runs);
-  }, [dir, worker.name]);
+    setRuns((await workers.listWorkerRuns({ workspace: dir, name: worker.name, limit: shown })).runs);
+  }, [dir, worker.name, shown]);
   useEffect(() => {
     refreshRuns().catch((e) => setError(message(e)));
   }, [refreshRuns]);
@@ -141,6 +146,8 @@ export function WorkerView({
   // Follows a run as it goes (its events from the start), until it ends.
   const following = useRef("");
   const stopFollowing = useRef<AbortController | null>(null);
+  // The list's second look after a Stop, cleared when the view goes.
+  const stopped = useRef<ReturnType<typeof setTimeout>>(undefined);
   const follow = useCallback(
     async (id: string) => {
       if (following.current === id) return;
@@ -178,6 +185,7 @@ export function WorkerView({
     return () => {
       following.current = "";
       stopFollowing.current?.abort();
+      clearTimeout(stopped.current);
     };
   }, [dir, worker.name, follow]);
   // A workflow worker's run, on its workflow's canvas.
@@ -195,7 +203,8 @@ export function WorkerView({
     act(async () => {
       await workers.stopWorkerRun({ runId: id });
       await refreshRuns();
-      setTimeout(() => void refreshRuns().catch(() => {}), 1000);
+      clearTimeout(stopped.current);
+      stopped.current = setTimeout(() => void refreshRuns().catch(() => {}), 1000);
     });
 
   const requested = useRef({ runNow, disable, onRequestDone });
@@ -410,6 +419,13 @@ export function WorkerView({
             </div>
           ))}
         </div>
+        {runs.length >= shown && (
+          <span>
+            <Button small onClick={() => setShown((n) => n + runPage)}>
+              {t("desktop.worker.older_runs")}
+            </Button>
+          </span>
+        )}
         </>
       )}
     </div>

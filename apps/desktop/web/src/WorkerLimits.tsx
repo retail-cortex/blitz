@@ -14,27 +14,34 @@
  * limitations under the License.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mdiCheck } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
 import { t } from "./i18n";
 import type { WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
-import { limitFields, permissionKinds, toggleKind, type LimitField } from "./workersOverview";
+import { limitFields, permissionKinds, refreshLimitFields, toggleKind, type LimitField } from "./workersOverview";
 import { Chip, useSnackbar } from "@blitz/webui";
 
 /**
- * The global limits on every worker (Settings › Workers; spec_023_workers
- * WK-63), [workers.policy] in the global settings: how many runs go at
+ * The global limits on every job (Settings › Library › Jobs;
+ * spec_023_workers WK-63), [workers.policy] in the global settings: how many runs go at
  * once, what a worker that sets no limit gets and the most it may ask for
  * (model calls, cost, time), and the permission kinds it may be given.
  * Each field is saved as it's left (empty: the default); the open
- * workspaces take it from their next listing or run.
+ * workspaces take it from their next listing or run. The overview's poll
+ * brings the policy again every few seconds: only a setting that changed
+ * replaces its field, so one being typed isn't wiped.
  */
 export function WorkerLimits({ policy, onChanged }: { policy: WorkerPolicySettings; onChanged: () => void }) {
   const snack = useSnackbar();
   const [values, setValues] = useState<Record<LimitField, string>>(() => limitFields(policy));
-  useEffect(() => setValues(limitFields(policy)), [policy]);
+  const saved = useRef(limitFields(policy));
+  useEffect(() => {
+    const next = limitFields(policy);
+    setValues((v) => refreshLimitFields(v, saved.current, next));
+    saved.current = next;
+  }, [policy]);
 
   const save = async (key: string, value: string) => {
     try {
@@ -43,7 +50,7 @@ export function WorkerLimits({ policy, onChanged }: { policy: WorkerPolicySettin
       onChanged();
     } catch (e) {
       snack(message(e), { error: true });
-      setValues(limitFields(policy));
+      if (key in saved.current) setValues((v) => ({ ...v, [key]: saved.current[key as LimitField] }));
     }
   };
   const field = (key: LimitField, type: "number" | "text", label: string) => (
