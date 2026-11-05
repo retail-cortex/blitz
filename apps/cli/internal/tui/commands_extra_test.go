@@ -83,7 +83,9 @@ func TestChangeCommandOutputs(t *testing.T) {
 		},
 		"undo after cd": {
 			setup: func(s *stubBackend) {
-				s.undo = func(bool) (api.UndoResult, error) { return api.UndoResult{}, errors.New("nothing to undo") }
+				s.undo = func(bool) (api.UndoResult, error) {
+					return api.UndoResult{}, fmt.Errorf("reworded: %w", api.ErrNothingToUndo)
+				}
 				s.activeSession = func() (api.SessionInfo, bool) { return api.SessionInfo{ID: "s", MovedFrom: "/old/place"}, true }
 			},
 			line: "/undo", want: []string{"nothing to undo", "Changes made before /cd are in /old/place"},
@@ -472,9 +474,15 @@ func TestSessionCommandOutputs(t *testing.T) {
 		},
 		"locale unknown": {
 			setup: func(s *stubBackend) {
-				s.setLocale = func(string) (api.LocaleChange, error) { return api.LocaleChange{}, errBoom }
+				s.setLocale = func(string) (api.LocaleChange, error) { return api.LocaleChange{}, api.ErrUnknownLocale }
 			},
 			line: "/lang klingon", want: []string{`Unknown language "klingon"`},
+		},
+		"locale fails": {
+			setup: func(s *stubBackend) {
+				s.setLocale = func(string) (api.LocaleChange, error) { return api.LocaleChange{}, errBoom }
+			},
+			line: "/lang es", want: []string{"Couldn't change the language: boom"}, notWant: []string{"Unknown language"},
 		},
 		"locale without a catalog, not saved": {
 			setup: func(s *stubBackend) {
@@ -506,6 +514,27 @@ func TestExportNamedForTheSession(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "# Fix the build\n", string(b))
+}
+
+// /export keeps a file that's already there unless --force says to replace it.
+func TestExportKeepsAnExistingFile(t *testing.T) {
+	app, s := stubApp(t, "")
+	s.exportSession = func(string) (string, error) { return "# Session\n", nil }
+	path := filepath.Join(app.Workspace.Dir(), "README.md")
+	require.NoError(t, os.WriteFile(path, []byte("keep me"), 0o644))
+	for _, tt := range []struct {
+		line, says, want string
+	}{
+		{"/export README.md", "already exists; /export README.md --force replaces it", "keep me"},
+		{"/export README.md --force", "Wrote the session to", "# Session\n"},
+	} {
+		t.Run(tt.line, func(t *testing.T) {
+			assert.Contains(t, runCmd(t, app, tt.line), tt.says)
+			b, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(b))
+		})
+	}
 }
 
 // PrintRecap shows only the last messages.

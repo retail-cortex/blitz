@@ -30,19 +30,8 @@ import (
 // them. Rules are checked before they're saved.
 func permissionsCommand(g *globalFlags) *cobra.Command {
 	var workspace bool
-	scope := func() (string, error) {
-		if !workspace {
-			return "", nil
-		}
-		cfg, err := loadConfig(g)
-		if err != nil {
-			return "", err
-		}
-		return cfg.Tools.WorkspaceDir, nil
-	}
-	done := func(cmd *cobra.Command, path string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "Updated %s. Workspaces open in the service use it when they reopen (the desktop app's settings apply at once).\n", path)
-	}
+	scope := func() (string, error) { return settingsScope(g, workspace) }
+	done := printUpdated
 
 	perms := &cobra.Command{
 		Use:   "permissions",

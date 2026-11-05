@@ -34,6 +34,9 @@ func TestParseInterval(t *testing.T) {
 		{in: "1h30m", want: 90 * time.Minute},
 		{in: "5", want: 5 * time.Minute},
 		{in: "30s", wantErr: true},
+		{in: "0", wantErr: true},
+		{in: "-3", wantErr: true},
+		{in: "-5m", wantErr: true},
 		{in: "soon", wantErr: true},
 	} {
 		t.Run(tt.in, func(t *testing.T) {

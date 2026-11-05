@@ -250,9 +250,19 @@ func TestStreamInputProtocol(t *testing.T) {
 		})
 	}
 
+	// An unknown decision denies and says why.
+	got := make(chan api.Decision, 1)
+	go func() {
+		d, _ := s.approve(ctx, api.ApprovalRequest{Tool: "run_shell_command"})
+		got <- d
+	}()
+	req := lines.next("approval_request")
+	send(fmt.Sprintf(`{"type": "approval", "id": %q, "decision": "Once"}`, req["id"]))
+	assert.Contains(t, lines.next("error")["error"], `unknown decision "Once"`)
+	assert.Equal(t, api.DecisionDeny, <-got)
+
 	// Cancelled while waiting: denied.
 	cctx, cancel := context.WithCancel(ctx)
-	got := make(chan api.Decision, 1)
 	go func() {
 		d, _ := s.approve(cctx, api.ApprovalRequest{Tool: "x"})
 		got <- d
@@ -300,6 +310,18 @@ func TestStreamInputPromptAndCancel(t *testing.T) {
 		t.Fatal("cancelling didn't end the stream")
 	}
 	inW.Close()
+}
+
+// The run exits with the last turn's code: a failed turn followed by one
+// that succeeds is a success (CLI-07; N26 cli-1#5).
+func TestStreamInputExitsWithTheLastTurn(t *testing.T) {
+	e := testEnv(t, append(loopReplies(1), genai.NewContentFromText("done", genai.RoleModel))...)
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	out := &syncBuffer{}
+	in := strings.NewReader(`{"type": "user", "text": "second"}` + "\n")
+	err := runStreamInput(context.Background(), e, oneShotOptions{prompt: "first", sessionID: sess.ID, format: formatStreamJSON, stdout: out, maxTurns: 1}, in)
+	assert.NoError(t, err, "the first turn's failure outlived the second's success:\n%s", out.String())
+	assert.Equal(t, 2, strings.Count(out.String(), `"type":"result"`), out.String())
 }
 
 // In text mode a schema's retry prints like the first answer, with the

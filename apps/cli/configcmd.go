@@ -23,6 +23,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,7 @@ func newConfigCommand(g *globalFlags) *cobra.Command {
 			if err := writeTemplate(path, force); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s (mode 600). Edit it, then run 'blitz doctor'.\n", path)
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("config.wrote", "path", path))
 			return nil
 		},
 	}
@@ -74,27 +75,11 @@ func newConfigCommand(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
-// maskConfig returns a copy of cfg with credentials masked.
+// maskConfig returns a copy of cfg with every credential masked
+// (config.EachSecret, the list the log redactor uses too).
 func maskConfig(cfg *config.Config) config.Config {
 	c := *cfg
-	c.LLM.Gemini.APIKey = maskSecret(c.LLM.Gemini.APIKey)
-	c.LLM.OpenAI.APIKey = maskSecret(c.LLM.OpenAI.APIKey)
-	c.LLM.Anthropic.APIKey = maskSecret(c.LLM.Anthropic.APIKey)
-	servers := make([]config.MCPServerConfig, len(c.MCP.Servers))
-	for i, s := range c.MCP.Servers {
-		env := make(map[string]string, len(s.Env))
-		for k, v := range s.Env {
-			env[k] = maskSecret(v)
-		}
-		s.Env = env
-		headers := make(map[string]string, len(s.Headers))
-		for k, v := range s.Headers {
-			headers[k] = maskSecret(v)
-		}
-		s.Headers = headers
-		servers[i] = s
-	}
-	c.MCP.Servers = servers
+	c.EachSecret(maskSecret)
 	return c
 }
 

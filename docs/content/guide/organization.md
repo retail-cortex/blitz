@@ -76,7 +76,7 @@ If you're one of your organization's Admins, Studio's **Publish to organization�
 
 ## Job notices
 
-When a job of yours runs on your organization's service, Settings › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to change them. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
+When a job of yours runs on your organization's service, Settings › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to turn them on, `--email=false`, `--webhook ""` and `--every-run=false` to turn them off. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
 
 ## Your organization's workspaces
 

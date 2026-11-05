@@ -32,16 +32,21 @@ import (
 var wordRE = regexp.MustCompile(`[A-Za-z]{3,}`)
 
 // Literals allowed to stay as they are: --version output (parsed by
-// scripts), product names and key names.
-var lintAllowed = []string{"Blitz Go (Google ADK) version", "Blitz Go", "Ctrl+C"}
+// scripts), product names, key names, a rule kind and an AppleScript
+// command (not shown).
+var lintAllowed = []string{"Blitz Go (Google ADK) version", "Blitz Go", "Ctrl+C", "mcp:", "display notification %s with title %s"}
 
-// TestNoUntranslatedOutput fails when user-facing output in the REPL is a
-// literal English string instead of an i18n.T lookup. Doctor, config and
-// CLI errors are deliberately English and not scanned.
+// TestNoUntranslatedOutput fails when user-facing output in the REPL, or
+// in the subcommands translated so far (spec_053 EN-51a), is a literal
+// English string instead of an i18n.T lookup: an argument to a print or a
+// Sprintf, or a piece of one joined with +. Doctor, --help and CLI errors
+// are deliberately English and not scanned.
 func TestNoUntranslatedOutput(t *testing.T) {
 	files, _ := filepath.Glob("*.go")
-	files = append(files, "../../main.go")
-	printers := map[string]bool{"Print": true, "Println": true, "Printf": true, "Fprint": true, "Fprintln": true, "Fprintf": true}
+	for _, f := range []string{"main.go", "enterprise.go", "enterprisesync.go", "agents.go", "auth.go"} {
+		files = append(files, filepath.Join("..", "..", f))
+	}
+	printers := map[string]bool{"Print": true, "Println": true, "Printf": true, "Fprint": true, "Fprintln": true, "Fprintf": true, "Sprintf": true}
 	fset := token.NewFileSet()
 	for _, file := range files {
 		if strings.HasSuffix(file, "_test.go") {
@@ -62,17 +67,32 @@ func TestNoUntranslatedOutput(t *testing.T) {
 				return true
 			}
 			for _, arg := range call.Args {
-				lit, ok := arg.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					continue
+				for _, lit := range literals(arg) {
+					s, _ := strconv.Unquote(lit.Value)
+					for _, a := range lintAllowed {
+						s = strings.ReplaceAll(s, a, "")
+					}
+					assert.False(t, wordRE.MatchString(s), "%s: untranslated output %s; use i18n.T", fset.Position(lit.Pos()), lit.Value)
 				}
-				s, _ := strconv.Unquote(lit.Value)
-				for _, a := range lintAllowed {
-					s = strings.ReplaceAll(s, a, "")
-				}
-				assert.False(t, wordRE.MatchString(s), "%s: untranslated output %s; use i18n.T", fset.Position(lit.Pos()), lit.Value)
 			}
 			return true
 		})
 	}
+}
+
+// literals are the string literals an argument is, or is joined from with +.
+func literals(e ast.Expr) []*ast.BasicLit {
+	switch e := e.(type) {
+	case *ast.BasicLit:
+		if e.Kind == token.STRING {
+			return []*ast.BasicLit{e}
+		}
+	case *ast.BinaryExpr:
+		if e.Op == token.ADD {
+			return append(literals(e.X), literals(e.Y)...)
+		}
+	case *ast.ParenExpr:
+		return literals(e.X)
+	}
+	return nil
 }

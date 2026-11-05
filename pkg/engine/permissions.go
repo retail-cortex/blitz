@@ -111,8 +111,10 @@ func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.Permi
 	}
 	out.Removed = w.tools.Rules().Remove(rule, "", tools.SourceConfig, tools.SourceFlag, tools.SourceSession)
 	if save != api.ScopeSession {
-		out.Saved.Path, _, out.Saved.Err = config.RemovePermissionRule("", w.scopeDir(save), out.Rule)
-		_ = w.reloadSavedPermissions() // the rule is gone already; it warns
+		var n int
+		out.Saved.Path, n, out.Saved.Err = config.RemovePermissionRule("", w.scopeDir(save), out.Rule)
+		out.Removed = max(out.Removed, n) // a saved rule this session didn't load still counts
+		_ = w.reloadSavedPermissions()    // the rule is gone already; it warns
 	}
 	return out, nil
 }

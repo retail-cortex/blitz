@@ -15,6 +15,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -194,6 +195,29 @@ func TestApprovalPickerEdges(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
+// An ask rule asks every time, so neither prompt offers to remember the
+// approval: only yes or no.
+func TestApprovalUnderAnAskRule(t *testing.T) {
+	req := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "make", Key: "cmd:make", KeyLabel: "make", MustAsk: true}
+	t.Run("picker", func(t *testing.T) {
+		f, keys := pickTerminal(t)
+		keys.in <- []byte("y")
+		d, err := NewApprover(f.in, 0)(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, api.DecisionOnce, d)
+		assert.NotContains(t, f.output(), "this session")
+	})
+	for _, in := range []string{"s\n", "a\n"} {
+		t.Run("line "+strings.TrimSpace(in), func(t *testing.T) {
+			var out bytes.Buffer
+			d, err := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), req)
+			require.NoError(t, err)
+			assert.Equal(t, api.DecisionDeny, d)
+			assert.Contains(t, out.String(), "[y/N]")
+		})
+	}
+}
+
 // On a pipe, /agent and /model show the current choice without a picker.
 func TestAgentAndModelOnAPipe(t *testing.T) {
 	app, _ := stubApp(t, "")
@@ -260,8 +284,7 @@ func TestSessionPickerChoices(t *testing.T) {
 	s.listSessions = func(bool) ([]api.SessionInfo, error) { return nil, nil }
 	assert.Contains(t, runCmd(t, app, "/resume"), "No other sessions in this workspace.")
 	s.listSessions = func(bool) ([]api.SessionInfo, error) { return nil, errBoom }
-	_, picked := pickSession(context.Background(), app)
-	assert.False(t, picked)
+	assert.Contains(t, runCmd(t, app, "/resume"), "Error listing sessions: boom", "a failed list isn't a cancel")
 }
 
 // The session picker shows at most fifty sessions.

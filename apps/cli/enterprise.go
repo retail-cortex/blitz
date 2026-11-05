@@ -16,6 +16,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -28,7 +29,9 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/gitcred"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +40,7 @@ import (
 // service and signing in to it (spec_053_enterprise EN-10 to EN-14). The
 // Blitz service keeps the connection, so the desktop app, the tray and
 // the CLI share one sign-in.
-func newEnterpriseCommand() *cobra.Command {
+func newEnterpriseCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "enterprise",
 		Short: "Connect to your organization's Blitz service and sign in to it",
@@ -45,19 +48,12 @@ func newEnterpriseCommand() *cobra.Command {
 it with your organization's account. Connected, the organization's models
 are the ones Blitz uses, under its limits.`,
 	}
-	settings := func(cmd *cobra.Command) (*client.Settings, error) {
-		sock, err := ensureService(cmd.Context())
-		if err != nil {
-			return nil, err
-		}
-		return client.AttachSettings(sock), nil
-	}
 	status := &cobra.Command{
 		Use:   "status",
 		Short: "Show the organization's service, whether it's reached, and who is signed in",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -74,7 +70,7 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Connect to your organization's service, such as https://blitz.acme.com",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -82,7 +78,7 @@ are the ones Blitz uses, under its limits.`,
 			if err != nil {
 				return withCode(exitUsage, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Connected to %s (%s). Sign in: blitz enterprise login\n", orgName(o), o.URL)
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ "+i18n.T("org.connected", "name", orgName(o), "url", o.URL))
 			return nil
 		},
 	}
@@ -91,14 +87,14 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Sign out and disconnect: Blitz uses your own providers again",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
 			if _, err := s.Connect(cmd.Context(), ""); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Disconnected: Blitz uses your own model providers again.")
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.disconnected"))
 			return nil
 		},
 	}
@@ -108,7 +104,7 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Sign in with your organization's account, with a code entered in any browser",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -117,15 +113,15 @@ are the ones Blitz uses, under its limits.`,
 			out := cmd.OutOrStdout()
 			o, err := s.SignInOrganization(ctx, !browser, func(p client.OrganizationPrompt) {
 				if p.Code != "" {
-					fmt.Fprintf(out, "Open %s and enter the code %s (Ctrl+C stops).\n", p.URL, p.Code)
+					fmt.Fprintln(out, i18n.T("org.login_code", "url", p.URL, "code", p.Code))
 				} else {
-					fmt.Fprintf(out, "Open this address to sign in (Ctrl+C stops):\n  %s\n", p.URL)
+					fmt.Fprintf(out, "%s\n  %s\n", i18n.T("org.login_url"), p.URL)
 				}
 			})
 			if err != nil {
 				return withCode(exitFailure, err)
 			}
-			fmt.Fprintf(out, "✓ Signed in to %s as %s\n", orgName(o), o.Email)
+			fmt.Fprintln(out, "✓ "+i18n.T("org.signed_in", "name", orgName(o), "email", o.Email))
 			return askTerms(ctx, cmd, s, orgName(o))
 		},
 	}
@@ -135,7 +131,7 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Sign out of your organization's service",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -144,10 +140,10 @@ are the ones Blitz uses, under its limits.`,
 				return err
 			}
 			if o.URL == "" {
-				fmt.Fprintln(cmd.OutOrStdout(), "Not connected to an organization.")
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.not_connected"))
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Signed out of %s.\n", orgName(o))
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.signed_out", "name", orgName(o)))
 			return nil
 		},
 	}
@@ -156,7 +152,7 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Read your organization's terms and accept them, if a version waits",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -167,12 +163,29 @@ are the ones Blitz uses, under its limits.`,
 			return askTerms(cmd.Context(), cmd, s, orgName(o))
 		},
 	}
+	about := &cobra.Command{
+		Use:   "about",
+		Short: "What your organization says about itself: about text, support, terms and privacy notice",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			b, why, err := s.Branding(cmd.Context(), true)
+			if err != nil {
+				return err
+			}
+			describeBranding(cmd.OutOrStdout(), b, why)
+			return nil
+		},
+	}
 	workspaces := &cobra.Command{
 		Use:   "workspaces",
 		Short: "List your organization's workspaces you have a role in, and where each is cloned",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -182,12 +195,12 @@ are the ones Blitz uses, under its limits.`,
 			}
 			out := cmd.OutOrStdout()
 			if len(list) == 0 {
-				fmt.Fprintf(out, "You have no workspaces in %s yet: blitz enterprise create <name>\n", org)
+				fmt.Fprintln(out, i18n.T("org.no_workspaces", "org", org))
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 			for _, w := range list {
-				where := "not on this computer: blitz enterprise open " + w.Handle
+				where := i18n.T("org.not_cloned", "handle", w.Handle)
 				if w.Cloned {
 					where = w.Dir
 				}
@@ -201,7 +214,7 @@ are the ones Blitz uses, under its limits.`,
 		Short: "Clone one of your organization's workspaces, the first time, and say where it is",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -210,7 +223,7 @@ are the ones Blitz uses, under its limits.`,
 				return err
 			}
 			if cloned {
-				fmt.Fprintf(cmd.OutOrStdout(), "✓ Cloned to %s\n", dir)
+				fmt.Fprintln(cmd.OutOrStdout(), "✓ "+i18n.T("org.cloned", "dir", dir))
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), dir)
 			}
@@ -227,7 +240,7 @@ makes it yours alone, its handle ~<you>/<name>: anyone may have one called
 home.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -235,7 +248,7 @@ home.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Made %s (%s). Open it: blitz enterprise open %s\n", w.Name, w.Handle, w.Handle)
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ "+i18n.T("org.created", "name", w.Name, "handle", w.Handle))
 			return nil
 		},
 	}
@@ -246,22 +259,21 @@ home.`,
 	share := &cobra.Command{
 		Use:   "share [folder]",
 		Short: "Share a folder with your organization where it is, and keep it in step",
-		Long: `Shares a folder (the current one by default) with your organization where
+		Long: `Shares a folder (--dir's, else the current one) with your organization where
 it is: its changes are committed, the folder and its history are checked for
 secrets (nothing is sent if any are found), a workspace is made for it and
 the folder is pushed there, then kept in step as you work. A repository's own
 origin stays as it was; the organization's is the remote "organization".`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := "."
+			abs, err := orgWorkspace(g) // --dir's, else the current folder
 			if len(args) == 1 {
-				dir = args[0]
+				abs, err = filepath.Abs(args[0])
 			}
-			abs, err := filepath.Abs(dir)
 			if err != nil {
 				return err
 			}
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -272,15 +284,34 @@ origin stays as it was; the organization's is the remote "organization".`,
 			for _, n := range notes {
 				fmt.Fprintln(cmd.OutOrStdout(), "! "+n)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Shared %s as %s (%s), kept in step where it is.\n", abs, w.Name, w.Handle)
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ "+i18n.T("org.shared", "dir", abs, "name", w.Name, "handle", w.Handle))
 			return nil
 		},
 	}
 	share.Flags().StringVar(&shareName, "name", "", "the workspace's name (default: the folder's)")
 	share.Flags().StringVar(&shareHandle, "handle", "", "its handle (default: made from the name)")
 	share.Flags().BoolVar(&sharePersonal, "personal", false, "make it yours alone (~<you>/<name>)")
-	cmd.AddCommand(status, connect, disconnect, login, logout, terms, workspaces, open, create, share, newEnterpriseJobsCommand(), newEnterpriseUsageCommand(), newEnterprisePublishCommand(), newEnterpriseReviewsCommand(), newEnterpriseCatalogCommand(), newEnterpriseNoticesCommand(), newEnterpriseSyncCommand())
+	cmd.AddCommand(status, connect, disconnect, login, logout, terms, about, workspaces, open, create, share, newEnterpriseJobsCommand(g), newEnterpriseUsageCommand(), newEnterprisePublishCommand(g), newEnterpriseReviewsCommand(), newEnterpriseCatalogCommand(g), newEnterpriseNoticesCommand(), newEnterpriseSyncCommand(g))
 	return cmd
+}
+
+// orgSettings attaches to the Blitz service (starting it if need be) for
+// the enterprise commands.
+func orgSettings(cmd *cobra.Command) (*client.Settings, error) {
+	sock, err := ensureService(cmd.Context())
+	if err != nil {
+		return nil, err
+	}
+	return client.AttachSettings(sock), nil
+}
+
+// orgWorkspace is the workspace an enterprise command works in: the
+// global --dir's, else the current folder.
+func orgWorkspace(g *globalFlags) (string, error) {
+	if g.dir == "" {
+		return os.Getwd()
+	}
+	return filepath.Abs(config.ExpandHome(g.dir))
 }
 
 // orgName is the service's name, else its address.
@@ -294,37 +325,73 @@ func orgName(o client.Organization) string {
 // describeOrganization writes the connection and the sign-in.
 func describeOrganization(w io.Writer, o client.Organization) {
 	if o.URL == "" {
-		fmt.Fprintln(w, "Not connected to an organization: blitz enterprise connect <address>")
+		fmt.Fprintln(w, i18n.T("org.status_not_connected"))
 		return
 	}
-	fmt.Fprintf(w, "Organization  %s (%s)\n", orgName(o), o.URL)
+	fmt.Fprintln(w, i18n.T("org.status_org", "name", orgName(o), "url", o.URL))
 	if o.Managed {
-		fmt.Fprintln(w, "              set by your organization's device management")
+		fmt.Fprintln(w, i18n.T("org.status_managed"))
 	}
 	switch {
 	case o.Checked && !o.Reachable:
-		fmt.Fprintf(w, "Service       not reached: %s\n", o.Error)
+		fmt.Fprintln(w, i18n.T("org.status_unreached", "error", o.Error))
 	case o.Version != "":
-		fmt.Fprintf(w, "Service       version %s; offers %s\n", o.Version, strings.Join(o.Capabilities, ", "))
+		fmt.Fprintln(w, i18n.T("org.status_service", "version", o.Version, "capabilities", strings.Join(o.Capabilities, ", ")))
 	}
 	if !o.SignedIn {
-		fmt.Fprintln(w, "Signed in     no: blitz enterprise login")
+		fmt.Fprintln(w, i18n.T("org.status_signed_out"))
 		return
 	}
 	who := o.Email
 	if o.PersonName != "" {
 		who = o.PersonName + " <" + o.Email + ">"
 	}
-	fmt.Fprintf(w, "Signed in     %s", who)
+	fmt.Fprint(w, i18n.T("org.status_signed_in", "who", who))
 	if len(o.Roles) > 0 {
 		fmt.Fprintf(w, " (%s)", strings.Join(o.Roles, ", "))
 	}
 	fmt.Fprintln(w)
 	if !o.Renews.IsZero() {
-		fmt.Fprintf(w, "Renews        %s\n", o.Renews.Local().Format(time.Kitchen))
+		fmt.Fprintln(w, i18n.T("org.status_renews", "time", o.Renews.Local().Format(time.Kitchen)))
 	}
 	if o.Terms != "" {
-		fmt.Fprintf(w, "Terms         version %s to accept\n", o.Terms)
+		fmt.Fprintln(w, i18n.T("org.status_terms", "version", o.Terms))
+	}
+}
+
+// describeBranding writes what the organization says about itself, as the
+// desktop app's About shows it (EN-52): its name and about text, support
+// link, and its documents (a privacy notice in full; the terms through
+// blitz enterprise terms, where they're accepted).
+func describeBranding(w io.Writer, b client.Branding, why string) {
+	if why != "" {
+		fmt.Fprintln(w, "! "+i18n.T("org.about_stale", "error", why))
+	}
+	if b.Name == "" && b.About == "" && b.Support == "" && len(b.Documents) == 0 {
+		fmt.Fprintln(w, i18n.T("org.about_none"))
+		return
+	}
+	if b.Name != "" {
+		fmt.Fprintln(w, b.Name)
+	}
+	if b.About != "" {
+		fmt.Fprintln(w, "\n"+b.About)
+	}
+	if b.Support != "" {
+		fmt.Fprintln(w, "\n"+i18n.T("org.about_support", "url", b.Support))
+	}
+	for _, d := range b.Documents {
+		switch d.Document {
+		case "terms":
+			where := cmp.Or(d.URL, "blitz enterprise terms")
+			fmt.Fprintln(w, i18n.T("org.about_terms", "version", d.Version, "where", where))
+		case "privacy":
+			if d.URL != "" || d.Text == "" {
+				fmt.Fprintln(w, i18n.T("org.about_privacy", "version", d.Version, "where", d.URL))
+				continue
+			}
+			fmt.Fprintln(w, "\n"+strings.TrimSpace(i18n.T("org.about_privacy", "version", d.Version, "where", ""))+"\n"+d.Text)
+		}
 	}
 }
 
@@ -339,28 +406,28 @@ func askTerms(ctx context.Context, cmd *cobra.Command, s *client.Settings, name 
 		return err
 	}
 	if t.Version == "" || t.Accepted {
-		fmt.Fprintf(out, "%s's terms: nothing to accept.\n", name)
+		fmt.Fprintln(out, i18n.T("org.terms_none", "name", name))
 		return nil
 	}
-	fmt.Fprintf(out, "\n%s asks you to accept its terms (version %s):\n\n", name, t.Version)
+	fmt.Fprintf(out, "\n%s\n\n", i18n.T("org.terms_ask", "name", name, "version", t.Version))
 	if t.Text != "" {
 		fmt.Fprintln(out, t.Text)
 	} else {
-		fmt.Fprintf(out, "  Read them at %s\n", t.URL)
+		fmt.Fprintln(out, "  "+i18n.T("org.terms_read", "url", t.URL))
 	}
-	fmt.Fprint(out, "\nAccept them? [y/N] ")
+	fmt.Fprint(out, "\n"+i18n.T("org.terms_prompt"))
 	answer, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
 		if _, err := s.SignOutOrganization(ctx); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Not accepted: signed out of %s.\n", name)
+		fmt.Fprintln(out, i18n.T("org.terms_declined", "name", name))
 		return withCode(exitFailure, errors.New("the organization's terms weren't accepted"))
 	}
 	if _, err := s.AcceptTerms(ctx, t.Version); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "✓ Accepted %s's terms (version %s).\n", name, t.Version)
+	fmt.Fprintln(out, "✓ "+i18n.T("org.terms_accepted", "name", name, "version", t.Version))
 	return nil
 }
 
@@ -379,11 +446,11 @@ clients with its workspaces:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return gitcred.Run(cmd.Context(), args[0], cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, protocol, host string) (string, string, bool, error) {
-				sock, err := ensureService(ctx)
+				s, err := orgSettings(cmd)
 				if err != nil {
 					return "", "", false, err
 				}
-				return client.AttachSettings(sock).GitCredential(ctx, protocol, host)
+				return s.GitCredential(ctx, protocol, host)
 			})
 		},
 	}

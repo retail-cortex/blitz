@@ -287,3 +287,36 @@ func (s *Settings) SetOrgNotices(ctx context.Context, n *pb.OrgNotices) (*pb.Org
 	}
 	return res.Msg.Notices, nil
 }
+
+// GoingServiceRun is a run going now on the organization's service, with
+// its job and workspace (EN-42).
+type GoingServiceRun struct {
+	Run                            ServiceRun
+	JobID, JobName, Workspace, Dir string
+}
+
+// WatchServiceRuns calls on with every run going now on the service, at
+// once and again each time one changes (ConfigService.WatchServiceRuns),
+// until ctx ends (nil) or the stream fails.
+func (s *Settings) WatchServiceRuns(ctx context.Context, on func([]GoingServiceRun)) error {
+	stream, err := s.c.WatchServiceRuns(ctx, connect.NewRequest(&pb.WatchServiceRunsRequest{}))
+	if err != nil {
+		return fromAPI(err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+		m := stream.Msg()
+		if !m.GetListed() { // a keepalive
+			continue
+		}
+		runs := make([]GoingServiceRun, len(m.GetRuns()))
+		for i, g := range m.GetRuns() {
+			runs[i] = GoingServiceRun{Run: serviceRun(g.GetRun()), JobID: g.GetJobId(), JobName: g.GetJobName(), Workspace: g.GetWorkspace(), Dir: g.GetDir()}
+		}
+		on(runs)
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	return fromAPI(stream.Err())
+}

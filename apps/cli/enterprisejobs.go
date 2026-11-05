@@ -17,7 +17,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -26,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -61,14 +64,7 @@ func missingText(name string, m *client.ServiceJobMissing) string {
 // newEnterpriseJobsCommand is blitz enterprise jobs: the jobs your
 // organization's service runs (spec_053 EN-42, EN-43), as Studio › Jobs
 // and the status bar show them.
-func newEnterpriseJobsCommand() *cobra.Command {
-	settings := func(cmd *cobra.Command) (*client.Settings, error) {
-		sock, err := ensureService(cmd.Context())
-		if err != nil {
-			return nil, err
-		}
-		return client.AttachSettings(sock), nil
-	}
+func newEnterpriseJobsCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "jobs",
 		Short: "The jobs your organization's service runs: list, runs, run now, on or off, files, and answers",
@@ -77,7 +73,7 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 --workspace <handle> when two workspaces have one of that name.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -108,7 +104,7 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 	var workspace string
 	cmd.PersistentFlags().StringVar(&workspace, "workspace", "", "the job's workspace (its handle), when the name isn't enough")
 	find := func(cmd *cobra.Command, name string) (*client.Settings, client.ServiceJob, error) {
-		s, err := settings(cmd)
+		s, err := orgSettings(cmd)
 		if err != nil {
 			return nil, client.ServiceJob{}, err
 		}
@@ -125,7 +121,7 @@ whose WORKER.md says runs_on: service). A job is named by its name, with
 		switch len(found) {
 		case 0:
 			// A job of this workspace's: say why the service hasn't got it.
-			if dir, err := os.Getwd(); err == nil && workspace == "" {
+			if dir, err := orgWorkspace(g); err == nil && workspace == "" {
 				if _, err := os.Stat(filepath.Join(dir, ".agents", "workers", name, "WORKER.md")); err == nil {
 					if m, err := s.WhyNotServiceJob(cmd.Context(), dir, name); err == nil && m != nil {
 						return nil, client.ServiceJob{}, withCode(exitUsage, errors.New(missingText(name, m)))
@@ -197,11 +193,11 @@ in, pushes the workspace to its main on your organization's service, and has
 the service read it now.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			dir, err := os.Getwd()
+			dir, err := orgWorkspace(g)
 			if err != nil {
 				return err
 			}
@@ -265,7 +261,7 @@ the service read it now.`,
 		Short: "The files a run left (its out/ folder and its log); --save saves them in Downloads",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -297,7 +293,7 @@ the service read it now.`,
 		Short: "The runs waiting for your answer: what each asks to do",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := settings(cmd)
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
@@ -335,7 +331,7 @@ the service read it now.`,
 			Short: short,
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				s, err := settings(cmd)
+				s, err := orgSettings(cmd)
 				if err != nil {
 					return err
 				}
@@ -390,7 +386,22 @@ the service read it now.`,
 			return nil
 		},
 	}
-	cmd.AddCommand(runs, push, runNow, take, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
+	watch := &cobra.Command{
+		Use:   "watch",
+		Short: "Follow the runs going now on the service, as they start, change and end (Ctrl+C stops)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer stop()
+			out := cmd.OutOrStdout()
+			return s.WatchServiceRuns(ctx, func(runs []client.GoingServiceRun) { printGoingRuns(out, runs) })
+		},
+	}
+	cmd.AddCommand(runs, push, runNow, take, switchTo(true), switchTo(false), files, pending, answer(true), answer(false), watch)
 	return cmd
 }
 
@@ -402,11 +413,11 @@ func newEnterpriseUsageCommand() *cobra.Command {
 		Short: "Your use of your organization's models today and this month, and what's left of each limit",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			u, err := client.AttachSettings(sock).OrgUsage(cmd.Context())
+			u, err := s.OrgUsage(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -482,8 +493,8 @@ func rateText(r *pb.OrgRateLimit) string {
 
 // newEnterprisePublishCommand is blitz enterprise publish: a workspace's
 // items to the organization's catalog, as a review (spec_053 EN-36).
-func newEnterprisePublishCommand() *cobra.Command {
-	var dir, lock, title string
+func newEnterprisePublishCommand(g *globalFlags) *cobra.Command {
+	var lock, title string
 	var groups []string
 	cmd := &cobra.Command{
 		Use:   "publish [<kind>/<name>...]",
@@ -494,12 +505,11 @@ organization's catalog as a review: an Admin (you too) approves it in the admin
 console, and the next version carries it. With none named, lists what
 can be published and how each applies now. For the organization's Admins.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			s := client.AttachSettings(sock)
-			abs, err := filepath.Abs(dir)
+			abs, err := orgWorkspace(g)
 			if err != nil {
 				return err
 			}
@@ -540,7 +550,6 @@ can be published and how each applies now. For the organization's Admins.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
 	cmd.Flags().StringVar(&lock, "lock", "default", "locked (nobody changes or switches it off) or default (a workspace or person may)")
 	cmd.Flags().StringSliceVar(&groups, "groups", nil, "who it's for (everyone when none)")
 	cmd.Flags().StringVar(&title, "title", "", "the review's title (default: what's published)")
@@ -556,11 +565,11 @@ func newEnterpriseReviewsCommand() *cobra.Command {
 		Short: "Changes to your organization's catalog: waiting, approved or rejected",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			list, err := client.AttachSettings(sock).CatalogReviews(cmd.Context(), state)
+			list, err := s.CatalogReviews(cmd.Context(), state)
 			if err != nil {
 				return err
 			}
@@ -591,8 +600,8 @@ func newEnterpriseReviewsCommand() *cobra.Command {
 // newEnterpriseCatalogCommand is blitz enterprise catalog: the
 // organization's items a workspace gets, and copying a default one in to
 // change (spec_053 EN-34).
-func newEnterpriseCatalogCommand() *cobra.Command {
-	var dir, kind string
+func newEnterpriseCatalogCommand(g *globalFlags) *cobra.Command {
+	var kind string
 	cmd := &cobra.Command{
 		Use:   "catalog",
 		Short: "The agents, skills, rules… your organization gives this workspace",
@@ -602,15 +611,15 @@ have its own instead: "blitz enterprise catalog copy <kind>/<name>"
 copies it into .agents to change).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			abs, err := filepath.Abs(dir)
+			abs, err := orgWorkspace(g)
 			if err != nil {
 				return err
 			}
-			res, err := client.AttachSettings(sock).OrgItems(cmd.Context(), abs, kind)
+			res, err := s.OrgItems(cmd.Context(), abs, kind)
 			if err != nil {
 				return err
 			}
@@ -634,7 +643,6 @@ copies it into .agents to change).`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
 	cmd.Flags().StringVar(&kind, "kind", "", "one kind: agent, skill, rule, guardrail, command, mcp or connector")
 	copyCmd := &cobra.Command{
 		Use:   "copy <kind>/<name>",
@@ -645,15 +653,15 @@ copies it into .agents to change).`,
 			if !ok {
 				return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", args[0]))
 			}
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			abs, err := filepath.Abs(dir)
+			abs, err := orgWorkspace(g)
 			if err != nil {
 				return err
 			}
-			paths, err := client.AttachSettings(sock).CopyOrgItem(cmd.Context(), abs, k, name)
+			paths, err := s.CopyOrgItem(cmd.Context(), abs, k, name)
 			if err != nil {
 				return err
 			}
@@ -661,7 +669,6 @@ copies it into .agents to change).`,
 			return nil
 		},
 	}
-	copyCmd.Flags().StringVarP(&dir, "dir", "d", ".", "the workspace")
 	cmd.AddCommand(copyCmd)
 	return cmd
 }
@@ -675,16 +682,16 @@ func newEnterpriseNoticesCommand() *cobra.Command {
 		Use:   "notices",
 		Short: "How you hear of your jobs' runs on your organization's service: email, a webhook, every run or not",
 		Long: `Shows how you hear of your jobs' runs on your organization's service, or
-changes it: --email on|off, --webhook <https address> ("" for none; a
-Slack or Teams incoming webhook shows the notice as it is), and
---every-run on|off (off: failures and runs waiting for your answer only).`,
+changes it: --email or --email=false, --webhook <https address> ("" for
+none; a Slack or Teams incoming webhook shows the notice as it is), and
+--every-run or --every-run=false (off: failures and runs waiting for your
+answer only). Turning one off takes the =false: "--email off" is refused.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sock, err := ensureService(cmd.Context())
+			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			s := client.AttachSettings(sock)
 			n, err := s.OrgNotices(cmd.Context())
 			if err != nil {
 				return err
@@ -730,4 +737,15 @@ Slack or Teams incoming webhook shows the notice as it is), and
 	cmd.Flags().StringVar(&webhook, "webhook", "", `an https address to POST them to ("" for none)`)
 	cmd.Flags().BoolVar(&everyRun, "every-run", false, "every run's end, not only failures and runs waiting for your answer")
 	return cmd
+}
+
+// printGoingRuns writes the runs going now on the service, as the
+// Processes view shows them (EN-42), each time they change.
+func printGoingRuns(w io.Writer, runs []client.GoingServiceRun) {
+	fmt.Fprintf(w, "\n%s  %s\n", time.Now().Format("15:04:05"), i18n.N("org.watch_going", len(runs)))
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	for _, g := range runs {
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\n", g.Workspace, g.JobName, g.Run.ID, g.Run.Status, g.Run.Created.Local().Format("15:04"))
+	}
+	tw.Flush()
 }

@@ -155,7 +155,7 @@ func mergeMCP(global, own []MCPServerConfig, off []string) []MCPServerConfig {
 // secret that can't be read leaves the key empty, so the environment or
 // the model's own error takes over.
 func resolveSecrets(cfg *Config, store secrets.Store) {
-	for _, p := range []*string{&cfg.LLM.Gemini.APIKey, &cfg.LLM.Anthropic.APIKey, &cfg.LLM.OpenAI.APIKey, &cfg.LLM.Azure.APIKey, &cfg.Web.SearchAPIKey} {
+	for _, p := range cfg.credentials() {
 		if name, ok := secrets.ParseRef(*p); ok {
 			v, err := store.Get(name)
 			if err != nil {

@@ -101,3 +101,42 @@ func TestFollowRunFails(t *testing.T) {
 	assert.Contains(t, out, "boom")
 	assert.Nil(t, in.handler, "the interrupt handler was left set")
 }
+
+// The bytes the REPL injects to steer the editor (Ctrl+E, Ctrl+U, Enter)
+// aren't read as the person's keys, so binding ctrl+e or ctrl+u (the docs'
+// own example) neither reopens the editor nor breaks Esc Esc.
+func TestInjectedKeysPassBindings(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		keys KeyBindings
+	}{
+		{"editor on ctrl+e", KeyBindings{Editor: 0x05, CycleMode: keyShiftTab}},
+		{"commands on ctrl+e and ctrl+u", KeyBindings{Editor: keyCtrlG, CycleMode: keyShiftTab, Commands: map[rune]string{0x05: "/status", 0x15: "/tasks"}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeTerminalWith(t, TerminalOptions{Keys: &tt.keys})
+			ctx := context.Background()
+			edits := 0
+			f.in.edit = func(text string) (string, error) { edits++; return text + " edited", nil }
+			if tt.keys.Editor == 0x05 {
+				f.keys(t, "draft", "\x05")
+				line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") })
+				require.NoError(t, err)
+				assert.Equal(t, "draft edited", line)
+			}
+			// Esc Esc clears the line.
+			f.keys(t, "draft", "\x1b", "\x1b", "new\r")
+			line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") })
+			require.NoError(t, err)
+			assert.Equal(t, "new", line)
+			// The steer prompt's Esc still drops the message.
+			f.keys(t, " more", "\x1b")
+			line, err = within(t, func() (string, error) { return f.in.AskSteer(ctx, "steer> ", "fix") })
+			require.NoError(t, err)
+			assert.Equal(t, "", line)
+			if tt.keys.Editor == 0x05 {
+				assert.Equal(t, 1, edits, "the editor reopened")
+			}
+		})
+	}
+}

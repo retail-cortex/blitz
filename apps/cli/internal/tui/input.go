@@ -55,12 +55,6 @@ func NewLineReader(in io.Reader, out io.Writer) *LineReader {
 	return &LineReader{turn: make(chan struct{}, 1), r: bufio.NewReader(in), out: out}
 }
 
-// ReadLine prints prompt and returns the next line without its newline.
-// io.EOF is returned only when no data remains.
-func (l *LineReader) ReadLine(prompt string) (string, error) {
-	return l.Ask(context.Background(), prompt)
-}
-
 // Ask prints text and reads one line, returning early with ctx.Err() if ctx
 // is cancelled. Concurrent callers are serialised so their output and input
 // don't interleave.
@@ -180,7 +174,7 @@ func NewApprover(in Input, diffLines int) api.Approver {
 
 		options := i18n.T("approve.yes")
 		valid := "y/N"
-		if req.Key != "" {
+		if remembers(req) {
 			label := req.KeyLabel
 			if label == "" {
 				label = i18n.T("approve.matching")
@@ -204,11 +198,11 @@ func NewApprover(in Input, diffLines int) api.Approver {
 			case "y", "yes":
 				return api.DecisionOnce, nil
 			case "s", "session":
-				if req.Key != "" {
+				if remembers(req) {
 					return api.DecisionSession, nil
 				}
 			case "a", "always":
-				if req.Key != "" {
+				if remembers(req) {
 					return api.DecisionAlways, nil
 				}
 			case "d", "diff":
@@ -221,6 +215,13 @@ func NewApprover(in Input, diffLines int) api.Approver {
 			return api.DecisionDeny, nil
 		}
 	}
+}
+
+// remembers reports whether an approval can be remembered for the session
+// or always. An ask rule asks every time anyway (MustAsk), so those choices
+// would look like they didn't work.
+func remembers(req api.ApprovalRequest) bool {
+	return req.Key != "" && !req.MustAsk
 }
 
 // RenderDiff colourises a unified diff for the terminal, keeping at most

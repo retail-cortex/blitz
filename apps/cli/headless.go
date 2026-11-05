@@ -249,7 +249,11 @@ func (s *streamInput) approve(ctx context.Context, req api.ApprovalRequest) (api
 		return api.DecisionSession, nil
 	case "always":
 		return api.DecisionAlways, nil
+	case "deny", "no":
+		return api.DecisionDeny, nil
 	}
+	// A typo or a casing slip denies too, but says why, as other bad lines do.
+	s.out.Encode(map[string]any{"type": "error", "error": fmt.Sprintf("unknown decision %q for %s (once, session, always or deny): denied", m.Decision, m.ID)})
 	return api.DecisionDeny, nil
 }
 
@@ -272,9 +276,7 @@ func runStreamInput(ctx context.Context, w api.Backend, o oneShotOptions, in io.
 	var last error
 	run := func(prompt string) {
 		o.prompt = prompt
-		if err := runOneShot(ctx, w, o); err != nil {
-			last = err
-		}
+		last = runOneShot(ctx, w, o)     // the run exits with the last turn's code (CLI-07)
 		o.images, o.command = nil, false // the first prompt's only
 	}
 	if o.prompt != "" {

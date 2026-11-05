@@ -38,6 +38,7 @@ go_library(
         "project.go",
         "providers.go",
         "reference.go",
+        "secretfields.go",
         "trust.go",
     ],
     embedsrcs = [
@@ -82,6 +83,7 @@ go_test(
         "project_test.go",
         "providers_test.go",
         "reference_test.go",
+        "secretfields_test.go",
     ],
     embed = [":config"],
     deps = [

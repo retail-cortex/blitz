@@ -49,13 +49,17 @@ func StartProcess(ctx context.Context, cfg *config.Config, version string, warn 
 	}
 }
 
-// SecretRedactor masks configured credentials (the providers' API keys,
-// Azure's included, and the web search key), the values of scrubbed
-// environment variables, and MCP servers' environment and header values
-// (tokens, often) in audit entries, logs and telemetry.
+// SecretRedactor masks the settings' credentials (config.EachSecret: the
+// providers' API keys, Azure's included, the web search key, the api
+// gateway's and http hooks' headers, MCP servers' environment and header
+// values) and the values of scrubbed environment variables in audit
+// entries, logs and telemetry.
 func SecretRedactor(cfg *config.Config) *redact.Redactor {
-	keys, mcp := configSecrets(cfg)
-	return redact.FromEnv(cfg.Sandbox.ScrubEnv, append(keys, mcp...)...)
+	keys, named := configSecrets(cfg)
+	for _, v := range named {
+		keys = append(keys, v.value)
+	}
+	return redact.FromEnv(cfg.Sandbox.ScrubEnv, withTokens(keys)...)
 }
 
 // RememberSecrets has every redactor mask cfg's credentials from now on
@@ -64,48 +68,52 @@ func SecretRedactor(cfg *config.Config) *redact.Redactor {
 // included. Workspaces call it as they open and as their settings change,
 // so keys set later in Settings, a workspace's own keys, and the tokens of
 // MCP servers added later or defined in a workspace are masked there too.
-// Of MCP servers' values, only those that look secret are remembered (an
-// Authorization header, an env or header named like a key or token): the
-// remembered values are also masked in text shown as it is.
+// Of the headers' and MCP servers' env values, only those that look secret
+// are remembered (an Authorization header, a name like a key or token):
+// the remembered values are also masked in text shown as it is.
 func RememberSecrets(cfg *config.Config) {
-	keys, _ := configSecrets(cfg)
-	for _, s := range cfg.MCP.Servers {
-		for k, v := range s.Env {
-			if secretName.MatchString(k) {
-				keys = append(keys, v)
-			}
-		}
-		for k, v := range s.Headers {
-			if strings.EqualFold(k, "Authorization") || secretName.MatchString(k) {
-				keys = append(keys, v)
-				if _, token, ok := strings.Cut(v, " "); ok {
-					keys = append(keys, strings.TrimSpace(token))
-				}
-			}
+	keys, named := configSecrets(cfg)
+	for _, v := range named {
+		if strings.EqualFold(v.name, "Authorization") || secretName.MatchString(v.name) {
+			keys = append(keys, v.value)
 		}
 	}
-	redact.Remember(keys...)
+	redact.Remember(withTokens(keys)...)
 }
 
 // secretName is an environment variable's or header's name that says its
 // value is a credential.
 var secretName = regexp.MustCompile(`(?i)key|token|secret|passw|credential|auth`)
 
-// configSecrets are cfg's credentials (keys) and its MCP servers' env and
-// header values, with a header's "Bearer <token>" token alone too (mcp).
-func configSecrets(cfg *config.Config) (keys, mcp []string) {
-	keys = []string{cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey, cfg.LLM.Azure.APIKey, cfg.Web.SearchAPIKey}
-	for _, s := range cfg.MCP.Servers {
-		for _, v := range s.Env {
-			mcp = append(mcp, v)
+// namedSecret is a secret value from a map, with its name.
+type namedSecret struct{ name, value string }
+
+// configSecrets are cfg's credentials, from config.EachNamedSecret, the one
+// list of what's secret: the single ones (keys) and the maps' values with
+// their names (named).
+func configSecrets(cfg *config.Config) (keys []string, named []namedSecret) {
+	cp := *cfg
+	cp.EachNamedSecret(func(name, v string) string {
+		switch {
+		case v == "":
+		case name == "":
+			keys = append(keys, v)
+		default:
+			named = append(named, namedSecret{name, v})
 		}
-		for _, v := range s.Headers {
-			mcp = append(mcp, v)
-			// "Bearer <token>": the token alone too, as it may be logged apart.
-			if _, token, ok := strings.Cut(v, " "); ok {
-				mcp = append(mcp, strings.TrimSpace(token))
-			}
+		return v
+	})
+	return keys, named
+}
+
+// withTokens is values with a "Bearer <token>" value's token alone too, as
+// it may be logged apart.
+func withTokens(values []string) []string {
+	out := values
+	for _, v := range values {
+		if _, token, ok := strings.Cut(v, " "); ok {
+			out = append(out, strings.TrimSpace(token))
 		}
 	}
-	return keys, mcp
+	return out
 }

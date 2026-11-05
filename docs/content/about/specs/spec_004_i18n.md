@@ -40,3 +40,4 @@ The interactive interface speaks English (`en-US`, source), Spanish (`es`) and C
 
 ## 5. Not translated (policy)
 - **I18N-30** `doctor` output, `--help` and CLI errors (so they can be pasted into bug reports); text the model reads (tool descriptions, tool results); error details from lower layers; code, paths, commands and tool output.
+- **I18N-30a** *2026-11-05 (scan N26-cli-1#7: no spec said whether a subcommand's normal output is translated).* A subcommand's normal output is translated, as the REPL's is (spec_053 EN-51a lists what is so far); its errors, `doctor` and `--help` stay English as above.

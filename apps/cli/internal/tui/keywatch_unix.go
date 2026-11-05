@@ -81,10 +81,17 @@ func (t *ttyKeys) ready(timeout time.Duration) (bool, error) {
 	return n > 0, err
 }
 
+// read retries a read a signal interrupted (SIGWINCH on a resize): the
+// watcher takes 0 bytes as the end of input, which would stop steering and
+// Esc for the rest of the turn.
 func (t *ttyKeys) read(p []byte) (int, error) {
-	n, err := unix.Read(t.fd, p)
-	if errors.Is(err, unix.EINTR) {
-		return 0, nil
+	for {
+		n, err := sysRead(t.fd, p)
+		if !errors.Is(err, unix.EINTR) {
+			return n, err
+		}
 	}
-	return n, err
 }
+
+// sysRead is read(2) (a variable for tests).
+var sysRead = unix.Read

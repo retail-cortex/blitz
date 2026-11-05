@@ -18,6 +18,7 @@ go_library(
     name = "client",
     srcs = [
         "background.go",
+        "branding.go",
         "client.go",
         "convert.go",
         "enterprise.go",

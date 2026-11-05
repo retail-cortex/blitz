@@ -473,7 +473,7 @@ func pickApproval(ctx context.Context, t *TerminalInput, req api.ApprovalRequest
 		diff     bool
 	}
 	choices := []choice{{item: PickItem{Label: i18n.T("approve.pick_yes"), Key: 'y'}, decision: api.DecisionOnce}}
-	if req.Key != "" {
+	if remembers(req) {
 		choices = append(choices,
 			choice{item: PickItem{Label: i18n.T("approve.pick_session", "label", label), Key: 's'}, decision: api.DecisionSession},
 			choice{item: PickItem{Label: i18n.T("approve.pick_always", "label", label), Key: 'a'}, decision: api.DecisionAlways})
@@ -488,7 +488,9 @@ func pickApproval(ctx context.Context, t *TerminalInput, req api.ApprovalRequest
 	}
 	title := header + i18n.T("approve.ask")
 	for {
-		i, err := t.Pick(ctx, title, items, 0)
+		// The cursor starts on No, as the line prompt's y/N does: an Enter
+		// typed ahead denies rather than runs what nobody read.
+		i, err := t.Pick(ctx, title, items, len(items)-1)
 		if errors.Is(err, ErrPickCancelled) {
 			t.interrupt()
 			return api.DecisionDeny, fmt.Errorf("no approval input: %w", context.Canceled)

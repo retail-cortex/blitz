@@ -52,6 +52,27 @@ func TestCompleteBlocks(t *testing.T) {
 	}
 }
 
+// Streamed a byte at a time, the blocks come out as written at once, and
+// each write reads only the new text: inside a long fence the scan keeps
+// its place instead of starting over.
+func TestBlockScanKeepsItsPlace(t *testing.T) {
+	text := "intro\n\n```go\n" + strings.Repeat("x := 1\n", 50) + "```\nafter\n\nend"
+	var b blockScan
+	var buf string
+	var cuts []string
+	for i := range len(text) {
+		buf += text[i : i+1]
+		if cut := b.next(buf); cut > 0 {
+			cuts = append(cuts, buf[:cut])
+			buf = buf[cut:]
+			b.pos -= cut
+		}
+		assert.Equal(t, strings.LastIndexByte(buf, '\n')+1, b.pos, "after byte %d the scan isn't at the last whole line", i)
+	}
+	assert.Equal(t, []string{"intro\n\n", "```go\n" + strings.Repeat("x := 1\n", 50) + "```\n", "after\n\n"}, cuts)
+	assert.Equal(t, "end", buf)
+}
+
 func TestMarkdownStreamRendersProgressively(t *testing.T) {
 	var out bytes.Buffer
 	md, err := newMarkdownStream(&out, "dark", 80)

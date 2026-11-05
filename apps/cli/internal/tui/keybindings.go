@@ -101,7 +101,7 @@ func LoadKeyBindings(path string) (KeyBindings, error) {
 		if !strings.HasPrefix(cmd, "/") || strings.ContainsAny(cmd, "\r\n") {
 			return k, fmt.Errorf("%s: commands: %q: %q isn't a /command", path, name, cmd)
 		}
-		if r == k.Editor || r == k.CycleMode {
+		if _, dup := k.Commands[r]; dup || r == k.Editor || r == k.CycleMode {
 			return k, fmt.Errorf("%s: commands: %q is already bound", path, name)
 		}
 		if k.Commands == nil {
