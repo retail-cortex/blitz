@@ -135,6 +135,16 @@ func TestIntoMain(t *testing.T) {
 		bare, clone := repo(t)
 		hook := filepath.Join(bare, "hooks", "pre-receive")
 		require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755))
-		assert.ErrorContains(t, IntoMain(ctx, gitIn(clone), "origin", "blitz/jobs/daily/r1", "Blitz job daily"), "pushing main")
+		pushes := 0
+		counting := func(ctx context.Context, args ...string) ([]byte, error) {
+			if args[0] == "push" {
+				pushes++
+			}
+			return gitIn(clone)(ctx, args...)
+		}
+		err := IntoMain(ctx, counting, "origin", "blitz/jobs/daily/r1", "Blitz job daily")
+		assert.ErrorContains(t, err, "pushing main")
+		assert.ErrorContains(t, err, "declined", "what git said")
+		assert.Equal(t, 1, pushes, "a refusal that isn't main moving isn't tried again (N26 pkg-small-2 spec gaps)")
 	})
 }

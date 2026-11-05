@@ -192,6 +192,14 @@ func TestCopyIncluded(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a.txt"}, names, "directories, worktrees, links and files outside are skipped")
 
+	t.Run("outside", func(t *testing.T) {
+		for rel, want := range map[string]bool{
+			"a.txt": false, "..": true, "../x": true, "..x": false,
+			Dir: true, Dir + "/w/c.txt": true, ".blitz/other": false,
+		} {
+			assert.Equal(t, want, outside(rel), rel)
+		}
+	})
 	t.Run("no include file", func(t *testing.T) {
 		assert.NoError(t, copyIncluded(t.TempDir(), t.TempDir()))
 	})
