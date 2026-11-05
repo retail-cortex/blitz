@@ -256,8 +256,8 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1")
 	}
 	if ev.Tier >= skills.Tier2AuditedWrite || ev.Bypass {
-		dir := filepath.Join(s.ws.Dir(), SkillOutputDir, skill.Name, fmt.Sprintf("%s-%s", sc.Name, time.Now().Format("20060102-150405.000")))
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		dir, err := s.ws.OwnDir(filepath.Join(SkillOutputDir, skill.Name, fmt.Sprintf("%s-%s", sc.Name, time.Now().Format("20060102-150405.000"))), 0o700)
+		if err != nil {
 			return fail("%v", err)
 		}
 		writable = append(writable, dir)
@@ -366,9 +366,17 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 		path, err = skill.ScriptPath(sc.RelativePath)
 		return path, skill.HostDir(), cleanup, err
 	}
+	return copyScript(skill, sc, nil)
+}
+
+// copyScript writes the script (inline) or its skill's files (on disk)
+// into a temporary directory and returns the script's path there, the
+// directory with links resolved, and what removes it. prepare, when set,
+// adds to the directory before it's returned.
+func copyScript(skill *skills.Skill, sc skills.ScriptDefinition, prepare func(dir string) error) (path, dir string, cleanup func(), err error) {
 	tmp, err := os.MkdirTemp("", "blitz-skill-*")
 	if err != nil {
-		return "", "", cleanup, err
+		return "", "", func() {}, err
 	}
 	cleanup = func() { os.RemoveAll(tmp) }
 	switch {
@@ -381,6 +389,9 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 		}
 	default:
 		err = errors.New("the script has no source")
+	}
+	if err == nil && prepare != nil {
+		err = prepare(tmp)
 	}
 	if err != nil {
 		cleanup()
@@ -449,35 +460,13 @@ var NodeTypeScriptFlags = []string{"--experimental-strip-types", "--no-warnings"
 // directory, beside a node_modules link to its packages' environment,
 // where node looks for them.
 func materializeTypeScript(skill *skills.Skill, sc skills.ScriptDefinition, nodeModules string) (path, dir string, cleanup func(), err error) {
-	tmp, err := os.MkdirTemp("", "blitz-skill-*")
-	if err != nil {
-		return "", "", func() {}, err
-	}
-	cleanup = func() { os.RemoveAll(tmp) }
-	switch {
-	case sc.InlineCode != "":
-		path = filepath.Join(tmp, sc.Name+inlineExt[sc.Language])
-		err = os.WriteFile(path, []byte(sc.InlineCode), 0o600)
-	case sc.RelativePath != "":
-		if err = skill.CopyTo(tmp); err == nil {
-			path = filepath.Join(tmp, filepath.FromSlash(sc.RelativePath))
+	return copyScript(skill, sc, func(tmp string) error {
+		if nodeModules == "" {
+			return nil
 		}
-	default:
-		err = errors.New("the script has no source")
-	}
-	if err == nil && nodeModules != "" {
 		_ = os.RemoveAll(filepath.Join(tmp, "node_modules")) // a copied one mustn't win
-		err = os.Symlink(nodeModules, filepath.Join(tmp, "node_modules"))
-	}
-	if err != nil {
-		cleanup()
-		return "", "", func() {}, err
-	}
-	if c, err := filepath.EvalSymlinks(tmp); err == nil { // macOS: /var -> /private/var
-		path = filepath.Join(c, strings.TrimPrefix(path, tmp))
-		tmp = c
-	}
-	return path, tmp, cleanup, nil
+		return os.Symlink(nodeModules, filepath.Join(tmp, "node_modules"))
+	})
 }
 
 // listFiles lists up to max regular files under dir, relative to ws.

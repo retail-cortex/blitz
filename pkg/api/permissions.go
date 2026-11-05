@@ -82,6 +82,10 @@ type ApprovalRequest struct {
 	// provider, or the MCP tool as "server:tool". Empty when nothing can
 	// match, which such policies refuse.
 	Targets []string
+	// Deletes are the Targets a write deletes (a patch's deleted files and
+	// moved-away sources, a script's removed files): delete(...) permission
+	// rules govern them as well as write(...) rules.
+	Deletes []string
 	// MustAsk means an ask rule covers the action, so the user is asked even
 	// when a mode, an allow rule or a remembered approval would let it through
 	// (and refused where nobody can be asked).

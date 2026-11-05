@@ -352,6 +352,12 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
+	for _, p := range tools.ProcessLimitProblems(cfg.Processes) {
+		o.Warn(p)
+	}
+	if err := w.tools.CheckpointsErr(); err != nil {
+		o.Warn("checkpoints are kept in memory only, so /undo can't reach earlier sessions' changes or keep this one's: " + err.Error())
+	}
 	if st := w.tools.Images(); st != nil && cfg.Images.RetainDays > 0 {
 		if _, err := st.Prune(time.Duration(cfg.Images.RetainDays) * 24 * time.Hour); err != nil {
 			o.Warn("image cleanup: " + err.Error())

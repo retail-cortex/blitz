@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -66,6 +67,24 @@ func ProcessLimitsFrom(c config.ProcessesConfig) ProcessLimits {
 		MemoryBytes: int64(c.MemoryMB) << 20, GrowthWindow: dur(c.GrowthWindow),
 		LeftAfter: dur(c.LeftAfter),
 	}
+}
+
+// ProcessLimitProblems says which [processes] durations are set but
+// aren't durations ("2 minutes" for 2m), and so are ignored, keeping the
+// default: the workspace warns of them as it opens (spec_052 PR-70a).
+func ProcessLimitProblems(c config.ProcessesConfig) []string {
+	var out []string
+	for _, f := range []struct{ key, val string }{
+		{"busy_for", c.BusyFor}, {"growth_window", c.GrowthWindow}, {"left_after", c.LeftAfter},
+	} {
+		if f.val == "" {
+			continue
+		}
+		if _, err := time.ParseDuration(f.val); err != nil {
+			out = append(out, fmt.Sprintf("processes.%s = %q isn't a duration (such as 2m or 90s), so the default is used", f.key, f.val))
+		}
+	}
+	return out
 }
 
 // growthFloor: memory that grows below this isn't worth a flag.

@@ -155,7 +155,7 @@ prompt = "Deny anything that deletes outside the workspace or touches production
 
 `/hooks` lists them all, where each came from, and their recent failures.
 
-Other failures warn unless `fail_closed = true`. Hooks come from your own trusted settings, so they run outside the OS sandbox with your environment; they're still killed with Blitz.
+Other failures, a reply that starts with `{` but isn't valid JSON or names a decision Blitz doesn't know among them, warn unless `fail_closed = true`. Hooks come from your own trusted settings, so they run outside the OS sandbox with your environment; they're still killed with Blitz.
 
 ## Custom commands
 

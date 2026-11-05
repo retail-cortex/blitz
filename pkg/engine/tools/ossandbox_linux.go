@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 )
 
 // nativeSandbox uses bubblewrap (bwrap). It probes once, since bwrap needs
@@ -31,16 +32,33 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bubblewrap (bwrap) not found; install it (e.g. apt install bubblewrap)")
 	}
-	probe := bwrapArgs(bwrap, spec, nil, nil)
-	probe = append(probe, "/bin/true")
-	if out, err := exec.Command(probe[0], probe[1:]...).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, bytes.TrimSpace(out))
+	if spec.shared == nil || !spec.shared.probed.Load() {
+		probe := bwrapArgs(bwrap, spec, nil, nil)
+		probe = append(probe, "/bin/true")
+		pctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+		out, err := exec.CommandContext(pctx, probe[0], probe[1:]...).CombinedOutput()
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, bytes.TrimSpace(out))
+		}
+		if spec.shared != nil {
+			spec.shared.probed.Store(true)
+		}
 	}
 	scan := newBlockedScan(spec) // kept between commands
+	if spec.shared != nil {
+		scan = spec.shared.blockedScan(spec) // and between the caller's sandboxes
+	}
+	roots := append(slices.Clone(spec.WritableDirs), spec.ReadOnlyDirs...)
 	return func(ctx context.Context, argv []string) ([]string, error) {
-		files, dirs, err := scan.expandCtx(ctx) // a cold scan can take seconds
+		files, dirs, err := scan.expandIn(ctx, roots) // a cold scan can take seconds
 		if err != nil {
 			return nil, err
+		}
+		// The run folder is made now, so the sandbox hides it even before
+		// the service first starts.
+		if c, err := credentialsDir(); err == nil {
+			_ = privateDir(c)
 		}
 		return append(bwrapArgs(bwrap, spec, files, dirs), argv...), nil
 	}, nil

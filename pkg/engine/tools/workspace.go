@@ -26,10 +26,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // DefaultMaxFileSize bounds how much of a single file the tools will load into memory.
-const DefaultMaxFileSize int64 = 10 * 1024 * 1024
+const DefaultMaxFileSize int64 = config.DefaultMaxFileSizeBytes
 
 var (
 	// ErrOutsideWorkspace is returned when a path is not under any sandbox root.
@@ -78,11 +80,6 @@ type location struct {
 }
 
 func (l location) abs() string { return filepath.Join(l.root.dir, l.rel) }
-
-// NewWorkspace opens dir as a single read-write root with no blocked paths.
-func NewWorkspace(dir string, maxFileSize int64) (*Workspace, error) {
-	return OpenWorkspace(WorkspaceOptions{Dir: dir, MaxFileSize: maxFileSize})
-}
 
 // OpenWorkspace opens the workspace and any additional roots. Additional
 // roots that don't exist are an error, so a typo can't silently widen or
@@ -222,13 +219,14 @@ func (w *Workspace) resolve(p string, write bool) (location, error) {
 }
 
 // locate finds the deepest root containing abs, so a read-only root nested
-// inside the workspace takes precedence.
+// inside the workspace takes precedence. Where the file system ignores
+// case, so does the match: VENDOR/x.go is inside the read-only vendor.
 func (w *Workspace) locate(abs string) (location, bool) {
 	var best *fsRoot
 	var bestRel string
 	for _, r := range w.roots {
-		rel, err := filepath.Rel(r.dir, abs)
-		if err != nil || escapesRoot(rel) {
+		rel, ok := relIn(r.dir, abs)
+		if !ok {
 			continue
 		}
 		if best == nil || len(r.dir) > len(best.dir) {
@@ -236,6 +234,23 @@ func (w *Workspace) locate(abs string) (location, bool) {
 		}
 	}
 	return location{root: best, rel: bestRel}, best != nil
+}
+
+// relIn is abs relative to dir, and whether abs is dir or inside it,
+// ignoring case where the file system does (caseInsensitiveFS).
+func relIn(dir, abs string) (string, bool) {
+	if !caseInsensitiveFS {
+		rel, err := filepath.Rel(dir, abs)
+		return rel, err == nil && !escapesRoot(rel)
+	}
+	switch {
+	case strings.EqualFold(dir, abs):
+		return ".", true
+	case len(abs) > len(dir) && strings.EqualFold(abs[:len(dir)], dir) &&
+		(abs[len(dir)] == filepath.Separator || strings.HasSuffix(dir, string(filepath.Separator))):
+		return strings.TrimPrefix(abs[len(dir):], string(filepath.Separator)), true
+	}
+	return "", false
 }
 
 func (w *Workspace) check(loc location, write bool) error {
@@ -249,8 +264,10 @@ func (w *Workspace) check(loc location, write bool) error {
 		return fmt.Errorf("%w (%s): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 	}
 	// A symlink can point at a blocked or read-only location that the
-	// lexical path doesn't reveal; check where it really leads.
-	if real, err := filepath.EvalSymlinks(loc.abs()); err == nil && real != loc.abs() {
+	// lexical path doesn't reveal; check where it really leads. A file not
+	// made yet is checked where its folder really is: a new file through a
+	// linked folder lands in the folder the link leads to.
+	if real, err := resolveExistingPrefix(loc.abs()); err == nil && real != loc.abs() {
 		if pat, blocked := w.blocked.Match(real); blocked {
 			return fmt.Errorf("%w (%s via symlink): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 		}
@@ -359,6 +376,12 @@ func (w *Workspace) ReadFileLimit(p string, limit int64) ([]byte, error) {
 
 // CreateExclusive creates a new file, failing with fs.ErrExist if it exists.
 func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) error {
+	return w.createExclusive(ctx, p, data, 0o644)
+}
+
+// createExclusive is CreateExclusive with the file's mode (a moved file
+// keeps its own, its executable bit included).
+func (w *Workspace) createExclusive(ctx context.Context, p string, data []byte, mode fs.FileMode) error {
 	loc, err := w.resolve(p, true)
 	if err != nil {
 		return err
@@ -377,7 +400,7 @@ func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) 
 		}
 		return err
 	}
-	f, err := r.OpenFile(loc.rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := r.OpenFile(loc.rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return fail(err)
 	}
@@ -389,6 +412,12 @@ func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) 
 	if err := f.Close(); err != nil {
 		_ = r.Remove(loc.rel)
 		return fail(err)
+	}
+	if mode != 0o644 { // past the umask
+		if err := r.Chmod(loc.rel, mode); err != nil {
+			_ = r.Remove(loc.rel)
+			return fail(err)
+		}
 	}
 	w.checkpoints.after(sessionOf(ctx), loc.abs(), data, true)
 	return nil
@@ -643,6 +672,40 @@ func (w *Workspace) Describe() []string {
 		lines = append(lines, "blocked: "+strings.Join(pats, ", "))
 	}
 	return lines
+}
+
+// OwnDir makes the folder p (and its parents) for files Blitz itself puts
+// in the workspace, such as a skill script's output, and returns its
+// absolute path. It is checked like a file tool's write (refused in a
+// read-only workspace or root, or on a blocked path) and made through
+// os.Root, so a link in the way can't lead it out of the workspace.
+func (w *Workspace) OwnDir(p string, perm os.FileMode) (string, error) {
+	loc, err := w.resolve(p, true)
+	if err != nil {
+		return "", err
+	}
+	if err := loc.root.root.MkdirAll(loc.rel, perm); err != nil {
+		return "", err
+	}
+	return loc.abs(), nil
+}
+
+// CheckOwnFile checks that Blitz may write the file p itself, outside the
+// file tools (a git hook): as a file tool's write, and with its real
+// location, links resolved, inside the workspace.
+func (w *Workspace) CheckOwnFile(p string) error {
+	loc, err := w.resolve(p, true)
+	if err != nil {
+		return err
+	}
+	real, err := resolveExistingPrefix(loc.abs())
+	if err != nil {
+		return err
+	}
+	if _, ok := relIn(loc.root.dir, real); !ok {
+		return fmt.Errorf("%w: %s leads out of the workspace", ErrOutsideWorkspace, w.display(loc.abs()))
+	}
+	return nil
 }
 
 func mkdirParent(r *os.Root, rel string) error {

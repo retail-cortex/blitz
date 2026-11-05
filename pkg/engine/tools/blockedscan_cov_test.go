@@ -15,6 +15,8 @@
 package tools
 
 import (
+	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -67,4 +69,34 @@ func (fakeInfo) Sys() any           { return nil }
 // A file the system says nothing about has no inode.
 func TestInodeUnknown(t *testing.T) {
 	assert.Zero(t, inode(fakeInfo{}))
+}
+
+// One scan serves sandboxes whose roots differ (a script box's runs, each
+// with its own temporary folder): a directory read for one run isn't read
+// again for the next while it's unchanged (N26 engine-tools-2#16).
+func TestBlockedScanSharedAcrossRoots(t *testing.T) {
+	ws := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(ws, ".env"), []byte("x"), 0o600))
+	m, err := NewPathMatcher([]string{".env"}, nil)
+	require.NoError(t, err)
+	var shared sharedSandbox
+	scan := shared.blockedScan(OSSandboxSpec{Blocked: m})
+	require.Same(t, scan, shared.blockedScan(OSSandboxSpec{Blocked: m}), "one scan for the caller")
+	var reads []string
+	scan.readDir = func(p string) ([]fs.DirEntry, error) { reads = append(reads, p); return os.ReadDir(p) }
+	old := time.Now().Add(-time.Hour) // nothing changed recently: what's read is kept
+	scan.now = func() time.Time { return old.Add(2 * time.Hour) }
+	require.NoError(t, os.Chtimes(ws, old, old))
+
+	for i, tmp := range []string{t.TempDir(), t.TempDir()} {
+		t.Run(fmt.Sprintf("run %d", i+1), func(t *testing.T) {
+			reads = nil
+			files, _, err := scan.expandIn(context.Background(), []string{tmp, ws})
+			require.NoError(t, err)
+			assert.Equal(t, []string{filepath.Join(ws, ".env")}, files)
+			if i > 0 {
+				assert.NotContains(t, reads, ws, "the workspace was read again")
+			}
+		})
+	}
 }

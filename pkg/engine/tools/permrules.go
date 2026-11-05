@@ -85,6 +85,7 @@ type PermissionRule struct {
 
 	cmd []cmdPattern     // shell
 	re  []*regexp.Regexp // paths and names
+	abs bool             // a path pattern for an absolute (or ~) location
 }
 
 // String is the rule as written: kind(pattern), or the bare tool name.
@@ -174,9 +175,28 @@ func (r *PermissionRule) compile() error {
 	case RuleRead, RuleWrite, RuleDelete:
 		g := filepath.ToSlash(config.ExpandHome(r.Pattern))
 		g = strings.TrimPrefix(strings.TrimSuffix(g, "/"), "./")
-		// A directory pattern covers what's under it.
-		// GlobToRegex quotes everything but its wildcards: it always compiles.
-		r.re = []*regexp.Regexp{regexp.MustCompile(anchor("^" + textutil.GlobToRegex(g) + "(/.*)?$"))}
+		// The forms of blocked paths (spec_006 FS-10): an absolute location,
+		// also as its links resolve; a name without a slash at any depth;
+		// else relative to the workspace. A directory pattern covers what's
+		// under it. GlobToRegex quotes everything but its wildcards: it
+		// always compiles.
+		var exprs []string
+		switch {
+		case strings.HasPrefix(g, "/"):
+			r.abs = true
+			exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
+			if canon := canonicalGlobPrefix(g); canon != g {
+				exprs = append(exprs, "^"+textutil.GlobToRegex(canon)+"(/.*)?$")
+			}
+		case !strings.Contains(g, "/"):
+			exprs = append(exprs, "(^|/)"+textutil.GlobToRegex(g)+"(/.*)?$")
+		default:
+			exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
+		}
+		r.re = nil
+		for _, e := range exprs {
+			r.re = append(r.re, regexp.MustCompile(anchor(e)))
+		}
 	default: // web, search, mcp, skill, agent
 		g := strings.ToLower(r.Pattern)
 		exprs := []string{"^" + nameGlob(g) + "$"}
@@ -214,19 +234,37 @@ func nameGlob(g string) string {
 	return sb.String()
 }
 
+// matchesPath reports whether a path rule covers a file shown as display
+// (workspace-relative inside it) whose absolute path is abs ("" when not
+// known): an absolute pattern matches abs, the others display.
+func (r PermissionRule) matchesPath(display, abs string) bool {
+	t := display
+	if r.abs {
+		t = abs
+	}
+	if t == "" {
+		return false
+	}
+	t = filepath.ToSlash(t)
+	for _, re := range r.re {
+		if re.MatchString(t) {
+			return true
+		}
+	}
+	return false
+}
+
 // matches reports whether the rule covers one target of its kind.
 func (r PermissionRule) matches(target string) bool {
 	switch r.Kind {
 	case RuleTool:
 		return strings.EqualFold(r.Pattern, target)
 	case RuleRead, RuleWrite, RuleDelete:
-		t := filepath.ToSlash(target)
-		for _, re := range r.re {
-			if re.MatchString(t) {
-				return true
-			}
+		abs := ""
+		if filepath.IsAbs(target) {
+			abs = target
 		}
-		return false
+		return r.matchesPath(target, abs)
 	default:
 		t := strings.ToLower(strings.TrimSuffix(target, "."))
 		for _, re := range r.re {
@@ -244,6 +282,35 @@ func (r PermissionRule) matches(target string) bool {
 type PermissionRules struct {
 	mu    sync.RWMutex
 	rules []PermissionRule
+	root  string // the workspace, for path rules naming absolute locations
+}
+
+// SetWorkspace says which workspace the path targets of Decide are
+// relative to, so write(~/proj/secrets/**) matches secrets/x there.
+func (p *PermissionRules) SetWorkspace(dir string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.root = dir
+}
+
+// pathForms returns a path target as shown (workspace-relative inside the
+// workspace) and as an absolute path ("" when it can't be known).
+func (p *PermissionRules) pathForms(target string) (display, abs string) {
+	p.mu.RLock()
+	root := p.root
+	p.mu.RUnlock()
+	if filepath.IsAbs(target) {
+		if root != "" {
+			if rel, ok := relIn(root, target); ok {
+				return rel, target
+			}
+		}
+		return target, target
+	}
+	if root == "" {
+		return target, ""
+	}
+	return target, filepath.Join(root, target)
 }
 
 // NewPermissionRules parses the configured rules; source labels them. With
@@ -453,9 +520,17 @@ func (p *PermissionRules) Decide(kind string, targets []string) (Effect, *Permis
 		return "", nil
 	}
 	rules := p.List()
+	pathKind := kind == RuleRead || kind == RuleWrite || kind == RuleDelete
 	first := func(effect Effect, t string) *PermissionRule {
+		display, abs := t, ""
+		if pathKind {
+			display, abs = p.pathForms(t)
+		}
 		for i := range rules {
-			if rules[i].Effect == effect && rules[i].Kind == kind && rules[i].matches(t) {
+			if rules[i].Effect != effect || rules[i].Kind != kind {
+				continue
+			}
+			if pathKind && rules[i].matchesPath(display, abs) || !pathKind && rules[i].matches(t) {
 				return &rules[i]
 			}
 		}
@@ -477,6 +552,27 @@ func (p *PermissionRules) Decide(kind string, targets []string) (Effect, *Permis
 		last = r
 	}
 	return EffectAllow, last
+}
+
+// decideRequest is Decide for an approval request: its kind's rules over
+// its targets and, for the files a write deletes, the delete rules too.
+// Deny wins over ask, and ask over allow; it's allowed only when every
+// rule that applies allows it.
+func (p *PermissionRules) decideRequest(req api.ApprovalRequest) (Effect, *PermissionRule) {
+	effect, rule := p.Decide(ruleKind(req), req.Targets)
+	if len(req.Deletes) == 0 || req.Kind == api.ActionDelete || effect == EffectDeny {
+		return effect, rule
+	}
+	de, dr := p.Decide(RuleDelete, req.Deletes)
+	switch {
+	case de == EffectDeny, de == EffectAsk && effect != EffectAsk:
+		return de, dr
+	case effect == EffectAsk:
+		return effect, rule
+	case effect == EffectAllow && de == EffectAllow:
+		return effect, rule
+	}
+	return "", nil
 }
 
 // shellPatterns returns the compiled shell patterns with effect, for the

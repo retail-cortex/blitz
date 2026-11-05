@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,6 +50,7 @@ type gvisorBox struct {
 	stateDir string // runsc --root: container state, shared by this user's sandboxes
 	bundles  string // OCI bundles, one per sandbox, removed by Close
 	seq      atomic.Int64
+	shared   sharedSandbox // the blocked-path scan, kept across runs
 }
 
 // gvisorCloseTimeout bounds the cleanup after a run, which uses its own
@@ -79,7 +81,12 @@ func newGVisorBox(cfg ScriptBoxConfig) (ScriptBox, error) {
 	if err := os.WriteFile(b.empty, nil, 0o400); err != nil && !os.IsPermission(err) {
 		return nil, err
 	}
-	b.sweep(context.Background())
+	// How sandboxexec finds runsc (it has no option for it): set once here,
+	// not on every run, which changed the environment under running code.
+	os.Setenv(sandbox.RunscPathEnvVar, b.runsc)
+	sctx, cancel := context.WithTimeout(context.Background(), gvisorCloseTimeout)
+	b.sweep(sctx) // a hung runsc doesn't hold the box up
+	cancel()
 	gvisorProbeMu.Lock()
 	defer gvisorProbeMu.Unlock()
 	perr, done := gvisorProbes[runsc]
@@ -160,7 +167,11 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	}
 	// Blocked paths inside what's mounted (a .env in the workspace) are
 	// covered: files by an empty file, directories by an empty tmpfs.
-	files, dirs := expandBlocked(OSSandboxSpec{WritableDirs: req.Writable, ReadOnlyDirs: req.ReadOnly, Blocked: b.blocked})
+	// One scan for the box's runs: what it read stays cached (SH-24a).
+	files, dirs, err := b.shared.blockedScan(OSSandboxSpec{Blocked: b.blocked}).expandIn(ctx, append(slices.Clone(req.Writable), req.ReadOnly...))
+	if err != nil {
+		return ScriptResult{}, err
+	}
 	for _, f := range files {
 		mounts = append(mounts, sandbox.Mount{Source: b.empty, Destination: f, Type: sandbox.MountTypeBind, ReadOnly: true})
 	}
@@ -179,7 +190,6 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	// The sandbox's name carries this process's ID, so a sandbox left behind
 	// by a Blitz that was killed can be found and removed (sweep).
 	id := fmt.Sprintf("cp-%d-%d", os.Getpid(), b.seq.Add(1))
-	os.Setenv(sandbox.RunscPathEnvVar, b.runsc) // how sandboxexec finds runsc
 
 	start := time.Now()
 	sb, err := sandbox.New(ctx,
@@ -211,7 +221,9 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	go func() {
 		select {
 		case <-runCtx.Done():
-			_ = exec.Command(b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
+			kctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gvisorCloseTimeout)
+			defer cancel()
+			_ = exec.CommandContext(kctx, b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
 		case <-finished:
 		}
 	}()

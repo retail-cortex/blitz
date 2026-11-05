@@ -28,6 +28,7 @@ import (
 // not reach the real one.
 func TestMain(m *testing.M) {
 	lsptest.MaybeServe() // the lsp tests' fake language server
+	maybeDial()          // the socket tests' client, run under the sandbox
 	home, err := os.MkdirTemp("", "blitz-tools-home-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
