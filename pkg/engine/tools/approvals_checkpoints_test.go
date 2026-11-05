@@ -242,3 +242,68 @@ func TestHooksRunOutsideSandbox(t *testing.T) {
 	b, _ := os.ReadFile(outside)
 	assert.Contains(t, string(b), "logged", "hook could not write outside the workspace; hooks should not be sandboxed")
 }
+
+// A stand-in gate that shares the workspace's (a background task's
+// worktree) uses and adds to its session grants, and has its hooks,
+// sub-agents, tasks and reviewer (N26 engine-runtime#1b).
+func TestHooksShare(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name  string
+		setup func(ws *Hooks)
+		check func(t *testing.T, ws, wt *Hooks, wtAsked *[]api.ApprovalRequest)
+	}{
+		{
+			name: "the session's grant applies in the worktree",
+			setup: func(ws *Hooks) {
+				require.NoError(t, ws.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionCommand, Key: "cmd:ls"}))
+			},
+			check: func(t *testing.T, _, wt *Hooks, asked *[]api.ApprovalRequest) {
+				require.NoError(t, wt.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionCommand, Key: "cmd:ls"}))
+				assert.Empty(t, *asked, "asked again in the worktree")
+			},
+		},
+		{
+			name: "a grant in the worktree is the session's",
+			check: func(t *testing.T, ws, wt *Hooks, asked *[]api.ApprovalRequest) {
+				require.NoError(t, wt.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionCommand, Key: "cmd:make"}))
+				assert.Len(t, *asked, 1)
+				assert.Contains(t, ws.SessionRules(), "cmd:make")
+			},
+		},
+		{
+			name: "the permission_request hooks answer",
+			setup: func(ws *Hooks) {
+				ws.SetEventHooks(func(context.Context, api.ApprovalRequest) Outcome { return Outcome{Decision: "allow"} }, nil)
+			},
+			check: func(t *testing.T, _, wt *Hooks, asked *[]api.ApprovalRequest) {
+				require.NoError(t, wt.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionCommand, Key: "cmd:x"}))
+				assert.Empty(t, *asked, "the hook didn't answer")
+			},
+		},
+		{
+			name: "sub-agents, tasks and the reviewer",
+			setup: func(ws *Hooks) {
+				ws.SetSubagentInvoker(func(context.Context, string, string) (string, error) { return "", nil })
+				ws.SetReviewer(func(context.Context, api.ApprovalRequest) (bool, string, error) { return true, "fine", nil })
+			},
+			check: func(t *testing.T, _, wt *Hooks, _ *[]api.ApprovalRequest) {
+				assert.NotNil(t, wt.subagentInvoker())
+				wt.mu.RLock()
+				defer wt.mu.RUnlock()
+				assert.NotNil(t, wt.reviewer)
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ws, _ := decisionHooks(api.DecisionSession)
+			if c.setup != nil {
+				c.setup(ws)
+			}
+			wt, asked := decisionHooks(api.DecisionSession)
+			wt.Share(ws)
+			c.check(t, ws, wt, asked)
+		})
+	}
+}

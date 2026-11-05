@@ -103,6 +103,22 @@ type runState struct {
 	// failures counts the run's failed calls by tool, arguments and error
 	// (*atomic.Int32), to tell the agent when it repeats one.
 	failures sync.Map
+	// parent is the run a sub-agent with its own budget was called from:
+	// its model calls count toward each run up the chain too.
+	parent *runState
+}
+
+// child is the state of a run started from st (nil: none): the same
+// session, the same restrictions (plan-only or read-only, allowed tools)
+// and overrides (agent, model, task), with its own model-call budget.
+// The caller sets parent when the calls should still count toward st's.
+func (st *runState) child(maxTurns int) *runState {
+	c := &runState{maxTurns: maxTurns}
+	if st != nil {
+		c.sessionID, c.planOnly, c.mode, c.allowed = st.sessionID, st.planOnly, st.mode, st.allowed
+		c.agent, c.model, c.models, c.taskID = st.agent, st.model, st.models, st.taskID
+	}
+	return c
 }
 
 // repeatWarnAt is how many times the same call may fail the same way in a
@@ -269,7 +285,9 @@ type Engine struct {
 	scoped scopedRules // path-scoped project rules
 
 	fallbackMu sync.Mutex
-	fallbackBy string // fallback model answering now; "" when the primary is
+	// fallbackBy is, by run (session and task), the fallback answering
+	// now and the primary it stands in for; absent while the primary is.
+	fallbackBy map[string]fallbackState
 
 	mu                sync.RWMutex
 	llm               model.LLM
@@ -692,12 +710,15 @@ func (e *Engine) agentConfig(reg *tools.Registry, spec *agents.AgentSpec, llm mo
 	}
 }
 
-// beforeModel enforces the per-run model-call budget, and puts
-// {secrets:key} values into the request's messages.
+// beforeModel enforces the per-run model-call budget (a sub-agent's own
+// and every calling run's), and puts {secrets:key} values into the
+// request's messages.
 func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.LLMResponse, error) {
-	if st := stateFrom(ctx); st != nil && st.maxTurns > 0 {
-		if n := st.turns.Add(1); n > int64(st.maxTurns) {
-			return nil, fmt.Errorf("%w (%d model calls)", api.ErrMaxTurns, st.maxTurns)
+	for st := stateFrom(ctx); st != nil; st = st.parent {
+		if st.maxTurns > 0 {
+			if n := st.turns.Add(1); n > int64(st.maxTurns) {
+				return nil, fmt.Errorf("%w (%d model calls)", api.ErrMaxTurns, st.maxTurns)
+			}
 		}
 	}
 	if req != nil {
@@ -820,25 +841,40 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	return nil, nil
 }
 
+// fallbackState is a fallback model answering for primary.
+type fallbackState struct{ served, primary string }
+
 // noteFallback tells the user when a fallback model starts answering and
-// when the primary is back, once per change rather than on every call.
+// when the primary is back, once per change in the session (a background
+// task's apart) rather than on every call.
 func (e *Engine) noteFallback(ctx context.Context, resp *model.LLMResponse) {
 	primary, _ := resp.CustomMetadata[FallbackFromKey].(string)
-	served := ""
+	now := fallbackState{primary: primary}
 	if primary != "" {
-		served = resp.ModelVersion
+		now.served = resp.ModelVersion
+	}
+	key := ""
+	if st := stateFrom(ctx); st != nil {
+		key = st.sessionID + "\x00" + st.taskID
 	}
 	e.fallbackMu.Lock()
-	prev := e.fallbackBy
-	e.fallbackBy = served
+	prev := e.fallbackBy[key]
+	if now.served == "" {
+		delete(e.fallbackBy, key)
+	} else {
+		if e.fallbackBy == nil {
+			e.fallbackBy = map[string]fallbackState{}
+		}
+		e.fallbackBy[key] = now
+	}
 	e.fallbackMu.Unlock()
 	notice := e.noticeTo(ctx)
-	if served == prev || notice == nil {
+	if now.served == prev.served || notice == nil {
 		return
 	}
-	msg := i18n.T("model.fallback_recovered", "model", e.ModelName())
-	if served != "" {
-		msg = i18n.T("model.fallback", "primary", primary, "model", served)
+	msg := i18n.T("model.fallback_recovered", "model", prev.primary) // the model that recovered
+	if now.served != "" {
+		msg = i18n.T("model.fallback", "primary", primary, "model", now.served)
 	}
 	slog.InfoContext(ctx, msg)
 	notice(msg)

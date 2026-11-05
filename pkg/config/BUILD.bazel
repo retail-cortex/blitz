@@ -20,6 +20,7 @@ go_library(
         "agentmodels.go",
         "apiprovider.go",
         "atomic.go",
+        "background.go",
         "browserprofiles.go",
         "check.go",
         "config.go",

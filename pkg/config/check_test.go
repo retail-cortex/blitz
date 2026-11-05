@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,11 @@ func TestCheckSettings(t *testing.T) {
 			want: []Problem{{Line: 4, Error: true, Message: "[permissions] allow:"}},
 		},
 		{name: "plain-text key", text: "[llm.openai]\napi_key = \"sk-abc123\"\n", want: []Problem{{Line: 2, Message: "the openai API key is in the file as plain text"}}},
+		{name: "background limits that aren't", text: "[tools]\nbackground_agent_timeout = \"30 min\"\nbackground_agent_max_turns = 0\n", want: []Problem{
+			{Line: 2, Error: true, Message: "tools.background_agent_timeout is a length of time"},
+			{Line: 3, Error: true, Message: "tools.background_agent_max_turns is a task's model calls"},
+		}},
+		{name: "background limits", text: "[tools]\nbackground_agent_timeout = \"2h\"\nmax_background_agents = 2\n"},
 		{name: "skill policy", text: "[skills.policy]\nsandbox = \"docker\"\n", want: []Problem{{Line: 1, Message: "skills.policy.sandbox"}}},
 		{
 			name: "errors first on a line, then by line",
@@ -88,5 +94,44 @@ func TestSplitKey(t *testing.T) {
 		`pricing.'claude-opus-5'.x`: {"pricing", "claude-opus-5", "x"},
 	} {
 		t.Run(in, func(t *testing.T) { assert.Equal(t, want, []string(splitKey(in))) })
+	}
+}
+
+// The background tasks' limits are read from one place, and a value that
+// isn't one is reported, naming its key (N26 engine-runtime#3).
+func TestBackgroundLimits(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*ToolsConfig)
+		want BackgroundLimits
+		errs []string
+	}{
+		{name: "the defaults", want: BackgroundLimits{Agents: 4, Timeout: 30 * time.Minute, MaxTurns: 50}},
+		{name: "an empty timeout is the default", edit: func(c *ToolsConfig) { c.BackgroundAgentTimeout = "" }, want: BackgroundLimits{Agents: 4, Timeout: 30 * time.Minute, MaxTurns: 50}},
+		{name: "set", edit: func(c *ToolsConfig) {
+			c.MaxBackgroundAgents, c.BackgroundAgentTimeout, c.BackgroundAgentMaxTurns = 2, "2h", 9
+		}, want: BackgroundLimits{Agents: 2, Timeout: 2 * time.Hour, MaxTurns: 9}},
+		{name: "a timeout that isn't one", edit: func(c *ToolsConfig) { c.BackgroundAgentTimeout = "30 min" }, errs: []string{"tools.background_agent_timeout", `"30 min"`}},
+		{name: "a negative timeout", edit: func(c *ToolsConfig) { c.BackgroundAgentTimeout = "-1m" }, errs: []string{"tools.background_agent_timeout"}},
+		{name: "no model calls", edit: func(c *ToolsConfig) { c.BackgroundAgentMaxTurns = 0 }, errs: []string{"tools.background_agent_max_turns", "not 0"}},
+		{name: "no tasks", edit: func(c *ToolsConfig) { c.MaxBackgroundAgents = 0 }, errs: []string{"tools.max_background_agents", "not 0"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tc := DefaultConfig().Tools
+			if c.edit != nil {
+				c.edit(&tc)
+			}
+			got, err := tc.BackgroundLimits()
+			if c.errs == nil {
+				require.NoError(t, err)
+				assert.Equal(t, c.want, got)
+				return
+			}
+			require.Error(t, err)
+			for _, e := range c.errs {
+				assert.ErrorContains(t, err, e)
+			}
+		})
 	}
 }

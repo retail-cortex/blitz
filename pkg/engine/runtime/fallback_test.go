@@ -314,3 +314,42 @@ func TestConsumerStoppingCountsAsAnswered(t *testing.T) {
 	require.Empty(t, from)
 	require.Equal(t, 0, backup.count())
 }
+
+// The fallback notices are once per change in each run: a background
+// task answered by a fallback doesn't flip the notices of its session's
+// turn, whose primary answers, and "is answering again" names the model
+// that recovered (N26 engine-runtime#8).
+func TestFallbackNoticesPerRun(t *testing.T) {
+	fellBack := func() *model.LLMResponse {
+		r := &model.LLMResponse{}
+		markFallback(r, "local", "pinned-primary")
+		return r
+	}
+	primary := func() *model.LLMResponse { return &model.LLMResponse{} }
+	turn := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	task := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s", taskID: "task-1"})
+	type call struct {
+		ctx  context.Context
+		resp func() *model.LLMResponse
+	}
+	cases := []struct {
+		name  string
+		calls []call
+		want  []string
+	}{
+		{name: "a task on its fallback, the turn on its primary", calls: []call{{task, fellBack}, {turn, primary}, {task, fellBack}, {turn, primary}},
+			want: []string{"pinned-primary is unavailable; answering with fallback local for now."}},
+		{name: "the primary recovers", calls: []call{{turn, fellBack}, {turn, fellBack}, {turn, primary}},
+			want: []string{"pinned-primary is unavailable; answering with fallback local for now.", "pinned-primary is answering again."}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got []string
+			e := &Engine{notice: func(m string) { got = append(got, m) }}
+			for _, cl := range c.calls {
+				e.noteFallback(cl.ctx, cl.resp())
+			}
+			assert.Equal(t, c.want, got)
+		})
+	}
+}

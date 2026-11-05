@@ -254,20 +254,15 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	if _, ok := e.agentReg.Get(agentName); !ok {
 		return api.TaskInfo{}, &api.UnknownAgentError{Name: agentName}
 	}
-	limit := e.cfg.Tools.MaxBackgroundAgents
-	if limit <= 0 {
-		limit = 4
+	limits, err := e.cfg.Tools.BackgroundLimits()
+	if err != nil {
+		return api.TaskInfo{}, fmt.Errorf("background tasks can't start: %w", err)
 	}
-	timeout, err := time.ParseDuration(e.cfg.Tools.BackgroundAgentTimeout)
-	if err != nil || timeout <= 0 {
-		timeout = 30 * time.Minute
-	}
-	maxTurns := e.cfg.Tools.BackgroundAgentMaxTurns
-	if maxTurns <= 0 {
-		maxTurns = 50
-	}
+	limit, timeout, maxTurns := limits.Agents, limits.Timeout, limits.MaxTurns
+	budgetKey := "tools.background_agent_max_turns"
 	if spec, _ := e.agentReg.Get(agentName); spec != nil && spec.MaxTurns > 0 {
 		maxTurns = spec.MaxTurns // its own budget, as in the foreground
+		budgetKey = "max_turns in the " + agentName + " agent's front matter"
 	}
 
 	m := e.tasks
@@ -318,12 +313,15 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	m.publishLocked(st.sessionID, api.SessionEvent{Task: &started})
 	m.mu.Unlock()
 
-	// Its own run state charges its session and has its own budget;
-	// nobody is asked anything; the turn's notices aren't its.
-	own := &runState{sessionID: st.sessionID, maxTurns: maxTurns, taskID: id, agent: st.agent, model: st.model, models: st.models}
+	// Its own run state charges its session and has its own budget (it
+	// outlives the turn, so not the turn's); it keeps the starting run's
+	// restrictions (plan-only, read-only, allowed tools); nobody is asked
+	// anything; the turn's notices aren't its.
+	own := st.child(maxTurns)
+	own.taskID = id
 	runCtx = context.WithValue(runCtx, runStateKey{}, own)
 	runCtx = context.WithValue(runCtx, taskKey{}, id)
-	runCtx = context.WithValue(runCtx, turnNoticeKey{}, (func(string))(nil))
+	runCtx = WithTurnNotices(runCtx, nil) // the engine's and the tools' (an MCP server failing)
 	runCtx = context.WithValue(runCtx, turnStatusKey{}, (func(string))(nil))
 	runCtx = context.WithValue(runCtx, subagentEventKey{}, func(ev *session.Event) { e.taskEvent(t, ev) })
 	runCtx = tools.Background(runCtx)
@@ -350,6 +348,11 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 			defer isolated.Close()
 		}
 		result, err := e.InvokeSubagent(runCtx, agentName, prompt)
+		if errors.Is(err, api.ErrMaxTurns) && own.turns.Load() > int64(own.maxTurns) {
+			// Its own budget ran out: say where it's set, as its time
+			// and cost limits do.
+			err = fmt.Errorf("%w: %s sets it", err, budgetKey)
+		}
 		e.endTask(runCtx, t, result, err)
 	}()
 	return e.taskInfo(t), nil
@@ -600,8 +603,10 @@ func (m *taskManager) forgetSessionLocked(session string) []string {
 
 // worktreeTools makes task id's worktree and a tools registry rooted in
 // it: its files, sandbox and checkpoints are the worktree's. It shares the
-// workspace's settings, but not its MCP servers or hooks, which the
-// workspace's own run already provides.
+// workspace's settings, current mode and approvals (sub-agents, tasks,
+// the auto mode's reviewer, permission_request hooks, the session's
+// grants), but not its MCP servers or other hooks, which the workspace's
+// own run already provides. A mode the worktree can't take fails it.
 func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, error) {
 	w, err := worktree.Create(e.toolReg.Workspace().Dir(), worktree.NewName(id+"-"), "")
 	if err != nil {
@@ -618,6 +623,13 @@ func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, e
 		}
 		return nil, w, err
 	}
-	_ = reg.SetPermissionMode(e.toolReg.Hooks().Mode())
+	reg.Hooks().Share(e.toolReg.Hooks())
+	if err := reg.SetPermissionMode(e.toolReg.Hooks().Mode()); err != nil {
+		reg.Close()
+		if _, rerr := worktree.Remove(e.toolReg.Workspace().Dir(), w.Name, true); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("removing worktree %s: %w", w.Name, rerr))
+		}
+		return nil, w, fmt.Errorf("the session's mode %s: %w", e.toolReg.Hooks().Mode(), err)
+	}
 	return reg, w, nil
 }

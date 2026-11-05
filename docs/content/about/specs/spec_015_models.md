@@ -103,6 +103,7 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 - **MDL-62** A response from a fallback is marked `CustomMetadata["blitz_fallback_from"] = <primary>` and `ModelVersion = <fallback>` if empty, so cost is priced by the model that answered.
 - **MDL-63** If all fail: "every model failed: <joined errors>".
 - **MDL-64** The engine notifies the user once when a fallback starts answering ("model.fallback") and once when the primary is back ("model.fallback_recovered"), not on every call. During a turn the notice is one of the turn's events (`notice`, `runtime.WithTurnNotices`), so the terminal and the desktop show it in the conversation; outside a turn it goes to `WithNotice` (the service's log).
+- **MDL-64a** *2026-11-04 (scan N26-engine-runtime#8: the state was one per engine, so a background task on its fallback and the turn on its primary flipped the notices on every call, and "is answering again" named the active agent's model).* "Once per change" is per run: per session, and per background task apart from it. "model.fallback_recovered" names the primary that recovered. Forgetting a session drops its state.
 - **MDL-65** Breaker behaviour (`pkg/engine/breaker`): after the threshold the breaker opens for 15 s, doubling up to 5 min; then one half-open trial call is allowed.
 
 ## 6. Per-model settings

@@ -906,9 +906,9 @@ func DefaultConfig() *Config {
 			AutoApproveCommands: false,
 			MaxParallel:         8,
 
-			MaxBackgroundAgents:     4,
-			BackgroundAgentTimeout:  "30m",
-			BackgroundAgentMaxTurns: 50,
+			MaxBackgroundAgents:     DefaultMaxBackgroundAgents,
+			BackgroundAgentTimeout:  DefaultBackgroundAgentTimeout,
+			BackgroundAgentMaxTurns: DefaultBackgroundAgentMaxTurns,
 		},
 		Session: SessionConfig{
 			StorageDir: filepath.Join(homeDir, ".blitz", "sessions"),

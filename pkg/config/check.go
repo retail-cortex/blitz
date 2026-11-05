@@ -80,6 +80,21 @@ func CheckSettings(text string) []Problem {
 			}
 		}
 	}
+	// The background tasks' limits, as far as the file sets them.
+	bg := DefaultConfig().Tools
+	for key, set := range map[string]func(){
+		"max_background_agents":      func() { bg.MaxBackgroundAgents = cfg.Tools.MaxBackgroundAgents },
+		"background_agent_timeout":   func() { bg.BackgroundAgentTimeout = cfg.Tools.BackgroundAgentTimeout },
+		"background_agent_max_turns": func() { bg.BackgroundAgentMaxTurns = cfg.Tools.BackgroundAgentMaxTurns },
+	} {
+		if md.IsDefined("tools", key) {
+			set()
+			if _, err := bg.BackgroundLimits(); err != nil {
+				out = append(out, Problem{Line: keyLine(text, toml.Key{"tools", key}), Error: true, Message: err.Error()})
+			}
+			bg = DefaultConfig().Tools
+		}
+	}
 	for _, msg := range cfg.Skills.Policy.Problems() {
 		out = append(out, Problem{Line: keyLine(text, toml.Key{"skills", "policy"}), Message: msg})
 	}

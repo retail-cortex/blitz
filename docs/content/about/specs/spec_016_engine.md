@@ -40,6 +40,7 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 ### 3.1 Callbacks
 - **ENG-20** Before each tool: audit `tool_call` (name, args); apply the plan/read-only refusal (§4); MCP approval (`ApproveMCP`); `pre_tool` hooks (a block returns `{"error":"blocked by pre_tool hook: <reason>"}` instead of running). Refusals are returned as tool results so the model sees them.
+- **ENG-20a** *2026-11-04 (scan N26-engine-runtime#10: ENG-20 listed an old order).* The order is: audit `tool_call`; the plan/read-only refusal; the allowed-tools refusal; the permission rules' deny; `pre_tool` hooks; guardrails on the action; MCP approval (`ApproveMCP`).
 - **ENG-21** After each tool: `post_tool` hooks (asynchronous, see [spec_010_hooks](spec_010_hooks.md)); audit `tool_result` with decision `ok`/`error` (tool error or an `error` field); attach steer messages (§5).
 - **ENG-22** After each non-partial model response: note fallback changes (§ fallback in [spec_015_models](spec_015_models.md)) and record usage priced by the model that actually answered (`ModelVersion` if it has a price, else the calling agent's model), including cache-write tokens from `CustomMetadata["cache_creation_input_tokens"]`.
 
@@ -75,12 +76,14 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 ## 8. Sub-agents
 
 - **ENG-70** `InvokeSubagent(agent, prompt)` (behind the `invoke_agent` tool) builds the agent fresh and runs it in an isolated in-memory session `subagent-<name>-<seq>`; returns the concatenated final non-thought text authored by that agent. Nesting is capped at depth 3 (`ErrSubagentDepth`). The calling run's usage accounting, per-model settings and turn limit context still apply.
+- **ENG-70a** *2026-11-04 (scan N26-engine-runtime#14).* A sub-agent with its own `max_turns` counts its model calls toward the calling run's budget too ([spec_032_background_agents](spec_032_background_agents.md) BGA-50a).
 
 ## 9. Usage and cost
 
 - **ENG-80** Per call: input = prompt + tool-use prompt tokens; cached; cache-write (clamped to uncached input); output = candidates + thoughts; `LastPrompt` = input (the current context size).
 - **ENG-81** Cost = (uncached × input + cached × cached_input + cache_write × write_rate + output × output_rate) / 1e6, where write_rate defaults to the input rate. Price lookup: exact model name, else the longest configured prefix (`gemini-3.8-flash-001` → `gemini-3.8-flash`). An unpriced call marks the session `Priced=false`.
 - **ENG-82** Usage is kept per session in memory for the life of the process; it is not persisted.
+- **ENG-82a** *2026-11-04 (scan N26-engine-runtime#9: ENG-82 described the old behaviour).* With a `UsageStore` (`WithUsageStore`; `session.Storage` implements it) a session's usage is saved after every call and restored on its first read, so `/cost` survives a restart; without one it is kept in memory for the life of the process.
 
 ## 10. Tracing
 
