@@ -34,6 +34,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	adksession "google.golang.org/adk/v2/session"
@@ -360,6 +362,9 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 		return api.TurnResult{}, err
 	}
 	ctx = withFlowOrigin(ctx, rec.Origin)
+	if rec.Origin == "worker" {
+		ctx = w.resumedJobContext(ctx, rec.Session)
+	}
 	if st := w.storage; st.Active() == nil || st.Active().ID != rec.Session {
 		other, err := session.NewStorage(w.cfg.Session.StorageDir)
 		if err != nil {
@@ -380,6 +385,30 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 	}
 	resp := &genai.FunctionResponse{ID: taskID, Name: workflow.WorkflowInputFunctionCallName, Response: map[string]any{"payload": answer}}
 	return w.driveFlow(ctx, rec.Session, f, rec.Input, on, runID, resp, rec.Done)
+}
+
+// resumedJobContext is ctx for resuming a workflow a job started (its run
+// chat sessionID): unattended, under that job's permissions as it has them
+// now, as its run was; none (everything refused) when the job is gone.
+func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) context.Context {
+	var perms []workers.Permission
+	infos, _ := w.ListWorkers()
+	for _, info := range infos {
+		runs, _ := w.runLog.List(w.Dir(), info.Name, 0)
+		if !slices.ContainsFunc(runs, func(r api.Run) bool { return r.SessionID == sessionID }) {
+			continue
+		}
+		if wk, loadErr, err := w.worker(info.Name); err == nil && loadErr == nil {
+			perms = workers.Apply(wk, w.workerPolicy()).Permissions
+		}
+		break
+	}
+	return tools.Unattended(ctx, func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
+		if workers.Allows(perms, req) {
+			return api.DecisionOnce, nil
+		}
+		return api.DecisionDeny, nil
+	})
 }
 
 // resuming holds a run's record, by its path, while a task of it is
