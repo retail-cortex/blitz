@@ -24,20 +24,23 @@ import { nameOf } from "./files/tree";
 import type { SearchHit, SearchStatus } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 import { useApp } from "./state";
-import { defaultSources, findTerms, hitTarget, markTerms, queryTerms, searchSources, toggleSource, type SearchSource } from "./search";
+import { findTerms, hitTarget, indexCounts, markTerms, queryTerms, scanPending, searchSources, startSources, toggleSource, type SearchSource } from "./search";
 import { Chip, Icon, IconButton, Segmented, useModal } from "@blitz/webui";
 
 /**
  * Cmd/Ctrl+Shift+F, or the palette: search everything in the workspace
- * (SearchWorkspace as you type), in the sources chosen (files and PDFs to
- * start). Each hit shows where it is and its passage, the words marked;
+ * (SearchWorkspace as you type), in the sources chosen (the workspace's
+ * Search by default in to start, else files and PDFs). Each hit shows where it is and its passage, the words marked;
  * Enter or a click opens it: a file at its line, a chat, a plan.
  */
 export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string; initialQuery?: string; onClose: () => void }) {
   const [query, setQuery] = useState(initialQuery);
   // Hidden files (dotfiles, ones git ignores) only when the Files shelf shows them.
   const hidden = useApp().prefs.show_hidden;
-  const [sources, setSources] = useState<SearchSource[]>(defaultSources);
+  // The sources: the workspace's defaults, once its first status says
+  // them, unless a chip was clicked first (chosen).
+  const [sources, setSources] = useState<SearchSource[]>(startSources);
+  const chosen = useRef(false);
   // How to search: by meaning too, once an embedding model is set.
   const [mode, setMode] = useState<"hybrid" | "keyword" | "semantic">("hybrid");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -50,9 +53,11 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
   const box = useRef<HTMLDivElement>(null);
   useModal(box, onClose);
 
-  // The index's status, asked again every second while it scans.
+  // The index's status, asked again every second while it scans (search
+  // on); Reindex (round) asks afresh.
+  const [round, setRound] = useState(0);
+  useEffect(() => input.current?.focus(), []);
   useEffect(() => {
-    input.current?.focus();
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     const ask = () =>
@@ -60,7 +65,11 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
         (r) => {
           if (!live) return;
           setStatus(r.status);
-          if (r.status?.scanning || !r.status?.lastScan) timer = setTimeout(ask, 1000);
+          if (!chosen.current) {
+            chosen.current = true;
+            setSources(startSources(r.status?.settings));
+          }
+          if (scanPending(r.status)) timer = setTimeout(ask, 1000);
         },
         () => {},
       );
@@ -69,7 +78,7 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
       live = false;
       clearTimeout(timer);
     };
-  }, [dir]);
+  }, [dir, round]);
 
   // The hits for what's typed, once typing pauses.
   const scanned = status?.lastScan;
@@ -111,14 +120,9 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
       openFile({ dir, path: to.path, line: to.line, find: findTerms(query) });
     }
   };
-  const reindex = () => workspaces.reindex({ workspace: dir }).then(() => setStatus((s) => (s ? { ...s, scanning: true } : s)), (e) => setError(message(e)));
+  const reindex = () => workspaces.reindex({ workspace: dir }).then(() => setRound((n) => n + 1), (e) => setError(message(e)));
 
-  const items = status?.items ?? {};
-  const counts = [
-    ...searchSources.map((s) => `${t(`desktop.search.source.${s}`)} ${items[s] ?? 0}`),
-    ...(semantic ? [t("desktop.search.embedded", { count: status?.embedded ?? 0 })] : []),
-    ...(status?.enriched ? [t("desktop.search.enriched", { count: status.enriched })] : []),
-  ].join(" · ");
+  const counts = status ? indexCounts(status) : "";
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       {/* The title bar still moves the window, without closing this. */}
@@ -158,7 +162,7 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
             />
           )}
           {searchSources.map((s) => (
-            <Chip key={s} selected={sources.includes(s)} aria-pressed={sources.includes(s)} onClick={() => (setSources((on) => toggleSource(on, s)), input.current?.focus())}>
+            <Chip key={s} selected={sources.includes(s)} aria-pressed={sources.includes(s)} onClick={() => ((chosen.current = true), setSources((on) => toggleSource(on, s)), input.current?.focus())}>
               {t(`desktop.search.source.${s}`)}
             </Chip>
           ))}

@@ -439,9 +439,17 @@ func newEnterpriseUsageCommand() *cobra.Command {
 					resets = ", resets " + l.Resets.AsTime().Local().Format("Jan 2 15:04")
 				}
 				if l.Unit == "tokens" {
-					limit := max(l.Tokens, l.InputTokens, l.OutputTokens)
-					used := l.Used.GetInputTokens() + l.Used.GetOutputTokens()
-					fmt.Fprintf(out, "  %s %s quota on %s: %d of %d tokens used%s\n", l.ScopeKind, l.Period, on, used, limit, resets)
+					// Each cap as the gateway counts it: the total against
+					// input and output together, the others alone.
+					in, outTok := l.Used.GetInputTokens(), l.Used.GetOutputTokens()
+					for _, c := range []struct {
+						what        string
+						limit, used int64
+					}{{"", l.Tokens, in + outTok}, {"input ", l.InputTokens, in}, {"output ", l.OutputTokens, outTok}} {
+						if c.limit > 0 {
+							fmt.Fprintf(out, "  %s %s quota on %s: %d of %d %stokens used (%d left)%s\n", l.ScopeKind, l.Period, on, c.used, c.limit, c.what, max(0, c.limit-c.used), resets)
+						}
+					}
 					continue
 				}
 				fmt.Fprintf(out, "  %s %s budget on %s: $%.2f of $%.2f used ($%.2f left)%s\n", l.ScopeKind, l.Period, on, l.Used.GetCostUsd(), l.AmountUsd,

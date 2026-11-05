@@ -39,7 +39,7 @@ export function useOpenRun() {
 }
 
 /** What a run that ended says: the step it failed at and why, or that it finished. */
-export function endText(r: WorkflowRun): string {
+function endText(r: WorkflowRun): string {
   if (r.status === "failed") {
     const step = failedStep(r);
     return t("desktop.flow_runs.failed_body", { step: step?.title || step?.id || "?", error: step?.error || r.error });

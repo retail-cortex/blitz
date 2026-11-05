@@ -9,7 +9,7 @@ Specs: [workspace search](../about/specs/spec_035_search.md), [web](../about/spe
 
 Blitz keeps an index of each workspace so you can search everything in it at once: its files (as git sees them; blocked paths such as `.env` are never indexed), the text of its PDFs and notebooks, its chats, and its notes and approved plans. Results are ranked, one per item, with the passage that matched and where it is.
 
-- **Desktop app:** type in the search box at the top (⌘K): passages from the workspace show under the matching file names. **Search the workspace** (⇧⌘F, or the last entry in that list) is the full search. Pick where to look with the chips (Files and PDFs to start); Enter opens the file at the line, the chat or the plan; a Markdown file opens in its preview, at the passage, with your words marked.
+- **Desktop app:** type in the search box at the top (⌘K): passages from the workspace show under the matching file names. **Search the workspace** (⇧⌘F, or the last entry in that list) is the full search. Pick where to look with the chips (the workspace's **Search by default in** to start, else Files and PDFs); Enter opens the file at the line, the chat or the plan; a Markdown file opens in its preview, at the passage, with your words marked.
 - **Terminal:** `/search <terms>` in a session, or `/search files|documents|chats|notes|all <terms>`; `blitz search <terms>` from the shell, with `--in`, `--json`, `--status` and `--reindex`.
 - **Agents:** the `search_workspace` tool, next to `grep`: ranked passages rather than every match.
 

@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { mdiDeleteOutline, mdiHelpCircleOutline, mdiPlus } from "@mdi/js";
 import { t } from "./i18n";
-import { Button, IconButton, nudge, useAnchoredMenu } from "@blitz/webui";
+import { Button, IconButton, useAnchoredMenu, useKeptInWindow } from "@blitz/webui";
 import { parseRules, ruleExamples, ruleHelp, ruleKinds, rulesText, type Rule, type RuleKind } from "./workerForm";
 
 /**
@@ -100,13 +100,7 @@ export function PermissionRules({ value, onChange, allow }: { value: string; onC
  */
 function PatternHelp({ kind, onPick }: { kind: RuleKind; onPick: (pattern: string) => void }) {
   const { at, toggle, close, ref, layer } = useAnchoredMenu<HTMLSpanElement>("down end");
-  // Kept in the window, as a menu is.
-  useLayoutEffect(() => {
-    const el = layer.current;
-    if (!el || !at) return;
-    const { x, y } = nudge(el.getBoundingClientRect(), window.innerWidth, window.innerHeight);
-    el.style.transform = x || y ? `translate(${x}px, ${y}px)` : "";
-  }, [at, layer]);
+  useKeptInWindow(layer, at);
   return (
     <span className="menu-anchor" ref={ref}>
       <IconButton icon={mdiHelpCircleOutline} label={t("desktop.newworker.pattern_help")} small selected={!!at} aria-expanded={!!at} aria-haspopup="dialog" onClick={toggle} />

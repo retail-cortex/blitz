@@ -23,11 +23,25 @@ import { useEffect, useState } from "react";
 import { mdiAlertCircleOutline, mdiShieldLockOutline } from "@mdi/js";
 import { fixSandbox, restartService, sandboxStatus, serviceStatus, type SandboxFix, type SandboxStatus } from "./desktop";
 import { t } from "./i18n";
-import { serviceInfo, waitForService } from "./serviceVersion";
+import { serviceInfo, settleTimeout, waitForService } from "./serviceVersion";
 import { Button, Icon } from "@blitz/webui";
 
+/**
+ * Restarts the service after the fix and waits for it: "" once it's back,
+ * else why not (it failed to restart, or isn't back in time).
+ */
+export async function restartAfterFix(restart: () => Promise<void>, wait: () => Promise<{ settled: boolean }>): Promise<string> {
+  try {
+    await restart();
+    if (!(await wait()).settled) return t("desktop.service.didnt_start", { seconds: settleTimeout / 1000 });
+    return "";
+  } catch (e) {
+    return String(e);
+  }
+}
+
 /** Where fixing the sandbox is: asking for the password, then restarting the service. */
-export type FixPhase = "idle" | "fixing" | "restarting" | "done";
+type FixPhase = "idle" | "fixing" | "restarting" | "done";
 
 /**
  * The sandbox's state, and allow(): the fix, then a restart of the service.
@@ -53,15 +67,16 @@ export function useSandboxFix(onFixed?: () => void) {
     }
     // What the service opened before still has no sandbox: start afresh.
     setPhase("restarting");
-    try {
-      const info = await serviceInfo().catch(() => undefined);
-      await restartService(info?.pid ?? 0);
-      await waitForService(serviceStatus, true);
-    } catch (e) {
-      setRestartError(String(e));
-    }
+    const failed = await restartAfterFix(
+      async () => {
+        await restartService((await serviceInfo().catch(() => undefined))?.pid ?? 0);
+      },
+      () => waitForService(serviceStatus, true),
+    );
+    setRestartError(failed);
     setPhase("done");
-    onFixed?.();
+    // The workspace reloads only once the service is back.
+    if (!failed) onFixed?.();
   };
   return { status, phase, fix, restartError, allow };
 }

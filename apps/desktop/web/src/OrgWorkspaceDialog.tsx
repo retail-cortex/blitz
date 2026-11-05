@@ -23,7 +23,7 @@ import { t } from "./i18n";
 import { Button, Dialog, Field, Switch } from "@blitz/webui";
 
 /** A handle as the service makes one from a name: lower case, - between words. */
-export function handleOf(name: string): string {
+function handleOf(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

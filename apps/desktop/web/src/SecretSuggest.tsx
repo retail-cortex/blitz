@@ -21,7 +21,7 @@ import { insertSecret, missingSecrets, secretNames, secretOptions, secretTokenAt
 import { Icon } from "@blitz/webui";
 
 /** The names a workspace (or "") can name, loaded once a field shows. */
-export function useSecretNames(workspace: string): SecretName[] {
+function useSecretNames(workspace: string): SecretName[] {
   const [names, setNames] = useState<SecretName[]>([]);
   useEffect(() => {
     let live = true;

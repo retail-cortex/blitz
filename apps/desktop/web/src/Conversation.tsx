@@ -81,7 +81,7 @@ import { Decision, type ApprovalRequest, type Question, type Task, type Usage } 
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
 import { withTools } from "./turns";
-import { allCommands, helpText, knownCommand, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { allCommands, helpText, knownCommand, listedCommands, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
   addToContextEvent,
@@ -112,7 +112,7 @@ import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { taskTimes, useNow, type TaskTime } from "./taskTimes";
-import { acceptAttribute, acceptedAs, clock, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
+import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -169,7 +169,8 @@ export function Conversation({
   projectWaiting?: number;
   onReviewProject?: () => void;
   onSettingsChanged: () => void;
-  onOpenView: (v: "changes" | "workers") => void;
+  /** Opens a view (/diff, /processes, …); unset where there are none (the VS Code panel), which says so. */
+  onOpenView?: CommandContext["openView"];
   /** The chat expanded over the editor, or not, while files are open (its header's button). */
   expand?: { expanded: boolean; toggle: () => void };
 }) {
@@ -206,11 +207,7 @@ export function Conversation({
   useEffect(() => {
     workspaces
       .listCommands({ workspace: dir })
-      .then((r) =>
-        setCustomCommands(
-          r.commands.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || `Run /${c.name}`, source: (c.source || "project") as CommandSpec["source"] })),
-        ),
-      )
+      .then((r) => setCustomCommands(listedCommands(r.commands)))
       .catch(() => {});
   }, [dir]);
   const commands = useMemo(() => allCommands(customCommands), [customCommands]);
@@ -470,7 +467,7 @@ export function Conversation({
         }
         const doc = isDocument(f);
         const kind = acceptedAs(accepted, f)?.kind ?? "image";
-        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: kind === "image" ? URL.createObjectURL(f) : "", document: doc, kind };
+        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || t("desktop.attach.pasted"), url: kind === "image" ? URL.createObjectURL(f) : "", document: doc, kind };
         setAttachments((list) => [...list, a]);
         (async () => {
           try {
@@ -761,7 +758,7 @@ export function Conversation({
       usage: () => say(t("desktop.cmd.usage", { usage: `/${spec.name}${spec.args ? " " + spec.args : ""}` }), "error"),
       busy: () => latestRunning.current,
       settingsChanged: onSettingsChanged,
-      openView: onOpenView,
+      openView: onOpenView ?? (() => say(t("desktop.cmd.no_view"), "error")),
       openSettings: (section, scope, connect) => openSettings({ section, scope, connect }),
       reviewProject: onReviewProject,
       reload,
@@ -1072,7 +1069,7 @@ export function Conversation({
   );
 }
 
-/** How a chat is named in History: a snapshot by its name, else its title. */
+/** The chat's bar: its title (renamed in place), History, New chat and, when set, expand. */
 function SessionBar({
   session,
   list,
@@ -1356,10 +1353,10 @@ function Thought({ text, open }: { text: string; open: boolean }) {
   );
 }
 
-/** An attachment's icon by its kind. */
 /** A web content chip's icon: the console's, or a page's. */
 const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : mdiWeb);
 
+/** An attachment's icon by its kind. */
 function kindIcon(kind: string): string {
   return { document: mdiFilePdfBox, text: mdiFileDocumentOutline, audio: mdiFileMusicOutline, video: mdiFileVideoOutline }[kind] ?? mdiImageOutline;
 }
@@ -1565,11 +1562,6 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
 }
 
 /**
- * A job the agent made from the chat (create_job, spec_023_workers WK-70):
- * paused until it's reviewed, with Review (Studio › Jobs, its details) and
- * Enable here; once enabled, when it next runs.
- */
-/**
  * The chat's suggestion to reflect (spec_048_harness_learning HE-63): the
  * runs since the last reflection hit the same problems. Reflect runs
  * /reflect in a new chat; Not now holds the suggestion off for a week.
@@ -1613,6 +1605,11 @@ function ReflectCard({ dir, patterns }: { dir: string; patterns: number }) {
   );
 }
 
+/**
+ * A job the agent made from the chat (create_job, spec_023_workers WK-70):
+ * paused until it's reviewed, with Review (Studio › Jobs, its details) and
+ * Enable here; once enabled, when it next runs.
+ */
 function JobCard({ dir, name }: { dir: string; name: string }) {
   const snack = useSnackbar();
   const [job, setJob] = useState<Worker>();
@@ -1862,6 +1859,8 @@ function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const busy = uploading(attachments);
+  // An attachment that didn't upload is removed before sending, not left out.
+  const failed = failedUpload(attachments);
   // Completing a command's name as it's typed.
   const matches = matchCommands(draft, commands);
   const [pick, setPick] = useState(0);
@@ -1936,7 +1935,7 @@ function Composer({
   }, [draft]);
   const send = () => {
     const text = draft.trim();
-    if (!text || busy) return;
+    if (!text || busy || failed) return;
     setDraft("");
     onSubmit(text);
   };
@@ -2137,7 +2136,7 @@ function Composer({
         <span className="spacer" />
         <KeyHint />
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
-        <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
+        <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
       </div>
     </div>
   );

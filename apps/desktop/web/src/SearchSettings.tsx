@@ -20,8 +20,8 @@ import { config, workspaces } from "./api";
 import { message } from "./errors";
 import { configChanged } from "./events";
 import type { SearchStatus } from "./gen/blitz/v1/workspace_pb";
-import { t, tn } from "./i18n";
-import { searchSources, toggleSource, type SearchSource } from "./search";
+import { t } from "./i18n";
+import { indexCounts, searchSources, startSources, toggleSource } from "./search";
 import { Button, Chip, Field, Icon, Switch, useSnackbar } from "@blitz/webui";
 
 /** Embedding models to suggest: Gemini's, OpenAI's, and a local one. */
@@ -58,8 +58,7 @@ export function SearchSettings({ workspace, status, onChanged }: { workspace: st
   };
 
   if (!settings) return <p className="t-body-sm muted">{t("desktop.search.scanning")}</p>;
-  const sources = (settings.sources.length ? settings.sources : ["files", "documents"]) as SearchSource[];
-  const items = status?.items ?? {};
+  const sources = startSources(settings);
   return (
     <div className="stack search-settings" style={{ gap: 12 }}>
       <label className="row" style={{ gap: 12 }}>
@@ -159,12 +158,7 @@ export function SearchSettings({ workspace, status, onChanged }: { workspace: st
             <span className="t-body-sm muted" style={{ flex: 1 }}>
               {!status?.enabled || status.scanning || !status.lastScan
                 ? t("desktop.search.scanning")
-                : [
-                    ...searchSources.map((s) => `${t(`desktop.search.source.${s}`)} ${items[s] ?? 0}`),
-                    ...(status.embeddingModel ? [t("desktop.search.embedded", { count: status.embedded })] : []),
-                    ...(status.enriched ? [t("desktop.search.enriched", { count: status.enriched })] : []),
-                    ...(status.unreadable ? [tn("desktop.rs.search.unreadable", status.unreadable)] : []),
-                  ].join(" · ")}
+                : indexCounts(status)}
             </span>
             <Button small icon={mdiRefresh} disabled={!status?.enabled || status.scanning} onClick={() => workspaces.reindex({ workspace }).then(onChanged, (e) => snack(message(e), { error: true }))}>
               {t("desktop.search.reindex")}

@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { blockAt, defaultSources, findTerms, hitTarget, markTerms, matchSpans, queryTerms, toggleSource } from "./search";
+import { blockAt, defaultSources, findTerms, hitTarget, indexCounts, markTerms, matchSpans, queryTerms, scanPending, startSources, toggleSource } from "./search";
 
 describe("hitTarget", () => {
   it.each([
@@ -87,4 +87,32 @@ describe("where a hit opens", () => {
     [[3, 4], 1, -1],
     [[], 5, -1],
   ])("blocks starting at %o hold line %i in block %i", (starts, line, want) => expect(blockAt(starts, line)).toBe(want));
+});
+
+// N26 desktop-1#21: the dialog always started on files and PDFs, whatever
+// the workspace's Search by default in said.
+describe("the sources a search starts with", () => {
+  it.each([
+    { name: "none set", settings: undefined, want: ["files", "documents"] },
+    { name: "empty", settings: { sources: [] }, want: ["files", "documents"] },
+    { name: "the workspace's", settings: { sources: ["files", "chats", "notes"] }, want: ["files", "chats", "notes"] },
+    { name: "unknown left out", settings: { sources: ["web", "notes"] }, want: ["notes"] },
+  ])("$name", ({ settings, want }) => expect(startSources(settings)).toEqual(want));
+});
+
+// N26 desktop-1#20, #22: the dialog asked forever with search off, and
+// its counts left out what couldn't be read.
+describe("the index's state", () => {
+  const s = { enabled: true, scanning: false, lastScan: {}, items: { files: 3 }, embeddingModel: "", embedded: 0, enriched: 0, unreadable: 2 };
+  it("is asked again only while a scan is to come", () => {
+    expect(scanPending(s)).toBe(false);
+    expect(scanPending({ ...s, scanning: true })).toBe(true);
+    expect(scanPending({ ...s, lastScan: undefined })).toBe(true);
+    expect(scanPending({ ...s, enabled: false, lastScan: undefined })).toBe(false);
+    expect(scanPending(undefined)).toBe(false);
+  });
+  it("says what it holds, unreadable items too", () => {
+    expect(indexCounts(s)).toContain("3");
+    expect(indexCounts(s).split(" · ")).toHaveLength(5);
+  });
 });

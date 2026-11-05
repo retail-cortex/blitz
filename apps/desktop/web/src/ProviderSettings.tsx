@@ -92,7 +92,7 @@ interface Choice {
  * The provider the scope uses: its own, else, globally, Gemini (the
  * default); a workspace with none follows the global settings ("").
  */
-export const effectiveProvider = (provider: string, workspace: string) => provider || (workspace ? "" : "gemini");
+const effectiveProvider = (provider: string, workspace: string) => provider || (workspace ? "" : "gemini");
 
 /** The model saved for provider: its own, or, for the one in use, a scope-wide one over it. */
 const savedModel = (d: DescribeConfigResponse, provider: string, inUse: boolean) => (inUse && d.defaultModel) || d.models[provider] || "";
@@ -118,7 +118,7 @@ const sameChoice = (a: Choice, b: Choice) =>
  * the machine running the service (GetSignIn) and whether Ollama answers
  * there, each asked once per scope (again when asked to: after a change).
  */
-export function useProviderFacts(workspace: string, desc: DescribeConfigResponse | undefined): [ProviderFacts | undefined, () => void] {
+function useProviderFacts(workspace: string, desc: DescribeConfigResponse | undefined): [ProviderFacts | undefined, () => void] {
   const [signIns, setSignIns] = useState<Record<string, SignInStatus | undefined>>({});
   const [ollama, setOllama] = useState<OllamaProbe>();
   const [n, setN] = useState(0);
@@ -178,7 +178,7 @@ function useKeyCheck(workspace: string, provider: string, method: string, typed:
 }
 
 /** How long after the last keystroke a pasted or typed key is tried (ms). */
-export const keyCheckDelay = 500;
+const keyCheckDelay = 500;
 
 /**
  * A scope's provider and its sign-in: the global settings (workspace "")
@@ -678,7 +678,7 @@ export function ConnectModelCard({ onSetUp }: { onSetUp: () => void }) {
  * What the organization says one of its models can do, and its price
  * (spec_053 EN-21): "Uses tools · Reads images · 200K context · …".
  */
-export function modelFacts(m: ListedModel): string {
+function modelFacts(m: ListedModel): string {
   const c = m.capabilities;
   const parts: string[] = [];
   if (c?.tools) parts.push(t("desktop.org.can.tools"));

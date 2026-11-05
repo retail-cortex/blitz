@@ -290,6 +290,19 @@ export function nudge(box: Box, vw: number, vh: number, margin = 8): { x: number
 }
 
 /**
+ * Keeps a layer drawn without FloatingLayer (a panel of its own) inside
+ * the window, as a menu is, each time it opens at a new place (at).
+ */
+export function useKeptInWindow(layer: React.RefObject<HTMLElement | null>, at: CSSProperties | null) {
+  useLayoutEffect(() => {
+    const el = layer.current;
+    if (!el || !at) return;
+    const { x, y } = nudge(el.getBoundingClientRect(), window.innerWidth, window.innerHeight);
+    el.style.transform = x || y ? `translate(${x}px, ${y}px)` : "";
+  }, [at, layer]);
+}
+
+/**
  * A menu of any content floating over the whole window (in document.body,
  * so no panel clips it or makes its position relative), at style (from
  * menuPosition, or a point), moved inside the window once its size is
