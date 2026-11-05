@@ -18,11 +18,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The service is idle between requests, counted from the last one, and
@@ -41,4 +43,31 @@ func TestIdleFor(t *testing.T) {
 	assert.Zero(t, s.IdleFor(), "a background run going")
 	close(s.runs.list[0].done)
 	assert.Positive(t, s.IdleFor(), "the run ended")
+
+	// An eval run, a health check or a reflection makes no turn the
+	// workspace counts, and keeps the service busy all the same.
+	s.evals.list = append(s.evals.list, &liveEval{})
+	assert.Zero(t, s.IdleFor(), "an eval run going")
+	s.evals.list = nil
+	release := make(chan struct{})
+	require.True(t, s.goUpkeep(func(context.Context) { <-release }))
+	assert.Zero(t, s.IdleFor(), "a check going")
+	close(release)
+	require.Eventually(t, func() bool { return s.IdleFor() > 0 }, time.Second, time.Millisecond, "the check ended")
+}
+
+// Close stops the server's health checks and reflections and waits for
+// them before it closes the workspaces they use; none starts after it
+// (spec_044 HL-14, spec_048 HE-06).
+func TestCloseStopsUpkeep(t *testing.T) {
+	s := New(func(context.Context, string) (*engine.Workspace, error) { return nil, nil })
+	var stopped atomic.Bool
+	require.True(t, s.goUpkeep(func(ctx context.Context) {
+		<-ctx.Done()
+		time.Sleep(20 * time.Millisecond) // still winding down as Close is called
+		stopped.Store(true)
+	}))
+	require.NoError(t, s.Close())
+	assert.True(t, stopped.Load(), "Close waited for it")
+	assert.False(t, s.goUpkeep(func(context.Context) { t.Error("ran after Close") }), "none after Close")
 }

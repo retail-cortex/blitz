@@ -463,3 +463,30 @@ func TestSaveOrgSyncRefusals(t *testing.T) {
 	_, info := errorReason(t, err)
 	assert.Equal(t, "NOT_SYNCED", info.Reason)
 }
+
+// A shared folder is the same folder however it's spelled, links followed
+// (macOS's /var is /private/var), as the folder's sync finds it (EN-66a).
+func TestSamePath(t *testing.T) {
+	dir := t.TempDir()
+	real, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	cases := []struct {
+		name string
+		a, b string
+		same bool
+	}{
+		{"as given", dir, dir, true},
+		{"through a link", link, real, true},
+		{"unclean", dir + "/./", dir, true},
+		{"another", dir, t.TempDir(), false},
+		{"gone, compared as given", "/no/such/dir", "/no/such/dir/", true},
+		{"gone and another", "/no/such/dir", "/no/such/other", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.same, samePath(tc.a, tc.b))
+		})
+	}
+}

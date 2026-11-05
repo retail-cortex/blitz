@@ -45,13 +45,19 @@ func (a *activity) track(h http.Handler) http.Handler {
 }
 
 // IdleFor is how long the service has had nothing to do: no request in
-// flight, no turn running in any workspace and no background run going;
-// 0 while it has.
+// flight, no turn running in any workspace, no background run, eval run,
+// health check or scheduled reflection going; 0 while it has.
 func (s *Server) IdleFor() time.Duration {
 	s.act.mu.Lock()
 	inflight, last := s.act.inflight, s.act.last
 	s.act.mu.Unlock()
-	if inflight > 0 {
+	if inflight > 0 || s.upkeep.going.Load() > 0 {
+		return 0
+	}
+	s.evals.mu.Lock()
+	evals := len(s.evals.list)
+	s.evals.mu.Unlock()
+	if evals > 0 { // each is forgotten here as it ends
 		return 0
 	}
 	s.runs.mu.Lock()

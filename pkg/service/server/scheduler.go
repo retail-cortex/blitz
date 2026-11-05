@@ -21,6 +21,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -258,12 +259,13 @@ func (sc *scheduler) register(dir string, info api.WorkerInfo) {
 	}
 }
 
-// liveRun is a run going now: its record and its events so far, for
-// watchers.
+// liveRun is a run going now: its record and its latest events (at most
+// keptRunEvents, as a background run's), for watchers.
 type liveRun struct {
 	mu      sync.Mutex
 	run     api.Run
 	events  []*pb.TurnEvent
+	dropped int // events dropped from the front, to keep keptRunEvents
 	done    bool
 	changed chan struct{} // closed and replaced when events arrive or the run ends
 	// stop cancels the run's context with api.ErrRunStopped: the run ends,
@@ -276,6 +278,10 @@ func (lr *liveRun) add(ev *pb.TurnEvent, done bool) {
 	defer lr.mu.Unlock()
 	if ev != nil {
 		lr.events = append(lr.events, ev)
+		if over := len(lr.events) - keptRunEvents; over > 0 {
+			lr.events = slices.Delete(lr.events, 0, over)
+			lr.dropped += over
+		}
 	}
 	lr.done = lr.done || done
 	close(lr.changed)

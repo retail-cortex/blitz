@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"iter"
 	"net/http"
 	"net/http/httptest"
@@ -626,5 +627,60 @@ func TestPreviewScheduleOverTheAPI(t *testing.T) {
 			require.Len(t, r.Msg.NextRuns, tt.runs)
 			assert.True(t, r.Msg.NextRuns[0].AsTime().After(time.Now()))
 		})
+	}
+}
+
+// A run's events are kept as a background run's are: its latest
+// keptRunEvents, so a run going for hours doesn't grow blitzd; a watcher
+// gets those, in order, then the live ones (spec_023).
+func TestWatchWorkerRunKeepsTheLatest(t *testing.T) {
+	c, s := serveScheduler(t, time.Hour, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	piece := func(i int) *pb.TurnEvent {
+		return &pb.TurnEvent{Kind: &pb.TurnEvent_Text{Text: &pb.Text{Text: fmt.Sprint(i, " ")}}}
+	}
+	lr := &liveRun{run: api.Run{ID: "r1"}, changed: make(chan struct{})}
+	s.sched.mu.Lock()
+	s.sched.live["r1"] = lr
+	s.sched.mu.Unlock()
+	const made = keptRunEvents + 10
+	for i := range made {
+		lr.add(piece(i), false)
+	}
+	lr.mu.Lock()
+	assert.Len(t, lr.events, keptRunEvents, "no more kept")
+	assert.Equal(t, 10, lr.dropped)
+	lr.mu.Unlock()
+
+	stream, err := c.WatchWorkerRun(ctx, connect.NewRequest(&pb.WatchWorkerRunRequest{RunId: "r1"}))
+	require.NoError(t, err)
+	var got []string
+	finished := false
+	for stream.Receive() {
+		ev := stream.Msg().Event
+		if ev.GetFinished() != nil {
+			finished = true
+			continue
+		}
+		got = append(got, ev.GetText().GetText())
+		if len(got) == keptRunEvents {
+			// Live ones after the kept, more than are kept in all.
+			for i := made; i < made+keptRunEvents+5; i++ {
+				lr.add(piece(i), false)
+			}
+			lr.add(&pb.TurnEvent{Kind: &pb.TurnEvent_Finished{Finished: &pb.TurnFinished{}}}, true)
+		}
+	}
+	require.NoError(t, stream.Err())
+	assert.True(t, finished)
+	require.NotEmpty(t, got)
+	assert.Equal(t, "10 ", got[0], "from the oldest kept")
+	assert.Equal(t, fmt.Sprint(made+keptRunEvents+4, " "), got[len(got)-1], "to the last")
+	for i := 1; i < len(got); i++ {
+		var a, b int
+		fmt.Sscan(got[i-1], &a)
+		fmt.Sscan(got[i], &b)
+		require.Less(t, a, b, "in order, none twice")
 	}
 }

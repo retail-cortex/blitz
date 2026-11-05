@@ -391,8 +391,9 @@ func (h workerService) RewriteWorker(ctx context.Context, r req[pb.RewriteWorker
 	return ok(&pb.RewriteWorkerResponse{Prompt: rw.Prompt, Permissions: rw.Permissions, Changes: rw.Changes, Problem: rw.Problem})
 }
 
-// WatchWorkerRun streams a running run's events from its start, then live
-// ones, until it finishes. Events aren't kept once a run has finished.
+// WatchWorkerRun streams a running run's events from its start (its latest
+// keptRunEvents when it has made more), then live ones, until it finishes.
+// Events aren't kept once a run has finished.
 func (h workerService) WatchWorkerRun(ctx context.Context, r req[pb.WatchWorkerRunRequest], stream *connect.ServerStream[pb.WatchWorkerRunResponse]) error {
 	sc := h.s.sched
 	if sc == nil {
@@ -402,17 +403,19 @@ func (h workerService) WatchWorkerRun(ctx context.Context, r req[pb.WatchWorkerR
 	if lr == nil {
 		return apiError(connect.CodeNotFound, "RUN_NOT_RUNNING", fmt.Errorf("run %q isn't running (GetWorkerRun has its record)", r.Msg.RunId), "run_id", r.Msg.RunId)
 	}
-	sent := 0
+	sent := 0 // of all the run's events, dropped ones included
 	for {
 		lr.mu.Lock()
-		pending, done, changed := lr.events[sent:], lr.done, lr.changed
+		// Events dropped before they were sent are skipped; a copy, as add
+		// moves the kept ones down.
+		pending, done, changed := slices.Clone(lr.events[max(sent-lr.dropped, 0):]), lr.done, lr.changed
+		sent = lr.dropped + len(lr.events)
 		lr.mu.Unlock()
 		for _, ev := range pending {
 			if err := stream.Send(&pb.WatchWorkerRunResponse{Event: ev}); err != nil {
 				return err
 			}
 		}
-		sent += len(pending)
 		if done {
 			return nil
 		}

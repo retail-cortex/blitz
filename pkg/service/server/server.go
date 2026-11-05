@@ -64,6 +64,7 @@ type Server struct {
 	act       activity       // requests served, for IdleFor
 	signins   signin.Runner  // providers' sign-ins, one per provider at a time
 	ent       enterpriseConn // the organization's service (spec_053_enterprise)
+	upkeep    upkeep         // health checks and reflections going
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -101,6 +102,7 @@ type workspace struct {
 func New(open Opener, opts ...Option) *Server {
 	s := &Server{open: open, version: "dev", started: time.Now(), program: programFile(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
 	s.act.last = s.started
+	s.upkeep.ctx, s.upkeep.cancel = context.WithCancel(context.Background())
 	for _, o := range opts {
 		o(s)
 	}
@@ -135,6 +137,7 @@ func (s *Server) Close() error {
 	s.ent.mu.Unlock()
 	s.stopRuns()
 	s.stopEvals()
+	s.stopUpkeep()
 	s.mu.Lock()
 	open := s.workspaces
 	s.workspaces = map[string]*workspace{}
