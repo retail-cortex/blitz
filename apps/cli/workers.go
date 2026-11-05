@@ -47,21 +47,22 @@ type workerOps interface {
 }
 
 // openWorkers reaches the workspace's workers in the Blitz service (started
-// when it isn't running), which owns them. close releases what it opened.
-func openWorkers(ctx context.Context, g *globalFlags) (ops workerOps, close func(), err error) {
+// when it isn't running), which owns them. Nothing needs closing: the
+// client holds no connection of its own.
+func openWorkers(ctx context.Context, g *globalFlags) (workerOps, error) {
 	cfg, err := loadConfig(g)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	dir, err := filepath.Abs(config.ExpandHome(cfg.Tools.WorkspaceDir))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	sock, err := ensureService(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return client.AttachWorkers(sock, dir), func() {}, nil
+	return client.AttachWorkers(sock, dir), nil
 }
 
 func newWorkersCommand(g *globalFlags) *cobra.Command {
@@ -137,11 +138,10 @@ main for the service to pick it up (a workspace with sync on does that).`,
 // workersStop stops the running run of the worker named, or the run with
 // that ID.
 func workersStop(cmd *cobra.Command, g *globalFlags, which string) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	runs, err := ops.RunningWorkerRuns()
 	if err != nil {
 		return workerErr(err)
@@ -159,11 +159,10 @@ func workersStop(cmd *cobra.Command, g *globalFlags, which string) error {
 }
 
 func workersUndo(cmd *cobra.Command, g *globalFlags, runID string, force bool) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	restored, err := ops.UndoWorkerRun(runID, force)
 	if len(restored) > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "Restored %s.\n", strings.Join(restored, ", "))
@@ -175,11 +174,10 @@ func workersUndo(cmd *cobra.Command, g *globalFlags, runID string, force bool) e
 }
 
 func workersList(cmd *cobra.Command, g *globalFlags) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	list, err := ops.ListWorkers()
 	if err != nil {
 		return workerErr(err)
@@ -223,11 +221,27 @@ func describeWorker(out io.Writer, w api.WorkerInfo) {
 		perms = strings.Join(w.Permissions, ", ")
 	}
 	fmt.Fprintf(out, "  may:         %s\n", perms)
-	fmt.Fprintf(out, "  limits:      %d model calls, $%.2f, %s\n", w.Limits.MaxTurns, w.Limits.MaxCostUSD, w.Limits.Timeout)
+	fmt.Fprintf(out, "  limits:      %s\n", limitsText(w.Limits))
 	for _, p := range w.Problems {
 		fmt.Fprintf(out, "  ! %s\n", p)
 	}
 	fmt.Fprintf(out, "  content:     %s\n", w.Hash)
+}
+
+// limitsText says a job's limits, each 0 (none) as "no limit" rather than
+// a limit of nothing (N26 cli-2#24).
+func limitsText(l api.Limits) string {
+	turns, cost, timeout := "no limit on model calls", "no cost limit", "no time limit"
+	if l.MaxTurns > 0 {
+		turns = fmt.Sprintf("%d model calls", l.MaxTurns)
+	}
+	if l.MaxCostUSD > 0 {
+		cost = fmt.Sprintf("$%.2f", l.MaxCostUSD)
+	}
+	if l.Timeout > 0 {
+		timeout = l.Timeout.String()
+	}
+	return turns + ", " + cost + ", " + timeout
 }
 
 func findWorker(list []api.WorkerInfo, name string) (api.WorkerInfo, bool) {
@@ -240,11 +254,10 @@ func findWorker(list []api.WorkerInfo, name string) (api.WorkerInfo, bool) {
 }
 
 func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	list, err := ops.ListWorkers()
 	if err != nil {
 		return workerErr(err)
@@ -284,11 +297,10 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 }
 
 func workersDisable(cmd *cobra.Command, g *globalFlags, name string) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	if _, err := ops.DisableWorker(name); err != nil {
 		return workerErr(err)
 	}
@@ -297,11 +309,10 @@ func workersDisable(cmd *cobra.Command, g *globalFlags, name string) error {
 }
 
 func workersRun(cmd *cobra.Command, g *globalFlags, name string) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	out := cmd.OutOrStdout()
 	printer := tui.NewPrinter(tui.PrinterOptions{Out: out})
 	run, err := ops.RunWorker(cmd.Context(), name, printer.Handle)
@@ -317,11 +328,10 @@ func workersRun(cmd *cobra.Command, g *globalFlags, name string) error {
 }
 
 func workersRuns(cmd *cobra.Command, g *globalFlags, name string, limit int) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	runs, err := ops.WorkerRuns(name, limit)
 	if err != nil {
 		return workerErr(err)
@@ -367,11 +377,10 @@ func workerErr(err error) error {
 // workersMove moves a job to the organization's service (spec_053 EN-40,
 // EN-41), saying what keeps it from running there.
 func workersMove(cmd *cobra.Command, g *globalFlags, name string, anyway bool) error {
-	ops, done, err := openWorkers(cmd.Context(), g)
+	ops, err := openWorkers(cmd.Context(), g)
 	if err != nil {
 		return err
 	}
-	defer done()
 	problems, moved, err := ops.MoveToService(cmd.Context(), name, anyway)
 	if err != nil {
 		return workerErr(err)

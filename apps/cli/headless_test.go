@@ -356,7 +356,8 @@ func (r *turnRecorder) Run(ctx context.Context, sessionID string, t api.Turn, on
 	return r.Backend.Run(ctx, sessionID, t, on)
 }
 
-// The schema's retry turn runs under the run's own limits and mode.
+// The schema's retry turn runs in the run's mode, under what is left of
+// its limits (N26 cli-2#7).
 func TestOneShotJSONSchemaRetryKeepsTheLimits(t *testing.T) {
 	schema, err := loadSchema(personSchema)
 	require.NoError(t, err)
@@ -370,9 +371,45 @@ func TestOneShotJSONSchemaRetryKeepsTheLimits(t *testing.T) {
 	require.Len(t, r.turns, 2, "the answer and its retry")
 	retry := r.turns[1]
 	assert.True(t, retry.Plan, "plan mode")
-	assert.Equal(t, 7, retry.MaxTurns)
-	assert.Equal(t, 1.5, retry.MaxCostUSD)
-	assert.Equal(t, time.Minute, retry.Timeout)
+	assert.Equal(t, 6, retry.MaxTurns, "the first turn's model call counts")
+	assert.Less(t, retry.MaxCostUSD, 1.5, "the first turn's cost counts")
+	assert.Positive(t, retry.MaxCostUSD)
+	assert.Less(t, retry.Timeout, time.Minute, "the first turn's time counts")
+	assert.Positive(t, retry.Timeout)
+}
+
+// What the --json-schema retry has left of the run's limits, and a limit
+// the first turn used up (N26 cli-2#7).
+func TestRetryLimits(t *testing.T) {
+	first := api.TurnResult{Before: api.Usage{Calls: 2, CostUSD: 0.10}, After: api.Usage{Calls: 5, CostUSD: 0.40}}
+	cases := map[string]struct {
+		o       oneShotOptions
+		elapsed time.Duration
+		turns   int
+		cost    float64
+		timeout time.Duration
+		err     error
+	}{
+		"no limits":     {elapsed: time.Hour},
+		"what is left":  {o: oneShotOptions{maxTurns: 10, maxCostUSD: 0.50, timeout: 15 * time.Minute}, elapsed: 10 * time.Minute, turns: 7, cost: 0.20, timeout: 5 * time.Minute},
+		"turns used up": {o: oneShotOptions{maxTurns: 3}, err: api.ErrMaxTurns},
+		"cost used up":  {o: oneShotOptions{maxCostUSD: 0.30}, err: api.ErrCostLimit},
+		"time used up":  {o: oneShotOptions{timeout: time.Minute}, elapsed: time.Minute, err: api.ErrTimeLimit},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			turns, cost, timeout, err := retryLimits(c.o, first, c.elapsed)
+			if c.err != nil {
+				require.ErrorIs(t, err, c.err)
+				assert.Equal(t, exitMaxTurns, exitCodeFor(err))
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.turns, turns)
+			assert.InDelta(t, c.cost, cost, 1e-9)
+			assert.Equal(t, c.timeout, timeout)
+		})
+	}
 }
 
 // syncBuffer is a bytes.Buffer safe to write from a run while a test reads it.

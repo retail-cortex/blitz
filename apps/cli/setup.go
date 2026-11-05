@@ -101,6 +101,21 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 	return cfg, nil
 }
 
+// setupInterface loads the interface language and the organization's
+// kept name for every command, as openBackend does for a run, so a
+// command that opens no workspace (blitz security, jobs run, trust,
+// memory) and the last error line speak them too (N26 cli-2#9). Settings
+// that don't load leave English and Blitz; their warnings come from the
+// command that loads them.
+func setupInterface(g *globalFlags) {
+	cfg, err := loadConfig(g)
+	if err != nil {
+		return
+	}
+	i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, func(string) {})
+	i18n.SetAppName(enterprise.KeptName(config.EnterpriseDir("", cfg.Enterprise.URL)))
+}
+
 // backendOptions are how openBackend opens the workspace.
 type backendOptions struct {
 	local, streaming bool

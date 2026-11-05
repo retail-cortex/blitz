@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -173,10 +174,11 @@ func TestPrintContextParts(t *testing.T) {
 }
 
 func TestNotifier(t *testing.T) {
-	var shown []string
+	var shown, titles []string
 	old := notifyCommand
 	notifyCommand = func(title, body string) *exec.Cmd {
 		shown = append(shown, body)
+		titles = append(titles, title)
 		return exec.Command("true")
 	}
 	defer func() { notifyCommand = old }()
@@ -192,6 +194,16 @@ func TestNotifier(t *testing.T) {
 			assert.Equal(t, tt.shown, len(shown) == 1)
 		})
 	}
+
+	// The title is the app's name, the organization's when branded
+	// (N26 cli-2#10).
+	t.Run("branded title", func(t *testing.T) {
+		i18n.SetAppName("Acme")
+		defer i18n.SetAppName("")
+		titles = nil
+		captureStdout(t, func() { Notifier{Mode: "desktop"}.Send("done") })
+		assert.Equal(t, []string{"Acme"}, titles)
+	})
 
 	t.Run("only in a long turn", func(t *testing.T) {
 		n := Notifier{After: time.Minute, Mode: "desktop"}
@@ -211,6 +223,25 @@ func TestNotifier(t *testing.T) {
 		assert.Equal(t, []string{"Blitz is waiting for your approval (run_shell_command)", "Blitz has a question for you"}, shown)
 		assert.False(t, Notifier{Mode: "both"}.longRunning(), "After 0 never notifies")
 	})
+}
+
+// ui.notify in any case; anything else isn't ok and is both, the default
+// (N26 cli-2#8).
+func TestParseNotifyMode(t *testing.T) {
+	cases := map[string]struct {
+		mode string
+		ok   bool
+	}{
+		"both": {"both", true}, "Off": {"off", true}, " BELL ": {"bell", true}, "desktop": {"desktop", true},
+		"": {"both", true}, "none": {"both", false}, "silent": {"both", false},
+	}
+	for in, c := range cases {
+		t.Run(in, func(t *testing.T) {
+			mode, ok := ParseNotifyMode(in)
+			assert.Equal(t, c.mode, mode)
+			assert.Equal(t, c.ok, ok)
+		})
+	}
 }
 
 // /cost shows web searches on a line of their own (BL-WEB-01).

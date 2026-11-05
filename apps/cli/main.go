@@ -130,6 +130,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 				return
 			}
 			markUse()
+			setupInterface(&o.global)
 		},
 	}
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
@@ -145,7 +146,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(), newGitCredentialCommand())
 	groupHelp(root)
 	return root
 }
@@ -398,6 +399,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, notice, tui.Reset)
 		}
 	}
+	if _, ok := tui.ParseNotifyMode(cfg.UI.Notify); !ok && pretty && !oneShot {
+		warnFn(i18n.T("startup.notify_unknown", "value", cfg.UI.Notify))
+	}
 	if remote && !oneShot {
 		fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("startup.attached", "socket", socket.DefaultSocket()), tui.Reset)
 	}
@@ -637,14 +641,15 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "reload", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search", "update", "install", "registry")
 	c.Command("agents", "update")
 	c.Command("rules", "update")
 	c.Command("session", "list", "new", "load", "save")
-	c.Command("search", "web", "session")
+	c.Command("search", "web", "session", "files", "documents", "chats", "notes", "all", "status", "reindex")
+	c.Command("processes", "all", "log", "stop")
 	c.Command("envs", "prune", "remove")
 	c.Command("license", "full", "third-party")
 	c.Command("memory", "show", "reload", "add", "notes", "forget")
@@ -730,7 +735,8 @@ func notifier(cfg *config.Config, terminal bool) tui.Notifier {
 	if !terminal {
 		return tui.Notifier{Mode: "off"}
 	}
-	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: cfg.UI.Notify}
+	mode, _ := tui.ParseNotifyMode(cfg.UI.Notify)
+	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: mode}
 }
 
 // statusLine is ui.status_line on a terminal ("" elsewhere).

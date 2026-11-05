@@ -97,7 +97,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
   ```
 
 - **Status line**: `ui.status_line = "default"` shows the model, mode, context and cost above each prompt; set it to a command instead and its first line of output is shown, with the session's state as JSON on its stdin (fields in [spec_019_tui](../about/specs/spec_019_tui.md) TUI-48).
-- **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off`.
+- **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off` (another value is a warning at start, and `both`).
 
 ### Commands
 
@@ -112,6 +112,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/theme [name [--save]]` | Markdown and diff colours: `auto`, `dark`, `light`, `dracula`, `tokyo-night`, `pink`, `ascii`, `notty` |
 | `/copy [n]` | Copy the last answer (or the nth from last) to the clipboard; OSC 52 over SSH |
 | `/compact [focus]` | Summarize everything before the latest turn now |
+| `/reload` | Read the agents, skills, instructions and rules again (each message already picks up changes) |
+| `/clear` | Clear the terminal screen |
 | `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; `/init` runs `/setup` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/hooks` | The hooks, where they come from, and their recent failures |

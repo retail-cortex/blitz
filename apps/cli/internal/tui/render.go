@@ -97,7 +97,7 @@ func SummarizeToolResponse(resp map[string]any) (summary string, success bool) {
 		return resStr, true
 	}
 	if cnt, ok := resp["content"].(string); ok && cnt != "" {
-		return fmt.Sprintf("%d bytes read", len(cnt)), true
+		return i18n.T("tool.bytes_read", "bytes", len(cnt)), true
 	}
 	return "", true
 }
