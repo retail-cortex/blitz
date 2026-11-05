@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.11
-weight: 2
+weight: 3
 ---
 
 **Counting who uses Blitz, in the open.** From this release, on a day you use Blitz, it tells Retail Cortex once that your install was in use: a random ID, the day, whether it was the desktop app, the CLI or VS Code, the version and your platform. Nothing about your work: no prompts, files, workspaces, models, providers or account. It's how we'll see whether Blitz is growing, which versions people run, and where to put our effort. One line in your settings turns it off.
