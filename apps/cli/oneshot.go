@@ -218,7 +218,10 @@ func endRun(ctx context.Context, w api.Backend, o oneShotOptions) {
 	})
 }
 
-// streamJSONHandler writes one JSON line per event.
+// streamJSONHandler writes one JSON line per event (spec_020_cli CLI-21):
+// text, tool calls and results, and (CLI-21a) Blitz's notices, workflow
+// steps and the agent's task list, each a type of its own with every key
+// always present, so a reader that knows only the first three skips them.
 func streamJSONHandler(enc *json.Encoder) func(api.Event) {
 	return func(ev api.Event) {
 		switch {
@@ -228,6 +231,20 @@ func streamJSONHandler(enc *json.Encoder) func(api.Event) {
 			_ = enc.Encode(map[string]any{"type": "tool_call", "name": ev.ToolCall.Name, "args": ev.ToolCall.Args})
 		case ev.ToolResult != nil:
 			_ = enc.Encode(map[string]any{"type": "tool_result", "name": ev.ToolResult.Name, "result": ev.ToolResult.Result})
+		}
+		if n := ev.Notice; n != nil {
+			_ = enc.Encode(map[string]any{"type": "notice", "text": n.Text, "error": n.Error, "transient": n.Transient, "author": ev.Author})
+		}
+		if st := ev.Step; st != nil {
+			_ = enc.Encode(map[string]any{"type": "workflow_step", "workflow": st.Workflow, "id": st.ID, "title": st.Title, "step_type": st.Type,
+				"index": st.Index, "count": st.Count, "status": st.Status, "output": st.Output, "error": st.Error, "run": st.Run})
+		}
+		if ev.Tasks != nil {
+			tasks := make([]map[string]string, len(ev.Tasks))
+			for i, t := range ev.Tasks {
+				tasks[i] = map[string]string{"content": t.Content, "status": t.Status}
+			}
+			_ = enc.Encode(map[string]any{"type": "tasks", "tasks": tasks, "author": ev.Author})
 		}
 	}
 }

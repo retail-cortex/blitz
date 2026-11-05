@@ -451,3 +451,44 @@ func (s *syncBuffer) String() string {
 	defer s.mu.Unlock()
 	return s.b.String()
 }
+
+// stream-json writes one line per event: the text, tool call and result
+// lines as they were, and notices, workflow steps and task lists as types
+// of their own with every key present (spec_020_cli CLI-21a, N26
+// cli-behaviour).
+func TestStreamJSONHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		ev   api.Event
+		want []string // the JSON lines, in order
+	}{
+		{"text", api.Event{Author: "dev", Text: &api.Text{Text: "hi", Partial: true}},
+			[]string{`{"author":"dev","partial":true,"text":"hi","type":"text"}`}},
+		{"thought", api.Event{Text: &api.Text{Text: "hmm", Thought: true}}, nil},
+		{"tool call", api.Event{ToolCall: &api.ToolCall{Name: "read_file", Args: map[string]any{"path": "a"}}},
+			[]string{`{"args":{"path":"a"},"name":"read_file","type":"tool_call"}`}},
+		{"tool result", api.Event{ToolResult: &api.ToolResult{Name: "read_file", Result: map[string]any{"ok": true}}},
+			[]string{`{"name":"read_file","result":{"ok":true},"type":"tool_result"}`}},
+		{"notice", api.Event{Notice: &api.Notice{Text: "A guardrail stopped the turn. Send continue to go on.", Error: true}},
+			[]string{`{"author":"","error":true,"text":"A guardrail stopped the turn. Send continue to go on.","transient":false,"type":"notice"}`}},
+		{"transient notice", api.Event{Author: "qa", Notice: &api.Notice{Text: "Retrying", Transient: true}},
+			[]string{`{"author":"qa","error":false,"text":"Retrying","transient":true,"type":"notice"}`}},
+		{"workflow step", api.Event{Step: &api.FlowStep{Workflow: "release", ID: "build", Title: "Build it", Type: "agent", Index: 2, Count: 3, Status: api.StepDone, Output: "ok", Run: "run-1"}},
+			[]string{`{"count":3,"error":"","id":"build","index":2,"output":"ok","run":"run-1","status":"done","step_type":"agent","title":"Build it","type":"workflow_step","workflow":"release"}`}},
+		{"tasks", api.Event{Author: "dev", Tasks: []api.Task{{Content: "write it", Status: "done"}, {Content: "test it", Status: "in_progress"}}},
+			[]string{`{"author":"dev","tasks":[{"content":"write it","status":"done"},{"content":"test it","status":"in_progress"}],"type":"tasks"}`}},
+		{"tasks cleared", api.Event{Tasks: []api.Task{}}, []string{`{"author":"","tasks":[],"type":"tasks"}`}},
+		{"nothing", api.Event{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b bytes.Buffer
+			streamJSONHandler(json.NewEncoder(&b))(tt.ev)
+			got := strings.Split(strings.TrimSpace(b.String()), "\n")
+			if b.Len() == 0 {
+				got = nil
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
