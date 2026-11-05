@@ -300,6 +300,20 @@ func TestStoreErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Zero(t, n, "no age: nothing pruned")
 
+	// A temporary file a crash left goes, whatever the age; one being
+	// written stays.
+	old, fresh := filepath.Join(dir, ".img-crashed"), filepath.Join(dir, ".img-writing")
+	require.NoError(t, os.WriteFile(old, []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(fresh, []byte("x"), 0o600))
+	past := time.Now().Add(-2 * staleTemp)
+	require.NoError(t, os.Chtimes(old, past, past))
+	n, err = s.Prune(0)
+	assert.NoError(t, err)
+	assert.Zero(t, n, "temporary files aren't counted")
+	assert.NoFileExists(t, old)
+	assert.FileExists(t, fresh)
+	require.NoError(t, os.Remove(fresh))
+
 	// A directory where an image should be can't be read.
 	sha := strings.Repeat("b", 64)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".png", "x"), 0o700))

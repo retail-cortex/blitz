@@ -71,7 +71,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 | `InstallService()` | Installs `service` as the login item and starts it now (`pkg/loginitem`), replacing a previous item. Fails if no `blitzd` is found. |
 | `StopService(pid)`, `RestartService(pid)` | Stop the running service (its login item, else process `pid`), and for restart install and start this app's `blitzd` (DSK-51a). |
 | `SetTray(on)` | Runs `blitz-tray --install` or `--uninstall` (the one beside the app, in its runfiles, or on `PATH`); `ServiceStatus` also says which `blitz-tray` it found and whether it starts at login (SVC-54). |
-| `OpenDocument(path)` | Opens an image or PDF (by extension, a regular file) in the system's viewer; anything else is refused (FIL-54). |
+| `OpenDocument(path)` | Opens an image, PDF, sound or video (by extension, a regular file; a link by its target's, and the target opens; not SVG) in the system's viewer; anything else is refused (FIL-54). |
 | `OpenFolder(dir)` | Shows an existing directory in the file manager (`open`, `xdg-open`); anything else is refused (the logs' folder, DSK-60). |
 | `RevealPath(path)` | Shows an existing file or folder selected in the file manager (`open -R`, `explorer /select,`, D-Bus `FileManager1.ShowItems`; else its folder); nothing is run (the tree's **Show in …**, FIL-58). |
 | `FileManager()` | The file manager's name for **Show in …**: Finder, File Explorer, or on Linux the one that opens folders (Dolphin, Files, …), "" when unknown. |

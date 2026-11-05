@@ -150,9 +150,6 @@ var ErrNotImage = errors.New("not a file Blitz can attach (an image, a PDF, a te
 // decodable are the images decoded, checked and, when too big, scaled.
 var decodable = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/bmp": true}
 
-// IsImagePath reports whether a file name has a supported image extension.
-func IsImagePath(p string) bool { return KindOf(TypeForName(p)) == KindImage }
-
 // Prepare validates data for the model, by its type (detected from the
 // bytes, the name breaking ties: Detect). Images are checked and scaled
 // down when larger than the limits allow, GIF and BMP made PNG (which

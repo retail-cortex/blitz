@@ -75,23 +75,34 @@ func TestOpenDocument(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755))
 	}
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "dir.pdf"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "chart.svg"), []byte("<svg/>"), 0o644))
+	// Links named as pictures: to a script, to a folder, to a PDF.
+	require.NoError(t, os.Symlink(filepath.Join(dir, "run.sh"), filepath.Join(dir, "chart.png")))
+	require.NoError(t, os.Symlink(filepath.Join(dir, "dir.pdf"), filepath.Join(dir, "folder.png")))
+	require.NoError(t, os.Symlink("spec.PDF", filepath.Join(dir, "paper.png")))
+	real, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
 	for _, tc := range []struct {
-		name string
-		ok   bool
+		name  string
+		opens string // what opens; "" refused
 	}{
-		{"spec.PDF", true},
-		{"run.sh", false},
-		{"evil.desktop", false},
-		{"dir.pdf", false},
-		{"none.pdf", false},
+		{"spec.PDF", "spec.PDF"},
+		{"run.sh", ""},
+		{"evil.desktop", ""},
+		{"dir.pdf", ""},
+		{"none.pdf", ""},
+		{"chart.svg", ""},
+		{"chart.png", ""},
+		{"folder.png", ""},
+		{"paper.png", "spec.PDF"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opened = nil
 			p := filepath.Join(dir, tc.name)
 			err := OpenDocument(p)
-			if tc.ok {
+			if tc.opens != "" {
 				assert.NoError(t, err)
-				assert.Equal(t, []string{p}, opened)
+				assert.Equal(t, []string{filepath.Join(real, tc.opens)}, opened, "the link's target opens")
 			} else {
 				assert.Error(t, err)
 				assert.Empty(t, opened)

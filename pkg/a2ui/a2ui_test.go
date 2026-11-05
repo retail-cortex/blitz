@@ -16,6 +16,7 @@ package a2ui
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -173,6 +174,12 @@ func TestFunctions(t *testing.T) {
 		{"numeric string", call("numeric", map[string]any{"value": p("/n"), "max": 20}), true},
 		{"numeric not", call("numeric", map[string]any{"value": p("/s")}), false},
 		{"numeric empty", call("numeric", map[string]any{"value": ""}), false},
+		{"numeric spaces around", call("numeric", map[string]any{"value": " 5 "}), true},
+		{"numeric spaces only", call("numeric", map[string]any{"value": "  "}), false},
+		{"numeric hex", call("numeric", map[string]any{"value": "0x1p4"}), false},
+		{"numeric infinity", call("numeric", map[string]any{"value": "Infinity"}), false},
+		{"numeric a bool", call("numeric", map[string]any{"value": true}), false},
+		{"length in code points", call("length", map[string]any{"value": "😀😀😀", "max": 3}), true},
 		{"email", call("email", map[string]any{"value": "a@b.co"}), true},
 		{"email not", call("email", map[string]any{"value": "a@b"}), false},
 		{"and", call("and", map[string]any{"values": []any{true, "x", 1.0}}), true},
@@ -217,6 +224,41 @@ func TestValidationRegexp(t *testing.T) {
 		{"id": "a", "component": "Text", "checks": []any{map[string]any{"call": "required", "args": map[string]any{"value": ""}}}},
 	}}
 	assert.Equal(t, []Problem{{Component: "a", Message: "doesn't pass its check"}}, tabs.Problems(nil))
+}
+
+// A check that calls a function outside the catalog (a typo, or a newer
+// A2UI function), or a validationRegexp that isn't a usable pattern,
+// refuses the answer rather than waving it through.
+func TestBrokenChecksFail(t *testing.T) {
+	field := func(extra map[string]any) Form {
+		c := map[string]any{"id": "reason", "component": "TextField", "value": map[string]any{"path": "/reason"}}
+		for k, v := range extra {
+			c[k] = v
+		}
+		return Form{Components: []map[string]any{{"id": "root", "component": "Card", "child": "reason"}, c}}
+	}
+	check := func(ch map[string]any) map[string]any { return map[string]any{"checks": []any{ch}} }
+	value := map[string]any{"path": "/reason"}
+	cases := []struct {
+		name string
+		form Form
+		data map[string]any
+		want int
+	}{
+		{"a misspelt function", field(check(map[string]any{"call": "requried", "args": map[string]any{"value": value}, "message": "say why"})), map[string]any{"reason": ""}, 1},
+		{"a misspelt function, even with an answer", field(check(map[string]any{"call": "requried", "args": map[string]any{"value": value}})), map[string]any{"reason": "ok"}, 1},
+		{"an unknown function under not", field(check(map[string]any{"call": "not", "args": map[string]any{"value": map[string]any{"call": "exec"}}})), nil, 1},
+		{"an unknown function in a list", field(check(map[string]any{"call": "or", "args": map[string]any{"values": []any{true, map[string]any{"call": "exec"}}}})), nil, 1},
+		{"known functions pass", field(check(map[string]any{"call": "not", "args": map[string]any{"value": map[string]any{"call": "required", "args": map[string]any{"value": value}}}})), nil, 0},
+		{"an invalid validationRegexp", field(map[string]any{"validationRegexp": "("}), map[string]any{"reason": "x"}, 1},
+		{"an invalid validationRegexp, empty", field(map[string]any{"validationRegexp": "("}), map[string]any{"reason": ""}, 1},
+		{"a validationRegexp too long to trust", field(map[string]any{"validationRegexp": strings.Repeat("a", 201)}), map[string]any{"reason": "a"}, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Len(t, c.form.Problems(c.data), c.want)
+		})
+	}
 }
 
 // The edges of values: literal bindings, the whole model, numbers of

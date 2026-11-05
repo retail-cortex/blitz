@@ -63,7 +63,7 @@ export function appendMention(draft: string, path: string): string {
   return `${draft}${sep}${m} `;
 }
 
-/** Whether a path is an image the model can be sent (as pkg/images's IsImagePath). */
+/** Whether a path is an image the model can be sent (pkg/images's KindOf(TypeForName(path)) == KindImage). */
 export function isImagePath(path: string): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(path);
 }

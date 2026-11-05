@@ -191,7 +191,10 @@ func (t *Telemetry) LogHandler() slog.Handler {
 	return otelslog.NewHandler(ServiceName, otelslog.WithLoggerProvider(t.lp))
 }
 
-// Flush exports everything recorded so far.
+// Flush exports everything recorded so far, without shutting down. The
+// service uses Shutdown; Flush is for tests (here and in
+// pkg/engine/runtime, whose in-memory exporters Shutdown would clear) and
+// embedders of NewTelemetry.
 func (t *Telemetry) Flush(ctx context.Context) error {
 	if t == nil {
 		return nil
