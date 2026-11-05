@@ -85,28 +85,33 @@ func TestLimitSource(t *testing.T) {
 	var notices []api.Notice
 	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "look"}, collect(&notices))
 	require.ErrorIs(t, err, api.ErrMaxTurns)
-	assert.Contains(t, err.Error(), "maximum turns reached (1 model calls): the guardrail limits sets this in "+filepath.Join(".agents", "guardrails", "limits.md")+" (max_turns under limits:")
+	assert.Contains(t, err.Error(), "maximum turns reached (1 model calls): the guardrail limits sets this in "+filepath.Join(".agents", "guardrails", "limits.md")+"; to allow more a turn, raise max_turns under limits:")
+	assert.True(t, strings.HasSuffix(err.Error(), "Send “continue” to carry on where it stopped."), "in a conversation, the way on")
 
 	def := gates.BuiltinDefault(gates.Builtins[2])
 	for _, tc := range []struct {
 		name string
 		err  error
 		lim  turnLimits
+		job  bool
 		want string
+		goOn bool
 	}{
-		{"the default ceiling", fmt.Errorf("%w ($10.00)", api.ErrCostLimit), turnLimits{cost: &def}, "set max_cost_usd under limits: in " + filepath.Join(".agents", "guardrails", "limits.md")},
-		{"the turn's own limit", api.ErrMaxTurns, turnLimits{cost: &def}, api.ErrMaxTurns.Error()},
-		{"not a guardrail's limit", api.ErrTimeLimit, turnLimits{turns: &def, cost: &def}, api.ErrTimeLimit.Error()},
-		{"no error", nil, turnLimits{turns: &def}, ""},
+		{"the default ceiling", fmt.Errorf("%w ($10.00)", api.ErrCostLimit), turnLimits{cost: &def}, false, "set max_cost_usd under limits: in " + filepath.Join(".agents", "guardrails", "limits.md"), true},
+		{"a job's run", api.ErrMaxTurns, turnLimits{turns: &def}, true, "set max_turns under limits:", false},
+		{"the turn's own limit", api.ErrMaxTurns, turnLimits{cost: &def}, false, api.ErrMaxTurns.Error(), false},
+		{"not a guardrail's limit", api.ErrTimeLimit, turnLimits{turns: &def, cost: &def}, false, api.ErrTimeLimit.Error(), false},
+		{"no error", nil, turnLimits{turns: &def}, false, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := w.limitSource(tc.err, tc.lim)
+			got := w.limitSource(tc.err, tc.lim, tc.job)
 			if tc.err == nil {
 				assert.NoError(t, got)
 				return
 			}
 			require.ErrorIs(t, got, tc.err, "still the limit's error")
 			assert.Contains(t, got.Error(), tc.want)
+			assert.Equal(t, tc.goOn, strings.Contains(got.Error(), "continue"), "nobody to send continue to a job")
 		})
 	}
 

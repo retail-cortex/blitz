@@ -112,9 +112,11 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 }
 
 // limitSource adds to a turn stopped at a limit a guardrail set which
-// guardrail set it and how to change it: "maximum turns reached" alone
-// sends people looking for a setting.
-func (w *Workspace) limitSource(err error, lim turnLimits) error {
+// guardrail set it and how to change it, and, in a conversation (not a
+// job's run), that "continue" carries on: a long coding turn reaches 200
+// model calls easily, and "maximum turns reached" alone sends people
+// looking for a setting.
+func (w *Workspace) limitSource(err error, lim turnLimits, job bool) error {
 	var g *gates.Guardrail
 	var key string
 	switch {
@@ -126,15 +128,21 @@ func (w *Workspace) limitSource(err error, lim turnLimits) error {
 	if g == nil {
 		return err
 	}
+	var hint string
 	if g.Path == "" {
-		return fmt.Errorf("%w: %s", err, i18n.T("guardrail.limit_default", "name", g.Name, "key", key,
-			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md")))
+		hint = i18n.T("guardrail.limit_default", "name", g.Name, "key", key,
+			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
+	} else {
+		path := g.Path
+		if rel, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(rel, "..") {
+			path = rel
+		}
+		hint = i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", path)
 	}
-	path := g.Path
-	if rel, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(rel, "..") {
-		path = rel
+	if !job {
+		hint += " " + i18n.T("guardrail.limit_continue")
 	}
-	return fmt.Errorf("%w: %s", err, i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", path))
+	return fmt.Errorf("%w: %s", err, hint)
 }
 
 // guardsFor are the guardrails of the session's turn. A call outside one
