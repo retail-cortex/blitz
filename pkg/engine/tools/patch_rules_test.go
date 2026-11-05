@@ -182,3 +182,30 @@ func TestLimitsAreNamed(t *testing.T) {
 	assert.Equal(t, d.Web.MaxBytes, f.cfg.MaxBytes)
 	assert.Equal(t, time.Duration(d.Web.TimeoutSeconds)*time.Second, f.cfg.Timeout)
 }
+
+// A file apply_patch moves keeps its mode, an executable script its +x
+// (N26 engine-tools-2#26).
+func TestApplyPatchMoveKeepsMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"an executable script", 0o755},
+		{"a private file", 0o600},
+		{"a plain file", 0o644},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws, dir := newTestWorkspace(t)
+			src := filepath.Join(dir, "run.sh")
+			writeFile(t, src, "echo hi\n")
+			require.NoError(t, os.Chmod(src, tt.mode))
+			rt := toolOf(t)(NewApplyPatchTool(ws, allowAll()))
+			out := runTool(t, rt, map[string]any{"patch": "*** Begin Patch\n*** Update File: run.sh\n*** Move to: bin/run.sh\n@@\n-echo hi\n+echo hello\n*** End Patch"})
+			require.Equal(t, true, out["success"], "%v", out)
+			info, err := os.Stat(filepath.Join(dir, "bin", "run.sh"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.mode, info.Mode().Perm())
+		})
+	}
+}

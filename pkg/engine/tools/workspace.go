@@ -376,6 +376,12 @@ func (w *Workspace) ReadFileLimit(p string, limit int64) ([]byte, error) {
 
 // CreateExclusive creates a new file, failing with fs.ErrExist if it exists.
 func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) error {
+	return w.createExclusive(ctx, p, data, 0o644)
+}
+
+// createExclusive is CreateExclusive with the file's mode (a moved file
+// keeps its own, its executable bit included).
+func (w *Workspace) createExclusive(ctx context.Context, p string, data []byte, mode fs.FileMode) error {
 	loc, err := w.resolve(p, true)
 	if err != nil {
 		return err
@@ -394,7 +400,7 @@ func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) 
 		}
 		return err
 	}
-	f, err := r.OpenFile(loc.rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := r.OpenFile(loc.rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return fail(err)
 	}
@@ -406,6 +412,12 @@ func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) 
 	if err := f.Close(); err != nil {
 		_ = r.Remove(loc.rel)
 		return fail(err)
+	}
+	if mode != 0o644 { // past the umask
+		if err := r.Chmod(loc.rel, mode); err != nil {
+			_ = r.Remove(loc.rel)
+			return fail(err)
+		}
 	}
 	w.checkpoints.after(sessionOf(ctx), loc.abs(), data, true)
 	return nil

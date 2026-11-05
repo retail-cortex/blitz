@@ -210,9 +210,20 @@ func TestApplyPatchIsUndoable(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "undo did not remove added file")
 }
 
+// An all-CRLF file keeps CRLF; a file with mixed endings keeps the lines
+// the patch doesn't touch as they were (N26 engine-tools-2#27).
 func TestApplyHunksCRLF(t *testing.T) {
-	src := "line1\r\nold\r\nline3\r\n"
-	got, err := applyHunks(src, []patchHunk{{hint: -1, old: []string{"line1", "old"}, new: []string{"line1", "new"}}})
-	require.NoError(t, err)
-	assert.Equal(t, "line1\r\nnew\r\nline3\r\n", got, "CRLF not preserved: %q", got)
+	tests := []struct {
+		name, src, want string
+	}{
+		{"every line CRLF", "line1\r\nold\r\nline3\r\n", "line1\r\nnew\r\nline3\r\n"},
+		{"mixed endings", "line1\r\nold\nline3\n", "line1\r\nnew\nline3\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := applyHunks(tt.src, []patchHunk{{hint: -1, old: []string{"line1", "old"}, new: []string{"line1", "new"}}})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got, "%q", got)
+		})
+	}
 }

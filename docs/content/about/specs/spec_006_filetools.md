@@ -41,6 +41,7 @@ Every file tool goes through one `Workspace` sandbox: paths must fall under a co
 ## 4. Writes
 
 - **FS-20** `WriteFileAtomic`: temp file `.<name>.tmp-<hex>` in the same directory, fsync, chmod to the existing file's mode (new files 0644), rename. A symlinked file is rewritten in place through the root instead of replacing the link. Parent directories are created (0755). Writing a directory or the root itself is refused.
+- **FS-20a** *2026-11-05 (scan N26-engine-tools-2#26: a file apply_patch moved was created 0644, so a moved script lost its +x).* A file `apply_patch` moves (`*** Move to:` or a renamed unified diff) is created with the source's mode.
 - **FS-21** `CreateExclusive` fails with `fs.ErrExist` if the file exists.
 - **FS-22** `RemoveFile` removes only non-directories and never a root.
 - **FS-23** Every write/delete first snapshots the prior state for checkpoints; if the operation fails the snapshot entry is discarded.
@@ -92,6 +93,7 @@ All tools return errors in an `error` field of the result (never a Go error), so
 - **FS-50** Accepts a unified diff (git or plain, `---/+++/@@`, `a/`/`b/` prefixes and timestamps stripped, git metadata and prose between files ignored, `\ No newline at end of file` respected, blank context lines missing their leading space tolerated) or a `*** Begin Patch … *** End Patch` block (add/delete/update/move).
 - **FS-51** Validation happens before anything is written: every file resolved writable, a file may appear only once, add requires absence, delete/update require presence, move requires the destination to be absent.
 - **FS-52** Hunk matching: exact, then ignoring trailing whitespace, then ignoring surrounding whitespace; nearest occurrence to the hinted line; anchors (`@@ context`) supported; pure insertions at hint/after anchor/EOF. Matching is on LF-normalised text and CRLF is restored. Failures name the hunk and preview the lines not found.
+- **FS-52a** *2026-11-05 (scan N26-engine-tools-2#27: a patch to a file with any CRLF turned every line into CRLF).* Endings are normalised (and CRLF restored after) only when every line ends in CRLF; in a file with mixed endings a line's CR is trailing space to the matcher. A hunk's leading and trailing context lines are kept as the file has them (whitespace, a CR), so only the lines that change are rewritten.
 - **FS-53** One approval for the whole patch ("Apply patch to N file(s): …") with a combined diff (renames shown `rename a -> b`), targets = every touched path.
 - **FS-54** Atomic: if any write fails, already-changed files are restored; the error says "(no files were changed)" or reports a rollback failure. The result lists per-file summaries.
 

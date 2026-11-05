@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -275,8 +276,10 @@ func parseBeginPatch(text string) ([]filePatch, error) {
 // by the model don't make an otherwise unambiguous patch fail.
 func applyHunks(content string, hunks []patchHunk) (string, error) {
 	// Match on LF-normalised text and restore CRLF afterwards, since patch
-	// lines never carry the carriage returns.
-	crlf := strings.Contains(content, "\r\n")
+	// lines never carry the carriage returns: only when every line ends in
+	// CRLF, so a file with mixed endings keeps the lines the patch doesn't
+	// touch as they are (its lines' CRs are trailing space to the matcher).
+	crlf := strings.Contains(content, "\r\n") && strings.Count(content, "\r\n") == strings.Count(content, "\n")
 	if crlf {
 		content = strings.ReplaceAll(content, "\r\n", "\n")
 		out, err := applyHunks(content, hunks)
@@ -318,15 +321,31 @@ func applyHunks(content string, hunks []patchHunk) (string, error) {
 			}
 		}
 
+		// The hunk's leading and trailing context is kept as the file has it
+		// (its whitespace, a CR at the end of a line), not as the patch
+		// spells it: only the lines that change are replaced.
+		pre, suf := commonEnds(h.old, h.new)
 		replaced := make([]string, 0, len(lines)-len(h.old)+len(h.new))
-		replaced = append(replaced, lines[:at]...)
-		replaced = append(replaced, h.new...)
-		replaced = append(replaced, lines[at+len(h.old):]...)
+		replaced = append(replaced, lines[:at+pre]...)
+		replaced = append(replaced, h.new[pre:len(h.new)-suf]...)
+		replaced = append(replaced, lines[at+len(h.old)-suf:]...)
 		lines = replaced
 		delta += len(h.new) - len(h.old)
 		pos = at + len(h.new)
 	}
 	return joinLines(lines, hadNewline || content == ""), nil
+}
+
+// commonEnds is how many lines old and new share at the start, and then
+// at the end, without overlapping.
+func commonEnds(old, new []string) (pre, suf int) {
+	for pre < len(old) && pre < len(new) && old[pre] == new[pre] {
+		pre++
+	}
+	for suf < len(old)-pre && suf < len(new)-pre && old[len(old)-1-suf] == new[len(new)-1-suf] {
+		suf++
+	}
+	return pre, suf
 }
 
 // findBlock returns where block occurs in lines at or after from, preferring
@@ -615,7 +634,11 @@ func executePlan(ctx context.Context, ws *Workspace, plan []plannedChange) error
 			}
 			done = append(done, undo{c.path, c.before, true})
 		case c.target != c.path:
-			if err := ws.CreateExclusive(ctx, c.target, []byte(c.after)); err != nil {
+			mode := fs.FileMode(0o644)
+			if info, err := ws.Stat(c.path); err == nil {
+				mode = info.Mode().Perm() // a moved script stays executable
+			}
+			if err := ws.createExclusive(ctx, c.target, []byte(c.after), mode); err != nil {
 				return rollback(fmt.Errorf("write %s: %w", c.target, err))
 			}
 			done = append(done, undo{c.target, "", false})
