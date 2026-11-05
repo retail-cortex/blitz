@@ -43,6 +43,12 @@ func TestParse(t *testing.T) {
 		{"an unknown when", "---\nwhen: later\n---\nx", Rule{Name: "r", Path: "p", When: "later", Text: "x", Problem: `when "later": before_agent or after_agent`}},
 		{"an unknown action", "---\nwhen: before_agent\naction: shout\n---\nx", Rule{Name: "r", Path: "p", When: BeforeAgent, Action: "shout", Text: "x", Problem: `action "shout": block, warn or revise`}},
 		{"an empty gate", "---\nwhen: before_agent\naction: block\n---\n", Rule{Name: "r", Path: "p", When: BeforeAgent, Action: Block, Problem: "the rule is empty: say what to check"}},
+		// N26 safety-enterprise#6, #7: a gate's when or action in another
+		// case is read; one without when: that has a gate's keys is a
+		// problem, not an instruction rule gating nothing.
+		{"when and action in capitals", "---\nwhen: Before_Agent\naction: Block\n---\nx", Rule{Name: "r", Path: "p", When: BeforeAgent, Action: Block, Text: "x"}},
+		{"When: as the key", "---\nWhen: before_agent\naction: block\n---\nx", Rule{Name: "r", Path: "p", Action: Block, Text: "x", Problem: "When is a gate's: add when: before_agent or after_agent (or take it out for an instruction rule)"}},
+		{"wen:", "---\nwen: before_agent\n---\nx", Rule{Name: "r", Path: "p", Text: "x", Problem: "wen is a gate's: add when: before_agent or after_agent (or take it out for an instruction rule)"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

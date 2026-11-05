@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -116,7 +117,7 @@ func Parse(name, path string, data []byte) Rule {
 		r.Problem = fmt.Sprintf("front matter: %v", err)
 		return r
 	}
-	r.When, r.Order, r.Agents, r.Action, r.Description = strings.TrimSpace(m.When), m.Order, m.Agents, strings.TrimSpace(m.Action), m.Description
+	r.When, r.Order, r.Agents, r.Action, r.Description = strings.ToLower(strings.TrimSpace(m.When)), m.Order, m.Agents, strings.ToLower(strings.TrimSpace(m.Action)), m.Description
 	switch v := m.Paths.(type) {
 	case string:
 		r.Paths = []string{v}
@@ -128,6 +129,10 @@ func Parse(name, path string, data []byte) Rule {
 		}
 	}
 	switch {
+	case r.When == "" && gateKey(front) != "":
+		// A gate whose when: is misspelt would be an instruction rule,
+		// gating nothing.
+		r.Problem = fmt.Sprintf("%s is a gate's: add when: before_agent or after_agent (or take it out for an instruction rule)", gateKey(front))
 	case r.When != "" && r.When != BeforeAgent && r.When != AfterAgent:
 		r.Problem = fmt.Sprintf("when %q: before_agent or after_agent", r.When)
 	case r.When != "" && r.Action == "":
@@ -138,6 +143,22 @@ func Parse(name, path string, data []byte) Rule {
 		r.Problem = "the rule is empty: say what to check"
 	}
 	return r
+}
+
+// gateKey is the first of a gate's keys in a front matter without
+// when: (a when: in another case, wen:, action:, order:), "" for none.
+func gateKey(front []byte) string {
+	var top map[string]any
+	if yaml.Unmarshal(front, &top) != nil {
+		return ""
+	}
+	for _, k := range slices.Sorted(maps.Keys(top)) {
+		switch strings.ToLower(k) {
+		case "when", "wen", "whne", "action", "order":
+			return k
+		}
+	}
+	return ""
 }
 
 // Load reads every rule file (*.md, recursively) in dirs; a name in an

@@ -18,6 +18,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path"
@@ -27,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
+	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"gopkg.in/yaml.v3"
 )
@@ -217,7 +219,7 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 			return g
 		}
 	}
-	g.Builtin, g.Stage, g.Action = strings.TrimSpace(m.Builtin), strings.TrimSpace(m.Stage), strings.TrimSpace(m.Action)
+	g.Builtin, g.Stage, g.Action = lower(m.Builtin), lower(m.Stage), lower(m.Action)
 	g.Agents, g.Tools, g.Description, g.PII = m.Agents, m.Tools, m.Description, m.PII
 	g.Judge = m.Judge != nil && *m.Judge
 	l := m.Limits
@@ -231,7 +233,7 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 	// What a built-in's file leaves out runs as it would without one: the
 	// injection judge on; limits' ceilings and commands (commands: [] is
 	// none).
-	switch strings.TrimSpace(m.Builtin) {
+	switch g.Builtin {
 	case BuiltinInjection:
 		g.Judge = m.Judge == nil || *m.Judge
 	case BuiltinLimits:
@@ -249,6 +251,9 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 	g.Problem = checkGuardrail(&g)
 	if g.Problem == "" && g.Builtin == BuiltinLimits {
 		g.Problem = misplacedLimits(front)
+	}
+	if g.Problem == "" {
+		g.Problem = unknownKeys(front)
 	}
 	// A file named after a built-in is that built-in's: as anything else
 	// it would take the built-in's place, its ceilings and refusals gone
@@ -277,6 +282,39 @@ func misplacedLimits(front []byte) string {
 	for _, k := range limitKeys {
 		if _, ok := top[k]; ok {
 			return fmt.Sprintf("%s goes under limits: (limits:\n  %s: …)", k, k)
+		}
+	}
+	return ""
+}
+
+// lower is a setting's value as it's compared: trimmed, in lower case
+// (action: Block is block).
+func lower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+// guardKeys are a guardrail file's settings, with the catalog's lock and
+// groups (spec_053 EN-31) and a name, which Blitz doesn't read.
+var guardKeys = []string{"builtin", "stage", "action", "agents", "tools", "description", "pii", "judge", "limits", "enabled", "lock", "groups", "name"}
+
+// unknownKeys is the problem of a guardrail file with a setting Blitz
+// doesn't know, at the top or under limits: ("" for none): a misspelt
+// allowed_domain would otherwise leave every domain allowed without a
+// word.
+func unknownKeys(front []byte) string {
+	var top map[string]any
+	if yaml.Unmarshal(front, &top) != nil {
+		return ""
+	}
+	keys := slices.Sorted(maps.Keys(top))
+	for _, k := range keys {
+		if !slices.Contains(guardKeys, k) && !slices.Contains(limitKeys, k) {
+			return fmt.Sprintf("%s: not a guardrail's setting (%s)", k, strings.Join(guardKeys[:10], ", "))
+		}
+	}
+	if l, ok := top["limits"].(map[string]any); ok {
+		for _, k := range slices.Sorted(maps.Keys(l)) {
+			if !slices.Contains(limitKeys, k) {
+				return fmt.Sprintf("limits: %s: not a limit (%s)", k, strings.Join(limitKeys, ", "))
+			}
 		}
 	}
 	return ""
@@ -897,7 +935,13 @@ func Describe(g Guardrail) string {
 		line("  redact takes each matching phrase out of the result, leaving %q in its place, and passes the rest", InjectionNote)
 	case BuiltinSecrets:
 		line("runs: on every piece of the agent's answer as it streams, before the user sees it (stage %s), for %s", StageOutput, agents)
-		line("checks: credentials in the answer: private keys (PEM), AWS access key ids, OpenAI and Anthropic keys, Google API keys, GitHub tokens, Slack tokens, JWTs, password/secret/token/api_key assignments, and the values of the workspace's own secrets")
+		var kinds []string
+		for _, f := range redact.Formats {
+			if !slices.Contains(kinds, f.Kind+"s") {
+				kinds = append(kinds, f.Kind+"s")
+			}
+		}
+		line("checks: credentials in the answer: %s, password/secret/token/api_key assignments, and the values of the workspace's own secrets", strings.Join(kinds, ", "))
 		if g.PII {
 			line("  and personal data: email addresses, phone numbers, card numbers and US social security numbers (pii: true)")
 		} else {

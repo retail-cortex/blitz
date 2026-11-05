@@ -38,6 +38,11 @@ func TestParseGuardrail(t *testing.T) {
 		{"a custom one can't redact", "---\nstage: output\naction: redact\n---\nX", StageOutput, Redact, `action "redact": block or warn (redact is the secrets guardrail's)`},
 		{"a custom one needs a stage", "No stage.", "", "", `stage "": input, tool_result, output or action`},
 		{"an empty custom one", "---\nstage: input\n---\n", StageInput, Block, "the guardrail is empty: say what to catch"},
+		// N26 safety-enterprise#6, #7.
+		{"values in capitals", "---\nstage: Action\naction: Block\n---\nNo deleting branches.", StageAction, Block, ""},
+		{"a misspelt setting", "---\nstage: action\nactoin: warn\n---\nX", StageAction, Block, "actoin: not a guardrail's setting (builtin, stage, action, agents, tools, description, pii, judge, limits, enabled)"},
+		{"a misspelt limit", "---\nbuiltin: limits\nlimits:\n  allowed_domain: [example.com]\n---\n", StageAction, Block, "limits: allowed_domain: not a limit (max_cost_usd, max_turns, max_files_changed, allowed_domains, commands)"},
+		{"the catalog's lock and groups", "---\nstage: input\nlock: locked\ngroups: [eng]\n---\nX", StageInput, Block, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -259,7 +264,7 @@ func TestDescribe(t *testing.T) {
 	}{
 		{"injection", BuiltinDefault(Builtins[0]), []string{"builtin: prompt_injection", "web_fetch, web_search, the browser and MCP servers", "ignore|disregard", "judge: true", "action: redact", "takes each matching phrase out", "warn: lets it through", "block: stops it"}},
 		{"injection unjudged, some tools", Guardrail{Builtin: BuiltinInjection, Action: Block, Tools: []string{"read_file"}}, []string{"what read_file bring back", "judge: false", "action: block", "redact: masks"}},
-		{"secrets", BuiltinDefault(Builtins[1]), []string{"stage output", "private keys", "pii: false", "action: redact", "block: stops it"}},
+		{"secrets", BuiltinDefault(Builtins[1]), []string{"stage output", "private keys, AWS access keys", "GitLab tokens, Slack tokens, Stripe keys", "pii: false", "action: redact", "block: stops it"}},
 		{"secrets with personal data", Guardrail{Builtin: BuiltinSecrets, PII: true, Agents: []string{"qa"}}, []string{"for qa", "email addresses"}},
 		{"limits", BuiltinDefault(Builtins[2]), []string{"defaults", "git push* --force", "rm -rf ~", "cost per turn (the turn stops there): $10.00", "model calls per turn (the turn stops there): 200", "files changed per turn: no limit", "action: block"}},
 		{"limits set", Guardrail{Builtin: BuiltinLimits, Limits: Limits{MaxCostUSD: 2, MaxTurns: 9, MaxFilesChanged: 4, AllowedDomains: []string{"go.dev"}}, Off: true}, []string{"$2.00", "model calls per turn (the turn stops there): 9", "files changed per turn: 4", "go.dev", "commands: none refused", "enabled: false"}},
