@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -41,11 +42,16 @@ import (
 // turn starts. Unlike rules, a guardrail that can't be checked refuses
 // (block) rather than lets things through.
 
-// guardSubjectLimit bounds what a custom guardrail's judge is shown, and
-// how much of a tool's result the injection patterns read.
+// guardSubjectLimit bounds what a custom guardrail's judge is shown at
+// once: longer content is judged in parts of it (overlapping by
+// guardPartOverlap, so a sentence cut between two is whole in one), up to
+// guardMaxParts; content longer than that can't be judged (a guardrail
+// that blocks refuses it). The injection patterns read all of a tool's
+// result.
 const (
 	guardSubjectLimit = 12 << 10
-	guardScanLimit    = 256 << 10
+	guardPartOverlap  = 1 << 10
+	guardMaxParts     = 8
 )
 
 // writeTools change files: the limits guardrail counts them.
@@ -224,9 +230,43 @@ func (w *Workspace) auditGuardrail(ctx context.Context, g gates.Guardrail, decis
 }
 
 // judgeGuardrail judges subject against a custom guardrail, secrets
-// redacted first.
+// redacted first: all of it, in parts when it's long (the first part that
+// fails is the verdict). Past guardMaxParts it can't be judged: an error,
+// which a guardrail that blocks treats as a refusal.
 func (w *Workspace) judgeGuardrail(ctx context.Context, g gates.Guardrail, subject string) (gates.Verdict, error) {
-	return gates.JudgeGuardrail(ctx, w.ruleAsker(), g, w.secretRedactor().String(textutil.Ellipsize(subject, guardSubjectLimit)))
+	parts := guardParts(w.secretRedactor().String(subject))
+	if len(parts) > guardMaxParts {
+		return gates.Verdict{}, fmt.Errorf("%d KiB is too long to judge (the most is about %d KiB)", len(subject)>>10, guardMaxParts*(guardSubjectLimit-guardPartOverlap)>>10)
+	}
+	var v gates.Verdict
+	for i, part := range parts {
+		if len(parts) > 1 {
+			part = fmt.Sprintf("(part %d of %d)\n%s", i+1, len(parts), part)
+		}
+		var err error
+		if v, err = gates.JudgeGuardrail(ctx, w.ruleAsker(), g, part); err != nil || !v.Pass {
+			return v, err
+		}
+	}
+	return v, nil
+}
+
+// guardParts splits s into parts of at most guardSubjectLimit bytes (on
+// rune boundaries), each starting guardPartOverlap before the last ended.
+func guardParts(s string) []string {
+	var parts []string
+	for {
+		part := textutil.TruncateUTF8(s, guardSubjectLimit)
+		parts = append(parts, part)
+		if len(part) == len(s) {
+			return parts
+		}
+		next := len(part) - guardPartOverlap
+		for next > 0 && !utf8.RuneStart(s[next]) {
+			next--
+		}
+		s = s[max(next, 1):]
+	}
 }
 
 // TryGuardrail judges a sample against a guardrail as written (Studio's
@@ -356,7 +396,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 		return v
 	}
 	data, _ := json.Marshal(result)
-	text := textutil.Ellipsize(string(data), guardScanLimit)
+	text := string(data)
 	external := g.external(c.Tool)
 	out := result
 	for _, gr := range active {
@@ -372,7 +412,7 @@ func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[s
 			}
 			caught, reason = true, i18n.T("guardrail.injection_found", "phrase", phrase)
 			if gr.Judge {
-				if verdict, err := gates.ConfirmInjection(ctx, g.w.ruleAsker(), textutil.Ellipsize(text, guardSubjectLimit)); err == nil && verdict.Pass {
+				if verdict, err := gates.ConfirmInjection(ctx, g.w.ruleAsker(), around(text, phrase, guardSubjectLimit)); err == nil && verdict.Pass {
 					g.w.auditGuardrail(ctx, gr, "pass", verdict.Reason)
 					continue // the judge says it's quoted, not aimed at the agent
 				}
@@ -567,4 +607,19 @@ func (w *Workspace) SaveGuardrail(spec GuardrailSpec, previous string) (gates.Gu
 // built-in's: back to its defaults).
 func (w *Workspace) DeleteGuardrail(name string) error {
 	return gates.DeleteGuardrail(w.ProjectGuardrailsDir(), name)
+}
+
+// around is at most n bytes of s around the first phrase in it (the start
+// of s when phrase isn't there), on rune boundaries: what the injection
+// judge confirms a match from.
+func around(s, phrase string, n int) string {
+	i := strings.Index(s, phrase)
+	if i < 0 || len(s) <= n {
+		return textutil.TruncateUTF8(s, n)
+	}
+	start := max(0, min(i-(n-len(phrase))/2, len(s)-n))
+	for start > 0 && !utf8.RuneStart(s[start]) {
+		start--
+	}
+	return textutil.TruncateUTF8(s[start:], n)
 }
