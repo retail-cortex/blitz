@@ -416,3 +416,20 @@ func TestAutoModeAtTheGate(t *testing.T) {
 		})
 	}
 }
+
+// A path rule's braces and classes are alternatives (N26 pkg-small-2#16).
+func TestPathRuleBraces(t *testing.T) {
+	r, err := ParsePermissionRule(EffectDeny, "write(**/*.{pem,key})", "test")
+	require.NoError(t, err)
+	for target, want := range map[string]bool{"a.pem": true, "x/b.key": true, "c.txt": false, "d.{pem,key}": false} {
+		t.Run(target, func(t *testing.T) {
+			assert.Equal(t, want, r.matches(target))
+		})
+	}
+	r, err = ParsePermissionRule(EffectDeny, "write(v[0-9].txt)", "test")
+	require.NoError(t, err)
+	assert.True(t, r.matches("v1.txt"))
+	assert.False(t, r.matches("va.txt"))
+	_, err = ParsePermissionRule(EffectDeny, "write([z-a])", "test")
+	assert.NoError(t, err, "a class that's no class is literal, and compiles")
+}

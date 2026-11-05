@@ -33,6 +33,7 @@ Every file tool goes through one `Workspace` sandbox: paths must fall under a co
 ## 3. Blocked-path patterns
 
 - **FS-10** Pattern forms (each matches the path itself and everything beneath it): no slash (`.env`, `*.pem`) — that name at any depth; absolute (`~/.ssh`, `/etc/x`) — that location, also its symlink-resolved spelling; relative with a slash (`config/prod/*.yaml`) — relative to every root.
+- **FS-78** *2026-11-05 (scan N26-pkg-small-2#16: `**/*.{pem,key}` and `id_[rd]sa` were taken literally and blocked nothing, without a word).* A pattern's `{a,b}` alternatives are a pattern each (`textutil.ExpandBraces`, nested ones too, at most 64), and `[abc]`, `[a-z]` and `[!abc]` are classes (never a slash); an unclosed or impossible one stays literal. The same holds for `read`/`write`/`delete` permission rules, in-process and in the macOS profile.
 - **FS-11** `*` matches within one segment, `**` across segments (`**/` optional), `?` one character. Patterns containing `"` or newline are invalid.
 - **FS-12** Matching is case-insensitive on macOS and Windows (so `.ENV` is `.env`).
 - **FS-13** The same expressions (without Go-only syntax) are emitted for the macOS Seatbelt profile ([spec_007_shell](spec_007_shell.md)).
