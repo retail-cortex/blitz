@@ -382,9 +382,14 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		// An approved plan is carried out in the same turn (a few times at
 		// most, should the agent plan again).
 		carried := false
-		for i := 0; err == nil && i < maxPlanRounds; i++ {
+		for i := 0; err == nil; i++ {
 			_, path, mode, ok := gate.Take()
 			if !ok {
+				break
+			}
+			if i == maxPlanRounds {
+				// Said, not left to look as if the turn simply ended.
+				on(api.Event{Notice: &api.Notice{Text: i18n.T("turn.plan_cap", "n", maxPlanRounds), Error: true}})
 				break
 			}
 			carried = true
@@ -396,9 +401,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			err = w.engine.Execute(ctx, sessionID, goAhead, handler, carryOut...)
 		}
 		// stop hooks may ask the agent to keep going, a few times at most.
-		for i := 0; err == nil && i < maxStopContinues; i++ {
+		for i := 0; err == nil; i++ {
 			out := w.tools.ScriptHooks().Run(ctx, "stop", "", tools.HookEvent{SessionID: sessionID, StopHookActive: i > 0})
 			if !out.Blocked && !out.Continue {
+				break
+			}
+			if i == maxStopContinues {
+				on(api.Event{Notice: &api.Notice{Text: i18n.T("turn.stop_hook_cap", "n", maxStopContinues), Error: true}})
 				break
 			}
 			reason := strings.TrimSpace(out.Reason)

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/jobspec"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
@@ -493,17 +494,14 @@ var settableValues = map[string]bool{
 	"blitz.default_agent":   true,
 	"blitz.agency_level":    true,
 	"blitz.permission_mode": true,
-	// The workspace dashboard's judge and schedule (spec_044_health).
-	"health.model":    true,
-	"health.schedule": true,
-	// The scheduled reflection (spec_048_harness_learning HE-06).
-	"harness.reflect_schedule": true,
-	"ui.style":                 true,
-	"ui.locale":                true,
-	"ui.notify":                true,
-	"ui.task_alerts":           true,
-	"ui.theme":                 true,
-	"ui.editor":                true,
+	// The workspace dashboard's judge (spec_044_health).
+	"health.model":   true,
+	"ui.style":       true,
+	"ui.locale":      true,
+	"ui.notify":      true,
+	"ui.task_alerts": true,
+	"ui.theme":       true,
+	"ui.editor":      true,
 	// Workspace search, from its panel in the desktop app.
 	"search.embedding_model": true,
 	"search.enrich_model":    true,
@@ -527,9 +525,12 @@ var typedValues = map[string]string{
 	"workers.policy.max_cost_usd":         "usd",
 	"workers.policy.default_timeout":      "duration",
 	"workers.policy.max_timeout":          "duration",
-	// Cost limits of the dashboard's and the reflector's schedules.
-	"health.max_cost_usd":  "usd",
-	"harness.max_cost_usd": "usd",
+	// The dashboard's and the reflector's schedules (spec_044_health,
+	// spec_048_harness_learning HE-06), and their cost limits.
+	"health.schedule":          "schedule",
+	"harness.reflect_schedule": "schedule",
+	"health.max_cost_usd":      "usd",
+	"harness.max_cost_usd":     "usd",
 	// When /reflect is suggested (spec_048_harness_learning HE-62).
 	"harness.reflect_threshold": "int",
 	// Settings › Browser (spec_050_agent_browser AB-02, spec_008_web WEB-09).
@@ -575,6 +576,14 @@ func typedValue(kind, key, value string) (string, any, error) {
 		d, err := time.ParseDuration(value)
 		if err != nil || d <= 0 {
 			return "", nil, fmt.Errorf("%s is a length of time like 30m or 2h, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "schedule":
+		// In words or cron, as a job's; "off" turns it off.
+		if !strings.EqualFold(strings.TrimSpace(value), "off") {
+			if _, err := jobspec.ParseSchedule(value, ""); err != nil {
+				return "", nil, fmt.Errorf("%s: %w", key, err)
+			}
 		}
 		return strconv.Quote(value), value, nil
 	case "show":

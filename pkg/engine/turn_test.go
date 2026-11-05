@@ -20,6 +20,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -278,6 +279,31 @@ func TestMaxTurnsSpansTheTurn(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.Equal(t, tc.calls, llm.Calls())
+		})
+	}
+}
+
+// A stop hook still asking to go on at the cap says the turn stops there
+// (N26 engine-top-2#15).
+func TestStopHookCapSaysSo(t *testing.T) {
+	for _, tc := range []struct {
+		name, hook string
+		notice     bool
+	}{
+		{name: "always asks", hook: `cat >/dev/null; echo '{"continue": true}'`, notice: true},
+		{name: "asks once", hook: `input=$(cat); case "$input" in *'"stop_hook_active":true'*) ;; *) echo '{"continue": true}';; esac`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Hooks.Stop = []config.HookConfig{{Command: tc.hook}} })
+			var notices []string
+			_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "go"}, func(e api.Event) {
+				if e.Notice != nil {
+					notices = append(notices, e.Notice.Text)
+				}
+			})
+			require.NoError(t, err)
+			said := slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, "stop hook still asks") })
+			assert.Equal(t, tc.notice, said, "notices %q", notices)
 		})
 	}
 }

@@ -143,6 +143,8 @@
     "rule.failed": "✗ The answer fails the rule {name}: {reason}",
     "rule.unjudged": "The rule {name} couldn't be checked: {error}",
     "rule.still_failing": "✗ Rules still fail after {n} revisions: stopping here",
+    "turn.plan_cap": "✗ Carried out {n} approved plans in this turn: stopping here, the next plan is not carried out",
+    "turn.stop_hook_cap": "✗ A stop hook still asks to go on after {n} times: stopping here",
     "goal.impossible": "The goal can't be reached: {reason}",
     "goal.limit": "The goal isn't met after {n} more turns; the agent stops here (/goal to see it, blitz.goal_max_continues to allow more).",
     "goal.continuing": "Goal not met yet ({n}/{max}): {reason}",

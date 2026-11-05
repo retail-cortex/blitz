@@ -143,6 +143,8 @@
     "rule.failed": "✗ La réponse ne respecte pas la règle {name} : {reason}",
     "rule.unjudged": "La règle {name} n'a pas pu être vérifiée : {error}",
     "rule.still_failing": "✗ Les règles échouent toujours après {n} révisions : arrêt ici",
+    "turn.plan_cap": "✗ {n} plans approuvés réalisés dans ce tour : arrêt ici, le plan suivant n’est pas réalisé",
+    "turn.stop_hook_cap": "✗ Un hook d’arrêt demande encore de continuer après {n} fois : arrêt ici",
     "goal.impossible": "L’objectif ne peut pas être atteint : {reason}",
     "goal.limit": "L’objectif n’est pas atteint après {n} tours de plus; l’agent s’arrête ici (/goal pour le voir, blitz.goal_max_continues pour en permettre plus).",
     "goal.continuing": "Objectif pas encore atteint ({n}/{max}) : {reason}",

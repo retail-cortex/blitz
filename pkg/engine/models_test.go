@@ -196,3 +196,29 @@ func TestUnpinToTheAgentsDefaultModel(t *testing.T) {
 	_, err = w.Unpin(ctx, "nobody")
 	assert.ErrorAs(t, err, &unknown)
 }
+
+// Unpinning when the global settings can't be read says so instead of
+// saving blind, which could let the global pin come back (N26
+// engine-top-2#18).
+func TestUnpinWithUnreadableGlobalSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name, global string
+		failed       bool
+	}{
+		{name: "readable", global: "[agent_models]\nreviewer = \"gemini-x\"\n"},
+		{name: "unreadable", global: "[agent_models\n", failed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, nil)
+			dir := config.ConfigDir("")
+			require.NoError(t, os.MkdirAll(dir, 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tc.global), 0o600))
+			saved := w.saveAgentModel("reviewer", "")
+			if tc.failed {
+				assert.ErrorContains(t, saved.Err, "reading the global settings")
+			} else {
+				assert.NoError(t, saved.Err)
+			}
+		})
+	}
+}

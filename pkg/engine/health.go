@@ -276,7 +276,9 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 	defer func() {
 		st := store.State()
 		st.LastCheck, st.LastCost, st.Skipped, st.Judged, st.Errors = time.Now(), costUSD, "", judged, failed
-		_ = store.SetState(st)
+		if err := store.SetState(st); err != nil {
+			w.warn("saving the health check's state: " + err.Error())
+		}
 	}()
 	if len(items) == 0 {
 		return 0, 0, nil

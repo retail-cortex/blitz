@@ -454,7 +454,9 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		skipped := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunSkipped,
 			Manual: o.Manual, Started: time.Now(), Error: api.ErrRunInProgress.Error()}
 		if !o.Manual { // a scheduled run that couldn't happen is worth a record
-			w.runLog.Append(skipped)
+			if err := w.runLog.Append(skipped); err != nil {
+				w.warn("recording the worker run: " + err.Error())
+			}
 			w.notifyRun(skipped)
 		}
 		return skipped, api.ErrRunInProgress
