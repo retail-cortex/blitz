@@ -216,6 +216,16 @@ func TestFix(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotSystemBwrap)
 		assert.Empty(t, f.ran)
 	})
+	// Linux's /tmp: anyone may write to it, but the sticky bit keeps what
+	// others own in it from being removed or replaced.
+	t.Run("in a sticky folder others can write", func(t *testing.T) {
+		f := newFakeSystem(t, "1", true, true, "sudo")
+		require.NoError(t, os.Chmod(filepath.Join(f.dir, "bin"), 0o777|os.ModeSticky))
+		run = func(cmd *exec.Cmd) error { f.ran = append(f.ran, cmd.Args); f.works = true; return nil }
+		_, err := Fix(context.Background(), Elevation{})
+		assert.NotErrorIs(t, err, ErrNotSystemBwrap)
+		assert.NotEmpty(t, f.ran, "the profile is installed")
+	})
 	t.Run("a bwrap the person owns", func(t *testing.T) {
 		f := newFakeSystem(t, "1", true, true, "sudo")
 		trustedOwner = func(uid uint32) bool { return uid == 0 }
