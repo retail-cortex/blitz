@@ -425,6 +425,11 @@ message DescribeConfigResponse {
 message ConfigChange {
   string path = 1;
   string model_error = 2;
+  // What the open workspaces the change touches (every one, for the global
+  // settings) couldn't take up, each "<folder>: <what>": settings that
+  // don't load, permission rules that can't be read (so aren't enforced),
+  // MCP servers that didn't start. Empty when all took it.
+  repeated string problems = 3;
 }
 
 // Request message for ConfigService.SetApiKey.

@@ -183,6 +183,34 @@ func (h sessionService) ExportSession(ctx context.Context, r req[pb.ExportSessio
 	return ok(&pb.ExportSessionResponse{Markdown: md})
 }
 
+// turn is the API's turn as the engine runs it, for RunTurn and
+// StartBackground alike: its images, its context, and the note of files
+// whose two versions sync kept (EN-63), told once, added to its prompt
+// (the transcript keeps what the person wrote).
+func (s *Server) turn(w *workspace, dir string, t *pb.Turn) (api.Turn, error) {
+	var imgs []*images.Image
+	for _, id := range t.ImageIds {
+		img, err := w.image(id)
+		if err != nil {
+			return api.Turn{}, err
+		}
+		imgs = append(imgs, img)
+	}
+	var added []api.ContextBlock
+	for _, c := range t.Context {
+		added = append(added, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+	}
+	prompt := t.Prompt
+	if note := s.conflictNote(dir); note != "" {
+		prompt = cmp.Or(prompt, t.Text) + "\n\n" + note
+	}
+	return api.Turn{
+		Text: t.Text, Prompt: prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
+		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
+		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command, Context: added,
+	}, nil
+}
+
 // RunTurn runs a turn and streams its events. Events are sent from one
 // goroutine at a time (the send lock), since the agent and approval
 // requests can produce them concurrently.
@@ -195,18 +223,9 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 	if t == nil {
 		return apiError(connect.CodeInvalidArgument, "INVALID_TURN", errors.New("turn is required"))
 	}
-	var imgs []*images.Image
-	for _, id := range t.ImageIds {
-		img, err := w.image(id)
-		if err != nil {
-			return err
-		}
-		imgs = append(imgs, img)
-	}
-
-	var added []api.ContextBlock
-	for _, c := range t.Context {
-		added = append(added, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+	turn, err := h.s.turn(w, r.Msg.Workspace, t)
+	if err != nil {
+		return err
 	}
 
 	var mu sync.Mutex
@@ -219,18 +238,8 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 		}
 	}
 	ctx = withSink(ctx, send)
-	// Files whose two versions sync kept, told once (EN-63); the
-	// transcript keeps what the person wrote.
-	prompt := t.Prompt
-	if note := h.s.conflictNote(r.Msg.Workspace); note != "" {
-		prompt = cmp.Or(prompt, t.Text) + "\n\n" + note
-	}
-	res, runErr := w.Run(ctx, r.Msg.SessionId, api.Turn{
-		Text: t.Text, Prompt: prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
-		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
-		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command, Context: added,
-		OnAccepted: func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) },
-	}, func(e api.Event) { send(eventMsg(e)) })
+	turn.OnAccepted = func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) }
+	res, runErr := w.Run(ctx, r.Msg.SessionId, turn, func(e api.Event) { send(eventMsg(e)) })
 
 	send(&pb.TurnEvent{Kind: &pb.TurnEvent_Finished{Finished: &pb.TurnFinished{
 		Output: res.Output, Before: usageMsg(res.Before), After: usageMsg(res.After), Leftover: res.Leftover, Error: errorInfo(runErr),

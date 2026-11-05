@@ -302,10 +302,12 @@ func (h sessionService) StartBackground(ctx context.Context, r req[pb.StartBackg
 	if t == nil || strings.TrimSpace(t.Text) == "" {
 		return nil, apiError(connect.CodeInvalidArgument, "INVALID_TURN", errors.New("a background run needs a prompt"))
 	}
-	run, err := h.s.startRun(w, api.Turn{
-		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, MaxTurns: int(t.MaxTurns),
-		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command,
-	})
+	// Every field a turn takes, as RunTurn's (spec_027 PAR-PAR-20).
+	turn, err := h.s.turn(w, r.Msg.Workspace, t)
+	if err != nil {
+		return nil, err
+	}
+	run, err := h.s.startRun(w, turn)
 	if err != nil {
 		return nil, err
 	}

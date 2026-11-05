@@ -1810,6 +1810,7 @@
     "desktop.file.hint": "TOML. Vérifié avant d'être enregistré. N'y mettez pas de clés d'API : définissez-les dans Fournisseurs et clés.",
     "desktop.file.revert": "Annuler les modifications",
     "desktop.file.saved": "Réglages enregistrés",
+    "desktop.file.saved_problems": "Enregistré, mais tout n'a pas pris effet : {problems}",
     "desktop.file.validate": "Valider",
     "desktop.file.valid": "Aucun problème trouvé.",
     "desktop.file.valid_stale": "Aucun problème trouvé (modifié depuis : validez de nouveau).",

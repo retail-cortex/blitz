@@ -193,6 +193,26 @@ func TestConfigServicePermissions(t *testing.T) {
 	fixed := *w.Config()
 	fixed.Permissions.Deny = nil
 	require.NoError(t, w.ReloadPermissions(&fixed))
+
+	// A global change the open workspace can't take up says so, not only
+	// in the log (SVC-55b).
+	described, err := cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{}))
+	require.NoError(t, err)
+	global, err := os.ReadFile(described.Msg.Path)
+	require.NoError(t, err)
+	for _, tc := range []struct{ name, text, says string }{
+		{"a rule that can't be read", "[permissions]\ndeny = [\"shell(re:[)\"]\n", "permission rules not reloaded"},
+		{"settings that don't load", "[permissions\n", "settings not loaded"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(described.Msg.Path, []byte(tc.text), 0o600))
+			defer func() { require.NoError(t, os.WriteFile(described.Msg.Path, global, 0o600)) }()
+			change := configService{s}.changed(ctx, "", described.Msg.Path)
+			require.Len(t, change.Problems, 1)
+			assert.Contains(t, change.Problems[0], w.Dir()+": "+tc.says)
+		})
+	}
+	assert.Empty(t, configService{s}.changed(ctx, "", described.Msg.Path).Problems)
 	assert.Equal(t, "global", got["shell(git push)"])
 	assert.Equal(t, "built-in", got["shell(ls)"])
 

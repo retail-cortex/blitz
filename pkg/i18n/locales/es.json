@@ -1810,6 +1810,7 @@
     "desktop.file.hint": "TOML. Se comprueba antes de guardarlo. No ponga claves de API aquí: defínalas en Proveedores y claves.",
     "desktop.file.revert": "Descartar cambios",
     "desktop.file.saved": "Configuración guardada",
+    "desktop.file.saved_problems": "Guardado, pero no todo surtió efecto: {problems}",
     "desktop.file.validate": "Validar",
     "desktop.file.valid": "No se encontraron problemas.",
     "desktop.file.valid_stale": "No se encontraron problemas (editado desde entonces: vuelva a validar).",

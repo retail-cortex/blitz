@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -109,7 +110,8 @@ func apiSettingsFromProto(a *pb.ApiProviderSettings) *config.APIProviderSettings
 }
 
 // changed reloads the open workspaces a change in scope dir touches (all of
-// them for the global settings) and reports the scope's model error.
+// them for the global settings) and reports the scope's model error, and
+// what any of them couldn't take up (spec_021 SVC-55b).
 func (h configService) changed(ctx context.Context, dir, path string) *pb.ConfigChange {
 	change := &pb.ConfigChange{Path: path}
 	h.s.models.forget() // keys or providers may differ now
@@ -121,17 +123,23 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 		}
 	}
 	h.s.mu.Unlock()
+	problem := func(w *workspace, what string, err error) {
+		slog.Warn(what, "workspace", w.Dir(), "error", err)
+		change.Problems = append(change.Problems, fmt.Sprintf("%s: %s: %v", w.Dir(), what, err))
+	}
 	for _, w := range ws {
 		cfg, err := config.LoadWorkspace(h.s.configDir, w.Dir())
-		if err == nil {
+		if err != nil {
+			problem(w, "settings not loaded", err)
+		} else {
 			// Rules first: a model error mustn't hide a rule change.
 			if perr := w.ReloadPermissions(cfg); perr != nil {
-				slog.Warn("permission rules not reloaded", "workspace", w.Dir(), "error", perr)
+				problem(w, "permission rules not reloaded", perr)
 			}
 			w.ReloadSearch(cfg)
 			w.ReloadWorkerPolicy(cfg)
 			if merr := w.ReloadMCP(ctx, cfg); merr != nil {
-				slog.Warn("MCP servers not reloaded", "workspace", w.Dir(), "error", merr)
+				problem(w, "MCP servers not reloaded", merr)
 			}
 			err = w.ReloadProviders(ctx, cfg)
 		}
@@ -139,6 +147,7 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 			change.ModelError = err.Error()
 		}
 	}
+	slices.Sort(change.Problems)
 	return change
 }
 

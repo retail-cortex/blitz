@@ -75,6 +75,11 @@ func TestBackgroundRuns(t *testing.T) {
 	_, err := c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: " "}}))
 	_, info := errorReason(t, err)
 	assert.Equal(t, "INVALID_TURN", info.Reason)
+	// Every field a turn takes is read, as RunTurn's: an image it names
+	// that the workspace doesn't have is refused, not dropped.
+	_, err = c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: "look", ImageIds: []string{"img-9"}}}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "UNKNOWN_IMAGE", info.Reason)
 
 	res, err := c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: "make a file\nwith more"}}))
 	require.NoError(t, err)

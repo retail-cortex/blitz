@@ -188,6 +188,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 ### 8.3 Session manager — P2, M
 **CC** agent view (`claude agents`, `--bg`, `attach`, `logs`, `stop`), cross-session messaging. **AG** Agent Manager inbox. **Blitz today:** the service holds sessions but only one turn view per client.
 - **PAR-PAR-20** ✅ *Done 2026-09-30 ([spec_032_background_agents](spec_032_background_agents.md) §10, BGA-60–67; [spec_024_desktop](spec_024_desktop.md) DSK-80b): background runs, not every client's turns — `blitz agents` lists the runs `--bg` started; a turn a client runs stays that client's.* `blitz agents` lists every running and waiting turn in the service across workspaces (state, cost, waiting for approval); `blitz --bg "<prompt>"` starts a turn in the service and returns; `blitz attach <id>` attaches the REPL to it; `blitz logs <id>`, `blitz stop <id>`. The desktop app shows the same as an inbox.
+- **PAR-PAR-20a** *2026-11-05 (scan N26-service#16: `StartBackground` dropped a turn's images, context, aside, accepted and fetch grants, and the note of files with both versions, EN-63).* A background run takes every field of its `Turn` as `RunTurn` does (one conversion, `Server.turn`), the EN-63 note included.
 
 ## 9. Terminal experience
 

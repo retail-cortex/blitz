@@ -1810,6 +1810,7 @@
     "desktop.file.hint": "TOML. Checked before it's saved. Keep API keys out of it: set them in Providers & keys.",
     "desktop.file.revert": "Revert",
     "desktop.file.saved": "Settings saved",
+    "desktop.file.saved_problems": "Saved, but not everything took effect: {problems}",
     "desktop.file.validate": "Validate",
     "desktop.file.valid": "No problems found.",
     "desktop.file.valid_stale": "No problems found (edited since: validate again).",
