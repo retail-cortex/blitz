@@ -49,9 +49,10 @@ func Read(in io.Reader) Request {
 	return r
 }
 
-// Answer gives the credential for host: ok false when there's none (Git
-// then tries its other helpers, or fails), or an error to say why.
-type Answer func(ctx context.Context, host string) (user, password string, ok bool, err error)
+// Answer gives the credential for host, asked over protocol (https or
+// http): ok false when there's none (Git then tries its other helpers, or
+// fails), or an error to say why.
+type Answer func(ctx context.Context, protocol, host string) (user, password string, ok bool, err error)
 
 // loopback reports whether host (with a port or not) is this computer.
 func loopback(host string) bool {
@@ -83,7 +84,7 @@ func Run(ctx context.Context, action string, in io.Reader, out io.Writer, answer
 	if req["protocol"] != "https" && (req["protocol"] != "http" || !loopback(req["host"])) {
 		return nil
 	}
-	user, password, ok, err := answer(ctx, req["host"])
+	user, password, ok, err := answer(ctx, req["protocol"], req["host"])
 	if err != nil || !ok {
 		return err
 	}

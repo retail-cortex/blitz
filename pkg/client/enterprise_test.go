@@ -113,7 +113,7 @@ func TestOrganizationUnreachable(t *testing.T) {
 	assert.Error(t, err)
 	_, _, err = c.OpenOrgWorkspace(ctx, "x")
 	assert.Error(t, err)
-	_, _, _, err = c.GitCredential(ctx, "x")
+	_, _, _, err = c.GitCredential(ctx, "https", "x")
 	assert.Error(t, err)
 
 	// The organization's jobs, usage and catalog (EN-24, EN-34, EN-36, EN-42, EN-43).

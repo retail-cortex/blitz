@@ -118,7 +118,6 @@ edges: [{from: ask, to: save}]
 	require.NoError(t, err)
 	require.Len(t, list.Msg.Tasks, 1)
 	assert.Equal(t, "timer", list.Msg.Tasks[0].Kind)
-	assert.NotNil(t, list.Msg.Tasks[0].FireAt)
 	assert.Equal(t, "NOT_ANSWERABLE", reason(t, unary(c.workspaces.AnswerHumanTask, &pb.AnswerHumanTaskRequest{Workspace: dir, TaskId: list.Msg.Tasks[0].Id})))
 	s.resumeDueTimers(ctx)
 	assert.NoFileExists(t, filepath.Join(dir, "out", "later.md"), "not due yet")

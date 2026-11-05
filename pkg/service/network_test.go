@@ -204,14 +204,12 @@ func TestNetworkCheck(t *testing.T) {
 	assert.NoError(t, n.check(), "a certificate callback will do")
 }
 
-// guard puts the caller in the request's context, and answers refusals
-// with a JSON error.
+// guard lets through the callers Auth knows and Authz allows, and answers
+// refusals with a JSON error.
 func TestGuard(t *testing.T) {
 	n := &Network{Auth: tokens{"ana": {ID: "u1", Roles: []string{"member"}}}, Authz: readers{}}
-	var seen Caller
-	h := n.guard(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		seen, _ = CallerFrom(r.Context())
-	}))
+	var reached bool
+	h := n.guard(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }))
 	cases := map[string]struct {
 		token, path string
 		status      int
@@ -225,7 +223,7 @@ func TestGuard(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			seen = Caller{}
+			reached = false
 			req := httptest.NewRequest(http.MethodPost, c.path, nil)
 			if c.token != "" {
 				req.Header.Set("Authorization", "Bearer "+c.token)
@@ -234,16 +232,14 @@ func TestGuard(t *testing.T) {
 			h.ServeHTTP(rec, req)
 			assert.Equal(t, c.status, rec.Code)
 			if c.status == http.StatusOK {
-				assert.Equal(t, "u1", seen.ID)
+				assert.True(t, reached)
 				return
 			}
-			assert.Empty(t, seen.ID, "the handler wasn't reached")
+			assert.False(t, reached, "the handler wasn't reached")
 			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 			assert.Contains(t, rec.Body.String(), c.body)
 		})
 	}
-	_, ok := CallerFrom(context.Background())
-	assert.False(t, ok)
 }
 
 // The program's own routes answer without sign-in; every other path is

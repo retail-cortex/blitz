@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,6 +65,7 @@ type Server struct {
 	act       activity       // requests served, for IdleFor
 	signins   signin.Runner  // providers' sign-ins, one per provider at a time
 	ent       enterpriseConn // the organization's service (spec_053_enterprise)
+	upkeep    upkeep         // health checks and reflections going
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -101,6 +103,7 @@ type workspace struct {
 func New(open Opener, opts ...Option) *Server {
 	s := &Server{open: open, version: "dev", started: time.Now(), program: programFile(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
 	s.act.last = s.started
+	s.upkeep.ctx, s.upkeep.cancel = context.WithCancel(context.Background())
 	for _, o := range opts {
 		o(s)
 	}
@@ -110,7 +113,7 @@ func New(open Opener, opts ...Option) *Server {
 // Handler serves every service.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	limit := connect.WithReadMaxBytes(maxRequestBytes)
+	limit := connect.WithHandlerOptions(connect.WithReadMaxBytes(maxRequestBytes), connect.WithInterceptors(reasons{}))
 	mux.Handle(pb.NewSessionServiceHandler(sessionService{s}, limit))
 	mux.Handle(pb.NewWorkspaceServiceHandler(workspaceService{s}, limit))
 	mux.Handle(pb.NewWorkerServiceHandler(workerService{s}, limit))
@@ -135,6 +138,7 @@ func (s *Server) Close() error {
 	s.ent.mu.Unlock()
 	s.stopRuns()
 	s.stopEvals()
+	s.stopUpkeep()
 	s.mu.Lock()
 	open := s.workspaces
 	s.workspaces = map[string]*workspace{}
@@ -400,6 +404,55 @@ func toAPI(err error) error {
 		return connect.NewError(connect.CodeCanceled, err)
 	}
 	return apiError(connect.CodeInternal, "INTERNAL", err)
+}
+
+// reasons gives every error a handler returns its ErrorInfo (SVC-30): an
+// error that isn't a Connect error goes through toAPI, and a Connect error
+// with no ErrorInfo gets one, its reason its code's name (INVALID_ARGUMENT,
+// INTERNAL, ...). A call cancelled or out of time is left as it is, so a
+// client reads it as its context's own error.
+type reasons struct{}
+
+func (reasons) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
+		res, err := next(ctx, r)
+		return res, withReason(err)
+	}
+}
+
+func (reasons) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return next
+}
+
+func (reasons) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		return withReason(next(ctx, conn))
+	}
+}
+
+// withReason is err with its ErrorInfo, as reasons gives it.
+func withReason(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		err = toAPI(err)
+		if !errors.As(err, &ce) {
+			return err
+		}
+	}
+	if ce.Code() == connect.CodeCanceled || ce.Code() == connect.CodeDeadlineExceeded {
+		return ce
+	}
+	for _, d := range ce.Details() {
+		if v, derr := d.Value(); derr == nil {
+			if _, ok := v.(*pb.ErrorInfo); ok {
+				return ce
+			}
+		}
+	}
+	return apiError(ce.Code(), strings.ToUpper(ce.Code().String()), errors.New(ce.Message()))
 }
 
 // errorInfo is err as an ErrorInfo message, for errors reported inside a

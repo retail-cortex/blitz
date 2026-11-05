@@ -65,9 +65,6 @@ func humanTaskMsg(r engine.FlowRecord, t engine.FlowTask) *pb.HumanTask {
 		data, _ := json.Marshal(t.Form.Messages(t.ID))
 		m.A2UiJson = string(data)
 	}
-	if !t.FireAt.IsZero() {
-		m.FireAt = timestamppb.New(t.FireAt)
-	}
 	return m
 }
 

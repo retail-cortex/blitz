@@ -141,8 +141,9 @@ func TestEnterpriseJourney(t *testing.T) {
 		require.True(t, ok)
 		defer end()
 		_, _, err := signIn(false)
-		_, info := errorReason(t, err)
+		code, info := errorReason(t, err)
 		assert.Equal(t, "SIGN_IN_RUNNING", info.Reason)
+		assert.Equal(t, connect.CodeAlreadyExists, code, "as a provider's")
 	})
 	t.Run("refused", func(t *testing.T) {
 		idp.IDToken = "for-someone-else"
@@ -335,6 +336,7 @@ func TestEnterpriseBrandingAndTerms(t *testing.T) {
 	t.Run("errors from the service", func(t *testing.T) {
 		assert.Equal(t, "UNREACHABLE", errorInfo(enterpriseError(errors.New("connection refused"))).GetReason())
 		assert.Equal(t, "TERMS_REQUIRED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden, Code: "terms_required"})).GetReason())
+		assert.Equal(t, "REFUSED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden})).GetReason(), "a refusal with no code")
 	})
 }
 
@@ -486,6 +488,14 @@ func TestOrgWorkspaces(t *testing.T) {
 	other, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: "github.com"}))
 	require.NoError(t, err)
 	assert.False(t, other.Msg.Ok)
+	for _, tc := range []struct {
+		protocol string
+		ok       bool
+	}{{"http", true}, {"https", false}, {"", true}} { // the test service is http://
+		got, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://"), Protocol: tc.protocol}))
+		require.NoError(t, err)
+		assert.Equal(t, tc.ok, got.Msg.Ok, "asked over %q", tc.protocol)
+	}
 	_, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
 	require.NoError(t, err)
 	out, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://")}))
@@ -773,6 +783,13 @@ func TestServiceJobs(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(home, "Downloads", "sales by week (2).csv"))
 	require.NoError(t, err)
 	assert.Equal(t, "w,s\n", string(data))
+	// Larger than a run's file may be: never saved cut off (EN-42a).
+	maxSave = 3
+	_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: files.Msg.Files[1].Urn}))
+	maxSave = 100 << 20
+	_, info = errorReason(t, err)
+	assert.Equal(t, "UPLOAD_TOO_LARGE", info.Reason)
+	assert.NoFileExists(t, filepath.Join(home, "Downloads", "sales by week (3).csv"), "nothing left half-saved")
 	// Nowhere to save it: Downloads is a file.
 	t.Setenv("HOME", t.TempDir())
 	newHome, _ := os.UserHomeDir()
@@ -823,8 +840,7 @@ func TestServiceJobs(t *testing.T) {
 	org.RunChanges <- enterprisetest.RunChange{Run: run, Job: job, Workspace: "plans", Status: "succeeded"}
 	require.True(t, watch.Receive(), watch.Err())
 	require.NotNil(t, watch.Msg().Change, "the odd one isn't sent")
-	assert.Equal(t, "succeeded", watch.Msg().Change.Status)
-	assert.Equal(t, plans, watch.Msg().Change.Dir)
+	assert.Equal(t, job, watch.Msg().Change.JobId, "the job whose runs to ask for again")
 	// The service's stream drops: followed again, with the list as it is.
 	defer func(d time.Duration) { watchRunsRetry = d }(watchRunsRetry)
 	watchRunsRetry = 20 * time.Millisecond
@@ -986,6 +1002,50 @@ func TestShareWithOrganization(t *testing.T) {
 		assert.False(t, made, "nothing made")
 	})
 
+	// A key in changes not yet committed: refused before they're
+	// committed, so nothing is left in the history (a new folder isn't
+	// left a repository either).
+	t.Run("a key not yet committed", func(t *testing.T) {
+		repo := t.TempDir()
+		git(repo, "init", "-q")
+		require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("Hello.\n"), 0o644))
+		git(repo, "add", "-A")
+		git(repo, "commit", "-q", "-m", "first")
+		head := git(repo, "rev-parse", "HEAD")
+		plain := t.TempDir()
+		cases := []struct {
+			name, dir, file string
+			check           func(t *testing.T)
+		}{
+			{"an untracked file", repo, ".env", func(t *testing.T) {
+				assert.Equal(t, head, git(repo, "rev-parse", "HEAD"), "no commit made")
+				assert.Equal(t, "?? .env", git(repo, "status", "--porcelain"))
+			}},
+			{"a changed file", repo, "README.md", func(t *testing.T) {
+				assert.Equal(t, head, git(repo, "rev-parse", "HEAD"), "no commit made")
+			}},
+			{"a folder that isn't a repository", plain, "config.py", func(t *testing.T) {
+				assert.NoDirExists(t, filepath.Join(plain, ".git"), "left as it was")
+			}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				require.NoError(t, os.WriteFile(filepath.Join(tc.dir, tc.file), []byte("KEY = 'AKIAIOSFODNN7EXAMPLE'\n"), 0o644))
+				defer git(repo, "checkout", "-q", "--", "README.md")
+				_, err := share(tc.dir, "Unsaved", false)
+				_, info := errorReason(t, err)
+				assert.Equal(t, "SECRETS_FOUND", info.Reason)
+				assert.Contains(t, err.Error(), tc.file+":1")
+				tc.check(t)
+				require.NoError(t, os.Remove(filepath.Join(tc.dir, tc.file)))
+			})
+		}
+		org.Mu.Lock()
+		_, made := org.Workspaces["unsaved"]
+		org.Mu.Unlock()
+		assert.False(t, made, "nothing made")
+	})
+
 	t.Run("inside another repository", func(t *testing.T) {
 		outer := t.TempDir()
 		git(outer, "init", "-q")
@@ -1074,21 +1134,34 @@ func TestShareWithOrganization(t *testing.T) {
 			}
 			return dir
 		}
-		// A long history it can't check all of: nothing shared (N26
-		// safety-enterprise#9).
+		// Too many files to check, in its changes or its history: nothing
+		// shared, nothing committed (EN-66, N26 safety-enterprise#9).
 		defer func(n int, size int64) { maxShareScan, largeShareFile = n, size }(maxShareScan, largeShareFile)
 		maxShareScan = 1
-		long := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
-		_, err := share(long, "Long", false)
-		_, unchecked := errorReason(t, err)
-		assert.Equal(t, "SECRETS_UNCHECKED", unchecked.Reason)
-		assert.ErrorContains(t, err, "more than 1 files")
-
-		// A large file, and a remote called organization already there.
-		maxShareScan, largeShareFile = 50_000, 4
 		big := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
 		git(big, "init", "-q")
 		git(big, "remote", "add", "organization", "https://old.example/x.git")
+		_, err := share(big, "Big", false)
+		code, info := errorReason(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, code)
+		assert.Equal(t, "SECRETS_UNCHECKED", info.Reason)
+		assert.Equal(t, "1", info.Metadata["max_files"])
+		assert.ErrorContains(t, err, "more than 1 files")
+		_, noHead := exec.Command("git", "-C", big, "rev-parse", "--verify", "-q", "HEAD").Output()
+		assert.Error(t, noHead, "nothing committed")
+		long := folder(map[string]string{"a.md": "a"})
+		git(long, "init", "-q")
+		git(long, "add", "-A")
+		git(long, "commit", "-q", "-m", "first")
+		require.NoError(t, os.WriteFile(filepath.Join(long, "b.md"), []byte("b"), 0o644))
+		git(long, "add", "-A")
+		git(long, "commit", "-q", "-m", "second")
+		_, err = share(long, "Long", false)
+		_, info = errorReason(t, err)
+		assert.Equal(t, "SECRETS_UNCHECKED", info.Reason, "a history past the limit")
+
+		// A large file, and a remote called organization already there.
+		maxShareScan, largeShareFile = 50_000, 4
 		made, err := share(big, "Big", false)
 		require.NoError(t, err)
 		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "data.csv is 0 MB")
@@ -1099,12 +1172,27 @@ func TestShareWithOrganization(t *testing.T) {
 		_, err = share(folder(map[string]string{"a.md": "a"}), "Big", false)
 		assert.Error(t, err)
 
-		// A push the service refuses.
+		// A push the service refuses: the folder is shared all the same,
+		// and sent as it syncs; sharing it again is refused.
 		t.Setenv("BLITZ_TEST_TOKEN", "not a token")
-		_, err = share(folder(map[string]string{"b.md": "b"}), "Refused", false)
-		_, info := errorReason(t, err)
+		refused := folder(map[string]string{"b.md": "b"})
+		_, err = share(refused, "Refused", false)
+		_, info = errorReason(t, err)
 		assert.Equal(t, "PUSH_FAILED", info.Reason)
+		assert.Equal(t, "refused", info.Metadata["handle"])
+		assert.Equal(t, refused, sharedFor(org.URL)["refused"].Dir, "recorded before it's sent")
 		t.Setenv("BLITZ_TEST_TOKEN", token)
+		_, err = share(refused, "Refused", false)
+		_, info = errorReason(t, err)
+		assert.Equal(t, "ALREADY_SHARED", info.Reason)
+		require.Eventually(t, func() bool {
+			_, err := c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: refused}))
+			if err != nil {
+				return false
+			}
+			out, _ := exec.Command("git", "-C", org.Repo("refused"), "show", "main:b.md").Output()
+			return string(out) == "b"
+		}, 10*time.Second, 50*time.Millisecond, "sent by its sync")
 
 		// The record of shared folders can't be read.
 		require.NoError(t, os.WriteFile(sharedPath(), []byte("not JSON"), 0o600))
@@ -1213,6 +1301,35 @@ func TestPublishToOrganization(t *testing.T) {
 	_, err = publish()
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
+	// A key in what would be published, in a skill's script (the catalog's
+	// own check reads only the items): nothing goes (EN-36a).
+	leaky := filepath.Join(ws, ".agents", "skills", "go", "deploy.sh")
+	require.NoError(t, os.WriteFile(leaky, []byte("#!/bin/sh\nKEY='AKIAIOSFODNN7EXAMPLE' make deploy\n"), 0o644))
+	_, err = publish(&pb.PublishItem{Kind: "skill", Name: "go"})
+	_, info = errorReason(t, err)
+	assert.Equal(t, "SECRETS_FOUND", info.Reason)
+	assert.Contains(t, err.Error(), ".agents/skills/go/deploy.sh:2")
+	require.NoError(t, os.Remove(leaky))
+
+	// The workspace named as every workspace call's is: never "" (blitzd's
+	// own folder) or a relative one.
+	for _, bad := range []string{"", "relative"} {
+		calls := map[string]func() error{
+			"ListPublishable": func() error {
+				_, err := c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: bad}))
+				return err
+			},
+			"PublishToOrganization": func() error {
+				_, err := c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: bad, Items: []*pb.PublishItem{{Kind: "agent", Name: "writer"}}}))
+				return err
+			},
+		}
+		for name, call := range calls {
+			_, info := errorReason(t, call())
+			assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "%s %q", name, bad)
+		}
+	}
+
 	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go"})
 	require.NoError(t, err)
 	assert.Equal(t, "open", made.Msg.Review.State)
@@ -1320,6 +1437,14 @@ func TestOrgItems(t *testing.T) {
 	_, err = copyItem("rule", "style")
 	_, info = errorReason(t, err)
 	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
+	for _, bad := range []string{"", "relative"} {
+		_, err = c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: bad, Kind: "rule", Name: "style"}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "copied into %q", bad)
+		_, err = c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: bad}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "listed for %q", bad)
+	}
 
 	// How the person hears of their jobs' runs (JB-31).
 	notices, err := c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))

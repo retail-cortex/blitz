@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -81,12 +83,13 @@ func TestJobFromEnv(t *testing.T) {
 	assert.Contains(t, resumePrompt(j), "denied your request (run_shell_command: make deploy). They said: \"Not today.\"")
 	assert.Equal(t, []string{ws, job, run}, j.Artifacts.IDs)
 	for name, c := range map[string]struct{ k, v, err string }{
-		"not a person's ID":    {envRunAs, "ana", "isn't a person's ID"},
-		"not a name":           {envArtifacts, "artifacts", "isn't this run's artifacts"},
-		"another run's":        {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job + ":" + job, "isn't this run's artifacts"},
-		"a job's, not a run's": {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job, "isn't this run's artifacts"},
-		"an answer of neither": {envAnswer, "maybe", "approve or deny"},
-		"no request answered":  {envRequest, "{}", "isn't the request answered"},
+		"not a person's ID":            {envRunAs, "ana", "isn't a person's ID"},
+		"not a name":                   {envArtifacts, "artifacts", "isn't this run's artifacts"},
+		"another run's":                {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job + ":" + job, "isn't this run's artifacts"},
+		"a job's, not a run's":         {envArtifacts, "urn:blitz:artifacts:" + ws + ":" + job, "isn't this run's artifacts"},
+		"an answer of neither":         {envAnswer, "maybe", "approve or deny"},
+		"resumed by a service too old": {envArtifacts, "", "too old to resume"},
+		"no request answered":          {envRequest, "{}", "isn't the request answered"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := JobFromEnv(with(c.k, c.v))
@@ -106,6 +109,9 @@ func TestRunJob(t *testing.T) {
 	p := enterprisetest.NewProvider(t)
 	s := enterprisetest.NewService(t, p.URL)
 	s.AddWorkspace(t, "plans", "Plans", "owner")
+	// A run's files: fewer than the service's 1,000, to fill them quickly.
+	defer func(n int) { maxRunFiles = n }(maxRunFiles)
+	maxRunFiles, s.MaxRunFiles = 30, 30
 	git := func(dir string, args ...string) string {
 		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
 		cmd.Dir = dir
@@ -196,7 +202,7 @@ func TestRunJob(t *testing.T) {
 	t.Run("more files than a run keeps, and one it can't read", func(t *testing.T) {
 		crowd := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
 			out := cfg.Sandbox.AllowedPaths[len(cfg.Sandbox.AllowedPaths)-1]
-			for i := range maxKeep + 1 {
+			for i := range maxRunFiles {
 				require.NoError(t, os.WriteFile(filepath.Join(out, fmt.Sprintf("f%04d.txt", i)), nil, 0o600))
 			}
 			require.NoError(t, os.WriteFile(filepath.Join(out, "a-secret.txt"), []byte("x"), 0o000))
@@ -205,8 +211,12 @@ func TestRunJob(t *testing.T) {
 		require.NoError(t, RunJob(ctx, job("r11", "digest"), JobOptions{Config: t.TempDir(), Open: crowd}), "its run still succeeds")
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
-		assert.Contains(t, s.Ends["r11"]["note"], "more than 999 files in out/")
-		assert.Contains(t, s.Ends["r11"]["note"], "permission denied")
+		note, _ := s.Ends["r11"]["note"].(string)
+		assert.Regexp(t, `more than \d+ files in out/ \(a run keeps 30, its log and session among them\)`, note)
+		assert.Contains(t, note, "permission denied")
+		assert.NotContains(t, note, "too_many", "never more than the service keeps")
+		assert.NotContains(t, note, "session/", "its session kept")
+		assert.LessOrEqual(t, len(s.Kept["r11"]), maxRunFiles, "never more than the service keeps")
 		assert.Contains(t, s.Kept["r11"], "events.jsonl", "its log still kept")
 	})
 
@@ -241,6 +251,20 @@ func TestRunJob(t *testing.T) {
 		defer s.Mu.Unlock()
 		return s.Ends[run]
 	}
+
+	t.Run("a run its time limit stops", func(t *testing.T) {
+		j := job("r12", "digest")
+		j.Deadline = time.Now().Add(2 * time.Second)
+		slow := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+			o.Model = waiting{}
+			return engine.Open(ctx, cfg, o)
+		}
+		err := RunJob(ctx, j, JobOptions{Config: t.TempDir(), Open: slow})
+		assert.ErrorContains(t, err, "ran past its time limit")
+		end := ended("r12")
+		assert.Equal(t, "stopped", end["status"])
+		assert.Equal(t, "it ran past its time limit", end["note"], "said why, not the engine's error")
+	})
 
 	t.Run("a job that doesn't read", func(t *testing.T) {
 		assert.ErrorContains(t, RunJob(ctx, job("r5", "odd"), JobOptions{Config: t.TempDir(), Open: open(false)}), `runs_on "moon"`)
@@ -340,6 +364,9 @@ func TestRunJobPauses(t *testing.T) {
 	p := enterprisetest.NewProvider(t)
 	s := enterprisetest.NewService(t, p.URL)
 	s.AddWorkspace(t, "plans", "Plans", "owner")
+	// A run's files: fewer than the service's 1,000, to fill them quickly.
+	defer func(n int) { maxRunFiles = n }(maxRunFiles)
+	maxRunFiles, s.MaxRunFiles = 30, 30
 	git := func(dir string, args ...string) string {
 		cmd := exec.Command("git", append([]string{"-c", "user.name=Ana", "-c", "user.email=ana@acme.com"}, args...)...)
 		cmd.Dir = dir
@@ -382,8 +409,16 @@ func TestRunJobPauses(t *testing.T) {
 	}
 	root := t.TempDir()
 
-	// It asks to write a file: paused, its session kept.
-	require.NoError(t, RunJob(ctx, job("release"), JobOptions{Config: t.TempDir(), Root: root, Open: opener(create, genai.NewContentFromText("Waiting.", genai.RoleModel))}))
+	// It asks to write a file: paused, its session kept, even with out/
+	// as full as a run's files can be (JB-30).
+	crowded := func(ctx context.Context, cfg *config.Config, o engine.Options) (*engine.Workspace, error) {
+		out := cfg.Sandbox.AllowedPaths[len(cfg.Sandbox.AllowedPaths)-1]
+		for i := range maxRunFiles {
+			require.NoError(t, os.WriteFile(filepath.Join(out, fmt.Sprintf("f%04d.txt", i)), nil, 0o600))
+		}
+		return opener(create, genai.NewContentFromText("Waiting.", genai.RoleModel))(ctx, cfg, o)
+	}
+	require.NoError(t, RunJob(ctx, job("release"), JobOptions{Config: t.TempDir(), Root: root, Open: crowded}))
 	s.Mu.Lock()
 	end, kept := s.Ends[run], s.Kept[run]
 	s.Mu.Unlock()
@@ -399,6 +434,8 @@ func TestRunJobPauses(t *testing.T) {
 		}
 	}
 	assert.Positive(t, sessionFiles, "its session kept")
+	assert.Len(t, kept, maxRunFiles, "out/ filled what was left")
+	assert.Regexp(t, `the first \d+ were kept`, end["note"], "the files left out said")
 
 	// Approved: the same run goes on in its session, allowed that once.
 	resumed := job("release")
@@ -438,4 +475,37 @@ func TestRunJobPauses(t *testing.T) {
 	s.Mu.Lock()
 	assert.Equal(t, "succeeded", s.Ends[run]["status"], "refused, not paused")
 	s.Mu.Unlock()
+}
+
+// waiting is a model that never answers: it waits until its call is
+// cancelled, as one working on a long reply would.
+type waiting struct{}
+
+func (waiting) Name() string { return "waiting" }
+
+func (waiting) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		<-ctx.Done()
+		yield(nil, ctx.Err())
+	}
+}
+
+// The run's token goes to git in its environment, after any settings the
+// environment has already, never on its command line (which anyone on the
+// computer can read).
+func TestGitConfigEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		env  []string
+		want []string
+	}{
+		{"none before", []string{"HOME=/h"}, []string{"HOME=/h", "GIT_CONFIG_KEY_0=k", "GIT_CONFIG_VALUE_0=v", "GIT_CONFIG_COUNT=1"}},
+		{"one before", []string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=a", "GIT_CONFIG_VALUE_0=b"},
+			[]string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=a", "GIT_CONFIG_VALUE_0=b", "GIT_CONFIG_KEY_1=k", "GIT_CONFIG_VALUE_1=v", "GIT_CONFIG_COUNT=2"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, gitConfigEnv(tc.env, "k", "v"))
+		})
+	}
 }

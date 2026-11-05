@@ -21,6 +21,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -35,13 +36,45 @@ import (
 // watchHealthEvery is how often WatchWorkspaceHealth looks again.
 var watchHealthEvery = 5 * time.Second
 
-// healthChecks are the checks going, their stop by workspace; and
-// healthProgress how far each is.
-var (
-	healthChecks   sync.Map // dir → context.CancelFunc
-	reflections    sync.Map // dir → true while a scheduled reflection runs
-	healthProgress sync.Map // dir → engine.HealthProgress
-)
+// upkeep is a server's own work beside its requests: health checks and
+// scheduled reflections, which Close stops and waits for before it closes
+// the workspaces they use.
+type upkeep struct {
+	ctx    context.Context // ended by Close
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	going  atomic.Int32 // checks and reflections running, for IdleFor
+	// checks are the checks going, their stop by workspace; and progress
+	// how far each is.
+	checks      sync.Map // dir → context.CancelFunc
+	reflections sync.Map // dir → true while a scheduled reflection runs
+	progress    sync.Map // dir → engine.HealthProgress
+}
+
+// goUpkeep runs f in the background on the server's upkeep context, and
+// is false once the server is closing (f isn't run).
+func (s *Server) goUpkeep(f func(ctx context.Context)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	s.upkeep.wg.Add(1)
+	s.upkeep.going.Add(1)
+	go func() {
+		defer s.upkeep.wg.Done()
+		defer s.upkeep.going.Add(-1)
+		f(s.upkeep.ctx)
+	}()
+	return true
+}
+
+// stopUpkeep stops the server's checks and reflections and waits for them
+// to end (the server is closing).
+func (s *Server) stopUpkeep() {
+	s.upkeep.cancel()
+	s.upkeep.wg.Wait()
+}
 
 func ts(t time.Time) *timestamppb.Timestamp {
 	if t.IsZero() {
@@ -91,38 +124,41 @@ func healthMsg(r engine.HealthReport, checking bool) *pb.WorkspaceHealth {
 	return m
 }
 
-func checking(dir string) bool {
-	_, ok := healthChecks.Load(dir)
+func (s *Server) checking(dir string) bool {
+	_, ok := s.upkeep.checks.Load(dir)
 	return ok
 }
 
 // withProgress is m with how far the workspace's check is.
-func withProgress(m *pb.WorkspaceHealth, dir string) *pb.WorkspaceHealth {
-	if v, ok := healthProgress.Load(dir); ok && m.Checking {
+func (s *Server) withProgress(m *pb.WorkspaceHealth, dir string) *pb.WorkspaceHealth {
+	if v, ok := s.upkeep.progress.Load(dir); ok && m.Checking {
 		p := v.(engine.HealthProgress)
 		m.Progress = &pb.HealthCheckProgress{Item: p.Item, Index: int32(p.Index), Total: int32(p.Total), CostUsd: p.CostUSD}
 	}
 	return m
 }
 
-// runCheck runs a check of w in the background, until it ends or is
-// stopped, its progress kept for the dashboard. It's false when a check
-// of w is going already.
-func runCheck(w *workspace, c engine.HealthCheck, scheduled bool) bool {
-	ctx, cancel := context.WithCancel(context.Background())
-	if _, busy := healthChecks.LoadOrStore(w.Dir(), cancel); busy {
+// runCheck runs a check of w in the background, until it ends, is
+// stopped or the server closes, its progress kept for the dashboard. It's
+// false when a check of w is going already, or the server is closing.
+func (s *Server) runCheck(w *workspace, c engine.HealthCheck, scheduled bool) bool {
+	ctx, cancel := context.WithCancel(s.upkeep.ctx)
+	if _, busy := s.upkeep.checks.LoadOrStore(w.Dir(), cancel); busy {
 		cancel()
 		return false
 	}
-	healthProgress.Store(w.Dir(), engine.HealthProgress{})
+	s.upkeep.progress.Store(w.Dir(), engine.HealthProgress{})
 	var cost float64
 	c.Starting = func(item string, index, total int) {
-		healthProgress.Store(w.Dir(), engine.HealthProgress{Item: item, Index: index, Total: total, CostUSD: cost})
+		s.upkeep.progress.Store(w.Dir(), engine.HealthProgress{Item: item, Index: index, Total: total, CostUSD: cost})
 	}
-	go func() {
-		defer healthChecks.Delete(w.Dir())
-		defer healthProgress.Delete(w.Dir())
-		defer cancel()
+	done := func() {
+		cancel()
+		s.upkeep.progress.Delete(w.Dir())
+		s.upkeep.checks.Delete(w.Dir())
+	}
+	started := s.goUpkeep(func(context.Context) {
+		defer done()
 		var err error
 		if scheduled {
 			err = w.ScheduledHealthCheck(ctx, c.Starting)
@@ -132,8 +168,11 @@ func runCheck(w *workspace, c engine.HealthCheck, scheduled bool) bool {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("health check", "workspace", w.Dir(), "scheduled", scheduled, "error", err)
 		}
-	}()
-	return true
+	})
+	if !started {
+		done()
+	}
+	return started
 }
 
 func checkScope(s *pb.HealthCheckScope) engine.HealthCheck {
@@ -145,7 +184,7 @@ func (h workspaceService) GetWorkspaceHealth(ctx context.Context, r req[pb.GetWo
 	if err != nil {
 		return nil, err
 	}
-	return ok(&pb.GetWorkspaceHealthResponse{Health: withProgress(healthMsg(w.Health(ctx), checking(w.Dir())), w.Dir())})
+	return ok(&pb.GetWorkspaceHealthResponse{Health: h.s.withProgress(healthMsg(w.Health(ctx), h.s.checking(w.Dir())), w.Dir())})
 }
 
 func (h workspaceService) WatchWorkspaceHealth(ctx context.Context, r req[pb.WatchWorkspaceHealthRequest], stream *connect.ServerStream[pb.WatchWorkspaceHealthResponse]) error {
@@ -157,7 +196,7 @@ func (h workspaceService) WatchWorkspaceHealth(ctx context.Context, r req[pb.Wat
 	tick := time.NewTicker(watchHealthEvery)
 	defer tick.Stop()
 	for {
-		m := withProgress(healthMsg(w.Health(ctx), checking(w.Dir())), w.Dir())
+		m := h.s.withProgress(healthMsg(w.Health(ctx), h.s.checking(w.Dir())), w.Dir())
 		at := m.At
 		m.At = nil // the time alone isn't a change
 		data, _ := json.Marshal(m)
@@ -192,14 +231,14 @@ func (h workspaceService) CheckWorkspaceHealth(ctx context.Context, r req[pb.Che
 	}
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if _, busy := healthChecks.LoadOrStore(w.Dir(), cancel); busy {
+	if _, busy := h.s.upkeep.checks.LoadOrStore(w.Dir(), cancel); busy {
 		return apiError(connect.CodeFailedPrecondition, "HEALTH_CHECK_RUNNING", engine.ErrHealthCheckRunning)
 	}
-	defer healthChecks.Delete(w.Dir())
-	defer healthProgress.Delete(w.Dir())
+	defer h.s.upkeep.checks.Delete(w.Dir())
+	defer h.s.upkeep.progress.Delete(w.Dir())
 	sc := checkScope(r.Msg.Scope)
 	sc.Starting = func(item string, index, total int) {
-		healthProgress.Store(w.Dir(), engine.HealthProgress{Item: item, Index: index, Total: total})
+		h.s.upkeep.progress.Store(w.Dir(), engine.HealthProgress{Item: item, Index: index, Total: total})
 	}
 	judged, cost, err := w.CheckHealth(cctx, sc, func(p engine.HealthProgress) {
 		m := &pb.CheckWorkspaceHealthResponse{Item: p.Item, Index: int32(p.Index), Total: int32(p.Total), Error: p.Error, CostUsd: p.CostUSD}
@@ -223,7 +262,7 @@ func (h workspaceService) StartHealthCheck(ctx context.Context, r req[pb.StartHe
 	if err != nil {
 		return nil, err
 	}
-	if !runCheck(w, checkScope(r.Msg.Scope), false) {
+	if !h.s.runCheck(w, checkScope(r.Msg.Scope), false) {
 		return nil, apiError(connect.CodeFailedPrecondition, "HEALTH_CHECK_RUNNING", engine.ErrHealthCheckRunning)
 	}
 	return ok(&pb.StartHealthCheckResponse{})
@@ -234,7 +273,7 @@ func (h workspaceService) StopHealthCheck(ctx context.Context, r req[pb.StopHeal
 	if err != nil {
 		return nil, err
 	}
-	if stop, ok := healthChecks.Load(w.Dir()); ok {
+	if stop, ok := h.s.upkeep.checks.Load(w.Dir()); ok {
 		stop.(context.CancelFunc)()
 	}
 	return ok(&pb.StopHealthCheckResponse{})
@@ -251,7 +290,7 @@ func (s *Server) healthDue() {
 		if w == nil || !w.HealthDue(now) {
 			continue
 		}
-		runCheck(w, engine.HealthCheck{}, true)
+		s.runCheck(w, engine.HealthCheck{}, true)
 	}
 }
 
@@ -267,18 +306,20 @@ func (s *Server) reflectDue() {
 		if w == nil {
 			continue
 		}
-		if _, busy := reflections.LoadOrStore(dir, true); busy {
+		if _, busy := s.upkeep.reflections.LoadOrStore(dir, true); busy {
 			continue
 		}
 		if !w.ReflectDue(now) {
-			reflections.Delete(dir)
+			s.upkeep.reflections.Delete(dir)
 			continue
 		}
-		go func() {
-			defer reflections.Delete(dir)
-			if err := w.ScheduledReflect(context.Background()); err != nil && !errors.Is(err, context.Canceled) {
+		if !s.goUpkeep(func(ctx context.Context) {
+			defer s.upkeep.reflections.Delete(dir)
+			if err := w.ScheduledReflect(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				slog.Warn("scheduled reflection", "workspace", dir, "error", err)
 			}
-		}()
+		}) {
+			s.upkeep.reflections.Delete(dir)
+		}
 	}
 }

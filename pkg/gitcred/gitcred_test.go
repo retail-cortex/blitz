@@ -25,7 +25,7 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	answer := func(_ context.Context, host string) (string, string, bool, error) {
+	answer := func(_ context.Context, protocol, host string) (string, string, bool, error) {
 		switch host {
 		case "blitz.acme.com", "127.0.0.1:8080", "localhost", "[::1]:9000":
 			return "blitz", "at-1", true, nil

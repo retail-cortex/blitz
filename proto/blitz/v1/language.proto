@@ -204,9 +204,9 @@ message CompletionItem {
   bool snippet = 7;
   // Other changes that come with it (an import).
   repeated TextEdit additional_edits = 8;
-  // The server's order and the text it filters by.
-  string sort_text = 9;
-  string filter_text = 10;
+  // Removed 2026-11-05 (scan N26-service#10: no client read it).
+  reserved 9, 10;
+  reserved "sort_text", "filter_text";
 }
 
 // Response message for LanguageService.Complete.

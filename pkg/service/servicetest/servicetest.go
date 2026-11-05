@@ -30,12 +30,9 @@ import (
 	"github.com/retail-cortex/blitz/pkg/service/server"
 )
 
-// Server is the service's API over workspaces the test opens.
-type Server = server.Server
-
 // New returns a service whose workspaces open, and whose Handler serves
 // the API, with open (typically a workspace on a mock model).
-func New(open func(ctx context.Context, dir string) (*engine.Workspace, error)) *Server {
+func New(open func(ctx context.Context, dir string) (*engine.Workspace, error)) *server.Server {
 	return server.New(open)
 }
 

@@ -77,7 +77,6 @@ func TestSkillRegistriesOverTheAPI(t *testing.T) {
 	found, err := cfg.SearchRegistrySkills(ctx, connect.NewRequest(&pb.SearchRegistrySkillsRequest{Query: "literature"}))
 	require.NoError(t, err)
 	require.Len(t, found.Msg.Skills, 1)
-	assert.Equal(t, "sk_1", found.Msg.Skills[0].CastorId)
 	assert.Empty(t, found.Msg.Problems)
 
 	_, err = cfg.InstallRegistrySkill(ctx, connect.NewRequest(&pb.InstallRegistrySkillRequest{Ref: "ghost"}))

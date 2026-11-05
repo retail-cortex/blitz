@@ -132,3 +132,10 @@ copy_to_bin(
         "//pkg/docx:__pkg__",
     ],
 )
+
+# The service's spec, whose SVC-30 lists the error reasons a client can
+# match: the service's test checks it against what the code sends.
+exports_files(
+    ["content/about/specs/spec_021_service.md"],
+    visibility = ["//pkg/service/server:__pkg__"],
+)

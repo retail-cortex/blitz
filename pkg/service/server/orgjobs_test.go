@@ -110,6 +110,18 @@ func TestWhyNotServiceJob(t *testing.T) {
 		assert.True(t, why("digest", p).Found)
 	})
 
+	t.Run("git failing isn't read as changes", func(t *testing.T) {
+		// The organization's remote isn't there: diff fails, which isn't
+		// "ahead" (EN-42a).
+		require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "origin", "elsewhere").Run())
+		defer func() {
+			require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "elsewhere", "origin").Run())
+		}()
+		got := why("ghost", "")
+		assert.Equal(t, "not_read", got.Reason)
+		assert.Contains(t, got.Detail, "origin/main", "git's own words")
+	})
+
 	t.Run("committed here but not pushed", func(t *testing.T) {
 		write("tidy", "runs_on: service")
 		require.NoError(t, exec.Command("git", "-C", dir, "add", "-A").Run())
@@ -462,4 +474,63 @@ func TestSaveOrgSyncRefusals(t *testing.T) {
 	_, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: "relative/nowhere\x00"}))
 	_, info := errorReason(t, err)
 	assert.Equal(t, "NOT_SYNCED", info.Reason)
+}
+
+// A shared folder is the same folder however it's spelled, links followed
+// (macOS's /var is /private/var), as the folder's sync finds it (EN-66a).
+func TestSamePath(t *testing.T) {
+	dir := t.TempDir()
+	real, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	cases := []struct {
+		name string
+		a, b string
+		same bool
+	}{
+		{"as given", dir, dir, true},
+		{"through a link", link, real, true},
+		{"unclean", dir + "/./", dir, true},
+		{"another", dir, t.TempDir(), false},
+		{"gone, compared as given", "/no/such/dir", "/no/such/dir/", true},
+		{"gone and another", "/no/such/dir", "/no/such/other", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.same, samePath(tc.a, tc.b))
+		})
+	}
+}
+
+// gitOut reads a refused sign-in from git's own words, in English
+// whatever the computer's language, and not from any "401" in a message
+// (EN-64).
+func TestGitOutSignedOut(t *testing.T) {
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="blitz"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(refusing.Close)
+	t.Setenv("LANGUAGE", "de")
+	t.Setenv("LC_ALL", "de_DE.UTF-8")
+	s := &Server{}
+	s.ent.gitHelper = `!f() { echo username=blitz; echo password=wrong; }; f`
+	repo := t.TempDir()
+	require.NoError(t, exec.Command("git", "-C", repo, "init", "-q").Run())
+	cases := []struct {
+		name      string
+		args      []string
+		signedOut bool
+	}{
+		{"refused by the service", []string{"ls-remote", refusing.URL + "/x.git"}, true},
+		{"a 401 in another failure", []string{"rev-parse", "--verify", "x401"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.gitOut(context.Background(), repo, tc.args...)
+			require.Error(t, err)
+			assert.Equal(t, tc.signedOut, errors.Is(err, orgsync.ErrSignedOut), "%v", err)
+		})
+	}
 }

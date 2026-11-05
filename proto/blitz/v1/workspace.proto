@@ -1350,8 +1350,9 @@ message RunSkillScriptResponse {
   bool timed_out = 4;
   // The sandbox it ran in.
   string sandbox = 5;
-  // Files it wrote to its output directory.
-  repeated string output_files = 6;
+  // Removed 2026-11-05 (scan N26-service#10: no client read it).
+  reserved 6;
+  reserved "output_files";
   // Why it didn't run, or failed to.
   string error = 7;
 }
@@ -3128,7 +3129,9 @@ message HumanTask {
   // task's), updateComponents and updateDataModel, its templates filled
   // from the run as the step started.
   string a2ui_json = 9;
-  google.protobuf.Timestamp fire_at = 10;
+  // Removed 2026-11-05 (scan N26-service#10: no client read it).
+  reserved 10;
+  reserved "fire_at";
   google.protobuf.Timestamp created = 11;
   // The chat its run's agent steps are turns in.
   string session_id = 12;
@@ -3736,7 +3739,9 @@ message ConnectorKind {
   // they name parameters ($1 or @name).
   map<string, string> queries_hint = 11;
   string queries_example = 12;
-  string placeholders = 13;
+  // Removed 2026-11-05 (scan N26-service#10: no client read it).
+  reserved 13;
+  reserved "placeholders";
   // builtin, global or workspace; its file ("" built in).
   string origin = 14;
   string path = 15;
