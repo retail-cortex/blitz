@@ -169,6 +169,18 @@ func TestBuildCountsARefusalOnce(t *testing.T) {
 	assert.Equal(t, "b.md", find(ev, ToolFailed, "create_file").Target)
 }
 
+// A refusal in dont-ask mode is a denial, said so (N26 engine-sub-1 #32).
+func TestBuildCountsDontAskRefusals(t *testing.T) {
+	log := []audit.Entry{
+		prompt(0, "s", "write it"), call(1, "s", "create_file", map[string]any{"path": "a.md"}),
+		{Time: at(1), Session: "s", Kind: audit.KindDenial, Tool: "create_file", Decision: "mode-dont-ask", Detail: "Create a.md"},
+	}
+	ev := Build(Inputs{Since: t0, Audit: log, Sessions: map[string]Session{"s": {}}})
+	require.Len(t, ev.Items, 1)
+	assert.Equal(t, Denied, ev.Items[0].Kind)
+	assert.Contains(t, ev.Items[0].Seen[0].Excerpt, "dont-ask")
+}
+
 func TestBuildGroupsRepeats(t *testing.T) {
 	var log []audit.Entry
 	for i := range 5 {

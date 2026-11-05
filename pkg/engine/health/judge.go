@@ -90,7 +90,7 @@ func Prompt(it Item, file string) string {
 	for _, line := range Rubrics[it.Kind] {
 		fmt.Fprintf(&b, "- %s\n", line)
 	}
-	b.WriteString("\nEvidence from the last 30 days:\n")
+	fmt.Fprintf(&b, "\nEvidence from the last %d days:\n", int(Window/(24*time.Hour)))
 	b.WriteString(Evidence(it))
 	if len(file) > maxFile {
 		file = file[:maxFile] + "\n[…cut]"
