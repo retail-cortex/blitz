@@ -19,7 +19,7 @@ Type words or `"a phrase"`: every term must match, word forms count (`indexing` 
 
 Search is local: nothing leaves your machine, unless you turn on either of these, which send your files to a model provider:
 
-- **Semantic search** (`search.embedding_model`, e.g. `gemini/text-embedding-004`, `openai/text-embedding-3-small` or `ollama/nomic-embed-text` to stay local): finds by meaning as well as words ("automobile" finds "car"). Each indexed passage is embedded once, and each query; `--mode keyword|semantic|hybrid` (or the switch in the desktop app) picks how a search ranks.
+- **Semantic search** (`search.embedding_model`, e.g. `gemini/text-embedding-004`, `openai/text-embedding-3-small` or `ollama/nomic-embed-text` to stay local): finds by meaning as well as words ("automobile" finds "car"). Each indexed passage is embedded once, and each query, with secrets redacted first; `--mode keyword|semantic|hybrid` (or the switch in the desktop app) picks how a search ranks.
 - **Summaries and tags** (`search.enrich = true`): a model describes each file in the background, up to `search.enrich_daily_limit` a day (default 200), skipping large, generated and vendored files and redacting secrets first. Results show the summary and tags, and a search finds a file by what it's about.
 
 A project's settings can't turn either on.

@@ -26,20 +26,25 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 )
 
 // SkillMetadata defines metadata stored in SKILL.md frontmatter: the Agent
 // Skills spec fields, plus Castor's skill definition fields (see
 // definition.go). Unknown keys are ignored, so skills written for other
-// tools still load.
+// tools still load, except where a typo would lower protection silently
+// (see unknownKeys).
 type SkillMetadata struct {
 	// Agent Skills spec.
 	Name          string            `yaml:"name"`
@@ -96,19 +101,15 @@ type Skill struct {
 
 // ParseSkillMD parses a SKILL.md document with YAML frontmatter.
 func ParseSkillMD(content []byte, path string) (*Skill, error) {
-	trimmed := bytes.TrimSpace(content)
-	if !bytes.HasPrefix(trimmed, []byte("---")) {
-		return nil, fmt.Errorf("SKILL.md missing starting frontmatter delimiter '---'")
-	}
-
-	rest := trimmed[3:]
-	idx := bytes.Index(rest, []byte("---"))
-	if idx == -1 {
+	// The front matter ends at a --- line, as Studio's editor reads it,
+	// not at a --- inside a value (N26 engine-sub-2#2).
+	frontmatterBytes, instructionBytes, ok := frontmatter.Split(content)
+	if !ok {
+		if !bytes.HasPrefix(bytes.TrimSpace(bytes.TrimPrefix(content, []byte("\ufeff"))), []byte("---")) {
+			return nil, fmt.Errorf("SKILL.md missing starting frontmatter delimiter '---'")
+		}
 		return nil, fmt.Errorf("SKILL.md missing closing frontmatter delimiter '---'")
 	}
-
-	frontmatterBytes := rest[:idx]
-	instructionBytes := bytes.TrimSpace(rest[idx+3:])
 
 	var meta SkillMetadata
 	if err := yaml.Unmarshal(frontmatterBytes, &meta); err != nil {
@@ -124,8 +125,115 @@ func ParseSkillMD(content []byte, path string) (*Skill, error) {
 		Content:       string(instructionBytes),
 		Path:          path,
 		Resources:     []string{},
-		Problems:      meta.Validate(),
+		Problems:      append(meta.Validate(), unknownKeys(frontmatterBytes)...),
 	}, nil
+}
+
+// unknownKeys are the problems with keys Blitz doesn't read where a typo
+// would lower protection without a word (spec_013 SK-10a): any inside
+// execution_hints, scripts and compiled_reference, which only Blitz and
+// Castor write (require_human_approval drops a tier 3 skill to the
+// policy's floor), and a top-level key one letter off one of theirs, or
+// differing in case, '-' or '_' or a plural (agent: [a] offers the skill
+// to every agent). Other unknown top-level keys are other tools' and
+// ignored; so is Claude Code's agent: with a single name.
+func unknownKeys(front []byte) []string {
+	var doc yaml.Node
+	if yaml.Unmarshal(front, &doc) != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	var probs []string
+	strict := func(label string, n *yaml.Node, t reflect.Type) {
+		if n.Kind != yaml.MappingNode {
+			return
+		}
+		known := yamlKeys(t)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if k := n.Content[i].Value; !known[k] {
+				probs = append(probs, fmt.Sprintf("%s: unknown key %q%s", label, k, didYouMean(k, known)))
+			}
+		}
+	}
+	top := doc.Content[0]
+	known := yamlKeys(reflect.TypeFor[SkillMetadata]())
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		k, v := top.Content[i].Value, top.Content[i+1]
+		switch k {
+		case "execution_hints":
+			strict(k, v, reflect.TypeFor[ExecutionHints]())
+		case "compiled_reference":
+			strict(k, v, reflect.TypeFor[CompiledReference]())
+		case "scripts":
+			if v.Kind == yaml.SequenceNode {
+				for j, sc := range v.Content {
+					strict(fmt.Sprintf("scripts[%d]", j), sc, reflect.TypeFor[ScriptDefinition]())
+				}
+			}
+		}
+		if known[k] || k == "agent" && v.Kind == yaml.ScalarNode {
+			continue
+		}
+		if hint := didYouMean(k, known); hint != "" {
+			probs = append(probs, fmt.Sprintf("unknown key %q%s", k, hint))
+		}
+	}
+	return probs
+}
+
+// yamlKeys are the YAML keys of struct type t's fields.
+func yamlKeys(t reflect.Type) map[string]bool {
+	out := map[string]bool{}
+	for f := range t.Fields() {
+		name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+		switch {
+		case f.Anonymous:
+			maps.Copy(out, yamlKeys(f.Type))
+		case name != "" && name != "-":
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// didYouMean is " (did you mean "k"?)" for the known key k is a near miss
+// of: the same but for case, '-', '_' or a plural, or one letter off.
+func didYouMean(k string, known map[string]bool) string {
+	norm := func(s string) string {
+		s = strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(s))
+		return strings.TrimSuffix(s, "s")
+	}
+	for _, c := range slices.Sorted(maps.Keys(known)) {
+		if norm(c) == norm(k) || len(c) >= 5 && editDistance(c, k) <= 1 {
+			return fmt.Sprintf(" (did you mean %q?)", c)
+		}
+	}
+	return ""
+}
+
+// editDistance is the edit distance between a and b, a swap of two
+// letters next to each other counting as one edit (agnets is agents).
+func editDistance(a, b string) int {
+	d := make([][]int, len(a)+1)
+	for i := range d {
+		d[i] = make([]int, len(b)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
+			}
+		}
+	}
+	return d[len(a)][len(b)]
 }
 
 // Matches returns true if the query matches the skill's name, description, or tags.

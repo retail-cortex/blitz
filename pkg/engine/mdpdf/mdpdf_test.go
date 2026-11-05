@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/ledongthuc/pdf"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -293,4 +294,16 @@ func TestMathAndHTMLPictures(t *testing.T) {
 	assert.Contains(t, text, `\sum`, "displayed maths as its LaTeX")
 	assert.Contains(t, text, "[image: gone]")
 	assert.Equal(t, 1, bytes.Count(res.PDF, []byte("/Subtype /Image")))
+}
+
+// The notes the PDF prints in place of a diagram or an image are in the
+// reader's language (N26 engine-sub-2#24).
+func TestRenderNotesInTheLocale(t *testing.T) {
+	tag, err := i18n.Default().Resolve("es")
+	require.NoError(t, err)
+	i18n.SetCurrent(i18n.Default().Localizer(tag))
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	_, text := render(t, "```mermaid\ngraph TD; A-->B\n```\n\n![a chart](missing.png)", Options{})
+	assert.Contains(t, text, "Diagrama: expórtalo")
+	assert.Contains(t, text, "[imagen: a chart]")
 }

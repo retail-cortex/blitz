@@ -21,13 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 
 	adksession "google.golang.org/adk/v2/session"
+
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 const eventsSuffix = ".events.jsonl"
@@ -236,15 +237,7 @@ func (p *PersistentService) AppendEvent(ctx context.Context, s adksession.Sessio
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return jsonl.Append(path, filePerm, line)
 }
 
 // Truncate keeps the first keep events of a session and drops the rest,
@@ -324,7 +317,9 @@ func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Sessi
 }
 
 // ReadEvents reads session id's stored event log from dir, for exports
-// (nil when it has none).
+// (nil when it has none). A line that doesn't parse (torn by a crash) is
+// skipped, as replay skips it (SES-21a), so a session that resumes also
+// exports.
 func ReadEvents(dir, id string) ([]*adksession.Event, error) {
 	if err := ValidateID(id); err != nil {
 		return nil, err
@@ -338,15 +333,14 @@ func ReadEvents(dir, id string) ([]*adksession.Event, error) {
 	}
 	defer f.Close()
 	var out []*adksession.Event
-	dec := json.NewDecoder(f)
-	for {
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 64<<20)
+	for sc.Scan() {
 		ev := new(adksession.Event)
-		if err := dec.Decode(ev); err != nil {
-			if errors.Is(err, io.EOF) {
-				return out, nil
-			}
-			return out, fmt.Errorf("event %d: %w", len(out)+1, err)
+		if line := bytes.TrimSpace(sc.Bytes()); len(line) == 0 || json.Unmarshal(line, ev) != nil {
+			continue
 		}
 		out = append(out, ev)
 	}
+	return out, sc.Err()
 }

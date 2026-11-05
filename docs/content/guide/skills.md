@@ -39,9 +39,11 @@ A skill is one of four kinds, from what its folder holds:
 
 `agents: [reviewer]` in the front matter offers a skill only to those agents.
 
+Keys Blitz doesn't know are ignored at the top level, so skills written for other tools load, but a misspelt key inside `execution_hints`, `scripts` or `compiled_reference`, or a top-level key one letter off Blitz's (`agent: [reviewer]`), is a problem shown with the skill, and its scripts don't run until it's fixed. The front matter ends at a line that is only `---`. When two folders hold a skill of the same name, the workspace's wins over yours, and a skill your organization locks wins over both, and over a plugin's (you're told).
+
 **Desktop:** **Studio › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
 
-**In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
+**In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does. `/skill-name` also holds the turn to the skill's tools (`allowed-tools`) when it names some, as a command's do; `\skill-name` and a skill the agent picks itself don't.
 
 ## Trigger phrases and scenarios
 

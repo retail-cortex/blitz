@@ -130,7 +130,7 @@ func TestDefinitionDetails(t *testing.T) {
 
 	s, err := ParseSkillMD([]byte("---\nname: x\nallowed_tools: Read, Bash\nexecution_hints: {timeout_seconds: -5}\nscripts:\n  - language: unspecified\n    inline_code: \"x\"\n---\n"), "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"Read", "Bash"}, s.AllowedToolsList(), "the legacy key is read when allowed-tools is unset")
+	assert.Equal(t, "Read, Bash", s.AllowedToolsLegacy, "the legacy key is read")
 	require.Len(t, s.Scripts, 1)
 	assert.Equal(t, LanguageUnspecified, s.Scripts[0].Language)
 	assert.Contains(t, s.Problems, "execution_hints: timeout_seconds can't be negative")
@@ -159,4 +159,60 @@ func TestEvaluateBlocks(t *testing.T) {
 	assert.Contains(t, all, "its content (none)")
 
 	assert.Empty(t, untrustedRoot(&Skill{}, []string{"/"}), "built-in skills have no root")
+}
+
+// The front matter ends at a --- line only, so a --- inside a value
+// keeps the keys after it (N26 engine-sub-2#2); Render quotes what needs
+// it, so Studio's file reads back as written.
+func TestFrontMatterEndsAtALine(t *testing.T) {
+	tests := map[string]string{
+		"--- inside a value": "---\nname: s\ndescription: Slides from notes --- fast\nagents: [writer]\nexecution_hints: {requires_human_approval: true}\n---\nBody.\n",
+		"a byte order mark":  "\ufeff---\nname: s\ndescription: Slides from notes --- fast\nagents: [writer]\nexecution_hints: {requires_human_approval: true}\n---\nBody.\n",
+	}
+	for name, doc := range tests {
+		t.Run(name, func(t *testing.T) {
+			s, err := ParseSkillMD([]byte(doc), "SKILL.md")
+			require.NoError(t, err)
+			assert.Equal(t, "Slides from notes --- fast", s.Description)
+			assert.Equal(t, []string{"writer"}, s.Agents)
+			assert.Equal(t, Tier3MandatoryApproval, s.DeclaredTier())
+			assert.Equal(t, "Body.", s.Content)
+		})
+	}
+	for _, desc := range []string{"Slides from notes --- fast", "--- leads", "two\n---\nlines", "true", "1.10", "null", "a: b"} {
+		t.Run("render "+desc, func(t *testing.T) {
+			data, err := Render(nil, Spec{Name: "s", Description: desc, Agents: []string{"writer", "yes"}, Instructions: "Body."})
+			require.NoError(t, err)
+			s, err := ParseSkillMD(data, "SKILL.md")
+			require.NoError(t, err, string(data))
+			assert.Equal(t, desc, s.Description, string(data))
+			assert.Equal(t, []string{"writer", "yes"}, s.Agents)
+			assert.Equal(t, "Body.", s.Content)
+		})
+	}
+}
+
+// A typo where Blitz would lose protection silently is a problem (which
+// keeps the skill's scripts from running); other tools' keys aren't
+// (N26 engine-sub-2#3).
+func TestUnknownKeysAreProblems(t *testing.T) {
+	tests := []struct {
+		name, front string
+		want        []string
+	}{
+		{"execution_hints typo", "execution_hints:\n  require_human_approval: true\n", []string{`execution_hints: unknown key "require_human_approval" (did you mean "requires_human_approval"?)`}},
+		{"scripts typo", "scripts:\n  - name: a\n    language: python\n    relative_path: scripts/a.py\n    writes_workspace: true\n", []string{`scripts[0]: unknown key "writes_workspace"`}},
+		{"compiled_reference typo", "compiled_reference: {sha256: x}\n", []string{`compiled_reference: unknown key "sha256"`}},
+		{"agents misspelt", "agent: [reviewer]\n", []string{`unknown key "agent" (did you mean "agents"?)`}},
+		{"one letter off", "trigger_phrase: [x]\nagnets: [a]\n", []string{`unknown key "trigger_phrase" (did you mean "trigger_phrases"?)`, `unknown key "agnets" (did you mean "agents"?)`}},
+		{"Claude Code's agent", "agent: Explore\ncontext: fork\nmodel: opus\nuser-invocable: true\n", nil},
+		{"known keys", "agents: [a]\nexecution_hints: {hitl_tier: tier_2, writes_workspace: true, custom_hints: {network: true}}\n", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := ParseSkillMD([]byte("---\nname: s\n"+tc.front+"---\n"), "SKILL.md")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, s.Problems)
+		})
+	}
 }

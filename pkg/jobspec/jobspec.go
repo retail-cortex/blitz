@@ -140,21 +140,31 @@ func RunsOn(s string) (string, error) {
 }
 
 // Split is a WORKER.md's frontmatter (between lines of ---) and its body.
+// The front matter ends at the next line that is only --- (trailing
+// spaces and a CR allowed), never at a --- inside a value, as SKILL.md's
+// does (the engine's frontmatter.Split, which this package can't import).
 func Split(data []byte) (fm, body []byte, err error) {
 	s := bytes.TrimLeft(bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}), " \t\r\n") // a byte-order mark, then blank lines
-	if !bytes.HasPrefix(s, []byte("---")) {
+	first, rest, _ := bytes.Cut(s, []byte("\n"))
+	if !fence(first) {
 		return nil, nil, errors.New("missing frontmatter: start with a line of ---")
 	}
-	s = s[3:]
-	end := bytes.Index(s, []byte("\n---"))
-	if end < 0 {
-		return nil, nil, errors.New("missing the --- line that ends the frontmatter")
+	for off := 0; ; {
+		line, _, more := bytes.Cut(rest[off:], []byte("\n"))
+		if fence(line) {
+			if body = rest[off+len(line):]; more {
+				body = body[1:]
+			} else {
+				body = nil
+			}
+			return rest[:off], body, nil
+		}
+		if !more {
+			return nil, nil, errors.New("missing the --- line that ends the frontmatter")
+		}
+		off += len(line) + 1
 	}
-	body = s[end+4:]
-	if i := bytes.IndexByte(body, '\n'); i >= 0 {
-		body = body[i+1:]
-	} else {
-		body = nil
-	}
-	return s[:end], body, nil
 }
+
+// fence reports whether line is a --- line.
+func fence(line []byte) bool { return string(bytes.TrimRight(line, " \t\r")) == "---" }

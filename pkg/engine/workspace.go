@@ -292,12 +292,20 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.skills.SwitchOff(off)
 	}
 	if cfg.Skills.Enabled {
+		// The organization's locked skills win over any other of their
+		// name, a plugin's (loaded later) included (spec_053 EN-31).
+		if cfg.Org.Locked != "" {
+			w.skills.Lock(filepath.Join(cfg.Org.Locked, "skills"))
+		}
 		if err := w.skills.DiscoverExternal(cfg.SkillSearchPaths(dir)); err != nil {
 			o.Warn(err.Error())
 		}
 		for _, p := range cfg.Skills.Policy.Problems() {
 			o.Warn(p)
 		}
+	}
+	for _, p := range cfg.Workers.Policy.Problems() {
+		o.Warn(p)
 	}
 
 	// Before the tools: they start the hooks and MCP servers.
@@ -682,6 +690,9 @@ func (w *Workspace) loadMemory() {
 		return b
 	}})
 	w.memoryStamp = memory.Stamp(w.Dir(), w.cfg.Memory, w.memory)
+	for _, p := range w.memory.Problems {
+		w.warnOnce(p) // read again at each change: said once
+	}
 }
 
 // unavailable stands in for the configured model when it can't be built:

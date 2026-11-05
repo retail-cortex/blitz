@@ -46,9 +46,10 @@ func TestGlobalRulesAndMalformedRules(t *testing.T) {
 	l := LoadAll(t.TempDir(), cfg)
 
 	got := contents(l.Docs)
-	require.Len(t, got, 2, "unclosed and unparsable frontmatter load as plain docs: %q", got)
+	require.Len(t, got, 1, "unclosed frontmatter loads as a plain doc, unparsable isn't used: %q", got)
 	assert.Contains(t, got[0], "---", "the unclosed file is kept whole")
-	assert.Contains(t, got[1], "---", "the unparsable file is kept whole")
+	require.Len(t, l.Problems, 1)
+	assert.Contains(t, l.Problems[0], "b-badyaml.md: the front matter can't be read")
 	require.Len(t, l.Rules, 1, "the empty rule is dropped: %+v", l.Rules)
 	assert.Equal(t, []string{"*.go"}, l.Rules[0].Paths, "blank globs are dropped")
 	assert.Equal(t, "0123456789\n(truncated)", l.Rules[0].Content)
@@ -183,4 +184,25 @@ func TestGateRulesAreNotInstructions(t *testing.T) {
 	}
 	assert.Contains(t, texts, "Use tabs.")
 	assert.NotContains(t, texts, "Say how it was tested.")
+}
+
+// A rule or gate whose front matter isn't YAML is left out and reported,
+// never an instruction in every prompt (N26 engine-sub-2#18).
+func TestUnreadableRulesAreLeftOut(t *testing.T) {
+	tests := map[string]string{
+		"unquoted glob":      "---\npaths: **/*.ts\n---\nUse strict types.",
+		"unquoted glob list": "---\npaths: [*.go]\n---\nUse strict types.",
+		"gate with a typo":   "---\nwhen: after_agent\njudge: [x\n---\nUse strict types.",
+	}
+	for name, doc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ws := t.TempDir()
+			write(t, filepath.Join(ws, ".agents", "rules", "r.md"), doc)
+			l := LoadAll(ws, config.MemoryConfig{Enabled: true, RuleDirs: []string{".agents/rules"}})
+			assert.Empty(t, l.Docs)
+			assert.Empty(t, l.Rules)
+			require.Len(t, l.Problems, 1)
+			assert.Contains(t, l.Problems[0], "r.md: the front matter can't be read")
+		})
+	}
 }

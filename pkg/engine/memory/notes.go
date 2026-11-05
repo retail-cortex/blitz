@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 )
 
 // Notes are what the agent remembers across sessions of a workspace
@@ -192,17 +194,16 @@ func readNote(path string) (Note, error) {
 	}
 	n := Note{Name: strings.TrimSuffix(filepath.Base(path), ".md"), Path: path, Kind: NoteFact}
 	text := string(data)
-	if rest, ok := strings.CutPrefix(text, "---\n"); ok {
-		if head, body, ok := strings.Cut(rest, "\n---\n"); ok {
-			text = body
-			for _, line := range strings.Split(head, "\n") {
-				k, v, _ := strings.Cut(line, ":")
-				switch strings.TrimSpace(k) {
-				case "kind":
-					n.Kind = strings.TrimSpace(v)
-				case "saved":
-					n.Time, _ = time.Parse(time.RFC3339, strings.TrimSpace(v))
-				}
+	// One reader for every front matter (a BOM or CRLF lines included).
+	if head, body, ok := frontmatter.Split(data); ok {
+		text = string(body)
+		for _, line := range strings.Split(string(head), "\n") {
+			k, v, _ := strings.Cut(line, ":")
+			switch strings.TrimSpace(k) {
+			case "kind":
+				n.Kind = strings.TrimSpace(v)
+			case "saved":
+				n.Time, _ = time.Parse(time.RFC3339, strings.TrimSpace(v))
 			}
 		}
 	}

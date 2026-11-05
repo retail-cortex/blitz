@@ -150,6 +150,9 @@ func TestSave(t *testing.T) {
 	require.Empty(t, probs)
 	data, _ = os.ReadFile(p)
 	assert.Equal(t, "---\nname: fresh\ndescription: New one\n---\n\n", string(data))
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "readable as the files beside it (N26 engine-sub-2#26)")
 }
 
 // A skill's files go in references/ or scripts/, never outside its folder.

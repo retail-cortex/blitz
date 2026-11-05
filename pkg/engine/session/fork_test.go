@@ -46,8 +46,49 @@ func TestForkGetAndReadEvents(t *testing.T) {
 	_, err = ReadEvents(dir, "../bad")
 	assert.Error(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, fork.ID+eventsSuffix), []byte("{not json\n"), 0o600))
-	_, err = ReadEvents(dir, fork.ID)
-	assert.ErrorContains(t, err, "event 1")
+	events, err = ReadEvents(dir, fork.ID)
+	require.NoError(t, err, "a bad line is skipped, as replay skips it")
+	assert.Empty(t, events)
 	_, err = st.Get("missing-session")
 	assert.Error(t, err)
+}
+
+// A snapshot and a fork carry the sub-agent log, and a snapshot replaced
+// takes its sub-agent log with it (N26 engine-sub-2#14).
+func TestCopiesKeepTheSubagentLog(t *testing.T) {
+	tests := map[string]func(s *Storage, id string) (*SessionRecord, error){
+		"snapshot": func(s *Storage, id string) (*SessionRecord, error) { return s.Snapshot(id, "keep", false) },
+		"fork":     func(s *Storage, id string) (*SessionRecord, error) { return s.Fork(id) },
+	}
+	for name, copySession := range tests {
+		t.Run(name, func(t *testing.T) {
+			s, err := NewStorage(t.TempDir())
+			require.NoError(t, err)
+			t.Cleanup(func() { s.Release() })
+			rec, err := s.CreateSession("", "", "blitz")
+			require.NoError(t, err)
+			require.NoError(t, s.AddMessage("user", "hi"))
+			require.NoError(t, s.AppendSubagentEvent(rec.ID, map[string]string{"author": "qa"}))
+			cp, err := copySession(s, rec.ID)
+			require.NoError(t, err)
+			data, err := os.ReadFile(s.path(cp.ID, subagentsSuffix))
+			require.NoError(t, err)
+			assert.Contains(t, string(data), `"qa"`)
+		})
+	}
+	t.Run("replaced snapshot", func(t *testing.T) {
+		s, err := NewStorage(t.TempDir())
+		require.NoError(t, err)
+		t.Cleanup(func() { s.Release() })
+		rec, err := s.CreateSession("", "", "blitz")
+		require.NoError(t, err)
+		require.NoError(t, s.AddMessage("user", "hi"))
+		require.NoError(t, s.AppendSubagentEvent(rec.ID, map[string]string{"author": "qa"}))
+		first, err := s.Snapshot(rec.ID, "keep", false)
+		require.NoError(t, err)
+		_, err = s.Snapshot(rec.ID, "keep", true)
+		require.NoError(t, err)
+		_, err = os.Stat(s.path(first.ID, subagentsSuffix))
+		assert.ErrorIs(t, err, os.ErrNotExist)
+	})
 }

@@ -60,8 +60,24 @@ func TestParse(t *testing.T) {
 }
 
 func TestSplit(t *testing.T) {
-	fm, body, err := Split([]byte("---\na: 1\n---\nThe body.\n"))
-	require.NoError(t, err)
-	assert.Equal(t, "\na: 1", string(fm))
-	assert.Equal(t, "The body.\n", string(body))
+	tests := []struct {
+		name, in, fm, body string
+	}{
+		{"front matter and a body", "---\na: 1\n---\nThe body.\n", "a: 1\n", "The body.\n"},
+		{"no body", "---\na: 1\n---", "a: 1\n", ""},
+		// N26 engine-sub-2#6: only a --- line ends it.
+		{"--- inside a value", "---\nprompt_note: a --- b\n----\nb: 2\n---\r\nThe body.", "prompt_note: a --- b\n----\nb: 2\n", "The body."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm, body, err := Split([]byte(tt.in))
+			require.NoError(t, err)
+			assert.Equal(t, tt.fm, string(fm))
+			assert.Equal(t, tt.body, string(body))
+		})
+	}
+	_, _, err := Split([]byte("---a: 1\n---\n"))
+	assert.ErrorContains(t, err, "start with a line of ---")
+	_, _, err = Split([]byte("---\na: 1\n----\n"))
+	assert.ErrorContains(t, err, "ends the frontmatter")
 }

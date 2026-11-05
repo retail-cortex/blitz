@@ -102,7 +102,9 @@ type server struct {
 	opened  []string                  // the agent's open documents' URIs, least recently synced first
 	held    map[string]int            // the editor's documents, by URI: how many hold each
 	diags   map[string]publishedDiags // for open documents only
-	changed chan struct{}             // a diagnostics notification came
+	// changed is closed, and replaced, when a diagnostics notification
+	// comes, so every waiter wakes, whichever file it waits for.
+	changed chan struct{}
 	// onDiags is told of each URI whose diagnostics came (the editor's
 	// watchers); nil for none.
 	onDiags func(uri string)
@@ -212,7 +214,7 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 	if err != nil {
 		return nil, err
 	}
-	s := &server{lang: cfg.Language, root: root, text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1), onDiags: m.diagnosed}
+	s := &server{lang: cfg.Language, root: root, text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}), onDiags: m.diagnosed}
 	s.c = newConn(proc, s.notified)
 	ictx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -291,13 +293,36 @@ func (s *server) notified(method string, params json.RawMessage) {
 		s.diags[uri] = publishedDiags{at: time.Now(), version: p.Version, items: p.Diagnostics}
 	}
 	held, onDiags := s.held[uri] > 0, s.onDiags
+	close(s.changed)
+	s.changed = make(chan struct{})
 	s.mu.Unlock()
 	if open && held && onDiags != nil {
 		onDiags(uri)
 	}
-	select {
-	case s.changed <- struct{}{}:
-	default:
+}
+
+// waitDiagnostics is what the server published for uri about the text it
+// has now, waiting up to wait for it: diagnostics about an earlier version
+// (a server answering an edit before last) are about code that's gone,
+// so they're waited past (N26 engine-sub-2#22).
+func (s *server) waitDiagnostics(ctx context.Context, uri string, wait time.Duration) (publishedDiags, bool, error) {
+	deadline := time.After(wait)
+	for {
+		s.mu.Lock()
+		d, ok := s.diags[uri]
+		ok = ok && (d.version == 0 || d.version == s.version[uri])
+		changed := s.changed
+		s.mu.Unlock()
+		if ok {
+			return d, true, nil
+		}
+		select {
+		case <-changed:
+		case <-deadline:
+			return publishedDiags{}, false, nil // nothing reported in time
+		case <-ctx.Done():
+			return publishedDiags{}, false, ctx.Err()
+		}
 	}
 }
 
@@ -611,32 +636,21 @@ func (m *Manager) Diagnostics(ctx context.Context, path string, wait time.Durati
 		return nil, err
 	}
 	uri := fileURI(path)
-	deadline := time.After(wait)
-	for {
-		s.mu.Lock()
-		d, ok := s.diags[uri]
-		s.mu.Unlock()
-		if ok {
-			out := make([]Diagnostic, 0, len(d.items))
-			for _, w := range d.items {
-				sev := "error"
-				if w.Severity > 0 && w.Severity < len(severities) {
-					sev = severities[w.Severity]
-				}
-				loc := m.readable(uri, w.Range.Start)
-				out = append(out, Diagnostic{Line: loc.Line, Column: loc.Column, Severity: sev, Message: w.Message, Source: w.Source})
-			}
-			sort.SliceStable(out, func(i, j int) bool { return out[i].Line < out[j].Line })
-			return out, nil
-		}
-		select {
-		case <-s.changed:
-		case <-deadline:
-			return nil, nil // nothing reported in time
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	d, ok, err := s.waitDiagnostics(ctx, uri, wait)
+	if !ok {
+		return nil, err
 	}
+	out := make([]Diagnostic, 0, len(d.items))
+	for _, w := range d.items {
+		sev := "error"
+		if w.Severity > 0 && w.Severity < len(severities) {
+			sev = severities[w.Severity]
+		}
+		loc := m.readable(uri, w.Range.Start)
+		out = append(out, Diagnostic{Line: loc.Line, Column: loc.Column, Severity: sev, Message: w.Message, Source: w.Source})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Line < out[j].Line })
+	return out, nil
 }
 
 // Running reports whether a server runs for files like path (edits then

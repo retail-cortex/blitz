@@ -37,6 +37,8 @@ go_library(
     ],
     deps = [
         "//pkg/api",
+        "//pkg/engine/atomicfile",
+        "//pkg/engine/jsonl",
         "@org_golang_google_adk_v2//session",
     ],
 )

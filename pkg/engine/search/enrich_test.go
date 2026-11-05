@@ -17,6 +17,7 @@ package search
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -140,6 +141,42 @@ func TestEnrichmentBudgetAndFailure(t *testing.T) {
 	assert.Len(t, enr.described(), 3, "a new day: the last one described")
 	assert.Empty(t, x.Status().EnrichErr)
 	assert.Equal(t, 3, x.Status().Enriched)
+}
+
+// A call that fails counts against the day's budget, and an item whose
+// description can't be read is marked done without one, so it isn't paid
+// for again at every scan ahead of the others (N26 engine-sub-2#20).
+func TestEnrichmentFailuresCount(t *testing.T) {
+	tests := []struct {
+		name      string
+		fail      error
+		enriched  int // after a second scan with the model working
+		described int
+	}{
+		{"unreadable reply", fmt.Errorf("%w: no JSON", ErrBadDescription), 0, 0},
+		{"failed call", errors.New("rate limited"), 1, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			files := newSource("files")
+			files.set("a.go", "package a", t0)
+			enr := &fakeEnricher{fail: tt.fail}
+			x, err := Open(t.TempDir(), []Source{files}, nil, WithEnricher(enr, 2, nil))
+			require.NoError(t, err)
+			t.Cleanup(func() { x.Close() })
+			require.NoError(t, x.Scan(ctx))
+			_, used := x.budget()
+			assert.Equal(t, 1, used, "the call counts")
+
+			enr.mu.Lock()
+			enr.fail = nil
+			enr.mu.Unlock()
+			require.NoError(t, x.Scan(ctx))
+			assert.Len(t, enr.described(), tt.described)
+			assert.Equal(t, tt.enriched, x.Status().Enriched)
+		})
+	}
 }
 
 // generated tells vendored and generated files by path or header.

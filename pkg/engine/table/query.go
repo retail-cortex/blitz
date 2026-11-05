@@ -109,7 +109,8 @@ func (f Filter) Match(cell string) bool {
 
 // Query asks for a page of a table's rows: those with Search in a cell
 // (ignoring case) and passing every Filter (by column), sorted by a
-// column (-1: in file order), from Offset, up to Limit.
+// column (-1: in file order), from Offset (a negative one is 0), up to
+// Limit (0 or less: 100; at most MaxPage).
 type Query struct {
 	Search  string
 	Filters map[int]string
@@ -136,6 +137,10 @@ type Page struct {
 	Total   int
 	Sorted  bool
 }
+
+// MaxPage is the most rows a page holds, whatever the query asks: a
+// client asking for millions doesn't hold them all in memory.
+const MaxPage = 10_000
 
 // SortLimit is the most matching rows a page sorts: past it, the rows come
 // in file order (filter first).
@@ -167,6 +172,9 @@ func Read(ctx context.Context, r *csv.Reader, q Query) (Page, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	// What a client sends is checked here (N26 engine-sub-2#23): a
+	// negative offset would slice a sorted page out of range (a panic).
+	limit, q.Offset = min(limit, MaxPage), max(q.Offset, 0)
 	var sorting []Row
 	for n := 1; ; n++ {
 		if n%4096 == 0 && ctx.Err() != nil {
