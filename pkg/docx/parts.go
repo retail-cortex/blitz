@@ -96,7 +96,7 @@ func (w *writer) numbering() string {
 	b.WriteString(xmlHd + `<w:numbering xmlns:w="` + nsW + `">`)
 	for abs, ordered := range []bool{false, true} {
 		fmt.Fprintf(&b, `<w:abstractNum w:abstractNumId="%d"><w:multiLevelType w:val="hybridMultilevel"/>`, abs)
-		for l := range 9 {
+		for l := range maxListLevel + 1 {
 			format, text := "bullet", bullets[l%len(bullets)]
 			if ordered {
 				format, text = []string{"decimal", "lowerLetter", "lowerRoman"}[l%3], fmt.Sprintf("%%%d.", l+1)

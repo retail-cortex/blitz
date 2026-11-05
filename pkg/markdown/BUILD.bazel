@@ -38,6 +38,7 @@ go_test(
     embed = [":markdown"],
     deps = [
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@com_github_yuin_goldmark//ast",
     ],
 )

@@ -206,6 +206,53 @@ func TestUseDoesntWait(t *testing.T) {
 	assert.False(t, due, "kept to try again, not marked twice")
 }
 
+// A flush stuck on the network holds no one up: a mark made meanwhile,
+// in this process or another sharing the file, answers at once and is
+// still there, to send, when the flush saves what it sent (AI-11, AI-04).
+func TestMarkDuringFlush(t *testing.T) {
+	arrived := make(chan struct{}, 4)
+	release := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		arrived <- struct{}{}
+		<-release
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(slow.Close)
+	now := start
+	r := newRecorder(t, slow.URL, &now)
+	other := &Recorder{Dir: r.Dir, Version: r.Version, URL: slow.URL, Now: r.Now} // another process
+	due, err := r.Mark(Desktop)
+	require.NoError(t, err)
+	require.True(t, due)
+	flushed := make(chan error, 1)
+	go func() { flushed <- r.Flush(context.Background()) }()
+	<-arrived // the desktop's ping is on the wire
+
+	cases := []struct {
+		name string
+		rec  *Recorder
+		fr   string
+	}{
+		{"this process", r, CLI},
+		{"another process", other, VSCode},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			began := time.Now()
+			due, err := tc.rec.Mark(tc.fr)
+			require.NoError(t, err)
+			assert.True(t, due)
+			assert.Less(t, time.Since(began), time.Second, "didn't wait for the flush")
+		})
+	}
+	close(release)
+	require.NoError(t, <-flushed)
+	s := r.load()
+	day := start.Format(time.DateOnly)
+	assert.Equal(t, []entry{{day, Desktop}}, s.Sent)
+	assert.ElementsMatch(t, []entry{{day, CLI}, {day, VSCode}}, s.Pending, "the marks made meanwhile are kept")
+}
+
 // BLITZ_ACTIVITY_URL replaces the address (AI-13).
 func TestActivityURL(t *testing.T) {
 	s := newServer(t)

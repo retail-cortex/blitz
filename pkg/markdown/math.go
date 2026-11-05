@@ -16,6 +16,7 @@ package markdown
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -56,7 +57,8 @@ var KindMathBlock = ast.NewNodeKind("MathBlock")
 type MathBlock struct {
 	ast.BaseBlock
 	Source string
-	done   bool // written $$…$$ on one line: nothing more to read
+	done   bool             // written $$…$$ on one line: nothing more to read
+	lines  *strings.Builder // the lines read so far, Source once closed
 }
 
 // Kind implements ast.Node.
@@ -84,6 +86,11 @@ func (mathExtension) Extend(m goldmark.Markdown) {
 
 type inlineMath struct{}
 
+// maxInlineMath is how far along its line a $ looks for its close: a
+// formula in a paragraph is shorter, and without a bound a long line of
+// $ that never close costs the square of its length.
+const maxInlineMath = 2048
+
 func (inlineMath) Trigger() []byte { return []byte{'$'} }
 
 func (inlineMath) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast.Node {
@@ -99,7 +106,7 @@ func (inlineMath) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast.Nod
 	if len(body) == 0 || isSpace(body[0]) {
 		return nil
 	}
-	for i := 0; i < len(body); i++ {
+	for i := 0; i < len(body) && i < maxInlineMath; i++ {
 		switch {
 		case body[i] == '\\':
 			i++ // an escaped character, \$ among them
@@ -160,23 +167,30 @@ func (blockMath) Continue(node ast.Node, reader text.Reader, _ parser.Context) p
 	if line == nil || n.done {
 		return parser.Close
 	}
+	if n.lines == nil {
+		n.lines = &strings.Builder{}
+	}
 	trimmed := bytes.TrimSpace(line)
 	if end := bytes.Index(trimmed, []byte("$$")); end >= 0 && end == len(trimmed)-2 {
-		n.Source = string(bytes.TrimSpace([]byte(n.Source + " " + string(trimmed[:end]))))
+		n.lines.WriteByte(' ')
+		n.lines.Write(trimmed[:end])
 		reader.AdvanceToEOL()
 		return parser.Close
 	}
-	if n.Source != "" {
-		n.Source += "\n"
+	if n.lines.Len() > 0 {
+		n.lines.WriteByte('\n')
 	}
-	n.Source += string(bytes.TrimRight(line, "\r\n"))
+	n.lines.Write(bytes.TrimRight(line, "\r\n"))
 	reader.AdvanceToEOL()
 	return parser.Continue | parser.NoChildren
 }
 
 func (blockMath) Close(node ast.Node, _ text.Reader, _ parser.Context) {
 	n := node.(*MathBlock)
-	n.Source = string(bytes.TrimSpace([]byte(n.Source)))
+	if n.lines != nil {
+		n.Source, n.lines = n.lines.String(), nil
+	}
+	n.Source = strings.TrimSpace(n.Source)
 }
 
 func (blockMath) CanInterruptParagraph() bool { return true }

@@ -277,7 +277,16 @@ func (p *mathParser) rawArg() string {
 	return b.String()
 }
 
+// atom is one atom. It counts toward maxMathDepth as expr does: commands
+// (\sqrt\sqrt…, \hat, fonts) and scripts (^^^…) recurse through it
+// without a group.
 func (p *mathParser) atom(st mathStyle) string {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > maxMathDepth {
+		p.i = len(p.toks)
+		return ""
+	}
 	t, ok := p.next()
 	if !ok {
 		return ""
