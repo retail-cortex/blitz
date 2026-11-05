@@ -87,7 +87,7 @@ func TestOrgLayer(t *testing.T) {
 	assert.Equal(t, "default", cfg.Org.LockOf(filepath.Join(dir, "catalog", "default", "agents", "a.md")))
 	assert.Equal(t, "", cfg.Org.LockOf(filepath.Join(home, ".blitz", "agents", "a.md")))
 	assert.Equal(t, "", OrgLayer{}.LockOf("/x"))
-	cmds := cfg.Org.Around("commands", []string{"mine"})
+	cmds := cfg.Org.around("commands", []string{"mine"})
 	assert.Equal(t, "mine", cmds[1])
 
 	names := map[string]string{}

@@ -251,10 +251,6 @@ func (o OrgLayer) LockedFirst(dirs []string, subs ...string) []string {
 	return out
 }
 
-// Around is the exported form of around, for the engine's own lists
-// (commands).
-func (o OrgLayer) Around(sub string, dirs []string) []string { return o.around(sub, dirs) }
-
 // orgLayers is each settings folder's organization layer, as its settings
 // last loaded it, for what reads the catalog without the settings to hand
 // (connectors).

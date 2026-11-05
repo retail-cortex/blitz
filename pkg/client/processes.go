@@ -25,7 +25,8 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// pollEvery is how often WaitAll asks whether the processes have finished.
+// pollEvery is how often WaitAll asks whether the processes have finished,
+// and RunWorker whether its run has.
 var pollEvery = 500 * time.Millisecond
 
 // callTimeout bounds the calls made while the client exits.

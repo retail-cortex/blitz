@@ -104,7 +104,7 @@ func (w *Workers) RunWorker(ctx context.Context, name string, on func(api.Event)
 		select {
 		case <-ctx.Done():
 			return workerRun(got.Msg.Run), ctx.Err()
-		case <-time.After(200 * time.Millisecond):
+		case <-time.After(pollEvery):
 		}
 	}
 }

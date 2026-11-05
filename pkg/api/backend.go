@@ -218,9 +218,9 @@ type ProjectSettings struct {
 }
 
 // ProjectItem is one project setting. Kind is deny, ask, blocked_path,
-// limit, skill_policy, worker_limit (applied); hook, mcp, allow, writable,
-// model, agent_model, worker_allow, skill_scripts (needing trust); or
-// setting (another key).
+// limit, skill_policy, worker_limit, plugin_off (applied); hook, mcp,
+// allow, writable, model, agent_model, worker_allow, plugin,
+// skill_scripts (needing trust); or setting (another key).
 type ProjectItem struct {
 	File  string
 	Kind  string
@@ -238,6 +238,9 @@ const (
 	TrustChanged  = "changed"
 	TrustTrusted  = "trusted"
 	TrustDeclined = "declined"
+	// TrustUnknown: the service couldn't be asked, so it isn't known
+	// what the project settings hold or whether they're trusted.
+	TrustUnknown = "unknown"
 )
 
 // ErrProjectChanged means the project settings changed since they were

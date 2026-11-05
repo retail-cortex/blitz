@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"connectrpc.com/connect"
@@ -151,7 +152,7 @@ func (r *Remote) FollowBackground(ctx context.Context, id string, on func(api.Ev
 	if err := stream.Err(); err != nil {
 		return api.TurnResult{}, fromAPI(err)
 	}
-	return api.TurnResult{}, errors.New("the service stopped showing the run before it ended")
+	return api.TurnResult{}, errors.New(i18n.T("attached.run_unfinished"))
 }
 
 func finished(f *pb.TurnFinished) api.TurnResult {

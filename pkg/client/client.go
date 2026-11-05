@@ -180,7 +180,7 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	if err := stream.Err(); err != nil {
 		return api.TurnResult{}, fromAPI(err)
 	}
-	return api.TurnResult{}, errors.New("the service ended the turn without finishing it")
+	return api.TurnResult{}, errors.New(i18n.T("attached.turn_unfinished"))
 }
 
 func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *pb.ApprovalRequest) {
@@ -523,7 +523,7 @@ func (r *Remote) RemovePermissionRule(rule string, save api.Scope) (api.Permissi
 }
 
 // SetPermissionMode sets the permission mode (default, accept-edits,
-// plan, dont-ask or bypass) and returns it (WorkspaceService.SetPermissionMode).
+// plan, auto, dont-ask or bypass) and returns it (WorkspaceService.SetPermissionMode).
 func (r *Remote) SetPermissionMode(mode string) (string, error) {
 	res, err := r.workspaces.SetPermissionMode(context.Background(), connect.NewRequest(&pb.SetPermissionModeRequest{Workspace: r.dir, Mode: mode}))
 	if err != nil {
@@ -1044,5 +1044,5 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 	if err := stream.Err(); err != nil {
 		return api.EvalRun{}, fromAPI(err)
 	}
-	return api.EvalRun{}, errors.New("the service ended the eval without finishing it")
+	return api.EvalRun{}, errors.New(i18n.T("attached.eval_unfinished"))
 }

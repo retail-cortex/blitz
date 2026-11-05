@@ -153,7 +153,8 @@ type BlitzConfig struct {
 	// AutoApprove is the older spelling of PermissionMode = "bypass".
 	AutoApprove bool `toml:"auto_approve"`
 	// PermissionMode is the starting permission mode: default,
-	// accept-edits, plan, dont-ask or bypass (which needs the OS sandbox).
+	// accept-edits, plan, auto, dont-ask or bypass (which needs the OS
+	// sandbox).
 	PermissionMode string `toml:"permission_mode"`
 	// PlanReview decides when the agent plans for approval before changing
 	// anything: always (every prompt), agent-decides (it may choose to, with
@@ -517,7 +518,8 @@ type SkillPolicy struct {
 	// AllowHITLBypass lets a skill that declares tier 0 and
 	// allow_hitl_bypass skip approval (e.g. in CI). Off: tier 0 is tier 3.
 	AllowHITLBypass bool `toml:"allow_hitl_bypass"`
-	// Languages are the script languages that may run: python, typescript.
+	// Languages are the script languages that may run (ScriptLanguages;
+	// all six by default).
 	Languages []string `toml:"languages"`
 	// Sandbox runs scripts under gvisor, the OS sandbox (os), or whichever
 	// is available (auto).

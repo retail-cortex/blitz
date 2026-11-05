@@ -26,7 +26,8 @@ type PermissionRule struct {
 	Effect string // allow, ask or deny
 	Rule   string // kind(pattern), or a tool name
 	// Source is "global" or "workspace" (the settings file it's in),
-	// "built-in" (read_only_defaults), "flag" or "session".
+	// "project" (a trusted project file's), "built-in"
+	// (read_only_defaults), "flag" or "session".
 	Source string
 }
 

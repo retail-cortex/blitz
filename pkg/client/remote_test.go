@@ -205,6 +205,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		"SandboxSummary":      func() any { return r.SandboxSummary() },
 		"ListCheckpoints":     func() any { return r.ListCheckpoints() },
 		"SessionDiff":         func() any { return r.SessionDiff() },
+		"TakeProcessNotices":  func() any { return r.TakeProcessNotices("s") },
 		"ListApprovals":       func() any { return r.ListApprovals() },
 		"SearchStatus":        func() any { return r.SearchStatus().Items },
 		"SearchSession":       func() any { n, _ := r.SearchSession("x"); return n },
@@ -224,6 +225,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		})
 	}
 	assert.Empty(t, r.TakeProcessNotices("s"), "notices without the service")
+	assert.Equal(t, api.TrustUnknown, r.ProjectSettings().State, "not \"nothing to trust\" (N26 api-client-config#29)")
 }
 
 // The rest of Backend over a live service: sessions, models, skills,
