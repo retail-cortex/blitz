@@ -24,7 +24,7 @@ import { FileKind } from "../gen/blitz/v1/file_pb";
 import { t } from "../i18n";
 import { Button, Dialog, Field, Segmented, useSnackbar } from "@blitz/webui";
 import { paperFor } from "./printPage";
-import { pageHTML, pictureLimits, pictureName, picturesFolder, saveName, savePath, type SaveFormat } from "./webSave";
+import { pageHTML, pictureLimits, pictureName, picturesFolder, saveName, savePath, takenNames, type SaveFormat } from "./webSave";
 
 // The folder a workspace's pages were last saved in, for the next.
 const lastFolder = new Map<string, string>();
@@ -84,7 +84,11 @@ export function SaveWebDialog({ dir, id, url, title, onClose }: { dir: string; i
         const pic = await previewPicture(id, src);
         if (bytes + pic.data.length > pictureLimits.bytes) throw new Error("too large");
         if (!made) {
-          await files.listDir({ workspace: dir, path: folderPath }).catch(() => files.createFolder({ workspace: dir, path: folderPath }));
+          // A folder that's there keeps its files: the pictures take
+          // names not in it (EL-106: nothing replaced unasked).
+          const there = await files.listDir({ workspace: dir, path: folderPath }).catch(() => undefined);
+          if (there) for (const n of takenNames(there.entries)) taken.add(n);
+          else await files.createFolder({ workspace: dir, path: folderPath });
           made = true;
         }
         const file = pictureName(src, pic.ext, taken);

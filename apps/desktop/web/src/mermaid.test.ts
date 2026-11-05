@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { mermaidSources, svgSize } from "./mermaid";
+import { mermaidSources, serially, svgSize } from "./mermaid";
 
 describe("mermaidSources", () => {
   it("finds each ```mermaid block's text as the Word writer reads it", () => {
@@ -31,4 +31,27 @@ describe("svgSize", () => {
     ['<svg width="200" height="100">', 200, 100],
     ["<svg>", 600, 400],
   ])("%s", (svg, width, height) => expect(svgSize(svg)).toEqual({ width, height }));
+});
+
+describe("renders, one at a time", () => {
+  it.each([
+    { name: "after one that ends well", fails: false },
+    { name: "after one that fails", fails: true },
+  ])("a render waits for the one before: $name", async ({ fails }) => {
+    const log: string[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const first = serially(async () => {
+      log.push("print: theme");
+      await held;
+      log.push("print: drawn");
+      if (fails) throw new Error("bad diagram");
+    });
+    const second = serially(async () => void log.push("window: theme and drawn"));
+    await Promise.resolve();
+    release();
+    await first.catch(() => {});
+    await second;
+    expect(log).toEqual(["print: theme", "print: drawn", "window: theme and drawn"]);
+  });
 });

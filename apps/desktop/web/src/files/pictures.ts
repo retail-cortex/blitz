@@ -83,6 +83,19 @@ function decodeEntities(s: string): string {
 const cache = new Map<string, Promise<string>>();
 const cacheSize = 64;
 
+// URLs dropped from the cache: each is revoked once no picture on the page
+// shows it (the image editor's thumbnails mustn't break the document's).
+const evicted = new Set<string>();
+
+function revokeUnshown() {
+  const shown = new Set(typeof document === "undefined" ? [] : Array.from(document.images, (i) => i.getAttribute("src")));
+  for (const u of evicted) {
+    if (shown.has(u)) continue;
+    evicted.delete(u);
+    URL.revokeObjectURL(u);
+  }
+}
+
 /** Reads a workspace picture; tests replace it. */
 export let readPicture: (dir: string, path: string) => Promise<{ mime: string; data: Uint8Array }> = (dir, path) => files.readPreview({ workspace: dir, path });
 
@@ -113,7 +126,10 @@ export function pictureURL(dir: string, docPath: string | null, src: string): Pr
     if (cache.size > cacheSize) {
       const [oldest, gone] = cache.entries().next().value as [string, Promise<string>];
       cache.delete(oldest);
-      void gone.then((u) => u && URL.revokeObjectURL(u));
+      void gone.then((u) => {
+        if (u) evicted.add(u);
+        revokeUnshown();
+      });
     }
   }
   return url;

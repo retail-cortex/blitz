@@ -76,6 +76,11 @@ export const pictureLimits = { count: 50, bytes: 50 << 20 };
 /** The folder a Markdown file's pictures go in, beside it: "docs/Cart.md" → "docs/Cart_files". */
 export const picturesFolder = (path: string) => path.replace(/\.md$/i, "") + "_files";
 
+/** The names a pictures folder already has, as pictureName takes them (so none is replaced). */
+export function takenNames(entries: { name: string }[]): Set<string> {
+  return new Set(entries.map((e) => e.name.toLowerCase()));
+}
+
 /**
  * A downloaded picture's file name, from its address (else "picture"),
  * with the extension its type says, and not one of taken (which gets it).
