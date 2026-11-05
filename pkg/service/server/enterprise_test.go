@@ -771,6 +771,13 @@ func TestServiceJobs(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(home, "Downloads", "sales by week (2).csv"))
 	require.NoError(t, err)
 	assert.Equal(t, "w,s\n", string(data))
+	// Larger than a run's file may be: never saved cut off (EN-42a).
+	maxSave = 3
+	_, err = c.SaveServiceRunFile(ctx, connect.NewRequest(&pb.SaveServiceRunFileRequest{Urn: files.Msg.Files[1].Urn}))
+	maxSave = 100 << 20
+	_, info = errorReason(t, err)
+	assert.Equal(t, "UPLOAD_TOO_LARGE", info.Reason)
+	assert.NoFileExists(t, filepath.Join(home, "Downloads", "sales by week (3).csv"), "nothing left half-saved")
 	// Nowhere to save it: Downloads is a file.
 	t.Setenv("HOME", t.TempDir())
 	newHome, _ := os.UserHomeDir()
@@ -1282,6 +1289,34 @@ func TestPublishToOrganization(t *testing.T) {
 	_, err = publish()
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
+	// A key in what would be published: nothing goes (EN-36a).
+	leaky := filepath.Join(ws, ".agents", "agents", "leaky.md")
+	require.NoError(t, os.WriteFile(leaky, []byte("---\nname: leaky\ndescription: Deploys\n---\nUse KEY = 'AKIAIOSFODNN7EXAMPLE'.\n"), 0o644))
+	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "leaky"})
+	_, info = errorReason(t, err)
+	assert.Equal(t, "SECRETS_FOUND", info.Reason)
+	assert.Contains(t, err.Error(), ".agents/agents/leaky.md:5")
+	require.NoError(t, os.Remove(leaky))
+
+	// The workspace named as every workspace call's is: never "" (blitzd's
+	// own folder) or a relative one.
+	for _, bad := range []string{"", "relative"} {
+		calls := map[string]func() error{
+			"ListPublishable": func() error {
+				_, err := c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: bad}))
+				return err
+			},
+			"PublishToOrganization": func() error {
+				_, err := c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: bad, Items: []*pb.PublishItem{{Kind: "agent", Name: "writer"}}}))
+				return err
+			},
+		}
+		for name, call := range calls {
+			_, info := errorReason(t, call())
+			assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "%s %q", name, bad)
+		}
+	}
+
 	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go"})
 	require.NoError(t, err)
 	assert.Equal(t, "open", made.Msg.Review.State)
@@ -1389,6 +1424,14 @@ func TestOrgItems(t *testing.T) {
 	_, err = copyItem("rule", "style")
 	_, info = errorReason(t, err)
 	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
+	for _, bad := range []string{"", "relative"} {
+		_, err = c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: bad, Kind: "rule", Name: "style"}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "copied into %q", bad)
+		_, err = c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: bad}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "listed for %q", bad)
+	}
 
 	// How the person hears of their jobs' runs (JB-31).
 	notices, err := c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))

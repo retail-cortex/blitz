@@ -22,10 +22,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,7 +150,10 @@ func (h configService) TakeServiceRun(ctx context.Context, r req[pb.TakeServiceR
 // mergeRun adds branch to the main of handle's workspace (whose clone is at
 // dir) through a clone of its own, never touching the folder's files.
 func (s *Server) mergeRun(ctx context.Context, c *enterprise.Client, dir, handle, branch string) error {
-	_, remote := s.orgRemote(c, handle)
+	_, remote, err := s.orgRemote(c, handle)
+	if err != nil {
+		return invalid(err)
+	}
 	url, err := gitText(ctx, dir, "remote", "get-url", remote)
 	if err != nil {
 		return invalid(fmt.Errorf("the folder's remote %s: %w", remote, err))
@@ -236,13 +241,24 @@ func (s *Server) whyNotServiceJob(ctx context.Context, c *enterprise.Client, dir
 	if file != "" && filepath.Clean(file) != filepath.Join(dir, filepath.FromSlash(rel), "WORKER.md") {
 		return &pb.GetServiceJobResponse{Reason: "outside", Detail: rel + "/WORKER.md"}, nil
 	}
-	_, remote := s.orgRemote(c, handle)
-	changed, _ := s.gitOut(ctx, dir, "status", "--porcelain", "--untracked-files=all", "--", rel)
+	_, remote, err := s.orgRemote(c, handle)
+	if err != nil {
+		return &pb.GetServiceJobResponse{Reason: "not_read", Detail: err.Error()}, nil
+	}
+	changed, err := s.gitOut(ctx, dir, "status", "--porcelain", "--untracked-files=all", "--", rel)
+	if err != nil {
+		return &pb.GetServiceJobResponse{Reason: "not_read", Detail: err.Error()}, nil
+	}
 	if len(strings.TrimSpace(string(changed))) == 0 {
-		// Committed here: is it on main as the service has it?
+		// Committed here: is it on main as the service has it? (diff
+		// --quiet exits 1 for a difference; anything else is git failing.)
 		_, err := s.gitOut(ctx, dir, "diff", "--quiet", remote+"/main", "HEAD", "--", rel)
-		if err != nil {
+		var ee *exec.ExitError
+		switch {
+		case errors.As(err, &ee) && ee.ExitCode() == 1:
 			changed = []byte("ahead")
+		case err != nil:
+			return &pb.GetServiceJobResponse{Reason: "not_read", Detail: err.Error()}, nil
 		}
 	}
 	if len(strings.TrimSpace(string(changed))) > 0 {
@@ -262,13 +278,15 @@ func (s *Server) whyNotServiceJob(ctx context.Context, c *enterprise.Client, dir
 }
 
 // orgRemote is the clone of handle's workspace on this computer and the
-// Git remote that's the organization's there.
-func (s *Server) orgRemote(c *enterprise.Client, handle string) (string, string) {
+// Git remote that's the organization's there; an error when the settings
+// that say where clones go can't be read.
+func (s *Server) orgRemote(c *enterprise.Client, handle string) (string, string, error) {
 	cfg, err := config.Load(s.configDir)
 	if err != nil {
-		cfg = &config.Config{}
+		return "", "", err
 	}
-	return orgDir(sharedFor(c.URL()), s.orgFolder(c, cfg), handle)
+	dir, remote := orgDir(sharedFor(c.URL()), s.orgFolder(c, cfg), handle)
+	return dir, remote, nil
 }
 
 func (h configService) PushServiceJob(ctx context.Context, r req[pb.PushServiceJobRequest]) (*connect.Response[pb.PushServiceJobResponse], error) {
@@ -280,7 +298,10 @@ func (h configService) PushServiceJob(ctx context.Context, r req[pb.PushServiceJ
 		return nil, invalid(fmt.Errorf("%q isn't a job's name", r.Msg.Name))
 	}
 	dir, rel := r.Msg.Workspace, jobDir(r.Msg.Name)
-	_, remote := h.s.orgRemote(c, handle)
+	_, remote, err := h.s.orgRemote(c, handle)
+	if err != nil {
+		return nil, invalid(err)
+	}
 	failed := func(err error) error {
 		return apiError(connect.CodeFailedPrecondition, "PUSH_FAILED", fmt.Errorf("couldn't put the job on the workspace's main: %w", err))
 	}
@@ -365,8 +386,9 @@ func (h configService) ListServiceRunFiles(ctx context.Context, r req[pb.ListSer
 	return ok(out)
 }
 
-// maxSave bounds a run's file saved here: the service keeps none larger.
-const maxSave = 100 << 20
+// maxSave bounds a run's file saved here: the service keeps none larger
+// (a variable for tests).
+var maxSave int64 = 100 << 20
 
 func (h configService) SaveServiceRunFile(ctx context.Context, r req[pb.SaveServiceRunFileRequest]) (*connect.Response[pb.SaveServiceRunFileResponse], error) {
 	n, err := artifactsName(r.Msg.Urn, true)
@@ -394,9 +416,16 @@ func (h configService) SaveServiceRunFile(ctx context.Context, r req[pb.SaveServ
 	if err != nil {
 		return nil, apiError(connect.CodeInternal, "INTERNAL", err)
 	}
-	_, err = io.Copy(f, io.LimitReader(body, maxSave))
+	// One byte past the limit says the file is larger: never saved cut off.
+	n2, err := io.Copy(f, io.LimitReader(body, maxSave+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
+	}
+	if err == nil && n2 > maxSave {
+		_ = os.Remove(f.Name())
+		return nil, apiError(connect.CodeFailedPrecondition, "UPLOAD_TOO_LARGE",
+			fmt.Errorf("%s is larger than the %d MB a run's file may be: open it in the organization's service instead", path.Base(n.Path), maxSave>>20),
+			"max_bytes", strconv.FormatInt(maxSave, 10))
 	}
 	if err != nil {
 		_ = os.Remove(f.Name())

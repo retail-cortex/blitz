@@ -110,6 +110,18 @@ func TestWhyNotServiceJob(t *testing.T) {
 		assert.True(t, why("digest", p).Found)
 	})
 
+	t.Run("git failing isn't read as changes", func(t *testing.T) {
+		// The organization's remote isn't there: diff fails, which isn't
+		// "ahead" (EN-42a).
+		require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "origin", "elsewhere").Run())
+		defer func() {
+			require.NoError(t, exec.Command("git", "-C", dir, "remote", "rename", "elsewhere", "origin").Run())
+		}()
+		got := why("ghost", "")
+		assert.Equal(t, "not_read", got.Reason)
+		assert.Contains(t, got.Detail, "origin/main", "git's own words")
+	})
+
 	t.Run("committed here but not pushed", func(t *testing.T) {
 		write("tidy", "runs_on: service")
 		require.NoError(t, exec.Command("git", "-C", dir, "add", "-A").Run())
