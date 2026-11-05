@@ -31,6 +31,8 @@ func TestModelsCommand(t *testing.T) {
 	isolate(t)
 	_, err := runCLI(t, "models")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "no provider set up: %v", err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blitz config set-key <provider>", "names a command that exists (N26 cli-2#2)")
 	out, err := runCLI(t, "models", "carrier-pigeon")
 	assert.Equal(t, exitFailure, exitCodeFor(err))
 	assert.Contains(t, out, `can't list its models: unknown provider "carrier-pigeon"`)

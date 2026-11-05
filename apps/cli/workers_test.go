@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/stretchr/testify/assert"
@@ -273,4 +274,20 @@ func TestWorkersStopNothingRunning(t *testing.T) {
 	out, err := runCLI(t, "-d", ws, "workers", "stop", "deps")
 	require.Error(t, err, out)
 	assert.Contains(t, err.Error(), `no run of "deps" is going`)
+}
+
+// A job's limits, with 0 (none) said as no limit (N26 cli-2#24).
+func TestLimitsText(t *testing.T) {
+	for name, c := range map[string]struct {
+		l    api.Limits
+		want string
+	}{
+		"none": {api.Limits{}, "no limit on model calls, no cost limit, no time limit"},
+		"all":  {api.Limits{MaxTurns: 20, MaxCostUSD: 0.5, Timeout: 10 * time.Minute}, "20 model calls, $0.50, 10m0s"},
+		"some": {api.Limits{MaxCostUSD: 2}, "no limit on model calls, $2.00, no time limit"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, c.want, limitsText(c.l))
+		})
+	}
 }

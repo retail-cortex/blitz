@@ -392,6 +392,18 @@ var notifyCommand = func(title, body string) *exec.Cmd {
 	return nil
 }
 
+// ParseNotifyMode is ui.notify as a mode, in any case: both, bell, desktop
+// or off. Anything else isn't ok, and is both, the default (N26 cli-2#8).
+func ParseNotifyMode(s string) (mode string, ok bool) {
+	switch m := strings.ToLower(strings.TrimSpace(s)); m {
+	case "both", "bell", "desktop", "off":
+		return m, true
+	case "":
+		return "both", true
+	}
+	return "both", false
+}
+
 // Send rings the bell and shows a notification, as the mode says.
 func (n Notifier) Send(body string) {
 	if n.Mode == "off" {
@@ -403,7 +415,7 @@ func (n Notifier) Send(body string) {
 	if n.Mode == "bell" {
 		return
 	}
-	if cmd := notifyCommand("Blitz", body); cmd != nil {
+	if cmd := notifyCommand(i18n.AppName(), body); cmd != nil { // the organization's name, when branded
 		_ = cmd.Start()
 		go cmd.Wait()
 	}

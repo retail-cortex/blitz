@@ -109,4 +109,4 @@ Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: 
 | "Sign in to your organization … to use its models" | Sign in: Settings › Organization, or `blitz enterprise login` |
 | "… isn't answering" | Check your network or VPN; **Retry** |
 | "… offers you no models" | Ask your admins for access to a model |
-| "Accept the organization's terms" | Your organization changed its terms: accept them where it asks |
+| "Accept the organization's terms" | Your organization changed its terms: accept them where it asks, or in a terminal with `blitz enterprise terms` |

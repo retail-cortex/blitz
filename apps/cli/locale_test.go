@@ -88,3 +88,16 @@ func TestLocaleReachesModelAndConfig(t *testing.T) {
 	sys = run()
 	assert.NotContains(t, sys, "Response Language", "English should not add a language instruction:\n%s", sys)
 }
+
+// Every command speaks the interface language in the settings, not only
+// those that open a workspace (N26 cli-2#9).
+func TestCommandsUseTheLocale(t *testing.T) {
+	home := isolate(t)
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[ui]\nlocale = \"es\"\n"), 0o600))
+	i18n.SetCurrent(nil)
+	_, err := runCLI(t, "config", "path")
+	require.NoError(t, err)
+	assert.Equal(t, "editor de líneas no disponible: x", i18n.T("startup.line_editor", "error", "x"))
+}

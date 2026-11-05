@@ -72,7 +72,7 @@ func showSkill(s api.SkillInfo) {
 	}
 	tier := s.Tier
 	if s.Bypass {
-		tier += " (bypass)"
+		tier = i18n.T("skills.show_bypass", "tier", tier)
 	}
 	fmt.Printf("   %s\n", i18n.T("skills.show_tier", "tier", tier))
 	switch {

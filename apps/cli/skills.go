@@ -20,20 +20,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/skillreg"
 	"github.com/spf13/cobra"
 )
 
 // newSkillsCommand is `blitz skills`: skill registries, and the skills
-// installed from them (spec_013_skills SK-90..SK-96).
-func newSkillsCommand() *cobra.Command {
-	return newSkillsCommandWith(skillreg.Default())
+// installed from them (spec_013_skills SK-90..SK-96). A project's skills
+// go in the workspace --dir names, else the current folder.
+func newSkillsCommand(g *globalFlags) *cobra.Command {
+	return newSkillsCommandWith(skillreg.Default(), g)
 }
 
-func newSkillsCommandWith(store *skillreg.Store) *cobra.Command {
+// workspaceDir is the workspace g's --dir names, else the current folder
+// (N26 cli-2#11).
+func workspaceDir(g *globalFlags) (string, error) {
+	if g.dir != "" {
+		return filepath.Abs(config.ExpandHome(g.dir))
+	}
+	return os.Getwd()
+}
+
+func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "skills", Short: "Install skills from registries, such as Castor, and keep them up to date"}
 
 	registry := &cobra.Command{Use: "registry", Aliases: []string{"registries"}, Short: "Add, list and remove skill registries"}
@@ -120,7 +132,7 @@ func newSkillsCommandWith(store *skillreg.Store) *cobra.Command {
 		if !project {
 			return "", nil
 		}
-		return os.Getwd()
+		return workspaceDir(g)
 	}
 	install := &cobra.Command{
 		Use:   "install <registry/name|name>",
@@ -139,7 +151,7 @@ func newSkillsCommandWith(store *skillreg.Store) *cobra.Command {
 			return nil
 		},
 	}
-	install.Flags().BoolVar(&project, "project", false, "Install it in this folder's .agents/skills, for everyone working in it")
+	install.Flags().BoolVar(&project, "project", false, "Install it in the workspace's .agents/skills (--dir, else this folder), for everyone working in it")
 
 	update := &cobra.Command{
 		Use:   "update [name…]",
@@ -162,7 +174,7 @@ func newSkillsCommandWith(store *skillreg.Store) *cobra.Command {
 		Short: "Remove a skill installed from a registry",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir, err := os.Getwd()
+			dir, err := workspaceDir(g)
 			if err != nil {
 				return err
 			}
