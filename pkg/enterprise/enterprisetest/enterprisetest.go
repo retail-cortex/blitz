@@ -185,6 +185,9 @@ type Service struct {
 	Refreshes int
 	SignIns   []string // the client each sign-in named
 	Offline   bool
+	// ListDown makes listing the workspaces fail (503), as a service
+	// that's slow or restarting does; set with Mu held.
+	ListDown  bool
 	Tokenless bool // a sign-in or a run's token answered without tokens
 	// Key signs the branding; Branding is what it serves (none when nil),
 	// and Terms the version in force, accepted or not, by person.
@@ -535,6 +538,10 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
+		if s.ListDown {
+			refuse(w, http.StatusServiceUnavailable, "unavailable", "")
+			return
+		}
 		handles := make([]string, 0, len(s.Workspaces))
 		for h := range s.Workspaces {
 			handles = append(handles, h)

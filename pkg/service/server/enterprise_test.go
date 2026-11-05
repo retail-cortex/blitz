@@ -546,6 +546,17 @@ func TestOrgSync(t *testing.T) {
 		return st.Msg.State
 	}
 	require.Eventually(t, func() bool { return state() == "saved" }, 10*time.Second, 20*time.Millisecond, "kept in step once cloned")
+	// The service unreachable for several looks at its list: the sync
+	// keeps running (it used to stop with the first failed request).
+	org.Mu.Lock()
+	org.ListDown = true
+	org.Mu.Unlock()
+	time.Sleep(10 * s.ent.syncEvery)
+	assert.NotEmpty(t, state(), "still syncing while the list can't be read")
+	org.Mu.Lock()
+	org.ListDown = false
+	org.Mu.Unlock()
+	require.Eventually(t, func() bool { return state() == "saved" }, 10*time.Second, 20*time.Millisecond, "saved again once it answers")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("Ship it."), 0o644))
 	bare := org.Repo("plans")

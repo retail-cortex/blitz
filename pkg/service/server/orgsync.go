@@ -134,10 +134,16 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 	for {
 		want := map[string]enterprise.Workspace{}
 		remotes := map[string]string{}
-		if c.Status().SignedIn {
+		// Known: signed out (none wanted), or the list and the settings
+		// read. A list or settings that can't be read now (the service
+		// slow, a network blip) leaves the syncs running as they are:
+		// stopping them all on one failed request left every workspace
+		// unsynced until the next look.
+		known := !c.Status().SignedIn
+		if !known {
 			if list, err := c.Workspaces(ctx); err == nil {
-				cfg, err := config.Load(s.configDir)
-				if err == nil {
+				if cfg, err := config.Load(s.configDir); err == nil {
+					known = true
 					folder := s.orgFolder(c, cfg)
 					shared := sharedFor(c.URL())
 					for _, w := range list {
@@ -146,20 +152,26 @@ func (s *Server) runSyncs(ctx context.Context, c *enterprise.Client, kick <-chan
 							want[dir], remotes[dir] = w, remote
 						}
 					}
+				} else {
+					slog.Debug("the organization's workspaces to sync: the settings", "error", err)
+				}
+			} else if ctx.Err() == nil {
+				slog.Debug("the organization's workspaces to sync", "error", err)
+			}
+		}
+		if known {
+			for dir := range running {
+				if _, ok := want[dir]; !ok {
+					stop(dir)
 				}
 			}
-		}
-		for dir := range running {
-			if _, ok := want[dir]; !ok {
-				stop(dir)
-			}
-		}
-		for dir, w := range want {
-			if running[dir] == nil {
-				r := s.startSync(ctx, c, dir, w.Handle, remotes[dir])
-				s.ent.syncs.mu.Lock()
-				running[dir] = r
-				s.ent.syncs.mu.Unlock()
+			for dir, w := range want {
+				if running[dir] == nil {
+					r := s.startSync(ctx, c, dir, w.Handle, remotes[dir])
+					s.ent.syncs.mu.Lock()
+					running[dir] = r
+					s.ent.syncs.mu.Unlock()
+				}
 			}
 		}
 		t := time.NewTimer(every)
