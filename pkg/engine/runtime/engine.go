@@ -893,6 +893,9 @@ func (e *Engine) noteFallback(ctx context.Context, resp *model.LLMResponse) {
 	msg := i18n.T("model.fallback_recovered", "model", prev.primary) // the model that recovered
 	if now.served != "" {
 		msg = i18n.T("model.fallback", "primary", primary, "model", now.served)
+		if reason, _ := resp.CustomMetadata[FallbackReasonKey].(string); reason != "" {
+			msg = i18n.T("model.fallback_error", "primary", primary, "model", now.served, "error", reason)
+		}
 	}
 	slog.InfoContext(ctx, msg)
 	notice(msg)

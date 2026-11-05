@@ -454,6 +454,7 @@
     "tools.mcp.unavailable": "El servidor MCP \"{server}\" no está disponible: {error}",
     "tools.mcp.available": "El servidor MCP \"{server}\" vuelve a estar disponible.",
     "model.fallback": "{primary} no está disponible; por ahora responde el modelo de respaldo {model}.",
+    "model.fallback_error": "{primary} falló ({error}); por ahora responde el modelo de respaldo {model}.",
     "model.fallback_recovered": "{model} vuelve a responder.",
     "model.reconnecting": "Se perdió la conexión con el modelo ({error}). Reconectando…",
     "org.builtin_kept": "Tu organización desactiva el agente integrado {name}, pero las sesiones empiezan con él: se mantiene. Elige otro agente predeterminado para prescindir de él.",

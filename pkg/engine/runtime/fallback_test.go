@@ -17,6 +17,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"strings"
 	"sync"
@@ -39,7 +40,10 @@ type scripted struct {
 	mu        sync.Mutex
 	failing   bool
 	midStream bool
-	calls     int
+	// fail, when set, is the error a failing model returns (default: an
+	// overload).
+	fail  error
+	calls int
 }
 
 func (s *scripted) Name() string { return s.name }
@@ -57,7 +61,7 @@ func (s *scripted) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ b
 	return func(yield func(*model.LLMResponse, error) bool) {
 		s.mu.Lock()
 		s.calls++
-		failing, mid := s.failing, s.midStream
+		failing, mid, fail := s.failing, s.midStream, s.fail
 		s.mu.Unlock()
 		if err := ctx.Err(); err != nil {
 			yield(nil, err)
@@ -68,6 +72,10 @@ func (s *scripted) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ b
 				return
 			}
 			yield(nil, errors.New("stream reset"))
+			return
+		}
+		if fail != nil {
+			yield(nil, fail)
 			return
 		}
 		if failing {
@@ -322,7 +330,7 @@ func TestConsumerStoppingCountsAsAnswered(t *testing.T) {
 func TestFallbackNoticesPerRun(t *testing.T) {
 	fellBack := func() *model.LLMResponse {
 		r := &model.LLMResponse{}
-		markFallback(r, "local", "pinned-primary")
+		markFallback(r, "local", "pinned-primary", "")
 		return r
 	}
 	primary := func() *model.LLMResponse { return &model.LLMResponse{} }
@@ -361,4 +369,70 @@ func chainNames(f *fallbackModel) []string {
 		names[i] = m.Name()
 	}
 	return names
+}
+
+// The chain moves on, and opens the primary's breaker, for every error the
+// primary returns before answering, client errors included (the owner's
+// decision, MDL-61a), and the notice names the primary's error; a
+// cancelled turn is no error to fall back on (N26 engine-runtime#20).
+func TestFallbackOnEveryErrorKind(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		fallback bool
+		reason   string
+	}{
+		{name: "overloaded", err: errors.New("529 Overloaded"), fallback: true, reason: "529 Overloaded"},
+		{name: "server error", err: errors.New("500 Internal Server Error"), fallback: true, reason: "500 Internal Server Error"},
+		{name: "rate limit", err: errors.New("429 Too Many Requests: quota exceeded"), fallback: true, reason: "429 Too Many Requests: quota exceeded"},
+		{name: "bad request", err: errors.New("400 Bad Request: tools.0.input_schema: invalid"), fallback: true, reason: "400 Bad Request: tools.0.input_schema: invalid"},
+		{name: "broken key", err: errors.New("401 Unauthorized: invalid x-api-key"), fallback: true, reason: "401 Unauthorized: invalid x-api-key"},
+		{name: "forbidden", err: errors.New("403 Forbidden: permission denied"), fallback: true, reason: "403 Forbidden: permission denied"},
+		{name: "unknown model", err: errors.New("404 Not Found: model: claude-nope"), fallback: true, reason: "404 Not Found: model: claude-nope"},
+		{name: "context too long", err: errors.New("400 Bad Request:\n  prompt is too long: 210000 tokens > 200000 maximum"), fallback: true,
+			reason: "400 Bad Request: prompt is too long: 210000 tokens > 200000 maximum"},
+		{name: "organization budget", err: fmt.Errorf("monthly budget spent: %w", ErrOrgLimit), fallback: true,
+			reason: "monthly budget spent: your organization's limit is reached"},
+		{name: "a long body is cut", err: errors.New(strings.Repeat("x", 400)), fallback: true, reason: strings.Repeat("x", maxFallbackReason) + "…"},
+		{name: "cancelled", err: context.Canceled, fallback: false},
+		{name: "cancelled, wrapped", err: fmt.Errorf("request: %w", context.Canceled), fallback: false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			primary, backup := &scripted{name: "primary", fail: c.err}, &scripted{name: "backup"}
+			f, _ := chainOf(t, primary, backup)
+			var got []*model.LLMResponse
+			var err error
+			for resp, e := range f.GenerateContent(t.Context(), &model.LLMRequest{}, false) {
+				if e != nil {
+					err = e
+					break
+				}
+				got = append(got, resp)
+			}
+			open, _ := f.health[0].Allow()
+			if !c.fallback {
+				require.ErrorIs(t, err, context.Canceled)
+				assert.Equal(t, 0, backup.count(), "fell back on a cancelled call")
+				assert.True(t, open, "a cancelled call opened the primary's breaker")
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, "primary", got[0].CustomMetadata[FallbackFromKey])
+			assert.Equal(t, c.reason, got[0].CustomMetadata[FallbackReasonKey])
+			assert.False(t, open, "the primary's breaker stayed closed")
+
+			// While its breaker is open the primary is skipped, and the
+			// notice still names why.
+			var notices []string
+			e := &Engine{notice: func(m string) { notices = append(notices, m) }}
+			for resp, e2 := range f.GenerateContent(t.Context(), &model.LLMRequest{}, false) {
+				require.NoError(t, e2)
+				e.noteFallback(t.Context(), resp)
+			}
+			assert.Equal(t, 1, primary.count(), "the primary was tried during its cooldown")
+			assert.Equal(t, []string{"primary failed (" + c.reason + "); answering with fallback backup for now."}, notices)
+		})
+	}
 }
