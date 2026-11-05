@@ -382,6 +382,11 @@ func (s *Syncer) push(ctx context.Context) {
 
 // ahead reports whether this computer has saves the service hasn't.
 func (s *Syncer) ahead(ctx context.Context) bool {
+	if _, err := s.Git(ctx, s.Dir, "rev-parse", "--verify", "-q", s.upstream()+"/main"); err != nil {
+		// Nothing shared yet: any commit here is ahead.
+		_, err := s.Git(ctx, s.Dir, "rev-parse", "--verify", "-q", "HEAD")
+		return err == nil
+	}
 	out, err := s.Git(ctx, s.Dir, "rev-list", "--count", s.upstream()+"/main..HEAD")
 	return err == nil && strings.TrimSpace(string(out)) != "0"
 }
@@ -414,7 +419,13 @@ func (s *Syncer) take(ctx context.Context) bool {
 	}
 	upstream := s.upstream() + "/main"
 	if _, err := s.Git(ctx, s.Dir, "rev-parse", "--verify", "-q", upstream); err != nil {
-		return true // nothing shared yet
+		// Nothing shared yet: what's here goes out (ahead says so), or
+		// there's nothing to do; either way the sync has a state, not
+		// none until the next fetch.
+		if !s.ahead(ctx) {
+			s.settle()
+		}
+		return true
 	}
 	if _, err := s.Git(ctx, s.Dir, "merge", "-q", "--no-edit", upstream); err == nil {
 		if !s.ahead(ctx) {

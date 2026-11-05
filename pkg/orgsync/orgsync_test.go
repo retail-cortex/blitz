@@ -98,6 +98,38 @@ func read(dir, name string) string {
 	return string(b)
 }
 
+// A workspace whose shared repository has no main yet (its sync started
+// before the share's own push landed) sends what it has and says so,
+// rather than waiting, stateless, for the next fetch; with nothing on
+// either side it's in step.
+func TestNothingSharedYet(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		commit bool
+	}{
+		{"commits here go out", true},
+		{"nothing either side", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			bare, dir := filepath.Join(root, "plans.git"), filepath.Join(root, "ana")
+			run(t, root, "init", "-q", "--bare", "-b", "main", bare)
+			run(t, root, "init", "-q", "-b", "main", dir)
+			run(t, dir, "remote", "add", "origin", bare)
+			if tc.commit {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("# Plan\n"), 0o644))
+				run(t, dir, "add", "-A")
+				run(t, dir, "commit", "-q", "-m", "First")
+			}
+			s := start(t, "Ana", dir, nil, nil)
+			eventually(t, func() bool { return s.State().State == Saved }, "in step")
+			if tc.commit {
+				assert.Equal(t, "First", strings.TrimSpace(run(t, bare, "log", "-1", "--format=%s", "main")), "shared")
+			}
+		})
+	}
+}
+
 // A change is saved a moment after the last one, never mid-turn, and
 // reaches the others when they hear of it (EN-62).
 func TestSync(t *testing.T) {
