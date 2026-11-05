@@ -332,7 +332,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.bg {
 		return startBackground(ctx, cmd.OutOrStdout(), cfg, api.Turn{
 			Text: prompt, Plan: o.plan, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
-		})
+		}, o.images)
 	}
 	appendPrompt := o.appendPrompt
 	if o.appendPromptFile != "" {

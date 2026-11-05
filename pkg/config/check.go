@@ -15,15 +15,18 @@
 package config
 
 import (
+	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
 
 // decodeError is how toml reports a value that doesn't fit its setting:
@@ -37,6 +40,89 @@ type Problem struct {
 	// Error problems stop the file from being saved; warnings don't.
 	Error   bool
 	Message string
+}
+
+// decodeSettings decodes the settings file at path over cfg: that file
+// alone (no .env.<runtime>.toml or .env.local.toml beside it), with
+// modenv's xor: values anywhere in it turned back into their text.
+func decodeSettings(path string, cfg *Config) (toml.MetaData, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return toml.MetaData{}, err
+	}
+	text := string(data)
+	if strings.Contains(text, "xor:") {
+		var m map[string]any
+		if _, err := toml.Decode(text, &m); err != nil {
+			return toml.MetaData{}, fmt.Errorf("%s: %w", path, err)
+		}
+		if err := decryptAll(m); err != nil {
+			return toml.MetaData{}, fmt.Errorf("%s: %w", path, err)
+		}
+		var buf bytes.Buffer
+		if err := toml.NewEncoder(&buf).Encode(m); err != nil {
+			return toml.MetaData{}, fmt.Errorf("%s: %w", path, err)
+		}
+		text = buf.String()
+	}
+	md, err := toml.Decode(text, cfg)
+	if err != nil {
+		return md, fmt.Errorf("%s: %w", path, err)
+	}
+	return md, nil
+}
+
+// decryptAll turns modenv's xor: values in v, at any depth, back into
+// their text.
+func decryptAll(v any) error {
+	switch v := v.(type) {
+	case map[string]any:
+		for k, x := range v {
+			if s, ok := x.(string); ok && strings.HasPrefix(s, "xor:") {
+				plain, err := modenv.DecryptSecret(s)
+				if err != nil {
+					return fmt.Errorf("%s: %w", k, err)
+				}
+				v[k] = plain
+				continue
+			}
+			if err := decryptAll(x); err != nil {
+				return err
+			}
+		}
+	case []map[string]any:
+		for _, x := range v {
+			if err := decryptAll(x); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, x := range v {
+			if s, ok := x.(string); ok && strings.HasPrefix(s, "xor:") {
+				plain, err := modenv.DecryptSecret(s)
+				if err != nil {
+					return err
+				}
+				v[i] = plain
+				continue
+			}
+			if err := decryptAll(x); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// unknownSettings are the warnings for the keys in the settings file at
+// path that Blitz doesn't know (CFG-48): loading ignores them, so a typo
+// such as [permissions] denny is said out loud, not dropped.
+func unknownSettings(path string, md toml.MetaData) []string {
+	var out []string
+	for _, k := range md.Undecoded() {
+		out = append(out, fmt.Sprintf("%s: unknown setting %s (ignored)", path, k))
+	}
+	return out
 }
 
 // CheckSettings checks a settings file's text without saving it: TOML
@@ -100,6 +186,10 @@ func CheckSettings(text string) []Problem {
 	}
 	for _, msg := range cfg.Skills.Policy.Problems() {
 		out = append(out, Problem{Line: keyLine(text, toml.Key{"skills", "policy"}), Message: msg})
+	}
+	for _, msg := range fixChoices(&cfg, false) {
+		key, _, _ := strings.Cut(msg, " ")
+		out = append(out, Problem{Line: keyLine(text, splitKey(key)), Message: msg})
 	}
 	// By line, errors first on a line.
 	slices.SortStableFunc(out, func(a, b Problem) int {

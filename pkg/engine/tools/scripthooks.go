@@ -689,8 +689,12 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "blitz-hooks")
+	var scrub []string
+	if s.exec != nil {
+		scrub = s.exec.ScrubEnv
+	}
 	for k, v := range h.Headers {
-		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars))
+		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars, scrub))
 	}
 	resp, err := s.HTTP.Do(req)
 	if err != nil {
@@ -708,10 +712,12 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 }
 
 // expandAllowed replaces $VAR and ${VAR} in v with the environment's value
-// for the names allowed; others stay as written.
-func expandAllowed(v string, allowed []string) string {
+// for the names allowed; others stay as written. A name sandbox.scrub_env
+// withholds (scrub) is never sent, allowed or not: a hook can't carry
+// what commands aren't given (N26 api-client-config#2).
+func expandAllowed(v string, allowed, scrub []string) string {
 	return os.Expand(v, func(name string) string {
-		if slices.Contains(allowed, name) {
+		if slices.Contains(allowed, name) && !scrubbed(name, scrub) {
 			return os.Getenv(name)
 		}
 		return "${" + name + "}"

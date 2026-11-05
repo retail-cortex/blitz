@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"errors"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"time"
 
 	"connectrpc.com/connect"
@@ -109,7 +110,7 @@ func (s *Settings) SignInOrganization(ctx context.Context, device bool, on func(
 	if err := stream.Err(); err != nil {
 		return Organization{}, fromAPI(err)
 	}
-	return Organization{}, errors.New("the service ended the sign-in without a result")
+	return Organization{}, errors.New(i18n.T("attached.sign_in_unfinished"))
 }
 
 // SignOutOrganization signs out of the organization's service

@@ -269,3 +269,27 @@ func TestCallGrants(t *testing.T) {
 	assert.Len(t, *reqs, 6, "asked: before the grant, the empty ID, the other call, the other session's, the ask rule, after it ended")
 	assert.Equal(t, "", CallID(context.Background()))
 }
+
+// An http hook's headers carry only the variables it allows, and never
+// one sandbox.scrub_env withholds, allowed or not: a project's hook can't
+// send the person's API key (N26 api-client-config#2).
+func TestExpandAllowed(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-secret")
+	t.Setenv("HOOK_TOKEN", "t0ken")
+	scrub := config.DefaultScrubEnv
+	cases := []struct {
+		name, value string
+		allowed     []string
+		want        string
+	}{
+		{name: "allowed", value: "Bearer $HOOK_TOKEN", allowed: []string{"HOOK_TOKEN"}, want: "Bearer t0ken"},
+		{name: "not allowed", value: "Bearer ${HOOK_TOKEN}", want: "Bearer ${HOOK_TOKEN}"},
+		{name: "allowed but scrubbed", value: "$ANTHROPIC_API_KEY", allowed: []string{"ANTHROPIC_API_KEY"}, want: "${ANTHROPIC_API_KEY}"},
+		{name: "scrubbed, any case", value: "$anthropic_api_key", allowed: []string{"anthropic_api_key"}, want: "${anthropic_api_key}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, expandAllowed(tc.value, tc.allowed, scrub))
+		})
+	}
+}

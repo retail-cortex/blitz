@@ -172,6 +172,8 @@ func ProjectNotice(p api.ProjectSettings) string {
 		waiting = len(p.Pending)
 	}
 	switch {
+	case p.State == api.TrustUnknown:
+		return i18n.T("project.state.unknown")
 	case len(p.Applied) == 0 && waiting == 0:
 		return ""
 	case waiting == 0:

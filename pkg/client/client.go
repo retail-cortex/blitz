@@ -142,6 +142,7 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	for _, img := range t.Images {
 		turn.ImageIds = append(turn.ImageIds, img.SHA256)
 	}
+	turn.Context = contextMsgs(t.Context)
 	r.ranIn(sessionID)
 	stream, err := r.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sessionID, Turn: turn}))
 	if err != nil {
@@ -179,7 +180,7 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	if err := stream.Err(); err != nil {
 		return api.TurnResult{}, fromAPI(err)
 	}
-	return api.TurnResult{}, errors.New("the service ended the turn without finishing it")
+	return api.TurnResult{}, errors.New(i18n.T("attached.turn_unfinished"))
 }
 
 func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *pb.ApprovalRequest) {
@@ -188,6 +189,7 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 		var err error
 		if d, err = approve(ctx, api.ApprovalRequest{
 			Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, KeyLabel: req.ScopeLabel,
+			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk,
 		}); err != nil {
 			d = api.DecisionDeny
 		}
@@ -521,7 +523,7 @@ func (r *Remote) RemovePermissionRule(rule string, save api.Scope) (api.Permissi
 }
 
 // SetPermissionMode sets the permission mode (default, accept-edits,
-// plan, dont-ask or bypass) and returns it (WorkspaceService.SetPermissionMode).
+// plan, auto, dont-ask or bypass) and returns it (WorkspaceService.SetPermissionMode).
 func (r *Remote) SetPermissionMode(mode string) (string, error) {
 	res, err := r.workspaces.SetPermissionMode(context.Background(), connect.NewRequest(&pb.SetPermissionModeRequest{Workspace: r.dir, Mode: mode}))
 	if err != nil {
@@ -758,7 +760,7 @@ func (r *Remote) ReloadMemory(ctx context.Context) ([]string, error) {
 func (r *Remote) Reload(ctx context.Context) (api.ReloadResult, error) {
 	res, err := r.workspaces.ReloadAgentFiles(ctx, connect.NewRequest(&pb.ReloadAgentFilesRequest{Workspace: r.dir}))
 	if err != nil {
-		return api.ReloadResult{}, err
+		return api.ReloadResult{}, fromAPI(err)
 	}
 	return api.ReloadResult{Agents: int(res.Msg.Agents), Skills: int(res.Msg.Skills), Files: res.Msg.Files, Problems: res.Msg.Problems}, nil
 }
@@ -854,16 +856,6 @@ func (r *Remote) GitDiff(ctx context.Context, color bool) (string, error) {
 		return "", fromAPI(err)
 	}
 	return res.Msg.Diff, nil
-}
-
-// GitStatus is the workspace's git branch and how many files differ from
-// HEAD (WorkspaceService.GetGitStatus).
-func (r *Remote) GitStatus(ctx context.Context) (api.GitStatus, error) {
-	res, err := r.workspaces.GetGitStatus(ctx, connect.NewRequest(&pb.GetGitStatusRequest{Workspace: r.dir}))
-	if err != nil {
-		return api.GitStatus{}, fromAPI(err)
-	}
-	return api.GitStatus{Git: res.Msg.Git, Repo: res.Msg.Repo, Branch: res.Msg.Branch, Changed: int(res.Msg.Changed)}, nil
 }
 
 // ListApprovals lists the standing approvals the user gave
@@ -1052,5 +1044,5 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 	if err := stream.Err(); err != nil {
 		return api.EvalRun{}, fromAPI(err)
 	}
-	return api.EvalRun{}, errors.New("the service ended the eval without finishing it")
+	return api.EvalRun{}, errors.New(i18n.T("attached.eval_unfinished"))
 }

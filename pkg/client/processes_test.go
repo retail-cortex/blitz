@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 // A client accounts for the background processes its own turns started in
@@ -163,62 +164,77 @@ func TestRemoteBackgroundTasks(t *testing.T) {
 	assert.Contains(t, info.Messages[i].Text, got.ID+" (qa) finished")
 }
 
-// A background task's approval request reaches its client through
-// WatchTasks and ListTaskRequests, and the ordinary Approve answers it.
+// A background task's approval request or question reaches its client
+// through WatchTasks and ListTaskRequests, and AnswerTaskRequest answers
+// it; a question answered with an empty line goes as Approve, which the
+// service takes as that answer by the request's ID.
 func TestRemoteTaskRequests(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MODENV_PREFIX", "")
-	start := call("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "make a file", "background": true})
-	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.WorkspaceDir = dir
-		cfg.Session.StorageDir = t.TempDir()
-		cfg.AgentModels = map[string]string{"qa": "gemini/qa-model"}
-		return engine.Open(ctx, cfg, engine.Options{
-			Model: runtime.NewMockLLM("gemini-3.8-flash", start, text("started")),
-			NewModel: func(_ context.Context, _ *config.Config, ref string) (model.LLM, error) {
-				return runtime.NewMockLLM("qa-model", create, text("made it")), nil
-			},
-		})
-	})
-	srv := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { srv.Close(); s.Close() })
-	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
-	require.NoError(t, err)
-	sess, _, err := r.OpenSession("", false)
-	require.NoError(t, err)
-
-	watchCtx, stop := context.WithTimeout(context.Background(), 15*time.Second)
-	defer stop()
-	stream, err := r.workspaces.WatchTasks(watchCtx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: r.dir, SessionIds: []string{sess.ID}}))
-	require.NoError(t, err)
-	defer stream.Close()
-	require.True(t, stream.Receive(), "no ready: %v", stream.Err())
-	require.True(t, stream.Msg().Event.GetReady())
-
-	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(api.Event) {})
-	require.NoError(t, err)
-	var asked *pb.ApprovalRequest
-	for asked == nil && stream.Receive() {
-		if a := stream.Msg().Event.GetApprovalRequest(); a != nil {
-			asked = a
-		}
+	cases := []struct {
+		name string
+		call *genai.Content
+	}{
+		{"an approval", call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})},
+		{"a question", call("ask_user_question", map[string]any{"question": "Tabs or spaces?"})},
 	}
-	require.NotNil(t, asked, "no request streamed: %v", stream.Err())
-	assert.Equal(t, "qa", asked.Agent)
-	assert.Equal(t, "task-1", asked.TaskId)
-	pending := r.PendingTaskRequests()
-	require.Len(t, pending, 1)
-	assert.Equal(t, asked.RequestId, pending[0].ID)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("MODENV_PREFIX", "")
+			start := call("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "make a file", "background": true})
+			s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+				cfg := config.DefaultConfig()
+				cfg.Tools.WorkspaceDir = dir
+				cfg.Session.StorageDir = t.TempDir()
+				cfg.AgentModels = map[string]string{"qa": "gemini/qa-model"}
+				return engine.Open(ctx, cfg, engine.Options{
+					Model: runtime.NewMockLLM("gemini-3.8-flash", start, text("started")),
+					NewModel: func(_ context.Context, _ *config.Config, ref string) (model.LLM, error) {
+						return runtime.NewMockLLM("qa-model", tc.call, text("made it")), nil
+					},
+				})
+			})
+			srv := httptest.NewServer(s.Handler())
+			t.Cleanup(func() { srv.Close(); s.Close() })
+			r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
+			require.NoError(t, err)
+			sess, _, err := r.OpenSession("", false)
+			require.NoError(t, err)
 
-	require.NoError(t, r.AnswerTaskRequest(asked.RequestId, api.DecisionOnce, ""))
-	require.Eventually(t, func() bool {
-		got, _, err := r.Task("task-1")
-		return err == nil && got.State == api.TaskDone
-	}, 10*time.Second, 50*time.Millisecond)
-	assert.Empty(t, r.PendingTaskRequests())
-	assert.ErrorIs(t, r.AnswerTaskRequest(asked.RequestId, api.DecisionOnce, ""), api.ErrUnknownRequest, "answered twice")
+			watchCtx, stop := context.WithTimeout(context.Background(), 15*time.Second)
+			defer stop()
+			stream, err := r.workspaces.WatchTasks(watchCtx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: r.dir, SessionIds: []string{sess.ID}}))
+			require.NoError(t, err)
+			defer stream.Close()
+			require.True(t, stream.Receive(), "no ready: %v", stream.Err())
+			require.True(t, stream.Msg().Event.GetReady())
+
+			_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(api.Event) {})
+			require.NoError(t, err)
+			var id, agent, task string
+			for id == "" && stream.Receive() {
+				if a := stream.Msg().Event.GetApprovalRequest(); a != nil {
+					id, agent, task = a.RequestId, a.Agent, a.TaskId
+				}
+				if q := stream.Msg().Event.GetQuestion(); q != nil {
+					id, agent, task = q.RequestId, q.Agent, q.TaskId
+				}
+			}
+			require.NotEmpty(t, id, "no request streamed: %v", stream.Err())
+			assert.Equal(t, "qa", agent)
+			assert.Equal(t, "task-1", task)
+			pending := r.PendingTaskRequests()
+			require.Len(t, pending, 1)
+			assert.Equal(t, id, pending[0].ID)
+
+			require.NoError(t, r.AnswerTaskRequest(id, api.DecisionOnce, ""))
+			require.Eventually(t, func() bool {
+				got, _, err := r.Task("task-1")
+				return err == nil && got.State == api.TaskDone
+			}, 10*time.Second, 50*time.Millisecond)
+			assert.Empty(t, r.PendingTaskRequests())
+			assert.ErrorIs(t, r.AnswerTaskRequest(id, api.DecisionOnce, ""), api.ErrUnknownRequest, "answered twice")
+		})
+	}
 }
 
 // Attached, /cd moves the session to the target workspace in the service;

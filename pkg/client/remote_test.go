@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
@@ -139,7 +141,6 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"SetLocale":            func() error { _, err := r.SetLocale(ctx, "fr"); return err },
 		"Undo":                 func() error { _, err := r.Undo(false); return err },
 		"GitDiff":              func() error { _, err := r.GitDiff(ctx, false); return err },
-		"GitStatus":            func() error { _, err := r.GitStatus(ctx); return err },
 		"LoadImage":            func() error { _, err := r.LoadImage("a.png"); return err },
 		"AddImage":             func() error { _, err := r.AddImage("a.png", nil); return err },
 		"LoadAttachments":      func() error { _, err := r.LoadAttachments([]string{"a.png"}, "", nil); return err },
@@ -168,6 +169,18 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 	assert.Equal(t, "effort", set, "the key as it would have been applied")
 }
 
+// Reload's error is app's, not the transport's, as every other call's
+// (N26 api-client-config#21).
+func TestRemoteReloadError(t *testing.T) {
+	r, _ := gone(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := r.Reload(ctx)
+	var ce *connect.Error
+	assert.False(t, errors.As(err, &ce), "a raw connect error: %v", err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
 // With the service gone, the calls that can't return an error tell warn
 // and return nothing.
 func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
@@ -192,6 +205,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		"SandboxSummary":      func() any { return r.SandboxSummary() },
 		"ListCheckpoints":     func() any { return r.ListCheckpoints() },
 		"SessionDiff":         func() any { return r.SessionDiff() },
+		"TakeProcessNotices":  func() any { return r.TakeProcessNotices("s") },
 		"ListApprovals":       func() any { return r.ListApprovals() },
 		"SearchStatus":        func() any { return r.SearchStatus().Items },
 		"SearchSession":       func() any { n, _ := r.SearchSession("x"); return n },
@@ -211,6 +225,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		})
 	}
 	assert.Empty(t, r.TakeProcessNotices("s"), "notices without the service")
+	assert.Equal(t, api.TrustUnknown, r.ProjectSettings().State, "not \"nothing to trust\" (N26 api-client-config#29)")
 }
 
 // The rest of Backend over a live service: sessions, models, skills,

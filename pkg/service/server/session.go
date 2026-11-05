@@ -204,10 +204,7 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 		imgs = append(imgs, img)
 	}
 
-	var added []api.ContextBlock
-	for _, c := range t.Context {
-		added = append(added, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
-	}
+	added := contextBlocks(t.Context)
 
 	var mu sync.Mutex
 	var sendErr error

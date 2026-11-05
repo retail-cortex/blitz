@@ -134,8 +134,12 @@ func TestEnterpriseJourney(t *testing.T) {
 		assert.True(t, done.State.SignedIn)
 	})
 	t.Run("one sign-in at a time", func(t *testing.T) {
-		s.ent.signingIn.Lock()
-		defer s.ent.signingIn.Unlock()
+		wait := signInWait
+		signInWait = 10 * time.Millisecond
+		defer func() { signInWait = wait }()
+		end, ok := s.ent.beginSignIn(context.Background())
+		require.True(t, ok)
+		defer end()
 		_, _, err := signIn(false)
 		_, info := errorReason(t, err)
 		assert.Equal(t, "SIGN_IN_RUNNING", info.Reason)

@@ -151,6 +151,8 @@ type   = "prompt"
 prompt = "Deny anything that deletes outside the workspace or touches production."
 ```
 
+An http hook's headers get only the variables `allowed_env_vars` names, and never one `sandbox.scrub_env` withholds from commands (`*_API_KEY`, `*_TOKEN`, … by default): to send such a token, take its pattern out of `scrub_env`. Before you trust a project's hooks, Blitz shows the headers and variables each http hook would send.
+
 `if` takes a permission rule: `shell(…)` is checked against each command of the script (one Blitz can't parse runs the hook, so it can decide), `read`, `write` and `delete(…)` against the files a call reads, writes or deletes (for `apply_patch`, the files in its patch), and `web(…)` against a page's host.
 
 `/hooks` lists them all, where each came from, and their recent failures.

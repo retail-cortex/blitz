@@ -49,12 +49,14 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Org.Expired(time.Now()) {
-		// Never without the organization's rules (EN-33).
-		return nil, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
-	}
 	st := c.Status()
-	if !st.SignedIn {
+	switch {
+	case cfg.Org.Problem != "" && st.SignedIn:
+		// Never without the organization's rules (EN-33).
+		return nil, fmt.Errorf("your organization's policy can't be read (%s): its models wait until Blitz fetches it from %s again", cfg.Org.Problem, c.URL())
+	case cfg.Org.Problem == "" && cfg.Org.Expired(time.Now()):
+		return nil, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
+	case !st.SignedIn:
 		return nil, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Organization, or blitz enterprise login", c.URL())
 	}
 	// The workspace opens on this: a service that doesn't answer leaves

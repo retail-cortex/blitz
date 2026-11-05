@@ -38,6 +38,7 @@ Skills are reusable instructions (`SKILL.md`) an agent loads on demand, optional
 - **SK-21** Tier: stricter of declared and `min_hitl_tier` (0 or 1 → tier 1; capped at 3; default 2). Tier 0 (bypass) requires both the skill's `allow_hitl_bypass` and the policy's; otherwise it becomes tier 3.
 - **SK-22** Environment: variables the skill asks for pass only if they match `env_passthrough` globs; the rest are withheld (reported).
 - **SK-23** Per script: language must be in `languages` (default `python`, `typescript`); timeout = script's, else hints', capped by `max_timeout_seconds` (300) which also applies when none is set; each dependency must be a plain PEP 508 requirement (no URLs, paths or pip options), not in `packages.deny`, in `packages.allow` if set (PEP 503-normalised names, globs), and pinned `==` when `require_hashes`.
+- **SK-23** *2026-11-05 (scan N26-api-client-config#13).* The default `languages` is every one of `ScriptLanguages` (SK-105, SK-106), not python and typescript.
 - **SK-24** `Problems()` of the policy are warned at startup and by `doctor`.
 
 ## 4b. Slash commands

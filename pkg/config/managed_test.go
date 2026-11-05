@@ -25,13 +25,13 @@ import (
 
 // Device management's machine-wide settings (spec_053 EN-10): its
 // organization and workspaces folder over the person's, which they can't
-// change while it's set; a file that doesn't parse sets nothing; the
+// change while it's set; a file that doesn't parse keeps it managed; the
 // machine's own place on each system.
 func TestManagedSettings(t *testing.T) {
 	keysEnv(t)
 	managed := filepath.Join(t.TempDir(), "managed.toml")
 	t.Setenv(ManagedEnv, managed)
-	assert.Empty(t, ManagedURL(), "no file")
+	assert.False(t, Managed(), "no file")
 	_, err := SetEnterpriseURL("", "https://mine.example")
 	require.NoError(t, err)
 
@@ -47,8 +47,13 @@ func TestManagedSettings(t *testing.T) {
 	require.NoError(t, os.WriteFile(managed, []byte("[enterprise\nurl ="), 0o644))
 	cfg, err = Load("")
 	require.NoError(t, err)
-	assert.Equal(t, "https://mine.example", cfg.Enterprise.URL, "a broken file sets nothing")
-	assert.False(t, cfg.Enterprise.Managed)
+	assert.Equal(t, "https://mine.example", cfg.Enterprise.URL, "a broken file sets no service")
+	assert.True(t, cfg.Enterprise.Managed, "but stays managed (N26 api-client-config#16)")
+	assert.True(t, Managed())
+	_, err = SetEnterpriseURL("", "")
+	assert.ErrorIs(t, err, ErrManaged)
+	require.NotEmpty(t, cfg.Warnings)
+	assert.Contains(t, cfg.Warnings[0], "device management's settings can't be read")
 
 	t.Setenv(ManagedEnv, "")
 	assert.Equal(t, filepath.Base(ManagedSettingsPath()), "managed.toml")

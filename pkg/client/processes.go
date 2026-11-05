@@ -25,7 +25,8 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// pollEvery is how often WaitAll asks whether the processes have finished.
+// pollEvery is how often WaitAll asks whether the processes have finished,
+// and RunWorker whether its run has.
 var pollEvery = 500 * time.Millisecond
 
 // callTimeout bounds the calls made while the client exits.
@@ -270,6 +271,7 @@ func (r *Remote) PendingTaskRequests() []api.TaskRequest {
 			a := k.ApprovalRequest
 			out = append(out, api.TaskRequest{ID: a.RequestId, TaskID: a.TaskId, Agent: a.Agent, Approval: &api.ApprovalRequest{
 				Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, KeyLabel: a.ScopeLabel,
+				Key: a.Key, Targets: a.Targets, MustAsk: a.MustAsk,
 			}})
 		case *pb.TaskEvent_Question:
 			q := k.Question

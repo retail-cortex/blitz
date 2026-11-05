@@ -16,6 +16,7 @@ package config
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,6 +42,9 @@ func TestReferenceDescribesEverySetting(t *testing.T) {
 		{"llm", "table", ""},
 		{"llm.provider", "string", `"gemini"`},
 		{"llm.max_retries", "integer", "3"},
+		{"processes.cpu_percent", "number", "90"},
+		{"processes.busy_for", "string", `"2m"`},
+		{"sandbox.shell", "string", strconv.Quote(DefaultShellMode())},
 		{"blitz.temperature", "number", "0.2"},
 		{"tools.max_parallel", "integer", "8"},
 		{"skills.paths", "list of strings", `["~/.blitz/skills", "./skills", ".agents/skills"]`},

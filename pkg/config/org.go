@@ -16,6 +16,8 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -40,6 +42,12 @@ type OrgLayer struct {
 	Policy           OrgPolicy
 	// Expires is when Blitz stops working under it unrenewed (EN-33).
 	Expires time.Time
+	// Problem is why the organization's policy couldn't be read ("" when
+	// it was): a service is set but its policy.json is missing or
+	// damaged. Blitz then works under the strictest policy (nothing of
+	// the person's own allowed), and the organization's work waits, as
+	// past an expiry (EN-33).
+	Problem string
 }
 
 // LockOf is how the catalog applies the item at path: "locked" or
@@ -59,10 +67,11 @@ func (o OrgLayer) LockOf(path string) string {
 // Active reports whether a catalog applies.
 func (o OrgLayer) Active() bool { return o.Defaults != "" || o.Locked != "" }
 
-// Expired reports whether the catalog is past its expiry at now: the
-// organization's work waits until it's fetched again (EN-33).
+// Expired reports whether the catalog is past its expiry at now, or its
+// policy couldn't be read: the organization's work waits until it's
+// fetched again (EN-33).
 func (o OrgLayer) Expired(now time.Time) bool {
-	return o.Active() && !o.Expires.IsZero() && now.After(o.Expires)
+	return o.Active() && (o.Problem != "" || !o.Expires.IsZero() && now.After(o.Expires))
 }
 
 // OrgPolicy is the organization's policy as Blitz applies it (EN-35):
@@ -123,41 +132,85 @@ func applyOrg(cfg *Config, prefixDir string) {
 	if dir == "" {
 		return
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "policy.json"))
-	if err != nil {
-		return
-	}
-	var st orgState
-	if json.Unmarshal(raw, &st) != nil {
-		return
-	}
 	layers := filepath.Join(dir, "catalog")
-	cfg.Org = OrgLayer{Defaults: filepath.Join(layers, "default"), Locked: filepath.Join(layers, "locked"), Policy: st.Policy, Expires: st.Expires}
+	cfg.Org = OrgLayer{Defaults: filepath.Join(layers, "default"), Locked: filepath.Join(layers, "locked")}
+	path := filepath.Join(dir, "policy.json")
+	var st orgState
+	raw, err := os.ReadFile(path)
+	if err == nil {
+		err = json.Unmarshal(raw, &st)
+	}
+	if err != nil {
+		// Never without the organization's rules (EN-33): with no policy
+		// to go by, the strictest one (the zero policy allows nothing of
+		// the person's own), and its work waits.
+		st = orgState{}
+		cfg.Org.Problem = err.Error()
+		if errors.Is(err, os.ErrNotExist) {
+			cfg.Org.Problem = "not fetched yet"
+		}
+		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Organization or with blitz enterprise login", path, cfg.Org.Problem))
+	}
+	cfg.Org.Policy, cfg.Org.Expires = st.Policy, st.Expires
 	orgLayers.Store(ConfigDir(prefixDir), cfg.Org)
 	for _, tool := range st.Policy.Tools.Off {
 		if !slices.Contains(cfg.Permissions.Deny, tool) {
 			cfg.Permissions.Deny = append(cfg.Permissions.Deny, tool)
 		}
 	}
-	cfg.MCP.Servers = orgMCP(cfg.MCP.Servers, cfg.Org)
+	var problems []string
+	cfg.MCP.Servers, problems = orgMCP(cfg.MCP.Servers, cfg.Org)
+	cfg.Warnings = append(cfg.Warnings, problems...)
+}
+
+// ErrOrgMCP is why an MCP server added after the settings load isn't
+// used: the organization's policy doesn't allow MCP servers of the
+// person's own (EN-35).
+var ErrOrgMCP = errors.New("your organization's policy doesn't allow MCP servers of your own")
+
+// ErrMCPNameTaken is why an MCP server added after the settings load isn't
+// used: one of its name is there already, and that one stays.
+var ErrMCPNameTaken = errors.New("an MCP server of that name exists already")
+
+// AddMCPServer adds s to the MCP servers from a source that comes after
+// the settings load, and so after the organization's policy applies (a
+// trusted project's, a plugin's): every such source goes through here, so
+// the policy holds for them all (EN-35). It's refused with ErrOrgMCP when
+// the organization doesn't allow the person's own servers, and with
+// ErrMCPNameTaken when one of its name is there already.
+func (c *Config) AddMCPServer(s MCPServerConfig) error {
+	if c.Org.Active() && !c.Org.Policy.MCP.Own {
+		return ErrOrgMCP
+	}
+	if slices.ContainsFunc(c.MCP.Servers, func(u MCPServerConfig) bool { return u.Name == s.Name }) {
+		return ErrMCPNameTaken
+	}
+	c.MCP.Servers = append(c.MCP.Servers, s)
+	return nil
 }
 
 // orgMCP is the MCP servers with the organization's: a locked one in
 // place of the person's of its name, a default one unless they have one;
-// the person's own are dropped when the policy doesn't allow them.
-func orgMCP(own []MCPServerConfig, o OrgLayer) []MCPServerConfig {
+// the person's own are dropped when the policy doesn't allow them. The
+// problems are the organization's files that couldn't be read.
+func orgMCP(own []MCPServerConfig, o OrgLayer) ([]MCPServerConfig, []string) {
 	var out []MCPServerConfig
+	var problems []string
 	if o.Policy.MCP.Own {
 		out = slices.Clone(own)
 	}
 	add := func(dir string, locked bool) {
-		entries, _ := os.ReadDir(filepath.Join(dir, "mcp"))
+		entries, err := os.ReadDir(filepath.Join(dir, "mcp"))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			problems = append(problems, fmt.Sprintf("your organization's MCP servers (%s) can't be read: %v", filepath.Join(dir, "mcp"), err))
+		}
 		for _, e := range entries {
 			if e.IsDir() || filepath.Ext(e.Name()) != ".toml" {
 				continue
 			}
 			var s MCPServerConfig
 			if _, err := toml.DecodeFile(filepath.Join(dir, "mcp", e.Name()), &s); err != nil {
+				problems = append(problems, fmt.Sprintf("your organization's MCP server %s isn't used: %v", filepath.Join(dir, "mcp", e.Name()), err))
 				continue
 			}
 			if s.Name == "" {
@@ -174,7 +227,7 @@ func orgMCP(own []MCPServerConfig, o OrgLayer) []MCPServerConfig {
 	}
 	add(o.Locked, true)
 	add(o.Defaults, false)
-	return out
+	return out, problems
 }
 
 // around is subfolder sub of the organization's layers, around the
@@ -206,10 +259,6 @@ func (o OrgLayer) LockedFirst(dirs []string, subs ...string) []string {
 	}
 	return out
 }
-
-// Around is the exported form of around, for the engine's own lists
-// (commands).
-func (o OrgLayer) Around(sub string, dirs []string) []string { return o.around(sub, dirs) }
 
 // orgLayers is each settings folder's organization layer, as its settings
 // last loaded it, for what reads the catalog without the settings to hand

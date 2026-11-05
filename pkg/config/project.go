@@ -83,6 +83,7 @@ const (
 	ReasonOutside     = "outside"      // a path outside the workspace
 	ReasonProvider    = "provider"     // a model of a provider the user hasn't set up
 	ReasonUserSet     = "user_set"     // the user's own settings set it
+	ReasonOrgPolicy   = "org_policy"   // the organization's policy doesn't allow it (EN-35)
 )
 
 // ProjectItem is one setting from a project file.
@@ -419,6 +420,9 @@ func (p *Project) Hash(extra ...string) string {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
+// maxHashedBytes is how much of a referenced file is read for its hash.
+var maxHashedBytes int64 = 64 << 20
+
 // referencedFiles are the workspace files that pf's hooks and MCP servers
 // name (a script they run), with the SHA-256 of each.
 func referencedFiles(workspace string, pf *projectFile) map[string]string {
@@ -444,7 +448,12 @@ func referencedFiles(workspace string, pf *projectFile) map[string]string {
 		info, err := f.Stat()
 		if err == nil && info.Mode().IsRegular() {
 			sum := sha256.New()
-			if _, err := io.Copy(sum, io.LimitReader(f, 64<<20)); err == nil {
+			if _, err := io.Copy(sum, io.LimitReader(f, maxHashedBytes)); err == nil {
+				if info.Size() > maxHashedBytes {
+					// Past what's read, its size and time stand in for the
+					// rest, so a change there asks again too.
+					fmt.Fprintf(sum, "\x00%d\x00%d", info.Size(), info.ModTime().UnixNano())
+				}
 				out[filepath.ToSlash(rel)] = hex.EncodeToString(sum.Sum(nil))
 			}
 		}
@@ -572,14 +581,16 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 	for _, pf := range p.trusted {
 		cfg.Hooks = AppendHooks(cfg.Hooks, WithSource(pf.Hooks, pf.file))
 		for _, s := range pf.MCP.Servers {
-			if slices.ContainsFunc(cfg.MCP.Servers, func(u MCPServerConfig) bool { return u.Name == s.Name }) {
-				ignore(pf, ProjectMCP, s.Name, "", ReasonUserSet)
-				continue
-			}
-			cfg.MCP.Servers = append(cfg.MCP.Servers, MCPServerConfig{
+			err := cfg.AddMCPServer(MCPServerConfig{
 				Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, URL: s.URL, Headers: s.Headers, Tools: s.Tools,
 				Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: s.TimeoutSeconds, Scope: MCPScopeProject,
 			})
+			switch {
+			case errors.Is(err, ErrOrgMCP):
+				ignore(pf, ProjectMCP, s.Name, "", ReasonOrgPolicy)
+			case err != nil:
+				ignore(pf, ProjectMCP, s.Name, "", ReasonUserSet)
+			}
 		}
 		for _, r := range pf.Permissions.Allow {
 			cfg.ProjectPermissions.Allow = appendNew(cfg.ProjectPermissions.Allow, r)
@@ -626,7 +637,8 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 
 // providerReady reports whether ref ("provider/model", or a model of the
 // configured provider) names a provider the user has set up: the one
-// configured, or one with an API key.
+// configured, or one with an API key or a sign-in (OAuth, Application
+// Default Credentials).
 func (c *Config) providerReady(ref string) bool {
 	provider, _, ok := strings.Cut(ref, "/")
 	if !ok || strings.EqualFold(provider, c.LLM.Provider) {
@@ -634,15 +646,15 @@ func (c *Config) providerReady(ref string) bool {
 	}
 	switch strings.ToLower(provider) {
 	case "gemini", "google":
-		return c.LLM.Gemini.APIKey != "" || c.LLM.Gemini.APIKeyCommand != ""
+		return c.LLM.Gemini.APIKey != "" || c.LLM.Gemini.APIKeyCommand != "" || c.LLM.Gemini.UsesADC()
 	case "anthropic":
-		return c.LLM.Anthropic.APIKey != "" || c.LLM.Anthropic.APIKeyCommand != ""
+		return c.LLM.Anthropic.APIKey != "" || c.LLM.Anthropic.APIKeyCommand != "" || c.LLM.Anthropic.UsesOAuth() || c.LLM.Anthropic.UsesADC()
 	case "openai":
 		return c.LLM.OpenAI.APIKey != "" || c.LLM.OpenAI.APIKeyCommand != ""
 	case "bedrock":
-		return c.LLM.Bedrock.Model != "" || c.LLM.Bedrock.Region != ""
+		return c.LLM.Bedrock.Model != "" || c.LLM.Bedrock.Region != "" || c.LLM.Bedrock.Auth != ""
 	case "azure":
-		return c.LLM.Azure.Resource != "" || c.LLM.Azure.BaseURL != "" || c.LLM.Azure.AnthropicBaseURL != ""
+		return c.LLM.Azure.Resource != "" || c.LLM.Azure.BaseURL != "" || c.LLM.Azure.AnthropicBaseURL != "" || c.LLM.Azure.Auth != ""
 	case "api":
 		return c.LLM.API.BaseURL != ""
 	}
