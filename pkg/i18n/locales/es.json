@@ -110,6 +110,7 @@
     "guardrail.redacted": "🛡 La barrera {name} quitó instrucciones del resultado de una herramienta: {reason}",
     "guardrail.prompt_blocked": "La barrera {name} detuvo este mensaje: {reason}",
     "guardrail.domain": "{url} no está entre los dominios permitidos ({domains})",
+    "guardrail.domain_script": "un script en el navegador puede llegar a cualquier sitio, y solo se permiten {domains}",
     "guardrail.command": "el comando coincide con {glob}, que no está permitido",
     "guardrail.files": "este turno ya cambió {n} archivos, el máximo permitido",
     "guardrail.injection_found": "contiene texto dirigido al agente: “{phrase}”",

@@ -110,6 +110,7 @@
     "guardrail.redacted": "🛡 Le garde-fou {name} a retiré des instructions du résultat d'un outil : {reason}",
     "guardrail.prompt_blocked": "Le garde-fou {name} a arrêté ce message : {reason}",
     "guardrail.domain": "{url} n'est pas parmi les domaines permis ({domains})",
+    "guardrail.domain_script": "un script dans le navigateur peut joindre n'importe quel site, et seuls {domains} sont permis",
     "guardrail.command": "la commande correspond à {glob}, qui n'est pas permis",
     "guardrail.files": "ce tour a déjà modifié {n} fichiers, le maximum permis",
     "guardrail.injection_found": "il contient du texte destiné à l'agent : « {phrase} »",

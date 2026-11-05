@@ -124,7 +124,7 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 	}
 	u.RawQuery = q.Encode()
 	shown := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
-	if err := w.tools.ApproveNetwork(ctx, "api_call", method+" "+shown, u); err != nil {
+	if err := w.approveNetwork(ctx, "api_call", method+" "+shown, u); err != nil {
 		return flows.Result{}, err
 	}
 	client, err := w.tools.NetworkClient(nil)
@@ -213,7 +213,7 @@ func (w *Workspace) authorize(ctx context.Context, req *http.Request, a *flows.A
 		if err != nil {
 			return fmt.Errorf("the token URL: %w", err)
 		}
-		if err := w.tools.ApproveNetwork(ctx, "api_call", "POST "+tokenURL+" (an OAuth2 token)", tu); err != nil {
+		if err := w.approveNetwork(ctx, "api_call", "POST "+tokenURL+" (an OAuth2 token)", tu); err != nil {
 			return err
 		}
 		client, err := w.tools.NetworkClient(nil)
@@ -266,7 +266,7 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 	if err != nil {
 		return flows.Result{}, fmt.Errorf("the URL: %w", err)
 	}
-	if err := w.tools.ApproveNetwork(ctx, "a2a_call", "A2A "+base, u); err != nil {
+	if err := w.approveNetwork(ctx, "a2a_call", "A2A "+base, u); err != nil {
 		return flows.Result{}, err
 	}
 	headers := map[string]string{}
@@ -287,7 +287,7 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 		if err != nil || slices.Contains(only.hosts, strings.ToLower(su.Hostname())) {
 			continue
 		}
-		if err := w.tools.ApproveNetwork(ctx, "a2a_call", "A2A "+it.URL, su); err != nil {
+		if err := w.approveNetwork(ctx, "a2a_call", "A2A "+it.URL, su); err != nil {
 			return flows.Result{}, err
 		}
 		only.hosts = append(only.hosts, strings.ToLower(su.Hostname()))

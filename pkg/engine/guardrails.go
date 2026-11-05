@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -304,9 +305,9 @@ func (w *Workspace) maskOutput(g gates.Guardrail, text string) (string, bool) {
 type guard struct{ w *Workspace }
 
 // external reports whether a tool brings in outside content: the web,
-// the browser, an MCP server.
+// the browser, an MCP server, a workflow's call step.
 func (g guard) external(tool string) bool {
-	if slices.Contains([]string{"web_fetch", "web_search", "browser"}, tool) {
+	if slices.Contains([]string{"web_fetch", "web_search", "browser", "mcp_call", "api_call", "a2a_call"}, tool) {
 		return true
 	}
 	_, _, ok := g.w.tools.MCP().Lookup(tool)
@@ -364,6 +365,9 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 	l := gr.Limits
 	str := func(k string) string { s, _ := c.Args[k].(string); return s }
 	switch {
+	case c.Tool == "browser" && str("action") == "script" && len(l.AllowedDomains) > 0:
+		// A script can send the page, or a request, anywhere.
+		return i18n.T("guardrail.domain_script", "domains", strings.Join(l.AllowedDomains, ", ")) + " " + g.w.limitSetting(gr, "allowed_domains")
 	case c.Tool == "web_fetch" || (c.Tool == "browser" && str("action") == "navigate"):
 		if u := str("url"); !gates.DomainAllowed(u, l.AllowedDomains) {
 			return i18n.T("guardrail.domain", "url", u, "domains", strings.Join(l.AllowedDomains, ", ")) + " " + g.w.limitSetting(gr, "allowed_domains")
@@ -391,6 +395,17 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[string]any) runtime.GuardVerdict {
 	st := g.w.guardsFor(c.Session)
 	var v runtime.GuardVerdict
+	// A click, a form or going back can take the browser off the allowed
+	// domains: what it found there is withheld.
+	if c.Tool == "browser" {
+		page, _ := result["url"].(string)
+		if gr, why := g.w.offDomains(st.all, c.Agent, page); why != "" {
+			g.w.auditGuardrail(ctx, gr, "block", why)
+			v.Result = map[string]any{"error": i18n.T("guardrail.refused", "name", gr.Name, "reason", why)}
+			v.Notices = append(v.Notices, v.Result["error"].(string))
+			return v
+		}
+	}
 	active := gates.Active(st.all, gates.StageToolResult, c.Agent)
 	if len(active) == 0 {
 		return v
@@ -622,4 +637,29 @@ func around(s, phrase string, n int) string {
 		start--
 	}
 	return textutil.TruncateUTF8(s[start:], n)
+}
+
+// offDomains is the limits guardrail (of all, guarding agent) whose
+// allowed_domains an http(s) URL is off, and why ("" when none).
+func (w *Workspace) offDomains(all []gates.Guardrail, agent, raw string) (gates.Guardrail, string) {
+	if u, err := url.Parse(raw); err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return gates.Guardrail{}, ""
+	}
+	for _, gr := range gates.Active(all, gates.StageAction, agent) {
+		if gr.Builtin == gates.BuiltinLimits && !gates.DomainAllowed(raw, gr.Limits.AllowedDomains) {
+			return gr, i18n.T("guardrail.domain", "url", raw, "domains", strings.Join(gr.Limits.AllowedDomains, ", ")) + " " + w.limitSetting(gr, "allowed_domains")
+		}
+	}
+	return gates.Guardrail{}, ""
+}
+
+// approveNetwork is a workflow call's request to u held to the limits
+// guardrail's allowed_domains (as web_fetch is), then approved as a fetch
+// of its host is (tools.ApproveNetwork).
+func (w *Workspace) approveNetwork(ctx context.Context, tool, detail string, u *url.URL) error {
+	if gr, why := w.offDomains(w.Guardrails(), w.engine.ActiveAgent(), u.String()); why != "" {
+		w.auditGuardrail(ctx, gr, "block", why)
+		return &api.BlockedError{Reason: i18n.T("guardrail.refused", "name", gr.Name, "reason", why)}
+	}
+	return w.tools.ApproveNetwork(ctx, tool, detail, u)
 }

@@ -153,6 +153,27 @@ func TestLimitsDomainsAndFiles(t *testing.T) {
 	assert.Contains(t, call("web_fetch", map[string]any{"url": "https://evil.test/"}), "(allowed_domains under limits: in "+filepath.Join(".agents", "guardrails", "limits.md")+")")
 	assert.Contains(t, call("browser", map[string]any{"action": "navigate", "url": "https://evil.test/"}), "allowed domains")
 	assert.Empty(t, call("browser", map[string]any{"action": "read"}))
+	assert.Contains(t, call("browser", map[string]any{"action": "script", "script": "location='https://evil.test'"}), "a script in the browser can reach any site")
+	// A click (or back, or a form) that leaves the domains: what it found is withheld.
+	for _, tc := range []struct {
+		page     string
+		withheld bool
+	}{
+		{"https://evil.test/x", true},
+		{"https://docs.example.com/y", false},
+		{"about:blank", false},
+	} {
+		t.Run(tc.page, func(t *testing.T) {
+			v := g.ToolResult(context.Background(), runtime.GuardCall{Session: "s", Tool: "browser"}, map[string]any{"url": tc.page, "text": "found"})
+			if tc.withheld {
+				require.NotNil(t, v.Result)
+				assert.Contains(t, v.Result["error"], "isn't on the allowed domains")
+				assert.Nil(t, v.Result["text"])
+			} else {
+				assert.Nil(t, v.Result)
+			}
+		})
+	}
 	assert.Empty(t, call("create_file", map[string]any{"path": "a.txt"}), "nothing changed yet")
 }
 

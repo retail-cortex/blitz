@@ -110,6 +110,7 @@
     "guardrail.redacted": "🛡 Guardrail {name} took instructions out of a tool's result: {reason}",
     "guardrail.prompt_blocked": "The guardrail {name} stopped this prompt: {reason}",
     "guardrail.domain": "{url} isn't on the allowed domains ({domains})",
+    "guardrail.domain_script": "a script in the browser can reach any site, and only {domains} are allowed",
     "guardrail.command": "the command matches {glob}, which isn't allowed",
     "guardrail.files": "this turn has changed {n} files, the most allowed",
     "guardrail.injection_found": "it contains text aimed at the agent: “{phrase}”",
