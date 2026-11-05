@@ -58,10 +58,12 @@ func (w *Workspace) ProjectGuardrailsDir() string {
 }
 
 // guardrailDirs are the folders guardrails are read from: the
-// workspace's, then the user's (~/.blitz/guardrails); a name in the
-// workspace's wins.
+// organization's locked ones, the workspace's, the user's
+// (~/.blitz/guardrails), then the organization's defaults; a name in an
+// earlier folder wins, so a locked guardrail can't be replaced or switched
+// off by a file of its name (spec_053_enterprise EN-31).
 func (w *Workspace) guardrailDirs() []string {
-	return []string{w.ProjectGuardrailsDir(), filepath.Join(config.ConfigDir(""), "guardrails")}
+	return w.cfg.Org.LockedFirst([]string{w.ProjectGuardrailsDir(), filepath.Join(config.ConfigDir(""), "guardrails")}, "guardrails")
 }
 
 // Guardrails are the workspace's guardrails, read afresh: the built-in
@@ -88,8 +90,9 @@ type guarding struct {
 }
 
 // turnLimits are the limits guardrails that set a turn's model-call and
-// cost limits (nil: the turn's own limit, or none).
-type turnLimits struct{ turns, cost *gates.Guardrail }
+// cost limits (nil: the turn's own limit, or none), and the limits file
+// with a problem whose defaults run in its place (nil: none).
+type turnLimits struct{ turns, cost, broken *gates.Guardrail }
 
 // startGuardrails reads the guardrails for a turn in the session, and
 // applies the limits guardrail's turn and cost limits to t.
@@ -97,6 +100,12 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 	st := &guardState{all: w.Guardrails()}
 	w.guards.turns.Store(sessionID, st)
 	var lim turnLimits
+	for _, g := range st.all {
+		if g.Problem != "" && g.For() == gates.BuiltinLimits {
+			lim.broken = &g
+			break
+		}
+	}
 	for _, g := range gates.Active(st.all, gates.StageAction, w.engine.ActiveAgent()) {
 		if g.Builtin != gates.BuiltinLimits {
 			continue
@@ -112,11 +121,12 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 }
 
 // limitSource adds to a turn stopped at a limit a guardrail set which
-// guardrail set it and how to change it, and, in a conversation (not a
-// job's run), that "continue" carries on: a long coding turn reaches 200
-// model calls easily, and "maximum turns reached" alone sends people
-// looking for a setting.
-func (w *Workspace) limitSource(err error, lim turnLimits, job bool) error {
+// guardrail set it and how to change it (or that its file has a problem,
+// so its defaults run), and, where someone can answer (not a job's run,
+// an eval, a skill's scenario or the reflection), that "continue" carries
+// on: a long coding turn reaches 200 model calls easily, and "maximum
+// turns reached" alone sends people looking for a setting.
+func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error {
 	var g *gates.Guardrail
 	var key string
 	switch {
@@ -128,18 +138,24 @@ func (w *Workspace) limitSource(err error, lim turnLimits, job bool) error {
 	if g == nil {
 		return err
 	}
+	rel := func(path string) string {
+		if r, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(r, "..") {
+			return r
+		}
+		return path
+	}
 	var hint string
-	if g.Path == "" {
+	switch {
+	case g.Path == "" && lim.broken != nil:
+		hint = i18n.T("guardrail.limit_broken", "name", g.Name, "key", key, "path", rel(lim.broken.Path),
+			"problem", strings.Join(strings.Fields(lim.broken.Problem), " "))
+	case g.Path == "":
 		hint = i18n.T("guardrail.limit_default", "name", g.Name, "key", key,
 			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
-	} else {
-		path := g.Path
-		if rel, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(rel, "..") {
-			path = rel
-		}
-		hint = i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", path)
+	default:
+		hint = i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", rel(g.Path))
 	}
-	if !job {
+	if attended {
 		hint += " " + i18n.T("guardrail.limit_continue")
 	}
 	return fmt.Errorf("%w: %s", err, hint)

@@ -125,6 +125,7 @@
     "guardrail.secret_seen": "⚠ The answer shows what looks like a secret or personal data (guardrail {name})",
     "guardrail.limit_default": "the guardrail {name} sets this by default; to allow more a turn, set {key} under limits: in {path} (0: no limit).",
     "guardrail.limit_file": "the guardrail {name} sets this in {path}; to allow more a turn, raise {key} under limits: (0: no limit).",
+    "guardrail.limit_broken": "the guardrail {name} runs with its defaults, which set this, because {path} has a problem: {problem}. Fix it there to change {key} under limits: (0: no limit).",
     "guardrail.limit_continue": "Send “continue” to carry on where it stopped.",
     "rule.blocked": "The rule {name} stopped this prompt: {reason}",
     "rule.warned": "⚠ Rule {name}: {reason}",

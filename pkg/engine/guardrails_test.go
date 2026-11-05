@@ -89,22 +89,26 @@ func TestLimitSource(t *testing.T) {
 	assert.True(t, strings.HasSuffix(err.Error(), "Send “continue” to carry on where it stopped."), "in a conversation, the way on")
 
 	def := gates.BuiltinDefault(gates.Builtins[2])
+	brokenPath := filepath.Join(w.ProjectGuardrailsDir(), "limits.md")
+	broken := gates.ParseGuardrail("limits", brokenPath, []byte("---\nbuiltin: limits\nmax_turns: 0\n---\n"))
+	require.NotEmpty(t, broken.Problem)
 	for _, tc := range []struct {
-		name string
-		err  error
-		lim  turnLimits
-		job  bool
-		want string
-		goOn bool
+		name     string
+		err      error
+		lim      turnLimits
+		attended bool
+		want     string
+		goOn     bool
 	}{
-		{"the default ceiling", fmt.Errorf("%w ($10.00)", api.ErrCostLimit), turnLimits{cost: &def}, false, "set max_cost_usd under limits: in " + filepath.Join(".agents", "guardrails", "limits.md"), true},
-		{"a job's run", api.ErrMaxTurns, turnLimits{turns: &def}, true, "set max_turns under limits:", false},
-		{"the turn's own limit", api.ErrMaxTurns, turnLimits{cost: &def}, false, api.ErrMaxTurns.Error(), false},
-		{"not a guardrail's limit", api.ErrTimeLimit, turnLimits{turns: &def, cost: &def}, false, api.ErrTimeLimit.Error(), false},
-		{"no error", nil, turnLimits{turns: &def}, false, "", false},
+		{"the default ceiling", fmt.Errorf("%w ($10.00)", api.ErrCostLimit), turnLimits{cost: &def}, true, "set max_cost_usd under limits: in " + filepath.Join(".agents", "guardrails", "limits.md"), true},
+		{"nobody to answer", api.ErrMaxTurns, turnLimits{turns: &def}, false, "set max_turns under limits:", false},
+		{"a file with a problem", api.ErrMaxTurns, turnLimits{turns: &def, broken: &broken}, true, "runs with its defaults, which set this, because " + filepath.Join(".agents", "guardrails", "limits.md") + " has a problem: max_turns goes under limits: (limits: max_turns: …). Fix it there to change max_turns", true},
+		{"the turn's own limit", api.ErrMaxTurns, turnLimits{cost: &def}, true, api.ErrMaxTurns.Error(), false},
+		{"not a guardrail's limit", api.ErrTimeLimit, turnLimits{turns: &def, cost: &def}, true, api.ErrTimeLimit.Error(), false},
+		{"no error", nil, turnLimits{turns: &def}, true, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := w.limitSource(tc.err, tc.lim, tc.job)
+			got := w.limitSource(tc.err, tc.lim, tc.attended)
 			if tc.err == nil {
 				assert.NoError(t, got)
 				return
@@ -117,8 +121,10 @@ func TestLimitSource(t *testing.T) {
 
 	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nmax_turns: 0\n---\n")
 	turn := api.Turn{}
-	w.startGuardrails("s", &turn)
+	lim := w.startGuardrails("s", &turn)
 	assert.Equal(t, gates.DefaultMaxTurns, turn.MaxTurns, "a broken file holds the defaults")
+	require.NotNil(t, lim.broken, "and the hint says the file has a problem")
+	assert.Equal(t, brokenPath, lim.broken.Path)
 
 	off, _ := openTestWith(t, func(cfg *config.Config) {
 		cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
@@ -354,4 +360,78 @@ func TestBuiltinGuardrailHealthFile(t *testing.T) {
 	before := hashOf()
 	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_files_changed: 4\n---\n")
 	assert.NotEqual(t, before, hashOf())
+}
+
+// The organization's guardrails are guardrails, not rules (spec_053
+// EN-31): a locked one runs before the workspace's and the person's, and a
+// file of its name there can't replace or switch it off; a default one
+// gives way to the workspace's.
+func TestOrgGuardrails(t *testing.T) {
+	org := config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
+	put := func(layer, name, content string) {
+		dir := filepath.Join(layer, "guardrails")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o644))
+	}
+	put(org.Locked, "limits", "---\nbuiltin: limits\nlimits:\n  max_turns: 5\n  commands: [\"git push*\"]\n---\n")
+	put(org.Locked, "no-prod", "---\nstage: action\naction: block\n---\nRefuse any command against prod.\n")
+	put(org.Defaults, "careful", "---\nstage: output\naction: warn\n---\nThe organization's wording.\n")
+	put(org.Defaults, "tidy", "---\nstage: output\naction: warn\n---\nKeep answers tidy.\n")
+	w, llm := openTestWith(t, func(cfg *config.Config) { cfg.Org = org },
+		toolCall("run_shell_command", map[string]any{"command": "git push origin main"}), text("stopped"))
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nenabled: false\nlimits:\n  max_turns: 500\n  commands: []\n---\n")
+	writeGuardrail(t, w, "no-prod", "---\nstage: action\naction: warn\nenabled: false\n---\nAnything goes.\n")
+	writeGuardrail(t, w, "careful", "---\nstage: output\naction: warn\n---\nThe workspace's wording.\n")
+
+	byName := map[string]gates.Guardrail{}
+	for _, g := range w.Guardrails() {
+		byName[g.Name] = g
+	}
+	for _, tc := range []struct{ name, dir string }{
+		{"limits", org.Locked},
+		{"no-prod", org.Locked},
+		{"careful", w.ProjectGuardrailsDir()},
+		{"tidy", org.Defaults},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Contains(t, byName, tc.name)
+			assert.True(t, strings.HasPrefix(byName[tc.name].Path, tc.dir+string(filepath.Separator)), "read from %s", tc.dir)
+			assert.False(t, byName[tc.name].Off)
+		})
+	}
+	assert.Equal(t, gates.StageAction, byName["no-prod"].Stage)
+	assert.Equal(t, gates.Block, byName["no-prod"].Action, "the locked one, not the workspace's warn")
+	for _, r := range w.Rules() {
+		assert.NotEqual(t, "no-prod", r.Name, "a guardrail isn't read as a rule")
+		assert.NotEqual(t, "limits", r.Name)
+	}
+
+	turn := api.Turn{}
+	w.startGuardrails("s", &turn)
+	assert.Equal(t, 5, turn.MaxTurns, "the locked limit, not the workspace's switched-off 500")
+
+	// The locked limits refuse the command although the workspace's file
+	// switches limits off and allows every command (the judged ones out:
+	// no judge in this test).
+	for _, p := range []string{filepath.Join(org.Locked, "guardrails", "no-prod.md"), filepath.Join(org.Defaults, "guardrails", "tidy.md"), filepath.Join(org.Defaults, "guardrails", "careful.md"), filepath.Join(w.ProjectGuardrailsDir(), "careful.md")} {
+		require.NoError(t, os.Remove(p))
+	}
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "ship it"}, ignore)
+	require.NoError(t, err)
+	got := toolResponse(llm, "run_shell_command")
+	require.NotNil(t, got)
+	assert.Contains(t, got["error"], "guardrail limits")
+	assert.Contains(t, got["error"], "git push*")
+}
+
+// A turn nobody can answer (an eval's case, a skill's scenario, the
+// reflection, a job's run or its workflow's steps: all unattended) isn't
+// told to send "continue" when a limit stops it (spec_041 GT-32).
+func TestLimitSourceUnattended(t *testing.T) {
+	w, _ := openTestWith(t, nil, toolCall("list_files", map[string]any{"path": "."}), text("done"))
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_turns: 1\n---\n")
+	_, _, _, err := w.unattended(context.Background(), "eval limits c1", "", api.Turn{Text: "look"}, nil, nil)
+	require.ErrorIs(t, err, api.ErrMaxTurns)
+	assert.Contains(t, err.Error(), "raise max_turns under limits:")
+	assert.NotContains(t, err.Error(), "continue", "nobody to send it")
 }
