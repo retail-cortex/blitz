@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,8 +23,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"connectrpc.com/connect"
 
 	"github.com/retail-cortex/blitz/pkg/socket"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
@@ -33,7 +38,7 @@ import (
 func newServiceCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "service",
-		Short: "Start the Blitz service at login (install, uninstall, status)",
+		Short: "Start the Blitz service at login (install, uninstall, restart, status)",
 		Long: `Installs a login item that runs blitzd, the Blitz service, for this user: a launchd
 agent on macOS, a systemd user unit on Linux. The service then runs workers
 on schedule and the CLI and desktop app attach to it.
@@ -46,6 +51,8 @@ A login item doesn't see your shell's environment: keep API keys in
 			RunE: func(cmd *cobra.Command, _ []string) error { return serviceInstall(cmd.OutOrStdout()) }},
 		&cobra.Command{Use: "uninstall", Short: "Stop the service and remove the login item", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return serviceUninstall(cmd.OutOrStdout()) }},
+		&cobra.Command{Use: "restart", Short: "Restart the service, so it reads changed settings, servers and plugins", Args: cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error { return serviceRestart(cmd.Context(), cmd.OutOrStdout()) }},
 		&cobra.Command{Use: "status", Short: "Say whether the login item is installed and the service answering", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return serviceStatus(cmd.OutOrStdout()) }},
 	)
@@ -81,6 +88,66 @@ func serviceUninstall(out io.Writer) error {
 		return err
 	}
 	fmt.Fprintln(out, "The Blitz service no longer starts at login.")
+	return nil
+}
+
+// serviceRestart restarts the per-user service (N26 cli-2#2): through its
+// login item when it has one; else the running one is asked to stop and
+// started again as blitz starts it on demand. A service that isn't
+// running has nothing to restart: the next one reads the change.
+func serviceRestart(ctx context.Context, out io.Writer) error {
+	sock := socket.DefaultSocket()
+	if loginitem.Installed() {
+		if err := loginitem.Restart(); err != nil {
+			return err
+		}
+		if err := waitService(ctx, sock, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "✓ The Blitz service restarted.")
+		return nil
+	}
+	if !socket.Running(sock) {
+		fmt.Fprintln(out, "The Blitz service isn't running: it reads the change when it starts.")
+		return nil
+	}
+	if err := shutdownService(ctx, sock); err != nil {
+		return fmt.Errorf("stopping the Blitz service: %w", err)
+	}
+	if err := waitStopped(ctx, sock); err != nil {
+		return err
+	}
+	if _, err := ensureService(ctx); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "✓ The Blitz service restarted.")
+	return nil
+}
+
+// shutdownService asks the service at sock to stop
+// (WorkspaceService.Shutdown).
+func shutdownService(ctx context.Context, sock string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	_, err := c.Shutdown(ctx, connect.NewRequest(&pb.ShutdownRequest{}))
+	return err
+}
+
+// waitStopped waits for the service on sock to stop answering, for up to
+// startWait (its turns get a few seconds to end).
+func waitStopped(ctx context.Context, sock string) error {
+	deadline := time.Now().Add(startWait)
+	for socket.Running(sock) {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the Blitz service on %s didn't stop within %s", sock, startWait)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 	return nil
 }
 

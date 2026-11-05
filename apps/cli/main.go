@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/activity"
-	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -110,8 +109,9 @@ func newRootCommand() *cobra.Command {
 data. Run it with no arguments for an interactive session, or pass a
 prompt to run once and exit.
 
-Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
-4 prompt blocked by a hook, 130 interrupted.`,
+Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
+(--max-turns, --max-cost-usd, --timeout), 4 prompt blocked by a hook,
+130 interrupted.`,
 		Example: `  blitz                          # interactive
   blitz -d ~/src/app "fix the failing test"
   git diff | blitz -p - --output-format json
@@ -133,8 +133,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 		},
 	}
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		//nolint:ST1005 // shown to the user as is, after the flag error
-		return withCode(exitUsage, fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath()))
+		return withCode(exitUsage, fmt.Errorf("%w\nRun '%s --help' for usage", err, c.CommandPath()))
 	})
 
 	pf := root.PersistentFlags()
@@ -300,6 +299,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if o.bg && (prompt == "" || streamIn || o.interactive || o.local || o.resume != "" || o.cont || o.outputFormat != formatText) {
 		return withCode(exitUsage, errors.New("--bg starts a prompt in a new session of the service: it needs a prompt, and not -i, --local, --resume, --continue or --output-format"))
+	}
+	if o.bg {
+		if names := bgRefusedFlags(cmd.Flags()); len(names) > 0 {
+			return withCode(exitUsage, fmt.Errorf("--bg can't carry %s: a background run takes the workspace's own settings (run without --bg to use them)", strings.Join(names, ", ")))
+		}
 	}
 	if !oneShot && o.plan {
 		return withCode(exitUsage, errors.New("--plan requires a prompt (in a session, use /plan <goal>)"))
@@ -539,6 +543,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		StatusLine:    statusLine(cfg, pretty),
 		Follow:        follower(w, o.attachRun),
 		FollowID:      o.attachRun,
+		FirstPrompt:   prompt, // -i with a prompt: sent first (N26 cli-2#4)
 		// /cd: the target opens as a workspace does at start (its
 		// settings, the trust question, the service when it runs); the
 		// REPL switches to it once the session has moved, and the old one
@@ -570,6 +575,27 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,
 		},
 	})
+}
+
+// bgRefused are the run flags a background run can't carry: it runs with
+// the workspace's settings in the shared service, so a rule, mode, model or
+// agent given for the run would be dropped (N26 cli-2#1, BGA-60).
+var bgRefused = []string{
+	"agent", "model", "agency", "effort", "permission-mode", "allow", "deny",
+	"trust-project", "trust-workspace", "add-dir", "plugin-dir",
+	"append-system-prompt", "append-system-prompt-file", "json-schema",
+	"name", "fork", "no-session-persistence", "input-format",
+}
+
+// bgRefusedFlags names the flags in bgRefused that fs was given.
+func bgRefusedFlags(fs *pflag.FlagSet) []string {
+	var names []string
+	for _, name := range bgRefused {
+		if f := fs.Lookup(name); f != nil && f.Changed {
+			names = append(names, "--"+name)
+		}
+	}
+	return names
 }
 
 // resolvePrompt returns the prompt from -p, arguments, or stdin. stdin is
@@ -718,7 +744,9 @@ func statusLine(cfg *config.Config, terminal bool) string {
 // follower follows the background run id through w, attached to the
 // service (blitz attach); nil without one.
 func follower(w api.Backend, id string) func(context.Context, func(api.Event)) (api.TurnResult, error) {
-	r, ok := w.(*client.Remote)
+	r, ok := w.(interface {
+		FollowBackground(context.Context, string, func(api.Event)) (api.TurnResult, error)
+	})
 	if id == "" || !ok {
 		return nil
 	}

@@ -11,6 +11,7 @@ weight: 10
 blitz                                   # an interactive session in the current directory
 blitz -d ~/src/app                      # ...in another workspace
 blitz "fix the failing test"            # run once and exit
+blitz -i "fix the failing test"         # send it, then stay in the session
 git diff | blitz review this change     # piped input becomes part of the prompt
 blitz -p - < task.md                    # the prompt from stdin
 blitz --continue "now add docs"         # continue this directory's most recent session
@@ -72,7 +73,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
 | `blitz jobs …` | Lists, enables, runs, undoes and shows the history of [jobs](../guide/workers.md) |
 | `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
-| `blitz service install\|uninstall\|status` | Starts the service at login, or stops doing so |
+| `blitz service install\|uninstall\|restart\|status` | Starts the service at login, or stops doing so; `restart` restarts it so it reads changed settings, MCP servers and plugins |
 | `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |
 | `blitz completion bash\|zsh\|fish\|powershell` | Shell completion |

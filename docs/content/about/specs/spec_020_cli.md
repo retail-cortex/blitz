@@ -28,7 +28,7 @@ weight: 20
 | `blitz enterprise connect <address>`, `disconnect`, `login [--browser]`, `logout`, `status`, `terms`, `workspaces`, `open <workspace>`, `create <name>`; `blitz git-credential get|store|erase` | *Since 2026-11-01.* The organization's service and the sign-in to it, kept by the service (`GetEnterprise`, `ConnectEnterprise`, `EnterpriseSignIn`, `EnterpriseSignOut`, [spec_053_enterprise](spec_053_enterprise.md) EN-10 to EN-14): connect checks the address is a service (else a usage error); login shows an address and a code to enter in any browser, or opens one on this computer with `--browser`; status asks the service whether it answers. Disconnecting signs out and gives Blitz back the person's own providers. A version of the organization's terms waiting after login, or asked for with `terms`, is shown and asked `[y/N]`: no signs out (exit 1) |
 | `blitz config init [--force] \| path \| show` | Configuration file management (§8) |
 | `blitz serve [...]` | Hidden: runs `blitzd`, the per-user service, with the same arguments ([spec_021_service](spec_021_service.md) SVC-00) |
-| `blitz service install \| uninstall \| status` | Login item for the service |
+| `blitz service install \| uninstall \| restart \| status` | Login item for the service. *Since 2026-11-05 (scan N26-cli-2#2: the MCP, plugin and update hints named it, and it didn't exist)* `restart` restarts it: through the login item when there is one (waiting for it to answer), else the running service is asked to stop (`Shutdown`) and started again on demand; with none running it says the next one reads the change |
 | `blitz jobs [list] \| enable <name> [-y] \| disable <name> \| run <name> \| runs <name> [-n N] \| undo <run-id> [-f]` | Jobs ([spec_023_workers](spec_023_workers.md)) |
 | `blitz mcp add <name> <command\|url> [--env K=V] [--header K:V] [--prefix p] [--agents a,b] \| list \| get <name> \| remove \| enable \| disable \| login \| logout <name>` | MCP servers in the user's settings ([spec_009_mcp](spec_009_mcp.md) MCP-03, MCP-38) |
 | `blitz license [full\|third-party]` | The NOTICE (with pointers to the rest), the Apache License, or the third-party notices, paged on a terminal; the REPL's `/license` shows the same ([spec_030_release_readiness](spec_030_release_readiness.md) RR-05) |
@@ -76,6 +76,7 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 - **CLI-03** Empty stdin when stdin was to be read is a usage error ("stdin was empty (use -i …)").
 - **CLI-04** `-p TEXT` together with positional arguments is a usage error.
 - **CLI-05** A run is one-shot iff a prompt exists and `-i` is not set.
+- **CLI-05a** *2026-11-05 (scan N26-cli-2#4: the prompt was dropped).* With `-i` and a prompt, the REPL sends the prompt first, as if typed, once the banner is up (`App.FirstPrompt`), and the session stays open.
 - **CLI-06** `--plan`, a non-text `--output-format`, or any of `--max-turns`/`--max-cost-usd`/`--timeout` without a one-shot prompt is a usage error. Negative limits and an unknown `--output-format` are usage errors.
 - **CLI-07** `exec` with no prompt from any source is a usage error.
 

@@ -223,16 +223,37 @@ var private struct {
 	list []*privateService
 }
 
-// privateService is a service for this run alone: stop stops it.
+// privateService is a service for this run alone, on sock: stop stops it.
 type privateService struct {
+	sock string
 	stop func()
 }
 
-// keepPrivate keeps a private service until stopPrivate.
-func keepPrivate(stop func()) {
+// keepPrivate keeps the private service on sock until stopPrivate (or
+// stopPrivateAt).
+func keepPrivate(sock string, stop func()) {
 	private.mu.Lock()
-	private.list = append(private.list, &privateService{stop: stop})
+	private.list = append(private.list, &privateService{sock: sock, stop: stop})
 	private.mu.Unlock()
+}
+
+// stopPrivateAt stops the private service on sock, if this process
+// started one there: the workspace it held is let go at once, as when
+// /cd leaves it (N26 cli-2#6).
+func stopPrivateAt(sock string) {
+	private.mu.Lock()
+	var found *privateService
+	for i, ps := range private.list {
+		if ps.sock == sock {
+			found = ps
+			private.list = append(private.list[:i], private.list[i+1:]...)
+			break
+		}
+	}
+	private.mu.Unlock()
+	if found != nil {
+		found.stop()
+	}
 }
 
 // startPrivate starts a service for this run alone, with o, on a socket in
@@ -274,7 +295,7 @@ var startPrivate = func(ctx context.Context, o serviceOptions) (string, error) {
 	}
 	done := make(chan struct{})
 	go func() { cmd.Wait(); close(done) }()
-	keepPrivate(func() {
+	keepPrivate(sock, func() {
 		stdin.Close() // the service stops
 		select {
 		case <-done:

@@ -182,6 +182,9 @@ func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn
 	if private && errors.Is(err, api.ErrWorkspaceBusy) && releaseShared(ctx, cfg.Tools.WorkspaceDir) {
 		r, err = client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn) // the shared service let it go
 	}
+	if err != nil && private {
+		stopPrivateAt(sock) // nothing of its own to hold
+	}
 	switch {
 	case errors.Is(err, api.ErrWorkspaceBusy):
 		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
@@ -195,7 +198,25 @@ func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn
 			}
 		}
 	}
-	return r, locales, !private, nil
+	if private {
+		return &privateRemote{Remote: r, sock: sock}, locales, false, nil
+	}
+	return r, locales, true, nil
+}
+
+// privateRemote is a workspace in a service started for this run alone:
+// closing it stops that service, so a /cd away from it (or a /cd that
+// failed) leaves no blitzd holding the workspace (N26 cli-2#6).
+type privateRemote struct {
+	*client.Remote
+	sock string
+}
+
+// Close closes the workspace and stops its service.
+func (p *privateRemote) Close() error {
+	err := p.Remote.Close()
+	stopPrivateAt(p.sock)
+	return err
 }
 
 // releaseShared asks the shared service, when it runs, to close the

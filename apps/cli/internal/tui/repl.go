@@ -65,6 +65,9 @@ type App struct {
 	// it.
 	Follow   func(ctx context.Context, on func(api.Event)) (api.TurnResult, error)
 	FollowID string
+	// FirstPrompt, when set, is sent as the first prompt once the banner
+	// is up, as if typed (blitz -i "prompt"); the session stays open.
+	FirstPrompt string
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -356,17 +359,24 @@ func RunREPL(ctx context.Context, app *App) error {
 		}
 		printStatusLine(ctx, app)
 		prompt := promptText()
-		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
-		readCtx, stopLoopWait := app.loops.waitCtx(idleCtx)
-		readCtx, stopNotices := watchNotices(readCtx, app)
-		line, err := app.Input.ReadInput(readCtx, prompt)
-		loopDue := errors.Is(context.Cause(readCtx), errLoopDue) || errors.Is(context.Cause(readCtx), errNoticeDue)
-		stopNotices()
-		stopLoopWait()
-		stopIdle()
-		if err != nil && loopDue && ctx.Err() == nil {
-			fmt.Println()
-			continue // the loop runs at the top
+		var line string
+		var err error
+		if app.FirstPrompt != "" { // blitz -i "prompt": sent as if typed
+			line, app.FirstPrompt = app.FirstPrompt, ""
+			fmt.Printf("%s%s\n", prompt, safe(line))
+		} else {
+			idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
+			readCtx, stopLoopWait := app.loops.waitCtx(idleCtx)
+			readCtx, stopNotices := watchNotices(readCtx, app)
+			line, err = app.Input.ReadInput(readCtx, prompt)
+			loopDue := errors.Is(context.Cause(readCtx), errLoopDue) || errors.Is(context.Cause(readCtx), errNoticeDue)
+			stopNotices()
+			stopLoopWait()
+			stopIdle()
+			if err != nil && loopDue && ctx.Err() == nil {
+				fmt.Println()
+				continue // the loop runs at the top
+			}
 		}
 		switch {
 		case err == nil:
@@ -521,7 +531,12 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 		ih.SetInterruptHandler(stopTurn)
 		defer ih.SetInterruptHandler(nil)
 	}
-	stopSteering := func() {}
+	// The key watcher stops once, when the agent finishes or, for a turn
+	// that ended without finishing (its stream failed), when Run returns:
+	// none is left reading the keyboard (N26 cli-2#5).
+	stopWatch := func() {}
+	var stopOnce sync.Once
+	stopSteering := func() { stopOnce.Do(func() { stopWatch() }) }
 	// Messages typed as the turn ended, too late for it: the next turn,
 	// with the unread ones (BL-SVC-10).
 	var late []string
@@ -553,12 +568,13 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 			fmt.Println()
 			printer.Begin()
 			if !o.aside {
-				stopSteering = watchSteering(turnCtx, app, sessionID, printer, onLate)
+				stopWatch = watchSteering(turnCtx, app, sessionID, printer, onLate)
 			}
 		},
 		// Waits for a message being typed, so it is sent rather than lost.
 		OnFinished: func() { stopSteering() },
 	}, printer.Handle)
+	stopSteering()
 	var blocked *api.BlockedError
 	if errors.As(streamErr, &blocked) {
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("repl.prompt_blocked", "reason", safe(blocked.Reason)), Reset)

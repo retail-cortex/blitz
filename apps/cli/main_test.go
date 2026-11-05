@@ -193,7 +193,7 @@ func useTestServices(t *testing.T) {
 			defer close(done)
 			servicetest.RunWith(pctx, sock, o.Config, ro)
 		}()
-		keepPrivate(func() { stop(); <-done })
+		keepPrivate(sock, func() { stop(); <-done })
 		return sock, waitService(context.Background(), sock, done)
 	}
 	t.Cleanup(func() {
