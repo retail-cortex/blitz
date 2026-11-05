@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -40,15 +41,7 @@ var blockedScanSkip = map[string]bool{".git": true, "node_modules": true, "vendo
 // git treats "racy" index entries.
 const racyWindow = 2 * time.Second
 
-// expandBlocked resolves blocked-path patterns to concrete existing paths,
-// since bubblewrap can only mask paths, not patterns. Absolute patterns are
-// globbed directly; name patterns (".env", "*.pem") are found by scanning the
-// writable and read-only roots.
-func expandBlocked(spec OSSandboxSpec) (files, dirs []string) {
-	return newBlockedScan(spec).expand()
-}
-
-// blockedScan is expandBlocked for one sandbox, run before each of its
+// blockedScan finds the blocked paths for one sandbox, run before each of its
 // commands. It keeps what it read, so the next scan reads again only the
 // directories that changed since (or changed just before they were read):
 // one stat per directory walked instead of reading every directory and
@@ -103,6 +96,13 @@ func (s *blockedScan) expand() (files, dirs []string) {
 // and a turn's time limit or cancellation shouldn't wait for it. What was
 // read stays cached for the next scan.
 func (s *blockedScan) expandCtx(ctx context.Context) (files, dirs []string, err error) {
+	return s.expandIn(ctx, append(slices.Clone(s.spec.WritableDirs), s.spec.ReadOnlyDirs...))
+}
+
+// expandIn is expandCtx over roots instead of the spec's: a skill script
+// box keeps one scan for all its runs, whose roots differ (each run's
+// temporary folder), and what it read stays cached across them.
+func (s *blockedScan) expandIn(ctx context.Context, roots []string) (files, dirs []string, err error) {
 	m := s.spec.Blocked
 	if m == nil || len(m.rules) == 0 {
 		return nil, nil, ctx.Err()
@@ -137,7 +137,7 @@ func (s *blockedScan) expandCtx(ctx context.Context) (files, dirs []string, err 
 	}
 
 	w := &blockedWalk{scan: s, add: add, visited: map[string]bool{}, ctx: ctx}
-	for _, root := range append(append([]string(nil), s.spec.WritableDirs...), s.spec.ReadOnlyDirs...) {
+	for _, root := range roots {
 		info, err := os.Lstat(root)
 		if err != nil {
 			continue

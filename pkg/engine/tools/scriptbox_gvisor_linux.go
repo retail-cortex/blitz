@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,6 +50,7 @@ type gvisorBox struct {
 	stateDir string // runsc --root: container state, shared by this user's sandboxes
 	bundles  string // OCI bundles, one per sandbox, removed by Close
 	seq      atomic.Int64
+	shared   sharedSandbox // the blocked-path scan, kept across runs
 }
 
 // gvisorCloseTimeout bounds the cleanup after a run, which uses its own
@@ -160,7 +162,11 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	}
 	// Blocked paths inside what's mounted (a .env in the workspace) are
 	// covered: files by an empty file, directories by an empty tmpfs.
-	files, dirs := expandBlocked(OSSandboxSpec{WritableDirs: req.Writable, ReadOnlyDirs: req.ReadOnly, Blocked: b.blocked})
+	// One scan for the box's runs: what it read stays cached (SH-24a).
+	files, dirs, err := b.shared.blockedScan(OSSandboxSpec{Blocked: b.blocked}).expandIn(ctx, append(slices.Clone(req.Writable), req.ReadOnly...))
+	if err != nil {
+		return ScriptResult{}, err
+	}
 	for _, f := range files {
 		mounts = append(mounts, sandbox.Mount{Source: b.empty, Destination: f, Type: sandbox.MountTypeBind, ReadOnly: true})
 	}

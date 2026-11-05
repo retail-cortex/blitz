@@ -23,6 +23,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // ShellSandboxMode selects OS-level sandboxing for shell commands.
@@ -45,6 +47,29 @@ type OSSandboxSpec struct {
 	ReadOnlyDirs []string // never writable, even when inside a writable dir
 	Blocked      *PathMatcher
 	AllowNetwork bool
+
+	// shared, when set, is kept by the caller across sandboxes it builds
+	// one after another (a skill script box, one per run): the platform
+	// is probed once, and bubblewrap's blocked-path scan is reused.
+	shared *sharedSandbox
+}
+
+// sharedSandbox is what sandboxes built for the same caller share.
+type sharedSandbox struct {
+	probed atomic.Bool
+	scan   *blockedScan // built on first use, for the caller's blocked paths
+	mu     sync.Mutex
+}
+
+// blockedScan returns the shared scan, made for spec's blocked paths the
+// first time.
+func (s *sharedSandbox) blockedScan(spec OSSandboxSpec) *blockedScan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scan == nil {
+		s.scan = newBlockedScan(OSSandboxSpec{Blocked: spec.Blocked})
+	}
+	return s.scan
 }
 
 // OSSandbox wraps command argv so they run under the platform sandbox.
