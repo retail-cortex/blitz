@@ -77,7 +77,7 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 
 ## 7. Session search
 
-- **SES-50** `SearchTerms` splits a query into words and `"quoted phrases"`. `Search` matches case-insensitively and literally (no stemming), skipping earlier `/search` commands; it keeps at most `limit` (12) messages — most distinct terms first, then most recent — presented oldest first, each as an excerpt of ~300 chars around the hit cut at rune boundaries with "…". It returns the total match count.
+- **SES-50** `SearchTerms` splits a query into words and `"quoted phrases"`. `Search` matches case-insensitively and literally (no stemming), skipping earlier `/search` commands; it keeps at most `limit` (12) messages — most distinct terms first, then most recent — presented oldest first, each as an excerpt of up to ~300 chars on each side of the hit (`excerptRadius`; spec gap noted by scan N26-engine-sub-2, 2026-11-05) cut at rune boundaries with "…". It returns the total match count.
 - **SES-51** The transcript keeps what compaction removed from the model's context, but not tool calls or their output; other sessions and snapshots are not searched.
 
 ## 8. Commands

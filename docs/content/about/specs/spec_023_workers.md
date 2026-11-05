@@ -44,7 +44,7 @@ Check for outdated Go modules and write reports/deps.md.
 - **WK-02** The directory name is the job's name: `^[a-z0-9][a-z0-9_-]{0,63}$`; a frontmatter `name` must match it. Only valid names are looked up (they become file names).
 - **WK-03** Frontmatter is decoded strictly (unknown keys are errors — a misspelling would silently change behaviour). A leading BOM and blank lines are tolerated; missing frontmatter delimiters are errors.
 - **WK-03a** *2026-11-05 (scan N26-engine-sub-2#6: WORKER.md's front matter ended at the first line starting with `---`, a `----` rule included).* The front matter opens with a `---` line and ends at the next line that is only `---` (trailing spaces and a CR allowed), the rule SKILL.md, rules, notes and summaries follow too (spec_013 SK-02a; `jobspec.Split` keeps its own copy, as `pkg/jobspec` can't import the engine).
-- **WK-04** Invalid if: bad name, empty workflow body, unparseable schedule or time zone, bad permission, bad or non-positive `limits.timeout`, negative limits, unsupported `overlap`/`catch_up`/`runs_on`, hashing failure. An invalid job still loads with its problems listed.
+- **WK-04** Invalid if: bad name, empty workflow body, unparseable schedule or time zone, bad permission, bad or non-positive `limits.timeout`, negative limits, unsupported `overlap`/`catch_up`/`runs_on`/`on_request`/`merge` (the last two listed 2026-11-05, scan N26-engine-sub-2 spec gaps: the code always refused them), hashing failure. An invalid job still loads with its problems listed.
 - **WK-05** Content hash: SHA-256 over every regular file under the job directory (relative path, size, content; symlinks skipped; ≤ 64 MB), `sha256:<hex>`.
 
 ## 3. Schedules
