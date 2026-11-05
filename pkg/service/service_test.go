@@ -17,6 +17,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -381,6 +382,22 @@ func TestRunStopsByItself(t *testing.T) {
 		}
 		require.NoError(t, w.Close())
 		wait(t, done, sock)
+	})
+	t.Run("stopped first, its stdin still open", func(t *testing.T) {
+		sock := isolateService(t)
+		r, w := io.Pipe()
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- Run(ctx, Options{Socket: sock, ExitWith: r}) }()
+		for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
+			require.False(t, time.Now().After(deadline), "service didn't start")
+		}
+		cancel()
+		wait(t, done, sock)
+		require.Eventually(t, func() bool {
+			_, err := w.Write([]byte("x"))
+			return errors.Is(err, io.ErrClosedPipe)
+		}, 5*time.Second, 10*time.Millisecond, "its read of stdin ended, not left waiting")
 	})
 	t.Run("asked to", func(t *testing.T) {
 		sock := isolateService(t)

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,6 +207,11 @@ func (h configService) OpenOrgWorkspace(ctx context.Context, r req[pb.OpenOrgWor
 func (h configService) GitCredential(ctx context.Context, r req[pb.GitCredentialRequest]) (*connect.Response[pb.GitCredentialResponse], error) {
 	c, err := h.s.enterpriseClient()
 	if err != nil || c == nil || c.Host() != r.Msg.Host {
+		return ok(&pb.GitCredentialResponse{})
+	}
+	// Only over the service's own scheme: an http:// address of an https
+	// service would send the token in the clear.
+	if u, err := url.Parse(c.URL()); err != nil || (r.Msg.Protocol != "" && r.Msg.Protocol != u.Scheme) {
 		return ok(&pb.GitCredentialResponse{})
 	}
 	token, err := c.AccessToken(ctx)

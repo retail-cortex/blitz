@@ -222,12 +222,12 @@ func newGitCredentialCommand() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return gitcred.Run(cmd.Context(), args[0], cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, host string) (string, string, bool, error) {
+			return gitcred.Run(cmd.Context(), args[0], cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, protocol, host string) (string, string, bool, error) {
 				sock := socket.DefaultSocket()
 				if !socket.Running(sock) {
 					return "", "", false, nil
 				}
-				return client.AttachSettings(sock).GitCredential(ctx, host)
+				return client.AttachSettings(sock).GitCredential(ctx, protocol, host)
 			})
 		},
 	}

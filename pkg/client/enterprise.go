@@ -207,10 +207,10 @@ func (s *Settings) OpenOrgWorkspace(ctx context.Context, handle string) (dir str
 	return res.Msg.Dir, res.Msg.Cloned, nil
 }
 
-// GitCredential is Git's credential for host (ConfigService.GitCredential):
-// ok false when the service has none for it.
-func (s *Settings) GitCredential(ctx context.Context, host string) (user, password string, ok bool, err error) {
-	res, err := s.c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: host}))
+// GitCredential is Git's credential for host, asked over protocol
+// (ConfigService.GitCredential): ok false when the service has none for it.
+func (s *Settings) GitCredential(ctx context.Context, protocol, host string) (user, password string, ok bool, err error) {
+	res, err := s.c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: host, Protocol: protocol}))
 	if err != nil {
 		return "", "", false, fromAPI(err)
 	}

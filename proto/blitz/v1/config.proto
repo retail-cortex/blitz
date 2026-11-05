@@ -1491,6 +1491,10 @@ message OpenOrgWorkspaceResponse {
 // Request message for ConfigService.GitCredential.
 message GitCredentialRequest {
   string host = 1;
+  // How Git would send it (https or http): the token is given only over
+  // the service's own scheme, never to an http:// address of an https
+  // service. Empty from an older helper.
+  string protocol = 2;
 }
 
 // Response message for ConfigService.GitCredential.

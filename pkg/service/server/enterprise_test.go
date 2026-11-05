@@ -484,6 +484,14 @@ func TestOrgWorkspaces(t *testing.T) {
 	other, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: "github.com"}))
 	require.NoError(t, err)
 	assert.False(t, other.Msg.Ok)
+	for _, tc := range []struct {
+		protocol string
+		ok       bool
+	}{{"http", true}, {"https", false}, {"", true}} { // the test service is http://
+		got, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://"), Protocol: tc.protocol}))
+		require.NoError(t, err)
+		assert.Equal(t, tc.ok, got.Msg.Ok, "asked over %q", tc.protocol)
+	}
 	_, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
 	require.NoError(t, err)
 	out, err := c.GitCredential(ctx, connect.NewRequest(&pb.GitCredentialRequest{Host: strings.TrimPrefix(org.URL, "http://")}))

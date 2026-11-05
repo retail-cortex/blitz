@@ -25,7 +25,10 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	answer := func(_ context.Context, host string) (string, string, bool, error) {
+	answer := func(_ context.Context, protocol, host string) (string, string, bool, error) {
+		if protocol != "https" {
+			return "", "", false, nil // as the service answers an https service's host asked over http
+		}
 		switch host {
 		case "blitz.acme.com":
 			return "blitz", "at-1", true, nil
@@ -37,13 +40,14 @@ func TestRun(t *testing.T) {
 	cases := map[string]struct {
 		action, in, out, err string
 	}{
-		"the service's host": {"get", "protocol=https\nhost=blitz.acme.com\npath=git/plans.git\n\n", "username=blitz\npassword=at-1\n", ""},
-		"another host":       {"get", "protocol=https\nhost=github.com\n", "", ""},
-		"not over http":      {"get", "protocol=ssh\nhost=blitz.acme.com\n", "", ""},
-		"signed out":         {"get", "protocol=https\nhost=down.acme.com\n", "", "sign in to Blitz"},
-		"store keeps none":   {"store", "protocol=https\nhost=blitz.acme.com\npassword=x\n", "", ""},
-		"erase":              {"erase", "protocol=https\n", "", ""},
-		"something else":     {"list", "", "", "isn't get, store or erase"},
+		"the service's host":                 {"get", "protocol=https\nhost=blitz.acme.com\npath=git/plans.git\n\n", "username=blitz\npassword=at-1\n", ""},
+		"another host":                       {"get", "protocol=https\nhost=github.com\n", "", ""},
+		"not over http":                      {"get", "protocol=ssh\nhost=blitz.acme.com\n", "", ""},
+		"over http, not the service's https": {"get", "protocol=http\nhost=blitz.acme.com\n", "", ""},
+		"signed out":                         {"get", "protocol=https\nhost=down.acme.com\n", "", "sign in to Blitz"},
+		"store keeps none":                   {"store", "protocol=https\nhost=blitz.acme.com\npassword=x\n", "", ""},
+		"erase":                              {"erase", "protocol=https\n", "", ""},
+		"something else":                     {"list", "", "", "isn't get, store or erase"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
