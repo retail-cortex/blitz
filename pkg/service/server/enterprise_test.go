@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1113,6 +1114,23 @@ func TestShareWithOrganization(t *testing.T) {
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
 		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: notes}))
 		require.NoError(ct, err)
+		if st.Msg.State == "" {
+			// None runs for it: say which do, and what the list says, so a
+			// failure on CI can be read.
+			s.ent.syncs.mu.Lock()
+			running := slices.Collect(maps.Keys(s.ent.syncs.running))
+			s.ent.syncs.mu.Unlock()
+			l, lerr := c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+			var listed []string
+			if lerr == nil {
+				for _, w := range l.Msg.Workspaces {
+					listed = append(listed, fmt.Sprintf("%s=%s sync=%v", w.Handle, w.Dir, w.Sync))
+				}
+			}
+			_, gerr := os.Stat(filepath.Join(notes, ".git"))
+			ct.Errorf("no sync for %s (.git: %v); running %v; listed %v (%v)", notes, gerr, running, listed, lerr)
+			return
+		}
 		assert.Equal(ct, "saved", st.Msg.State, "its sync's state")
 	}, 30*time.Second, 20*time.Millisecond)
 	require.NoError(t, os.WriteFile(filepath.Join(notes, "more.md"), []byte("More."), 0o644))
