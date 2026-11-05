@@ -21,7 +21,6 @@ import (
 	"image/draw"
 	"image/png"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,7 +29,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"gopkg.in/yaml.v3"
 )
 
 // The tray's richer menu (spec_038_electron EL-111): what's going on, at
@@ -120,29 +118,19 @@ func Spaces(open []Space, workers []*pb.Worker) []Space {
 	return out
 }
 
-// Flow is one of a workspace's workflows, as its file says.
+// Flow is one of a workspace's workflows.
 type Flow struct {
-	Name        string
-	Description string
+	Name string
 }
 
 // Flows are dir's workflows (.agents/workflows/<name>.flow.yaml), by
-// name, read from disk: the service needn't open the workspace for the
-// tray to list them.
+// name, from the files' names: the service needn't open the workspace for
+// the tray to list them, and nothing is read (the menu redraws every 2 s).
 func Flows(dir string) []Flow {
 	files, _ := filepath.Glob(filepath.Join(dir, ".agents", "workflows", "*.flow.yaml"))
 	var out []Flow
 	for _, f := range files {
-		fl := Flow{Name: strings.TrimSuffix(filepath.Base(f), ".flow.yaml")}
-		if data, err := os.ReadFile(f); err == nil {
-			var head struct {
-				Description string `yaml:"description"`
-			}
-			if yaml.Unmarshal(data, &head) == nil {
-				fl.Description = strings.TrimSpace(head.Description)
-			}
-		}
-		out = append(out, fl)
+		out = append(out, Flow{Name: strings.TrimSuffix(filepath.Base(f), ".flow.yaml")})
 	}
 	slices.SortFunc(out, func(a, b Flow) int { return strings.Compare(a.Name, b.Name) })
 	return out

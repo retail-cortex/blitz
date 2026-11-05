@@ -44,8 +44,8 @@ func TestSpaces(t *testing.T) {
 	assert.Empty(t, Spaces(nil, nil))
 }
 
-// A workspace's workflows are read from its folder, by name, with their
-// descriptions.
+// A workspace's workflows are listed from its folder, by their files'
+// names, without reading them.
 func TestFlows(t *testing.T) {
 	dir := t.TempDir()
 	flows := filepath.Join(dir, ".agents", "workflows")
@@ -53,7 +53,8 @@ func TestFlows(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(flows, "research-brief.flow.yaml"), []byte("description: A one-page brief\nnodes: []\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(flows, "a-check.flow.yaml"), []byte("{not yaml"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(flows, "notes.md"), []byte("a command, not a workflow"), 0o644))
-	assert.Equal(t, []Flow{{Name: "a-check"}, {Name: "research-brief", Description: "A one-page brief"}}, Flows(dir))
+	require.NoError(t, os.WriteFile(filepath.Join(flows, "unreadable.flow.yaml"), nil, 0o000))
+	assert.Equal(t, []Flow{{Name: "a-check"}, {Name: "research-brief"}, {Name: "unreadable"}}, Flows(dir))
 	assert.Empty(t, Flows(t.TempDir()))
 }
 

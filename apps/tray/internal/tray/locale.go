@@ -16,6 +16,7 @@ package tray
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
 	goruntime "runtime"
@@ -28,18 +29,29 @@ import (
 )
 
 // SetupLocale shows the tray in the desktop app's language (Settings ›
-// Language), from the same catalogs, with ui.locales_dir's added.
+// Language), from the same catalogs, with ui.locales_dir's added; a
+// catalog that doesn't load is logged, as the CLI warns of it.
 func SetupLocale() {
 	var dirs []string
-	if cfg, err := config.Load(""); err == nil && cfg.UI.LocalesDir != "" {
-		dirs = append(dirs, config.ExpandHome(cfg.UI.LocalesDir))
-	}
 	if cfg, err := config.Load(""); err == nil {
+		if cfg.UI.LocalesDir != "" {
+			dirs = append(dirs, config.ExpandHome(cfg.UI.LocalesDir))
+		}
 		i18n.SetAppName(enterprise.KeptName(config.EnterpriseDir("", cfg.Enterprise.URL)))
 	}
-	b, _ := i18n.NewBundle(dirs...)
+	b := LoadCatalogs(dirs, log.Printf)
 	prefs, _ := os.ReadFile(config.ExpandHome("~/.blitz/desktop.json"))
 	i18n.SetCurrent(b.Localizer(Language(b, prefs, SystemLanguages())))
+}
+
+// LoadCatalogs loads the built-in catalogs and dirs', telling logf of each
+// one that doesn't load.
+func LoadCatalogs(dirs []string, logf func(format string, args ...any)) *i18n.Bundle {
+	b, errs := i18n.NewBundle(dirs...)
+	for _, err := range errs {
+		logf("blitz-tray: %v", err)
+	}
+	return b
 }
 
 // Language is the language the tray shows: the desktop app's setting
