@@ -206,7 +206,8 @@ func TestApprovalPicker(t *testing.T) {
 	approve := NewApprover(f.in, 2)
 	req := api.ApprovalRequest{Kind: "edit", Tool: "edit", Detail: "notes.txt", Key: "k", KeyLabel: "edits to notes.txt",
 		Diff: "--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-old\n+new\n"}
-	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "s": api.DecisionSession, "a": api.DecisionAlways, "n": api.DecisionDeny} {
+	// Enter alone denies: the cursor starts on No, as the line prompt's y/N.
+	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "s": api.DecisionSession, "a": api.DecisionAlways, "n": api.DecisionDeny, "\r": api.DecisionDeny} {
 		t.Run(key, func(t *testing.T) {
 			keys.in <- []byte(key)
 			d, err := approve(context.Background(), req)

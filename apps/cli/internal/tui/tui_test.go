@@ -43,12 +43,12 @@ func TestLineReaderSharedSequentialReads(t *testing.T) {
 
 	for _, want := range []string{"first", "second", "last-no-newline"} {
 		t.Run(want, func(t *testing.T) {
-			got, err := lr.ReadLine("> ")
-			require.NoError(t, err, "ReadLine = %q, %v; want %q", got, err, want)
-			require.Equal(t, want, got, "ReadLine = %q, %v; want %q", got, err, want)
+			got, err := lr.Ask(context.Background(), "> ")
+			require.NoError(t, err, "Ask = %q, %v; want %q", got, err, want)
+			require.Equal(t, want, got, "Ask = %q, %v; want %q", got, err, want)
 		})
 	}
-	_, err := lr.ReadLine("> ")
+	_, err := lr.Ask(context.Background(), "> ")
 	assert.ErrorIs(t, err, io.EOF, "expected EOF, got %v", err)
 	assert.Equal(t, 4, strings.Count(out.String(), "> "), "prompt not echoed each time: %q", out.String())
 }
@@ -336,7 +336,7 @@ func TestLineReaderCancelDoesNotLoseInput(t *testing.T) {
 
 	// Positive: the line typed afterwards goes to the next reader, not the abandoned one.
 	go pw.Write([]byte("kept\n"))
-	got, err := lr.ReadLine("> ")
+	got, err := lr.Ask(context.Background(), "> ")
 	require.NoError(t, err, "expected 'kept', got %q", got)
 	require.Equal(t, "kept", got, "expected 'kept', got %q %v", got, err)
 	pw.Close()

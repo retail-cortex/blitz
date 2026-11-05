@@ -126,13 +126,15 @@ func (l *loops) waitCtx(ctx context.Context) (context.Context, context.CancelFun
 
 // parseInterval reads 10m, 1h30m, or a number of minutes.
 func parseInterval(s string) (time.Duration, error) {
-	if n, err := strconv.Atoi(s); err == nil {
-		return time.Duration(n) * time.Minute, nil
-	}
 	d, err := time.ParseDuration(s)
+	if n, aerr := strconv.Atoi(s); aerr == nil {
+		d, err = time.Duration(n)*time.Minute, nil
+	}
 	if err != nil {
 		return 0, err
 	}
+	// A bare number gets the same minimum as a duration: /loop 0 would
+	// otherwise send the prompt back to back, a paid turn each.
 	if d < minLoop {
 		return 0, fmt.Errorf("at least %s", minLoop)
 	}

@@ -84,8 +84,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **Streaming Markdown**, a progress spinner, and a usage line after each turn: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.
 - **Steering**: while the agent works, start typing (or press Ctrl+T) to send it a message. It reaches the agent with the next tool result, so nothing is interrupted. (macOS and Linux.)
 - **Ctrl+C** or **Esc** cancels the running turn; at the prompt, Ctrl+C exits.
-- **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's questions open a menu under the prompt. Arrow keys move, typing filters, Enter chooses.
-- **Shift+Tab** cycles the permission mode (`default` → `accept-edits` → `plan`). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR`. **Esc Esc** clears the line, or on an empty line opens `/rewind`.
+- **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's questions open a menu under the prompt. Arrow keys move, typing filters, Enter chooses. An approval starts on **No**, so an Enter typed ahead never approves.
+- **Shift+Tab** cycles the permission mode (`default` → `accept-edits` → `auto` → `plan`). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR`. **Esc Esc** clears the line, or on an empty line opens `/rewind`.
 - **Vim and keys**: `ui.editor = "vim"` edits the prompt vi-style. `~/.blitz/keybindings.toml` moves the REPL's keys and binds keys to commands:
 
   ```toml
@@ -115,7 +115,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/hooks` | The hooks, where they come from, and their recent failures |
 | `/fork [n]` | Continue in a copy of the session, up to prompt `n` |
-| `/export [file]` | The session as Markdown, or a Word document for a `.docx` name: prompts, answers, tool calls (`blitz sessions export <id>` from the shell) |
+| `/export [file] [--force]` | The session as Markdown, or a Word document for a `.docx` name: prompts, answers, tool calls (`blitz sessions export <id>` from the shell). An existing file is kept unless `--force` |
 | `/style [name]` | How the agent writes its answers: `default`, `concise`, `explanatory`, or yours in `~/.blitz/styles` |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
 | `blitz skills registry add\|list\|remove`, `blitz skills search\|install\|update\|uninstall\|list` | Skills from registries such as Castor, hash-checked ([skills](../guide/skills.md#skills-from-a-registry)) |

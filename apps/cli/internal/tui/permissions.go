@@ -74,8 +74,11 @@ func cmdPermissions(args []string, app *App) {
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("perm.failed", "error", safe(err.Error())), Reset)
 			return
 		}
-		if res.Removed == 0 && !save {
+		if res.Removed == 0 {
 			fmt.Printf("%s%s%s\n", Yellow, i18n.T("perm.not_found", "rule", safe(res.Rule)), Reset)
+			if save && res.Saved.Err != nil {
+				printSaved(res.Saved)
+			}
 			return
 		}
 		fmt.Printf("%s%s%s\n", Green, i18n.T("perm.removed", "rule", safe(res.Rule)), Reset)

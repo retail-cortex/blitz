@@ -106,6 +106,7 @@ func pickSession(ctx context.Context, app *App) (string, bool) {
 	}
 	list, err := app.Workspace.ListSessions(false)
 	if err != nil {
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.list_failed", "error", safe(err.Error())), Reset)
 		return "", false
 	}
 	active, _ := app.Workspace.ActiveSession()

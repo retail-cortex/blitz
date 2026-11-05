@@ -143,11 +143,16 @@ func (w work) kill() {
 			fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.stopped", n), Reset)
 		}
 	}
-	if running := runningTasks(w.tasks); len(running) > 0 {
-		for _, t := range running {
-			_, _ = w.tasks.StopTask(t.ID)
+	stopped := 0
+	for _, t := range runningTasks(w.tasks) {
+		if _, err := w.tasks.StopTask(t.ID); err != nil {
+			fmt.Printf("%s%s%s\n", Red, i18n.T("exit.task_stop_failed", "id", t.ID, "error", safe(err.Error())), Reset)
+			continue
 		}
-		fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.tasks_stopped", len(running)), Reset)
+		stopped++
+	}
+	if stopped > 0 {
+		fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.tasks_stopped", stopped), Reset)
 	}
 }
 
