@@ -37,9 +37,9 @@ type Process interface {
 	Stop()
 }
 
-// Launcher starts a server's command in the workspace (the engine's runs it
-// guarded, in the OS sandbox).
-type Launcher func(ctx context.Context, argv []string) (Process, error)
+// Launcher starts a server's command in dir, its project root inside the
+// workspace (the engine's runs it guarded, in the OS sandbox).
+type Launcher func(ctx context.Context, dir string, argv []string) (Process, error)
 
 // conn is a JSON-RPC 2.0 connection over a server's stdio, with LSP's
 // Content-Length framing.

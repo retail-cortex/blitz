@@ -82,10 +82,10 @@ func TestLSPLauncherFailures(t *testing.T) {
 	failing := errors.New("no cache directory")
 	credentialsDir = func() (string, error) { return "", failing }
 	env := &ExecEnv{Credentials: []Credential{{Env: "GOOGLE_APPLICATION_CREDENTIALS", Path: func() string { return src }}}}
-	_, err := lspLauncher(env)(context.Background(), []string{"cat"})
+	_, err := lspLauncher(env)(context.Background(), "", []string{"cat"})
 	assert.ErrorIs(t, err, failing)
 
-	p, err := lspLauncher(&ExecEnv{Dir: t.TempDir()})(context.Background(), []string{"sh", "-c", "exec sleep 30 </dev/null"})
+	p, err := lspLauncher(&ExecEnv{Dir: t.TempDir()})(context.Background(), "", []string{"sh", "-c", "exec sleep 30 </dev/null"})
 	require.NoError(t, err)
 	start := time.Now()
 	p.Stop()

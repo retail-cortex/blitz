@@ -149,26 +149,39 @@ func (m *Manager) config(path string) *Server {
 	return nil
 }
 
-// stateOf is how language's server is now, and why it failed.
+// stateOf is how language's servers are now, and why one failed: ready
+// when one runs in any project root, else starting when one starts, else
+// the latest failure.
 func (m *Manager) stateOf(language string) (State, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if s := m.running[language]; s != nil {
+	for k, s := range m.running {
+		if k.lang != language {
+			continue
+		}
 		select {
 		case <-s.c.done:
 		default:
 			return StateReady, nil
 		}
 	}
-	if m.start[language] != nil {
-		return StateStarting, nil
-	}
-	if f, ok := m.failed[language]; ok && time.Since(f.at) < failedRetry {
-		var missing *NotInstalledError
-		if errors.As(f.err, &missing) {
-			return StateMissing, f.err
+	for k := range m.start {
+		if k.lang == language {
+			return StateStarting, nil
 		}
-		return StateFailed, f.err
+	}
+	var last *failure
+	for k, f := range m.failed {
+		if k.lang == language && time.Since(f.at) < failedRetry && (last == nil || f.at.After(last.at)) {
+			last = &f
+		}
+	}
+	if last != nil {
+		var missing *NotInstalledError
+		if errors.As(last.err, &missing) {
+			return StateMissing, last.err
+		}
+		return StateFailed, last.err
 	}
 	return StateIdle, nil
 }
@@ -862,7 +875,11 @@ func (m *Manager) Status() []ServerStatus {
 			st.Err = err.Error()
 		}
 		m.mu.Lock()
-		st.Since = m.since[cfg.Language]
+		for k, t := range m.since {
+			if k.lang == cfg.Language && t.After(st.Since) {
+				st.Since = t
+			}
+		}
 		m.mu.Unlock()
 		if state == StateMissing {
 			st.Install = InstallHint(cfg.Language)
@@ -872,20 +889,29 @@ func (m *Manager) Status() []ServerStatus {
 	return out
 }
 
-// Restart stops language's server; the next request starts it again, and
-// the editor's documents are opened in it again.
+// Restart stops language's servers, in every project root; the next
+// request starts each again, and the editor's documents are opened in it
+// again.
 func (m *Manager) Restart(language string) error {
-	m.mu.Lock()
-	s := m.running[language]
-	delete(m.failed, language)
-	m.mu.Unlock()
-	if s == nil {
-		if m.configFor(language) == nil {
-			return fmt.Errorf("%w: %s", ErrNoServer, language)
-		}
-		return nil
+	if m.configFor(language) == nil {
+		return fmt.Errorf("%w: %s", ErrNoServer, language)
 	}
-	m.stop(s)
+	m.mu.Lock()
+	var stop []*server
+	for k, s := range m.running {
+		if k.lang == language {
+			stop = append(stop, s)
+		}
+	}
+	for k := range m.failed {
+		if k.lang == language {
+			delete(m.failed, k)
+		}
+	}
+	m.mu.Unlock()
+	for _, s := range stop {
+		m.stop(s)
+	}
 	return nil
 }
 
@@ -903,8 +929,8 @@ func (m *Manager) configFor(language string) *Server {
 // again in its successor by their next request.
 func (m *Manager) stop(s *server) {
 	m.mu.Lock()
-	if m.running[s.lang] == s {
-		delete(m.running, s.lang)
+	if k := (serverKey{s.lang, s.root}); m.running[k] == s {
+		delete(m.running, k)
 	}
 	m.mu.Unlock()
 	s.shutdown()

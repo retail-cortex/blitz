@@ -42,10 +42,11 @@ func MaybeServe() {
 	}
 }
 
-// Launcher starts the fake server: this test binary, again.
+// Launcher starts the fake server: this test binary, again, in dir.
 func Launcher() lsp.Launcher {
-	return func(ctx context.Context, argv []string) (lsp.Process, error) {
+	return func(ctx context.Context, dir string, argv []string) (lsp.Process, error) {
 		cmd := exec.Command(os.Args[0])
+		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), envVar+"=1")
 		in, err := cmd.StdinPipe()
 		if err != nil {

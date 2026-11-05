@@ -49,7 +49,7 @@ type fakeServer struct {
 }
 
 func (f *fakeServer) launcher() Launcher {
-	return func(context.Context, []string) (Process, error) {
+	return func(context.Context, string, []string) (Process, error) {
 		serverIn, clientOut := io.Pipe()
 		clientIn, serverOut := io.Pipe()
 		f.mu.Lock()
@@ -300,11 +300,11 @@ func TestManagerSlowStart(t *testing.T) {
 	m := NewManager(dir, []Server{
 		{Language: "go", Command: []string{"stuck"}, Extensions: []string{".go"}},
 		{Language: "python", Command: []string{"quick"}, Extensions: []string{".py"}},
-	}, func(ctx context.Context, argv []string) (Process, error) {
+	}, func(ctx context.Context, dir string, argv []string) (Process, error) {
 		if argv[0] == "stuck" {
-			return launchStuck(ctx, argv)
+			return launchStuck(ctx, dir, argv)
 		}
-		return launchQuick(ctx, argv)
+		return launchQuick(ctx, dir, argv)
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -466,7 +466,7 @@ func TestServerKeepsFewDocumentsOpen(t *testing.T) {
 		require.NoError(t, err)
 	}
 	m.mu.Lock()
-	s := m.running["go"]
+	s := m.running[serverKey{"go", m.root}]
 	m.mu.Unlock()
 	s.mu.Lock()
 	assert.Equal(t, []string{fileURI(files[2]), fileURI(files[3])}, s.opened)

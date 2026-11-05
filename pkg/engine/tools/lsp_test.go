@@ -101,7 +101,7 @@ func TestLSPServersConfig(t *testing.T) {
 		got = append(got, s.Language+":"+s.Command[0])
 	}
 	assert.Equal(t, []string{"go:/opt/gopls", "rust:rust-analyzer", "typescript:typescript-language-server", "zig:zls"}, got)
-	_, err := lspLauncher(&ExecEnv{})(context.Background(), []string{"no-such-language-server"})
+	_, err := lspLauncher(&ExecEnv{})(context.Background(), "", []string{"no-such-language-server"})
 	assert.ErrorContains(t, err, "isn't installed")
 }
 
@@ -130,7 +130,7 @@ func TestLSPGoplsSandboxed(t *testing.T) {
 // The launcher starts a guarded process whose stdin and stdout are the
 // server's; Stop ends it.
 func TestLSPLauncher(t *testing.T) {
-	p, err := lspLauncher(&ExecEnv{Dir: t.TempDir()})(context.Background(), []string{"cat"})
+	p, err := lspLauncher(&ExecEnv{Dir: t.TempDir()})(context.Background(), "", []string{"cat"})
 	require.NoError(t, err)
 	_, err = p.Stdin().Write([]byte("hello\n"))
 	require.NoError(t, err)

@@ -171,7 +171,9 @@ func TestOpenDocumentStates(t *testing.T) {
 	assert.Equal(t, DocumentInfo{State: StateNone}, info)
 
 	missing := NewManager(t.TempDir(), []Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}},
-		func(context.Context, []string) (Process, error) { return nil, &NotInstalledError{Command: "gopls"} })
+		func(context.Context, string, []string) (Process, error) {
+			return nil, &NotInstalledError{Command: "gopls"}
+		})
 	t.Cleanup(missing.Close)
 	_, err := missing.For(context.Background(), "a.go")
 	require.Error(t, err)

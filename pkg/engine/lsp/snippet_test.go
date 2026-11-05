@@ -255,16 +255,17 @@ func TestNavigationUnknownDocument(t *testing.T) {
 func TestStateOf(t *testing.T) {
 	m := NewManager(t.TempDir(), nil, nil)
 	defer m.Close()
+	goKey := serverKey{"go", m.root}
 	for _, tc := range []struct {
 		name  string
 		setup func()
 		want  State
 	}{
 		{"idle", func() {}, StateIdle},
-		{"starting", func() { m.start["go"] = &starting{done: make(chan struct{})} }, StateStarting},
-		{"failed", func() { delete(m.start, "go"); m.failed["go"] = failure{err: errors.New("crashed"), at: time.Now()} }, StateFailed},
-		{"missing", func() { m.failed["go"] = failure{err: &NotInstalledError{Command: "gopls"}, at: time.Now()} }, StateMissing},
-		{"failed long ago", func() { m.failed["go"] = failure{err: errors.New("crashed"), at: time.Now().Add(-2 * failedRetry)} }, StateIdle},
+		{"starting", func() { m.start[goKey] = &starting{done: make(chan struct{})} }, StateStarting},
+		{"failed", func() { delete(m.start, goKey); m.failed[goKey] = failure{err: errors.New("crashed"), at: time.Now()} }, StateFailed},
+		{"missing", func() { m.failed[goKey] = failure{err: &NotInstalledError{Command: "gopls"}, at: time.Now()} }, StateMissing},
+		{"failed long ago", func() { m.failed[goKey] = failure{err: errors.New("crashed"), at: time.Now().Add(-2 * failedRetry)} }, StateIdle},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setup()
