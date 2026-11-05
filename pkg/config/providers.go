@@ -110,9 +110,17 @@ func overlay(cfg *Config, prefixDir, workspace string) error {
 	global, globalMCP, enterprise := cfg.Permissions, cfg.MCP, cfg.Enterprise
 	cfg.Permissions, cfg.MCP = PermissionsConfig{}, MCPConfig{}
 	defer func() { cfg.Enterprise = enterprise }()
-	if _, err := toml.DecodeFile(path, cfg); err != nil && !errors.Is(err, os.ErrNotExist) {
+	md, err := decodeSettings(path, cfg)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
 		cfg.Permissions, cfg.MCP = global, globalMCP
-		return fmt.Errorf("the workspace's settings (%s): %w", path, err)
+		return fmt.Errorf("the workspace's settings: %w", err)
+	default:
+		cfg.Warnings = append(cfg.Warnings, unknownSettings(path, md)...)
+		if md.IsDefined("enterprise") {
+			cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("%s: [enterprise] is ignored here: only the global settings connect to an organization", path))
+		}
 	}
 	cfg.Permissions = global.Merge(cfg.Permissions)
 	cfg.MCP.Servers = mergeMCP(globalMCP.Servers, cfg.MCP.Servers, cfg.MCP.Off)
@@ -140,12 +148,13 @@ func mergeMCP(global, own []MCPServerConfig, off []string) []MCPServerConfig {
 	return out
 }
 
-// resolveSecrets replaces keychain references (and modenv's xor: values,
-// from an overlay) in the API keys with the secrets themselves. A secret
-// that can't be read leaves the key empty, so the environment or the
-// model's own error takes over.
+// resolveSecrets replaces keychain references (and modenv's xor: values)
+// in every credential the settings hold (the providers' API keys, Azure's
+// included, and the web search key) with the secrets themselves. A
+// secret that can't be read leaves the key empty, so the environment or
+// the model's own error takes over.
 func resolveSecrets(cfg *Config, store secrets.Store) {
-	for _, p := range []*string{&cfg.LLM.Gemini.APIKey, &cfg.LLM.Anthropic.APIKey, &cfg.LLM.OpenAI.APIKey} {
+	for _, p := range []*string{&cfg.LLM.Gemini.APIKey, &cfg.LLM.Anthropic.APIKey, &cfg.LLM.OpenAI.APIKey, &cfg.LLM.Azure.APIKey, &cfg.Web.SearchAPIKey} {
 		if name, ok := secrets.ParseRef(*p); ok {
 			v, err := store.Get(name)
 			if err != nil {

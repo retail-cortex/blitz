@@ -3749,6 +3749,7 @@
     "project.reason.outside": "fuera del espacio de trabajo",
     "project.reason.provider": "un proveedor que no has configurado",
     "project.reason.user_set": "tu propia configuración lo define",
+    "project.reason.org_policy": "la política de tu organización no lo permite",
     "project.none": "No hay configuración de proyecto (.blitz/settings.toml) en este espacio de trabajo.",
     "project.title": "Configuración del proyecto ({files})",
     "project.applied": "En vigor (solo restringen):",

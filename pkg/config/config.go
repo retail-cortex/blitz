@@ -32,7 +32,6 @@ import (
 
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/retail-cortex/blitz/pkg/secrets"
-	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
 
 // AgencyLevel determines how autonomously the agent operates.
@@ -128,6 +127,11 @@ type Config struct {
 	// ProjectPermissions are the project files' rules, kept apart from
 	// the user's so they're listed as the project's.
 	ProjectPermissions PermissionsConfig `toml:"-"`
+	// Warnings are what the settings files say that loading didn't use or
+	// couldn't read (unknown settings, settings in the wrong file, an
+	// organization policy that can't be read), for the person to see when
+	// a workspace opens and in blitz doctor.
+	Warnings []string `toml:"-"`
 }
 
 // BlitzConfig controls the core behaviour settings.
@@ -936,7 +940,7 @@ func DefaultConfig() *Config {
 	return cfg
 }
 
-// Load loads configuration using modenv from a trusted directory, falling back
+// Load loads configuration from .env.toml in a trusted directory, falling back
 // to DefaultConfig with environment variable overrides.
 //
 // The config directory is, in order: prefixDir (the --config flag), the
@@ -962,11 +966,14 @@ func load(prefixDir, workspace string) (*Config, error) {
 		return nil, fmt.Errorf("failed to set MODENV_PREFIX: %w", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ".env.toml")); err == nil {
-		// Load hierarchical configuration and decrypt secrets via modenv
-		_, loadErr := modenv.Load(cfg)
-		if loadErr != nil {
-			return nil, fmt.Errorf("failed to load configuration via modenv: %w", loadErr)
+	if path := filepath.Join(dir, ".env.toml"); exists(path) {
+		md, err := decodeSettings(path, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load configuration: %w", err)
+		}
+		cfg.Warnings = append(cfg.Warnings, unknownSettings(path, md)...)
+		if md.IsDefined("mcp", "off") {
+			cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("%s: [mcp] off is ignored here: only a workspace's settings turn servers off", path))
 		}
 	}
 	for i := range cfg.MCP.Servers {
@@ -980,6 +987,7 @@ func load(prefixDir, workspace string) (*Config, error) {
 
 	// Apply direct environment variable fallbacks if not populated
 	applyEnvOverrides(cfg)
+	cfg.Warnings = append(cfg.Warnings, fixChoices(cfg, true)...)
 
 	cfg.Dir = dir
 	if workspace != "" {
@@ -994,6 +1002,12 @@ func load(prefixDir, workspace string) (*Config, error) {
 	applyManaged(cfg)
 	applyOrg(cfg, prefixDir)
 	return cfg, nil
+}
+
+// exists reports whether there's a file at path.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ConfigDir returns the trusted directory to load .env.toml from, or "" if none.
@@ -1121,3 +1135,42 @@ const (
 	PlanReviewAgent  = "agent-decides"
 	PlanReviewNever  = "never"
 )
+
+// choices are the settings that take one of a few words, with the words
+// (the first is the default).
+var choices = []struct {
+	key   string
+	words []string
+	field func(*Config) *string
+}{
+	{"blitz.plan_review", []string{PlanReviewAgent, PlanReviewAlways, PlanReviewNever}, func(c *Config) *string { return &c.Blitz.PlanReview }},
+	{"ui.notify", []string{"both", "bell", "desktop", "off"}, func(c *Config) *string { return &c.UI.Notify }},
+	{"ui.task_alerts", []string{"notify", "open", "off"}, func(c *Config) *string { return &c.UI.TaskAlerts }},
+	{"ui.editor", []string{"emacs", "vim"}, func(c *Config) *string { return &c.UI.Editor }},
+}
+
+// fixChoices checks the settings that take one of a few words: a word in
+// another case is taken as it, and one that isn't among them gives way to
+// the default, with a warning, rather than acting as whatever the code
+// compares it against last (plan_review = "Always" meaning never). With
+// fix false it only reports.
+func fixChoices(c *Config, fix bool) []string {
+	var out []string
+	for _, ch := range choices {
+		p := ch.field(c)
+		if *p == "" {
+			continue
+		}
+		if i := slices.IndexFunc(ch.words, func(w string) bool { return strings.EqualFold(w, *p) }); i >= 0 {
+			if fix {
+				*p = ch.words[i]
+			}
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s = %q isn't one of %s: %q is used", ch.key, *p, strings.Join(ch.words, ", "), ch.words[0]))
+		if fix {
+			*p = ch.words[0]
+		}
+	}
+	return out
+}

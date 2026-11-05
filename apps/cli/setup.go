@@ -162,6 +162,12 @@ func (o backendOptions) serviceOptions(cfg *config.Config) serviceOptions {
 func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
 	locales := i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, warn)
 	i18n.SetAppName(enterprise.KeptName(config.EnterpriseDir("", cfg.Enterprise.URL)))
+	if warn != nil {
+		// What the settings hold that loading didn't use (CFG-48).
+		for _, msg := range cfg.Warnings {
+			warn(msg)
+		}
+	}
 	private := o.private()
 	var sock string
 	var err error

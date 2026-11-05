@@ -324,6 +324,11 @@ func TestEnterprisePolicy(t *testing.T) {
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
 	assert.ErrorContains(t, err, "catalog is out of date")
+
+	// A policy that can't be read: the models wait too (N26 api-client-config#4).
+	cfg.Org.Expires, cfg.Org.Problem = time.Time{}, "not fetched yet"
+	_, err = NewModel(context.Background(), cfg, "fast")
+	assert.ErrorContains(t, err, "policy can't be read (not fetched yet)")
 }
 
 // fixedSource gives one access token.

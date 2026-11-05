@@ -127,8 +127,10 @@ func TestStartersWithoutBlitzd(t *testing.T) {
 	startShared = func(context.Context, string) error { return errors.New("no blitzd") }
 	_, err = ensureService(ctx)
 	assert.ErrorContains(t, err, "starting the Blitz service: no blitzd")
-	_, _, _, err = openBackend(ctx, &config.Config{}, backendOptions{}, func(string) {})
+	var warned []string
+	_, _, _, err = openBackend(ctx, &config.Config{Warnings: []string{"unknown setting permissions.denny"}}, backendOptions{}, func(s string) { warned = append(warned, s) })
 	assert.ErrorContains(t, err, "no blitzd")
+	assert.Equal(t, []string{"unknown setting permissions.denny"}, warned, "the settings' warnings are said as the run starts")
 	startPrivate = func(context.Context, serviceOptions) (string, error) { return "", errors.New("no blitzd") }
 	_, _, _, err = openBackend(ctx, &config.Config{}, backendOptions{local: true}, func(string) {})
 	assert.ErrorContains(t, err, "starting a Blitz service for this run: no blitzd")

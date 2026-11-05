@@ -269,16 +269,20 @@ func scrubEnv(env, patterns []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
-		drop := false
-		for _, p := range patterns {
-			if ok, _ := path.Match(strings.ToUpper(p), strings.ToUpper(name)); ok {
-				drop = true
-				break
-			}
-		}
-		if !drop {
+		if !scrubbed(name, patterns) {
 			out = append(out, kv)
 		}
 	}
 	return out
+}
+
+// scrubbed reports whether the variable name matches one of the
+// sandbox.scrub_env patterns (case doesn't matter).
+func scrubbed(name string, patterns []string) bool {
+	for _, p := range patterns {
+		if ok, _ := path.Match(strings.ToUpper(p), strings.ToUpper(name)); ok {
+			return true
+		}
+	}
+	return false
 }

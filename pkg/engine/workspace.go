@@ -276,6 +276,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if w.skills, err = skills.NewProvider(); err != nil {
 		return nil, fmt.Errorf("failed to load skills provider: %w", err)
 	}
+	// What the settings files hold that loading didn't use (CFG-48), and
+	// an organization policy that can't be read (EN-33).
+	for _, msg := range cfg.Warnings {
+		o.Warn(msg)
+	}
 	// The built-in agents and skills the organization switches off
 	// (spec_053 EN-31), but the agent sessions start with.
 	if off := cfg.Org.Policy.Builtins.Off; len(off) > 0 {

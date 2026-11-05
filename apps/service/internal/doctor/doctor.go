@@ -90,6 +90,9 @@ func Run(ctx context.Context, o Options) []Check {
 		return checks
 	}
 	add("config parse", statusOK, "provider %s, model %s, agent %s", cfg.LLM.Provider, cfg.ModelName(), cfg.Blitz.DefaultAgent)
+	for _, w := range cfg.Warnings {
+		add("settings", statusWarn, "%s", w)
+	}
 	checkProject(cfg, add)
 	checkSkills(cfg, add)
 

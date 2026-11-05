@@ -3749,6 +3749,7 @@
     "project.reason.outside": "outside the workspace",
     "project.reason.provider": "a provider you haven't set up",
     "project.reason.user_set": "your own settings set it",
+    "project.reason.org_policy": "your organization's policy doesn't allow it",
     "project.none": "No project settings (.blitz/settings.toml) in this workspace.",
     "project.title": "Project settings ({files})",
     "project.applied": "In force (they only tighten):",

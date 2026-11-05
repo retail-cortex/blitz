@@ -3749,6 +3749,7 @@
     "project.reason.outside": "hors de l’espace de travail",
     "project.reason.provider": "un fournisseur que vous n’avez pas configuré",
     "project.reason.user_set": "vos propres paramètres le définissent",
+    "project.reason.org_policy": "la politique de votre organisation ne le permet pas",
     "project.none": "Aucun paramètre de projet (.blitz/settings.toml) dans cet espace de travail.",
     "project.title": "Paramètres du projet ({files})",
     "project.applied": "En vigueur (ils ne font que restreindre) :",

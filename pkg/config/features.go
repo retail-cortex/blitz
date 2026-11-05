@@ -16,8 +16,10 @@ package config
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -380,10 +382,22 @@ func (h HookConfig) Kind() string {
 	return h.Type
 }
 
-// Describe is what the hook runs, for people.
+// Describe is what the hook runs, for people. An http hook's says the
+// headers it sends and the environment variables they may carry, so
+// trusting a project's hook shows what leaves the computer (PRJ-24).
 func (h HookConfig) Describe() string {
 	switch h.Kind() {
 	case HookHTTP:
+		var with []string
+		if len(h.Headers) > 0 {
+			with = append(with, "headers "+strings.Join(slices.Sorted(maps.Keys(h.Headers)), ", "))
+		}
+		if len(h.AllowedEnvVars) > 0 {
+			with = append(with, "environment variables "+strings.Join(h.AllowedEnvVars, ", "))
+		}
+		if len(with) > 0 {
+			return "POST " + h.URL + " (" + strings.Join(with, "; ") + ")"
+		}
 		return "POST " + h.URL
 	case HookPrompt:
 		return "prompt: " + h.Prompt

@@ -83,6 +83,7 @@ const (
 	ReasonOutside     = "outside"      // a path outside the workspace
 	ReasonProvider    = "provider"     // a model of a provider the user hasn't set up
 	ReasonUserSet     = "user_set"     // the user's own settings set it
+	ReasonOrgPolicy   = "org_policy"   // the organization's policy doesn't allow it (EN-35)
 )
 
 // ProjectItem is one setting from a project file.
@@ -572,14 +573,16 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 	for _, pf := range p.trusted {
 		cfg.Hooks = AppendHooks(cfg.Hooks, WithSource(pf.Hooks, pf.file))
 		for _, s := range pf.MCP.Servers {
-			if slices.ContainsFunc(cfg.MCP.Servers, func(u MCPServerConfig) bool { return u.Name == s.Name }) {
-				ignore(pf, ProjectMCP, s.Name, "", ReasonUserSet)
-				continue
-			}
-			cfg.MCP.Servers = append(cfg.MCP.Servers, MCPServerConfig{
+			err := cfg.AddMCPServer(MCPServerConfig{
 				Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, URL: s.URL, Headers: s.Headers, Tools: s.Tools,
 				Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: s.TimeoutSeconds, Scope: MCPScopeProject,
 			})
+			switch {
+			case errors.Is(err, ErrOrgMCP):
+				ignore(pf, ProjectMCP, s.Name, "", ReasonOrgPolicy)
+			case err != nil:
+				ignore(pf, ProjectMCP, s.Name, "", ReasonUserSet)
+			}
 		}
 		for _, r := range pf.Permissions.Allow {
 			cfg.ProjectPermissions.Allow = appendNew(cfg.ProjectPermissions.Allow, r)
