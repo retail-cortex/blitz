@@ -216,6 +216,40 @@ func TestEnterpriseTerms(t *testing.T) {
 	assert.Error(t, err, "signed out")
 }
 
+// A scripted login (stdin not a terminal) asks nothing and stays signed
+// in with the terms waiting, saying how to accept them; blitz enterprise
+// terms in a terminal accepts them afterwards (EN-53a, N26 cli-behaviour).
+func TestEnterpriseTermsWithoutATerminal(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Version = "v3"
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+
+	for _, args := range [][]string{{"enterprise", "login"}, {"enterprise", "terms"}} {
+		t.Run(args[1], func(t *testing.T) {
+			out, err := runCLIWithFile(t, args...)
+			require.NoError(t, err, out)
+			assert.NotContains(t, out, "Accept them? [y/N]", "nothing asked")
+			assert.NotContains(t, out, "signed out")
+			assert.Contains(t, out, "Acme Assist's terms (version v3) wait to be accepted")
+			assert.Contains(t, out, "blitz enterprise terms")
+			stopPrivate()
+
+			out, err = runCLI(t, "enterprise", "status")
+			require.NoError(t, err, out)
+			assert.Contains(t, out, "ana@acme.com", "still signed in")
+			assert.Contains(t, out, "version v3 to accept")
+		})
+	}
+	out, err := runCLIWith(t, "y\n", "enterprise", "terms")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "✓ Accepted Acme Assist's terms (version v3).")
+}
+
 // blitz enterprise workspaces and create, and blitz git-credential
 // answering Git for the service's host (EN-60, EN-61).
 func TestEnterpriseWorkspacesCommand(t *testing.T) {

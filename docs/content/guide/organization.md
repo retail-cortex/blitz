@@ -64,7 +64,7 @@ Its policy may also switch off Blitz's own built-in agents, skills or guardrails
 
 If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page, its menus, dialogs and notifications, the tray, the terminal's banner and help, and About, which ends with "Built on Blitz". Where Blitz speaks of itself as a program (its releases, its license, reinstalling it), it keeps its own name. They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.
 
-If your organization has terms, Blitz shows them before anything else when you sign in, and again when they change. **Accept** records it with your organization; **Decline** signs you out of it.
+If your organization has terms, Blitz shows them before anything else when you sign in, and again when they change. **Accept** records it with your organization; **Decline** signs you out of it. In the terminal, `blitz enterprise login` asks `[y/N]` after signing in. A login run from a script, with no terminal to ask in, asks nothing and stays signed in, but your organization's features wait until the terms are accepted: run `blitz enterprise terms` in a terminal, or open the Blitz app, which asks.
 
 ## Your usage and limits
 

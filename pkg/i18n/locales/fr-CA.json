@@ -484,6 +484,7 @@
     "org.terms_prompt": "Les accepter? [y/N] ",
     "org.terms_declined": "Non acceptées : déconnecté de {name}.",
     "org.terms_accepted": "Conditions de {name} acceptées (version {version}).",
+    "org.terms_waiting": "Les conditions de {name} (version {version}) attendent d'être acceptées, et ses fonctions attendent jusqu'à ce qu'elles le soient. La session reste ouverte : acceptez-les avec « blitz enterprise terms » dans un terminal, ou dans l'app Blitz.",
     "org.about_none": "Votre organisation n'a rien publié à son sujet.",
     "org.about_stale": "Impossible d'interroger le service de votre organisation ({error}); voici la copie gardée sur cet ordinateur.",
     "org.about_support": "Soutien : {url}",
