@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "expr.go",
         "flows.go",
+        "schedule.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/flows",
     visibility = [
@@ -45,6 +46,7 @@ go_test(
     srcs = [
         "expr_test.go",
         "flows_test.go",
+        "schedule_test.go",
         "settings_test.go",
     ],
     embed = [":flows"],

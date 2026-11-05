@@ -3249,6 +3249,10 @@ message WorkflowFile {
   // default, dont-ask or bypass; never looser than the workspace's
   // (spec_043_workflows WF-21).
   string mode = 7;
+  // What a job that runs it may do without asking, from its steps
+  // (flows.SchedulePermissions, WF-20): its scheduled runs get these as
+  // the workflow is when they run. Read only.
+  repeated string schedule_permissions = 8;
 }
 
 // Request message for WorkspaceService.ListWorkflows.

@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -121,7 +122,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		info.Problems = []string{loadErr.Error()}
 	}
 	if loadErr == nil {
-		eff := workers.Apply(wk, w.workerPolicy())
+		eff := workers.Apply(withFlowGrants(wk, w.workflow), w.workerPolicy())
 		for _, p := range eff.Permissions {
 			info.Permissions = append(info.Permissions, p.String())
 		}
@@ -440,6 +441,28 @@ type RunOptions struct {
 	Session, Prompt string
 }
 
+// withFlowGrants is wk with, for a workflow's job, what the workflow's
+// steps do as they are now (flows.SchedulePermissions, WF-20) added to its
+// own permissions: the grants follow the workflow, never a copy made when
+// its schedule was added. The policy then applies to them all.
+func withFlowGrants(wk *workers.Worker, workflow func(string) (flows.Flow, bool)) *workers.Worker {
+	if wk.Flow == "" {
+		return wk
+	}
+	f, ok := workflow(wk.Flow)
+	if !ok {
+		return wk
+	}
+	c := *wk
+	c.Permissions = slices.Clone(wk.Permissions)
+	for _, g := range flows.SchedulePermissions(f) {
+		if p, err := workers.ParsePermission(g); err == nil && !slices.Contains(c.Permissions, p) {
+			c.Permissions = append(c.Permissions, p)
+		}
+	}
+	return &c
+}
+
 // RunWorker runs the named worker once, as its schedule would: in a
 // session of its own, with only the permissions it declares and within its
 // limits, recorded in the run log. The worker must be enabled; a
@@ -476,7 +499,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	}()
 
 	policy := w.workerPolicy()
-	eff := workers.Apply(wk, policy)
+	eff := workers.Apply(withFlowGrants(wk, w.workflow), policy)
 	hints := w.jobLimitHints(wk, policy)
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}

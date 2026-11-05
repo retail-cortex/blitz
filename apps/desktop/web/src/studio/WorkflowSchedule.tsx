@@ -40,8 +40,10 @@ type Draft = { name: string; schedule: string; input: string };
  * When a workflow runs by itself (spec_043_workflows WF-20): its schedules,
  * each a worker that runs it (a deterministic worker: the workflow's steps,
  * its prompt the workflow's input), added, changed, switched on and off
- * and removed here. What a worker may do and its limits are in Studio ›
- * Workers.
+ * and removed here. What its steps do it may do without asking: the
+ * service works that out from the workflow as each run starts
+ * (permissions, from WorkflowFile.schedulePermissions, only says so).
+ * What else a worker may do and its limits are in Studio › Workers.
  */
 export function WorkflowSchedule({ workspace, workflow, disabled, permissions = [], needsInput = false }: { workspace: string; workflow: string; disabled: boolean; permissions?: string[]; needsInput?: boolean }) {
   const snack = useSnackbar();
@@ -76,7 +78,7 @@ export function WorkflowSchedule({ workspace, workflow, disabled, permissions = 
       if (!draft) return;
       setProblems([]);
       if (!draft.name) {
-        const r = await workers.createWorker({ workspace, name: scheduleName(workflow, all.map((w) => w.name)), description: t("desktop.flows.schedule.description", { name: workflow }), schedule: draft.schedule.trim(), workflow, prompt: draft.input, permissions });
+        const r = await workers.createWorker({ workspace, name: scheduleName(workflow, all.map((w) => w.name)), description: t("desktop.flows.schedule.description", { name: workflow }), schedule: draft.schedule.trim(), workflow, prompt: draft.input });
         if (!r.worker) return setProblems(r.problems);
         await workers.enableWorker({ workspace, name: r.worker.name, hash: r.worker.hash });
         snack(t("desktop.flows.schedule.added", { when: r.worker.schedule }));

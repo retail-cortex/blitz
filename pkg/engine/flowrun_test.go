@@ -516,7 +516,7 @@ func TestResumedJobWorkflowKeepsPermissions(t *testing.T) {
 	writeFlow(t, w, "later", `nodes:
   - {id: wait, type: timer, title: Wait, wait: 1h}
   - {id: ok, type: save_file, path: reports/a.md}
-  - {id: out, type: save_file, path: out/b.md}
+  - {id: out, type: save_file, path: "{{ input }}-b.md"}
 edges: [{from: wait, to: ok}, {from: ok, to: out}]
 `)
 	addWorker(t, w, "night", "---\nschedule: daily at 6 AM\nworkflow: later\npermissions: [\"write:reports/\"]\n---\nsummary\n")
@@ -527,9 +527,9 @@ edges: [{from: wait, to: ok}, {from: ok, to: out}]
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "worker", tasks[0].Origin)
 	_, err = w.ResumeFlow(context.Background(), tasks[0].Tasks[0].ID, map[string]any{"fired_at": "now"}, func(api.Event) {})
-	require.Error(t, err, "out/ isn't among the job's permissions")
+	require.Error(t, err, "the workspace's top isn't among the job's permissions, nor its steps' (WF-20a)")
 	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "a.md"), "reports/ is")
-	assert.NoFileExists(t, filepath.Join(w.Dir(), "out", "b.md"))
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "summary-b.md"))
 }
 
 // A worker can run a workflow: its steps under the worker's permissions,
@@ -548,12 +548,14 @@ func TestWorkerRunsWorkflow(t *testing.T) {
 	require.NotEmpty(t, info)
 	assert.Equal(t, "nightly", info[0].Workflow)
 
-	addWorker(t, w, "denied", "---\nschedule: daily at 6 AM\nworkflow: nightly\n---\nsecret\n")
+	// Its steps' grants (WF-20a) are reports/, so a file the input puts
+	// elsewhere is still refused.
+	addWorker(t, w, "denied", "---\nschedule: daily at 6 AM\nworkflow: nightly\n---\n../secret\n")
 	enable(t, w, "denied")
 	run, err = w.RunWorker(context.Background(), "denied", RunOptions{Manual: true})
 	require.NoError(t, err)
 	assert.Equal(t, api.RunFailed, run.Status, "no write permission: %+v", run)
-	assert.NoFileExists(t, filepath.Join(w.Dir(), "reports", "secret.md"))
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "secret.md"))
 
 	// Studio's health sees each job's runs and its workflow's (spec_045).
 	in := w.healthInputs(context.Background())

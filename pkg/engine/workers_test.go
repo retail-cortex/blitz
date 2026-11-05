@@ -273,6 +273,33 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	assert.Contains(t, run.Error, "cost limit", "cost run %+v %v", run, err)
 }
 
+// A workflow's job may do what the workflow's steps do as they are when
+// it runs (WF-20, N26 desktop-4#19), within the policy, without the job
+// listing it.
+func TestRunWorkerWorkflowGrants(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		allow  []string
+		status api.RunStatus
+		wrote  bool
+	}{
+		{name: "its save step writes", allow: []string{"write"}, status: api.RunSucceeded, wrote: true},
+		{name: "the policy still applies", allow: []string{"shell"}, status: api.RunFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Policy.Allow = tc.allow })
+			writeFlow(t, w, "save", "nodes:\n  - {id: s, type: save_file, path: out/report.md}\n")
+			addWorker(t, w, "flow", "---\nschedule: hourly\nworkflow: save\n---\nThe report.\n")
+			enable(t, w, "flow")
+			run, err := w.RunWorker(context.Background(), "flow", RunOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, tc.status, run.Status, "run %+v", run)
+			_, statErr := os.Stat(filepath.Join(w.Dir(), "out", "report.md"))
+			assert.Equal(t, tc.wrote, statErr == nil, "the file written: %v", statErr)
+		})
+	}
+}
+
 // A job whose body is a workflow keeps the job's limits across its
 // steps, runs them on its model, and its steps' changes are the run's to
 // undo (spec_023 WK-43, WK-54; N26 engine-top-2#2).
