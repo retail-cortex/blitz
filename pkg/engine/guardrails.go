@@ -125,8 +125,9 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 // so its defaults run), and, where someone can answer (not a job's run,
 // an eval, a skill's scenario or the reflection), that "continue" carries
 // on: a long coding turn reaches 200 model calls easily, and "maximum
-// turns reached" alone sends people looking for a setting.
-func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error {
+// turns reached" alone sends people looking for a setting. own says what
+// set the turn's own model-call limit, when no guardrail did ("": none).
+func (w *Workspace) limitSource(err error, lim turnLimits, attended bool, own string) error {
 	var g *gates.Guardrail
 	var key string
 	switch {
@@ -136,6 +137,9 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error 
 		g, key = lim.cost, "max_cost_usd"
 	}
 	if g == nil {
+		if own != "" && errors.Is(err, api.ErrMaxTurns) {
+			return fmt.Errorf("%w: %s", err, own)
+		}
 		return err
 	}
 	rel := w.workspaceRel
@@ -154,6 +158,21 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error 
 		hint += " " + i18n.T("guardrail.limit_continue")
 	}
 	return fmt.Errorf("%w: %s", err, hint)
+}
+
+// guardrailProblems are the notices for the session's turn's custom
+// guardrails whose files have a problem: they check nothing, so the turn
+// says so rather than run as if they did (a built-in's runs with its
+// defaults).
+func (w *Workspace) guardrailProblems(sessionID string) []api.Notice {
+	var out []api.Notice
+	for _, g := range w.guardsFor(sessionID).all {
+		if g.Problem != "" && g.For() == "" {
+			out = append(out, api.Notice{Error: true, Text: i18n.T("guardrail.not_running", "name", g.Name, "path", w.workspaceRel(g.Path),
+				"problem", strings.Join(strings.Fields(g.Problem), " "))})
+		}
+	}
+	return out
 }
 
 // workspaceRel is path relative to the workspace when it's in it.

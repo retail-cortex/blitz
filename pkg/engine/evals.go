@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
@@ -313,8 +314,12 @@ func (w *Workspace) unattended(ctx context.Context, label, agent string, t api.T
 	if on == nil {
 		on = func(api.Event) {}
 	}
+	var own string
+	if t.MaxTurns == 0 {
+		own = i18n.T("guardrail.limit_eval", "n", evalMaxTurns)
+	}
 	t.MaxTurns, t.Timeout = cmp.Or(t.MaxTurns, evalMaxTurns), cmp.Or(t.Timeout, evalTimeout)
-	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: t}, on, st, runtime.WithAgent(agent))
+	res, err := w.run(tools.Unattended(ctx, decide), rec.ID, turn{Turn: t, ownLimit: own}, on, st, runtime.WithAgent(agent))
 	costUSD = w.engine.Usage(rec.ID).CostUSD
 	mu.Lock()
 	defer mu.Unlock()

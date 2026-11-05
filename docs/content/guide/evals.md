@@ -46,7 +46,7 @@ A line break in a cell is `<br>`; a `|` is `\|`. Text above and below the table 
 
 ## What a case may do
 
-Each case runs in a throwaway session, unattended. It can read the workspace, but **never changes files or runs commands**: those actions are refused, and listed with the result. Add `allow: [network]` for the web tools, or `allow: [mcp]` for MCP tools. A case stops after 25 model calls or 5 minutes, scoring an answer after 2 minutes, and a case that runs over is marked as an error while the run goes on to the next. Your guardrails apply as in any turn.
+Each case runs in a throwaway session, unattended. It can read the workspace, but **never changes files or runs commands**: those actions are refused, and listed with the result. Add `allow: [network]` for the web tools, or `allow: [mcp]` for MCP tools. A case stops after 25 model calls (a limit that's fixed, and says so) or 5 minutes, scoring an answer after 2 minutes, and a case that runs over is marked as an error while the run goes on to the next. Your guardrails apply as in any turn.
 
 ## Running one
 

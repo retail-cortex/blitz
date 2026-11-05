@@ -109,7 +109,7 @@ func TestLimitSource(t *testing.T) {
 		{"no error", nil, turnLimits{turns: &def}, true, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := w.limitSource(tc.err, tc.lim, tc.attended)
+			got := w.limitSource(tc.err, tc.lim, tc.attended, "")
 			if tc.err == nil {
 				assert.NoError(t, got)
 				return
@@ -364,6 +364,32 @@ func TestBuiltinGuardrailHealthFile(t *testing.T) {
 	assert.NotEqual(t, before, hashOf())
 }
 
+// A custom guardrail whose file has a problem checks nothing, so each
+// turn says so; "Action" and "Block" read as action and block.
+func TestBrokenGuardrailNotice(t *testing.T) {
+	w, _ := openTestWith(t, nil, text("done"))
+	writeGuardrail(t, w, "no-drop", "---\nstage: actions\naction: block\n---\nRefuse DROP TABLE.\n")
+	writeGuardrail(t, w, "careful", "---\nstage: Action\naction: Block\n---\nBe careful.\n")
+	var notices []api.Notice
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "hi"}, collect(&notices))
+	require.NoError(t, err)
+	var texts []string
+	for _, n := range notices {
+		texts = append(texts, n.Text)
+	}
+	require.Len(t, texts, 1, "%v", texts)
+	assert.Contains(t, texts[0], "The guardrail no-drop isn't running: stage \"actions\"")
+	assert.Contains(t, texts[0], filepath.Join(".agents", "guardrails", "no-drop.md"))
+	assert.True(t, notices[0].Error)
+	for _, g := range w.Guardrails() {
+		if g.Name == "careful" {
+			assert.Empty(t, g.Problem)
+			assert.Equal(t, gates.StageAction, g.Stage)
+			assert.Equal(t, gates.Block, g.Action)
+		}
+	}
+}
+
 // A limits guardrail's defaults say where to set what refused a call.
 func TestLimitSettingDefault(t *testing.T) {
 	w := openTest(t)
@@ -433,6 +459,24 @@ func TestOrgGuardrails(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Contains(t, got["error"], "guardrail limits")
 	assert.Contains(t, got["error"], "git push*")
+}
+
+// A turn stopped at its own limit, set by no guardrail (an eval's 25
+// model calls a case), says what set it and that it can't be changed.
+func TestLimitSourceOwn(t *testing.T) {
+	w, _ := openTestWith(t, nil, toolCall("list_files", map[string]any{"path": "."}), toolCall("list_files", map[string]any{"path": "."}), text("done"))
+	old := evalMaxTurns
+	evalMaxTurns = 1
+	t.Cleanup(func() { evalMaxTurns = old })
+	_, _, _, err := w.unattended(context.Background(), "eval limits c1", "", api.Turn{Text: "look"}, nil, nil)
+	require.ErrorIs(t, err, api.ErrMaxTurns)
+	assert.Contains(t, err.Error(), "an eval's case or a skill's scenario stops at 1 model calls; that limit is fixed")
+	assert.NotContains(t, err.Error(), "limits.md", "no guardrail set it")
+
+	def := gates.BuiltinDefault(gates.Builtins[2])
+	got := w.limitSource(api.ErrMaxTurns, turnLimits{turns: &def}, false, "own")
+	assert.NotContains(t, got.Error(), "own", "a guardrail's limit names the guardrail")
+	assert.Equal(t, api.ErrCostLimit, w.limitSource(api.ErrCostLimit, turnLimits{}, false, "own"), "own is the model calls'")
 }
 
 // A turn nobody can answer (an eval's case, a skill's scenario, the
