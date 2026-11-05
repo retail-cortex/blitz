@@ -113,7 +113,7 @@ var extension = regexp.MustCompile(`^\.[A-Za-z0-9+_-]{1,16}$`)
 // with its text as the editor has it; or, with block, a code block in the
 // Markdown file p, as a file of its own that's never written. In an
 // untrusted workspace the document isn't opened: the state says why.
-func (w *Workspace) OpenDocument(client, p, text string, version int64, block *CodeBlock) (lsp.DocumentInfo, error) {
+func (w *Workspace) OpenDocument(ctx context.Context, client, p, text string, version int64, block *CodeBlock) (lsp.DocumentInfo, error) {
 	rel, _, err := userPath(p)
 	if err != nil {
 		return lsp.DocumentInfo{}, err
@@ -131,9 +131,9 @@ func (w *Workspace) OpenDocument(client, p, text string, version int64, block *C
 	if block != nil {
 		sum := sha256.Sum256([]byte(client + "\x00" + rel + "\x00" + block.ID))
 		path := m.SnippetPath(hex.EncodeToString(sum[:8]), strings.ToLower(block.Extension))
-		return m.OpenSnippet(client, path, text, version), nil
+		return m.OpenSnippet(ctx, client, path, text, version), nil
 	}
-	return m.OpenDocument(client, filepath.Join(w.Dir(), rel), text, version), nil
+	return m.OpenDocument(ctx, client, filepath.Join(w.Dir(), rel), text, version), nil
 }
 
 // ChangeDocument replaces an editor document's text.

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "browsertest",
@@ -21,4 +21,15 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/engine/browser/browsertest",
     visibility = ["//pkg/engine:__subpackages__"],
     deps = ["@com_github_gorilla_websocket//:websocket"],
+)
+
+go_test(
+    name = "browsertest_test",
+    srcs = ["browsertest_test.go"],
+    embed = [":browsertest"],
+    deps = [
+        "@com_github_gorilla_websocket//:websocket",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

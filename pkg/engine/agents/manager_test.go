@@ -17,6 +17,8 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -150,4 +152,30 @@ func TestDuplicateNamesInOneFolder(t *testing.T) {
 			assert.Contains(t, f.Problem, "defined again in "+spec.Path)
 		}
 	}
+}
+
+// TestRefreshWhileLoading checks that reloads and loads at once don't race
+// (N26 engine-sub-1 #7; the race detector checks it).
+func TestRefreshWhileLoading(t *testing.T) {
+	reg, err := NewRegistry()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	writeAgent(t, dir, "a.md", "a", "A")
+	require.NoError(t, reg.LoadExternalAgents(dir))
+	var wg sync.WaitGroup
+	for i := range 4 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			reg.Invalidate()
+			_, _ = reg.Refresh()
+		}()
+		go func() {
+			defer wg.Done()
+			_ = reg.LoadExternalAgents(filepath.Join(dir, "missing", strconv.Itoa(i)))
+		}()
+	}
+	wg.Wait()
+	_, ok := reg.Get("a")
+	assert.True(t, ok)
 }

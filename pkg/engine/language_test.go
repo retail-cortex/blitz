@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
@@ -29,7 +30,7 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 	w := openProject(t, ws, Options{})
 	defer w.Close()
 	assert.False(t, w.LanguageTrusted())
-	info, err := w.OpenDocument("w", "main.go", "package main\n", 1, nil)
+	info, err := w.OpenDocument(context.Background(), "w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.Equal(t, LanguageUntrusted, info.State)
 	assert.Empty(t, info.ID)
@@ -37,13 +38,13 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 
 	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
 	assert.True(t, w.LanguageTrusted())
-	info, err = w.OpenDocument("w", "main.go", "package main\n", 1, nil)
+	info, err = w.OpenDocument(context.Background(), "w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, LanguageUntrusted, info.State)
 	assert.NotEmpty(t, info.ID)
 	require.NoError(t, w.CloseDocument(info.ID))
 
-	_, err = w.OpenDocument("w", "../out.go", "", 1, nil)
+	_, err = w.OpenDocument(context.Background(), "w", "../out.go", "", 1, nil)
 	assert.ErrorIs(t, err, ErrBadPath)
 }
 
@@ -54,14 +55,14 @@ func TestOpenCodeBlock(t *testing.T) {
 	w := openProject(t, ws, Options{})
 	defer w.Close()
 	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
-	info, err := w.OpenDocument("w", "notes.md", "x := 1\n", 1, &CodeBlock{Extension: ".GO", ID: "b1"})
+	info, err := w.OpenDocument(context.Background(), "w", "notes.md", "x := 1\n", 1, &CodeBlock{Extension: ".GO", ID: "b1"})
 	require.NoError(t, err)
 	assert.NotEmpty(t, info.ID)
 	assert.Equal(t, "go", info.Language)
 	require.NoError(t, w.CloseDocument(info.ID))
 
 	for _, block := range []*CodeBlock{{Extension: "go", ID: "b1"}, {Extension: ".go"}, {Extension: "../x", ID: "b1"}} {
-		_, err = w.OpenDocument("w", "notes.md", "", 1, block)
+		_, err = w.OpenDocument(context.Background(), "w", "notes.md", "", 1, block)
 		assert.ErrorIs(t, err, ErrBadPath)
 	}
 }

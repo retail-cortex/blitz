@@ -112,7 +112,7 @@ func newDocManager(t *testing.T, answer func(f *fakeServer, method string, param
 // openReady opens src with text and waits for it to reach the server.
 func openReady(t *testing.T, m *Manager, ts *textSync, src, text string, version int64) string {
 	t.Helper()
-	info := m.OpenDocument("window-1", src, text, version)
+	info := m.OpenDocument(context.Background(), "window-1", src, text, version)
 	require.NotEmpty(t, info.ID)
 	require.Equal(t, "go", info.Language)
 	require.Eventually(t, func() bool { got, ok := ts.text(fileURI(src)); return ok && got == text }, 5*time.Second, 5*time.Millisecond)
@@ -149,7 +149,7 @@ func TestDocumentsHoldTheEditorsText(t *testing.T) {
 func TestDocumentsSharedByTwoWindows(t *testing.T) {
 	m, _, ts, src := newDocManager(t, nil)
 	a := openReady(t, m, ts, src, "package main\n", 1)
-	b := m.OpenDocument("window-2", src, "package main\n", 1)
+	b := m.OpenDocument(context.Background(), "window-2", src, "package main\n", 1)
 	require.Eventually(t, func() bool {
 		m.docs.mu.Lock()
 		defer m.docs.mu.Unlock()
@@ -167,7 +167,7 @@ func TestDocumentsSharedByTwoWindows(t *testing.T) {
 // install.
 func TestOpenDocumentStates(t *testing.T) {
 	m, _, _, src := newDocManager(t, nil)
-	info := m.OpenDocument("w", filepath.Join(filepath.Dir(src), "notes.txt"), "", 1)
+	info := m.OpenDocument(context.Background(), "w", filepath.Join(filepath.Dir(src), "notes.txt"), "", 1)
 	assert.Equal(t, DocumentInfo{State: StateNone}, info)
 
 	missing := NewManager(t.TempDir(), []Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}},
@@ -177,7 +177,7 @@ func TestOpenDocumentStates(t *testing.T) {
 	t.Cleanup(missing.Close)
 	_, err := missing.For(context.Background(), "a.go")
 	require.Error(t, err)
-	info = missing.OpenDocument("w", "a.go", "", 1)
+	info = missing.OpenDocument(context.Background(), "w", "a.go", "", 1)
 	assert.Equal(t, StateMissing, info.State)
 	assert.Contains(t, info.Detail, "gopls isn't installed")
 	assert.Equal(t, "go install golang.org/x/tools/gopls@latest", info.Install)
@@ -359,7 +359,7 @@ func TestDocumentLeases(t *testing.T) {
 	// Watching keeps them.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	kept := m.OpenDocument("window-2", src, "package main\n", 1)
+	kept := m.OpenDocument(context.Background(), "window-2", src, "package main\n", 1)
 	go func() { _ = m.WatchDiagnostics(ctx, "window-2", func(DocumentDiagnostics) error { return nil }) }()
 	time.Sleep(4 * 50 * time.Millisecond)
 	assert.Equal(t, []string{kept.ID}, documentIDs(m, "window-2"))
@@ -368,7 +368,7 @@ func TestDocumentLeases(t *testing.T) {
 	dir := filepath.Dir(src)
 	var ids []string
 	for _, name := range []string{"b.go", "c.go"} {
-		ids = append(ids, m.OpenDocument("window-2", filepath.Join(dir, name), "package main\n", 1).ID)
+		ids = append(ids, m.OpenDocument(context.Background(), "window-2", filepath.Join(dir, name), "package main\n", 1).ID)
 		time.Sleep(time.Millisecond)
 	}
 	assert.ElementsMatch(t, ids, documentIDs(m, "window-2"))
@@ -421,4 +421,23 @@ func TestRestart(t *testing.T) {
 	_, err := m.For(context.Background(), src)
 	require.NoError(t, err)
 	assert.Equal(t, 2, f.launched())
+}
+
+// A server's position with a negative character, or one past its line,
+// doesn't panic: it's taken as it is (N26 engine-sub-1 #39).
+func TestCharPositionOutOfRange(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		p    wirePosition
+		want Position
+	}{
+		{"in range", wirePosition{Line: 0, Character: 2}, Position{Line: 1, Column: 3}},
+		{"a negative character", wirePosition{Line: 0, Character: -3}, Position{Line: 1, Column: -2}},
+		{"past the line", wirePosition{Line: 0, Character: 40}, Position{Line: 1, Column: 41}},
+		{"a negative line", wirePosition{Line: -1, Character: 0}, Position{Line: 0, Column: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.NotPanics(t, func() { assert.Equal(t, tc.want, charPosition("héllo\n", tc.p)) })
+		})
+	}
 }
