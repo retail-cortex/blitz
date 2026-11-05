@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -27,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -148,6 +150,68 @@ func TestServiceCommands(t *testing.T) {
 	fakeSystem(t, errors.New("systemctl failed"))
 	_, err = runCLI(t, "service", "install")
 	assert.ErrorContains(t, err, "systemctl failed")
+}
+
+// The commands the CLI's hints name exist (N26 cli-2#2): blitz service
+// restart after an MCP server or plugin changes, or an update, and the
+// commands that set up a provider.
+func TestHintsNameRealCommands(t *testing.T) {
+	root := newRootCommand()
+	for _, path := range [][]string{{"service", "restart"}, {"config", "set-key"}, {"auth", "login"}} {
+		t.Run(strings.Join(path, " "), func(t *testing.T) {
+			cmd, rest, err := root.Find(path)
+			require.NoError(t, err)
+			assert.Empty(t, rest)
+			assert.Equal(t, path[len(path)-1], cmd.Name())
+		})
+	}
+}
+
+// blitz service restart restarts the login item's service, or, without
+// one, stops the running service and starts it again on demand; with none
+// running it says so (N26 cli-2#2).
+func TestServiceRestart(t *testing.T) {
+	t.Run("none running", func(t *testing.T) {
+		isolate(t)
+		out, err := runCLI(t, "service", "restart")
+		require.NoError(t, err)
+		assert.Contains(t, out, "isn't running")
+	})
+	t.Run("started on demand", func(t *testing.T) {
+		isolate(t)
+		sock, err := ensureService(context.Background())
+		require.NoError(t, err)
+		started := 0
+		inner := startShared
+		startShared = func(ctx context.Context, s string) error { started++; return inner(ctx, s) }
+		t.Cleanup(func() { startShared = inner })
+		out, err := runCLI(t, "service", "restart")
+		require.NoError(t, err, out)
+		assert.Contains(t, out, "restarted")
+		assert.Equal(t, 1, started, "started again once")
+		assert.True(t, socket.Running(sock))
+	})
+	t.Run("login item", func(t *testing.T) {
+		if goruntime.GOOS != "darwin" && goruntime.GOOS != "linux" {
+			t.Skip("login items are only supported on macOS and Linux")
+		}
+		isolate(t)
+		startService(t) // the login item's, answering again at once
+		blitzdOnPath(t, "exit 0")
+		fakeSystem(t, nil)
+		_, err := runCLI(t, "service", "install")
+		require.NoError(t, err)
+		ran := fakeSystem(t, nil)
+		out, err := runCLI(t, "service", "restart")
+		require.NoError(t, err, out)
+		assert.Contains(t, out, "restarted")
+		want := "systemctl --user restart blitz.service"
+		if goruntime.GOOS == "darwin" {
+			want = "launchctl kickstart -k gui/"
+		}
+		require.NotEmpty(t, *ran)
+		assert.True(t, strings.HasPrefix((*ran)[len(*ran)-1], want), "ran %q", *ran)
+	})
 }
 
 // A settings file that doesn't load names no keys.

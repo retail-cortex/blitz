@@ -160,6 +160,22 @@ func TestInstallAndApply(t *testing.T) {
 	assert.Empty(t, loaded)
 	assert.Contains(t, strings.Join(problems, "\n"), "changed since it was installed")
 
+	// A symbolic link added after installing: Hash skips links, so it would
+	// match; the plugin isn't loaded (N26 pkg-small-2#27).
+	reinstalled, err := Fetch(ctx, sample(t))
+	require.NoError(t, err)
+	i, err = store.Install(reinstalled)
+	require.NoError(t, err)
+	dir = store.PluginDir(i)
+	loaded, problems = Apply(config.DefaultConfig(), store)
+	require.Empty(t, problems)
+	require.Len(t, loaded, 1)
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "elsewhere.md"), filepath.Join(dir, "agents", "sneaky.md")))
+	loaded, problems = Apply(config.DefaultConfig(), store)
+	assert.Empty(t, loaded)
+	assert.Contains(t, strings.Join(problems, "\n"), "changed since it was installed")
+	require.NoError(t, os.Remove(filepath.Join(dir, "agents", "sneaky.md")))
+
 	// --plugin-dir, and an enabled one that isn't installed.
 	cfg = config.DefaultConfig()
 	cfg.Plugins.Dirs = []string{sample(t), t.TempDir()}
@@ -296,7 +312,7 @@ func TestMarketplace(t *testing.T) {
 		{ref: "tampered", wantErr: "doesn't match the hash"},
 		{ref: "liar", wantErr: `holds the plugin "lint-kit"`},
 		{ref: "nothing@acme", wantErr: "no marketplace offers"},
-		{ref: "lint-kit@elsewhere", wantErr: "no marketplace offers"},
+		{ref: "lint-kit@elsewhere", wantErr: `no marketplace "elsewhere" has been added`},
 	} {
 		t.Run(tt.ref, func(t *testing.T) {
 			st, ok, err := store.FromMarketplace(ctx, tt.ref)

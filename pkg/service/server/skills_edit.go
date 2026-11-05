@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io/fs"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -34,16 +35,19 @@ func skillFileMsg(f api.SkillFile) *pb.SkillFile {
 }
 
 // skillErr is a skill edit's error as the API's: an unknown skill, an
-// edit made elsewhere, else a path that won't do (outside the folder,
-// not under references/ or scripts/, missing).
+// edit made elsewhere, a path that won't do (outside the folder, not
+// under references/ or scripts/, missing); anything else (a full disk, a
+// folder it may not write) as toAPI has it.
 func skillErr(err error) error {
 	switch {
 	case errors.Is(err, skills.ErrUnknownSkill):
 		return apiError(connect.CodeNotFound, "SKILL_NOT_FOUND", err)
 	case errors.Is(err, skills.ErrChanged):
 		return apiError(connect.CodeFailedPrecondition, "HASH_MISMATCH", err)
+	case errors.Is(err, skills.ErrBadPath), errors.Is(err, fs.ErrNotExist):
+		return apiError(connect.CodeInvalidArgument, "INVALID_PATH", err)
 	}
-	return apiError(connect.CodeInvalidArgument, "INVALID_PATH", err)
+	return toAPI(err)
 }
 
 func (h workspaceService) GetSkillFile(ctx context.Context, r req[pb.GetSkillFileRequest]) (*connect.Response[pb.GetSkillFileResponse], error) {
@@ -147,6 +151,6 @@ func (h workspaceService) RunSkillScript(ctx context.Context, r req[pb.RunSkillS
 	run := w.RunSkillScript(ctx, r.Msg.Name, r.Msg.Script, r.Msg.Args)
 	return ok(&pb.RunSkillScriptResponse{
 		ExitCode: int32(run.ExitCode), Stdout: run.Stdout, Stderr: run.Stderr, TimedOut: run.TimedOut,
-		Sandbox: run.Sandbox, OutputFiles: run.Files, Error: run.Error,
+		Sandbox: run.Sandbox, Error: run.Error,
 	})
 }

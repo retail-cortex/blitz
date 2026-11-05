@@ -31,8 +31,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/language"
 	"google.golang.org/genai"
 )
 
@@ -300,6 +302,20 @@ func TestStoreErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Zero(t, n, "no age: nothing pruned")
 
+	// A temporary file a crash left goes, whatever the age; one being
+	// written stays.
+	old, fresh := filepath.Join(dir, ".img-crashed"), filepath.Join(dir, ".img-writing")
+	require.NoError(t, os.WriteFile(old, []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(fresh, []byte("x"), 0o600))
+	past := time.Now().Add(-2 * staleTemp)
+	require.NoError(t, os.Chtimes(old, past, past))
+	n, err = s.Prune(0)
+	assert.NoError(t, err)
+	assert.Zero(t, n, "temporary files aren't counted")
+	assert.NoFileExists(t, old)
+	assert.FileExists(t, fresh)
+	require.NoError(t, os.Remove(fresh))
+
 	// A directory where an image should be can't be read.
 	sha := strings.Repeat("b", 64)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".png", "x"), 0o700))
@@ -327,4 +343,25 @@ func TestExpandNilAndUnnamed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, out[0])
 	assert.Equal(t, "[image is no longer available]", out[1].Parts[0].Text)
+}
+
+// What a person reads about an attachment is in their language: its
+// pages, and a file over the limit.
+func TestAttachMessagesTranslated(t *testing.T) {
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	cases := []struct {
+		locale, pages, limit string
+	}{
+		{"en-US", "3 pages", "the limit for a text file is"},
+		{"es", "3 páginas", "el límite para un archivo de texto es"},
+		{"fr-CA", "3 pages", "la limite pour un fichier texte est de"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.locale, func(t *testing.T) {
+			i18n.SetCurrent(i18n.Default().Localizer(language.MustParse(tc.locale)))
+			assert.Equal(t, tc.pages, pagesLabel(3))
+			_, err := Prepare("notes.txt", bytes.Repeat([]byte("a"), MaxTextBytes+1), Options{})
+			assert.ErrorContains(t, err, tc.limit)
+		})
+	}
 }

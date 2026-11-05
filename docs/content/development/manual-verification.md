@@ -220,7 +220,7 @@ Use a real screenshot (e.g. a UI with visible text) saved in the workspace as `s
 
 - [ ] After any session: `ls -la ~/.blitz/logs`. **Expected:** directory mode 700, `blitz-YYYY-MM-DD.jsonl` mode 600 with a `start` line; a failed turn adds an `ERROR` line.
 - [ ] `BLITZ_LOG_LEVEL=off blitz "hi"`. **Expected:** nothing new in the log.
-- [ ] Run a local collector, e.g. Jaeger: `docker run --rm -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest`. Then `BLITZ_TELEMETRY=1 blitz` 💲 and do a turn that reads and edits a file.
+- [ ] Run a local collector, e.g. Jaeger: `docker run --rm -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest`. Then `BLITZ_TELEMETRY=1 blitz --local` 💲 (the service exports, not the CLI: `--local` runs one of its own with the variable; the shared service reads `[telemetry]` only when it starts) and do a turn that reads and edits a file.
   **Expected:** in Jaeger (http://localhost:16686, service `blitz`), one trace per prompt: `turn` → `invoke_agent` → `generate_content …` and `execute_tool …`, with `approval` under the edit's tool span. No file content, prompt text or tool arguments in any attribute.
 - [ ] Two prompts, quit, then `--continue` with a third. In Jaeger search by tag `gen_ai.conversation.id=<session id>`. **Expected:** three `turn` traces with `turn.index` 1–3; turns 2 and 3 each show a link ("References") to the previous turn, including across the restart.
 - [ ] Same with `capture_content = true`. **Expected:** prompts and tool arguments appear; your API key does not.

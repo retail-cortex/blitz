@@ -28,8 +28,14 @@ import (
 // word/document.xml).
 var ErrNotDocx = errors.New("not a Word document")
 
-// maxDocumentXML bounds how much of word/document.xml is read.
-const maxDocumentXML = 64 << 20
+// ErrTooLarge means the document's text (word/document.xml) is over
+// maxDocumentXML: too large to preview, though it may well be a Word
+// document.
+var ErrTooLarge = errors.New("the document is too large to preview")
+
+// maxDocumentXML bounds how much of word/document.xml is read (a var for
+// tests).
+var maxDocumentXML int64 = 64 << 20
 
 // ToMarkdown reads a Word document's text as Markdown, for a preview:
 // paragraphs, headings (Heading1–6, Title), bold and italic runs, bulleted
@@ -54,7 +60,12 @@ func ToMarkdown(data []byte) (string, error) {
 		return "", err
 	}
 	defer rc.Close()
-	return readBody(xml.NewDecoder(io.LimitReader(rc, maxDocumentXML)))
+	lr := &io.LimitedReader{R: rc, N: maxDocumentXML + 1} // a byte past the limit tells a cut from an end
+	md, err := readBody(xml.NewDecoder(lr))
+	if lr.N <= 0 {
+		return "", fmt.Errorf("%w: its text is over %d MB", ErrTooLarge, maxDocumentXML>>20)
+	}
+	return md, err
 }
 
 // readPara is a paragraph as read: its style, whether it's a list item, and

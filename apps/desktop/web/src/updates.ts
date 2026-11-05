@@ -28,7 +28,7 @@ export type Line = { key: string; vars?: Record<string, string> };
 /** What Settings says about the update. */
 export function updateLine(s: UpdateStatus | null): Line {
   if (!s) return { key: "desktop.update.checking" };
-  if (!s.can) return { key: "desktop.update.cannot", vars: { reason: s.reason ?? "" } };
+  if (!s.can) return s.reason_key ? { key: s.reason_key } : { key: "desktop.update.cannot", vars: { reason: s.reason ?? "" } };
   if (s.error) return { key: "desktop.update.failed", vars: { error: s.error } };
   if (s.ready) return { key: "desktop.update.ready", vars: { version: s.latest } };
   if (s.downloading) return { key: "desktop.update.downloading", vars: { version: s.latest } };

@@ -556,23 +556,19 @@ var appName atomic.Pointer[string]
 
 // fixedKeys name the program itself, never the organization's app (EN-51):
 // "Built on Blitz", Blitz's releases, license, themes and its reinstall
-// hints. A key ending in "." covers every key under it. The desktop
-// window's i18n.ts has the same list.
-var fixedKeys = []string{
-	"desktop.brand",
-	"desktop.org.built_on",
-	"desktop.update.",
-	"desktop.cli.",
-	"desktop.service.no_blitzd",
-	"desktop.service.tray.none",
-	"desktop.settings.light_theme.detail",
-	"desktop.settings.dark_theme.detail",
-	"desktop.settings.transparency.blitz_only",
-	"desktop.settings.doc_css.sample_text",
-	"desktop.cmd.license",
-	"help.license",
-	"rewind.old_prompt",
-}
+// hints. A key ending in "." covers every key under it. The list is
+// fixed_keys.json, which the desktop window's i18n.ts imports too, so the
+// two can't drift.
+var fixedKeys = func() []string {
+	var keys []string
+	if err := json.Unmarshal(fixedKeysJSON, &keys); err != nil {
+		panic(fmt.Sprintf("fixed_keys.json: %v", err)) // caught by tests
+	}
+	return keys
+}()
+
+//go:embed fixed_keys.json
+var fixedKeysJSON []byte
 
 // FixedName reports whether key names the program itself, so keeps
 // "Blitz" under an organization's name.

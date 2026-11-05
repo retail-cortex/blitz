@@ -74,12 +74,13 @@ const functions: Record<string, (args: Record<string, unknown>) => unknown> = {
   required: ({ value }) => !(value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0)),
   regex: ({ value, pattern }) => typeof value === "string" && safeRegex(String(pattern))?.test(value) === true,
   length: ({ value, min, max }) => {
-    const n = typeof value === "string" || Array.isArray(value) ? value.length : 0;
+    // Code points, as the service counts them (an emoji is one).
+    const n = typeof value === "string" ? [...value].length : Array.isArray(value) ? value.length : 0;
     return (min === undefined || n >= Number(min)) && (max === undefined || n <= Number(max));
   },
   numeric: ({ value, min, max }) => {
-    const n = Number(value);
-    return value !== "" && Number.isFinite(n) && (min === undefined || n >= Number(min)) && (max === undefined || n <= Number(max));
+    const n = numberOf(value);
+    return n !== null && (min === undefined || n >= Number(min)) && (max === undefined || n <= Number(max));
   },
   email: ({ value }) => typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
   and: ({ values }) => Array.isArray(values) && values.every(Boolean),
@@ -89,6 +90,23 @@ const functions: Record<string, (args: Record<string, unknown>) => unknown> = {
   formatNumber: ({ value, decimals }) => (Number.isFinite(Number(value)) ? Number(value).toFixed(decimals === undefined ? 0 : Number(decimals)) : ""),
   pluralize: ({ count, singular, plural }) => (Number(count) === 1 ? String(singular ?? "") : String(plural ?? "")),
 };
+
+/** A number, or a decimal number written as a string (spaces around it allowed), as the service reads one; null otherwise. */
+function numberOf(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(value.trim())) return null;
+  const n = Number(value.trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Whether a dynamic value calls, anywhere in it, a function outside the catalog. */
+function callsUnknown(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(callsUnknown);
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.call === "string" && !Object.hasOwn(functions, v.call)) return true;
+  return Object.values(v).some(callsUnknown);
+}
 
 /** A pattern from a form, or null when it isn't one (or is too long to trust). */
 function safeRegex(pattern: string): RegExp | null {
@@ -106,7 +124,7 @@ export function resolve(value: unknown, data: Record<string, unknown>, scope = "
     const v = value as Record<string, unknown>;
     if (typeof v.path === "string") return getPath(data, scoped(v.path, scope));
     if (typeof v.call === "string") {
-      const fn = functions[v.call];
+      const fn = Object.hasOwn(functions, v.call) ? functions[v.call] : undefined;
       if (!fn) return undefined;
       const args: Record<string, unknown> = {};
       for (const [k, a] of Object.entries((v.args as Record<string, unknown>) ?? {})) args[k] = resolve(a, data, scope);
@@ -116,16 +134,20 @@ export function resolve(value: unknown, data: Record<string, unknown>, scope = "
   return value;
 }
 
-/** A component's failing checks' messages (none: it passes). */
+/**
+ * A component's failing checks' messages (none: it passes). As in the service, a check calling a function outside
+ * the catalog fails, and so does a validationRegexp that isn't a usable pattern.
+ */
 export function failing(c: Component, data: Record<string, unknown>, scope = ""): string[] {
   const checks = Array.isArray(c.checks) ? (c.checks as Record<string, unknown>[]) : [];
   const out: string[] = [];
   for (const check of checks) {
-    if (resolve(check, data, scope) === false) out.push(String(check.message ?? t("desktop.a2ui.check")));
+    if (callsUnknown(check) || resolve(check, data, scope) === false) out.push(String(check.message ?? t("desktop.a2ui.check")));
   }
-  if (typeof c.validationRegexp === "string" && c.value && typeof c.value === "object") {
+  if (typeof c.validationRegexp === "string") {
+    const re = safeRegex(c.validationRegexp);
     const v = resolve(c.value, data, scope);
-    if (typeof v === "string" && v !== "" && safeRegex(c.validationRegexp)?.test(v) === false) out.push(t("desktop.a2ui.check"));
+    if (!re || (typeof v === "string" && v !== "" && !re.test(v))) out.push(t("desktop.a2ui.check"));
   }
   return out;
 }

@@ -65,18 +65,20 @@ func NewPathMatcher(patterns []string, roots []string) (*PathMatcher, error) {
 		p = strings.TrimSuffix(p, "/")
 
 		var exprs []string
-		switch {
-		case strings.HasPrefix(p, "/"):
-			// Match both the spelling given and its symlink-resolved form.
-			exprs = append(exprs, "^"+globToRegex(p)+"(/.*)?$")
-			if canon := canonicalGlobPrefix(p); canon != p {
-				exprs = append(exprs, "^"+globToRegex(canon)+"(/.*)?$")
-			}
-		case !strings.Contains(p, "/"):
-			exprs = append(exprs, "/"+globToRegex(p)+"(/.*)?$")
-		default:
-			for _, root := range roots {
-				exprs = append(exprs, "^"+regexp.QuoteMeta(filepath.ToSlash(root))+"/"+globToRegex(strings.TrimPrefix(p, "./"))+"(/.*)?$")
+		for _, p := range textutil.ExpandBraces(p) { // **/*.{pem,key}: one rule each
+			switch {
+			case strings.HasPrefix(p, "/"):
+				// Match both the spelling given and its symlink-resolved form.
+				exprs = append(exprs, "^"+globToRegex(p)+"(/.*)?$")
+				if canon := canonicalGlobPrefix(p); canon != p {
+					exprs = append(exprs, "^"+globToRegex(canon)+"(/.*)?$")
+				}
+			case !strings.Contains(p, "/"):
+				exprs = append(exprs, "/"+globToRegex(p)+"(/.*)?$")
+			default:
+				for _, root := range roots {
+					exprs = append(exprs, "^"+regexp.QuoteMeta(filepath.ToSlash(root))+"/"+globToRegex(strings.TrimPrefix(p, "./"))+"(/.*)?$")
+				}
 			}
 		}
 		for _, expr := range exprs {
@@ -143,7 +145,7 @@ func globToRegex(glob string) string { return textutil.GlobToRegex(glob) }
 // canonicalGlobPrefix resolves symlinks in the literal (glob-free) directory
 // prefix of an absolute pattern, so "/var/x" also matches "/private/var/x".
 func canonicalGlobPrefix(p string) string {
-	idx := strings.IndexAny(p, "*?")
+	idx := strings.IndexAny(p, "*?[")
 	literal, rest := p, ""
 	if idx >= 0 {
 		cut := strings.LastIndex(p[:idx], "/")

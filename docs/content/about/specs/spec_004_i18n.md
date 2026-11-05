@@ -8,7 +8,7 @@ weight: 4
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/i18n/i18n.go`, `pkg/i18n/locales/{en-US,es,fr-CA}.json`; `SetupLocale`/`SetLocale` in `pkg/engine`; `docs/content/development/translating.md` |
 | Tests | `pkg/i18n/i18n_test.go`, `apps/cli/internal/tui/i18n_lint_test.go` (`TestNoUntranslatedOutput`), `apps/cli/internal/tui/locale_test.go`, `apps/cli/locale_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md) |
@@ -35,6 +35,7 @@ The interactive interface speaks English (`en-US`, source), Spanish (`es`) and C
 ## 4. Two languages: interface and reply
 
 - **I18N-20** The **interface** language is per process (package-level current localizer, `T`/`N`). The **reply** language is per workspace: for non-English locales (not the pseudo-locale) the agents' instructions gain "## Response Language … Write your replies to the user in <Language> … Keep code, identifiers, file paths, commands, and tool output exactly as they are."
+- **I18N-20a** *2026-11-05 (scan N26-cli-2#9: only commands that opened a workspace loaded it, so `blitz security`, `blitz jobs run`, `blitz trust`, `blitz memory` and the last error line spoke English and said Blitz).* The CLI loads the interface language (`ui.locale`) and the organization's kept name for every command, before it runs.
 - **I18N-21** `/locale` shows the current language and available catalogs; `/locale <code>` switches both (the client switches its own interface), rebuilds instructions, and saves `[ui] locale` in place ([spec_002_config](spec_002_config.md) CFG-23).
 
 ## 5. Not translated (policy)

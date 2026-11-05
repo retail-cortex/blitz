@@ -84,15 +84,46 @@ func TestListenErrors(t *testing.T) {
 	_, err := Listen(filepath.Join(file, "b.sock"))
 	assert.Error(t, err, "a file where the directory should be")
 
-	// A non-empty directory where the socket should be: not running, and
-	// it can't be removed.
-	sock := filepath.Join(dir, "d.sock")
-	require.NoError(t, os.MkdirAll(filepath.Join(sock, "x"), 0o700))
-	_, err = Listen(sock)
+	// A stale socket in a folder it can't be removed from.
+	locked := filepath.Join(dir, "locked")
+	l, err := Listen(filepath.Join(locked, "d.sock"))
+	require.NoError(t, err)
+	l.(interface{ SetUnlinkOnClose(bool) }).SetUnlinkOnClose(false)
+	require.NoError(t, l.Close())
+	require.NoError(t, os.Chmod(locked, 0o500))
+	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+	_, err = Listen(filepath.Join(locked, "d.sock"))
 	assert.ErrorContains(t, err, "removing stale socket")
 
 	_, err = Listen(filepath.Join(dir, strings.Repeat("s", 200)+".sock"))
 	assert.Error(t, err, "a socket path longer than the OS allows")
+}
+
+// Listen never removes a file that isn't a socket, and leaves the mode of
+// a folder it didn't create (N26 pkg-small-2#21).
+func TestListenLeavesOthersAlone(t *testing.T) {
+	dir := shortTemp(t)
+	require.NoError(t, os.Chmod(dir, 0o755))
+	for name, create := range map[string]func(string) error{
+		"a file":   func(p string) error { return os.WriteFile(p, []byte("notes"), 0o600) },
+		"a folder": func(p string) error { return os.Mkdir(p, 0o700) },
+		"a link":   func(p string) error { return os.Symlink(filepath.Join(dir, "elsewhere"), p) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(dir, strings.ReplaceAll(name, " ", "-"))
+			require.NoError(t, create(path))
+			_, err := Listen(path)
+			assert.ErrorContains(t, err, "isn't a socket")
+			_, err = os.Lstat(path)
+			assert.NoError(t, err, "still there")
+		})
+	}
+	l, err := Listen(filepath.Join(dir, "b.sock"))
+	require.NoError(t, err)
+	defer l.Close()
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm(), "the folder was there: its mode is kept")
 }
 
 // TestClient checks the client reaches an HTTP server on the socket.

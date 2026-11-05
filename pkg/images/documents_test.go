@@ -204,6 +204,30 @@ func TestExpandDocumentTextFails(t *testing.T) {
 	assert.Contains(t, out[0].Parts[0].Text, "[bad.pdf: its text couldn't be read")
 }
 
+// A PDF's text is read under the turn's context, so a cancelled turn
+// stops waiting for it.
+func TestDocumentTextUsesTurnContext(t *testing.T) {
+	s, err := OpenStore(t.TempDir())
+	require.NoError(t, err)
+	doc, err := Prepare("paper.pdf", pdfBytes(t, "x"), Options{})
+	require.NoError(t, err)
+	require.NoError(t, s.Put(doc))
+	orig := pdfText
+	t.Cleanup(func() { pdfText = orig })
+	type key struct{}
+	var got any
+	pdfText = func(ctx context.Context, _ []byte, _ int) (string, int, error) {
+		got = ctx.Value(key{})
+		return "", 0, ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), key{}, "turn"))
+	cancel()
+	out, err := Expand(ctx, []*genai.Content{{Role: genai.RoleUser, Parts: []*genai.Part{Part(doc)}}}, s, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "turn", got)
+	assert.Contains(t, out[0].Parts[0].Text, "context canceled")
+}
+
 func TestDocumentTextCut(t *testing.T) {
 	s, err := OpenStore(t.TempDir())
 	require.NoError(t, err)
@@ -212,7 +236,7 @@ func TestDocumentTextCut(t *testing.T) {
 	require.NoError(t, s.Put(doc))
 	long := strings.Repeat("é", MaxDocumentText+10)
 	require.NoError(t, os.WriteFile(filepath.Join(s.Dir(), doc.SHA256+".pdf.txt"), []byte(textHeader+"1\n"+long), 0o600))
-	p := s.documentText(doc.URI(), "")
+	p := s.documentText(context.Background(), doc.URI(), "")
 	assert.Contains(t, p.Text, `name="document.pdf"`)
 	assert.Contains(t, p.Text, "[the text is cut short at 300000 characters]")
 }

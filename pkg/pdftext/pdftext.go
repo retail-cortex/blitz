@@ -15,10 +15,10 @@
 // Package pdftext reads PDF files: whether data is one, its page count and
 // its text, page by page (spec_011_images). Models that can't read a PDF
 // get its text; read_file shows it. Reading is defensive: the parser's
-// panics become errors and a deadline bounds a pathological file. In the
-// programs (UseHelper), the text is read in a child process that's killed
-// at the deadline, so a page the parser loops on, a crash or a blow-up
-// ends with it.
+// panics become errors and a deadline bounds a pathological file, for the
+// page count as for the text. In the programs (UseHelper), both are read
+// in a child process that's killed at the deadline, so a file the parser
+// loops on, a crash or a blow-up ends with it.
 package pdftext
 
 import (
@@ -88,12 +88,25 @@ func open(data []byte) (r *pdf.Reader, err error) {
 	return r, nil
 }
 
-// Pages counts a PDF's pages.
-func Pages(data []byte) (n int, err error) {
-	r, err := open(data)
-	if err != nil {
-		return 0, err
+// Pages counts a PDF's pages, bounded as Text is: in the helper when
+// there is one (UseHelper), else in-process with the timeout.
+func Pages(data []byte) (int, error) {
+	if !IsPDF(data) {
+		return 0, ErrNotPDF
 	}
+	if exe, _ := helperExe.Load().(string); exe != "" {
+		_, n, err := textInHelper(context.Background(), exe, data, pagesOnly)
+		return n, err
+	}
+	_, n, err := textHere(context.Background(), data, pagesOnly)
+	return n, err
+}
+
+// pagesOnly, as maxChars, counts the pages without reading their text.
+const pagesOnly = -1
+
+// countPages is the page count of r, the parser's panics an error.
+func countPages(r *pdf.Reader) (n int, err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			n, err = 0, fmt.Errorf("unreadable PDF: %v", x)
@@ -176,7 +189,7 @@ func textInHelper(ctx context.Context, exe string, data []byte, maxChars int) (s
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		return "", 0, fmt.Errorf("reading the PDF's text: %w", ctx.Err())
+		return "", 0, stopped(ctx.Err())
 	}
 	var res helperResult
 	if err == nil {
@@ -203,12 +216,9 @@ func lastLine(s string) string {
 }
 
 // textHere is Text in this process: its parser can't be stopped mid-page,
-// so a page it loops on keeps a goroutine busy after the deadline.
+// so a file it loops on (opening it, or on a page) keeps a goroutine busy
+// after the deadline, though the call returns at it.
 func textHere(ctx context.Context, data []byte, maxChars int) (string, int, error) {
-	r, err := open(data)
-	if err != nil {
-		return "", 0, err
-	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	type result struct {
@@ -218,15 +228,33 @@ func textHere(ctx context.Context, data []byte, maxChars int) (string, int, erro
 	}
 	done := make(chan result, 1)
 	go func() {
-		text, pages, err := pageTexts(ctx, r, maxChars)
-		done <- result{text, pages, err}
+		r, err := open(data)
+		switch {
+		case err != nil:
+			done <- result{err: err}
+		case maxChars == pagesOnly:
+			n, err := countPages(r)
+			done <- result{pages: n, err: err}
+		default:
+			text, pages, err := pageTexts(ctx, r, maxChars)
+			done <- result{text, pages, err}
+		}
 	}()
 	select {
 	case res := <-done:
 		return res.text, res.pages, res.err
 	case <-ctx.Done():
-		return "", 0, fmt.Errorf("reading the PDF's text: %w", ctx.Err())
+		return "", 0, stopped(ctx.Err())
 	}
+}
+
+// stopped is the error of a read that ended with its context: past the
+// timeout, it says what the limit is and what to do.
+func stopped(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("reading the PDF's text: stopped after %s, its limit (a damaged or very large file? split it, or save only the pages needed): %w", timeout, err)
+	}
+	return fmt.Errorf("reading the PDF's text: %w", err)
 }
 
 var blankLines = regexp.MustCompile(`\n[ \t]*(\n[ \t]*)+`)

@@ -8,7 +8,7 @@ weight: 18
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/*.go` |
 | Tests | `pkg/engine/*_test.go` (notably `multi_test.go`, `turn_test.go`, `workspace_test.go`) |
 | Related | [spec_016_engine](spec_016_engine.md), [spec_017_sessions](spec_017_sessions.md), [spec_022_client](spec_022_client.md), [spec_021_service](spec_021_service.md) |

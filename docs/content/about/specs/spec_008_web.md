@@ -8,7 +8,7 @@ weight: 8
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/web.go`, `websearch.go`, `usersearch.go`, `browser.go`; `pkg/engine/browser`; `/search` in `pkg/engine/context.go` and `apps/cli/internal/tui` |
 | Tests | `pkg/engine/tools/web_test.go`, `websearch_test.go`, `usersearch_test.go`, `browser_test.go`; `pkg/engine/browser/browser_test.go` (a real browser with `BLITZ_TEST_CHROME=1`), `fake_test.go` (against `browsertest`, a fake DevTools page); `apps/cli/internal/tui/search_test.go` |
 | Depends on | [spec_005_approvals](spec_005_approvals.md) |

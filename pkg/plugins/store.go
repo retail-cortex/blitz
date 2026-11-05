@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,10 +139,38 @@ func (st *Staged) Discard() {
 
 var gitSource = regexp.MustCompile(`^(git@|git://|ssh://)|\.git$|^https://(github\.com|gitlab\.com|codeberg\.org)/[^/]+/[^/]+/?$`)
 
+// checkURL refuses a source fetched in the clear from another machine:
+// plain http (allowed only to this machine, as for skill registries) and
+// git://. A marketplace's index carries the hash its plugins are checked
+// against, so over plain http both could be swapped on the way.
+func checkURL(raw string) error {
+	lower := strings.ToLower(raw)
+	switch {
+	case strings.HasPrefix(lower, "git://"):
+		return fmt.Errorf("%s: git:// isn't encrypted; use https or ssh", raw)
+	case strings.HasPrefix(lower, "http://"):
+		u, err := url.Parse(raw)
+		if err != nil {
+			return err
+		}
+		if !loopback(u.Hostname()) {
+			return fmt.Errorf("%s: plugins and marketplaces need https (http only for localhost)", raw)
+		}
+	}
+	return nil
+}
+
+func loopback(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
 // Fetch gets the plugin at src: a directory, a .zip file, an https URL of
 // a .zip, or a git repository (cloned, the default branch unless
-// src#ref).
+// src#ref). Plain http is refused except to this machine (checkURL).
 func Fetch(ctx context.Context, src string) (*Staged, error) {
+	if err := checkURL(src); err != nil {
+		return nil, err
+	}
 	st := &Staged{Source: src}
 	var dir string
 	switch {
@@ -208,12 +237,20 @@ func Fetch(ctx context.Context, src string) (*Staged, error) {
 // maxDownload bounds a downloaded plugin.
 const maxDownload = 64 << 20
 
+// downloadClient follows a redirect only where checkURL allows a source.
+var downloadClient = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return checkURL(req.URL.String())
+}}
+
 func download(ctx context.Context, u, to string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return err
 	}

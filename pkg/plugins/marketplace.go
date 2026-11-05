@@ -114,6 +114,9 @@ func (s *Store) RemoveMarketplace(name string) error {
 // FetchMarketplace reads the index at url; cleanup removes what was
 // downloaded (after the plugins it lists are fetched).
 func FetchMarketplace(ctx context.Context, url string) (*Marketplace, func(), error) {
+	if err := checkURL(url); err != nil {
+		return nil, func() {}, err
+	}
 	cleanup := func() {}
 	var path string
 	switch {
@@ -181,6 +184,7 @@ func (s *Store) FromMarketplace(ctx context.Context, ref string) (st *Staged, ok
 	}
 	var found []Entry
 	var from []*Marketplace
+	var unread []error // marketplaces that couldn't be fetched: the others are still looked in
 	var cleanups []func()
 	defer func() {
 		for _, c := range cleanups {
@@ -193,7 +197,8 @@ func (s *Store) FromMarketplace(ctx context.Context, ref string) (st *Staged, ok
 		}
 		m, cleanup, err := FetchMarketplace(ctx, k.URL)
 		if err != nil {
-			return nil, true, fmt.Errorf("marketplace %s: %w", k.Name, err)
+			unread = append(unread, fmt.Errorf("marketplace %s: %w", k.Name, err))
+			continue
 		}
 		cleanups = append(cleanups, cleanup)
 		for _, e := range m.Plugins {
@@ -205,6 +210,10 @@ func (s *Store) FromMarketplace(ctx context.Context, ref string) (st *Staged, ok
 	switch {
 	case len(found) == 0 && market == "" && len(known) == 0:
 		return nil, false, nil
+	case market != "" && !slices.ContainsFunc(known, func(k Known) bool { return k.Name == market }):
+		return nil, true, fmt.Errorf("no marketplace %q has been added (blitz plugin marketplace add <url>)", market)
+	case len(found) == 0 && len(unread) > 0:
+		return nil, true, fmt.Errorf("no marketplace that could be read offers %s: %w", ref, errors.Join(unread...))
 	case len(found) == 0:
 		return nil, true, fmt.Errorf("no marketplace offers %s", ref)
 	case len(found) > 1:

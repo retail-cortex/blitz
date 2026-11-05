@@ -15,7 +15,7 @@ Blitz is an AI agent built for speed and focus, for code and everything around i
 
 ## The specifications
 
-Blitz is specified in thirty documents, written from the code and kept with it: each has numbered requirements (`CLI-01`, `FS-30`, …) that trace to the code and its tests, and its known gaps. They're numbered in build order, from project setup to release, so reading them in order rebuilds the system bottom-up. A check in CI (`//tools/specs`) keeps the index complete and every path they name real.
+Blitz is specified in a set of documents, written from the code and kept with it: each has numbered requirements (`CLI-01`, `FS-30`, …) that trace to the code and its tests, and its known gaps. They're numbered in build order, from project setup to release, so reading them in order rebuilds the system bottom-up. A check in CI (`//tools/specs`) keeps the index complete and every path they name real.
 
 A few to start with:
 

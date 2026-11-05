@@ -54,7 +54,7 @@ var claudeEvents = map[string]string{
 	"PreToolUse": "pre_tool", "PostToolUse": "post_tool", "UserPromptSubmit": "prompt_submit",
 	"SessionStart": "session_start", "SessionEnd": "session_end", "Stop": "stop", "SubagentStop": "subagent_stop",
 	"PreCompact": "pre_compact", "Notification": "notification", "PostToolUseFailure": "post_tool_failure",
-	"SubagentStart": "subagent_start", "PermissionRequest": "permission_request",
+	"SubagentStart": "subagent_start", "PermissionRequest": "permission_request", "PostCompact": "post_compact",
 }
 
 // ImportClaude converts the Claude Code plugin in src (.claude-plugin/
@@ -93,12 +93,7 @@ func ImportClaude(src, out string) (*Report, error) {
 	}
 	if err := readJSON(filepath.Join(src, "hooks", "hooks.json"), &hooks); err == nil {
 		var h config.HooksConfig
-		byEvent := map[string]*[]config.HookConfig{
-			"pre_tool": &h.PreTool, "post_tool": &h.PostTool, "prompt_submit": &h.PromptSubmit, "session_start": &h.SessionStart,
-			"session_end": &h.SessionEnd, "stop": &h.Stop, "subagent_stop": &h.SubagentStop, "pre_compact": &h.PreCompact,
-			"notification": &h.Notification, "post_tool_failure": &h.PostToolFailure, "subagent_start": &h.SubagentStart,
-			"permission_request": &h.PermissionRequest,
-		}
+		byEvent := h.Events()
 		events := sortedKeysOf(hooks.Hooks)
 		for _, ev := range events {
 			event, ok := claudeEvents[ev]
@@ -342,10 +337,13 @@ func (r *Report) convertAgents(dir string) {
 					list = append(list, fmt.Sprint(v))
 				}
 			}
-			mapped, unmapped := mapTools(list)
+			mapped, unmapped, scoped := mapTools(list)
 			meta["tools"] = mapped
 			if len(unmapped) > 0 {
 				r.Skipped = append(r.Skipped, fmt.Sprintf("agent %s: no Blitz tool for %s", name, strings.Join(unmapped, ", ")))
+			}
+			if len(scoped) > 0 {
+				r.Skipped = append(r.Skipped, fmt.Sprintf("agent %s: %s not given: a Blitz tool can't be limited to some uses, so it would get all of it (add the tool to the agent and an allow or deny rule if it should)", name, strings.Join(scoped, ", ")))
 			}
 		}
 		if m, ok := fm["model"].(string); ok && m != "" && m != "inherit" {
@@ -385,22 +383,28 @@ func toolMatches(matcher string) (matches, unmapped []string) {
 	return matches, unmapped
 }
 
-func mapTools(list []string) (mapped, unmapped []string) {
+// mapTools maps Claude Code tool names to Blitz's. A scoped entry, such
+// as Bash(git tag:*), isn't mapped: the Blitz tool would allow every use,
+// not the ones named. It's returned in scoped.
+func mapTools(list []string) (mapped, unmapped, scoped []string) {
 	for _, t := range list {
 		t = strings.TrimSpace(t)
 		if t == "" {
 			continue
 		}
-		base, _, _ := strings.Cut(t, "(")
-		if b, ok := claudeTools[base]; ok {
+		base, args, isScoped := strings.Cut(t, "(")
+		switch b, ok := claudeTools[base]; {
+		case ok && isScoped && strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(args), ")")) != "":
+			scoped = append(scoped, t)
+		case ok:
 			if !contains(mapped, b) {
 				mapped = append(mapped, b)
 			}
-		} else {
+		default:
 			unmapped = append(unmapped, t)
 		}
 	}
-	return mapped, unmapped
+	return mapped, unmapped, scoped
 }
 
 func contains(list []string, v string) bool {

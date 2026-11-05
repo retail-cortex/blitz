@@ -15,6 +15,7 @@
 package docx
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,35 @@ func TestToMarkdown(t *testing.T) {
 	}
 	_, err = ToMarkdown([]byte("not a zip"))
 	assert.ErrorIs(t, err, ErrNotDocx)
+}
+
+// A document whose text is over the limit is too large to preview, not
+// "not a Word document"; one at the limit reads.
+func TestToMarkdownTooLarge(t *testing.T) {
+	data, err := Render([]byte("# Report\n\n"+strings.Repeat("words ", 2000)), Options{})
+	require.NoError(t, err)
+	saved := maxDocumentXML
+	t.Cleanup(func() { maxDocumentXML = saved })
+	cases := []struct {
+		name  string
+		limit int64
+		want  error
+	}{
+		{"over the limit", 1024, ErrTooLarge},
+		{"within it", saved, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			maxDocumentXML = tc.limit
+			_, err := ToMarkdown(data)
+			if tc.want == nil {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorIs(t, err, tc.want)
+			assert.NotErrorIs(t, err, ErrNotDocx)
+		})
+	}
 }
 
 func TestParaAndTable(t *testing.T) {

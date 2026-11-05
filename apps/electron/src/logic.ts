@@ -130,8 +130,7 @@ export function originOf(url: string): string {
 
 /**
  * Whether a link may open outside the window, in the system's browser or
- * mail program: web and mail links only, never file: or other schemes
- * (as the desktop app's SafeURL).
+ * mail program: web and mail links only, never file: or other schemes.
  */
 export function isExternal(raw: string): boolean {
   let u: URL;

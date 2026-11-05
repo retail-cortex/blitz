@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -258,6 +259,12 @@ func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEn
 		r.Msg.Url = u
 	}
 	if previous != nil && previous.URL() != r.Msg.Url {
+		// Its catalog's loop ends first, so nothing it fetches lands in
+		// the folder being removed; the next connection starts afresh.
+		h.s.ent.mu.Lock()
+		h.s.ent.stopCatalog()
+		h.s.ent.c = nil
+		h.s.ent.mu.Unlock()
 		// Another organization, or none: this one's session ends.
 		if err := previous.SignOut(ctx); err != nil {
 			slog.Warn("signing out of the organization's service", "error", err)
@@ -289,7 +296,8 @@ func (h configService) EnterpriseSignIn(ctx context.Context, r req[pb.Enterprise
 	}
 	end, ok := h.s.ent.beginSignIn(ctx)
 	if !ok {
-		return apiError(connect.CodeAborted, "SIGN_IN_RUNNING", errors.New("a sign-in to your organization is already under way"))
+		// As a provider's sign-in already under way (signin.go).
+		return apiError(connect.CodeAlreadyExists, "SIGN_IN_RUNNING", errors.New("a sign-in to your organization is already under way"))
 	}
 	defer end()
 	show := func(p enterprise.Prompt) { _ = stream.Send(&pb.EnterpriseSignInResponse{Url: p.URL, Code: p.Code}) }
@@ -428,7 +436,8 @@ func enterpriseError(err error) error {
 	case errors.As(err, &ref) && ref.Status == http.StatusConflict:
 		return apiError(connect.CodeAborted, "CONFLICT", err)
 	case errors.As(err, &ref) && ref.Status/100 == 4:
-		return apiError(connect.CodeFailedPrecondition, strings.ToUpper(ref.Code), err)
+		// The service's own code, upper-cased (spec_021 SVC-30a).
+		return apiError(connect.CodeFailedPrecondition, cmp.Or(strings.ToUpper(ref.Code), "REFUSED"), err)
 	default:
 		return apiError(connect.CodeUnavailable, "UNREACHABLE", err)
 	}

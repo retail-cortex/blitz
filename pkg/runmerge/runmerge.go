@@ -38,8 +38,10 @@ const tries = 3
 
 // IntoMain merges remote's branch into remote's main and pushes main, in
 // the clone git runs in (which it leaves on main), as who ("Blitz job
-// digest"); again when someone pushes main meanwhile. A branch main has
-// already is no change.
+// digest"); again, up to three times, when someone pushes main meanwhile.
+// A push refused for another reason (sign-in, a hook) isn't tried again,
+// and its error says what git said. A branch main has already is no
+// change.
 func IntoMain(ctx context.Context, git Git, remote, branch, who string) error {
 	mainRef, runRef := remote+"/main", remote+"/"+branch
 	var err error
@@ -60,9 +62,34 @@ func IntoMain(ctx context.Context, git Git, remote, branch, who string) error {
 			}
 			return err
 		}
-		if _, err = git(ctx, "push", "--quiet", remote, "main"); err == nil {
+		out, perr := git(ctx, "push", "--quiet", remote, "main")
+		if perr == nil {
 			return nil
 		}
+		// git's words are in its output or its error, as the Git given
+		// keeps them.
+		if text := string(out) + "\n" + perr.Error(); !moved(text) { // refused (sign-in, a hook, protection): trying again won't help
+			return fmt.Errorf("pushing main: %w%s", perr, said(out, perr))
+		}
+		err = fmt.Errorf("main kept moving (tried %d times): %w", tries, perr)
 	}
 	return fmt.Errorf("pushing main: %w", err)
+}
+
+// moved reports whether git push's words say main moved on the remote
+// (the push isn't a fast-forward any more), the one refusal another try
+// can get past.
+func moved(text string) bool {
+	return strings.Contains(text, "[rejected]") && (strings.Contains(text, "fetch first") || strings.Contains(text, "non-fast-forward"))
+}
+
+// said is git's refusal from its output (the " ! [remote rejected] …"
+// line), after ": ", unless err has it already ("" when there's none).
+func said(out []byte, err error) string {
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "! ") && !strings.Contains(err.Error(), l) {
+			return ": " + l
+		}
+	}
+	return ""
 }

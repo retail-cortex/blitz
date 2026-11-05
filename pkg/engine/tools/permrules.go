@@ -178,20 +178,22 @@ func (r *PermissionRule) compile() error {
 		// The forms of blocked paths (spec_006 FS-10): an absolute location,
 		// also as its links resolve; a name without a slash at any depth;
 		// else relative to the workspace. A directory pattern covers what's
-		// under it. GlobToRegex quotes everything but its wildcards: it
-		// always compiles.
+		// under it. Braces are alternatives, and GlobToRegex quotes
+		// everything but its wildcards and classes: it always compiles.
 		var exprs []string
-		switch {
-		case strings.HasPrefix(g, "/"):
-			r.abs = true
-			exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
-			if canon := canonicalGlobPrefix(g); canon != g {
-				exprs = append(exprs, "^"+textutil.GlobToRegex(canon)+"(/.*)?$")
+		for _, g := range textutil.ExpandBraces(g) { // {a,b}: one expression each
+			switch {
+			case strings.HasPrefix(g, "/"):
+				r.abs = true
+				exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
+				if canon := canonicalGlobPrefix(g); canon != g {
+					exprs = append(exprs, "^"+textutil.GlobToRegex(canon)+"(/.*)?$")
+				}
+			case !strings.Contains(g, "/"):
+				exprs = append(exprs, "(^|/)"+textutil.GlobToRegex(g)+"(/.*)?$")
+			default:
+				exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
 			}
-		case !strings.Contains(g, "/"):
-			exprs = append(exprs, "(^|/)"+textutil.GlobToRegex(g)+"(/.*)?$")
-		default:
-			exprs = append(exprs, "^"+textutil.GlobToRegex(g)+"(/.*)?$")
 		}
 		r.re = nil
 		for _, e := range exprs {

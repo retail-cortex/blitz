@@ -53,10 +53,12 @@ func TestListenIsPrivateAndSingle(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0o700), fi.Mode().Perm(), "directory mode %v", fi.Mode().Perm())
 	_, secondErr := socket.Listen(path)
 	assert.ErrorIs(t, secondErr, socket.ErrRunning, "a second service on the socket")
-	l.Close()
 
 	// A socket left behind by a service that died is replaced.
-	os.WriteFile(path, nil, 0o600)
+	l.(interface{ SetUnlinkOnClose(bool) }).SetUnlinkOnClose(false)
+	l.Close()
+	_, err = os.Lstat(path)
+	require.NoError(t, err, "the stale socket stays on disk")
 	l, err = socket.Listen(path)
 	require.NoError(t, err, "stale socket")
 	l.Close()

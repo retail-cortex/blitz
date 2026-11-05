@@ -169,6 +169,11 @@ func TestTextInHelper(t *testing.T) {
 		cut, _, err := Text(context.Background(), data, 10)
 		require.NoError(t, err)
 		assert.Contains(t, cut, "cut short at 10 characters")
+		n, err := Pages(data)
+		require.NoError(t, err)
+		assert.Equal(t, wantPages, n, "counted in the helper")
+		_, err = Pages(emptyPDF())
+		assert.ErrorContains(t, err, "no pages")
 	})
 	t.Run("unreadable", func(t *testing.T) {
 		useTestHelper(t)
@@ -184,7 +189,11 @@ func TestTextInHelper(t *testing.T) {
 		start := time.Now()
 		_, _, err := Text(context.Background(), data, 0)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.ErrorContains(t, err, "stopped after 300ms, its limit", "the limit and a way out (N26 pkg-small-2#23)")
 		assert.Less(t, time.Since(start), 3*time.Second, "killed, not waited for")
+		_, err = Pages(data)
+		assert.ErrorIs(t, err, context.DeadlineExceeded, "the page count too (N26 pkg-small-2#9)")
+		assert.Less(t, time.Since(start), 5*time.Second)
 	})
 	t.Run("crashes", func(t *testing.T) {
 		useTestHelper(t)

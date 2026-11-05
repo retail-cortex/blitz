@@ -71,15 +71,15 @@ go_library(
         "//third_party/mcp-toolbox/internal/tools/sqlite/sqlitesql",
         "//third_party/mcp-toolbox/internal/util",
         "@com_github_goccy_go_yaml//:go-yaml",
-        "@com_github_goccy_go_yaml//lexer",
-        "@com_github_goccy_go_yaml//token",
         "@com_github_google_go_cmp//cmp",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
 go_test(
     name = "embed_test",
     srcs = ["embed_test.go"],
+    data = ["//third_party/mcp-toolbox:VERSION"],
     embed = [":embed"],
     deps = [
         "//third_party/mcp-toolbox/internal/sources/sqlite",
@@ -87,6 +87,7 @@ go_test(
         "@com_github_ncruces_go_sqlite3//:go-sqlite3",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_uber_go_goleak//:goleak",
     ],
 )

@@ -59,6 +59,31 @@ func TestPathMatcherPatterns(t *testing.T) {
 	assert.Len(t, m.sbplRegexes(), 5, "the absolute pattern through a symlink has two expressions")
 }
 
+// Braces and classes in a blocked path match what they say, instead of
+// matching nothing (N26 pkg-small-2#16).
+func TestPathMatcherBracesAndClasses(t *testing.T) {
+	root := t.TempDir()
+	m, err := NewPathMatcher([]string{"**/*.{pem,key}", "id_[rd]sa", "conf/{a,b}.env"}, []string{root})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"**/*.{pem,key}", "id_[rd]sa", "conf/{a,b}.env"}, m.Patterns())
+	for p, want := range map[string]bool{
+		filepath.Join(root, "a.pem"):             true,
+		filepath.Join(root, "y", "b.key"):        true,
+		filepath.Join(root, "c.crt"):             false,
+		"/home/u/.ssh/id_rsa":                    true,
+		"/home/u/.ssh/id_dsa":                    true,
+		"/home/u/.ssh/id_ecdsa":                  false,
+		filepath.Join(root, "conf", "a.env"):     true,
+		filepath.Join(root, "conf", "b.env"):     true,
+		filepath.Join(root, "conf", "{a,b}.env"): false,
+	} {
+		t.Run(p, func(t *testing.T) {
+			_, got := m.Match(p)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
 // TestPathMatcherNil matches nothing and has no patterns.
 func TestPathMatcherNil(t *testing.T) {
 	var m *PathMatcher

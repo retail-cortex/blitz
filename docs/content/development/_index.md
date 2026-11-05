@@ -59,14 +59,14 @@ bazel run //tools:license_headers   # add the Apache header to new files
 tools/third_party_notices.sh    # regenerate THIRD_PARTY_NOTICES after changing dependencies
 bazel run //tools/specs         # the specs' index and the paths they name
 bazel run //:docs               # this site at http://localhost:1313
-tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
+tools/coverage.sh               # test coverage of apps/ and pkg/ (libraries no test links listed, not counted); fails below tools/coverage/floor.txt
 bazel test //apps/desktop/web:coverage   # the desktop page's line and branch coverage; fails below vite.config.ts's thresholds
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
 bazel run //:desktop            # the desktop app (Electron, spec_038_electron) on this machine's service
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
 bazel build //:mac-app          # the desktop app for this Mac; //:deb, //:pacman, //:desktop-tar on Linux; //:windows-zip anywhere
 bazel build //:archives         # the CLI release archives, every platform
-BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to http://localhost:4318; logs in ~/.blitz/logs
+BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz -- --local   # a service of its own, which exports traces to http://localhost:4318; logs in ~/.blitz/logs
 bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_filter='PyEnv|InstallsPackages'   # real Python environments (network)
 ```
 

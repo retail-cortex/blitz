@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	yamlv3 "gopkg.in/yaml.v3"
 
 	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/sqlite"
 )
@@ -307,6 +308,14 @@ func TestReadsOnly(t *testing.T) {
 		{"UPDATE t SET n = 1", false},
 		{"DROP TABLE t", false},
 		{"SELECT 1; DROP TABLE t", false},
+		{"SELECT setval('s', 1)", false},
+		{"SELECT nextval('s')", false},
+		{"SELECT pg_terminate_backend(42)", false},
+		{"SELECT lo_unlink(1234)", false},
+		{"SELECT dblink_exec('c', 'DELETE FROM t')", false},
+		{"PRAGMA writable_schema = 1", false},
+		{"pragma main.user_version=3", false},
+		{"SELECT nextval_note FROM t", true},
 		{"", false},
 	} {
 		t.Run(tc.sql, func(t *testing.T) {
@@ -452,4 +461,63 @@ database: shop
 	got, isErr = call(t, cs, "rw_sql", map[string]any{"sql": "SELECT count(*) AS n FROM orders"})
 	require.False(t, isErr, got)
 	assert.Contains(t, got, `"n":2`, "the sneaky delete deleted nothing")
+}
+
+// A secret's own YAML syntax stays inside its value: it can't cut the
+// value short, change its type or add keys.
+func TestEnvFilledInValues(t *testing.T) {
+	file := "kind: source\nname: shop\ntype: postgres\nport: ${PORT}\n" +
+		"user: ${USER:reader} # ${NOT_A_VALUE}\npassword: \"${PW}\"\nplain: ${PW}\nurl: postgres://u:${PW}@h/db\n"
+	for _, pw := range []string{
+		"hunter2 #1",
+		"p@ss: w0rd#9",
+		"*star",
+		"&anchor",
+		"@at",
+		"'quoted",
+		"\"double",
+		"line1\nadmin: true",
+		"[1, 2]",
+		"12345",
+		"${OTHER}",
+	} {
+		t.Run(pw, func(t *testing.T) {
+			p := &ConfigParser{EnvVars: map[string]string{"PW": pw, "PORT": "5432"}}
+			out, err := p.parseEnv(file)
+			require.NoError(t, err)
+			var got map[string]any
+			require.NoError(t, yamlv3.Unmarshal([]byte(out), &got), out)
+			assert.Equal(t, map[string]any{
+				"kind": "source", "name": "shop", "type": "postgres", "port": 5432, "user": "reader",
+				"password": pw, "plain": plainValue(t, pw), "url": "postgres://u:" + pw + "@h/db",
+			}, got)
+			assert.Contains(t, out, "${NOT_A_VALUE}", "a comment's placeholder stays")
+		})
+	}
+	t.Run("missing", func(t *testing.T) {
+		_, err := (&ConfigParser{}).parseEnv("password: ${PW}\n")
+		require.ErrorContains(t, err, `"PW" (line 1, column 11)`)
+	})
+	t.Run("none", func(t *testing.T) {
+		out, err := (&ConfigParser{}).parseEnv("a: 1 # odd   spacing\r\n")
+		require.NoError(t, err)
+		assert.Equal(t, "a: 1 # odd   spacing\n", out, "a file without placeholders is left as written")
+	})
+}
+
+// plainValue is what an unquoted ${PW} becomes: its value read as YAML
+// would read it alone (a number stays a number), else the string.
+func plainValue(t *testing.T, pw string) any {
+	t.Helper()
+	if pw == "12345" {
+		return 12345
+	}
+	return pw
+}
+
+// Version is the copy's VERSION file.
+func TestVersion(t *testing.T) {
+	raw, err := os.ReadFile("../VERSION")
+	require.NoError(t, err)
+	assert.Equal(t, strings.TrimSpace(string(raw)), Version)
 }

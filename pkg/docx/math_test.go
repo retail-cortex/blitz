@@ -104,6 +104,28 @@ func TestOMMLOddInput(t *testing.T) {
 	}
 }
 
+// Nesting without braces (commands taking an atom, scripts on scripts)
+// is bounded too: 100,000 deep finishes, well-formed, instead of
+// overflowing the stack.
+func TestOMMLDeepNesting(t *testing.T) {
+	const n = 100_000
+	for _, tc := range []struct{ name, latex string }{
+		{"square roots", strings.Repeat(`\sqrt`, n) + "x"},
+		{"fractions", strings.Repeat(`\frac`, n) + "ab"},
+		{"accents", strings.Repeat(`\hat`, n) + "x"},
+		{"fonts", strings.Repeat(`\mathbf`, n) + "x"},
+		{"overlines", strings.Repeat(`\overline`, n) + "x"},
+		{"scripts", "x" + strings.Repeat("^", n) + "y"},
+		{"bare scripts", strings.Repeat("_", n)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wellFormedMath(t, tc.latex, omml(tc.latex))
+		})
+	}
+	out := omml(strings.Repeat(`\sqrt`, 1000) + "x")
+	assert.LessOrEqual(t, strings.Count(out, "<m:rad>"), maxMathDepth, "cut at maxMathDepth")
+}
+
 func TestSVGSize(t *testing.T) {
 	for _, tt := range []struct {
 		svg  string

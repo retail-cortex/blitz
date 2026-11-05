@@ -375,7 +375,7 @@ func (s *Skill) ScriptPath(rel string) (string, error) {
 		return "", errors.New("built-in skill: its files aren't on disk")
 	}
 	if !inBundle(rel) {
-		return "", fmt.Errorf("%q is outside the skill's directory", rel)
+		return "", fmt.Errorf("%w: %q is outside the skill's directory", ErrBadPath, rel)
 	}
 	root, err := os.OpenRoot(s.hostDir)
 	if err != nil {
@@ -387,7 +387,7 @@ func (s *Skill) ScriptPath(rel string) (string, error) {
 		return "", err
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%q isn't a regular file", rel)
+		return "", fmt.Errorf("%w: %q isn't a regular file", ErrBadPath, rel)
 	}
 	return filepath.Join(s.hostDir, filepath.FromSlash(rel)), nil
 }
@@ -403,7 +403,7 @@ func (s *Skill) ReadScript(rel string) ([]byte, error) {
 		return os.ReadFile(p)
 	}
 	if s.fsys == nil || !inBundle(rel) {
-		return nil, fmt.Errorf("%q isn't in the skill", rel)
+		return nil, fmt.Errorf("%w: %q isn't in the skill", ErrBadPath, rel)
 	}
 	return fs.ReadFile(s.fsys, path.Join(s.root, rel))
 }

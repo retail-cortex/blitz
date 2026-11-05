@@ -30,6 +30,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +113,11 @@ func JobFromEnv(getenv func(string) string) (Job, error) {
 		j.Artifacts = n
 	}
 	if j.Resume = getenv(envResume); j.Resume != "" {
+		if len(j.Artifacts.IDs) == 0 {
+			// Its session is kept with its artifacts: without their name it
+			// would start again from nothing.
+			return j, fmt.Errorf("%s is set without %s: this service is too old to resume a paused run", envResume, envArtifacts)
+		}
 		j.Answer, j.Note = getenv(envAnswer), getenv(envNote)
 		if j.Answer != "approve" && j.Answer != "deny" {
 			return j, fmt.Errorf("%s %q: approve or deny", envAnswer, j.Answer)
@@ -172,7 +178,7 @@ func RunJob(ctx context.Context, j Job, o JobOptions) error {
 	run := &jobRun{j: j, o: o, c: c}
 	end := run.safeRun(ctx)
 	// The run's end is told even when its time is up.
-	tell, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	tell, cancel := context.WithTimeout(context.WithoutCancel(ctx), endTimeout)
 	defer cancel()
 	if err := c.EndRun(tell, end); err != nil {
 		return fmt.Errorf("telling the organization's service how the run ended (%s): %w", end.Status, err)
@@ -248,9 +254,11 @@ func (r *jobRun) git(ctx context.Context, args ...string) ([]byte, error) {
 		return nil, err
 	}
 	basic := base64.StdEncoding.EncodeToString([]byte("x:" + token))
-	cmd := exec.CommandContext(ctx, r.o.Git, append([]string{"-c", "http.extraHeader=Authorization: Basic " + basic}, args...)...)
+	cmd := exec.CommandContext(ctx, r.o.Git, args...)
 	cmd.Dir = r.dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	// The header goes in git's environment, not its command line, which
+	// anyone on the computer can read while git runs.
+	cmd.Env = append(gitConfigEnv(os.Environ(), "http.extraHeader", "Authorization: Basic "+basic), "GIT_TERMINAL_PROMPT=0")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
@@ -258,6 +266,18 @@ func (r *jobRun) git(ctx context.Context, args ...string) ([]byte, error) {
 		return out.Bytes(), fmt.Errorf("git %s: %w: %s", args[0], err, bytes.TrimSpace(out.Bytes()))
 	}
 	return out.Bytes(), nil
+}
+
+// gitConfigEnv is env with key=value added to git's configuration through
+// GIT_CONFIG_COUNT, after any settings env has there already.
+func gitConfigEnv(env []string, key, value string) []string {
+	n := 0
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
+			n, _ = strconv.Atoi(v)
+		}
+	}
+	return append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", n, key), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", n, value), fmt.Sprintf("GIT_CONFIG_COUNT=%d", n+1))
 }
 
 func failed(format string, a ...any) enterprise.RunEnd {
@@ -389,9 +409,11 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 		mu.Unlock()
 	case err != nil && result.Status == "":
 		return failed("running the job: %v", err)
-	case result.Status == api.RunSucceeded, result.Status == api.RunStopped:
+	case result.Status == api.RunSucceeded:
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		// Its deadline stopped it: said so, whatever the engine called it.
 		end.Status, end.Note = string(api.RunStopped), "it ran past its time limit"
+	case result.Status == api.RunStopped:
 	default:
 		end.Status = string(api.RunFailed)
 		end.Note = strings.TrimSpace(cmp.Or(result.Error, string(result.Status)))
@@ -411,11 +433,14 @@ func (r *jobRun) run(ctx context.Context) enterprise.RunEnd {
 	return end
 }
 
-// keep uploads what the run left for people (out/, as out/<path>) and its
-// log (events.jsonl) as its artifacts (JB-30), at most maxKeep files.
+// keep uploads what the run left for people (out/, as out/<path>), its
+// log (events.jsonl) and its session (session/<path>, for a paused run to
+// go on in, EN-43) as its artifacts (JB-30): at most maxRunFiles in all,
+// out/'s files after the others, so the log and the session are never the
+// ones left out.
 func (r *jobRun) keep(ctx context.Context) error {
 	ctx = context.WithoutCancel(ctx) // a run past its time still keeps its files
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, keepTimeout)
 	defer cancel()
 	var errs []error
 	put := func(path, name string) {
@@ -429,45 +454,68 @@ func (r *jobRun) keep(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 		}
 	}
-	n := 0
-	err := filepath.WalkDir(r.out, func(path string, d fs.DirEntry, err error) error {
-		switch {
-		case err != nil:
-			return err
-		case !d.Type().IsRegular():
-			return nil // folders, and never a link out of the run's folder
-		case n == maxKeep:
-			return fmt.Errorf("more than %d files in out/", maxKeep)
-		}
-		n++
-		rel, _ := filepath.Rel(r.out, path)
-		put(path, "out/"+filepath.ToSlash(rel))
-		return nil
-	})
+	// files are the regular files under dir (never a link out of the
+	// run's folder), at most limit+1 of them.
+	files := func(dir string, limit int) ([]string, error) {
+		var out []string
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+				return err
+			case !d.Type().IsRegular():
+				return nil
+			case len(out) > limit:
+				return fs.SkipAll
+			}
+			out = append(out, path)
+			return nil
+		})
+		return out, err
+	}
+	put(r.log, "events.jsonl")
+	session, err := files(r.sessions, maxRunFiles-1)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	put(r.log, "events.jsonl")
-	// Its session, for a paused run to go on in (EN-43).
-	_ = filepath.WalkDir(r.sessions, func(path string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			rel, _ := filepath.Rel(r.sessions, path)
-			put(path, "session/"+filepath.ToSlash(rel))
-		}
-		return nil
-	})
+	session = session[:min(len(session), maxRunFiles-1)]
+	for _, path := range session {
+		rel, _ := filepath.Rel(r.sessions, path)
+		put(path, "session/"+filepath.ToSlash(rel))
+	}
+	room := maxRunFiles - 1 - len(session)
+	out, err := files(r.out, room)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if len(out) > room {
+		out = out[:room]
+		errs = append(errs, fmt.Errorf("more than %d files in out/ (a run keeps %d, its log and session among them): the first %d were kept", room, maxRunFiles, room))
+	}
+	for _, path := range out {
+		rel, _ := filepath.Rel(r.out, path)
+		put(path, "out/"+filepath.ToSlash(rel))
+	}
 	return errors.Join(errs...)
 }
 
-// maxKeep is how many of out/'s files a run keeps (the service keeps
-// 1,000 a run, its log among them).
-const maxKeep = 999
+// maxRunFiles is how many files the service keeps a run, its log and
+// session among them (a variable for tests).
+var maxRunFiles = 1000
+
+// How long a job's runner waits, past the run's own time limit for all
+// but the first (spec_009_jobs JB-10, JB-30).
+const (
+	endTimeout   = 30 * time.Second // to tell the service how the run ended
+	keepTimeout  = 10 * time.Minute // to keep its files
+	pushTimeout  = 2 * time.Minute  // to push its changes to their branch
+	mergeTimeout = 2 * time.Minute  // to add them to main
+)
 
 // push commits what the run changed and pushes it to the run's own branch,
 // blitz/jobs/<job>/<run> (JB-10): its name, or "" when nothing changed.
 func (r *jobRun) push(ctx context.Context) (string, error) {
 	ctx = context.WithoutCancel(ctx) // a run past its time still keeps its work
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, pushTimeout)
 	defer cancel()
 	if _, err := r.git(ctx, "add", "-A"); err != nil {
 		return "", err
@@ -493,7 +541,7 @@ func (r *jobRun) merge(ctx context.Context, branch string) (bool, string) {
 		return false, "its job keeps its changes on their branch (merge: never)"
 	}
 	ctx = context.WithoutCancel(ctx) // a run at its time limit still adds its work
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, mergeTimeout)
 	defer cancel()
 	if err := runmerge.IntoMain(ctx, r.git, "origin", branch, "Blitz job "+r.j.Name); err != nil {
 		return false, err.Error()

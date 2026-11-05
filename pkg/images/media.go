@@ -242,7 +242,7 @@ func wavSeconds(b []byte) float64 {
 	for i := 12; i+8 <= len(b); {
 		id, n := string(b[i:i+4]), binary.LittleEndian.Uint32(b[i+4:i+8])
 		switch {
-		case id == "fmt " && i+16 <= len(b):
+		case id == "fmt " && i+20 <= len(b): // the byte rate is bytes 16-19
 			rate = binary.LittleEndian.Uint32(b[i+16 : i+20])
 		case id == "data":
 			size = n

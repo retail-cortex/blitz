@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/activity"
-	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -131,11 +130,11 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 				return
 			}
 			markUse()
+			setupInterface(&o.global)
 		},
 	}
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		//nolint:ST1005 // shown to the user as is, after the flag error
-		return withCode(exitUsage, fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath()))
+		return withCode(exitUsage, fmt.Errorf("%w\nRun '%s --help' for usage", err, c.CommandPath()))
 	})
 
 	pf := root.PersistentFlags()
@@ -147,7 +146,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newGitCredentialCommand())
 	groupHelp(root)
 	return root
 }
@@ -302,6 +301,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.bg && (prompt == "" || streamIn || o.interactive || o.local || o.resume != "" || o.cont || o.outputFormat != formatText) {
 		return withCode(exitUsage, errors.New("--bg starts a prompt in a new session of the service: it needs a prompt, and not -i, --local, --resume, --continue or --output-format"))
 	}
+	if o.bg {
+		if names := bgRefusedFlags(cmd.Flags()); len(names) > 0 {
+			return withCode(exitUsage, fmt.Errorf("--bg can't carry %s: a background run takes the workspace's own settings (run without --bg to use them)", strings.Join(names, ", ")))
+		}
+	}
 	if !oneShot && o.plan {
 		return withCode(exitUsage, errors.New("--plan requires a prompt (in a session, use /plan <goal>)"))
 	}
@@ -394,6 +398,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		} else {
 			fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, notice, tui.Reset)
 		}
+	}
+	if _, ok := tui.ParseNotifyMode(cfg.UI.Notify); !ok && pretty && !oneShot {
+		warnFn(i18n.T("startup.notify_unknown", "value", cfg.UI.Notify))
 	}
 	if remote && !oneShot {
 		fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("startup.attached", "socket", socket.DefaultSocket()), tui.Reset)
@@ -540,6 +547,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		StatusLine:    statusLine(cfg, pretty),
 		Follow:        follower(w, o.attachRun),
 		FollowID:      o.attachRun,
+		FirstPrompt:   prompt, // -i with a prompt: sent first (N26 cli-2#4)
 		// /cd: the target opens as a workspace does at start (its
 		// settings, the trust question, the service when it runs); the
 		// REPL switches to it once the session has moved, and the old one
@@ -571,6 +579,27 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,
 		},
 	})
+}
+
+// bgRefused are the run flags a background run can't carry: it runs with
+// the workspace's settings in the shared service, so a rule, mode, model or
+// agent given for the run would be dropped (N26 cli-2#1, BGA-60).
+var bgRefused = []string{
+	"agent", "model", "agency", "effort", "permission-mode", "allow", "deny",
+	"trust-project", "trust-workspace", "add-dir", "plugin-dir",
+	"append-system-prompt", "append-system-prompt-file", "json-schema",
+	"name", "fork", "no-session-persistence", "input-format",
+}
+
+// bgRefusedFlags names the flags in bgRefused that fs was given.
+func bgRefusedFlags(fs *pflag.FlagSet) []string {
+	var names []string
+	for _, name := range bgRefused {
+		if f := fs.Lookup(name); f != nil && f.Changed {
+			names = append(names, "--"+name)
+		}
+	}
+	return names
 }
 
 // resolvePrompt returns the prompt from -p, arguments, or stdin. stdin is
@@ -612,14 +641,15 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "reload", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search", "update", "install", "registry")
 	c.Command("agents", "update")
 	c.Command("rules", "update")
 	c.Command("session", "list", "new", "load", "save")
-	c.Command("search", "web", "session")
+	c.Command("search", "web", "session", "files", "documents", "chats", "notes", "all", "status", "reindex")
+	c.Command("processes", "all", "log", "stop")
 	c.Command("envs", "prune", "remove")
 	c.Command("license", "full", "third-party")
 	c.Command("memory", "show", "reload", "add", "notes", "forget")
@@ -705,7 +735,8 @@ func notifier(cfg *config.Config, terminal bool) tui.Notifier {
 	if !terminal {
 		return tui.Notifier{Mode: "off"}
 	}
-	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: cfg.UI.Notify}
+	mode, _ := tui.ParseNotifyMode(cfg.UI.Notify)
+	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: mode}
 }
 
 // statusLine is ui.status_line on a terminal ("" elsewhere).
@@ -719,7 +750,9 @@ func statusLine(cfg *config.Config, terminal bool) string {
 // follower follows the background run id through w, attached to the
 // service (blitz attach); nil without one.
 func follower(w api.Backend, id string) func(context.Context, func(api.Event)) (api.TurnResult, error) {
-	r, ok := w.(*client.Remote)
+	r, ok := w.(interface {
+		FollowBackground(context.Context, string, func(api.Event)) (api.TurnResult, error)
+	})
 	if id == "" || !ok {
 		return nil
 	}

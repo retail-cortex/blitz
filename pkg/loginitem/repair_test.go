@@ -90,3 +90,36 @@ func TestRepair(t *testing.T) {
 	assert.Equal(t, blitzd, ServiceProgram())
 	assert.NotEmpty(t, *ran, "the repaired item is started")
 }
+
+// Only a program that isn't there is missing: one behind a folder that
+// can't be read (or a volume not yet mounted) is left alone.
+func TestMissing(t *testing.T) {
+	if goruntime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("folder permissions don't hide files here")
+	}
+	dir := t.TempDir()
+	here := filepath.Join(dir, "blitz-tray")
+	require.NoError(t, os.WriteFile(here, nil, 0o755))
+	locked := filepath.Join(dir, "locked")
+	require.NoError(t, os.Mkdir(locked, 0o700))
+	behind := filepath.Join(locked, "blitz-tray")
+	require.NoError(t, os.WriteFile(behind, nil, 0o755))
+	require.NoError(t, os.Chmod(locked, 0))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	cases := []struct {
+		name    string
+		program string
+		want    bool
+	}{
+		{"none named", "", false},
+		{"there", here, false},
+		{"gone", filepath.Join(dir, "moved"), true},
+		{"can't be checked", behind, false},
+		{"under a file", filepath.Join(here, "x"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, missing(tc.program))
+		})
+	}
+}

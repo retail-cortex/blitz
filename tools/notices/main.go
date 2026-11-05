@@ -440,6 +440,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`,
 
 var licenseFile = regexp.MustCompile(`(?i)^(licen[cs]e|copying|notice)([.-].*)?$`)
 
+// notShipped are license files for what isn't in the programs (a
+// module's docs or logo), and source files named like a license.
+var notShipped = regexp.MustCompile(`(?i)^licen[cs]e[.-](docs?|logo)$|\.(go|js|ts|c|h)$`)
+
 // readComponent reads dir's license files and identifies the license.
 func readComponent(name, version, dir string) (component, error) {
 	c := component{name: name, version: version, texts: map[string]string{}}
@@ -465,13 +469,20 @@ func readComponent(name, version, dir string) (component, error) {
 		files = append(files, f)
 	}
 	sort.Strings(files)
+	// Every license file must be one Blitz accepts: a GPL COPYING beside
+	// a LICENSE-MIT isn't an MIT component. A NOTICE isn't a license, and
+	// a license for what the programs don't ship (docs, a logo) or source
+	// named like one (license.go) doesn't count.
 	for _, file := range files {
-		if strings.HasPrefix(strings.ToUpper(file), "NOTICE") {
+		if strings.HasPrefix(strings.ToUpper(file), "NOTICE") || notShipped.MatchString(file) {
 			continue
 		}
-		if id := identify(c.texts[file]); id != "" {
+		id := identify(c.texts[file])
+		if id == "" {
+			return c, fmt.Errorf("%s %s: %s is a license Blitz doesn't accept, or one it can't recognize", name, version, file)
+		}
+		if c.license == "" {
 			c.license = id
-			break
 		}
 	}
 	if c.license == "" {
@@ -500,6 +511,8 @@ func identify(text string) string {
 		return "ISC"
 	case strings.Contains(t, "This is free and unencumbered software released into the public domain"):
 		return "Unlicense"
+	case strings.HasPrefix(t, "SQLite Is Public Domain"):
+		return "Public domain (SQLite)"
 	case strings.Contains(t, "Redistribution and use in source and binary forms"):
 		if strings.Contains(t, "Neither the name") || strings.Contains(t, "names of its contributors") {
 			return "BSD-3-Clause"

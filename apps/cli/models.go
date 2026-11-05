@@ -50,7 +50,7 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			if len(args) == 0 && len(list) == 0 {
-				return withCode(exitUsage, fmt.Errorf("no provider is set up: run blitz setup, or name one (gemini, anthropic, openai, ollama)"))
+				return withCode(exitUsage, fmt.Errorf("no provider is set up: give one a key with blitz config set-key <provider>, or sign in with blitz auth login; or name one (gemini, anthropic, openai, ollama)"))
 			}
 			out := cmd.OutOrStdout()
 			failed := 0

@@ -21,6 +21,7 @@ package fileview
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -30,6 +31,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
 // openCommand opens a folder in the file manager, or a document in its
@@ -52,40 +55,51 @@ func OpenFolder(dir string) error {
 		return err
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("not opening %s: not a folder", dir)
+		return errors.New(i18n.T("fileview.not_folder", "path", dir))
 	}
 	cmd := openCommand(dir)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("opening %s: %w", dir, err)
+		return fmt.Errorf("%s: %w", i18n.T("fileview.opening", "path", dir), err)
 	}
 	go func() { _ = cmd.Wait() }() // reap it
 	return nil
 }
 
 // viewable are the documents OpenDocument opens: images, PDFs, sound and
-// video, which the system shows or plays in a viewer and never runs.
-var viewable = map[string]bool{".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".ico": true, ".svg": true,
+// video, which the system shows or plays in a viewer and never runs. Not
+// SVG: it often opens in a browser, which runs its scripts (the window
+// previews it as an image).
+var viewable = map[string]bool{".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".ico": true,
 	".heic": true, ".heif": true,
 	".mp3": true, ".wav": true, ".m4a": true, ".aac": true, ".ogg": true, ".oga": true, ".opus": true, ".flac": true, ".weba": true,
 	".mp4": true, ".m4v": true, ".mov": true, ".webm": true, ".avi": true, ".wmv": true, ".flv": true, ".mpeg": true, ".mpg": true, ".3gp": true}
 
 // OpenDocument shows an image, PDF, sound or video in the system's viewer (where the
 // window's own preview falls short). Other files are refused: the page
-// can't make it run one.
+// can't make it run one. A link is judged, and opened, by what it points
+// to: chart.png linked to run.command is a script, and the system would
+// open it as one.
 func OpenDocument(path string) error {
 	if !viewable[strings.ToLower(filepath.Ext(path))] {
-		return fmt.Errorf("not opening %s: only images, PDFs, sound and video open", path)
+		return errors.New(i18n.T("fileview.not_viewable", "path", path))
 	}
-	fi, err := os.Stat(path)
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	if !viewable[strings.ToLower(filepath.Ext(real))] {
+		return errors.New(i18n.T("fileview.link_not_viewable", "path", path, "target", real))
+	}
+	fi, err := os.Lstat(real)
 	if err != nil {
 		return err
 	}
 	if !fi.Mode().IsRegular() {
-		return fmt.Errorf("not opening %s: not a file", path)
+		return errors.New(i18n.T("fileview.not_file", "path", path))
 	}
-	cmd := openCommand(path)
+	cmd := openCommand(real)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("opening %s: %w", path, err)
+		return fmt.Errorf("%s: %w", i18n.T("fileview.opening", "path", path), err)
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
@@ -130,7 +144,7 @@ var reveal = func(path string) error {
 // only shown.
 func RevealPath(path string) error {
 	if !filepath.IsAbs(path) {
-		return fmt.Errorf("not showing %s: not an absolute path", path)
+		return errors.New(i18n.T("fileview.not_absolute", "path", path))
 	}
 	path = filepath.Clean(path)
 	if _, err := os.Lstat(path); err != nil {

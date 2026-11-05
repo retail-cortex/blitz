@@ -26,6 +26,7 @@ import { useSyncExternalStore } from "react";
 import enUS from "../../../../pkg/i18n/locales/en-US.json";
 import es from "../../../../pkg/i18n/locales/es.json";
 import frCA from "../../../../pkg/i18n/locales/fr-CA.json";
+import fixedKeys from "../../../../pkg/i18n/fixed_keys.json";
 
 interface Catalog {
   meta: { locale: string; name: string; english_name: string };
@@ -112,27 +113,10 @@ const listeners = new Set<() => void>();
 let appName = "";
 
 /**
- * The keys that name the program itself, never the organization's app
- * (EN-51): "Built on Blitz", Blitz's releases, license, themes and its
- * reinstall hints. pkg/i18n's fixedKeys is the same list.
+ * Whether key names the program itself, so keeps "Blitz" under an organization's name (EN-51): "Built on Blitz",
+ * Blitz's releases, license, themes and its reinstall hints. The keys are pkg/i18n/fixed_keys.json, which the
+ * service reads too; one ending in "." covers every key under it.
  */
-const fixedKeys = [
-  "desktop.brand",
-  "desktop.org.built_on",
-  "desktop.update.",
-  "desktop.cli.",
-  "desktop.service.no_blitzd",
-  "desktop.service.tray.none",
-  "desktop.settings.light_theme.detail",
-  "desktop.settings.dark_theme.detail",
-  "desktop.settings.transparency.blitz_only",
-  "desktop.settings.doc_css.sample_text",
-  "desktop.cmd.license",
-  "help.license",
-  "rewind.old_prompt",
-];
-
-/** Whether key names the program itself, so keeps "Blitz" under an organization's name. */
 export const fixedName = (key: string) => fixedKeys.some((k) => (k.endsWith(".") ? key.startsWith(k) : key === k));
 
 /**

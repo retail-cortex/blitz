@@ -80,7 +80,7 @@ host: db.internal
 port: "5432"
 database: shop
 user: reader
-password: ${DB_SHOP_PASSWORD}
+password: "${DB_SHOP_PASSWORD}"
 readOnly: true
 ---
 kind: tool
@@ -97,6 +97,6 @@ parameters:
     description: How many
 ```
 
-`${NAME}` is the Blitz secret `NAME` (this workspace's, else the global one), never an environment variable. A file that came with the workspace (one you didn't save in Studio) gets only this workspace's secrets, and its tools ask first, until you open it and press **Save and trust**. A file with more than Studio's form describes, such as several sources or other Toolbox tools, still works: Studio lists it as **Custom YAML** and lets you edit the text.
+`${NAME}` is the Blitz secret `NAME` (this workspace's, else the global one), never an environment variable. Its value goes in whole, whatever it holds: a password with `#`, `: `, quotes or a newline in it stays one value. In quotes it's always text; unquoted, a value such as `5432` reads as a number. A file that came with the workspace (one you didn't save in Studio) gets only this workspace's secrets, and its tools ask first, until you open it and press **Save and trust**. A file with more than Studio's form describes, such as several sources or other Toolbox tools, still works: Studio lists it as **Custom YAML** and lets you edit the text.
 
 All the files together are one MCP server, **databases**, which `/mcp` lists with its state. It connects the first time an agent needs it; if a database can't be reached, `/mcp` and Studio say why.

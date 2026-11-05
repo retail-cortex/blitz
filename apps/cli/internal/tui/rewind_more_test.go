@@ -159,3 +159,12 @@ func TestRewindPickersOnATerminal(t *testing.T) {
 	assert.Contains(t, out, "Restored: a.go")
 	assert.Contains(t, f.output(), "Overwrite them")
 }
+
+// File names an agent created can't reach the terminal as escape
+// sequences or break the line (N26 cli-2#23).
+func TestRewindDetailIsSafe(t *testing.T) {
+	d := rewindDetail(api.RewindPoint{Files: []string{"a\x1b]0;pwned\x07.go", "b\nc.go"}})
+	assert.NotContains(t, d, "\x1b")
+	assert.NotContains(t, d, "\n")
+	assert.Contains(t, d, "c.go")
+}

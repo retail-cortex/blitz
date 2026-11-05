@@ -21,6 +21,7 @@ package observability
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -223,7 +224,9 @@ func (s *fileSink) prune() {
 	}
 }
 
-// redactAttr masks secrets in string and error values before encoding.
+// redactAttr masks secrets in string and error values before encoding,
+// and in any other value (a map, slice or struct: a tool's arguments, an
+// environment) by its JSON, which is written masked.
 func redactAttr(r *redact.Redactor) func([]string, slog.Attr) slog.Attr {
 	return func(_ []string, a slog.Attr) slog.Attr {
 		switch a.Value.Kind() {
@@ -235,6 +238,21 @@ func redactAttr(r *redact.Redactor) func([]string, slog.Attr) slog.Attr {
 				a.Value = slog.StringValue(r.String(v.Error()))
 			case fmt.Stringer:
 				a.Value = slog.StringValue(r.String(v.String()))
+			default:
+				raw, err := json.Marshal(v)
+				if err != nil {
+					a.Value = slog.StringValue(r.String(fmt.Sprint(v)))
+					break
+				}
+				masked := r.String(string(raw))
+				if masked == string(raw) {
+					break
+				}
+				if json.Valid([]byte(masked)) {
+					a.Value = slog.AnyValue(json.RawMessage(masked))
+				} else {
+					a.Value = slog.StringValue(masked)
+				}
 			}
 		}
 		return a

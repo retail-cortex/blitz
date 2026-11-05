@@ -72,7 +72,8 @@ type Recorder struct {
 	HTTP *http.Client
 	Now  func() time.Time
 
-	mu sync.Mutex // one process's marks and flushes, one at a time
+	mu       sync.Mutex // activity.json's reads and writes in this process, one at a time; never held over the network
+	flushing sync.Mutex // one flush at a time, so a ping isn't sent twice by this process
 }
 
 func (r *Recorder) now() time.Time {
@@ -162,16 +163,20 @@ func (r *Recorder) Mark(front string) (bool, error) {
 
 // Flush sends the pings still to send (AI-10, AI-12): those Retail Cortex
 // takes, or refuses as not counted, aren't sent again; those that fail
-// are kept for a later flush, within Keep days.
+// are kept for a later flush, within Keep days. The file isn't locked
+// while the pings go (AI-11: a Mark never waits on the network), and what
+// was sent is merged into the file as it is then, so a day marked
+// meanwhile, here or by another process, is kept.
 func (r *Recorder) Flush(ctx context.Context) error {
 	if !r.on() {
 		return nil
 	}
+	r.flushing.Lock()
+	defer r.flushing.Unlock()
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	today := day(r.now())
-	s := r.load()
-	pending := recent(s.Pending, today)
+	pending := recent(r.load().Pending, today)
+	r.mu.Unlock()
 	if len(pending) == 0 {
 		return nil
 	}
@@ -180,17 +185,25 @@ func (r *Recorder) Flush(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	var kept []entry
+	var sent []entry
 	for _, e := range pending {
 		switch err := r.send(ctx, id, e); {
 		case err == nil, errors.Is(err, errRefused):
-			s.Sent = append(s.Sent, e)
+			sent = append(sent, e)
 		default:
-			kept = append(kept, e)
 			errs = append(errs, err)
 		}
 	}
-	s.Pending, s.Sent = kept, recent(s.Sent, today)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := r.load() // as it is now: marks made while the pings went are kept
+	s.Pending = recent(slices.DeleteFunc(s.Pending, func(e entry) bool { return slices.Contains(sent, e) }), today)
+	for _, e := range sent {
+		if !slices.Contains(s.Sent, e) {
+			s.Sent = append(s.Sent, e)
+		}
+	}
+	s.Sent = recent(s.Sent, today)
 	if err := r.save(s); err != nil {
 		errs = append(errs, err)
 	}

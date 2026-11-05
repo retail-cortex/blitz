@@ -50,6 +50,10 @@
   {{- end }}
   </tbody>
 </table>
+{{- with .untested }}
+<p>Not counted, since no test links them (so they're in no line above):
+  {{ range $i, $p := . }}{{ if $i }}, {{ end }}<code>{{ $p }}</code>{{ end }}.</p>
+{{- end }}
 {{- else -}}
 <p><em>No coverage report in this build. The published site shows the latest from CI; to see one locally, run <code>tools/coverage.sh</code>, then build the site.</em></p>
 {{- end -}}

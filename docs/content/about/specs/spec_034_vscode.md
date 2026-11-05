@@ -37,6 +37,7 @@ The desktop app's conversation, beside the code in VS Code, attached to the same
 ## 5. Packaging
 
 - **VSC-30** `bazel build //apps/vscode:vsix` compiles the TypeScript (CommonJS, `tsconfig.build.json`) and packs `blitz.vsix` with `tools/vsix`: `extension/` (package.json, `dist`, `media`, README, LICENSE) with the `extension.vsixmanifest` and `[Content_Types].xml` vsce would write, entries dated 1980-01-01 so builds match. `--action_env=VSIX_VERSION=…` stamps a version; releases attach `blitz_<version>_vscode.vsix`, covered by the signed checksums. Install with `code --install-extension blitz.vsix`. It isn't published to the Marketplace.
+- **VSC-30a** *2026-11-05 (scan N26-pkg-small-2#15: `[Content_Types].xml` took its types from the build machine's tables, so the .vsix differed between Linux, macOS and a bare container).* `tools/vsix` gives each extension's media type from its own fixed list (`.js`, `.map`, `.md`, `.txt`, `.css`, `.png`, `.svg`, …), `application/octet-stream` for others: the same package on every machine.
 - **VSC-31** The npm workspace is at the repository's root (`pnpm-workspace.yaml`: the page and the extension; one `pnpm-lock.yaml`); THIRD_PARTY_NOTICES lists the page's packages, which are what ships.
 
 ## 6. Checked by hand

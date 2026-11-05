@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -211,6 +212,35 @@ func TestRenderOptions(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotText)
 	_, err = Render([]byte{0xff, 0xfe}, Options{})
 	assert.ErrorIs(t, err, ErrNotText)
+}
+
+// A list nested deeper than Word's nine levels is drawn at the last one:
+// every w:ilvl is one the numbering defines.
+func TestDeepListLevels(t *testing.T) {
+	cases := []struct {
+		name  string
+		depth int
+		deep  string
+	}{
+		{"nine levels", 9, `<w:ilvl w:val="8"/>`},
+		{"twelve levels", 12, `<w:ilvl w:val="8"/>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var md strings.Builder
+			for i := range tc.depth {
+				fmt.Fprintf(&md, "%s- level %d\n", strings.Repeat("  ", i), i)
+			}
+			data, err := Render([]byte(md.String()), Options{})
+			require.NoError(t, err)
+			doc := unpack(t, data)["word/document.xml"]
+			assert.Contains(t, doc, tc.deep)
+			for l := maxListLevel + 1; l < tc.depth; l++ {
+				assert.NotContains(t, doc, fmt.Sprintf(`<w:ilvl w:val="%d"/>`, l))
+			}
+			assert.Contains(t, doc, fmt.Sprintf(`> %d</w:t>`, tc.depth-1), "every item kept")
+		})
+	}
 }
 
 func TestEscapeAndNames(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"image/gif"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,7 +119,6 @@ func TestCatalogue(t *testing.T) {
 	for p, want := range map[string]bool{"a.heic": true, "lecture.mp3": true, "demo.mov": true, "paper.pdf": true, "notes.md": false, "x.zip": false} {
 		assert.Equal(t, want, IsAttachablePath(p), p)
 	}
-	assert.True(t, IsImagePath("scan.BMP"))
 }
 
 func TestPrepareKinds(t *testing.T) {
@@ -206,6 +206,62 @@ func TestDuration(t *testing.T) {
 	assert.Zero(t, Duration("video/mp4", v1))
 	assert.Zero(t, Duration("video/mp4", mvhd(0, 100)), "no time scale")
 	assert.Zero(t, Duration("audio/mpeg", []byte("ID3")))
+}
+
+// TestDurationShortFiles feeds the parsers files cut off at every length,
+// and chunks whose sizes overrun the file: each gives 0 (or the length
+// it can read), never a panic.
+func TestDurationShortFiles(t *testing.T) {
+	full := wav(1)
+	fmtOnly := []byte("RIFF\x00\x00\x00\x00WAVEfmt \x10\x00\x00\x00")
+	huge := slices.Clone(full[:44])
+	binary.LittleEndian.PutUint32(huge[16:], 0xFFFFFFF0) // a fmt chunk larger than the file
+	v1 := mvhd(1, 1)
+	v1[8] = 1
+	cases := []struct {
+		name string
+		mime string
+		data []byte
+	}{
+		{"empty wav", "audio/wav", nil},
+		{"riff header only", "audio/wav", full[:12]},
+		{"fmt header only", "audio/wav", fmtOnly},
+		{"fmt cut in the byte rate (28 bytes)", "audio/wav", append(slices.Clone(fmtOnly), 1, 0, 1, 0)},
+		{"fmt cut in the byte rate (31 bytes)", "audio/wav", append(slices.Clone(fmtOnly), 1, 0, 1, 0, 0x40, 0x1F, 0)},
+		{"fmt chunk larger than the file", "audio/wav", huge},
+		{"mvhd at the start", "video/mp4", []byte("mvhd")},
+		{"mvhd cut in its fields", "video/mp4", mvhd(600, 1200)[:20]},
+		{"version 1 mvhd cut", "video/mp4", v1[:26]},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data := slices.Clip(c.data) // no room past the end to read by mistake
+			assert.NotPanics(t, func() { assert.Zero(t, Duration(c.mime, data)) })
+		})
+	}
+	for _, f := range [][]byte{full, mvhd(600, 1200)} {
+		mime := "audio/wav"
+		if bytes.Contains(f, []byte("mvhd")) {
+			mime = "video/mp4"
+		}
+		for n := range len(f) {
+			assert.NotPanics(t, func() { Duration(mime, f[:n:n]) }, "%s cut at %d", mime, n)
+		}
+	}
+}
+
+// FuzzDuration checks the WAV and movie-header parsers never panic on
+// any bytes. Bazel runs its seeds only.
+func FuzzDuration(f *testing.F) {
+	f.Add("audio/wav", wav(1))
+	f.Add("audio/wav", []byte("RIFF\x00\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"))
+	f.Add("video/mp4", mvhd(600, 1200))
+	f.Add("video/quicktime", []byte("\x00\x00\x00\x08mvhd\x01"))
+	f.Add("audio/mp4", []byte{})
+	f.Fuzz(func(t *testing.T, mime string, data []byte) {
+		d := Duration(mime, data)
+		assert.GreaterOrEqual(t, d, 0.0)
+	})
 }
 
 func TestExpandRoutes(t *testing.T) {

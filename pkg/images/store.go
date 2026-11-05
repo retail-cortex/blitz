@@ -113,7 +113,7 @@ func (s *Store) Get(uri string) ([]byte, string, error) {
 // from its header when that's cheap.
 func (s *Store) PutFile(name string, f io.ReaderAt, size int64) (*Image, error) {
 	if size > MaxMediaBytes {
-		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(int(min(size, 1<<40))), humanBytes(MaxMediaBytes))
+		return nil, tooLarge(name, int(min(size, 1<<40)), MaxMediaBytes)
 	}
 	head := make([]byte, min(size, 1<<20))
 	if _, err := f.ReadAt(head, 0); err != nil && err != io.EOF {
@@ -273,23 +273,38 @@ func (s *Store) writeFile(final string, data []byte) error {
 	return os.Rename(tmp.Name(), final)
 }
 
-// Prune deletes images not used for maxAge and reports how many went.
+// staleTemp is how old a temporary file (.img-*) must be before Prune
+// takes it as left by a crash rather than a write in progress.
+var staleTemp = time.Hour
+
+// Prune deletes images not used for maxAge and reports how many went. It
+// also deletes temporary files a crash left behind (older than an hour;
+// not counted), whatever maxAge is.
 func (s *Store) Prune(maxAge time.Duration) (int, error) {
-	if maxAge <= 0 {
-		return 0, nil
-	}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
+		if maxAge <= 0 {
+			return 0, nil
+		}
 		return 0, err
 	}
-	cutoff := time.Now().Add(-maxAge)
+	now := time.Now()
 	n := 0
 	for _, e := range entries {
-		base, _, _ := strings.Cut(e.Name(), ".") // <sha>.png, <sha>.txt, <sha>.gemini.json
-		if e.IsDir() || !shaRE.MatchString(base) {
+		if e.IsDir() {
 			continue
 		}
-		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+		if strings.HasPrefix(e.Name(), ".img-") {
+			if info, err := e.Info(); err == nil && info.ModTime().Before(now.Add(-staleTemp)) {
+				_ = os.Remove(filepath.Join(s.dir, e.Name()))
+			}
+			continue
+		}
+		base, _, _ := strings.Cut(e.Name(), ".") // <sha>.png, <sha>.txt, <sha>.gemini.json
+		if maxAge <= 0 || !shaRE.MatchString(base) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(now.Add(-maxAge)) {
 			if os.Remove(filepath.Join(s.dir, e.Name())) == nil {
 				n++
 			}
@@ -449,7 +464,7 @@ func (s *Store) load(ctx context.Context, uri, name string, route MediaPolicy, u
 	case RouteText:
 		switch KindOf(mime) {
 		case KindDocument:
-			return s.documentText(uri, name), nil
+			return s.documentText(ctx, uri, name), nil
 		case KindText:
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -491,10 +506,11 @@ func toolFileName(fr *genai.FunctionResponse) string {
 	return fr.Name
 }
 
-// documentText is a PDF for a model that can't read one: its text.
-func (s *Store) documentText(uri, name string) *genai.Part {
+// documentText is a PDF for a model that can't read one: its text, read
+// under the turn's ctx (a cancelled turn stops waiting for it).
+func (s *Store) documentText(ctx context.Context, uri, name string) *genai.Part {
 	name = cmp.Or(name, "document.pdf")
-	text, pages, err := s.Text(context.Background(), uri)
+	text, pages, err := s.Text(ctx, uri)
 	if err != nil {
 		return genai.NewPartFromText(fmt.Sprintf("[%s: its text couldn't be read: %v]", name, err))
 	}

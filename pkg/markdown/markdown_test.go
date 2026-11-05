@@ -15,9 +15,12 @@
 package markdown
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/yuin/goldmark/ast"
 )
 
@@ -112,4 +115,44 @@ func TestMathEdges(t *testing.T) {
 	inline, src := Parse([]byte("$a$"))
 	inline.FirstChild().FirstChild().Dump(src, 0)
 	assert.Equal(t, KindMath, inline.FirstChild().FirstChild().Kind())
+}
+
+// A $ looks only so far along its line for its close: a formula longer
+// than maxInlineMath stays text, and a long line of $ that never close
+// parses without scanning the rest of the line from each. A long
+// displayed block keeps every line.
+func TestMathLongLines(t *testing.T) {
+	inline := func(src string) []string {
+		doc, _ := Parse([]byte(src))
+		var got []string
+		_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+			if m, ok := n.(*Math); ok && entering {
+				got = append(got, m.Source)
+			}
+			return ast.WalkContinue, nil
+		})
+		return got
+	}
+	cases := []struct {
+		name string
+		src  string
+		want int // formulas found
+	}{
+		{"a formula within the bound", "$" + strings.Repeat("x", maxInlineMath-10) + "$", 1},
+		{"a formula past it", "$" + strings.Repeat("x", maxInlineMath+10) + "$", 0},
+		{"a long line that never closes", strings.Repeat("$a ", 50_000), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Len(t, inline(tc.src), tc.want)
+		})
+	}
+	lines := make([]string, 2000)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("x_{%d}", i)
+	}
+	doc, _ := Parse([]byte("$$\n" + strings.Join(lines, "\n") + "\n$$\n"))
+	block, ok := doc.FirstChild().(*MathBlock)
+	require.True(t, ok)
+	assert.Equal(t, strings.Join(lines, "\n"), block.Source)
 }

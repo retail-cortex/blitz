@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
 // Keys from a command (spec_027_parity PAR-MOD-04): llm.<provider>.
@@ -83,6 +84,7 @@ func (k *commandKey) get(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("api_key_command %w", err)
 	}
 	k.key, k.at = key, time.Now()
+	redact.Remember(key) // never logged or exported, as a key written in the settings isn't
 	return key, nil
 }
 

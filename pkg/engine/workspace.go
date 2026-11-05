@@ -227,6 +227,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if o.Warn == nil {
 		o.Warn = func(string) {}
 	}
+	observability.RememberSecrets(cfg) // the process's log and telemetry mask this workspace's keys too
 	w := &Workspace{cfg: cfg, locales: SetupLocale(cfg, o.Warn), warn: o.Warn}
 	w.reply = i18n.Current()
 	if w.newModel = o.NewModel; w.newModel == nil {
@@ -734,8 +735,9 @@ func SetupLocale(cfg *config.Config, warn func(string)) *i18n.Bundle {
 	return i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, warn)
 }
 
-// SecretRedactor masks configured credentials and the values of scrubbed
-// environment variables in audit entries, logs and telemetry.
+// SecretRedactor masks configured credentials, the values of scrubbed
+// environment variables and MCP servers' values in audit entries, logs and
+// telemetry (observability.SecretRedactor).
 func SecretRedactor(cfg *config.Config) *redact.Redactor { return observability.SecretRedactor(cfg) }
 
 // ModelErrorSummary makes a model error safe and readable: some SDK errors
@@ -752,8 +754,7 @@ func ModelErrorSummary(err error, cfg *config.Config) string {
 	} else if i := strings.IndexByte(msg, '\n'); i >= 0 {
 		msg = msg[:i]
 	}
-	r := redact.FromEnv(cfg.Sandbox.ScrubEnv, cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey)
-	return r.String(msg)
+	return SecretRedactor(cfg).String(msg)
 }
 
 // mcpWithSecrets is servers with {secrets:key} in their env and header

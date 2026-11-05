@@ -162,6 +162,21 @@ func TestFetchFailures(t *testing.T) {
 	assert.ErrorContains(t, err, "not a plugin")
 	_, err = Fetch(ctx, "http://bad host/x.zip")
 	assert.Error(t, err, "an address that isn't one")
+
+	// In the clear from another machine: refused, even by a redirect
+	// (N26 pkg-small-2#5).
+	for _, src := range []string{"http://example.com/x.zip", "HTTP://example.com/x.zip", "git://example.com/x.git", "http://example.com/x.git"} {
+		t.Run(src, func(t *testing.T) {
+			_, err := Fetch(ctx, src)
+			assert.ErrorContains(t, err, "https")
+			_, _, err = FetchMarketplace(ctx, src)
+			assert.ErrorContains(t, err, "https")
+		})
+	}
+	redirect := httptest.NewServer(http.RedirectHandler("http://example.invalid/x.zip", http.StatusFound))
+	defer redirect.Close()
+	_, err = Fetch(ctx, redirect.URL+"/x.zip")
+	assert.ErrorContains(t, err, "need https")
 	closed := httptest.NewServer(http.NotFoundHandler())
 	closed.Close()
 	_, err = Fetch(ctx, closed.URL+"/x.zip")
@@ -234,9 +249,11 @@ func TestHash(t *testing.T) {
 // Read reports a manifest that isn't TOML, a bad version and a bad mcp.toml.
 func TestReadErrors(t *testing.T) {
 	for name, tree := range map[string]map[string]string{
-		"plugin.toml": {Manifest: "name = = x"},
-		"version":     {Manifest: "name = \"a\"\nversion = \"1 2\"\n"},
-		"mcp.toml":    {Manifest: "name = \"a\"", MCPFile: "[[servers]\n"},
+		"plugin.toml":              {Manifest: "name = = x"},
+		"version":                  {Manifest: "name = \"a\"\nversion = \"1 2\"\n"},
+		"mcp.toml":                 {Manifest: "name = \"a\"", MCPFile: "[[servers]\n"},
+		"hooks.toml":               {Manifest: "name = \"a\"", HooksFile: "[[hooks.pre_tool]]\ncommand = \"guard\"\n"},
+		"unknown keys mcp.servers": {Manifest: "name = \"a\"", MCPFile: "[[mcp.servers]]\nname = \"x\"\ncommand = \"y\"\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Read(files(t, t.TempDir(), tree))
@@ -336,6 +353,12 @@ func TestMarketplaceSources(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(local))
 	_, _, err = store.FromMarketplace(ctx, "kit@local")
+	assert.ErrorContains(t, err, "marketplace local")
+	// The others are still looked in (N26 pkg-small-2#22).
+	_, _, err = store.FromMarketplace(ctx, "kit")
+	assert.ErrorContains(t, err, "several marketplaces offer kit")
+	_, _, err = store.FromMarketplace(ctx, "nothing")
+	assert.ErrorContains(t, err, "no marketplace that could be read offers nothing")
 	assert.ErrorContains(t, err, "marketplace local")
 }
 

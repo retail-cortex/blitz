@@ -22,6 +22,7 @@ go_library(
         "locales/en-US.json",
         "locales/es.json",
         "locales/fr-CA.json",
+        "fixed_keys.json",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/i18n",
     visibility = ["//visibility:public"],
@@ -43,10 +44,11 @@ go_test(
     ],
 )
 
-# The catalogs, which the desktop page reads too.
+# The catalogs, and the keys that keep Blitz's name, which the desktop
+# page reads too.
 copy_to_bin(
     name = "locales",
-    srcs = glob(["locales/*.json"]),
+    srcs = glob(["locales/*.json"]) + ["fixed_keys.json"],
     visibility = ["//apps/desktop/web:__pkg__"],
 )
 

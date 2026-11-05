@@ -17,6 +17,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -60,19 +61,10 @@ func ProcessLine(p api.ProcessInfo) string {
 	for _, f := range p.Flags {
 		why = append(why, i18n.T("processes.flag."+f))
 	}
-	if p.IdleMs > 0 && hasFlag(p, api.ProcessFlagLeft) {
+	if p.IdleMs > 0 && slices.Contains(p.Flags, api.ProcessFlagLeft) {
 		why[len(why)-1] += " " + i18n.T("processes.idle", "took", (time.Duration(p.IdleMs)*time.Millisecond).Round(time.Minute).String())
 	}
 	return line + " — " + strings.Join(why, ", ")
-}
-
-func hasFlag(p api.ProcessInfo, flag string) bool {
-	for _, f := range p.Flags {
-		if f == flag {
-			return true
-		}
-	}
-	return false
 }
 
 // formatBytes is n in MB, or GB from 1 GB.

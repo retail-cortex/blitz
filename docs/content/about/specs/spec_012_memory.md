@@ -8,7 +8,7 @@ weight: 12
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/memory/memory.go`; `/memory` in `apps/cli/internal/tui`, `ReloadMemory`/`AddMemory` in `pkg/engine/context.go`; `/setup`: `pkg/engine/commands/builtin/setup.md`, `pkg/engine/agents/builtin/project-setup.md`, `pkg/engine/turn.go`; `/spec` and the updates: `pkg/engine/commands/builtin/spec.md`, `pkg/engine/agents/builtin/project-spec.md`, `pkg/engine/agents/builtin/harness-update.md`, `HarnessStale` in `pkg/engine/suggestions.go` |
 | Tests | `pkg/engine/memory/memory_test.go`; `pkg/engine/suggestions_test.go` (TestSetupCommandReloadsInstructions, TestHarnessMissing, TestHarnessStale); `pkg/engine/commands_test.go` (TestSpecAndUpdateCommands); `apps/cli/internal/tui/init_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md) |

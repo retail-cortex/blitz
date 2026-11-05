@@ -136,6 +136,7 @@ go_test(
         "manifest_handlers_test.go",
         "mcp_test.go",
         "orgjobs_test.go",
+        "reasons_test.go",
         "rules_test.go",
         "scheduler_test.go",
         "secrets_test.go",
@@ -150,6 +151,11 @@ go_test(
         "workflowruns_test.go",
         "workflows_test.go",
     ],
+    # The package's source and spec_021, for TestReasonsAreListed.
+    data = glob(
+        ["*.go"],
+        exclude = ["*_test.go"],
+    ) + ["//docs:content/about/specs/spec_021_service.md"],
     embed = [":server"],
     shard_count = 8,
     deps = [
@@ -163,6 +169,7 @@ go_test(
         "//pkg/engine/lsp/lsptest",
         "//pkg/engine/memory",
         "//pkg/engine/runtime",
+        "//pkg/engine/skills",
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/enterprise",

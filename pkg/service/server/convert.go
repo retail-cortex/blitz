@@ -257,6 +257,12 @@ func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
 	return m
 }
 
+// approvalRequestMsg is an approval request as the API's, asked as id.
+func approvalRequestMsg(id string, req api.ApprovalRequest) *pb.ApprovalRequest {
+	return &pb.ApprovalRequest{RequestId: id, Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, ScopeLabel: req.KeyLabel,
+		Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk}
+}
+
 // contextBlocks is what the user added to a turn from elsewhere.
 func contextBlocks(list []*pb.ContextBlock) []api.ContextBlock {
 	var out []api.ContextBlock
@@ -270,11 +276,9 @@ func contextBlocks(list []*pb.ContextBlock) []api.ContextBlock {
 // are, with who asks.
 func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
 	if a := r.Approval; a != nil {
-		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
-			RequestId: r.ID, Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, ScopeLabel: a.KeyLabel,
-			Key: a.Key, Targets: a.Targets, MustAsk: a.MustAsk,
-			Agent: r.Agent, TaskId: r.TaskID,
-		}}}
+		m := approvalRequestMsg(r.ID, *a)
+		m.Agent, m.TaskId = r.Agent, r.TaskID
+		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: m}}
 	}
 	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect}}}
 }

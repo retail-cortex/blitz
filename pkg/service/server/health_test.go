@@ -36,7 +36,7 @@ import (
 func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	watchHealthEvery = 20 * time.Millisecond
 	t.Cleanup(func() { watchHealthEvery = 5 * time.Second })
-	c, _ := serve(t, configtest.RunTools)
+	c, s := serve(t, configtest.RunTools)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
@@ -107,8 +107,8 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	require.Len(t, got.Msg.Health.LastErrors, 1, "the judge had no answer")
 	assert.Contains(t, got.Msg.Health.LastErrors[0], "agent/writer")
 
-	healthChecks.Store(dir, context.CancelFunc(func() {}))
-	healthProgress.Store(dir, engine.HealthProgress{Item: "agent/writer", Index: 1, Total: 2})
+	s.upkeep.checks.Store(dir, context.CancelFunc(func() {}))
+	s.upkeep.progress.Store(dir, engine.HealthProgress{Item: "agent/writer", Index: 1, Total: 2})
 	got, err = c.workspaces.GetWorkspaceHealth(ctx, connect.NewRequest(&pb.GetWorkspaceHealthRequest{Workspace: dir}))
 	require.NoError(t, err)
 	assert.True(t, got.Msg.Health.Checking)
@@ -116,14 +116,14 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	assert.Equal(t, "agent/writer", got.Msg.Health.Progress.Item)
 	_, err = c.workspaces.StartHealthCheck(ctx, connect.NewRequest(&pb.StartHealthCheckRequest{Workspace: dir}))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "one at a time")
-	healthProgress.Delete(dir)
+	s.upkeep.progress.Delete(dir)
 	busy, err := c.workspaces.CheckWorkspaceHealth(ctx, connect.NewRequest(&pb.CheckWorkspaceHealthRequest{Workspace: dir}))
 	require.NoError(t, err)
 	assert.False(t, busy.Receive())
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(busy.Err()))
 	_, err = c.workspaces.StopHealthCheck(ctx, connect.NewRequest(&pb.StopHealthCheckRequest{Workspace: dir}))
 	assert.NoError(t, err)
-	healthChecks.Delete(dir)
+	s.upkeep.checks.Delete(dir)
 	_, err = c.workspaces.StopHealthCheck(ctx, connect.NewRequest(&pb.StopHealthCheckRequest{Workspace: dir}))
 	assert.NoError(t, err, "nothing to stop")
 

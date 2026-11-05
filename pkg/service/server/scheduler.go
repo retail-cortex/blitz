@@ -21,6 +21,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -189,13 +191,27 @@ func (sc *scheduler) rescan(ctx context.Context) {
 		sc.mu.Lock()
 		delete(sc.missing, dir)
 		sc.mu.Unlock()
+		// A workspace that can't be read now keeps its jobs scheduled as
+		// they were, until it can.
+		keep := func() {
+			sc.mu.Lock()
+			for k := range sc.entries {
+				if strings.HasPrefix(k, dir+"\x00") {
+					seen[k] = true
+				}
+			}
+			sc.mu.Unlock()
+		}
 		w, err := sc.s.workspace(ctx, dir)
 		if err != nil {
 			slog.Warn("workers: can't open workspace", "workspace", dir, "error", err)
+			keep()
 			continue
 		}
 		list, err := w.ListWorkers()
 		if err != nil {
+			slog.Warn("workers: can't list the workspace's jobs", "workspace", dir, "error", err)
+			keep()
 			continue
 		}
 		for _, info := range list {
@@ -233,7 +249,8 @@ func (sc *scheduler) register(dir string, info api.WorkerInfo) {
 	}
 	sched, err := workers.ParseSchedule(info.Cron, info.Timezone)
 	if err != nil {
-		delete(sc.entries, k)
+		// Kept unscheduled, so the same bad schedule is said once.
+		sc.entries[k] = entry{hash: info.Hash, cron: info.Cron, tz: info.Timezone}
 		sc.mu.Unlock()
 		slog.Warn("workers: bad schedule", "workspace", dir, "worker", info.Name, "error", err)
 		return
@@ -258,12 +275,13 @@ func (sc *scheduler) register(dir string, info api.WorkerInfo) {
 	}
 }
 
-// liveRun is a run going now: its record and its events so far, for
-// watchers.
+// liveRun is a run going now: its record and its latest events (at most
+// keptRunEvents, as a background run's), for watchers.
 type liveRun struct {
 	mu      sync.Mutex
 	run     api.Run
 	events  []*pb.TurnEvent
+	dropped int // events dropped from the front, to keep keptRunEvents
 	done    bool
 	changed chan struct{} // closed and replaced when events arrive or the run ends
 	// stop cancels the run's context with api.ErrRunStopped: the run ends,
@@ -276,6 +294,10 @@ func (lr *liveRun) add(ev *pb.TurnEvent, done bool) {
 	defer lr.mu.Unlock()
 	if ev != nil {
 		lr.events = append(lr.events, ev)
+		if over := len(lr.events) - keptRunEvents; over > 0 {
+			lr.events = slices.Delete(lr.events, 0, over)
+			lr.dropped += over
+		}
 	}
 	lr.done = lr.done || done
 	close(lr.changed)
@@ -355,7 +377,9 @@ func (sc *scheduler) acquire(dir, name string, manual bool) error {
 		case sc.slots <- struct{}{}:
 			return nil
 		default:
-			return apiError(connect.CodeResourceExhausted, "TOO_MANY_RUNS", fmt.Errorf("%d worker runs are already going", cap(sc.slots)))
+			return apiError(connect.CodeResourceExhausted, "TOO_MANY_RUNS", fmt.Errorf(
+				"%d job runs are already going, as many as workers.policy.max_concurrent allows (a change to it applies once the Blitz service restarts)", cap(sc.slots)),
+				"max_concurrent", strconv.Itoa(cap(sc.slots)))
 		}
 	}
 	k := key(dir, name)

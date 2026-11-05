@@ -30,6 +30,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/catalog"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -68,8 +69,23 @@ func itemFiles(workspace string) (map[string][]byte, error) {
 	return out, err
 }
 
+// orgItemsIn is the workspace a catalog call names, checked as every
+// workspace call's is: an absolute folder, links followed; never "", which
+// would be blitzd's own folder.
+func orgItemsIn(workspace string) (string, error) {
+	dir, err := canonical(workspace)
+	if err != nil {
+		return "", apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", err, "workspace", workspace)
+	}
+	return dir, nil
+}
+
 func (h configService) ListPublishable(_ context.Context, r req[pb.ListPublishableRequest]) (*connect.Response[pb.ListPublishableResponse], error) {
-	files, err := itemFiles(r.Msg.Workspace)
+	ws, err := orgItemsIn(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	files, err := itemFiles(ws)
 	if err != nil {
 		return nil, invalid(err)
 	}
@@ -111,7 +127,11 @@ func (h configService) PublishToOrganization(ctx context.Context, r req[pb.Publi
 	if len(r.Msg.Items) == 0 {
 		return nil, invalid(errors.New("choose what to publish"))
 	}
-	files, err := itemFiles(r.Msg.Workspace)
+	ws, err := orgItemsIn(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	files, err := itemFiles(ws)
 	if err != nil {
 		return nil, invalid(err)
 	}
@@ -144,13 +164,25 @@ func (h configService) PublishToOrganization(ctx context.Context, r req[pb.Publi
 	if len(problems) > 0 {
 		return nil, apiError(connect.CodeFailedPrecondition, "PROBLEMS", fmt.Errorf("the catalog would refuse it: %s", strings.Join(problems, "; ")))
 	}
+	// Nothing secret goes to the catalog, as nothing does when a folder is
+	// shared (EN-66): every Admin reviewing it, then every member, would
+	// have it. Read as the files are, so the lines named are theirs.
+	var found []secretscan.Finding
+	for _, p := range sortedPaths(send) {
+		found = append(found, secretscan.Scan(".agents/"+p, files[p])...)
+	}
+	if len(found) > 0 {
+		return nil, apiError(connect.CodeFailedPrecondition, "SECRETS_FOUND", fmt.Errorf(
+			"nothing was published: it holds what look like secrets: %s. Take them out, or mark a false alarm with %s on its line",
+			findings(found), secretscan.AllowMarker))
+	}
 	c, _, err := h.s.orgClient()
 	if err != nil {
 		return nil, err
 	}
 	title := strings.TrimSpace(r.Msg.Title)
 	if title == "" {
-		title = "Publish " + strings.Join(names, ", ") + " from " + path.Base(filepath.ToSlash(r.Msg.Workspace))
+		title = "Publish " + strings.Join(names, ", ") + " from " + path.Base(filepath.ToSlash(ws))
 	}
 	rv, err := c.PublishCatalog(ctx, title, send)
 	if err != nil {
@@ -197,7 +229,14 @@ func (h configService) ListOrgItems(_ context.Context, r req[pb.ListOrgItemsRequ
 		return ok(out)
 	}
 	out.Version = int32(m.Version)
-	own, _ := itemFiles(r.Msg.Workspace)
+	ws, err := orgItemsIn(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	own, err := itemFiles(ws)
+	if err != nil {
+		return nil, invalid(err)
+	}
 	for _, f := range m.Files {
 		if f.Kind == catalog.SkillFile || (r.Msg.Kind != "" && f.Kind != r.Msg.Kind) {
 			continue
@@ -217,6 +256,10 @@ func (h configService) CopyOrgItem(_ context.Context, r req[pb.CopyOrgItemReques
 	if m == nil {
 		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", errors.New("this computer has no copy of the organization's catalog yet"))
 	}
+	ws, err := orgItemsIn(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
 	var paths []string
 	for _, f := range m.Files {
 		if f.Name != r.Msg.Name || (f.Kind != r.Msg.Kind && !(r.Msg.Kind == catalog.Skill && f.Kind == catalog.SkillFile)) {
@@ -230,7 +273,7 @@ func (h configService) CopyOrgItem(_ context.Context, r req[pb.CopyOrgItemReques
 	if len(paths) == 0 {
 		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", fmt.Errorf("the organization's catalog has no %s %q for you", r.Msg.Kind, r.Msg.Name))
 	}
-	root := agentsDir(r.Msg.Workspace)
+	root := agentsDir(ws)
 	for _, p := range paths {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil {
 			return nil, apiError(connect.CodeAlreadyExists, "ALREADY_EXISTS", fmt.Errorf("the workspace has its own %s already", p))

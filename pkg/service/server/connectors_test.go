@@ -64,7 +64,6 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 	pg := list.Msg.Kinds[1]
 	assert.Equal(t, "password", pg.Fields[4].Key)
 	assert.Equal(t, "secret", pg.Fields[4].Type)
-	assert.Equal(t, "$1", pg.Placeholders)
 	assert.NotEmpty(t, pg.Tools[0].About["en"])
 
 	file := filepath.Join(t.TempDir(), "kitchen.db")

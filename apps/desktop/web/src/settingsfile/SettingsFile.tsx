@@ -132,6 +132,7 @@ export function SettingsFile({ scopes, initial = "" }: { scopes: { dir: string; 
       const res = await config.saveConfigFile({ workspace, text });
       setSaved(text);
       if (res.change?.modelError) snack(t("desktop.keys.model_error", { reason: res.change.modelError }), { error: true });
+      else if (res.change?.problems?.length) snack(t("desktop.file.saved_problems", { problems: res.change.problems.join("; ") }), { error: true });
       else snack(t("desktop.file.saved"));
       configChanged({ dir: workspace });
     } catch (e) {

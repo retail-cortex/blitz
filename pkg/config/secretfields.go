@@ -28,8 +28,15 @@ import (
 // with it. Maps and slices are copied before they're written, so a shallow
 // copy of a Config can be masked without changing the original.
 func (c *Config) EachSecret(f func(string) string) {
+	c.EachNamedSecret(func(_, v string) string { return f(v) })
+}
+
+// EachNamedSecret is EachSecret, with each value's name: "" for a single
+// credential (an API key), else its environment variable's or header's
+// name, for callers that treat a map's values by what they're called.
+func (c *Config) EachNamedSecret(f func(name, value string) string) {
 	for _, p := range c.credentials() {
-		*p = f(*p)
+		*p = f("", *p)
 	}
 	eachValue := func(m map[string]string) map[string]string {
 		if len(m) == 0 {
@@ -37,7 +44,7 @@ func (c *Config) EachSecret(f func(string) string) {
 		}
 		out := maps.Clone(m)
 		for k, v := range out {
-			out[k] = f(v)
+			out[k] = f(k, v)
 		}
 		return out
 	}

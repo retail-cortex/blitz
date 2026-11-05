@@ -42,7 +42,7 @@ func TestMCPCommand(t *testing.T) {
 		{args: []string{"mcp", "disable", "fs"}, says: []string{`Disabled MCP server "fs"`}},
 		{args: []string{"mcp", "list"}, says: []string{"fs (disabled)\tnpx @acme/fs", "docs\thttps://mcp.example/docs"}},
 		{args: []string{"mcp", "get", "docs"}, says: []string{"url:      https://mcp.example/docs", "header:   Authorization: Be****23"}},
-		{args: []string{"mcp", "get", "fs"}, says: []string{"enabled:  false", "env:      ROOT=/t****rk"}},
+		{args: []string{"mcp", "get", "fs"}, says: []string{"enabled:  false", "env:      ROOT=****"}},
 		{args: []string{"mcp", "enable", "fs"}, says: []string{`Enabled MCP server "fs"`}},
 		{args: []string{"mcp", "remove", "docs"}, says: []string{`Removed MCP server "docs"`}},
 		{args: []string{"mcp", "remove", "docs"}, err: "no MCP server"},
@@ -195,4 +195,20 @@ func TestMCPCommandWorkspaceHere(t *testing.T) {
 	out, err = runCLI(t, "mcp", "list")
 	require.NoError(t, err)
 	assert.NotContains(t, out, "figma", "the global settings are unchanged")
+}
+
+// mask hides a short value whole, and shows the ends of a long one only.
+func TestMask(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                     "****",
+		"1234":                 "****",
+		"abc123":               "****",
+		"elevenchars":          "****",
+		"twelve-chars":         "tw****rs",
+		"Bearer sk-0123456789": "Be****89",
+	} {
+		t.Run(in, func(t *testing.T) {
+			assert.Equal(t, want, mask(in))
+		})
+	}
 }

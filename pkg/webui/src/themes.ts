@@ -17,7 +17,9 @@
 // The colour themes, for light and for dark (Settings › Appearance, as
 // VS Code's preferred light and dark themes): Blitz's own (m3.css, with
 // its glass), and the others themes.css gives (solid). Their names are
-// the themes' own, not translated.
+// the themes' own, not translated. The desktop host keeps the IDs too
+// (pkg/pagehost/prefs.go lightThemes, darkThemes; a test there holds them
+// equal), and resets any other to "blitz".
 
 /** The themes for light. */
 export const lightThemes = [

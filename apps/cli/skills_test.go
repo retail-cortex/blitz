@@ -35,7 +35,13 @@ import (
 // skillsCLI runs `blitz skills …` against store, with input on stdin.
 func skillsCLI(t *testing.T, store *skillreg.Store, input string, args ...string) (string, error) {
 	t.Helper()
-	cmd := newSkillsCommandWith(store)
+	return skillsCLIIn(t, store, &globalFlags{}, input, args...)
+}
+
+// skillsCLIIn runs `blitz skills …` as skillsCLI does, with g's flags.
+func skillsCLIIn(t *testing.T, store *skillreg.Store, g *globalFlags, input string, args ...string) (string, error) {
+	t.Helper()
+	cmd := newSkillsCommandWith(store, g)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -92,6 +98,15 @@ func TestSkillsCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "Installed lit-review 1.0.0 from castor")
 	assert.FileExists(t, filepath.Join(project, ".agents", "skills", "lit-review", "SKILL.md"))
+	// --dir names the workspace, wherever blitz runs (N26 cli-2#11).
+	other := t.TempDir()
+	out, err = skillsCLIIn(t, store, &globalFlags{dir: other}, "", "install", "castor/lit-review", "--project")
+	require.NoError(t, err, out)
+	assert.FileExists(t, filepath.Join(other, ".agents", "skills", "lit-review", "SKILL.md"))
+	out, err = skillsCLIIn(t, store, &globalFlags{dir: other}, "", "uninstall", "lit-review")
+	require.NoError(t, err, out)
+	assert.NoDirExists(t, filepath.Join(other, ".agents", "skills", "lit-review"))
+	assert.FileExists(t, filepath.Join(project, ".agents", "skills", "lit-review", "SKILL.md"), "the current folder's is left")
 	_, err = skillsCLI(t, store, "", "install", "ghost")
 	assert.ErrorContains(t, err, "no registry offers")
 
@@ -131,5 +146,5 @@ func TestSkillsCommandBrokenStore(t *testing.T) {
 	}
 	_, err := readToken(strings.NewReader("  tok \n"))
 	assert.NoError(t, err)
-	assert.NotNil(t, newSkillsCommand())
+	assert.NotNil(t, newSkillsCommand(&globalFlags{}))
 }

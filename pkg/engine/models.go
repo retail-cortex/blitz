@@ -26,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/observability"
 )
 
 // Agents, models, pins, model settings and settings. Operations return data
@@ -291,6 +292,7 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 // a key set in the settings takes effect without reopening the workspace.
 // It returns why the model still can't be built, if it can't.
 func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) error {
+	observability.RememberSecrets(cfg) // a key set in Settings is masked in the process's log and telemetry too
 	w.setSettings(func(c *config.Config) {
 		c.LLM = cfg.LLM
 		c.Blitz.DefaultModel = cfg.Blitz.DefaultModel

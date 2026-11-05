@@ -153,30 +153,48 @@ func (h workspaceService) RunEval(ctx context.Context, r req[pb.RunEvalRequest],
 	return l.follow(ctx, true, evalSender(stream))
 }
 
-// evalSender sends a run's events on stream: started, a result, finished.
-func evalSender(stream *connect.ServerStream[pb.RunEvalResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
-	return func(run api.EvalRun, x *api.EvalResult, finished bool) error {
+// evalEvents sends a run's events through send, each made by one of
+// started, result and finished (RunEval's and WatchEvalRun's streams have
+// the same three events, in messages of their own).
+func evalEvents[M any](send func(*M) error, started, finished func(*pb.EvalRun) *M, result func(*pb.EvalResult) *M) func(api.EvalRun, *api.EvalResult, bool) error {
+	return func(run api.EvalRun, x *api.EvalResult, done bool) error {
 		switch {
-		case finished:
-			return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Finished{Finished: evalRunMsg(run)}})
+		case done:
+			return send(finished(evalRunMsg(run)))
 		case x != nil:
-			return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Result{Result: evalResultMsg(*x)}})
+			return send(result(evalResultMsg(*x)))
 		}
-		return stream.Send(&pb.RunEvalResponse{Event: &pb.RunEvalResponse_Started{Started: evalRunMsg(run)}})
+		return send(started(evalRunMsg(run)))
 	}
+}
+
+// evalSender sends a run's events on RunEval's stream: started, a result,
+// finished.
+func evalSender(stream *connect.ServerStream[pb.RunEvalResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
+	return evalEvents(stream.Send,
+		func(r *pb.EvalRun) *pb.RunEvalResponse {
+			return &pb.RunEvalResponse{Event: &pb.RunEvalResponse_Started{Started: r}}
+		},
+		func(r *pb.EvalRun) *pb.RunEvalResponse {
+			return &pb.RunEvalResponse{Event: &pb.RunEvalResponse_Finished{Finished: r}}
+		},
+		func(x *pb.EvalResult) *pb.RunEvalResponse {
+			return &pb.RunEvalResponse{Event: &pb.RunEvalResponse_Result{Result: x}}
+		})
 }
 
 // evalWatcher is evalSender for WatchEvalRun's stream.
 func evalWatcher(stream *connect.ServerStream[pb.WatchEvalRunResponse]) func(api.EvalRun, *api.EvalResult, bool) error {
-	return func(run api.EvalRun, x *api.EvalResult, finished bool) error {
-		switch {
-		case finished:
-			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Finished{Finished: evalRunMsg(run)}})
-		case x != nil:
-			return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Result{Result: evalResultMsg(*x)}})
-		}
-		return stream.Send(&pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Started{Started: evalRunMsg(run)}})
-	}
+	return evalEvents(stream.Send,
+		func(r *pb.EvalRun) *pb.WatchEvalRunResponse {
+			return &pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Started{Started: r}}
+		},
+		func(r *pb.EvalRun) *pb.WatchEvalRunResponse {
+			return &pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Finished{Finished: r}}
+		},
+		func(x *pb.EvalResult) *pb.WatchEvalRunResponse {
+			return &pb.WatchEvalRunResponse{Event: &pb.WatchEvalRunResponse_Result{Result: x}}
+		})
 }
 
 // WatchEvalRun follows a run going on, or sends a recorded one as

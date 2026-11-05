@@ -317,6 +317,26 @@ func TestRunREPLUsesCurrentSession(t *testing.T) {
 	assert.NoError(t, RunREPL(context.Background(), app), "EOF should end REPL without error, got")
 }
 
+// blitz -i "prompt": the prompt is sent first, and the session stays open
+// for what is typed next (N26 cli-2#4).
+func TestRunREPLSendsTheFirstPrompt(t *testing.T) {
+	app := newTestApp(t, nil)
+	var out bytes.Buffer
+	app.FirstPrompt = "first"
+	app.Input = NewLineReader(strings.NewReader("second\n/exit\n"), &out)
+	require.NoError(t, RunREPL(context.Background(), app))
+	active := local(app).Storage().Active()
+	require.NotNil(t, active)
+	var users []string
+	for _, m := range active.Messages {
+		if m.Role == "user" {
+			users = append(users, m.Content)
+		}
+	}
+	assert.Equal(t, []string{"first", "second"}, users)
+	assert.Empty(t, app.FirstPrompt, "sent once")
+}
+
 func TestLineReaderCancelDoesNotLoseInput(t *testing.T) {
 	pr, pw := io.Pipe()
 	var out bytes.Buffer
