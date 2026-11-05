@@ -18,7 +18,7 @@
 // holds it, from and to the API. Lists are typed as text: tools and
 // domains comma-separated, commands one a line.
 
-import type { GuardrailFile } from "../gen/blitz/v1/workspace_pb";
+import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_pb";
 
 /** Where a guardrail checks. */
 export type GuardStage = "input" | "tool_result" | "output" | "action";
@@ -52,13 +52,6 @@ export interface GuardrailForm {
 
 /** A new custom guardrail's form: an action check that blocks. */
 export const emptyGuardrailForm: GuardrailForm = { name: "", builtin: "", stage: "action", action: "block", agents: [], tools: "", description: "", pii: false, judge: false, maxCostUsd: "", maxTurns: "", maxFilesChanged: "", domains: "", commands: "", text: "", off: false };
-
-/** Each built-in's stage and default action. */
-export const builtinDefaults: Record<BuiltinId, { stage: GuardStage; action: string; actions: string[] }> = {
-  prompt_injection: { stage: "tool_result", action: "redact", actions: ["redact", "warn", "block"] },
-  secrets: { stage: "output", action: "redact", actions: ["redact", "warn", "block"] },
-  limits: { stage: "action", action: "block", actions: ["block"] },
-};
 
 const num = (n: number) => (n ? String(n) : "");
 
@@ -96,9 +89,15 @@ export const defaultsEntry = "defaults";
 /** The limits guardrail's ceilings without a file (gates.DefaultMaxTurns, DefaultMaxCostUSD). */
 export const defaultLimits = { maxTurns: "200", maxCostUsd: "10" };
 
-/** A built-in's form with its defaults (on): the injection judge on; limits' defaults and ceilings. */
-export function formForBuiltin(id: BuiltinId): GuardrailForm {
-  const base = { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action };
+/**
+ * A built-in's form with its defaults (on), its stage and action as the
+ * service lists them (ListGuardrails' BuiltinGuardrail): the injection
+ * judge on; limits' defaults and ceilings.
+ */
+export function formForBuiltin(b: Pick<BuiltinGuardrail, "id" | "stage" | "defaultAction">): GuardrailForm {
+  const id = b.id as BuiltinId;
+  const stage = (guardStages as string[]).includes(b.stage) ? (b.stage as GuardStage) : "action";
+  const base = { ...emptyGuardrailForm, name: id, builtin: id, stage, action: b.defaultAction };
   if (id === "prompt_injection") return { ...base, judge: true };
   if (id === "limits") return { ...base, commands: defaultsEntry, ...defaultLimits };
   return base;

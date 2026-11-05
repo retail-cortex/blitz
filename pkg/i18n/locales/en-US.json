@@ -2987,7 +2987,7 @@
     "desktop.guardrails.domains_hint": "Comma-separated; a domain allows its subdomains. Empty: every domain.",
     "desktop.guardrails.domains_placeholder": "example.com, docs.dev",
     "desktop.guardrails.commands": "Commands not to run",
-    "desktop.guardrails.commands_hint": "One a line, * for anything, matched against the whole line and each command in it. \"defaults\" keeps Blitz's own list (force pushes, deleting / or your home folder, formatting a disk), updated with Blitz; add your own below it. Empty: none.",
+    "desktop.guardrails.commands_hint": "One a line, * for anything, matched against the whole line and each command in it. \"defaults\" keeps Blitz's own list (force pushes, deleting / or your home folder, formatting a disk), updated with Blitz; add your own below it. Empty: Blitz's own list (to refuse none, write commands: [] in the file).",
     "desktop.guardrails.commands_placeholder": "defaults\ndropdb *",
     "desktop.guardrails.tools": "Tools",
     "desktop.guardrails.tools_hint_results": "Comma-separated. Empty: those that bring in outside content (web, browser, MCP servers).",

@@ -41,7 +41,7 @@ import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_
 import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
-import { builtinDefaults, emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, limitsProblems, noLimit, sameGuardrailForm, defaultLimits, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
+import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, limitsProblems, noLimit, sameGuardrailForm, defaultLimits, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
@@ -123,7 +123,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   // in its file, keeping its settings; on again removes it.
   const toggle = async (b: BuiltinGuardrail, on: boolean) => {
     try {
-      const f = b.file ? formFromGuardrail(b.file) : formForBuiltin(b.id as BuiltinId);
+      const f = b.file ? formFromGuardrail(b.file) : formForBuiltin(b);
       await workspaces.saveGuardrail({ workspace, guardrail: specFromForm({ ...f, off: !on }) });
       snack(t(on ? "desktop.guardrails.switched_on" : "desktop.guardrails.switched_off", { name: t(`desktop.guardrails.builtin.${b.id}`) }));
       await refresh();
@@ -175,8 +175,9 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
 
   const b = form.builtin;
   const bad = limitsProblems(form);
-  const stage = b ? builtinDefaults[b].stage : form.stage;
-  const actions = b ? builtinDefaults[b].actions : ["block", "warn"];
+  // A built-in's stage and actions are the service's (BuiltinGuardrail).
+  const stage = b ? (builtinOpen?.stage ?? form.stage) : form.stage;
+  const actions = b ? (builtinOpen?.actions ?? []) : ["block", "warn"];
   const title = b ? t(`desktop.guardrails.builtin.${b}`) : form.name || t("desktop.guardrails.new");
   return (
     <div className={`slide-pane guardrails-pane ${open ? "is-open" : ""}`}>
@@ -206,7 +207,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               const on = !g.file?.off;
               return (
                 <div key={g.id} className="list-item guardrail-row">
-                  <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))}>
+                  <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(g))}>
                     <Icon path={builtinIcons[id]} className={on ? undefined : "muted"} />
                     <span className="lines spacer">
                       <span className="ellipsis">
@@ -216,7 +217,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
                     </span>
                   </button>
                   <span className="trailing">
-                    <IconButton icon={mdiTune} label={t("desktop.guardrails.settings", { name: t(`desktop.guardrails.builtin.${id}`) })} small onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))} />
+                    <IconButton icon={mdiTune} label={t("desktop.guardrails.settings", { name: t(`desktop.guardrails.builtin.${id}`) })} small onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(g))} />
                     <Switch label={t(`desktop.guardrails.builtin.${id}`)} checked={on} disabled={!!g.file && !g.file.editable} onChange={(v) => void toggle(g, v)} />
                   </span>
                 </div>

@@ -47,6 +47,7 @@ import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type Ev
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
+import { useEvalFollow } from "./evalFollow";
 import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, money, resultsCost, seconds, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
@@ -105,13 +106,28 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   // The agents with a file (the workspace's, the user's): built-in ones get no drafted evals.
   const [ownAgents, setOwnAgents] = useState<string[]>([]);
   const [runs, setRuns] = useState<EvalRun[]>([]);
-  const [live, setLive] = useState<{ run: EvalRun | null; results: EvalResult[]; total: number } | null>(null);
   const [shown, setShown] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   // The draft dialog: for which agent, and whether its cases go into the open eval.
   const [drafting, setDrafting] = useState<{ agent: string; append: boolean } | null>(null);
-  // The stream following the run shown; aborting it only stops following: the run goes on in the service.
-  const following = useRef<AbortController | null>(null);
+  // The run shown, followed (evalFollow): leaving stops only the following; the run goes on in the service.
+  const followed = useRef("");
+  const {
+    live,
+    setLive,
+    follow: followRun,
+    stopFollowing,
+    running,
+  } = useEvalFollow({
+    onFinished: (run) => {
+      if (run.status !== "stopped") snack(t(`desktop.evals.run_${run.status === "passed" ? "passed" : "failed"}`, { name: followed.current, summary: summary(run) }), { error: run.status !== "passed" });
+    },
+    onError: (e) => snack(message(e), { error: true }),
+    onDone: () => {
+      void loadRuns(followed.current);
+      void refresh();
+    },
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -137,7 +153,6 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
       () => {},
     );
   }, [workspace, refresh]);
-  useEffect(() => () => following.current?.abort(), []);
   // Opened for an agent (from its form): its eval, or a draft of one.
   useEffect(() => {
     if (!forAgent || !loaded) return;
@@ -151,7 +166,6 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const file = open ? list.find((e) => e.name === open) : undefined;
   const isNew = open === "";
   const dirty = open !== null && !sameEvalForm(form, base);
-  const running = !!live && !live.run?.status.match(/passed|failed|stopped/);
   // A run going on doesn't hold Studio open: it goes on in the service (EV-09a).
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
@@ -174,7 +188,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
       setTab(to);
       setProblems([]);
       setExpanded(new Set(name === "" ? f.cases.map((c) => c.key) : []));
-      following.current?.abort();
+      stopFollowing();
       setLive(null);
       setShown("");
       setRuns([]);
@@ -183,7 +197,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const close = () => {
     leave(() => {
       if (running) snack(t("desktop.evals.goes_on", { name: open ?? "" }));
-      following.current?.abort();
+      stopFollowing();
       setLive(null);
       setOpen(null);
       void refresh();
@@ -237,32 +251,10 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
     }
   };
 
-  // Follows a run into live: started (with its results so far), each
-  // result as it's scored, then finished. Leaving stops only the following.
-  const follow = async (name: string, total: number, events: (signal: AbortSignal) => AsyncIterable<RunEvalResponse | WatchEvalRunResponse>) => {
-    following.current?.abort();
-    const ctl = new AbortController();
-    following.current = ctl;
-    setLive({ run: null, results: [], total });
-    try {
-      for await (const res of events(ctl.signal)) {
-        const ev = res.event;
-        if (ev.case === "started") setLive((l) => l && { ...l, run: { ...ev.value, results: [] }, results: ev.value.results });
-        else if (ev.case === "result") setLive((l) => l && { ...l, results: [...l.results, ev.value] });
-        else if (ev.case === "finished") {
-          setLive((l) => l && { ...l, run: ev.value, results: ev.value.results });
-          if (ev.value.status !== "stopped") snack(t(`desktop.evals.run_${ev.value.status === "passed" ? "passed" : "failed"}`, { name, summary: summary(ev.value) }), { error: ev.value.status !== "passed" });
-        }
-      }
-    } catch (e) {
-      if (ctl.signal.aborted) return; // left: the run goes on
-      setLive(null);
-      snack(message(e), { error: true });
-    } finally {
-      if (following.current === ctl) following.current = null;
-    }
-    void loadRuns(name);
-    void refresh();
+  // Follows a run of the eval name into live.
+  const follow = (name: string, total: number, events: (signal: AbortSignal) => AsyncIterable<RunEvalResponse | WatchEvalRunResponse>) => {
+    followed.current = name;
+    return followRun(total, events);
   };
   // Runs the eval as saved, in the background: it goes on if Studio is left.
   const run = (name: string, cases: number, agentCount: number) => {

@@ -51,7 +51,7 @@ export interface EvalForm {
   cases: CaseForm[];
 }
 
-/** A near case's threshold when it has none. */
+/** A near case's threshold when it has none (evals.DefaultThreshold, which the service applies to a case saved without one). */
 export const defaultThreshold = 0.8;
 
 let keys = 0;

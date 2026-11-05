@@ -2987,7 +2987,7 @@
     "desktop.guardrails.domains_hint": "Séparés par des virgules ; un domaine permet ses sous-domaines. Vide : tous.",
     "desktop.guardrails.domains_placeholder": "example.com, docs.dev",
     "desktop.guardrails.commands": "Commandes à ne pas exécuter",
-    "desktop.guardrails.commands_hint": "Un par ligne, * pour n'importe quoi, comparé à la ligne entière et à chaque commande qu'elle contient. « defaults » garde la liste de Blitz (push forcés, suppression de / ou de votre dossier personnel, formatage d'un disque), mise à jour avec Blitz; ajoutez les vôtres en dessous. Vide : aucune.",
+    "desktop.guardrails.commands_hint": "Un par ligne, * pour n'importe quoi, comparé à la ligne entière et à chaque commande qu'elle contient. « defaults » garde la liste de Blitz (push forcés, suppression de / ou de votre dossier personnel, formatage d'un disque), mise à jour avec Blitz; ajoutez les vôtres en dessous. Vide : la liste de Blitz (pour n'en refuser aucune, écrivez commands: [] dans le fichier).",
     "desktop.guardrails.commands_placeholder": "defaults\ndropdb *",
     "desktop.guardrails.tools": "Outils",
     "desktop.guardrails.tools_hint_results": "Séparés par des virgules. Vide : ceux qui apportent du contenu externe (Web, navigateur, serveurs MCP).",

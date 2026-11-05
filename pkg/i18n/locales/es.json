@@ -2987,7 +2987,7 @@
     "desktop.guardrails.domains_hint": "Separados por comas; un dominio permite sus subdominios. Vacío: todos.",
     "desktop.guardrails.domains_placeholder": "example.com, docs.dev",
     "desktop.guardrails.commands": "Comandos que no ejecutar",
-    "desktop.guardrails.commands_hint": "Uno por línea, * para cualquier cosa, comparado con la línea entera y con cada comando en ella. \"defaults\" mantiene la lista propia de Blitz (push forzados, borrar / o su carpeta personal, formatear un disco), actualizada con Blitz; añada los suyos debajo. Vacío: ninguno.",
+    "desktop.guardrails.commands_hint": "Uno por línea, * para cualquier cosa, comparado con la línea entera y con cada comando en ella. \"defaults\" mantiene la lista propia de Blitz (push forzados, borrar / o su carpeta personal, formatear un disco), actualizada con Blitz; añada los suyos debajo. Vacío: la lista propia de Blitz (para no rechazar ninguno, escriba commands: [] en el archivo).",
     "desktop.guardrails.commands_placeholder": "defaults\ndropdb *",
     "desktop.guardrails.tools": "Herramientas",
     "desktop.guardrails.tools_hint_results": "Separadas por comas. Vacío: las que traen contenido externo (web, navegador, servidores MCP).",

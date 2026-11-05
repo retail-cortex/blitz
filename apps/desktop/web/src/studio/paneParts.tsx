@@ -28,10 +28,11 @@ import { FormStamps } from "./formStamps";
 
 /**
  * Asks before leaving a form with unsaved changes (dirty): leave(go)
- * runs go at once, or once the person agrees to discard them;
+ * runs go at once, or once the person agrees to discard them (after
+ * onDiscard, which puts the form back, for a pane that needs it);
  * discard(name) is the dialog, drawn where the pane draws its dialogs.
  */
-export function useDiscardGuard(dirty: boolean): { leave: (go: () => void) => void; discard: (name: string) => ReactNode } {
+export function useDiscardGuard(dirty: boolean, onDiscard?: () => void): { leave: (go: () => void) => void; discard: (name: string) => ReactNode } {
   const [pending, setPending] = useState<(() => void) | null>(null);
   const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
   const discard = (name: string) =>
@@ -43,6 +44,7 @@ export function useDiscardGuard(dirty: boolean): { leave: (go: () => void) => vo
         onConfirm={() => {
           const go = pending;
           setPending(null);
+          onDiscard?.();
           go();
         }}
         onClose={() => setPending(null)}

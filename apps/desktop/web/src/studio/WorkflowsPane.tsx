@@ -75,6 +75,7 @@ import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRun
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
 import { ComposeDialog } from "./ComposeDialog";
+import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
 import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "@blitz/webui";
@@ -282,7 +283,6 @@ export function WorkflowsPane({
   const [selectedLink, setSelectedLink] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [choosing, setChoosing] = useState(false);
   // The composer making a workflow from a conversation (spec_045_composer).
@@ -335,7 +335,8 @@ export function WorkflowsPane({
   useEffect(() => onCanvas?.(open !== null), [open, onCanvas]);
   useEffect(() => () => onCanvas?.(false), [onCanvas]);
 
-  const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
+  // Discarding puts the canvas back to the workflow as saved before going on.
+  const { leave, discard } = useDiscardGuard(dirty, () => setForm(base));
   const show = (name: string, f: WorkflowForm, saved: boolean) =>
     leave(() => {
       setForm(f);
@@ -1201,53 +1202,12 @@ export function WorkflowsPane({
           </Dialog>,
           document.body,
         )}
-      {deleting &&
-        createPortal(
-          <Dialog
-            title={t("desktop.flows.delete_title", { name: title })}
-            icon={mdiDeleteOutline}
-            onClose={() => setDeleting(false)}
-            footer={
-              <>
-                <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {t("desktop.rules.delete")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
-          </Dialog>,
-          document.body,
-        )}
-      {pending &&
-        createPortal(
-          <Dialog
-            title={t("desktop.agents.discard_title")}
-            icon={mdiUndoVariant}
-            onClose={() => setPending(null)}
-            footer={
-              <>
-                <Button onClick={() => setPending(null)}>{t("desktop.cancel")}</Button>
-                <Button
-                  variant="filled"
-                  danger
-                  onClick={() => {
-                    const go = pending;
-                    setPending(null);
-                    setForm(base);
-                    go();
-                  }}
-                >
-                  {t("desktop.agents.discard")}
-                </Button>
-              </>
-            }
-          >
-            <p>{t("desktop.agents.discard_body", { name: title })}</p>
-          </Dialog>,
-          document.body,
-        )}
+      {deleting && (
+        <ConfirmDialog title={t("desktop.flows.delete_title", { name: title })} icon={mdiDeleteOutline} confirm={t("desktop.rules.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
+          <p>{t("desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
+        </ConfirmDialog>
+      )}
+      {discard(title)}
     </div>
   );
 }

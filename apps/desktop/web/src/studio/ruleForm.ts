@@ -80,7 +80,7 @@ export function sameRuleForm(a: RuleForm, b: RuleForm): boolean {
   return JSON.stringify(specFromForm(a)) === JSON.stringify(specFromForm(b));
 }
 
-/** Whether name may name a rule file: lowercase letters, digits, single hyphens or underscores, up to 64. */
+/** Whether name may name a rule file: lowercase letters, digits, single hyphens or underscores, up to 64 (a copy of gates.ValidName, for the form to say at once; SaveRule checks it too). */
 export function validRuleName(name: string): boolean {
   return name.length <= 64 && /^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name);
 }
