@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 )
 
@@ -82,12 +83,18 @@ var errNoLanguageServers = errors.New("no language servers in this workspace")
 
 // LanguageTrusted reports whether language servers may start for the
 // editor: the project's settings are trusted, or none need trust.
-func (w *Workspace) LanguageTrusted() bool {
+func (w *Workspace) LanguageTrusted() bool { return w.projectTrusted() }
+
+// projectTrusted reports whether the workspace's project files may act
+// (language servers, a browser profile): there are none, they're trusted
+// now (trust forgotten since it opened counts as not), or this run
+// trusts them (--trust-project: loaded though not trusted when it opened).
+func (w *Workspace) projectTrusted() bool {
 	switch w.ProjectSettings().State {
-	case "", "none", "trusted":
+	case "", api.TrustNone, api.TrustTrusted:
 		return true
 	}
-	return false
+	return w.project.Loaded && w.project.State != api.TrustTrusted
 }
 
 // languages is the workspace's language servers.

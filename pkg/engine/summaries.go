@@ -126,7 +126,8 @@ func (w *Workspace) summarize(ctx context.Context, id string) (memory.Summary, e
 	if err != nil {
 		return memory.Summary{}, err
 	}
-	text, served, usage, err := runtime.Ask(ctx, llm, summaryInstruction+i18n.ReplyInstruction(w.replyIn()), in.String())
+	// Keys pasted into the chat don't go to the suggestions model.
+	text, served, usage, err := runtime.Ask(ctx, llm, summaryInstruction+i18n.ReplyInstruction(w.replyIn()), w.secretRedactor().String(in.String()))
 	if err != nil {
 		return memory.Summary{}, err
 	}

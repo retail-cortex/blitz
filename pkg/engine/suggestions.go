@@ -313,7 +313,8 @@ func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecor
 	if st, err := w.GitStatus(ctx); err == nil && st.Repo {
 		fmt.Fprintf(&b, "\nGit: branch %s, %d uncommitted files.\n", st.Branch, st.Changed)
 	}
-	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.replyIn()), b.String())
+	// Keys pasted into a chat don't go to the suggestions model.
+	text, served, usage, err := runtime.Ask(ctx, llm, ideasInstruction+i18n.ReplyInstruction(w.replyIn()), w.secretRedactor().String(b.String()))
 	if err != nil {
 		return nil, err
 	}

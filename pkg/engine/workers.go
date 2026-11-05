@@ -416,12 +416,6 @@ const unattendedPreamble = "You are running unattended as the scheduled worker %
 // workerTitlePrefix starts a worker run's session title.
 const workerTitlePrefix = "⏰ "
 
-// RunWorker runs the named worker once, now, and records the run. The
-// worker must be enabled at its current hash. The run has a session of its
-// own (not the workspace's active one), gets exactly the worker's
-// permissions after the host policy (anything else is refused and
-// recorded), and stops at its limits. on receives the turn's events.
-// A run of the same worker still going makes this ErrRunInProgress.
 // RunOptions configure RunWorker.
 type RunOptions struct {
 	// Manual means the run started on request rather than by the schedule.
@@ -443,7 +437,8 @@ type RunOptions struct {
 // RunWorker runs the named worker once, as its schedule would: in a
 // session of its own, with only the permissions it declares and within its
 // limits, recorded in the run log. The worker must be enabled; a
-// scheduled run of one that isn't is recorded as skipped.
+// scheduled run of one that isn't is recorded as skipped. A run of the
+// same worker still going makes this ErrRunInProgress.
 func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (api.Run, error) {
 	w.RefreshAgents(ctx)
 	wk, loadErr, err := w.worker(name)

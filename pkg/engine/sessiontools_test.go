@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
@@ -60,4 +61,23 @@ func TestSessionTools(t *testing.T) {
 	assert.Equal(t, 3.0, clipped["b"].([]any)[1])
 	assert.Len(t, clipped["c"].(map[string]any)["d"], maxToolText+len("…"))
 	assert.Nil(t, clipValues(nil))
+}
+
+// A tool argument cut for the reopened chat ends on a whole character
+// (N26 engine-top-2#23).
+func TestClip(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+		n              int
+	}{
+		{name: "short", in: "héllo", n: 10, want: "héllo"},
+		{name: "ascii", in: "abcdef", n: 3, want: "abc…"},
+		{name: "inside a rune", in: "aé", n: 2, want: "a…"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clip(tc.in, tc.n)
+			assert.Equal(t, tc.want, got)
+			assert.True(t, utf8.ValidString(got))
+		})
+	}
 }

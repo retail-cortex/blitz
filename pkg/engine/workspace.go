@@ -634,9 +634,7 @@ func FindBrowser(path string) (string, error) { return browser.Find(path) }
 // project's settings wait for trust or were declined, since a project the
 // person hasn't trusted could steer the agent into their sign-ins.
 func (w *Workspace) browserProfile() tools.BrowserProfile {
-	switch w.project.State {
-	case "", "none", "trusted":
-	default:
+	if !w.projectTrusted() {
 		return tools.BrowserProfile{}
 	}
 	store := config.OpenBrowserProfiles(settingsDir(w.cfg))

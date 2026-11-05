@@ -531,6 +531,35 @@ func TestSearchModelsUnavailable(t *testing.T) {
 	assert.ErrorContains(t, err, "model unavailable")
 }
 
+// A secret across the describer's cut is redacted before the cut, so no
+// part of it is sent (N26 engine-top-2#13).
+func TestDescribeRedactsBeforeTheCut(t *testing.T) {
+	secret := "sk-abcdefghijklmnopqrstuvwxyz0123456789"
+	for _, tc := range []struct {
+		name string
+		at   int // where the secret starts
+	}{
+		{name: "across the cut", at: maxDescribeChars - 12},
+		{name: "before the cut", at: 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			llm := runtime.NewMockLLM("describer", genai.NewContentFromText(`{"summary": "s", "tags": []}`, genai.RoleModel))
+			d := describer{llm: llm, redact: SecretRedactor(config.DefaultConfig())}
+			text := strings.Repeat(" ", tc.at) + secret + strings.Repeat(" ", maxDescribeChars)
+			_, err := d.Describe(context.Background(), "a.md", text)
+			require.NoError(t, err)
+			require.Len(t, llm.Requests, 1)
+			var sent strings.Builder
+			for _, c := range llm.Requests[0].Contents {
+				for _, p := range c.Parts {
+					sent.WriteString(p.Text)
+				}
+			}
+			assert.NotContains(t, sent.String(), secret[:12], "a part of the secret was sent")
+		})
+	}
+}
+
 // Search settings apply while the workspace is open: turned off and on
 // again, given an embedding model, or one that can't be built (the status
 // says why); the same settings leave the index alone. A change to the

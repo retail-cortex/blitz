@@ -19,6 +19,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
 // maxToolText bounds each string in a saved tool call's arguments and
@@ -93,9 +94,10 @@ func clipValue(v any) any {
 	return v
 }
 
+// clip is s cut to at most n bytes on a rune boundary, marked "…" when cut.
 func clip(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return textutil.TruncateUTF8(s, n) + "…"
 }
