@@ -29,7 +29,8 @@ describe("updateLine", () => {
     { name: "downloading", s: { ...base, latest: "v0.6.7", available: true, downloading: true }, key: "desktop.update.downloading", version: "v0.6.7" },
     { name: "ready", s: { ...base, latest: "v0.6.7", available: true, ready: true }, key: "desktop.update.ready", version: "v0.6.7" },
     { name: "failed", s: { ...base, error: "offline" }, key: "desktop.update.failed" },
-    { name: "a package manager's copy", s: { ...base, can: false, reason: "Installed by apt" }, key: "desktop.update.cannot" },
+    { name: "a reason without a key", s: { ...base, can: false, reason: "Installed by apt" }, key: "desktop.update.cannot" },
+    { name: "a package manager's copy", s: { ...base, can: false, reason: "Installed by apt", reason_key: "desktop.update.managed" }, key: "desktop.update.managed" },
   ])("$name", ({ s, key, version }) => {
     const line = updateLine(s as UpdateStatus | null);
     expect(line.key).toBe(key);

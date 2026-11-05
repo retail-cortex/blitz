@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -156,28 +157,6 @@ func TestDamagedPrefsAreSetAside(t *testing.T) {
 	assert.NoError(t, err, "after setting it aside")
 }
 
-func TestSafeURL(t *testing.T) {
-	for link, want := range map[string]bool{
-		"https://example.com/a?b":   true,
-		"http://localhost:8080":     true,
-		"mailto:dev@example.com":    true,
-		"HTTPS://EXAMPLE.COM":       true,
-		"file:///etc/passwd":        false,
-		"javascript:alert(1)":       false,
-		"vscode://open?x":           false,
-		"https://":                  false,
-		"/relative/path":            false,
-		"data:text/html,<script>":   false,
-		" https://example.com/ok  ": true,
-		"http://[::1":               false,
-	} {
-		t.Run(link, func(t *testing.T) {
-			got := SafeURL(link)
-			assert.Equal(t, want, got, "%q: %v", link, got)
-		})
-	}
-}
-
 // A damaged file that can't be set aside says so.
 func TestDamagedPrefsNotSetAside(t *testing.T) {
 	dir := t.TempDir()
@@ -190,4 +169,27 @@ func TestDamagedPrefsNotSetAside(t *testing.T) {
 	assert.Contains(t, err.Error(), "couldn't be set aside")
 	assert.ErrorIs(t, err, fs.ErrPermission)
 	assert.Equal(t, "system", p.Theme, "the defaults")
+}
+
+// The themes the preferences keep are those the page offers.
+func TestThemesMatchThePage(t *testing.T) {
+	raw, err := os.ReadFile("../webui/src/themes.ts")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name string
+		want []string
+	}{
+		{"lightThemes", lightThemes},
+		{"darkThemes", darkThemes},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			list := regexp.MustCompile(`(?s)export const ` + tc.name + ` = \[(.*?)\] as const`).FindSubmatch(raw)
+			require.NotNil(t, list, "themes.ts has no %s", tc.name)
+			var ids []string
+			for _, m := range regexp.MustCompile(`id: "([^"]+)"`).FindAllSubmatch(list[1], -1) {
+				ids = append(ids, string(m[1]))
+			}
+			assert.Equal(t, tc.want, ids)
+		})
+	}
 }

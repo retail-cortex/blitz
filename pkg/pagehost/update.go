@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +39,9 @@ type UpdateStatus struct {
 	// package manager's copy, a development build).
 	Can    bool   `json:"can"`
 	Reason string `json:"reason,omitempty"`
+	// ReasonKey is Reason's message key, for the page to say it in its
+	// language; empty when there's none, and Reason is shown as it is.
+	ReasonKey string `json:"reason_key,omitempty"`
 	// Downloading, then Ready: downloaded, checked and unpacked.
 	Downloading bool   `json:"downloading"`
 	Ready       bool   `json:"ready"`
@@ -73,19 +75,25 @@ type Updater struct {
 	err         string
 }
 
+// cannot is why the app can't update itself: Text in English (Apply's
+// error), Key for the page.
+type cannot struct{ Text, Key string }
+
 // install is the app being updated, or why it can't be.
-func (u *Updater) install() (selfupdate.Install, string) {
+func (u *Updater) install() (selfupdate.Install, cannot) {
 	if u.Version == "" || u.Version == "dev" {
-		return selfupdate.Install{}, "This is a development build: it doesn't update itself."
+		return selfupdate.Install{}, cannot{Text: "This is a development build: it doesn't update itself.", Key: "desktop.update.dev_build"}
 	}
 	in, err := selfupdate.FindInstall(u.HostExe, u.GOOS)
 	switch {
+	case errors.Is(err, selfupdate.ErrNotInstalled):
+		return in, cannot{Text: err.Error(), Key: "desktop.update.not_installed"}
 	case err != nil:
-		return in, err.Error()
-	case in.Manager != "":
-		return in, fmt.Sprintf("Installed by %s: update it there.", in.Manager)
+		return in, cannot{Text: err.Error()}
+	case in.Manager != "": // the system's package manager, the one there is
+		return in, cannot{Text: fmt.Sprintf("Installed by %s: update it there.", in.Manager), Key: "desktop.update.managed"}
 	}
-	return in, ""
+	return in, cannot{}
 }
 
 // CheckEvery is how long a check's answer stands: the app asks for the
@@ -103,7 +111,7 @@ type lastCheck struct {
 // than CheckEvery old, unless force (Check now), else from the latest
 // release, asked for.
 func (u *Updater) Check(ctx context.Context, force bool) UpdateStatus {
-	_, reason := u.install()
+	_, why := u.install()
 	now := time.Now()
 	if u.Now != nil {
 		now = u.Now()
@@ -128,7 +136,7 @@ func (u *Updater) Check(ctx context.Context, force bool) UpdateStatus {
 	if err == nil {
 		u.latest = latest
 	}
-	s := u.statusLocked(reason)
+	s := u.statusLocked(why)
 	if err != nil {
 		s.Error = "finding the latest release: " + err.Error()
 	}
@@ -138,15 +146,15 @@ func (u *Updater) Check(ctx context.Context, force bool) UpdateStatus {
 // Status is where the update is, without asking for the latest release
 // (as Check last found it): for following a download.
 func (u *Updater) Status() UpdateStatus {
-	_, reason := u.install()
+	_, why := u.install()
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.statusLocked(reason)
+	return u.statusLocked(why)
 }
 
 // statusLocked is the status now (u.mu held).
-func (u *Updater) statusLocked(reason string) UpdateStatus {
-	s := UpdateStatus{Current: u.Version, Latest: u.latest, Can: reason == "", Reason: reason, Downloading: u.downloading, Error: u.err}
+func (u *Updater) statusLocked(why cannot) UpdateStatus {
+	s := UpdateStatus{Current: u.Version, Latest: u.latest, Can: why.Text == "", Reason: why.Text, ReasonKey: why.Key, Downloading: u.downloading, Error: u.err}
 	if u.latest != "" {
 		s.Available = u.Version == "dev" || selfupdate.Compare(u.latest, u.Version) > 0
 		s.Notes = "https://github.com/retail-cortex/blitz/releases/tag/" + u.latest
@@ -160,9 +168,9 @@ func (u *Updater) statusLocked(reason string) UpdateStatus {
 // update is when it's done: the page waits for it, rather than asking
 // again and again.
 func (u *Updater) Download(ctx context.Context) UpdateStatus {
-	_, reason := u.install()
+	_, why := u.install()
 	u.mu.Lock()
-	s := u.statusLocked(reason)
+	s := u.statusLocked(why)
 	if !s.Can || !s.Available || s.Downloading || s.Ready {
 		u.mu.Unlock()
 		return s
@@ -179,7 +187,7 @@ func (u *Updater) Download(ctx context.Context) UpdateStatus {
 	} else {
 		u.staged = staged
 	}
-	return u.statusLocked(reason)
+	return u.statusLocked(why)
 }
 
 // ErrNotReady is applying an update that hasn't been downloaded.
@@ -188,9 +196,9 @@ var ErrNotReady = errors.New("no update has been downloaded")
 // Apply starts the swap (a copy of the host, from outside the app), which
 // waits for the app (the host's parent) to quit; the page then quits it.
 func (u *Updater) Apply() error {
-	in, reason := u.install()
-	if reason != "" {
-		return errors.New(reason)
+	in, why := u.install()
+	if why.Text != "" {
+		return errors.New(why.Text)
 	}
 	u.mu.Lock()
 	staged := u.staged
@@ -233,7 +241,7 @@ func copyProgram(src, dst string) error {
 		os.Remove(tmp)
 		// A previous updater still running on Windows keeps its file: it's
 		// a copy of the host too, with the same flags, so it's used as it is.
-		if strings.Contains(err.Error(), "used by another process") {
+		if inUse(err) {
 			return nil
 		}
 		return err

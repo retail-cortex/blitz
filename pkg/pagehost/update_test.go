@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,16 +113,18 @@ func TestUpdaterRefusals(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name, version, exe, goos, reason string
+		key                              string // what the page says it with
 	}{
-		{"a development build", "dev", installedApp(t), "windows", "development build"},
-		{"not installed", "0.6.6", "/work/bazel-bin/apps/tray/blitz-tray", "darwin", "isn't an installed desktop app"},
-		{"a package manager's", "0.6.6", "/usr/lib/blitz-desktop/resources/app/bin/blitz-tray", "linux", "your system's package manager"},
+		{"a development build", "dev", installedApp(t), "windows", "development build", "desktop.update.dev_build"},
+		{"not installed", "0.6.6", "/work/bazel-bin/apps/tray/blitz-tray", "darwin", "isn't an installed desktop app", "desktop.update.not_installed"},
+		{"a package manager's", "0.6.6", "/usr/lib/blitz-desktop/resources/app/bin/blitz-tray", "linux", "your system's package manager", "desktop.update.managed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			u := &Updater{Version: tc.version, HostExe: tc.exe, Dir: t.TempDir(), Source: func() selfupdate.Source { return src }, GOOS: tc.goos, GOARCH: "amd64"}
 			s := u.Check(ctx, false)
 			assert.False(t, s.Can)
 			assert.Contains(t, s.Reason, tc.reason)
+			assert.Equal(t, tc.key, s.ReasonKey)
 			assert.False(t, u.Download(ctx).Ready)
 			assert.ErrorContains(t, u.Apply(), tc.reason)
 		})
@@ -168,6 +171,30 @@ func TestHostUpdateCalls(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code)
 	code, _ = call(t, h, "CheckUpdate", "yes")
 	assert.Equal(t, http.StatusInternalServerError, code)
+}
+
+// A call ends when the page stops waiting: the check is the request's,
+// not one left running for its own timeout (N26 pkg-small-2#20).
+func TestHostCallEndsWithPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	t.Cleanup(srv.Close)
+	u := &Updater{Version: "0.6.6", HostExe: installedApp(t), Dir: t.TempDir(), GOOS: "windows", GOARCH: "amd64",
+		Source: func() selfupdate.Source { return selfupdate.Source{API: srv.URL} }}
+	h := Host{Updates: u}.Handler()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan json.RawMessage)
+	go func() {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, pageserver.HostPrefix+"CheckUpdate", bytes.NewReader([]byte("[true]"))).WithContext(ctx))
+		done <- rec.Body.Bytes()
+	}()
+	cancel()
+	select {
+	case body := <-done:
+		assert.Contains(t, string(body), "context canceled")
+	case <-time.After(3 * time.Second):
+		t.Fatal("the check didn't end with the request")
+	}
 }
 
 // The app asks for the latest release when it opens, but only five days

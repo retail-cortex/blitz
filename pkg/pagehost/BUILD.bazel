@@ -25,6 +25,8 @@ go_library(
         "prefs.go",
         "sandbox.go",
         "update.go",
+        "update_other.go",
+        "update_windows.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/pagehost",
     visibility = ["//visibility:public"],
@@ -55,8 +57,11 @@ go_test(
         "cli_winpath_test.go",
         "host_test.go",
         "prefs_test.go",
+        "update_other_test.go",
         "update_test.go",
+        "update_windows_test.go",
     ],
+    data = ["//pkg/webui/src:themes.ts"],
     embed = [":pagehost"],
     deps = [
         "//pkg/activity",
@@ -66,5 +71,10 @@ go_test(
         "//pkg/selfupdate",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-    ],
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
 )

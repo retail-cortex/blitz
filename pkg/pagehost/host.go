@@ -93,12 +93,13 @@ type ServiceStatus struct {
 }
 
 // hostMethod is one of the page's calls: its arguments, decoded by the
-// method, and its result.
-type hostMethod func(args []json.RawMessage) (any, error)
+// method, and its result. ctx is the request's: it ends when the page
+// stops waiting.
+type hostMethod func(ctx context.Context, args []json.RawMessage) (any, error)
 
 func (h Host) methods() map[string]hostMethod {
 	path := func(f func(string) error) hostMethod {
-		return func(args []json.RawMessage) (any, error) {
+		return func(_ context.Context, args []json.RawMessage) (any, error) {
 			var p string
 			if err := arg(args, 0, &p); err != nil {
 				return nil, err
@@ -107,12 +108,12 @@ func (h Host) methods() map[string]hostMethod {
 		}
 	}
 	m := map[string]hostMethod{
-		"Version":       func([]json.RawMessage) (any, error) { return h.Version, nil },
-		"ServiceStatus": func([]json.RawMessage) (any, error) { return h.status(), nil },
-		"InstallService": func([]json.RawMessage) (any, error) {
+		"Version":       func(context.Context, []json.RawMessage) (any, error) { return h.Version, nil },
+		"ServiceStatus": func(context.Context, []json.RawMessage) (any, error) { return h.status(), nil },
+		"InstallService": func(context.Context, []json.RawMessage) (any, error) {
 			return nil, h.installService()
 		},
-		"SetTray": func(args []json.RawMessage) (any, error) {
+		"SetTray": func(_ context.Context, args []json.RawMessage) (any, error) {
 			var on bool
 			if err := arg(args, 0, &on); err != nil {
 				return nil, err
@@ -125,9 +126,9 @@ func (h Host) methods() map[string]hostMethod {
 			}
 			return nil, loginitem.UninstallTray()
 		},
-		"StopService":    func([]json.RawMessage) (any, error) { return nil, h.Service.Stop() },
-		"RestartService": func([]json.RawMessage) (any, error) { return nil, h.Service.Restart() },
-		"ProgramExists": func(args []json.RawMessage) (any, error) {
+		"StopService":    func(context.Context, []json.RawMessage) (any, error) { return nil, h.Service.Stop() },
+		"RestartService": func(context.Context, []json.RawMessage) (any, error) { return nil, h.Service.Restart() },
+		"ProgramExists": func(_ context.Context, args []json.RawMessage) (any, error) {
 			var p string
 			if err := arg(args, 0, &p); err != nil {
 				return nil, err
@@ -137,20 +138,20 @@ func (h Host) methods() map[string]hostMethod {
 		"OpenFolder":   path(fileview.OpenFolder),
 		"OpenDocument": path(fileview.OpenDocument),
 		"RevealPath":   path(fileview.RevealPath),
-		"FileManager":  func([]json.RawMessage) (any, error) { return fileview.FileManager(), nil },
-		"License": func(args []json.RawMessage) (any, error) {
+		"FileManager":  func(context.Context, []json.RawMessage) (any, error) { return fileview.FileManager(), nil },
+		"License": func(_ context.Context, args []json.RawMessage) (any, error) {
 			var which string
 			if err := arg(args, 0, &which); err != nil {
 				return nil, err
 			}
 			return License(which)
 		},
-		"SandboxStatus": func([]json.RawMessage) (any, error) { return SandboxStatus(context.Background()), nil },
-		"FixSandbox":    func([]json.RawMessage) (any, error) { return FixSandbox(context.Background()), nil },
+		"SandboxStatus": func(ctx context.Context, _ []json.RawMessage) (any, error) { return SandboxStatus(ctx), nil },
+		"FixSandbox":    func(ctx context.Context, _ []json.RawMessage) (any, error) { return FixSandbox(ctx), nil },
 	}
 	if h.Prefs != nil {
-		m["GetPrefs"] = func([]json.RawMessage) (any, error) { return h.Prefs.Load() }
-		m["SavePrefs"] = func(args []json.RawMessage) (any, error) {
+		m["GetPrefs"] = func(context.Context, []json.RawMessage) (any, error) { return h.Prefs.Load() }
+		m["SavePrefs"] = func(_ context.Context, args []json.RawMessage) (any, error) {
 			var p Prefs
 			if err := arg(args, 0, &p); err != nil {
 				return nil, err
@@ -160,35 +161,35 @@ func (h Host) methods() map[string]hostMethod {
 	}
 	// The blitz command: a link on PATH, or on Windows its folder on the
 	// user's PATH.
-	m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
-	m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
-	m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
+	m["CLIStatus"] = func(context.Context, []json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
+	m["InstallCLI"] = func(context.Context, []json.RawMessage) (any, error) { return InstallCLI() }
+	m["ReinstallCLI"] = func(context.Context, []json.RawMessage) (any, error) { return ReinstallCLI() }
 	if u := h.Use; u != nil {
 		// Used: the window opened or came forward. A ping goes the first
 		// time each day, in the background.
-		m["Used"] = func([]json.RawMessage) (any, error) { u.Use(activity.Desktop); return nil, nil }
+		m["Used"] = func(context.Context, []json.RawMessage) (any, error) { u.Use(activity.Desktop); return nil, nil }
 	}
 	if u := h.Updates; u != nil {
 		// CheckUpdate(force): when the app opens (force false: GitHub is
 		// asked only five days after the last check) or Check now (true).
-		m["CheckUpdate"] = func(args []json.RawMessage) (any, error) {
+		m["CheckUpdate"] = func(ctx context.Context, args []json.RawMessage) (any, error) {
 			var force bool
 			if len(args) > 0 {
 				if err := arg(args, 0, &force); err != nil {
 					return nil, err
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			return u.Check(ctx, force), nil
 		}
-		m["UpdateStatus"] = func([]json.RawMessage) (any, error) { return u.Status(), nil }
-		m["DownloadUpdate"] = func([]json.RawMessage) (any, error) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		m["UpdateStatus"] = func(context.Context, []json.RawMessage) (any, error) { return u.Status(), nil }
+		m["DownloadUpdate"] = func(ctx context.Context, _ []json.RawMessage) (any, error) {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 			defer cancel()
 			return u.Download(ctx), nil
 		}
-		m["ApplyUpdate"] = func([]json.RawMessage) (any, error) { return nil, u.Apply() }
+		m["ApplyUpdate"] = func(context.Context, []json.RawMessage) (any, error) { return nil, u.Apply() }
 	}
 	return m
 }
@@ -319,7 +320,7 @@ func (h Host) Handler() http.Handler {
 			reply(w, nil, errors.New("the arguments aren't a JSON array"))
 			return
 		}
-		res, err := m(args)
+		res, err := m(r.Context(), args)
 		reply(w, res, err)
 	})
 }
