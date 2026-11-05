@@ -257,3 +257,30 @@ func TestIsTemporary(t *testing.T) {
 		assert.Equal(t, want, isTemporary(p), p)
 	}
 }
+
+// Every git run here shares its options: fsmonitor off, filters blanked
+// unless a restore asks for them, and no optional locks or prompts.
+func TestGitArgs(t *testing.T) {
+	needGit(t)
+	empty := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(empty, nil, 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", empty) // not the user's own filters (Git LFS)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	dir := t.TempDir()
+	gitOut(t, dir, "init", "-q")
+	gitOut(t, dir, "config", "filter.x.smudge", "touch pwned")
+	for _, tc := range []struct {
+		name    string
+		filters bool
+		want    []string
+	}{
+		{"filters blanked", false, []string{"-c", "core.fsmonitor=false", "-c", "filter.x.smudge=", "status"}},
+		{"filters kept", true, []string{"-c", "core.fsmonitor=false", "status"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, gitArgs(context.Background(), dir, tc.filters, "status"))
+		})
+	}
+	assert.Contains(t, gitEnv(), "GIT_OPTIONAL_LOCKS=0")
+	assert.Contains(t, gitEnv(), "GIT_TERMINAL_PROMPT=0")
+}

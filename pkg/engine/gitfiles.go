@@ -100,12 +100,9 @@ func (w *Workspace) gitWithFilters(ctx context.Context, stdin []byte, args ...st
 func (w *Workspace) gitExec(ctx context.Context, timeout time.Duration, filters bool, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	base := []string{"-c", "core.fsmonitor=false"}
-	if !filters {
-		base = append(base, noFilters(ctx, w.Dir())...)
-	}
-	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
+	cmd := exec.CommandContext(ctx, "git", gitArgs(ctx, w.Dir(), filters, args...)...)
 	cmd.Dir = w.Dir()
+	cmd.Env = gitEnv()
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
