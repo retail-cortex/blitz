@@ -312,6 +312,12 @@ func TestRepoConfigThatRunsCommandsIsRefused(t *testing.T) {
 		{"merge driver", func(t *testing.T, dir string) {
 			gitOut(t, dir, "config", "merge.x.driver", "touch pwned")
 		}, "merge.x.driver"},
+		{"alternate refs command", func(t *testing.T, dir string) {
+			gitOut(t, dir, "config", "core.alternateRefsCommand", "touch pwned")
+		}, "core.alternaterefscommand"},
+		{"ssh signing key command", func(t *testing.T, dir string) {
+			gitOut(t, dir, "config", "gpg.ssh.defaultKeyCommand", "touch pwned")
+		}, "gpg.ssh.defaultkeycommand"},
 		{"included", func(t *testing.T, dir string) {
 			inc := filepath.Join(t.TempDir(), "inc")
 			require.NoError(t, os.WriteFile(inc, []byte("[core]\n\tsshCommand = touch pwned\n"), 0o644))

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -216,6 +217,53 @@ func TestCommit(t *testing.T) {
 	assert.Equal(t, gitOut(t, w.Dir(), "rev-parse", "--short", "HEAD"), hash)
 	assert.Equal(t, "Add the cart\n\nThe cart package, empty for now.", gitOut(t, w.Dir(), "log", "-1", "--format=%B"))
 	assert.Empty(t, gitOut(t, w.Dir(), "status", "--porcelain"))
+}
+
+// Commit signs with what the user's own git config says, never with a
+// command the repository's config (which the agent can write) names.
+func TestCommitRefusesRepoCommands(t *testing.T) {
+	needGit(t)
+	for _, tc := range []struct{ name, key, value string }{
+		{"gpg program", "gpg.program", "touch pwned; gpg"},
+		{"ssh key command", "gpg.ssh.defaultKeyCommand", "touch pwned"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := openTest(t)
+			commitRepo(t, w)
+			gitOut(t, w.Dir(), "config", "commit.gpgsign", "true")
+			gitOut(t, w.Dir(), "config", "gpg.format", "ssh")
+			gitOut(t, w.Dir(), "config", tc.key, tc.value)
+			require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "cart.go"), []byte("package cart\n"), 0o644))
+			gitOut(t, w.Dir(), "add", "cart.go")
+			_, _, err := w.Commit(context.Background(), "Add the cart")
+			var rc *RepoConfigError
+			require.ErrorAs(t, err, &rc)
+			assert.Equal(t, strings.ToLower(tc.key), rc.Key)
+			assert.NoFileExists(t, filepath.Join(w.Dir(), "pwned"), "nothing ran")
+		})
+	}
+}
+
+// A commit whose hooks run past the limit says it was stopped, and
+// which setting sets the limit, rather than "signal: killed".
+func TestCommitTimesOut(t *testing.T) {
+	needGit(t)
+	old := remoteTimeout
+	remoteTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { remoteTimeout = old })
+	w := openTest(t)
+	commitRepo(t, w)
+	hook := filepath.Join(w.Dir(), ".git", "hooks", "pre-commit")
+	require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\nsleep 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "cart.go"), []byte("package cart\n"), 0o644))
+	gitOut(t, w.Dir(), "add", "cart.go")
+	_, _, err := w.Commit(context.Background(), "Add the cart")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git commit took longer than 100ms and was stopped.")
+	assert.Contains(t, err.Error(), "[git] timeout_seconds")
+
+	w.cfg.Git.TimeoutSeconds = 30
+	assert.Equal(t, 30*time.Second, w.gitLongTimeout(), "the setting wins")
 }
 
 // A hook that refuses the commit: its message comes back, nothing is

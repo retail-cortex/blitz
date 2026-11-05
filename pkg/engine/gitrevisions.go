@@ -342,7 +342,9 @@ func (w *Workspace) RestoreFileRevision(ctx context.Context, p, rev, version str
 	if err != nil {
 		return "", err
 	}
-	data, err := w.gitDo(ctx, nil, "cat-file", "blob", full+":"+then)
+	// With the filters, so a Git LFS file comes back as its content, not
+	// its pointer.
+	data, err := w.gitWithFilters(ctx, nil, "cat-file", "--filters", full+":"+then)
 	if err != nil {
 		return "", err
 	}
@@ -409,7 +411,7 @@ func (w *Workspace) RestoreFolder(ctx context.Context, p, rev string, preview bo
 	if preview || len(files) == 0 {
 		return files, nil
 	}
-	if _, err := w.gitDo(ctx, specs.Bytes(), "restore", "--source="+full, "--worktree", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
+	if _, err := w.gitWithFilters(ctx, specs.Bytes(), "restore", "--source="+full, "--worktree", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
 		return nil, err
 	}
 	w.userEdited(cmp.Or(t.slash, "."), fmt.Sprintf("%d files restored as they were in commit %s", len(files), full[:7]))

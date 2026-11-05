@@ -441,6 +441,9 @@ type GitConfig struct {
 	// were there before, nor files git ignores or temporary ones (*.tmp,
 	// *.swp, tmp/ and the like).
 	AutoAdd bool `toml:"auto_add"`
+	// TimeoutSeconds is how long a commit (its hooks included), fetch,
+	// pull or push may take before it's stopped (0: two minutes).
+	TimeoutSeconds int `toml:"timeout_seconds"`
 }
 
 // SuggestionsConfig shapes the welcome tiles a new chat shows: tiles from

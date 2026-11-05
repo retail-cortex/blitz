@@ -193,6 +193,48 @@ func TestFileRevisions(t *testing.T) {
 	assert.ErrorIs(t, err, ErrBadPath, "a file isn't a folder")
 }
 
+// A restore writes a file as the user has it, its filters run (Git LFS's
+// smudge, here one that upper-cases): not the blob git stores. A filter
+// the repository's own config names is refused.
+func TestRestoreRunsFilters(t *testing.T) {
+	needGit(t)
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(global, []byte("[filter \"up\"]\n\tclean = tr A-Z a-z\n\tsmudge = tr a-z A-Z\n"), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	ctx := context.Background()
+	w := openTest(t)
+	dir := w.Dir()
+	gitOut(t, dir, "init", "-q", "-b", "main")
+	gitOut(t, dir, "config", "user.email", "t@t")
+	gitOut(t, dir, "config", "user.name", "t")
+	write(t, dir, ".gitattributes", "*.big filter=up\n")
+	write(t, dir, "docs/a.big", "HELLO\n")
+	gitOut(t, dir, "add", ".")
+	gitOut(t, dir, "commit", "-qm", "first")
+	first := gitOut(t, dir, "rev-parse", "HEAD")
+	require.Equal(t, "hello\n", gitOut(t, dir, "cat-file", "blob", first+":docs/a.big")+"\n", "stored cleaned")
+
+	write(t, dir, "docs/a.big", "CHANGED\n")
+	current, err := os.ReadFile(filepath.Join(dir, "docs/a.big"))
+	require.NoError(t, err)
+	_, err = w.RestoreFileRevision(ctx, "docs/a.big", first, FileVersion(current))
+	require.NoError(t, err)
+	assert.Equal(t, "HELLO\n", read(t, dir, "docs/a.big"), "smudged, as checked out")
+
+	write(t, dir, "docs/a.big", "CHANGED\n")
+	_, err = w.RestoreFolder(ctx, "docs", first, false)
+	require.NoError(t, err)
+	assert.Equal(t, "HELLO\n", read(t, dir, "docs/a.big"), "a folder's too")
+
+	gitOut(t, dir, "config", "filter.up.smudge", "touch pwned; cat")
+	write(t, dir, "docs/a.big", "CHANGED\n")
+	_, err = w.RestoreFolder(ctx, "docs", first, false)
+	var rc *RepoConfigError
+	require.ErrorAs(t, err, &rc)
+	assert.NoFileExists(t, filepath.Join(dir, "pwned"))
+}
+
 // A folder's and the workspace's history: merges' parents for the graph,
 // what each commit changed, and a restore that keeps files added since.
 func TestFolderHistory(t *testing.T) {

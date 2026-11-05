@@ -99,6 +99,8 @@
     "git.auto_added": "Añadidos al control de versiones: {files}",
     "git.ignored_elsewhere": "{path} lo ignora `{pattern}` ({source}), no una línea que añadió Blitz: edita ese archivo para cambiarlo.",
     "git.repo_config_command": "La configuración de git del propio repositorio define {key}, que ejecuta un comando. Blitz no ejecuta comandos de la configuración de un repositorio, que el agente puede escribir: usa pull o push en una terminal, o mueve el ajuste a tu configuración global de git.",
+    "git.timed_out": "git {cmd} tardó más de {limit} y se detuvo.",
+    "git.timed_out_setting": "[git] timeout_seconds fija cuánto puede durar un commit, fetch, pull o push.",
     "goal.judge_failed": "No se pudo evaluar el objetivo ({error}); el agente se detiene aquí.",
     "goal.met": "✓ Objetivo cumplido: {reason}",
     "guardrail.refused": "🛡 La barrera {name} lo detuvo: {reason}",
