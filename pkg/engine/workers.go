@@ -581,7 +581,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		_, runErr = w.run(runCtx, rec.ID, turn{Turn: api.Turn{
 			Text: text, Prompt: prompt,
 			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,
-		}, run: run.ID, limits: hints}, on, st, opts...)
+		}, run: run.ID, limits: hints, agent: wk.Agent}, on, st, opts...)
 	}
 
 	w.auditTurnEnd(rec.ID, runErr)

@@ -202,7 +202,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 	b.WriteString(skillNote(list))
 	label := fmt.Sprintf("/%s › %s", f.Name, cmp.Or(n.Title, n.ID))
 	st := flowStorage(ctx, w)
-	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}, run: run}, on, st, opts...)
+	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}, run: run, agent: agent}, on, st, opts...)
 	w.meterTurn(ctx, agent, res)
 	if err != nil {
 		return "", err
@@ -229,7 +229,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 		case r.Action == gates.Block:
 			return "", errors.New(i18n.T("flow.rule_blocked", "rule", r.Name, "reason", v.Reason))
 		case r.Action == gates.Revise:
-			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}, run: run}, on, st, opts...)
+			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}, run: run, agent: agent}, on, st, opts...)
 			w.meterTurn(ctx, agent, again)
 			if err != nil {
 				return "", err

@@ -54,6 +54,7 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 
 - **SES-30** No `--resume`/`--continue`: a new session (titled by its first prompt).
 - **SES-31** `--continue`, or `--resume` with no value (`latest`): the most recent **non-snapshot** session of this workspace; none → `ResumeError` "no saved sessions for <dir> (use --resume <id> for a session from another directory)".
+- **SES-31a** *2026-11-05 (scan N26-engine-top-2#8: `--continue` could open a job's run from 06:00 instead of yesterday's chat, while the welcome Continue tile left runs out).* `--continue` and `--resume latest` take the newest of the person's own sessions: not a snapshot, a job's run (by origin, or a legacy "⏰" title), a `--bg` or workflow background run or an eval's case. The Continue tile and session summaries use the same test (`personal`).
 - **SES-32** `--resume <id>` resumes that session in place (any workspace; the REPL warns if it belongs to another). `--resume <snapshot-name>` starts a new session copied from the snapshot ("branched"). Unknown → `ResumeError`.
 - **SES-33** The audit log context is set to the chosen session and workspace.
 

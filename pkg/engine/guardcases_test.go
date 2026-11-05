@@ -43,7 +43,7 @@ func guardWith(t *testing.T, c guardCase) guard {
 	w := openTest(t)
 	writeGuardrail(t, w, "check", c.file)
 	withJudge(t, w, c.verdicts...)
-	w.startGuardrails("s", new(api.Turn))
+	w.startGuardrails("s", new(api.Turn), "")
 	return guard{w}
 }
 
@@ -159,7 +159,7 @@ func TestGuardOutputCases(t *testing.T) {
 	t.Run("secrets, warning", func(t *testing.T) {
 		w := openTest(t)
 		writeGuardrail(t, w, "secrets", "---\nbuiltin: secrets\naction: warn\n---\n")
-		w.startGuardrails("s", new(api.Turn))
+		w.startGuardrails("s", new(api.Turn), "")
 		g := guard{w}
 		v := g.Output(context.Background(), runtime.GuardCall{Session: "s"}, "AKIAABCDEFGHIJKLMNOP", false)
 		assert.Nil(t, v.Text, "the text stays")

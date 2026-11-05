@@ -20,6 +20,7 @@ Instruction files in the project and the user's home are added to every agent's 
 ## 2. Loading
 
 - **MEM-01** Disabled by `[memory] enabled = false`.
+- **MEM-01a** *2026-11-05 (scan N26-engine-top-2#4: turning memory off dropped every gate rule, the organization's locked ones too).* `[memory] enabled = false` leaves out instruction rules as it does instruction files; gate rules (`when:` set) still judge, since they are checks rather than instructions and an organization's locked rules can't be switched off (spec_053 EN-31).
 - **MEM-02** Order: the global file (`memory.global`, default `~/.blitz/BLITZ.md`) and the global rules (`memory.global_rules`, `~/.blitz/rules/`) first; then, for each directory from the repository root down to the workspace, each name in `memory.files` (default `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md` — other agents' files too, so a repository set up for them works unchanged), then `memory.local_files` (default `CLAUDE.local.md`, `BLITZ.local.md`: personal files, warned about at startup when git tracks them), then the rule files in `memory.rule_dirs` (default `.blitz/rules`, `.agents/rules`, `.claude/rules`) — more specific files come last.
 - **MEM-03** The repository root is the nearest ancestor (up to 10 levels) containing `.git`. Without one, only the workspace directory is searched.
 - **MEM-04** Files are de-duplicated by real path (symlinks resolved) and by content (a `CLAUDE.md` copying `AGENTS.md` loads once); directories and unreadable files are skipped; empty files are dropped.

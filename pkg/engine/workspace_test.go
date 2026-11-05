@@ -233,6 +233,37 @@ func TestOpenSessionSetsAuditContextAndMapsResumeErrors(t *testing.T) {
 	assert.Equal(t, rec.ID, got.ID, "resume by id: %+v %v %v", got, resumed, err)
 }
 
+// --continue and --resume latest carry on the person's latest chat, not a
+// newer job's, background or eval run (spec_017 SES-31; N26
+// engine-top-2#8).
+func TestSelectSessionSkipsRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name, title, origin string
+	}{
+		{name: "a job's run", title: "⏰ daily 2026-11-04 06:00", origin: session.OriginWorker},
+		{name: "a job's run saved before origins", title: "⏰ daily 2026-11-04 06:00"},
+		{name: "a background run", title: "check", origin: session.OriginBackground},
+		{name: "an eval's case", title: "eval x c1", origin: session.OriginEval},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, err := session.NewStorage(t.TempDir())
+			require.NoError(t, err)
+			mine, _, err := selectSession(st, "", false, "mine", "a")
+			require.NoError(t, err)
+			require.NoError(t, st.AddMessage("user", "hello"))
+			time.Sleep(10 * time.Millisecond) // a newer update time
+			run, err := st.CreateSession(session.NewSessionID(), tc.title, "a")
+			require.NoError(t, err)
+			run.Origin = tc.origin
+			require.NoError(t, st.AddMessage("user", "the run's prompt"))
+			got, resumed, err := selectSession(st, "", true, "", "")
+			require.NoError(t, err)
+			assert.True(t, resumed)
+			assert.Equal(t, mine.ID, got.ID)
+		})
+	}
+}
+
 func TestSelectSession(t *testing.T) {
 	st, err := session.NewStorage(t.TempDir())
 	require.NoError(t, err)

@@ -184,6 +184,9 @@ type turn struct {
 	// limits say where its own MaxTurns and MaxCostUSD came from, for
 	// the error when it stops at one.
 	limits limitHints
+	// agent is the agent it runs as when that isn't the active one (a
+	// job's, a workflow step's, an eval's: the run's WithAgent).
+	agent string
 }
 
 // run is Run recording the transcript in st, which holds the session as
@@ -200,13 +203,19 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
+	// Its guardrails, rules and \skill mentions are those of the agent it
+	// runs as: a job's, a workflow step's or an eval's own, else the
+	// active one.
+	if t.agent != "" {
+		ctx = withTurnAgent(ctx, t.agent)
+	}
 	// What before-agent rules said, and guardrails that can't run, shown
 	// once the prompt is recorded.
 	var ruleNotices []api.Notice
 	// The turn's guardrails, read now; their turn and cost limits apply.
 	var lim turnLimits
 	if !t.Aside {
-		lim = w.startGuardrails(sessionID, &t.Turn)
+		lim = w.startGuardrails(sessionID, &t.Turn, t.agent)
 		defer w.guards.turns.Delete(sessionID)
 		ruleNotices = w.guardrailProblems(sessionID)
 	}
@@ -245,7 +254,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = runtime.PlanPrompt(prompt)
 	}
 	// \skill-name in the prompt: those skills' instructions go with it.
-	prompt += w.skillMentionNote(t.Text)
+	prompt += w.skillMentionNote(t.Text, w.turnAgent(ctx))
 	// A conversation's first prompt says where the workspace stands and
 	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
 	first := false

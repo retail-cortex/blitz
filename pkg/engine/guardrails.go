@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -103,8 +104,9 @@ type guarding struct {
 type turnLimits struct{ turns, cost, broken *gates.Guardrail }
 
 // startGuardrails reads the guardrails for a turn in the session, and
-// applies the limits guardrail's turn and cost limits to t.
-func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
+// applies the limits guardrail's turn and cost limits to t, as they
+// apply to agent, the turn's ("": the active agent).
+func (w *Workspace) startGuardrails(sessionID string, t *api.Turn, agent string) turnLimits {
 	st := &guardState{all: w.Guardrails()}
 	w.guards.turns.Store(sessionID, st)
 	var lim turnLimits
@@ -114,7 +116,7 @@ func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 			break
 		}
 	}
-	for _, g := range gates.Active(st.all, gates.StageAction, w.engine.ActiveAgent()) {
+	for _, g := range gates.Active(st.all, gates.StageAction, cmp.Or(agent, w.engine.ActiveAgent())) {
 		if g.Builtin != gates.BuiltinLimits {
 			continue
 		}
@@ -611,7 +613,7 @@ func (g guard) Output(ctx context.Context, c runtime.GuardCall, text string, fin
 // order: one that fails, or can't be judged, and blocks refuses the
 // prompt; one that warns says so.
 func (w *Workspace) inputGuardrails(ctx context.Context, sessionID, text string, notice func(string, bool)) error {
-	for _, gr := range gates.Active(w.guardsFor(sessionID).all, gates.StageInput, w.engine.ActiveAgent()) {
+	for _, gr := range gates.Active(w.guardsFor(sessionID).all, gates.StageInput, w.turnAgent(ctx)) {
 		verdict, err := w.judgeGuardrail(ctx, gr, text)
 		switch {
 		case err != nil && gr.Action == gates.Block:

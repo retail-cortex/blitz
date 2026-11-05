@@ -75,7 +75,7 @@ func (w *Workspace) summariesDir() string {
 // summarizable reports whether rec is a conversation worth a summary: long
 // enough, and the person's own (not a snapshot, an eval or a background run).
 func summarizable(rec *session.SessionRecord) bool {
-	return rec != nil && rec.Name == "" && rec.Origin == "" && rec.MessageCount >= minSummaryMessages
+	return rec != nil && personal(rec) && rec.MessageCount >= minSummaryMessages
 }
 
 // summarize writes session id's summary, or brings it up to date, and

@@ -61,10 +61,11 @@ func TestRuleVerdicts(t *testing.T) {
 			assert.Contains(t, notices[0], tt.notice)
 		})
 	}
-	t.Run("memory off", func(t *testing.T) {
+	t.Run("memory off: gates still judge", func(t *testing.T) {
 		w, _ := openTestWith(t, func(c *config.Config) { c.Memory.Enabled = false })
 		writeRule(t, w, "check", "---\nwhen: before_agent\n---\nPolite.")
-		assert.Nil(t, w.Rules())
+		require.Len(t, w.Rules(), 1)
+		assert.Equal(t, "check", w.Rules()[0].Name)
 	})
 }
 

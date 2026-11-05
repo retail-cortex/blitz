@@ -342,6 +342,33 @@ func TestRunWorkerWorkflowIsTheRun(t *testing.T) {
 	})
 }
 
+// A job's turn gets the guardrails of the agent it runs as, not of the
+// window's active agent (N26 engine-top-2#5).
+func TestRunWorkerGuardrailsOfItsAgent(t *testing.T) {
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	for _, tc := range []struct {
+		name, agent string
+		status      api.RunStatus
+	}{
+		{name: "the guarded agent", agent: "qa", status: api.RunLimited},
+		{name: "another agent", agent: "", status: api.RunSucceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, nil, list, list, text("done"))
+			writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nagents: [qa]\nlimits:\n  max_turns: 1\n---\n")
+			job := "---\nschedule: hourly\n"
+			if tc.agent != "" {
+				job += "agent: " + tc.agent + "\n"
+			}
+			addWorker(t, w, "look", job+"---\nLook around.\n")
+			enable(t, w, "look")
+			run, err := w.RunWorker(context.Background(), "look", RunOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, tc.status, run.Status, "run %+v", run)
+		})
+	}
+}
+
 // A worker made from a form goes in .agents/workers once it's valid, and
 // lists as new (disabled); an invalid one writes nothing.
 func TestCreateWorker(t *testing.T) {
