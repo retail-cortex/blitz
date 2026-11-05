@@ -28,6 +28,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
+
+	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // Session summaries are where each earlier session of a workspace left off
@@ -85,19 +87,7 @@ func SaveSummary(dir string, s Summary) (Summary, error) {
 	body := fmt.Sprintf("---\nsession: %s\ntitle: %s\nmessages: %d\nupdated: %s\n---\n%s\n",
 		s.Session, strconv.Quote(title), s.Messages, s.Updated.UTC().Format(time.RFC3339), s.Text)
 	s.Path = filepath.Join(dir, s.Session+".md")
-	tmp, err := os.CreateTemp(dir, ".summary-*")
-	if err != nil {
-		return Summary{}, err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(body); err != nil {
-		tmp.Close()
-		return Summary{}, err
-	}
-	if err := tmp.Close(); err != nil {
-		return Summary{}, err
-	}
-	return s, os.Rename(tmp.Name(), s.Path)
+	return s, atomicfile.Write(s.Path, []byte(body), 0o600)
 }
 
 // FindSummary is session id's summary in dir (os.ErrNotExist when none).

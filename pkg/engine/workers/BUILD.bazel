@@ -39,6 +39,7 @@ go_library(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/engine/atomicfile",
         "//pkg/engine/jsonl",
         "//pkg/jobspec",
         "@in_gopkg_yaml_v3//:yaml_v3",

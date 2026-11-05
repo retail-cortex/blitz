@@ -39,6 +39,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
+
+	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // Session transcripts can contain secrets pasted by the user or echoed by
@@ -339,25 +341,7 @@ func (s *Storage) Truncate(n int) error {
 }
 
 // replaceFile writes data to path atomically, owner-only.
-func replaceFile(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(filePerm); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
-}
+func replaceFile(path string, data []byte) error { return atomicfile.Write(path, data, filePerm) }
 
 // maxTitle is the longest session title kept, in runes.
 const maxTitle = 60
@@ -829,26 +813,7 @@ func (s *Storage) writeMeta(rec *SessionRecord) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(s.dir, "."+rec.ID+".meta-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
-	if err := os.Chmod(tmpName, filePerm); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
-	if err := os.Rename(tmpName, s.path(rec.ID, metaSuffix)); err != nil {
-		os.Remove(tmpName)
+	if err := replaceFile(s.path(rec.ID, metaSuffix), data); err != nil {
 		return err
 	}
 	if rec == s.active {

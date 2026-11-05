@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+
+	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // entry is what the store keeps for one worker.
@@ -207,17 +209,5 @@ func (s *Store) save(ws map[string]map[string]entry) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".workers-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), s.path)
+	return atomicfile.Write(s.path, append(data, '\n'), 0o600)
 }
