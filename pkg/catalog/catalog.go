@@ -28,7 +28,9 @@
 //	commands/<name>.md        a slash command
 //	mcp/<name>.toml           an MCP server: [mcp.servers]'s fields, with
 //	                          secrets as {secrets:<name>}, never values
-//	connectors/…/<name>.yaml  a connector's descriptor or connection
+//	connectors/…/<name>.yaml  a connector's descriptor or connection, its
+//	                          lock and groups in "# lock:" and "# groups:"
+//	                          comments
 package catalog
 
 import (
@@ -183,6 +185,11 @@ func Check(p string, data []byte) (Item, []string) {
 		}
 	case Connector:
 		readYAML(data)
+		// A connector says it in comments (Place): its YAML is read
+		// strictly, or by Toolbox, where a lock: key isn't allowed.
+		if lock, groups, ok := connectorMeta(data); ok {
+			m = meta{Lock: lock, Groups: groups}
+		}
 	}
 	if kind != SkillFile {
 		switch m.Lock {

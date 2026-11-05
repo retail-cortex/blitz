@@ -253,12 +253,8 @@ type Terms struct {
 
 // Terms asks the service for its terms in force.
 func (c *Client) Terms(ctx context.Context) (Terms, error) {
-	token, err := c.AccessToken(ctx)
-	if err != nil {
-		return Terms{}, err
-	}
 	var t Terms
-	if err := call(ctx, c.hc, http.MethodGet, c.url+"/api/v1/terms", token, nil, &t); err != nil {
+	if err := c.signedCall(ctx, http.MethodGet, "/api/v1/terms", nil, &t); err != nil {
 		return Terms{}, err
 	}
 	c.mu.Lock()
@@ -272,11 +268,7 @@ func (c *Client) Terms(ctx context.Context) (Terms, error) {
 
 // AcceptTerms records that the person accepted version of the terms.
 func (c *Client) AcceptTerms(ctx context.Context, version string) error {
-	token, err := c.AccessToken(ctx)
-	if err != nil {
-		return err
-	}
-	if err := call(ctx, c.hc, http.MethodPost, c.url+"/api/v1/terms/accept", token, map[string]string{"version": version}, nil); err != nil {
+	if err := c.signedCall(ctx, http.MethodPost, "/api/v1/terms/accept", map[string]string{"version": version}, nil); err != nil {
 		return err
 	}
 	c.mu.Lock()

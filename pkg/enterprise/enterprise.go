@@ -407,10 +407,18 @@ func (c *Client) AccessToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// An answer without its tokens is kept as nothing: an empty refresh
+	// token would read as signed out next time.
+	if s.AccessToken == "" || s.RefreshToken == "" {
+		return "", errors.New("the organization's service answered the renewal without its tokens")
+	}
 	// The new refresh token is kept before the access token is used: the
 	// old one ends the session if it's sent again.
 	next := *r
-	next.RefreshToken, next.Person = s.RefreshToken, s.Person
+	next.RefreshToken = s.RefreshToken
+	if s.Person.ID != "" || s.Person.Email != "" {
+		next.Person = s.Person
+	}
 	if err := c.keep(&next, s); err != nil {
 		return "", err
 	}

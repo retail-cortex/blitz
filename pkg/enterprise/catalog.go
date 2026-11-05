@@ -29,6 +29,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // CatalogFile is one of the catalog's files for this person: what it is
@@ -46,30 +48,14 @@ type CatalogFile struct {
 }
 
 // Policy is the organization's policy (spec_053_enterprise EN-35), as far
-// as Blitz applies it.
+// as Blitz applies it: how often to fetch the catalog, and the rules
+// pkg/config applies from policy.json, one type for both so neither
+// drops what the other reads.
 type Policy struct {
 	// Refresh is how often to fetch the catalog when its stream isn't up,
 	// as a Go duration ("15m" when unset).
 	Refresh string `json:"refresh"`
-	Models  struct {
-		// OwnProviders lets people use their own providers beside the
-		// organization's models.
-		OwnProviders bool `json:"own_providers"`
-	} `json:"models"`
-	Tools struct {
-		// Off are tools no agent may use.
-		Off []string `json:"off"`
-		// ShellCommands lets people run their own ! commands.
-		ShellCommands bool `json:"shell_commands"`
-	} `json:"tools"`
-	MCP struct {
-		// Own lets people add their own MCP servers.
-		Own bool `json:"own"`
-	} `json:"mcp"`
-	Builtins struct {
-		// Off are Blitz's built-in agents and skills switched off, by name.
-		Off []string `json:"off"`
-	} `json:"builtins"`
+	config.OrgPolicy
 }
 
 // Manifest is a version of the catalog for this person.
@@ -244,7 +230,9 @@ func (c *Client) fetchFiles(ctx context.Context, token, dir string, files []Cata
 			return err
 		}
 		if res.StatusCode != http.StatusOK {
-			return &Refusal{Status: res.StatusCode, Message: fmt.Sprintf("the organization's catalog file %s: %s", f.Path, res.Status)}
+			err := &Refusal{Status: res.StatusCode, Message: fmt.Sprintf("the organization's catalog file %s: %s", f.Path, res.Status)}
+			c.refused(err)
+			return err
 		}
 		if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != f.SHA256 {
 			return fmt.Errorf("%w: %s doesn't match its hash", ErrSignature, f.Path)
@@ -327,7 +315,9 @@ func (c *Client) WatchCatalog(ctx context.Context, on func()) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return &Refusal{Status: res.StatusCode}
+		err := &Refusal{Status: res.StatusCode}
+		c.refused(err)
+		return err
 	}
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {
