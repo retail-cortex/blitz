@@ -578,7 +578,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* Show advanced, in the title bar: its words, then the switch. */
 .drawer-switch { gap: 10px; margin-inline-end: 4px; cursor: pointer; white-space: nowrap; }
 @container drawer (max-width: 600px) { .drawer-switch { font-size: 0; gap: 0; } }
-:is(.worker-drawer, .agent-drawer, .inbox-drawer, .processes-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
+:is(.worker-drawer, .inbox-drawer, .processes-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
 @container drawer (max-width: 600px) {
   .settings-drawer .settings-nav { width: 48px; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
@@ -909,15 +909,11 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-where { min-width: 0; text-align: right; }
 /* In Settings: a framed split, as tall as the pane allows. */
 /* What the menus open in the drawer: the changes fill it edge to edge;
-   an agent and a worker keep the form's measure. */
+   a worker keeps the form's measure. */
 .changes-drawer > .body { padding: 0; gap: 0; border-top: 1px solid var(--md-outline-variant); overflow: hidden; }
 .changes-drawer .changes { flex: 1; min-height: 0; }
 .worker-drawer .worker { max-width: none; }
-/* An agent's form reads as the worker's: the dialog's padding and scroll,
-   its buttons in the footer. */
-.agent-drawer .agent-editor, .agent-drawer .split, .agent-drawer .split-main { display: block; overflow: visible; padding: 0; }
-.agent-drawer .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
-/* A form's buttons in its dialog's footer (the worker's, the agent's). */
+/* A form's buttons in its dialog's footer (the worker's). */
 .dialog-actions { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
 .agent-editor-user .split-side { width: 230px; }

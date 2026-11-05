@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -123,7 +125,7 @@ func TestWaitIndexed(t *testing.T) {
 	}{
 		"scanned":       {ctx: done, status: api.SearchStatus{Enabled: true, LastScan: time.Now()}, limit: time.Second},
 		"off":           {ctx: done, status: api.SearchStatus{}, limit: time.Second, want: api.ErrSearchDisabled},
-		"time up":       {ctx: done, status: api.SearchStatus{Enabled: true, Scanning: true}, limit: 0, text: "still being indexed"},
+		"time up":       {ctx: done, status: api.SearchStatus{Enabled: true, Scanning: true}, limit: 0, text: "blitz search --status shows how far it got"},
 		"an older scan": {ctx: done, status: api.SearchStatus{Enabled: true, LastScan: time.Now().Add(-time.Hour)}, since: time.Now(), limit: 0, text: "still being indexed"},
 		"cancelled":     {ctx: cancelled, status: api.SearchStatus{Enabled: true, Scanning: true}, limit: time.Minute, want: context.Canceled},
 	} {
@@ -139,6 +141,23 @@ func TestWaitIndexed(t *testing.T) {
 			}
 		})
 	}
+}
+
+// What /search status, a tool's summary and /skills show say is in the
+// interface language (N26 cli-2#17).
+func TestSearchStatusAndSummariesTranslated(t *testing.T) {
+	i18n.Setup("", "es", func(string) {})
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	var out strings.Builder
+	PrintSearchStatus(&out, api.SearchStatus{Enabled: true, Items: map[string]int{api.SearchFiles: 3, api.SearchChats: 2}})
+	assert.Contains(t, out.String(), "archivos 3")
+	assert.Contains(t, out.String(), "chats 2")
+	out.Reset()
+	PrintSearchStatus(&out, api.SearchStatus{})
+	assert.Contains(t, out.String(), "está desactivada")
+	s, ok := SummarizeToolResponse(map[string]any{"content": "abcd"})
+	assert.True(t, ok)
+	assert.Equal(t, "4 bytes leídos", s)
 }
 
 // With search off, /search and /search reindex say so.

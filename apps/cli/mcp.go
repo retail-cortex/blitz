@@ -388,9 +388,11 @@ func pairs(list []string, sep string) (map[string]string, error) {
 	return out, nil
 }
 
-// mask hides most of a value that may be a secret.
+// mask hides most of a value that may be a secret; a short one (a PIN, a
+// short token) is hidden whole, since four of its characters would give
+// most of it away (N26 cli-2#19).
 func mask(v string) string {
-	if len(v) <= 4 {
+	if len(v) < 12 {
 		return "****"
 	}
 	return v[:2] + strings.Repeat("*", 4) + v[len(v)-2:]

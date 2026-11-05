@@ -18,7 +18,7 @@ go_library(
     name = "atomicfile",
     srcs = ["atomicfile.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/atomicfile",
-    visibility = ["//visibility:public"],
+    visibility = ["//pkg/engine:__subpackages__"],
 )
 
 go_test(

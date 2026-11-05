@@ -115,5 +115,8 @@ export const readyIds = (list: Attachment[]) => list.filter((a) => a.id && !a.er
 /** Whether any image is still uploading. */
 export const uploading = (list: Attachment[]) => list.some((a) => !a.id && !a.error && !a.web);
 
+/** Whether any attachment failed to upload: the prompt waits until it's removed, so none is left out unsaid. */
+export const failedUpload = (list: Attachment[]) => list.some((a) => !!a.error);
+
 /** The web content among the attachments, for the turn's context. */
 export const webBlocks = (list: Attachment[]) => list.filter((a) => a.web).map((a) => a.web!);

@@ -759,6 +759,8 @@ message AddPermissionResponse {
 message RemovePermissionRequest {
   string workspace = 1;
   string rule = 2;
+  // The list to remove it from (allow, ask or deny); "" for every list.
+  string effect = 3;
 }
 
 // Response message for ConfigService.RemovePermission.

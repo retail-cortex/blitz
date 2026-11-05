@@ -199,6 +199,13 @@ describe("the permission rule builder's rows", () => {
     expect(parseRules(text)).toHaveLength(3);
     expect(workerRequest({ ...emptyWorkerForm, name: "x", schedule: "@daily", prompt: "p", permissions: text }).permissions).toEqual(["web:news.google.com", "network:all"]);
   });
+  // N26 desktop-1#17: the service lowercases the kind; Shell:… was an "Other" row.
+  it("reads a kind in any case", () => {
+    expect(parseRules("Shell:go test ./...\nWEB:example.com")).toEqual([
+      { kind: "shell", pattern: "go test ./..." },
+      { kind: "web", pattern: "example.com" },
+    ]);
+  });
   it("round-trips", () => {
     const text = "shell:go test ./...\nwrite:reports/**\nmcp:github:create_issue";
     expect(rulesText(parseRules(text))).toBe(text);

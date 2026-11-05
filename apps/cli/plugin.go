@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/plugins"
@@ -64,7 +65,7 @@ func newPluginCommandWith(store *plugins.Store) *cobra.Command {
 			}
 			var errs []error
 			for _, i := range list {
-				if len(args) > 0 && !contains(args, i.Name) {
+				if len(args) > 0 && !slices.Contains(args, i.Name) {
 					continue
 				}
 				st, err := fetchPlugin(cmd, store, i.Source)
@@ -339,13 +340,4 @@ func confirmPlugin(in io.Reader, out io.Writer, runsCode bool) (bool, error) {
 	}
 	a := strings.ToLower(strings.TrimSpace(line))
 	return a == "y" || a == "yes", nil
-}
-
-func contains(list []string, v string) bool {
-	for _, x := range list {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }

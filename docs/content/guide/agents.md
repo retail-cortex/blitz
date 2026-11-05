@@ -19,7 +19,7 @@ Spec: [agents](../about/specs/spec_014_agents.md).
 An agent runs on the session's model unless something more specific says otherwise, in this order: a **pin** for that agent, the agent's own `default_model`, then the configured model.
 
 - `/pin_model qa anthropic/claude-haiku-4-5` pins `qa` to a cheaper model in this workspace; `/pin_model` alone lists the pins, and `/unpin qa` removes one.
-- In the desktop app, pins are in the workspace's **Run settings**.
+- In the desktop app, pins are in the workspace's **Workspace settings** (**Settings › Workspaces**).
 - `/model` changes every agent that isn't pinned.
 
 ### How much it does on its own
@@ -33,7 +33,7 @@ The **agency level** says how much the agent does before checking in with you:
 | `high` (default) | Completes the task, asking only when blocked or before something irreversible |
 | `extreme` | Completes it with maximal persistence, waiting out background work rather than stopping |
 
-Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_level`, or the desktop app's **Run settings**. Agency is separate from approvals: what may run without asking is the [permission mode and rules](safety.md). `/effort` (or `--effort`) sets how hard the model thinks.
+Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_level`, or the desktop app's **Workspace settings** (**Settings › Workspaces**). Agency is separate from approvals: what may run without asking is the [permission mode and rules](safety.md). `/effort` (or `--effort`) sets how hard the model thinks.
 
 ## Built-in agents
 
@@ -61,10 +61,10 @@ An agent is a Markdown file: front matter, then the system prompt.
 | Where | Who gets it |
 |---|---|
 | `~/.blitz/agents/*.md` | You, in every workspace (desktop: **Settings › Library › Agents**) |
-| `.agents/agents/*.md` in the project | Everyone who works in it (desktop: **Studio › Agents, skills and rules…** › Agents) |
+| `.agents/agents/*.md` in the project | Everyone who works in it (desktop: **Studio › Agents**) |
 | A plugin's `agents/` folder | Whoever enables the plugin |
 
-In the desktop app both are with the advanced settings (**Show advanced** (in the Settings title bar)): **Add agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
+In the desktop app both are with the advanced settings (**Show advanced** (in the Settings title bar)): **New agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
 
 ```markdown
 ---

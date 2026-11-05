@@ -259,11 +259,13 @@ function ServerDialog({ editing, initial, taken, busy, onClose, onSave }: { edit
   const [tried, setTried] = useState(false);
   const set = <K extends keyof McpForm>(k: K, v: McpForm[K]) => setF((x) => ({ ...x, [k]: v }));
   const problems = formProblems(f, taken);
+  // A saved server's env and header values are withheld (shown empty).
+  const withheld = !!editing && !!(f.kind === "command" ? initial.env : initial.headers);
   const save = () => {
     setTried(true);
     if (!problems.length) onSave(f);
   };
-  const field = (k: "name" | "command" | "url" | "timeout" | "agents", props: { mono?: boolean; placeholder?: string; inputMode?: "numeric" } = {}) => (
+  const field = (k: "name" | "command" | "url" | "timeout" | "agents" | "tools" | "prefix", props: { mono?: boolean; placeholder?: string; inputMode?: "numeric" } = {}) => (
     <label className="field">
       <span className="t-label">{t(`desktop.mcp.field.${k}`)}</span>
       <input className={`input ${props.mono ? "mono" : ""}`} value={f[k]} placeholder={props.placeholder} inputMode={props.inputMode} spellCheck={false} onChange={(e) => set(k, e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
@@ -312,6 +314,7 @@ function ServerDialog({ editing, initial, taken, busy, onClose, onSave }: { edit
             {field("command", { mono: true, placeholder: "npx" })}
             {area("args", "-y\n@modelcontextprotocol/server-github")}
             {area("env", "GITHUB_TOKEN=…")}
+            {withheld && <p className="t-body-sm muted">{t("desktop.mcp.withheld")}</p>}
             <label className="row" style={{ gap: 12 }}>
               <span className="spacer t-body">{t("desktop.mcp.field.sandbox")}</span>
               <Switch label={t("desktop.mcp.field.sandbox")} checked={f.sandbox} onChange={(v) => set("sandbox", v)} />
@@ -321,6 +324,7 @@ function ServerDialog({ editing, initial, taken, busy, onClose, onSave }: { edit
           <>
             {field("url", { mono: true, placeholder: "https://mcp.example.com/mcp" })}
             {area("headers", "Authorization: Bearer …")}
+            {withheld && <p className="t-body-sm muted">{t("desktop.mcp.withheld")}</p>}
             <p className="t-body-sm muted">{t("desktop.mcp.signin")}</p>
           </>
         )}
@@ -331,6 +335,10 @@ function ServerDialog({ editing, initial, taken, busy, onClose, onSave }: { edit
         <div className="row mcp-form-pair" style={{ gap: 12 }}>
           {field("timeout", { inputMode: "numeric", placeholder: "300" })}
           {field("agents", { placeholder: t("desktop.mcp.field.agents_placeholder") })}
+        </div>
+        <div className="row mcp-form-pair" style={{ gap: 12 }}>
+          {field("tools", { mono: true, placeholder: t("desktop.mcp.field.tools_placeholder") })}
+          {field("prefix", { mono: true, placeholder: "gh" })}
         </div>
         {tried && problems.length > 0 && (
           <ul className="error-text t-body-sm">

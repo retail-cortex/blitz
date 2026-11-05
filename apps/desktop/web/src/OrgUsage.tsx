@@ -31,27 +31,38 @@ export function count(n: bigint | number): string {
   return String(v);
 }
 
-/** What part of a limit is used, 0 to 1. */
-export function usedShare(l: OrgLimit): number {
-  if (l.unit === "tokens") {
-    const amount = Number(l.tokens || l.inputTokens || l.outputTokens);
-    const used = Number(l.used?.inputTokens ?? 0n) + Number(l.used?.outputTokens ?? 0n);
-    return amount > 0 ? Math.min(1, used / amount) : 0;
-  }
-  return l.amountUsd > 0 ? Math.min(1, (l.used?.costUsd ?? 0) / l.amountUsd) : 0;
+/** One cap a limit sets: it in words, and what part is used, 0 to 1. */
+export interface LimitCap {
+  text: string;
+  share: number;
 }
 
-/** A limit in words: whose, which period, on what, how much is used and left. */
-export function limitText(l: OrgLimit): string {
+const share = (used: number, amount: number) => (amount > 0 ? Math.min(1, used / amount) : 0);
+
+/**
+ * A limit's caps as the gateway counts them: a budget's dollars; a token
+ * quota's total (input and output together), input alone and output
+ * alone, each it sets, with what's used and left.
+ */
+export function limitCaps(l: OrgLimit): LimitCap[] {
   const whose = t(`desktop.usage.scope.${l.scopeKind}`);
   const period = t(`desktop.usage.period.${l.period}`);
   const model = l.model || t("desktop.usage.every_model");
-  if (l.unit === "tokens") {
-    const amount = l.tokens || l.inputTokens || l.outputTokens;
-    return t("desktop.usage.quota", { whose, period, model, used: count(Number(l.used?.inputTokens ?? 0n) + Number(l.used?.outputTokens ?? 0n)), amount: count(amount) });
+  if (l.unit !== "tokens") {
+    const used = l.used?.costUsd ?? 0;
+    return [{ text: t("desktop.usage.budget", { whose, period, model, used: used.toFixed(2), amount: l.amountUsd.toFixed(2), left: Math.max(0, l.amountUsd - used).toFixed(2) }), share: share(used, l.amountUsd) }];
   }
-  const used = l.used?.costUsd ?? 0;
-  return t("desktop.usage.budget", { whose, period, model, used: used.toFixed(2), amount: l.amountUsd.toFixed(2), left: Math.max(0, l.amountUsd - used).toFixed(2) });
+  const input = Number(l.used?.inputTokens ?? 0n);
+  const output = Number(l.used?.outputTokens ?? 0n);
+  return (
+    [
+      ["desktop.usage.quota", l.tokens, input + output],
+      ["desktop.usage.quota_input", l.inputTokens, input],
+      ["desktop.usage.quota_output", l.outputTokens, output],
+    ] as const
+  )
+    .filter(([, amount]) => amount > 0n)
+    .map(([key, amount, used]) => ({ text: t(key, { whose, period, model, used: count(used), amount: count(amount), left: count(Math.max(0, Number(amount) - used)) }), share: share(used, Number(amount)) }));
 }
 
 /** A model's rate limits in words. */
@@ -110,17 +121,19 @@ export function OrgUsageCard() {
       <span className="t-label">{t("desktop.usage.month")}</span>
       <UsedRows rows={u.month} />
       {u.limits.length > 0 && <span className="t-label">{t("desktop.usage.limits")}</span>}
-      {u.limits.map((l, i) => (
-        <div key={i} className="stack" style={{ gap: 4 }}>
-          <span className="t-body-sm">
-            {limitText(l)}
-            {l.resets && <span className="muted"> · {t("desktop.usage.resets", { time: timestampDate(l.resets).toLocaleString(language()) })}</span>}
-          </span>
-          <div className="progress-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(usedShare(l) * 100)} aria-label={limitText(l)}>
-            <span style={{ width: `${Math.round(usedShare(l) * 100)}%`, background: usedShare(l) >= 0.9 ? "var(--md-error)" : undefined }} />
+      {u.limits.flatMap((l, i) =>
+        limitCaps(l).map((c, j) => (
+          <div key={`${i}.${j}`} className="stack" style={{ gap: 4 }}>
+            <span className="t-body-sm">
+              {c.text}
+              {l.resets && <span className="muted"> · {t("desktop.usage.resets", { time: timestampDate(l.resets).toLocaleString(language()) })}</span>}
+            </span>
+            <div className="progress-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(c.share * 100)} aria-label={c.text}>
+              <span style={{ width: `${Math.round(c.share * 100)}%`, background: c.share >= 0.9 ? "var(--md-error)" : undefined }} />
+            </div>
           </div>
-        </div>
-      ))}
+        )),
+      )}
       {u.rateLimits.length > 0 && <span className="t-label">{t("desktop.usage.rates")}</span>}
       {u.rateLimits.map((r) => (
         <span key={r.model} className="t-body-sm muted">

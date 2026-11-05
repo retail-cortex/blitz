@@ -121,7 +121,7 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
             {r.rule}
           </code>
           {removable && (
-            <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.remove")} small disabled={busy} onClick={() => act(() => config.removePermission({ workspace, rule: r.rule }), t("desktop.perm.removed", { rule: r.rule }))} />
+            <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.remove")} small disabled={busy} onClick={() => act(() => config.removePermission({ workspace, rule: r.rule, effect: r.effect }), t("desktop.perm.removed", { rule: r.rule }))} />
           )}
         </div>
       ))}

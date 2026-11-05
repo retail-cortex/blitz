@@ -251,6 +251,11 @@ func TestNewCompleter(t *testing.T) {
 	assert.Contains(t, complete("/locale "), "fr-CA")
 	assert.Contains(t, complete("/resume "), sess.ID)
 	assert.Contains(t, complete("/resume "), "before", "snapshots by name")
+	// /processes and /search's sources complete too (N26 cli-2#12).
+	assert.Contains(t, complete("/proc"), "/processes ")
+	assert.Contains(t, complete("/processes "), "log")
+	assert.Contains(t, complete("/search "), "documents")
+	assert.Contains(t, complete("/search "), "reindex")
 }
 
 // Notices and the status line are for a terminal only.
@@ -260,6 +265,10 @@ func TestTerminalOnlySettings(t *testing.T) {
 	cfg.UI.NotifyAfter = 30
 	assert.Equal(t, "off", notifier(cfg, false).Mode)
 	assert.Equal(t, 30*time.Second, notifier(cfg, true).After)
+	cfg.UI.Notify = "Bell"
+	assert.Equal(t, "bell", notifier(cfg, true).Mode, "any case (N26 cli-2#8)")
+	cfg.UI.Notify = "none"
+	assert.Equal(t, "both", notifier(cfg, true).Mode, "an unknown value is the default")
 	assert.Equal(t, "", statusLine(cfg, false))
 	assert.Equal(t, "{model}", statusLine(cfg, true))
 }

@@ -147,11 +147,17 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 			if printer != nil {
 				printer.Begin()
 			}
-			retry, err := w.Run(ctx, sid, api.Turn{
-				Text:   "(json-schema) the answer again, valid against the schema",
-				Prompt: "Your final answer isn't valid against the JSON schema: " + serr.Error() + "\nAnswer again with only the JSON value." + o.schema.instruction(),
-				Plan:   o.plan, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
-			}, handler)
+			retry, err := api.TurnResult{}, error(nil)
+			maxTurns, maxCost, timeout, lerr := retryLimits(o, turn, time.Since(start))
+			if lerr != nil {
+				err = lerr
+			} else {
+				retry, err = w.Run(ctx, sid, api.Turn{
+					Text:   "(json-schema) the answer again, valid against the schema",
+					Prompt: "Your final answer isn't valid against the JSON schema: " + serr.Error() + "\nAnswer again with only the JSON value." + o.schema.instruction(),
+					Plan:   o.plan, MaxTurns: maxTurns, MaxCostUSD: maxCost, Timeout: timeout,
+				}, handler)
+			}
 			if printer != nil {
 				printer.End()
 				fmt.Fprintln(out)
@@ -249,4 +255,27 @@ func terminalWidth() int {
 		return w
 	}
 	return 100
+}
+
+// retryLimits are the run's limits left for the --json-schema retry: the
+// first turn's model calls, cost and time count against --max-turns,
+// --max-cost-usd and --timeout, so the two turns together keep to them
+// (N26 cli-2#7). A limit already used up is its limit error (exit 3).
+func retryLimits(o oneShotOptions, first api.TurnResult, elapsed time.Duration) (maxTurns int, maxCost float64, timeout time.Duration, err error) {
+	if o.maxTurns > 0 {
+		if maxTurns = o.maxTurns - (first.After.Calls - first.Before.Calls); maxTurns <= 0 {
+			return 0, 0, 0, fmt.Errorf("%w (%d)", api.ErrMaxTurns, o.maxTurns)
+		}
+	}
+	if o.maxCostUSD > 0 {
+		if maxCost = o.maxCostUSD - (first.After.CostUSD - first.Before.CostUSD); maxCost <= 0 {
+			return 0, 0, 0, fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, o.maxCostUSD)
+		}
+	}
+	if o.timeout > 0 {
+		if timeout = o.timeout - elapsed; timeout <= 0 {
+			return 0, 0, 0, fmt.Errorf("%w (%s)", api.ErrTimeLimit, o.timeout)
+		}
+	}
+	return maxTurns, maxCost, timeout, nil
 }

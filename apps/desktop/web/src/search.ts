@@ -17,6 +17,7 @@
 // Workspace search's rules, apart from the dialog (spec_035_search): which
 // sources a search uses, what a hit opens, and which parts of a snippet
 // to mark.
+import { t, tn } from "./i18n";
 
 /** The sources workspace search knows, in order. */
 export const searchSources = ["files", "documents", "chats", "notes"] as const;
@@ -24,6 +25,40 @@ export const searchSources = ["files", "documents", "chats", "notes"] as const;
 export type SearchSource = (typeof searchSources)[number];
 /** What a search uses until the user picks: files and PDFs. */
 export const defaultSources: SearchSource[] = ["files", "documents"];
+
+/**
+ * The sources a search starts with: the workspace's **Search by default
+ * in** (search.sources, SRCH-14), else files and PDFs.
+ */
+export function startSources(settings?: { sources: readonly string[] }): SearchSource[] {
+  const known = (settings?.sources ?? []).filter((s): s is SearchSource => (searchSources as readonly string[]).includes(s));
+  return known.length ? known : [...defaultSources];
+}
+
+/** The index's state as the dialog and the settings read it. */
+interface IndexState {
+  enabled: boolean;
+  scanning: boolean;
+  lastScan?: unknown;
+  items: { [source: string]: number };
+  embeddingModel: string;
+  embedded: number;
+  enriched: number;
+  unreadable: number;
+}
+
+/** Whether to ask the index's state again: while search is on and a scan runs, or none has finished. */
+export const scanPending = (s?: Pick<IndexState, "enabled" | "scanning" | "lastScan">) => !!s?.enabled && (s.scanning || !s.lastScan);
+
+/** What the index holds, in words: items by source, then vectors, summaries and unreadable items when there are any. */
+export function indexCounts(s: IndexState): string {
+  return [
+    ...searchSources.map((src) => `${t(`desktop.search.source.${src}`)} ${s.items[src] ?? 0}`),
+    ...(s.embeddingModel ? [t("desktop.search.embedded", { count: s.embedded })] : []),
+    ...(s.enriched ? [t("desktop.search.enriched", { count: s.enriched })] : []),
+    ...(s.unreadable ? [tn("desktop.rs.search.unreadable", s.unreadable)] : []),
+  ].join(" · ");
+}
 
 /** What a hit leads to: a file at a line, a chat, or nothing to open. */
 export type HitTarget = { kind: "file"; path: string; line?: number } | { kind: "chat"; id: string } | { kind: "none" };

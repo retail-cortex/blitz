@@ -274,7 +274,7 @@ func (h configService) RemovePermission(ctx context.Context, r req[pb.RemovePerm
 	if err != nil {
 		return nil, err
 	}
-	path, n, err := config.RemovePermissionRule(h.s.configDir, dir, r.Msg.Rule)
+	path, n, err := config.RemovePermissionRuleFrom(h.s.configDir, dir, r.Msg.Rule, r.Msg.Effect)
 	if err != nil {
 		return nil, invalid(err)
 	}

@@ -21,6 +21,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -29,9 +30,11 @@ import (
 // global settings' [[mcp.servers]] and a workspace's own, edited as
 // `blitz mcp` does, and applied to open workspaces at once.
 
+// mcpConfigMsg is s as a listing gives it, its env and header values
+// withheld (withheldValues).
 func mcpConfigMsg(s config.MCPServerConfig) *pb.MCPServerConfig {
 	return &pb.MCPServerConfig{
-		Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, Url: s.URL, Headers: s.Headers,
+		Name: s.Name, Command: s.Command, Args: s.Args, Env: withheldValues(s.Env), Url: s.URL, Headers: withheldValues(s.Headers),
 		Disabled: s.Disabled && !s.OffHere, Tools: s.Tools, AutoApprove: s.AutoApprove, Sandbox: s.Sandbox,
 		Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: int32(s.TimeoutSeconds), Scope: s.Scope, OffHere: s.OffHere,
 	}
@@ -43,6 +46,38 @@ func mcpConfig(m *pb.MCPServerConfig) config.MCPServerConfig {
 		Disabled: m.GetDisabled(), Tools: m.GetTools(), AutoApprove: m.GetAutoApprove(), Sandbox: m.Sandbox,
 		Prefix: m.GetPrefix(), Agents: m.GetAgents(), TimeoutSeconds: int(m.GetTimeoutSeconds()),
 	}
+}
+
+// withheldValues is m with each value "" unless it names a secret
+// ({secrets:…}, whose value is in the vault): an env or header value can
+// hold a credential, so it never reaches the page (as [llm.api]'s headers
+// don't, spec_002_config CFG-44). SaveMCPServer keeps a value sent back
+// empty (keepWithheld).
+func withheldValues(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		if secrets.HasPlaceholders(v) {
+			out[k] = v
+		} else {
+			out[k] = ""
+		}
+	}
+	return out
+}
+
+// keepWithheld is given with each empty value the saved one, for a key
+// the saved entry has: a listing withholds values, so an empty one sent
+// back means unchanged.
+func keepWithheld(given, saved map[string]string) map[string]string {
+	for k, v := range given {
+		if v == "" && saved[k] != "" {
+			given[k] = saved[k]
+		}
+	}
+	return given
 }
 
 // mcpEditError is err as the API says it: an unknown server is NOT_FOUND,
@@ -114,6 +149,15 @@ func (h configService) SaveMCPServer(ctx context.Context, r req[pb.SaveMCPServer
 	if r.Msg.Name == "" {
 		path, err = config.AddMCPServer(h.s.configDir, dir, s)
 	} else {
+		saved, _, _, lerr := config.ScopeMCP(h.s.configDir, dir)
+		if lerr != nil {
+			return nil, invalid(lerr)
+		}
+		for _, old := range saved {
+			if old.Name == r.Msg.Name {
+				s.Env, s.Headers = keepWithheld(s.Env, old.Env), keepWithheld(s.Headers, old.Headers)
+			}
+		}
 		path, err = config.ReplaceMCPServer(h.s.configDir, dir, r.Msg.Name, s)
 	}
 	if err != nil {

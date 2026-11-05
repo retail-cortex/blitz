@@ -16,7 +16,7 @@
 
 // Settings › Providers › API (spec_024_desktop DSK-61; spec_015_models
 // §3.4): the api provider's fields, to and from ApiProviderSettings. A
-// header's value is never shown (the service withholds it) unless it is
+// header's value is never shown (the service withholds it) unless it uses
 // the token placeholder; an empty value keeps the saved one.
 import { create } from "@bufbuild/protobuf";
 import { ApiProviderSettingsSchema, type ApiProviderSettings } from "./gen/blitz/v1/config_pb";
@@ -36,6 +36,11 @@ export interface ApiHeaderRow {
   hasValue: boolean;
   /** The value is the token: {{TOKEN_SCRIPT}}. */
   useToken: boolean;
+  /**
+   * The value written while useToken: the placeholder with the saved text
+   * around it ("Bearer {{TOKEN_SCRIPT}}"); unset for the bare placeholder.
+   */
+  token?: string;
 }
 
 /** The form's fields, as typed. */
@@ -51,9 +56,17 @@ export const newHeader = (): ApiHeaderRow => ({ name: "", value: "", hasValue: f
 
 /** The settings as the form shows them; nothing saved gives one empty row. */
 export function toApiForm(s?: ApiProviderSettings): ApiForm {
-  const headers = (s?.headers ?? []).map((h) => ({ name: h.name, value: "", hasValue: h.hasValue, useToken: h.value === tokenPlaceholder }));
+  // A value using the placeholder anywhere is the token, as the service
+  // has it (config's UsesToken); its text around the placeholder is kept.
+  const headers = (s?.headers ?? []).map((h): ApiHeaderRow => {
+    const useToken = h.value.includes(tokenPlaceholder);
+    return { name: h.name, value: "", hasValue: h.hasValue, useToken, ...(useToken && h.value !== tokenPlaceholder ? { token: h.value } : {}) };
+  });
   return { baseUrl: s?.baseUrl ?? "", headers: headers.length ? headers : [newHeader()], tokenScript: s?.tokenScript ?? "", language: s?.tokenScriptLanguage || "shell" };
 }
+
+/** What a header using the token writes: its saved text, else the placeholder. */
+export const tokenValue = (h: ApiHeaderRow) => h.token || tokenPlaceholder;
 
 /** Whether a header or the endpoint uses the token, so the script is needed. */
 export const usesToken = (f: ApiForm) => f.baseUrl.includes(tokenPlaceholder) || f.headers.some((h) => h.name.trim() && h.useToken);
@@ -88,7 +101,7 @@ function settingsInit(f: ApiForm) {
   const token = usesToken(f);
   return {
     baseUrl: f.baseUrl.trim(),
-    headers: named(f).map((h) => ({ name: h.name.trim(), value: h.useToken ? tokenPlaceholder : h.value })),
+    headers: named(f).map((h) => ({ name: h.name.trim(), value: h.useToken ? tokenValue(h) : h.value })),
     // A script nothing uses is refused by the service: it isn't sent.
     tokenScript: token ? f.tokenScript.trim() : "",
     tokenScriptLanguage: token ? f.language : "",

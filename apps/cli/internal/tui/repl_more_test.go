@@ -370,7 +370,6 @@ func TestCycleModeOutOfBypass(t *testing.T) {
 type steerScript struct {
 	*scriptInput
 	answer func() (string, error)
-	sent   chan struct{}
 }
 
 func (s *steerScript) WatchKeys(onKey func(string)) func() {
@@ -424,6 +423,67 @@ func TestREPLSteerOutcomes(t *testing.T) {
 				assert.Contains(t, out, w)
 			}
 			assert.Len(t, *turns, c.wantTurns)
+		})
+	}
+}
+
+// watchCount is an Input whose key watchers run until stopped, counting
+// the watchers started and those still running.
+type watchCount struct {
+	*scriptInput
+	mu              sync.Mutex
+	started, active int
+	stops           int
+}
+
+func (w *watchCount) WatchKeys(func(string)) func() {
+	w.mu.Lock()
+	w.started++
+	w.active++
+	w.mu.Unlock()
+	return func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.stops++
+		w.active--
+	}
+}
+
+func (w *watchCount) AskSteer(context.Context, string, string) (string, error) {
+	return "", context.Canceled
+}
+
+// A turn's key watcher stops when the turn ends, finished or not: a
+// stream that fails without finishing (the service died) leaves no
+// watcher reading the keyboard, and one that finishes stops it once
+// (N26 cli-2#5).
+func TestREPLSteeringStopsWhenTheTurnFails(t *testing.T) {
+	cases := map[string]struct {
+		finish bool
+		err    error
+	}{
+		"stream fails": {err: errors.New("the service ended the turn without finishing it")},
+		"finished":     {finish: true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			app, s := stubApp(t, "")
+			s.run = func(_ context.Context, turn api.Turn, _ func(api.Event)) (api.TurnResult, error) {
+				turn.OnAccepted()
+				if c.finish {
+					turn.OnFinished()
+				}
+				return api.TurnResult{}, c.err
+			}
+			in := &watchCount{scriptInput: &scriptInput{steps: lines("one", "two")}}
+			app.Input = in
+			app.Interrupts = make(chan os.Signal, 1)
+			captureStdout(t, func() { require.NoError(t, RunREPL(context.Background(), app)) })
+			in.mu.Lock()
+			defer in.mu.Unlock()
+			assert.Equal(t, 2, in.started)
+			assert.Equal(t, 0, in.active, "no watcher left reading the keyboard")
+			assert.Equal(t, 2, in.stops, "each stopped once")
 		})
 	}
 }

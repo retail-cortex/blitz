@@ -33,6 +33,43 @@ func TestValidRuleUnset(t *testing.T) {
 	assert.Equal(t, "anything", got)
 }
 
+// Removing a rule under one effect leaves the same rule under the others;
+// no effect removes it from every list (scan N26-desktop-1#15).
+func TestRemovePermissionRuleFrom(t *testing.T) {
+	for name, tc := range map[string]struct {
+		effect           string
+		removed          int
+		allow, ask, deny []string
+		err              string
+	}{
+		"ask alone":  {effect: "ask", removed: 1, allow: []string{"shell(make)"}, deny: []string{"shell(git push *)"}},
+		"deny alone": {effect: "deny", removed: 1, allow: []string{"shell(make)"}, ask: []string{"shell(git push *)"}},
+		"every list": {removed: 2, allow: []string{"shell(make)"}},
+		"not there":  {effect: "allow", removed: 0, allow: []string{"shell(make)"}, ask: []string{"shell(git push *)"}, deny: []string{"shell(git push *)"}},
+		"bad effect": {effect: "maybe", err: "unknown permission effect", allow: []string{"shell(make)"}, ask: []string{"shell(git push *)"}, deny: []string{"shell(git push *)"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			keysEnv(t)
+			for _, r := range [][2]string{{"allow", "shell(make)"}, {"ask", "shell(git push *)"}, {"deny", "shell(git push *)"}} {
+				_, _, err := AddPermissionRule("", "", r[0], r[1])
+				require.NoError(t, err)
+			}
+			_, n, err := RemovePermissionRuleFrom("", "", "shell(git push *)", tc.effect)
+			if tc.err != "" {
+				require.ErrorContains(t, err, tc.err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.removed, n)
+			p, _, err := ScopePermissions("", "")
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tc.allow, p.Allow)
+			assert.ElementsMatch(t, tc.ask, p.Ask)
+			assert.ElementsMatch(t, tc.deny, p.Deny)
+		})
+	}
+}
+
 // Rule edits refuse bad rules and effects, keep a rule that's there
 // already, and report a settings file they can't read.
 func TestPermissionRuleErrors(t *testing.T) {

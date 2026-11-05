@@ -15,7 +15,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allCommands, builtins, filterPalette, helpText, knownCommand, matchCommands, paletteResults, parseCommand, searchesFiles, type CommandSpec } from "./commands";
+import { t } from "./i18n";
+import { allCommands, builtins, filterPalette, helpText, knownCommand, listedCommands, matchCommands, shortcutLabel, paletteResults, parseCommand, searchesFiles, type CommandSpec } from "./commands";
 
 const custom: CommandSpec[] = [
   { name: "review", description: "Review changes", source: "bundled" },
@@ -24,6 +25,20 @@ const custom: CommandSpec[] = [
 ];
 
 describe("commands", () => {
+  // N26 desktop-1#31: the palette showed ⌘ on Linux and Windows too.
+  it.each([
+    { mac: true, shift: true, want: "⇧⌘F" },
+    { mac: true, shift: false, want: "⌘F" },
+    { mac: false, shift: true, want: "Ctrl+Shift+F" },
+    { mac: false, shift: false, want: "Ctrl+F" },
+  ])("writes a shortcut as the platform does ($want)", ({ mac, shift, want }) => expect(shortcutLabel("F", shift, mac)).toBe(want));
+  // N26 desktop-1#3: the composer said "Run /x" in English.
+  it("offers the workspace's commands, a missing description through i18n", () => {
+    expect(listedCommands([{ name: "deploy", argumentHint: "<env>", description: "", source: "" }, { name: "x", argumentHint: "", description: "Do x", source: "user" }])).toEqual([
+      { name: "deploy", args: "<env>", description: t("desktop.cmd.run", { name: "deploy" }), source: "project" },
+      { name: "x", args: undefined, description: "Do x", source: "user" },
+    ]);
+  });
   it("parses a composer line", () => {
     expect(parseCommand("/compact the API design")).toEqual({ name: "compact", args: "the API design" });
     expect(parseCommand("  /Undo  ")).toEqual({ name: "undo", args: "" });

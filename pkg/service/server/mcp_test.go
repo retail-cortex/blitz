@@ -60,7 +60,7 @@ func TestMCPServersOverTheAPI(t *testing.T) {
 	require.Len(t, list.Msg.Servers, 1)
 	got := list.Msg.Servers[0]
 	assert.Equal(t, "docs", got.Name)
-	assert.Equal(t, map[string]string{"X-Team": "core"}, got.Headers)
+	assert.Equal(t, map[string]string{"X-Team": ""}, got.Headers, "values are withheld")
 	assert.True(t, got.AutoApprove)
 	require.NotNil(t, got.Sandbox)
 	assert.False(t, *got.Sandbox)
@@ -98,6 +98,60 @@ func TestMCPServersOverTheAPI(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, code(err))
 	_, err = cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Name: "wiki"}))
 	assert.Equal(t, connect.CodeNotFound, code(err))
+}
+
+// A listing withholds env and header values (a secret's name aside); an
+// edit sending one back empty keeps it, and the edit keeps the tools and
+// prefix it's sent (scan N26-desktop-1#10, #11).
+func TestMCPServerValuesWithheld(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	listed := func() *pb.MCPServerConfig {
+		res, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{}))
+		require.NoError(t, err)
+		require.Len(t, res.Msg.Servers, 1)
+		return res.Msg.Servers[0]
+	}
+	file := func() string {
+		res, err := cfg.ListMCPServerConfigs(ctx, connect.NewRequest(&pb.ListMCPServerConfigsRequest{}))
+		require.NoError(t, err)
+		b, err := os.ReadFile(res.Msg.Path)
+		require.NoError(t, err)
+		return string(b)
+	}
+	_, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Server: &pb.MCPServerConfig{
+		Name: "github", Command: "npx", Env: map[string]string{"GITHUB_TOKEN": "ghp_secret", "TEAM": "{secrets:team}"},
+		Tools: []string{"create_issue"}, Prefix: "gh",
+	}}))
+	require.NoError(t, err)
+	got := listed()
+	assert.Equal(t, map[string]string{"GITHUB_TOKEN": "", "TEAM": "{secrets:team}"}, got.Env)
+	assert.Equal(t, []string{"create_issue"}, got.Tools)
+	assert.Equal(t, "gh", got.Prefix)
+
+	// In order: each edits what the one before saved.
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"empty keeps it", map[string]string{"GITHUB_TOKEN": "", "TEAM": "{secrets:team}"}, `"GITHUB_TOKEN" = "ghp_secret"`},
+		{"a new one", map[string]string{"GITHUB_TOKEN": "ghp_new"}, `"GITHUB_TOKEN" = "ghp_new"`},
+		{"empty again", map[string]string{"GITHUB_TOKEN": ""}, `"GITHUB_TOKEN" = "ghp_new"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := listed()
+			got.Env = tc.env
+			_, err := cfg.SaveMCPServer(ctx, connect.NewRequest(&pb.SaveMCPServerRequest{Name: "github", Server: got}))
+			require.NoError(t, err)
+			assert.Contains(t, file(), tc.want)
+			assert.Equal(t, []string{"create_issue"}, listed().Tools)
+			assert.Equal(t, "gh", listed().Prefix)
+		})
+	}
 }
 
 // A workspace's own MCP servers: added, listed with the global ones by

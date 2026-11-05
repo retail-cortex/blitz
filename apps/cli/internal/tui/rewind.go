@@ -178,11 +178,13 @@ func cmdRewind(ctx context.Context, args []string, app *App) {
 	}
 }
 
-// rewindDetail describes a prompt: when, and the files changed from it.
+// rewindDetail describes a prompt: when, and the files changed from it,
+// their names made safe for the terminal (an agent named them; N26
+// cli-2#23).
 func rewindDetail(p api.RewindPoint) string {
 	s := p.Time.Local().Format("15:04")
 	if len(p.Files) > 0 {
-		s += " · " + strings.Join(p.Files, ", ")
+		s += " · " + oneLine(strings.Join(p.Files, ", "))
 	}
 	return s
 }

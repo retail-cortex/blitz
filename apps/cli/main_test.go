@@ -103,6 +103,12 @@ func runCLI(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
+// --help names every limit that exits with 3 (N26 cli-2#16).
+func TestHelpExitCodes(t *testing.T) {
+	long := newRootCommand().Long
+	assert.Contains(t, long, "3 a limit stopped the run\n(--max-turns, --max-cost-usd, --timeout)")
+}
+
 func TestRootFlagValidation(t *testing.T) {
 	isolate(t)
 	for name, args := range map[string][]string{
@@ -193,7 +199,7 @@ func useTestServices(t *testing.T) {
 			defer close(done)
 			servicetest.RunWith(pctx, sock, o.Config, ro)
 		}()
-		keepPrivate(func() { stop(); <-done })
+		keepPrivate(sock, func() { stop(); <-done })
 		return sock, waitService(context.Background(), sock, done)
 	}
 	t.Cleanup(func() {

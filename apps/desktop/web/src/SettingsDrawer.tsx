@@ -280,9 +280,6 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
   );
 }
 
-// The window's look and behaviour. Simple mode shows the switch for
-// advanced settings, theme, language and notifications; the rest have
-// sensible defaults and show with advanced settings.
 /**
  * How workflows' human tasks reach the user ([ui] task_alerts, in the
  * user's settings file, which the tray reads too): a notification, the
@@ -312,6 +309,9 @@ function TaskAlertsSetting() {
   );
 }
 
+// The window's look and behaviour. Simple mode shows the switch for
+// advanced settings, theme, language and notifications; the rest have
+// sensible defaults and show with advanced settings.
 function Appearance() {
   const { prefs, update, theme } = useApp();
   const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
@@ -695,15 +695,15 @@ function OSSandbox() {
   );
 }
 
+/** The folder of a Windows or Unix path. */
+const folderOf = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
+
 /**
  * The blitz command: whether a terminal finds it, and Install, which links
  * the app's onto the user's PATH when no blitz is there, or Reinstall when
  * one is (another build's link, or dead links left on a developer's
  * machine). Not in a browser.
  */
-/** The folder of a Windows or Unix path. */
-const folderOf = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
-
 function CommandLine() {
   const [status, setStatus] = useState<CLIStatus | undefined | null>(null); // null: checking
   const [busy, setBusy] = useState(false);

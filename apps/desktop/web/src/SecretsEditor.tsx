@@ -38,6 +38,17 @@ export const secretPlaceholder = (key: string, workspace = "") => `{secrets:${wo
 export const storedName = (prefix: string, key: string) => `${prefix}${key}`;
 
 /**
+ * Why a new secret can't be added under key, as words ("" when it can):
+ * a bad name, or one listed already, whose value Replace changes (Add
+ * would replace it without asking).
+ */
+export function addProblem(key: string, list: readonly { key: string }[]): string {
+  if (!key) return "";
+  if (!validSecretKey(key)) return t("desktop.secrets.bad_key");
+  return list.some((s) => s.key === key) ? t("desktop.secrets.key_taken", { key }) : "";
+}
+
+/**
  * The user's secrets in a scope (spec_039_secrets): the global ones
  * (Settings › Library › Secrets, workspace "") or a workspace's own (its settings).
  * Names are listed; a value is only ever written (added, or replaced),
@@ -85,7 +96,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
   };
   const set = (k: string, v: string) => act(async () => (await config.setSecret({ workspace, key: k, value: v }), t("desktop.secrets.saved", { key: k })));
 
-  const keyProblem = key && !validSecretKey(key) ? t("desktop.secrets.bad_key") : "";
+  const keyProblem = addProblem(key, list);
   return (
     <div className="stack secrets-editor" style={{ gap: 12 }}>
       <p className="t-body-sm muted">

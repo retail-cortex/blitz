@@ -103,12 +103,12 @@ func PrintSearchHits(out io.Writer, hits []api.SearchHit) {
 // PrintSearchStatus writes how the workspace's search index is.
 func PrintSearchStatus(out io.Writer, s api.SearchStatus) {
 	if !s.Enabled {
-		fmt.Fprintln(out, api.ErrSearchDisabled.Error())
+		fmt.Fprintln(out, i18n.T("search.ws_disabled"))
 		return
 	}
 	var parts []string
 	for _, src := range api.SearchSources {
-		parts = append(parts, fmt.Sprintf("%s %d", src, s.Items[src]))
+		parts = append(parts, fmt.Sprintf("%s %d", i18n.T("search.ws_source."+src), s.Items[src]))
 	}
 	when := i18n.T("search.ws_never")
 	if !s.LastScan.IsZero() {
@@ -152,7 +152,7 @@ func WaitIndexed(ctx context.Context, b api.Backend, since time.Time, limit time
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return errors.New(i18n.T("search.ws_scanning"))
+			return errors.New(i18n.T("search.ws_wait_timeout", "wait", limit))
 		}
 		select {
 		case <-ctx.Done():
