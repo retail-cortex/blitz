@@ -51,6 +51,13 @@ func openTest(t *testing.T) *Workspace {
 // openTestWith is openTest with configuration changes and model replies.
 func openTestWith(t *testing.T, mutate func(*config.Config), replies ...*genai.Content) (*Workspace, *runtime.MockLLM) {
 	t.Helper()
+	return openTestStreaming(t, 0, mutate, replies...)
+}
+
+// openTestStreaming is openTestWith streaming the replies that are only
+// text, in pieces of chunk bytes (none when 0).
+func openTestStreaming(t *testing.T, chunk int, mutate func(*config.Config), replies ...*genai.Content) (*Workspace, *runtime.MockLLM) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	t.Chdir(t.TempDir())
@@ -63,7 +70,8 @@ func openTestWith(t *testing.T, mutate func(*config.Config), replies ...*genai.C
 		mutate(cfg)
 	}
 	llm := runtime.NewMockLLM("gemini-3.8-flash", replies...)
-	w, err := Open(context.Background(), cfg, Options{Model: llm, NewModel: mockModels})
+	llm.Chunk = chunk
+	w, err := Open(context.Background(), cfg, Options{Model: llm, NewModel: mockModels, Streaming: chunk > 0})
 	require.NoError(t, err)
 	t.Cleanup(func() { w.Close() })
 	return w, llm

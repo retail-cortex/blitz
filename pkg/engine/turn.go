@@ -616,6 +616,16 @@ func AttachmentNote(imgs []*images.Image) string {
 	return "\n[images: " + strings.Join(names, ", ") + "]"
 }
 
+// heldText is the end of a streamed answer its final event carries
+// (runtime.HeldTextKey).
+func heldText(ev *adksession.Event) (string, bool) {
+	if ev == nil {
+		return "", false
+	}
+	s, ok := ev.CustomMetadata[runtime.HeldTextKey].(string)
+	return s, ok
+}
+
 // relay passes a turn's ADK events on as Events, marking final text that
 // repeats streamed chunks and collecting the transcript's model text.
 type relay struct {
@@ -638,6 +648,11 @@ func (r *relay) paragraph() {
 }
 
 func (r *relay) handle(ev *adksession.Event) error {
+	if held, _ := heldText(ev); held != "" && r.streamed {
+		// The end of the streamed answer, held back until it was checked:
+		// the last piece, before the final text that repeats them all.
+		r.on(api.Event{Author: ev.Author, Text: &api.Text{Text: held, Partial: true}})
+	}
 	for _, e := range events(ev) {
 		if t := e.Text; t != nil && !t.Thought {
 			if t.Partial {

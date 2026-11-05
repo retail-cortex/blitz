@@ -58,6 +58,8 @@ func TestMaskSecrets(t *testing.T) {
 	_, err := e.afterModel(nil, resp, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "it was [REDACTED]", resp.Content.Parts[0].Text)
-	maskSecrets(nil)
-	maskSecrets(&model.LLMResponse{})
+	_, err = e.afterModel(nil, nil, nil)
+	assert.NoError(t, err)
+	_, err = e.afterModel(nil, &model.LLMResponse{Partial: true}, nil)
+	assert.NoError(t, err)
 }
