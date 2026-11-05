@@ -1,0 +1,6 @@
+{
+  "Open a folder: Blitz works in a workspace.": "Abre una carpeta: Blitz trabaja en un espacio de trabajo.",
+  "Blitz couldn't start its view: {0}": "Blitz no pudo abrir su vista: {0}",
+  "{0} ↔ proposed by Blitz": "{0} ↔ propuesto por Blitz",
+  "{0} isn't in the workspace Blitz works in ({1}).": "{0} no está en el espacio de trabajo en el que trabaja Blitz ({1})."
+}

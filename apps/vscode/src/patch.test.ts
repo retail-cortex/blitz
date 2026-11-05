@@ -15,7 +15,19 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { applyPatch, parsePatch } from "./patch";
+import { applyPatch, parsePatch, ProposedTexts } from "./patch";
+
+describe("ProposedTexts", () => {
+  it("keeps the newest, and forgets one closed", () => {
+    const t = new ProposedTexts(2);
+    t.set("a", "1");
+    t.set("b", "2");
+    t.set("c", "3");
+    expect([t.get("a"), t.get("b"), t.get("c"), t.size]).toEqual([undefined, "2", "3", 2]);
+    t.delete("b");
+    expect([t.get("b"), t.size]).toEqual([undefined, 1]);
+  });
+});
 
 const text = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
 
