@@ -375,6 +375,29 @@ func TestSetAuthClouds(t *testing.T) {
 	assert.ErrorContains(t, err, "unknown provider")
 	assert.Equal(t, []string{AuthADC, AuthOAuth}, AuthMethods("gemini"))
 	assert.Empty(t, AuthMethods("openai"))
+
+	// SetValue and SetProvider take them too (CFG-45a; N26 api-client-config#10).
+	for _, tc := range []struct {
+		name string
+		set  func() error
+		want func(*Config) string
+	}{
+		{"SetValue bedrock", func() error { _, err := SetValue("", ws, "llm.bedrock.auth", AuthOAuth); return err }, func(c *Config) string { return c.LLM.Bedrock.Auth }},
+		{"SetValue azure", func() error { _, err := SetValue("", ws, "llm.azure.auth", AuthEntra); return err }, func(c *Config) string { return c.LLM.Azure.Auth }},
+		{"SetProvider azure", func() error {
+			_, err := SetProvider("", ws, ProviderChoice{Provider: "azure", Auth: &ProviderAuth{Method: AuthOAuth}})
+			return err
+		}, func(c *Config) string { return c.LLM.Azure.Auth }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, tc.set())
+			cfg, err := LoadWorkspace("", ws)
+			require.NoError(t, err)
+			assert.NotEmpty(t, tc.want(cfg))
+		})
+	}
+	_, err = SetProvider("", ws, ProviderChoice{Provider: "ollama", Auth: &ProviderAuth{Method: AuthOAuth}})
+	assert.ErrorContains(t, err, "choose a provider")
 }
 
 // The provider form's sign-in is part of its one change.

@@ -109,6 +109,15 @@ func TestOrgLayer(t *testing.T) {
 		assert.Equal(t, "jira", names["jira"])
 		assert.False(t, cfg.Org.Expired(time.Now()), "no expiry")
 	})
+	t.Run("a locked MCP server that doesn't decode", func(t *testing.T) {
+		writeOrg(t, home, `{"policy":{"mcp":{"own":true}}}`, map[string]string{"locked/mcp/broken.toml": "command = \"x\"\nnope\n"})
+		cfg, err := Load("")
+		require.NoError(t, err)
+		require.Len(t, cfg.Warnings, 1, "said, not dropped silently (N26 api-client-config#16)")
+		assert.Contains(t, cfg.Warnings[0], "MCP server")
+		assert.Contains(t, cfg.Warnings[0], "broken.toml isn't used")
+		require.NoError(t, os.Remove(filepath.Join(home, ".blitz", "enterprise", "blitz.acme.com", "catalog", "locked", "mcp", "broken.toml")))
+	})
 	t.Run("a policy file that isn't JSON", func(t *testing.T) {
 		writeOrg(t, home, `{"policy":{"mcp":{"own":true},"tools":{"shell_commands":true}}`, nil)
 		cfg, err := Load("")

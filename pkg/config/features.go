@@ -292,7 +292,7 @@ type EnterpriseConfig struct {
 // the machine-wide settings set it (EN-10). u is the
 // service's address as the caller checked it. It returns the file's path.
 func SetEnterpriseURL(prefixDir, u string) (string, error) {
-	if ManagedURL() != "" {
+	if Managed() {
 		return "", ErrManaged
 	}
 	return editConfigFile(scopeDir(prefixDir, ""),

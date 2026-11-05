@@ -56,6 +56,7 @@ var mapNames = map[string]string{"agent_models": "<agent>", "model_settings": "<
 var Reference = sync.OnceValue(func() []Setting {
 	docs := fieldDocs()
 	def := DefaultConfig()
+	def.Sandbox.Shell = DefaultShellMode() // as load sets it: "required" on Linux
 	home, _ := os.UserHomeDir()
 	var out []Setting
 	var walk func(prefix string, t reflect.Type, v reflect.Value)

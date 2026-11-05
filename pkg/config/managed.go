@@ -17,6 +17,7 @@ package config
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -57,26 +58,44 @@ func ManagedSettingsPath() string {
 	return "/etc/blitz/managed.toml"
 }
 
-// ManagedURL is the organization's service the machine-wide settings set
-// ("" when they set none, or there are none).
-func ManagedURL() string { return loadManaged().Enterprise.URL }
+// Managed reports whether device management manages this computer's
+// organization: its machine-wide settings set a service, or are there but
+// can't be read (a damaged file doesn't hand the choice back to the
+// person). While it does, the person can't change it (ErrManaged).
+func Managed() bool {
+	m, err := loadManaged()
+	return err != nil || m.Enterprise.URL != ""
+}
 
-func loadManaged() managedFile {
+// loadManaged reads the machine-wide settings: none when there's no file,
+// an error when there's one that can't be read or decoded.
+func loadManaged() (managedFile, error) {
 	var m managedFile
-	data, err := os.ReadFile(ManagedSettingsPath())
+	path := ManagedSettingsPath()
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return m, nil
+	}
 	if err != nil {
-		return m
+		return m, err
 	}
 	if _, err := toml.Decode(string(data), &m); err != nil {
-		return managedFile{}
+		return managedFile{}, fmt.Errorf("%s: %w", path, err)
 	}
-	return m
+	return m, nil
 }
 
 // applyManaged puts the machine-wide settings over the person's: device
-// management's organization, and where its workspaces go.
+// management's organization, and where its workspaces go. A file that
+// can't be read keeps the organization managed (the person's own URL, if
+// any, stays, but they can't change it) and says so.
 func applyManaged(cfg *Config) {
-	m := loadManaged()
+	m, err := loadManaged()
+	if err != nil {
+		cfg.Enterprise.Managed = true
+		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your device management's settings can't be read (%v): ask your IT team", err))
+		return
+	}
 	if m.Enterprise.URL == "" {
 		return
 	}

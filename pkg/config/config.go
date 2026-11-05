@@ -925,6 +925,9 @@ func DefaultConfig() *Config {
 			StorageDir: filepath.Join(homeDir, ".blitz", "sessions"),
 			AutoSave:   true,
 		},
+		// The engine's defaults (tools.DefaultProcessLimits), here so the
+		// settings reference shows them.
+		Processes: ProcessesConfig{CPUPercent: 90, BusyFor: "2m", MemoryMB: 2048, GrowthWindow: "10m", LeftAfter: "2h"},
 		Sandbox: SandboxConfig{
 			BlockedPaths:       append([]string(nil), DefaultBlockedPaths...),
 			ShellWritablePaths: []string{"~/.cache", "~/go/pkg/mod", "~/.npm"},

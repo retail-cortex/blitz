@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -270,6 +271,19 @@ func TestProjectHash(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a script edited past what's read", func(t *testing.T) {
+		orig := maxHashedBytes
+		maxHashedBytes = 4
+		t.Cleanup(func() { maxHashedBytes = orig })
+		ws := projectWorkspace(t, map[string]string{".blitz/settings.toml": base, "hook.sh": "echo one"})
+		before := LoadProject(ws).Hash()
+		assert.Equal(t, before, LoadProject(ws).Hash(), "unchanged")
+		path := filepath.Join(ws, "hook.sh")
+		require.NoError(t, os.WriteFile(path, []byte("echo two"), 0o644))
+		later := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(path, later, later))
+		assert.NotEqual(t, before, LoadProject(ws).Hash(), "asks again (N26 api-client-config#17)")
+	})
 	t.Run("nothing to trust", func(t *testing.T) {
 		ws := projectWorkspace(t, map[string]string{".blitz/settings.toml": "[permissions]\ndeny = [\"web(*)\"]\n"})
 		assert.Empty(t, LoadProject(ws).Hash())
@@ -490,4 +504,29 @@ func TestProviderReady(t *testing.T) {
 		assert.True(t, cfg.providerReady(ref), ref)
 	}
 	assert.Equal(t, []string{"a"}, appendNew([]string{"a"}, "a"))
+}
+
+// A provider signed in to without a key is set up (PRJ-11; N26
+// api-client-config#18).
+func TestProviderReadySignIn(t *testing.T) {
+	cases := []struct {
+		name, ref string
+		set       func(*Config)
+		want      bool
+	}{
+		{"anthropic, no key", "anthropic/claude", func(*Config) {}, false},
+		{"anthropic OAuth", "anthropic/claude", func(c *Config) { c.LLM.Anthropic.Auth = AuthOAuth }, true},
+		{"anthropic on Vertex AI", "anthropic/claude", func(c *Config) { c.LLM.Anthropic.Auth = AuthADC }, true},
+		{"gemini ADC", "gemini/flash", func(c *Config) { c.LLM.Gemini.Auth = AuthADC }, true},
+		{"bedrock profile", "bedrock/claude", func(c *Config) { c.LLM.Bedrock.Auth = AuthOAuth }, true},
+		{"azure entra", "azure/gpt", func(c *Config) { c.LLM.Azure.Auth = AuthEntra }, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.LLM.Provider = "openai"
+			tc.set(cfg)
+			assert.Equal(t, tc.want, cfg.providerReady(tc.ref))
+		})
+	}
 }

@@ -286,7 +286,8 @@ func TestProcessLimits(t *testing.T) {
 		in   config.ProcessesConfig
 		want ProcessLimits
 	}{
-		"unset keeps the defaults": {want: d},
+		"unset keeps the defaults":         {want: d},
+		"the settings' defaults are these": {in: config.DefaultConfig().Processes, want: d},
 		"set": {
 			in: config.ProcessesConfig{CPUPercent: 50, BusyFor: "30s", MemoryMB: 512, GrowthWindow: "1m", LeftAfter: "15m"},
 			want: ProcessLimits{

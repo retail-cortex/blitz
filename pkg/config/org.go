@@ -149,7 +149,9 @@ func applyOrg(cfg *Config, prefixDir string) {
 			cfg.Permissions.Deny = append(cfg.Permissions.Deny, tool)
 		}
 	}
-	cfg.MCP.Servers = orgMCP(cfg.MCP.Servers, cfg.Org)
+	var problems []string
+	cfg.MCP.Servers, problems = orgMCP(cfg.MCP.Servers, cfg.Org)
+	cfg.Warnings = append(cfg.Warnings, problems...)
 }
 
 // ErrOrgMCP is why an MCP server added after the settings load isn't
@@ -180,20 +182,26 @@ func (c *Config) AddMCPServer(s MCPServerConfig) error {
 
 // orgMCP is the MCP servers with the organization's: a locked one in
 // place of the person's of its name, a default one unless they have one;
-// the person's own are dropped when the policy doesn't allow them.
-func orgMCP(own []MCPServerConfig, o OrgLayer) []MCPServerConfig {
+// the person's own are dropped when the policy doesn't allow them. The
+// problems are the organization's files that couldn't be read.
+func orgMCP(own []MCPServerConfig, o OrgLayer) ([]MCPServerConfig, []string) {
 	var out []MCPServerConfig
+	var problems []string
 	if o.Policy.MCP.Own {
 		out = slices.Clone(own)
 	}
 	add := func(dir string, locked bool) {
-		entries, _ := os.ReadDir(filepath.Join(dir, "mcp"))
+		entries, err := os.ReadDir(filepath.Join(dir, "mcp"))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			problems = append(problems, fmt.Sprintf("your organization's MCP servers (%s) can't be read: %v", filepath.Join(dir, "mcp"), err))
+		}
 		for _, e := range entries {
 			if e.IsDir() || filepath.Ext(e.Name()) != ".toml" {
 				continue
 			}
 			var s MCPServerConfig
 			if _, err := toml.DecodeFile(filepath.Join(dir, "mcp", e.Name()), &s); err != nil {
+				problems = append(problems, fmt.Sprintf("your organization's MCP server %s isn't used: %v", filepath.Join(dir, "mcp", e.Name()), err))
 				continue
 			}
 			if s.Name == "" {
@@ -210,7 +218,7 @@ func orgMCP(own []MCPServerConfig, o OrgLayer) []MCPServerConfig {
 	}
 	add(o.Locked, true)
 	add(o.Defaults, false)
-	return out
+	return out, problems
 }
 
 // around is subfolder sub of the organization's layers, around the

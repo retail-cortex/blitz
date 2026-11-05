@@ -490,6 +490,8 @@ var settableValues = map[string]bool{
 	"llm.gemini.location":      true,
 	"llm.anthropic.model":      true,
 	"llm.anthropic.auth":       true,
+	"llm.bedrock.auth":         true,
+	"llm.azure.auth":           true,
 	"llm.anthropic.profile":    true,
 	"llm.anthropic.project_id": true,
 	"llm.anthropic.location":   true,
@@ -814,7 +816,7 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 	if c.Provider != "" && !ValidProvider(c.Provider) {
 		return "", fmt.Errorf("unknown provider %q (%s)", c.Provider, ProviderList())
 	}
-	if (c.Key != "" || c.Auth != nil) && !knownProvider(c.Provider) {
+	if c.Key != "" && !knownProvider(c.Provider) || c.Auth != nil && !knownProvider(c.Provider) && len(authMethods[c.Provider]) == 0 {
 		return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key or sign-in", strings.Join(KeyedProviders, ", "))
 	}
 	edits := []settingEdit{{"llm", "provider", c.Provider}}
