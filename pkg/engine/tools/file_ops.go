@@ -98,7 +98,7 @@ func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, error) {
 		return ReadFileOutput{}, fmt.Errorf("%s is a directory", input.Path)
 	}
 	if info.Size() > ws.MaxFileSize() {
-		return ReadFileOutput{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit; use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
+		return ReadFileOutput{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit (tools.max_file_size_bytes); use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
 	}
 	return pageLines(io.LimitReader(f, ws.MaxFileSize()), input)
 }
@@ -191,7 +191,9 @@ type ListFilesOutput struct {
 	Directory  string      `json:"directory"`
 	Files      []FileEntry `json:"files"`
 	TotalCount int         `json:"total_count"`
-	Error      string      `json:"error,omitempty"`
+	// Truncated says the listing stopped at max_entries: there may be more.
+	Truncated bool   `json:"truncated,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 // NewListFilesTool creates an ADK tool for listing directory files.
@@ -207,9 +209,11 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 				dirPath = "."
 			}
 			max := input.MaxEntries
-			if max <= 0 || max > 500 {
+			if max <= 0 {
 				max = 200
 			}
+			max = min(max, 500)
+			truncated := false
 
 			files := make([]FileEntry, 0, 32)
 			walkErr := ws.Walk(dirPath, func(e WalkEntry) error {
@@ -235,6 +239,7 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 				files = append(files, FileEntry{Path: e.Path, IsDir: d.IsDir(), Size: size})
 
 				if len(files) >= max {
+					truncated = true
 					return fs.SkipAll
 				}
 				if !input.Recursive && d.IsDir() {
@@ -251,6 +256,7 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 				Directory:  dirPath,
 				Files:      files,
 				TotalCount: len(files),
+				Truncated:  truncated,
 			}, nil
 		},
 	)

@@ -35,11 +35,16 @@ func unifiedDiff(path, before, after string) string {
 	return udiff.Unified(oldName, newName, before, after)
 }
 
-// diffStats counts added and removed lines in a unified diff.
+// diffStats counts added and removed lines in one file's unified diff.
+// The --- and +++ lines before the first hunk are its header; in a hunk
+// they are lines (a removed "-- comment", an added "++x").
 func diffStats(diff string) (added, removed int) {
+	inHunk := false
 	for _, line := range strings.Split(diff, "\n") {
 		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+		case strings.HasPrefix(line, "@@"):
+			inHunk = true
+		case !inHunk:
 		case strings.HasPrefix(line, "+"):
 			added++
 		case strings.HasPrefix(line, "-"):

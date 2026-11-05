@@ -107,18 +107,29 @@ func (r PermissionRule) matchesCall(tool string, args map[string]any) bool {
 	return false
 }
 
-// callGrants are tool calls a pre_tool hook allowed, by the call's ID: the
-// approvals the call would ask for are granted (deny and ask rules still
-// apply).
+// callGrants are tool calls a pre_tool hook allowed, by the call's session
+// and ID (providers may number calls per response, so two sessions' calls
+// can share an ID): the approvals the call would ask for are granted (deny
+// and ask rules still apply).
 type callGrants struct {
 	mu  sync.Mutex
 	ids map[string]bool
 }
 
-// GrantCall lets the call id through its approvals (a pre_tool hook's
-// allow); EndCall forgets it.
-func (h *Hooks) GrantCall(id string) {
+// callGrantKey is ctx's call's key in the grants, or "" when it has no ID.
+func callGrantKey(ctx context.Context) string {
+	id := CallID(ctx)
 	if id == "" {
+		return ""
+	}
+	return sessionOf(ctx) + "\x00" + id
+}
+
+// GrantCall lets ctx's tool call through its approvals (a pre_tool hook's
+// allow); EndCall forgets it.
+func (h *Hooks) GrantCall(ctx context.Context) {
+	key := callGrantKey(ctx)
+	if key == "" {
 		return
 	}
 	h.grants.mu.Lock()
@@ -126,25 +137,25 @@ func (h *Hooks) GrantCall(id string) {
 	if h.grants.ids == nil {
 		h.grants.ids = map[string]bool{}
 	}
-	h.grants.ids[id] = true
+	h.grants.ids[key] = true
 }
 
-// EndCall forgets the call's grant.
-func (h *Hooks) EndCall(id string) {
+// EndCall forgets ctx's call's grant.
+func (h *Hooks) EndCall(ctx context.Context) {
 	h.grants.mu.Lock()
 	defer h.grants.mu.Unlock()
-	delete(h.grants.ids, id)
+	delete(h.grants.ids, callGrantKey(ctx))
 }
 
 // granted reports whether ctx is a tool call a hook allowed.
 func (h *Hooks) granted(ctx context.Context) bool {
-	id := CallID(ctx)
-	if id == "" {
+	key := callGrantKey(ctx)
+	if key == "" {
 		return false
 	}
 	h.grants.mu.Lock()
 	defer h.grants.mu.Unlock()
-	return h.grants.ids[id]
+	return h.grants.ids[key]
 }
 
 // CallID is the ID of the tool call ctx runs (the tool's context), or "".

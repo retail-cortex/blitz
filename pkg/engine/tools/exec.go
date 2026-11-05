@@ -253,6 +253,17 @@ func (g *guardedCmd) abandon() {
 // Release closes the guard pipe; safe to call more than once.
 func (g *guardedCmd) Release() { g.once.Do(g.release) }
 
+// checkScrubEnv refuses a sandbox.scrub_env pattern that isn't a glob,
+// which would match nothing and let the variable it means through.
+func checkScrubEnv(patterns []string) error {
+	for _, p := range patterns {
+		if _, err := path.Match(p, ""); err != nil {
+			return fmt.Errorf("sandbox.scrub_env: %q isn't a valid pattern: %w", p, err)
+		}
+	}
+	return nil
+}
+
 // scrubEnv drops variables whose names match any pattern (case-insensitive).
 func scrubEnv(env, patterns []string) []string {
 	out := env[:0:0]

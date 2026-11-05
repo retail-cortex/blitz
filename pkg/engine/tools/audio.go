@@ -155,7 +155,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 		functiontool.Config{
 			Name: "generate_audio",
 			Description: "Read text aloud with a speech model and save it as an audio file, such as an audio overview of notes. " +
-				"For a conversation between two hosts, give speakers and start each line with a speaker's name and a colon. Keep it under about ten minutes (9,000 characters); Markdown formatting isn't read out.",
+				"For a conversation between two hosts, give speakers and start each line with a speaker's name and a colon. Keep it within the limit ([audio] max_chars; the tool says so when the text is longer); Markdown formatting isn't read out.",
 		},
 		func(ctx agent.Context, input GenerateAudioInput) (GenerateAudioOutput, error) {
 			fail := func(msg string) (GenerateAudioOutput, error) {
@@ -172,7 +172,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 			}
 			maxChars := cfg.MaxChars
 			if maxChars <= 0 {
-				maxChars = 9_000
+				maxChars = config.DefaultAudioMaxChars
 			}
 			text := input.Text
 			if input.TextPath != "" {

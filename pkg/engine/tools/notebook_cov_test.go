@@ -89,6 +89,7 @@ func TestReadNotebookTruncated(t *testing.T) {
 	out := runTool(t, toolOf(t)(NewReadFileTool(ws)), map[string]any{"path": "big.ipynb"})
 	assert.Equal(t, true, out["truncated"])
 	assert.Contains(t, out["content"], "## Cell 0 [markdown]")
+	assert.Contains(t, out["content"], "[output truncated at", "says so in the content (N26 engine-tools-1#33)")
 
 	// Outside the workspace, or missing: read_file's own error.
 	out = runTool(t, toolOf(t)(NewReadFileTool(ws)), map[string]any{"path": "../x.ipynb"})

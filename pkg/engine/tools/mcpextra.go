@@ -27,6 +27,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -166,7 +167,7 @@ func (m *MCPManager) ReadResource(ctx context.Context, server, uri string) (stri
 			fmt.Fprintf(&b, "(binary content, %d bytes, %s)", len(c.Blob), c.MIMEType)
 		}
 		if b.Len() > maxResourceText {
-			return b.String()[:maxResourceText] + "\n… (cut)", nil
+			return textutil.TruncateUTF8(b.String(), maxResourceText) + "\n… (cut)", nil
 		}
 	}
 	return b.String(), nil
@@ -406,12 +407,28 @@ func NewMCPResourceTools(r *Registry) ([]tool.Tool, error) {
 					return ListMCPResourcesOutput{Error: err.Error()}, nil
 				}
 			}
-			res, err := r.mcp.Resources(ctx, in.Server)
-			out := ListMCPResourcesOutput{Resources: res}
-			if out.Resources == nil {
-				out.Resources = []MCPResource{}
+			servers := []string{in.Server}
+			if in.Server == "" {
+				servers = r.mcp.Servers()
 			}
-			if err != nil {
+			out := ListMCPResourcesOutput{Resources: []MCPResource{}}
+			var errs []error
+			for _, name := range servers {
+				// Every server is approved as its tools are, listed together
+				// or not (N26 engine-tools-1#26).
+				if in.Server == "" {
+					if err := r.approveMCPServer(ctx, name, "list_mcp_resources", nil); err != nil {
+						errs = append(errs, fmt.Errorf("MCP server %q: %w", name, err))
+						continue
+					}
+				}
+				res, err := r.mcp.Resources(ctx, name)
+				out.Resources = append(out.Resources, res...)
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}
+			if err := errors.Join(errs...); err != nil {
 				out.Error = err.Error()
 			}
 			return out, nil

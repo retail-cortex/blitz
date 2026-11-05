@@ -157,6 +157,23 @@ func TestManagedToolPausedServer(t *testing.T) {
 	assert.ErrorContains(t, err, "unavailable after repeated failures")
 }
 
+// A tool its server no longer serves (the settings changed under a running
+// turn) doesn't run: ApproveMCP no longer knows its name, so it was never
+// approved as the server's (N26 engine-tools-1#25).
+func TestManagedToolNoLongerServed(t *testing.T) {
+	m := NewMCPManagerFromToolsets([]MCPToolset{{
+		Config:  config.MCPServerConfig{Name: "odd", Prefix: "o"},
+		Toolset: staticToolset{tools: []tool.Tool{declarationless{plainTool{"bare"}}}},
+	}}, nil)
+	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
+	require.NoError(t, err)
+	m.replace(nil, nil)
+	_, _, ok := m.Lookup("o__bare")
+	require.False(t, ok, "the gate no longer knows it")
+	_, err = tl[0].(runnerTool).Run(createTestToolContext(), map[string]any{})
+	assert.ErrorContains(t, err, "no longer served")
+}
+
 // A nil manager (no MCP configured) serves and owns nothing.
 func TestNilMCPManager(t *testing.T) {
 	var m *MCPManager

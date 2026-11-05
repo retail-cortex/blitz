@@ -159,6 +159,7 @@ func TestSlowMCPCallTimesOutAndToolErrorsKeepServerHealthy(t *testing.T) {
 	_, err := tools["slow"].Run(createTestToolContext(), map[string]any{"text": "x"})
 	require.Error(t, err, "slow call")
 	require.Contains(t, err.Error(), "timed out", "slow call: %v", err)
+	require.Contains(t, err.Error(), "timeout_seconds", "names the setting (N26 engine-tools-1#29)")
 	d := time.Since(start)
 	require.LessOrEqual(t, d, 5*time.Second, "timeout took %v", d)
 	require.Equal(t, 1, m.servers[0].health.Failures(), "timeout not counted: %d failures", m.servers[0].health.Failures())

@@ -522,26 +522,10 @@ func (p *PermissionRules) ToolDenied(tool string, args map[string]any) *Permissi
 	if eff, r := p.Decide(RuleTool, []string{tool}); eff == EffectDeny {
 		return r
 	}
-	name := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := args[k].(string); ok && v != "" {
-				return v
-			}
-		}
-		return ""
-	}
-	switch tool {
-	case "activate_skill", "run_skill_script":
-		if s := name("skill_name", "skill", "name"); s != "" {
-			if eff, r := p.Decide(RuleSkill, []string{s}); eff == EffectDeny {
-				return r
-			}
-		}
-	case "invoke_agent":
-		if a := name("agent_name", "agent"); a != "" {
-			if eff, r := p.Decide(RuleAgent, []string{a}); eff == EffectDeny {
-				return r
-			}
+	targets := CallTargets(tool, args)
+	for _, kind := range []string{RuleSkill, RuleAgent} {
+		if eff, r := p.Decide(kind, targets[kind]); eff == EffectDeny {
+			return r
 		}
 	}
 	return nil

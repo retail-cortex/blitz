@@ -801,6 +801,15 @@ func (p *managedTool) Declaration() *genai.FunctionDeclaration {
 }
 
 func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
+	// A tool its server no longer serves (the settings changed since it was
+	// listed) was never approved as that server's: ApproveMCP didn't know
+	// its name, so it doesn't run (N26 engine-tools-1#25).
+	p.m.mu.Lock()
+	owned := p.m.owner[p.name] == p.srv
+	p.m.mu.Unlock()
+	if !owned {
+		return nil, fmt.Errorf("MCP tool %q is no longer served by %q: its settings changed; the next turn lists its tools again", p.name, p.srv.cfg.Name)
+	}
 	if ok, retryIn := p.srv.health.Allow(); !ok {
 		return nil, fmt.Errorf("MCP server %q is unavailable after repeated failures; retrying in %s", p.srv.cfg.Name, retryIn.Round(time.Second))
 	}
@@ -812,7 +821,7 @@ func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
 	case err == nil:
 		p.m.recordSuccess(ctx, p.srv)
 	case cctx.Err() == context.DeadlineExceeded && ctx.Err() == nil:
-		err = fmt.Errorf("MCP tool %q timed out after %s", p.name, p.srv.callTimeout())
+		err = fmt.Errorf("MCP tool %q timed out after %s (the server's timeout_seconds in [[mcp.servers]] sets this)", p.name, p.srv.callTimeout())
 		p.m.recordFailure(ctx, p.srv, err)
 	case transportFailure(err):
 		p.m.recordFailure(ctx, p.srv, err)

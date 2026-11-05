@@ -91,7 +91,8 @@ func TestMCPResourceToolsApproval(t *testing.T) {
 		want    string // in the output
 		wantErr string
 	}{
-		{"list every server", list, map[string]any{}, false, 0, "file:///readme", ""},
+		{"list every server", list, map[string]any{}, true, 1, "file:///readme", ""},
+		{"list every server, one refused", list, map[string]any{}, false, 1, "", `MCP server "srv"`},
 		{"list a denied server", list, map[string]any{"server": "srv"}, false, 1, "", "not approved"},
 		{"list an approved server", list, map[string]any{"server": "srv"}, true, 1, "file:///readme", ""},
 		{"list an unknown server", list, map[string]any{"server": "nope"}, true, 0, "", `no MCP server "nope"`},

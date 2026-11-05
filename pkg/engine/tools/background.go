@@ -135,7 +135,7 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 		}
 	}
 	if running >= m.maxRunning {
-		return nil, fmt.Errorf("too many background processes running (limit %d); kill one first", m.maxRunning)
+		return nil, fmt.Errorf("too many background processes running (a fixed limit of %d); kill one first", m.maxRunning)
 	}
 	m.pruneLocked()
 
@@ -187,6 +187,7 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 
 	go func() {
 		_ = cmd.Wait()
+		expired := ctx.Err() == context.DeadlineExceeded // the lifetime ended it
 		cancel()
 		m.mu.Lock()
 		bp.finished = true
@@ -204,8 +205,12 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 			if len(tail) > 1500 {
 				tail = "…" + tail[len(tail)-1500:]
 			}
-			notice(session, fmt.Sprintf("Background process %d (`%s`) exited with code %d after %s. Its last output:\n%s",
-				bp.ID, textutil.Ellipsize(command, 80), code, took, tail))
+			how := fmt.Sprintf("exited with code %d after %s", code, took)
+			if expired {
+				how = fmt.Sprintf("was stopped after %s, the fixed lifetime of a background process", m.maxLifetime)
+			}
+			notice(session, fmt.Sprintf("Background process %d (`%s`) %s. Its last output:\n%s",
+				bp.ID, textutil.Ellipsize(command, 80), how, tail))
 		}
 	}()
 	return bp, nil

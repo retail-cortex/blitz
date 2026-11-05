@@ -157,3 +157,21 @@ func TestManageBackgroundOwnSession(t *testing.T) {
 	_, err = pm.Kill(theirs.ID)
 	require.NoError(t, err)
 }
+
+// A process its lifetime stopped says so, not just its exit code (N26
+// engine-tools-1#10).
+func TestBackgroundLifetimeNotice(t *testing.T) {
+	pm := NewProcessManager(0, 200*time.Millisecond)
+	t.Cleanup(pm.Shutdown)
+	notices := make(chan string, 1)
+	pm.Notice = func(_, text string) { notices <- text }
+	bp, err := pm.StartWatched("s", "sleep 5", t.TempDir(), &Watch{Exit: true})
+	require.NoError(t, err)
+	select {
+	case n := <-notices:
+		assert.Contains(t, n, "was stopped after 200ms, the fixed lifetime")
+	case <-time.After(3 * time.Second):
+		t.Fatal("no notice")
+	}
+	<-bp.done
+}

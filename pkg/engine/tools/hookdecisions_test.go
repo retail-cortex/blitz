@@ -212,15 +212,18 @@ func TestCallGrants(t *testing.T) {
 		return api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: p, Targets: []string{p}}
 	}
 	assert.Error(t, hooks.Approve(ctx, write("a.txt")), "not granted: the user says no")
-	hooks.GrantCall("")
-	assert.Error(t, hooks.Approve(callCtx{context.Background(), ""}, write("a.txt")), "an empty call ID is never granted")
-	hooks.GrantCall("call-1")
+	noID := callCtx{context.Background(), ""}
+	hooks.GrantCall(noID)
+	assert.Error(t, hooks.Approve(noID, write("a.txt")), "an empty call ID is never granted")
+	hooks.GrantCall(ctx)
 	assert.NoError(t, hooks.Approve(ctx, write("a.txt")), "granted")
 	assert.Error(t, hooks.Approve(callCtx{context.Background(), "call-2"}, write("a.txt")), "another call")
+	// Another session's call with the same ID (N26 engine-tools-1#27).
+	assert.Error(t, hooks.Approve(callCtx{WithOwnerSession(context.Background(), "other"), "call-1"}, write("a.txt")), "another session's call-1")
 	assert.ErrorContains(t, hooks.Approve(ctx, write("id.key")), "deny")
 	assert.Error(t, hooks.Approve(ctx, write("go.lock")), "an ask rule still asks")
-	hooks.EndCall("call-1")
+	hooks.EndCall(ctx)
 	assert.Error(t, hooks.Approve(ctx, write("a.txt")))
-	assert.Len(t, *reqs, 5, "asked: before the grant, the empty ID, the other call, the ask rule, after it ended")
+	assert.Len(t, *reqs, 6, "asked: before the grant, the empty ID, the other call, the other session's, the ask rule, after it ended")
 	assert.Equal(t, "", CallID(context.Background()))
 }

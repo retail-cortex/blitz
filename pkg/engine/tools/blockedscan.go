@@ -18,6 +18,7 @@ import (
 	"context"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -33,7 +34,13 @@ const (
 	blockedScanMaxDepth   = 12
 )
 
-var blockedScanSkip = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, "__pycache__": true}
+// blockedScanSkip are the folders the scan doesn't descend into: grep's,
+// and .git.
+var blockedScanSkip = func() map[string]bool {
+	m := maps.Clone(grepSkipDirs)
+	m[".git"] = true
+	return m
+}()
 
 // racyWindow is how close to when it was read a directory's modification
 // time can be and still change again without the time changing (file

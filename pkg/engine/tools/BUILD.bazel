@@ -176,6 +176,7 @@ go_test(
         "cmdpolicy_cov_test.go",
         "cmdpolicy_test.go",
         "credentials_test.go",
+        "diff_test.go",
         "documents_test.go",
         "edit_race_test.go",
         "exec_cov_test.go",

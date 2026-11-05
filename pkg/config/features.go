@@ -126,10 +126,14 @@ type AudioConfig struct {
 	// Speakers are two named voices for a conversation, such as a
 	// two-host overview, whose lines start "Name: " (Gemini only).
 	Speakers []SpeakerConfig `toml:"speakers"`
-	// MaxChars caps the text spoken in one call (default 9000, about ten
-	// minutes; Gemini's audio is uncompressed, about 3 MB a minute).
+	// MaxChars caps the text spoken in one call (DefaultAudioMaxChars,
+	// about ten minutes; Gemini's audio is uncompressed, about 3 MB a
+	// minute).
 	MaxChars int `toml:"max_chars"`
 }
+
+// DefaultAudioMaxChars is [audio] max_chars when it isn't set.
+const DefaultAudioMaxChars = 9_000
 
 // SpeakerConfig is one voice in a conversation.
 type SpeakerConfig struct {
@@ -742,7 +746,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
 	c.PDF = PDFConfig{PageSize: "auto"}
 	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
-	c.Audio = AudioConfig{MaxChars: 9_000}
+	c.Audio = AudioConfig{MaxChars: DefaultAudioMaxChars}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20, BrowserFallback: true}
 	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800, Show: "ask", Open: "ask"}
 	// Prices in effect when the configuration loads: a service running

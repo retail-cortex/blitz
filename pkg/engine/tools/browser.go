@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -227,7 +228,7 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		if err = need(in.Script, "script"); err == nil {
 			out.Result, err = b.Eval(actx, in.Script)
 			if len(out.Result) > webMaxOutputChars {
-				out.Result, out.Truncated = out.Result[:webMaxOutputChars], true
+				out.Result, out.Truncated = textutil.TruncateUTF8(out.Result, webMaxOutputChars), true
 			}
 		}
 	case "screenshot":
