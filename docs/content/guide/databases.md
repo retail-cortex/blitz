@@ -33,7 +33,7 @@ The password goes into your system's keychain as a [secret](../about/specs/spec_
 
 Each database offers **ready-made tools**, named `db__<database>_<tool>`: `db__shop_list_tables`, `db__shop_execute_sql`, and for BigQuery `list_datasets` and `table_info`. Switch off the ones you don't want.
 
-**Your queries** are better still: SQL you write once, with parameters, offered as a tool of its own. An agent asking for "the top 5 customers" calls `db__shop_top_customers` with `limit: 5` instead of writing SQL. Write the SQL, and Blitz drafts its parameters from `$1`, `$2` (PostgreSQL, SQLite) or `@name` (BigQuery); **Try it** runs it on the spot.
+**Your queries** are better still: SQL you write once, with parameters, offered as a tool of its own. An agent asking for "the top 5 customers" calls `db__shop_top_customers` with `limit: 5` instead of writing SQL. Write the SQL, and Blitz drafts its parameters from `$1`, `$2` (PostgreSQL, SQLite) or `@name` (BigQuery); **Try it** runs it on the spot (one that may write asks first: what it changes stays changed).
 
 ### Write a query from a description
 

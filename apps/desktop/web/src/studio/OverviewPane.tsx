@@ -25,7 +25,7 @@ import { t, tn } from "../i18n";
 import { Bars, Columns, ScoreRing, Sparkline, gradeTone } from "@blitz/webui";
 import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { cost, ms, took } from "../workflowRuns";
-import { attention, dayColumns, dayTotals, delta, grade, healthKinds, itemKey, kindSummary, startCheck, stopCheck, topRuns, type HealthKind } from "./health";
+import { attention, dayColumns, dayTotals, delta, grade, healthKinds, healthSettingsChanges, healthSettingsForm, itemKey, kindSummary, startCheck, stopCheck, topRuns, type HealthKind, type HealthSettingsForm } from "./health";
 
 // Studio's Overview (spec_044_health): the workspace's dashboard, every
 // card opening in place into its detail.
@@ -117,7 +117,7 @@ export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: 
               : t("desktop.health.judging_start")}
           </span>
           <progress max={progress?.total || 1} value={Math.max(0, (progress?.index ?? 1) - 1)} />
-          <Button small icon={mdiStop} onClick={() => void stopCheck(workspace)}>
+          <Button small icon={mdiStop} onClick={() => stopCheck(workspace).catch((e) => snack(message(e), { error: true }))}>
             {t("desktop.evals.stop")}
           </Button>
         </div>
@@ -537,24 +537,16 @@ function ItemDetail({ it, runs, verdict, onRejudge, onImprove }: { it: HealthIte
 /** The judge's model, the schedule and a scheduled check's cost limit, and the reflection's schedule and limit, kept in the workspace's own settings. */
 function HealthSettings({ workspace, health, onClose }: { workspace: string; health: WorkspaceHealth; onClose: () => void }) {
   const snack = useSnackbar();
-  const [schedule, setSchedule] = useState(health.schedule);
-  const [limit, setLimit] = useState(health.maxCostUsd ? String(health.maxCostUsd) : "");
-  const [model, setModel] = useState(health.model);
-  const [reflect, setReflect] = useState(health.reflectSchedule);
-  const [reflectLimit, setReflectLimit] = useState(health.reflectMaxCostUsd ? String(health.reflectMaxCostUsd) : "");
-  const [threshold, setThreshold] = useState(String(health.reflectThreshold));
+  // Only what's changed is written (spec_044 HL-14b): a field left as it
+  // was keeps following the global settings or the default.
+  const [was] = useState(() => healthSettingsForm(health));
+  const [form, setForm] = useState(was);
+  const set = (k: keyof HealthSettingsForm) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
-      for (const [key, value] of [
-        ["health.schedule", schedule.trim() || "off"],
-        ["health.max_cost_usd", limit.trim() || "0"],
-        ["health.model", model.trim()],
-        ["harness.reflect_schedule", reflect.trim() || "off"],
-        ["harness.max_cost_usd", reflectLimit.trim() || "0"],
-        ["harness.reflect_threshold", threshold.trim() || "0"],
-      ] as const) {
+      for (const [key, value] of healthSettingsChanges(was, form)) {
         await config.setConfigValue({ workspace, key, value });
       }
       snack(t("desktop.health.settings_saved"));
@@ -581,22 +573,22 @@ function HealthSettings({ workspace, health, onClose }: { workspace: string; hea
     >
       <div className="stack" style={{ gap: 12 }}>
         <Field label={t("desktop.health.schedule")} supporting={t("desktop.health.schedule_hint")}>
-          {(id) => <input id={id} className="input" value={schedule} placeholder={t("desktop.health.schedule_placeholder")} onChange={(e) => setSchedule(e.target.value)} />}
+          {(id) => <input id={id} className="input" value={form.schedule} placeholder={t("desktop.health.schedule_placeholder")} onChange={(e) => set("schedule")(e.target.value)} />}
         </Field>
         <Field label={t("desktop.health.max_cost")} supporting={t("desktop.health.max_cost_hint")}>
-          {(id) => <input id={id} className="input" inputMode="decimal" value={limit} placeholder="1" onChange={(e) => setLimit(e.target.value)} />}
+          {(id) => <input id={id} className="input" inputMode="decimal" value={form.maxCost} placeholder="1" onChange={(e) => set("maxCost")(e.target.value)} />}
         </Field>
         <Field label={t("desktop.health.model")} supporting={t("desktop.health.model_hint")}>
-          {(id) => <input id={id} className="input mono" value={model} placeholder={t("desktop.health.default_model")} onChange={(e) => setModel(e.target.value)} />}
+          {(id) => <input id={id} className="input mono" value={form.model} placeholder={t("desktop.health.default_model")} onChange={(e) => set("model")(e.target.value)} />}
         </Field>
         <Field label={t("desktop.health.reflect_schedule")} supporting={health.reflectSkipped ? t("desktop.health.reflect_skipped", { why: health.reflectSkipped }) : t("desktop.health.reflect_schedule_hint")}>
-          {(id) => <input id={id} className="input" value={reflect} placeholder={t("desktop.health.reflect_schedule_placeholder")} onChange={(e) => setReflect(e.target.value)} />}
+          {(id) => <input id={id} className="input" value={form.reflect} placeholder={t("desktop.health.reflect_schedule_placeholder")} onChange={(e) => set("reflect")(e.target.value)} />}
         </Field>
         <Field label={t("desktop.health.reflect_max_cost")} supporting={t("desktop.health.reflect_max_cost_hint")}>
-          {(id) => <input id={id} className="input" inputMode="decimal" value={reflectLimit} placeholder="0.5" onChange={(e) => setReflectLimit(e.target.value)} />}
+          {(id) => <input id={id} className="input" inputMode="decimal" value={form.reflectMaxCost} placeholder="0.5" onChange={(e) => set("reflectMaxCost")(e.target.value)} />}
         </Field>
         <Field label={t("desktop.health.reflect_threshold")} supporting={t("desktop.health.reflect_threshold_hint")}>
-          {(id) => <input id={id} className="input" inputMode="numeric" value={threshold} placeholder="5" onChange={(e) => setThreshold(e.target.value)} />}
+          {(id) => <input id={id} className="input" inputMode="numeric" value={form.threshold} placeholder="5" onChange={(e) => set("threshold")(e.target.value)} />}
         </Field>
       </div>
     </Dialog>

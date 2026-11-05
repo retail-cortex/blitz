@@ -22,6 +22,7 @@ import type { ConnectorKind } from "../gen/blitz/v1/workspace_pb";
 import { Button, Field, IconButton } from "@blitz/webui";
 import { agentTool, type ConnectorApi } from "./connectorApi";
 import { can, connectionFromForm, paramTypes, readsOnly, statementParams, type ConnectorForm, type QueryForm } from "./connectorForm";
+import { ConfirmDialog } from "./paneParts";
 
 /** A connection's own query: its name, what it's for, its statement and parameters, and Try it on the connection as written. */
 export function QueryCard({
@@ -44,6 +45,8 @@ export function QueryCard({
   const [args, setArgs] = useState<Record<string, string>>({});
   const [trying, setTrying] = useState(false);
   const [result, setResult] = useState<{ output: string; error: boolean } | null>(null);
+  // A statement that may write runs only once it's confirmed: Try it runs it for real.
+  const [confirming, setConfirming] = useState(false);
   const reads = readsOnly(query.statement);
   const tryIt = async () => {
     setTrying(true);
@@ -114,12 +117,26 @@ export function QueryCard({
           {t("desktop.connectors.remove_query")}
         </Button>
         {can(kind, "try") && (
-          <Button variant="tonal" icon={trying ? mdiLoading : mdiPlay} iconSpin={trying} disabled={trying || !query.name.trim() || !query.statement.trim() || !form.name.trim()} onClick={() => void tryIt()}>
+          <Button variant="tonal" icon={trying ? mdiLoading : mdiPlay} iconSpin={trying} disabled={trying || !query.name.trim() || !query.statement.trim() || !form.name.trim()} onClick={() => (reads ? void tryIt() : setConfirming(true))}>
             {trying ? t("desktop.connectors.trying") : t("desktop.connectors.try_it")}
           </Button>
         )}
       </div>
       {result && <pre className={`small-card db-result ${result.error ? "error-text" : ""}`}>{result.output || t("desktop.connectors.no_rows")}</pre>}
+      {confirming && (
+        <ConfirmDialog
+          title={t("desktop.connectors.try_writes_title")}
+          icon={mdiPlay}
+          confirm={t("desktop.connectors.try_writes_go")}
+          onConfirm={() => {
+            setConfirming(false);
+            void tryIt();
+          }}
+          onClose={() => setConfirming(false)}
+        >
+          <p>{t("desktop.connectors.try_writes_body", { name: query.name.trim() })}</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ An item's grade is its overall score: **A** from 4.5, **B** from 3.5, **C** from
 
 ## On a schedule
 
-Once you've checked by hand, the workspace is checked again **every day at 02:00** by default, judging only what changed. Change it with the gear on the Overview: when (in words or as cron, such as *weekdays at 6 AM*, or *off*), the most a scheduled check may cost (estimated first: a check that would cost more doesn't run, and the Overview says why), and the judge's model. These are kept in the workspace's own settings, never in the project's files:
+Once you've checked by hand, the workspace is checked again **every day at 02:00** by default, judging only what changed. Change it with the gear on the Overview: when (in words or as cron, such as *weekdays at 6 AM*, or *off*), the most a scheduled check may cost (estimated first: a check that would cost more doesn't run, and the Overview says why), and the judge's model. Only what you change there is kept, in the workspace's own settings (never in the project's files); empty a field to go back to the default:
 
 ```toml
 [health]

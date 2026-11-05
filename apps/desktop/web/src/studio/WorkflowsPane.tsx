@@ -560,13 +560,29 @@ export function WorkflowsPane({
     );
   }, [open, workspace, endedCount, receipt?.status]);
 
+  // The streams following runs just started, until their first step:
+  // ended when the workflow or Studio closes, so a run that waits before
+  // its first step holds no stream open (the run itself goes on).
+  const following = useRef(new Set<AbortController>());
+  useEffect(() => {
+    const live = following.current;
+    return () => {
+      for (const ctl of live) ctl.abort();
+      live.clear();
+    };
+  }, [open]);
+
   // Runs the workflow as saved, in the background, as /name input: its
   // receipt shows as its first step starts. It goes on with Studio closed.
   const run = async (name: string) => {
     setAsking(false);
+    const ctl = new AbortController();
+    following.current.add(ctl);
     try {
       const started = await sessions.startBackground({ workspace, turn: { text: `/${name} ${input}`.trim(), command: true } });
-      for await (const res of sessions.watchBackground({ id: started.run?.id ?? "", follow: true })) {
+      const id = started.run?.id ?? "";
+      if (!id || ctl.signal.aborted) return;
+      for await (const res of sessions.watchBackground({ id, follow: true }, { signal: ctl.signal })) {
         const k = res.event?.kind;
         if (k?.case === "flowStep" && k.value.run) {
           dismissed.current.delete(k.value.run);
@@ -580,7 +596,9 @@ export function WorkflowsPane({
         }
       }
     } catch (e) {
-      snack(message(e), { error: true });
+      if (!ctl.signal.aborted) snack(message(e), { error: true });
+    } finally {
+      following.current.delete(ctl);
     }
   };
   // Answers the human task the run waits on: it resumes in the background.

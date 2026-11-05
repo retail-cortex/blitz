@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { HealthItemSchema, HealthSignalSchema, type HealthItem } from "../gen/blitz/v1/workspace_pb";
 import { chartGeometry, ringDash } from "@blitz/webui";
-import { attention, dayColumns, dayTotals, delta, grade, itemKey, kindSummary, topRuns } from "./health";
+import { attention, dayColumns, dayTotals, delta, grade, healthSettingsChanges, healthSettingsForm, itemKey, kindSummary, topRuns } from "./health";
 
 const item = (init: Parameters<typeof create<typeof HealthItemSchema>>[1]): HealthItem => create(HealthItemSchema, init);
 
@@ -110,5 +110,22 @@ describe("the workspace dashboard", () => {
     expect(chartGeometry([], [0, 0], 100, 50).line).toBe("25.0,50.0 75.0,50.0");
     expect(chartGeometry([1], [5], 100, 50).line).toBe("");
     expect(chartGeometry([], [], 100, 50).columnScale).toBe(0);
+  });
+});
+
+describe("the health settings", () => {
+  const was = healthSettingsForm({ schedule: "every day at 02:00", maxCostUsd: 0, model: "", reflectSchedule: "", reflectMaxCostUsd: 0.5, reflectThreshold: 5 });
+  it("shows a limit of 0 as 0, not as empty", () => {
+    expect(was.maxCost).toBe("0");
+  });
+  it.each([
+    { name: "nothing changed: nothing written", now: {}, want: [] },
+    { name: "an emptied limit is taken out, back to the default", now: { reflectMaxCost: "" }, want: [["harness.max_cost_usd", ""]] },
+    { name: "0 typed is no limit", now: { reflectMaxCost: "0" }, want: [["harness.max_cost_usd", "0"]] },
+    { name: "an emptied threshold is the default, not never", now: { threshold: " " }, want: [["harness.reflect_threshold", ""]] },
+    { name: "an emptied schedule is off", now: { schedule: "" }, want: [["health.schedule", "off"]] },
+    { name: "only the changed one", now: { model: "gemini/x", maxCost: "0" }, want: [["health.model", "gemini/x"]] },
+  ])("$name", ({ now, want }) => {
+    expect(healthSettingsChanges(was, { ...was, ...now })).toEqual(want);
   });
 });
