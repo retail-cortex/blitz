@@ -53,6 +53,7 @@ weight: 32
 - **BGA-10** `list_tasks()`: the tasks of this session, each with ID, agent, state, runtime, cost, and the first line of its result.
 - **BGA-11** `task_output(task_id, wait_seconds?)`: the state and the final text, or while it runs, the last few events. `wait_seconds` (at most 300) blocks until the task ends or the wait runs out, so an agent can wait on purpose.
 - **BGA-12** `stop_task(task_id)`: stops the task and returns its state.
+- **BGA-12a** *2026-11-04 (scan N26-engine-runtime#12: the wait and the cross-session cap were in no spec).* `stop_task`, `/tasks stop` and the workspace closing wait up to 5 s (`stopWait`) for the task to end; one still ending after that is reported as still running and ends on its own. Besides the last 16 per session, at most 64 ended tasks are kept across sessions (`maxEndedTasks`; each worker run is a session), the oldest dropped first.
 - **BGA-13** All three only see tasks of the calling agent's session (`UNKNOWN_TASK` otherwise).
 
 ## 5. Results reaching the main agent

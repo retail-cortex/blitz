@@ -80,6 +80,9 @@ func CheckSettings(text string) []Problem {
 			}
 		}
 	}
+	if p := strings.ToLower(cfg.LLM.Provider); md.IsDefined("llm", "provider") && p != "" && !ValidProvider(p) {
+		out = append(out, Problem{Line: keyLine(text, toml.Key{"llm", "provider"}), Error: true, Message: fmt.Sprintf("llm.provider: unknown provider %q (%s)", cfg.LLM.Provider, ProviderList())})
+	}
 	// The background tasks' limits, as far as the file sets them.
 	bg := DefaultConfig().Tools
 	for key, set := range map[string]func(){

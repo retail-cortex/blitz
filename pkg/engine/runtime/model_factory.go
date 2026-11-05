@@ -85,12 +85,15 @@ func defaultProvider(cfg *config.Config) string {
 	return strings.ToLower(cfg.LLM.Provider)
 }
 
-// knownProviders are the provider prefixes recognised in model references.
-var knownProviders = map[string]bool{
-	"gemini": true, "anthropic": true, "openai": true, "ollama": true,
-	"bedrock": true, "azure": true, "vertex-anthropic": true, "api": true,
-	"enterprise": true,
-}
+// knownProviders are the provider prefixes recognised in model
+// references: the settings' (config.Providers) and an organization's.
+var knownProviders = func() map[string]bool {
+	m := map[string]bool{"enterprise": true}
+	for _, p := range config.Providers {
+		m[p] = true
+	}
+	return m
+}()
 
 // ParseModelRef splits "provider/model" into its parts. Without a known
 // provider prefix the whole reference is a model of defaultProvider, so
@@ -269,11 +272,9 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return newOpenAIModel(ctx, modelName, "ollama", defaultOllamaBaseURL, pol.openAIOptions()...)
 
 	default:
-		// Fallback to Gemini if configured
-		if cfg.LLM.Gemini.APIKey != "" {
-			return gemini.NewModel(ctx, modelName, pol.geminiConfig(cfg.LLM.Gemini.APIKey))
-		}
-		return nil, fmt.Errorf("unsupported or unconfigured LLM provider '%s'", provider)
+		// A misspelt provider is that, whatever keys are set: never
+		// another provider's model under its name.
+		return nil, errUnknownProvider(provider)
 	}
 }
 

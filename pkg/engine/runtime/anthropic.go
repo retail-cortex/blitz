@@ -61,6 +61,9 @@ type anthropicModel struct {
 	// accepted in its own state.
 	clientFallback bool
 	states         sync.Map // session ID → *betafallback.BetaFallbackState
+	// authHint says what to check when the API refuses the credentials,
+	// for how this model signs in ("": [llm.anthropic]'s API key).
+	authHint string
 }
 
 // defaultClientFallback is the fallback for fallbacks = "default" where
@@ -159,7 +162,7 @@ func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name str
 	if name == "" {
 		name = DefaultAnthropicModel
 	}
-	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb, clientFallback: clientFB}, nil
+	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb, clientFallback: clientFB, authHint: anthropicAuthHint(cfg)}, nil
 }
 
 // claudeOnVertex are the client options for Claude on Vertex AI: the
@@ -212,7 +215,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 		if _, long := anthropic.CalculateNonStreamingTimeout(int(params.MaxTokens), params.Model, opts); !stream && long == nil {
 			msg, err := m.client.Beta.Messages.New(ctx, params, opts...)
 			if err != nil {
-				yield(nil, anthropicError(err))
+				yield(nil, anthropicError(err, m.authHint))
 				return
 			}
 			yield(messageToResponse(msg), nil)
@@ -238,7 +241,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 			}
 		}
 		if err := s.Err(); err != nil {
-			yield(nil, anthropicError(err))
+			yield(nil, anthropicError(err, m.authHint))
 			return
 		}
 		yield(messageToResponse(&msg), nil)
@@ -683,13 +686,32 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	return resp
 }
 
-// anthropicError adds the status code to API errors for clearer messages.
-func anthropicError(err error) error {
+// anthropicAuthHint is what to check when Anthropic refuses cfg's
+// credentials.
+func anthropicAuthHint(cfg config.AnthropicConfig) string {
+	switch cfg.Auth {
+	case config.AuthOAuth:
+		return "sign in again with ant auth login ([llm.anthropic] auth = \"oauth\")"
+	case config.AuthADC:
+		return "check Google Cloud's credentials (gcloud auth application-default login) and the Vertex AI project"
+	}
+	if cfg.APIKey == "" && cfg.APIKeyCommand != "" {
+		return "check llm.anthropic.api_key_command"
+	}
+	return ""
+}
+
+// anthropicError adds the status code to API errors for clearer messages;
+// a refused sign-in says what to check (hint, else the API key).
+func anthropicError(err error, hint string) error {
+	if hint == "" {
+		hint = "check llm.anthropic.api_key or ANTHROPIC_API_KEY"
+	}
 	var apiErr *anthropic.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 401, 403:
-			return fmt.Errorf("anthropic: authentication failed (%d); check llm.anthropic.api_key or ANTHROPIC_API_KEY: %w", apiErr.StatusCode, err)
+			return fmt.Errorf("anthropic: authentication failed (%d); %s: %w", apiErr.StatusCode, hint, err)
 		case 429:
 			if q := asQuota(err); q != err {
 				return fmt.Errorf("anthropic: %w", q)

@@ -123,7 +123,7 @@ func (a *ollamaAuto) GenerateContent(ctx context.Context, req *model.LLMRequest,
 // which model it doesn't have and what to do.
 func providerError(err error, provider, name, key string) error {
 	var apiErr *openai.Error
-	if provider == "" || !errors.As(err, &apiErr) {
+	if !errors.As(err, &apiErr) {
 		return err
 	}
 	if provider == "ollama" && apiErr.StatusCode == http.StatusNotFound {

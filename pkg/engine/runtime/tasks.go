@@ -547,7 +547,11 @@ func (e *Engine) WaitTask(ctx context.Context, sessions []string, id string, wai
 	return e.taskInfo(t), events, nil
 }
 
-// StopTask stops task id and waits a few seconds for it to end.
+// stopWait is how long StopTask and StopTasks wait for a stopped task to
+// end; one still going after it is reported as it is (still running).
+var stopWait = 5 * time.Second
+
+// StopTask stops task id and waits up to stopWait for it to end.
 func (e *Engine) StopTask(sessions []string, id string) (api.TaskInfo, error) {
 	t, err := e.get(sessions, id)
 	if err != nil {
@@ -556,7 +560,7 @@ func (e *Engine) StopTask(sessions []string, id string) (api.TaskInfo, error) {
 	t.cancel(errTaskStopped)
 	select {
 	case <-t.done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(stopWait):
 	}
 	return e.taskInfo(t), nil
 }
@@ -578,7 +582,7 @@ func (e *Engine) StopTasks() {
 	for _, t := range running {
 		select {
 		case <-t.done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(stopWait):
 		}
 	}
 }

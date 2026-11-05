@@ -79,6 +79,7 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 - **ENG-70** `InvokeSubagent(agent, prompt)` (behind the `invoke_agent` tool) builds the agent fresh and runs it in an isolated in-memory session `subagent-<name>-<seq>`; returns the concatenated final non-thought text authored by that agent. Nesting is capped at depth 3 (`ErrSubagentDepth`). The calling run's usage accounting, per-model settings and turn limit context still apply.
 - **ENG-70a** *2026-11-04 (scan N26-engine-runtime#14).* A sub-agent with its own `max_turns` counts its model calls toward the calling run's budget too ([spec_032_background_agents](spec_032_background_agents.md) BGA-50a).
+- **ENG-70b** *2026-11-04 (scan N26-engine-runtime#11: the depth error said nothing a person could do).* The depth stays a fixed 3 (no setting); `ErrSubagentDepth`'s message says what to do: "…(3): an agent this deep can't delegate; do the work itself, or have a shallower agent hand it out".
 
 ## 9. Usage and cost
 

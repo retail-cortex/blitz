@@ -18,6 +18,7 @@ import (
 	"cmp"
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,7 +204,7 @@ func nonEmpty(s string) []string {
 type errUnknownProvider string
 
 func (e errUnknownProvider) Error() string {
-	return "unknown provider " + string(e) + " (gemini, anthropic, openai, ollama, bedrock, azure or api)"
+	return "unknown provider " + strconv.Quote(string(e)) + " (" + config.ProviderList() + ")"
 }
 
 func contains(list []string, v string) bool {

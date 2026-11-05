@@ -78,7 +78,8 @@ func newBedrockModel(ctx context.Context, cfg config.BedrockConfig, name string,
 		}
 	}
 	client := anthropic.NewClient(append(opts, bedrock.WithConfig(aws))...)
-	return &anthropicModel{client: client, name: name, fallbacks: "off"}, nil
+	return &anthropicModel{client: client, name: name, fallbacks: "off",
+		authHint: "check the AWS credentials (aws sso login, aws configure or AWS_BEARER_TOKEN_BEDROCK) and [llm.bedrock]"}, nil
 }
 
 // Entra ID scopes.
@@ -143,7 +144,8 @@ func newAzureModel(ctx context.Context, cfg config.AzureConfig, name string, pol
 		if err != nil {
 			return nil, fmt.Errorf("[llm.azure]: %w", err)
 		}
-		return &anthropicModel{client: anthropic.NewClient(client.Options...), name: name, fallbacks: "off"}, nil
+		return &anthropicModel{client: anthropic.NewClient(client.Options...), name: name, fallbacks: "off",
+			authHint: "check [llm.azure] api_key, or the Entra sign-in (az login) with auth = \"entra\""}, nil
 	}
 
 	base := cfg.BaseURL
@@ -180,5 +182,9 @@ func newAzureModel(ctx context.Context, cfg config.AzureConfig, name string, pol
 		req.Header.Set(k, v)
 		return next(req)
 	}))
-	return newOpenAIModel(ctx, name, "azure", base, opts...)
+	m, err := newOpenAIModel(ctx, name, "azure", base, opts...)
+	if t, ok := m.(*toolCallParsingModel); ok {
+		t.key = cmp.Or(cfg.APIKey, os.Getenv("AZURE_OPENAI_API_KEY")) // masked in what Azure says
+	}
+	return m, err
 }

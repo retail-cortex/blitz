@@ -60,6 +60,7 @@ func TestCheckSettings(t *testing.T) {
 			{Line: 2, Error: true, Message: "tools.background_agent_timeout is a length of time"},
 			{Line: 3, Error: true, Message: "tools.background_agent_max_turns is a task's model calls"},
 		}},
+		{name: "a misspelt provider", text: "[llm]\nprovider = \"antropic\"\n", want: []Problem{{Line: 2, Error: true, Message: `llm.provider: unknown provider "antropic"`}}},
 		{name: "background limits", text: "[tools]\nbackground_agent_timeout = \"2h\"\nmax_background_agents = 2\n"},
 		{name: "skill policy", text: "[skills.policy]\nsandbox = \"docker\"\n", want: []Problem{{Line: 1, Message: "skills.policy.sandbox"}}},
 		{

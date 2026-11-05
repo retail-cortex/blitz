@@ -247,8 +247,9 @@ func TestBuildProviderModel(t *testing.T) {
 		},
 		{name: "none: openai address", model: "gpt-x", cfg: func(c *config.Config) { c.LLM.OpenAI.BaseURL = "http://127.0.0.1:1/v1" }, want: "openai"},
 		{name: "none: ollama", model: "llama", want: "openai"},
-		{name: "unknown with a gemini key", provider: "mystery", model: "gemini-x", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, want: "gemini"},
-		{name: "unknown", provider: "mystery", err: "unsupported or unconfigured LLM provider"},
+		// A misspelt provider is never Gemini's model under its name (N26 engine-runtime#17).
+		{name: "unknown with a gemini key", provider: "antropic", model: "claude-opus-5", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, err: `unknown provider "antropic" (gemini, anthropic, openai, ollama, bedrock, azure, vertex-anthropic or api)`},
+		{name: "unknown", provider: "mystery", err: `unknown provider "mystery"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.DefaultConfig()

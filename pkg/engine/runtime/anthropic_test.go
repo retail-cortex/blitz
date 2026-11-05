@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -856,7 +857,7 @@ func TestAnthropicConversions(t *testing.T) {
 		assert.Contains(t, string(b), "unsupported type", "the encoding error goes to the model")
 	})
 	t.Run("errors and effort", func(t *testing.T) {
-		assert.EqualError(t, anthropicError(errors.New("boom")), "anthropic: boom")
+		assert.EqualError(t, anthropicError(errors.New("boom"), ""), "anthropic: boom")
 		assert.True(t, supportsEffort("claude-opus-4-6-20260101"))
 		assert.False(t, supportsEffort("claude-haiku-4-5"))
 	})
@@ -867,4 +868,35 @@ func TestAnthropicConversions(t *testing.T) {
 		_, err = newAnthropicModel(context.Background(), config.AnthropicConfig{APIKeyCommand: "exit 4"}, "")
 		assert.ErrorContains(t, err, "[llm.anthropic]")
 	})
+}
+
+// A refused sign-in says what to check for how the model signs in, not
+// always the API key (N26 engine-runtime#15).
+func TestAnthropicAuthHints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`, http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	client := anthropic.NewClient(option.WithBaseURL(srv.URL), option.WithAPIKey("k"), option.WithMaxRetries(0))
+	_, refused := client.Models.Get(context.Background(), "claude-x", anthropic.ModelGetParams{})
+	require.Error(t, refused)
+	cases := []struct {
+		name string
+		hint string
+		want string
+	}{
+		{name: "an API key", hint: anthropicAuthHint(config.AnthropicConfig{APIKey: "k"}), want: "check llm.anthropic.api_key or ANTHROPIC_API_KEY"},
+		{name: "a key command", hint: anthropicAuthHint(config.AnthropicConfig{APIKeyCommand: "pass show k"}), want: "check llm.anthropic.api_key_command"},
+		{name: "ant auth login", hint: anthropicAuthHint(config.AnthropicConfig{Auth: config.AuthOAuth}), want: "sign in again with ant auth login"},
+		{name: "Vertex AI", hint: anthropicAuthHint(config.AnthropicConfig{Auth: config.AuthADC}), want: "check Google Cloud's credentials (gcloud auth application-default login)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := anthropicError(refused, c.hint)
+			assert.ErrorContains(t, err, "authentication failed (401); "+c.want)
+			if c.name != "an API key" {
+				assert.NotContains(t, err.Error(), "ANTHROPIC_API_KEY")
+			}
+		})
+	}
 }

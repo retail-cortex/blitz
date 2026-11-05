@@ -118,7 +118,12 @@ func TestProviderError(t *testing.T) {
 
 	plain := errors.New("boom")
 	assert.Equal(t, plain, providerError(plain, "openai", "m", ""), "not an API error")
-	assert.Equal(t, plain, providerError(plain, "", "m", ""), "no provider")
+
+	// A model built without a provider name (Azure OpenAI, llm.provider
+	// unset) says what the server said too (N26 engine-runtime#15).
+	err = providerError(call("401"), "", "gpt-4o", "sk-secret-key-123456")
+	assert.ErrorContains(t, err, "Incorrect API key provided")
+	assert.NotContains(t, err.Error(), "sk-secret-key-123456")
 }
 
 // Ollama's model is its own, else one older settings set in [llm.openai];

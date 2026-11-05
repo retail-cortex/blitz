@@ -1411,7 +1411,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (_ string, err error) {
 	depth, _ := ctx.Value(subagentDepthKey{}).(int)
 	if depth >= MaxSubagentDepth {
-		return "", fmt.Errorf("%w (%d)", ErrSubagentDepth, MaxSubagentDepth)
+		return "", fmt.Errorf("%w (%d): an agent this deep can't delegate; do the work itself, or have a shallower agent hand it out", ErrSubagentDepth, MaxSubagentDepth)
 	}
 	spec, ok := e.agentReg.Get(agentName)
 	if !ok {

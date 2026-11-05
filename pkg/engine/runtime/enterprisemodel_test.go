@@ -186,6 +186,27 @@ func TestEnterpriseModel(t *testing.T) {
 		_, _, err = callAPI(inSession("sess-4"), m, helloRequest())
 		assert.ErrorIs(t, err, enterprise.ErrNotSignedIn)
 	})
+	// The organization's errors are worded for its people: no [llm.api]
+	// and no token script (N26 engine-runtime#16).
+	for _, c := range []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{name: "a refused sign-in", status: http.StatusForbidden, want: "your organization's service refused your sign-in (HTTP 403): sign in again (Settings › Organization, or blitz enterprise login)"},
+		{name: "another error", status: http.StatusNotFound, want: "your organization's service: HTTP 404 Not Found: no such model"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := newOrgService(t, [2]any{c.status, `{"error":{"message":"no such model"}}`})
+			m, err := NewModel(context.Background(), signedIn(t, s), "fast")
+			require.NoError(t, err)
+			_, _, err = callAPI(inSession("sess-5"), m, helloRequest())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), c.want)
+			assert.NotContains(t, err.Error(), "[llm.api]")
+			assert.NotContains(t, err.Error(), "token script")
+		})
+	}
 	t.Run("signed out", func(t *testing.T) {
 		s := newOrgService(t)
 		enterprise.Register(enterprise.New(s.URL, &secrets.Memory{}, enterprise.Options{}))
