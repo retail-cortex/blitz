@@ -46,16 +46,18 @@ func scope(workspace string) (string, error) {
 	}
 	dir, err := canonical(workspace)
 	if err != nil {
-		return "", connect.NewError(connect.CodeInvalidArgument, err)
+		return "", apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", err, "workspace", workspace)
 	}
 	return dir, nil
 }
 
+// invalid is err as a request the service can't take, with no reason of
+// its own: INVALID_ARGUMENT.
 func invalid(err error) error {
 	if err == nil {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument, err)
+	return apiError(connect.CodeInvalidArgument, "INVALID_ARGUMENT", err)
 }
 
 var keySources = map[config.KeySource]pb.KeySource{

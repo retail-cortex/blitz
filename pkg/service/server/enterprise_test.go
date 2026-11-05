@@ -137,8 +137,9 @@ func TestEnterpriseJourney(t *testing.T) {
 		s.ent.signingIn.Lock()
 		defer s.ent.signingIn.Unlock()
 		_, _, err := signIn(false)
-		_, info := errorReason(t, err)
+		code, info := errorReason(t, err)
 		assert.Equal(t, "SIGN_IN_RUNNING", info.Reason)
+		assert.Equal(t, connect.CodeAlreadyExists, code, "as a provider's")
 	})
 	t.Run("refused", func(t *testing.T) {
 		idp.IDToken = "for-someone-else"
@@ -331,6 +332,7 @@ func TestEnterpriseBrandingAndTerms(t *testing.T) {
 	t.Run("errors from the service", func(t *testing.T) {
 		assert.Equal(t, "UNREACHABLE", errorInfo(enterpriseError(errors.New("connection refused"))).GetReason())
 		assert.Equal(t, "TERMS_REQUIRED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden, Code: "terms_required"})).GetReason())
+		assert.Equal(t, "REFUSED", errorInfo(enterpriseError(&enterprise.Refusal{Status: http.StatusForbidden})).GetReason(), "a refusal with no code")
 	})
 }
 
