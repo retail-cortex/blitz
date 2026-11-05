@@ -92,7 +92,7 @@ func (w *Workspace) workerRoots() []string {
 func (w *Workspace) discoverWorkers() map[string]workers.Found {
 	out := map[string]workers.Found{}
 	for _, root := range w.workerRoots() {
-		list, err := workers.Discover(root)
+		list, err := workers.Discover(w.ProjectWorkflowsDir(), root)
 		if err != nil {
 			w.warn(err.Error())
 		}
@@ -171,7 +171,7 @@ func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string,
 	if err := os.WriteFile(filepath.Join(dir, workers.FileName), data, 0o644); err != nil {
 		return api.WorkerInfo{}, nil, err
 	}
-	wk, err := workers.Load(dir)
+	wk, err := workers.Load(dir, w.ProjectWorkflowsDir())
 	return w.workerInfo(wk, err, time.Now()), nil, nil
 }
 
@@ -233,7 +233,7 @@ func (w *Workspace) checkWorker(spec api.WorkerSpec, data []byte) ([]string, err
 		return nil, err
 	}
 	var problems []string
-	if _, err := workers.Load(check); err != nil {
+	if _, err := workers.Load(check, w.ProjectWorkflowsDir()); err != nil {
 		var invalid *workers.InvalidError
 		if !errors.As(err, &invalid) {
 			return nil, err
@@ -272,7 +272,7 @@ func (w *Workspace) GetWorkerSpec(name string) (api.WorkerSpec, string, error) {
 	if err != nil {
 		return api.WorkerSpec{}, "", err
 	}
-	return workers.ReadSpec(dir)
+	return workers.ReadSpec(dir, w.ProjectWorkflowsDir())
 }
 
 // UpdateWorker rewrites a worker's WORKER.md from spec, if its files still
@@ -287,7 +287,7 @@ func (w *Workspace) UpdateWorker(spec api.WorkerSpec, hash string) (api.WorkerIn
 	if err != nil {
 		return api.WorkerInfo{}, nil, err
 	}
-	if now, err := workers.HashDir(dir); err != nil {
+	if now, err := workers.HashDir(dir, w.ProjectWorkflowsDir()); err != nil {
 		return api.WorkerInfo{}, nil, err
 	} else if now != hash {
 		return api.WorkerInfo{}, nil, fmt.Errorf("%w: edited %s, now %s", api.ErrHashMismatch, hash, now)
@@ -301,7 +301,7 @@ func (w *Workspace) UpdateWorker(spec api.WorkerSpec, hash string) (api.WorkerIn
 	if err := writeFileAtomic(filepath.Dir(dir), filepath.Join(dir, workers.FileName), data); err != nil {
 		return api.WorkerInfo{}, nil, err
 	}
-	wk, err := workers.Load(dir)
+	wk, err := workers.Load(dir, w.ProjectWorkflowsDir())
 	return w.workerInfo(wk, err, time.Now()), nil, nil
 }
 
@@ -363,7 +363,7 @@ func (w *Workspace) worker(name string) (*workers.Worker, error, error) {
 	}
 	for _, root := range w.workerRoots() {
 		dir := filepath.Join(root, name)
-		wk, loadErr := workers.Load(dir)
+		wk, loadErr := workers.Load(dir, w.ProjectWorkflowsDir())
 		if wk != nil {
 			return wk, loadErr, nil
 		}

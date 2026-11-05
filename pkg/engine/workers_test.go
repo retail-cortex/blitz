@@ -300,6 +300,63 @@ func TestRunWorkerWorkflowGrants(t *testing.T) {
 	}
 }
 
+// A job's hash covers the workflow it runs, whose steps add to what it
+// may do: editing, creating or removing the workflow suspends an enabled
+// job as changed, an edit read before it is refused, and the job runs
+// again once enabled at the new hash (scan N26 desktop-4#19 follow-up).
+func TestWorkflowChangeSuspendsJob(t *testing.T) {
+	const save = "nodes:\n  - {id: s, type: save_file, path: out/report.md}\n"
+	const wider = "nodes:\n  - {id: s, type: save_file, path: out/report.md}\n  - {id: b, type: save_file, path: notes/b.md}\nedges: [{from: s, to: b}]\n"
+	for _, tc := range []struct {
+		name          string
+		before, after string // "" for no workflow file
+	}{
+		{name: "edited", before: save, after: wider},
+		{name: "created", after: save},
+		{name: "removed", before: save},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Policy.Allow = []string{"write"} })
+			if tc.before != "" {
+				writeFlow(t, w, "save", tc.before)
+			}
+			addWorker(t, w, "flow", "---\nschedule: hourly\nworkflow: save\n---\nThe report.\n")
+			enable(t, w, "flow")
+			_, read, err := w.GetWorkerSpec("flow")
+			require.NoError(t, err)
+
+			if tc.after != "" {
+				writeFlow(t, w, "save", tc.after)
+			} else {
+				require.NoError(t, w.DeleteWorkflow("save"))
+			}
+			list, err := w.ListWorkers()
+			require.NoError(t, err)
+			require.Len(t, list, 1)
+			assert.Equal(t, api.StateChanged, list[0].State, "the job ran on with its workflow changed")
+			assert.NotEqual(t, read, list[0].Hash)
+			_, err = w.RunWorker(context.Background(), "flow", RunOptions{})
+			assert.ErrorIs(t, err, api.ErrWorkerNotEnabled)
+			spec, now, err := w.GetWorkerSpec("flow")
+			require.NoError(t, err)
+			assert.Equal(t, list[0].Hash, now, "GetWorkerSpec and the listing disagree")
+			_, _, err = w.UpdateWorker(spec, read)
+			assert.ErrorIs(t, err, api.ErrHashMismatch, "an edit read before the workflow changed")
+			_, err = w.EnableWorker("flow", read)
+			assert.ErrorIs(t, err, api.ErrHashMismatch, "enabled at the hash before the change")
+
+			enable(t, w, "flow")
+			if tc.after == "" {
+				return
+			}
+			run, err := w.RunWorker(context.Background(), "flow", RunOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, api.RunSucceeded, run.Status, "run %+v", run)
+			assert.FileExists(t, filepath.Join(w.Dir(), "out", "report.md"))
+		})
+	}
+}
+
 // A job whose body is a workflow keeps the job's limits across its
 // steps, runs them on its model, and its steps' changes are the run's to
 // undo (spec_023 WK-43, WK-54; N26 engine-top-2#2).
