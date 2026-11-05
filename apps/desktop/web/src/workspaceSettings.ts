@@ -19,7 +19,7 @@
 // project's settings asked once as it opens. The desktop app's workspace
 // and the editor's panel share it.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { workspaces } from "./api";
+import { config, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { configChangedEvent, type ConfigChangedDetail } from "./events";
 import type { GetSettingsResponse, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
@@ -39,6 +39,20 @@ export function sliderCommit(moved: boolean, shown: number, value: number | unde
 /** Saves a workspace's effort; "" (the model's own) is saved as auto, which the service reads as unset. */
 export function setEffort(dir: string, value: string) {
   return workspaces.setSetting({ workspace: dir, key: "effort", value: value || "auto" });
+}
+
+/**
+ * Applies a permission mode to the workspace and keeps it as the
+ * workspace's own, so new chats and the workspace after a restart open in
+ * it (spec_005 APR-14): the status bar's menu and Settings › Workspaces
+ * both pick a mode this way. The service applies it first and refuses a
+ * mode it can't (bypass without the OS sandbox); then nothing is kept.
+ * Returns the mode's canonical name.
+ */
+export async function keepPermissionMode(dir: string, mode: string) {
+  const r = await workspaces.setPermissionMode({ workspace: dir, mode });
+  await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: r.mode });
+  return r.mode;
 }
 
 /** A workspace's settings, and the project-settings review to show. */

@@ -36,13 +36,23 @@ type Loaded struct {
 // the store's enabled plugins (and those [plugins] enable names, from the
 // user or a trusted project), less those [plugins] disable names, then
 // cfg.Plugins.Dirs (--plugin-dir). A plugin whose files changed since it
-// was installed isn't loaded. Problems are returned, not fatal.
+// was installed isn't loaded. Problems are returned, not fatal. When the
+// organization's policy turns off the person's own plugins, none loads,
+// and that's said once if any would have (spec_053_enterprise EN-35).
 func Apply(cfg *config.Config, store *Store) ([]Loaded, []string) {
 	var loaded []Loaded
 	var problems []string
 	list, err := store.List()
 	if err != nil {
 		problems = append(problems, err.Error())
+	}
+	if cfg.Org.PluginsOff() {
+		if len(cfg.Plugins.Dirs) > 0 || slices.ContainsFunc(list, func(i Installed) bool {
+			return (i.Enabled || slices.Contains(cfg.Plugins.Enable, i.Name)) && !slices.Contains(cfg.Plugins.Disable, i.Name)
+		}) {
+			problems = append(problems, config.ErrOrgPlugins.Error()+": their skills, agents, commands, hooks and MCP servers aren't loaded")
+		}
+		return nil, problems
 	}
 	for _, i := range list {
 		on := (i.Enabled || slices.Contains(cfg.Plugins.Enable, i.Name)) && !slices.Contains(cfg.Plugins.Disable, i.Name)

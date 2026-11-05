@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -32,11 +33,22 @@ import (
 // newPluginCommand is `blitz plugin`: install, list, enable, disable,
 // remove and update plugins, add marketplaces, and import other agents'
 // plugins (spec_027_parity PAR-PLG-02..04).
-func newPluginCommand() *cobra.Command {
-	return newPluginCommandWith(plugins.Default())
+func newPluginCommand(g *globalFlags) *cobra.Command {
+	return newPluginCommandWith(g, plugins.Default())
 }
 
-func newPluginCommandWith(store *plugins.Store) *cobra.Command {
+// orgPluginsOff reports whether the organization's policy turns off the
+// person's own plugins (spec_053_enterprise EN-35): then none loads, and
+// listing or installing them says so.
+func orgPluginsOff(g *globalFlags) bool {
+	cfg, err := config.Load(g.config)
+	return err == nil && cfg.Org.PluginsOff()
+}
+
+// orgPluginsNote says the organization turns off the person's plugins.
+const orgPluginsNote = "Your organization turns off your own plugins: none of them loads while you're connected to it."
+
+func newPluginCommandWith(g *globalFlags, store *plugins.Store) *cobra.Command {
 	cmd := &cobra.Command{Use: "plugin", Aliases: []string{"plugins"}, Short: "Install and manage plugins: skills, commands, agents, hooks and MCP servers"}
 	var yes bool
 
@@ -50,7 +62,13 @@ func newPluginCommandWith(store *plugins.Store) *cobra.Command {
 				return err
 			}
 			defer st.Discard()
-			return installStaged(cmd, store, st, yes)
+			if err := installStaged(cmd, store, st, yes); err != nil {
+				return err
+			}
+			if orgPluginsOff(g) {
+				fmt.Fprintln(cmd.OutOrStdout(), orgPluginsNote)
+			}
+			return nil
 		},
 	}
 	install.Flags().BoolVarP(&yes, "yes", "y", false, "Install without asking")
@@ -106,6 +124,9 @@ func newPluginCommandWith(store *plugins.Store) *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			if orgPluginsOff(g) {
+				fmt.Fprintln(out, orgPluginsNote)
+			}
 			if len(all) == 0 {
 				fmt.Fprintln(out, "No plugins installed. Install one with: blitz plugin install <dir|url|git repo>")
 				return nil

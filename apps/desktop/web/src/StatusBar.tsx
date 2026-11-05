@@ -70,7 +70,7 @@ import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
-import { setEffort as setEffortSetting } from "./workspaceSettings";
+import { keepPermissionMode, setEffort as setEffortSetting } from "./workspaceSettings";
 
 /** How often the branch and changed files are asked for while shown. */
 const gitPollMs = 10_000;
@@ -496,7 +496,8 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
   const mode = modeOf(s?.permissionMode ?? "auto");
   const setMode = async (value: string) => {
     try {
-      await workspaces.setPermissionMode({ workspace: dir, mode: value });
+      // Kept as the workspace's mode, as Settings › Workspaces keeps it (spec_005 APR-14).
+      await keepPermissionMode(dir, value);
       configChanged({ dir });
     } catch (e) {
       snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
