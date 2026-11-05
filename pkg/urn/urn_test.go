@@ -91,9 +91,9 @@ func TestNew(t *testing.T) {
 	p, ok = n.Parent()
 	require.True(t, ok)
 	assert.Equal(t, "urn:blitz:artifacts:"+ws+":"+job, p.String())
-	_, ok = Collection(Runs).Parent()
+	_, ok = Name{Kind: Runs}.Parent()
 	assert.False(t, ok)
-	assert.True(t, Collection(Runs).IsCollection())
+	assert.True(t, Name{Kind: Runs}.IsCollection())
 
 	_, err = New(Runs, "x")
 	require.ErrorIs(t, err, ErrName)

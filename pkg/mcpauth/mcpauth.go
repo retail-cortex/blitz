@@ -35,6 +35,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
@@ -168,7 +169,8 @@ func NeedsLogin(server string) auth.OAuthHandler {
 // server's authorization server, has the user authorize it in a browser
 // (show gets the URL to open), and receives the code on a local callback,
 // or from pasted when the browser is elsewhere (an SSH session: paste the
-// address the browser ends on, or the code). The sign-in is saved in store.
+// address the browser ends on, whose state is checked; a code alone isn't
+// taken, as its state can't be). The sign-in is saved in store.
 func Login(ctx context.Context, store secrets.Store, server, serverURL string, show func(authURL string), pasted <-chan string) error {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -185,12 +187,12 @@ func Login(ctx context.Context, store secrets.Store, server, serverURL string, s
 		}
 		res := resultFrom(r.URL.Query())
 		if res == nil {
-			signedin.Write(w, http.StatusBadRequest, signedin.Page{Title: "The sign-in didn't go through", Failed: true,
-				Message: "The server sent no code back. Try blitz mcp login " + server + " again."})
+			signedin.Write(w, http.StatusBadRequest, signedin.Page{Title: i18n.T("signin.page.failed_title"), Failed: true,
+				Message: i18n.T("signin.page.mcp_no_code", "server", server)})
 			return
 		}
-		signedin.Write(w, http.StatusOK, signedin.Page{Title: "You're signed in",
-			Message: "Blitz is signed in to " + server + ". Go back to your terminal; you can close this page."})
+		signedin.Write(w, http.StatusOK, signedin.Page{Title: i18n.T("signin.page.done_title"),
+			Message: i18n.T("signin.page.mcp_done", "server", server)})
 		select {
 		case results <- res:
 		default:

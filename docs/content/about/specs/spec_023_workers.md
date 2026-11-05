@@ -49,6 +49,7 @@ Check for outdated Go modules and write reports/deps.md.
 ## 3. Schedules
 
 - **WK-10** Accepted: five-field cron, descriptors (`@hourly`, `@daily`, `@weekly`, `@monthly`, `@every 90m`), or fixed plain-text phrases translated by rules, never guessed: `hourly|daily|weekly|monthly`, `every [N|word] minute(s)|hour(s)|day(s)` (non-divisors become `@every`), `daily|weekdays|weekends|every <weekday> at <time>` where time is `6`, `6 am`, `6:30 PM`, `18:30`, `noon`, `midnight`. Anything else is an error listing the accepted forms.
+- **WK-10** *2026-11-05 (scan N26-safety-enterprise#29: "every 10 days" became `0 0 */10 * *`, a day-of-month step that runs on the 1st, 11th, 21st and 31st, then the 1st again).* "every N days" is `@every <24·N>h` ("every day" stays `@daily`): no day-of-month step fits every month.
 - **WK-11** `Next(t)` evaluates in the job's time zone.
 
 ## 4. Permissions and policy

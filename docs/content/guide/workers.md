@@ -72,7 +72,7 @@ blitz jobs enable deps     # shows what it may do, then asks
 | `on_request` | `refuse` here, `pause` on the service | What a run does when it needs something its permissions don't allow: `refuse` it and go on without, or `pause` and wait for its owner's answer |
 | `merge` | `main` | Where a run on the service leaves its changes: `main` adds them to the workspace's main when they merge cleanly, so they reach everyone's folder; `never` keeps them on the run's own branch for someone to add |
 
-**Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
+**Schedules** take cron (`30 9 * * 1-5`), descriptors (`@daily`, `@every 90m`) or plain phrases: `hourly`, `every 15 minutes`, `every 2 hours`, `every 3 days` (every 72 hours from when the schedule starts), `daily at 6 AM`, `weekdays at 9:30`, `weekends at noon`, `every Monday at 8 PM`.
 
 ## What a job may do
 

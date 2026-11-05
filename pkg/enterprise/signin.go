@@ -28,6 +28,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
 )
@@ -164,14 +165,14 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 			http.NotFound(w, r)
 			return
 		}
-		page := signedin.Page{Title: "You're signed in", Open: true, Brand: c.signInBrand(),
-			Message: "Blitz is signed in to your organization. Go back to Blitz to carry on."}
+		page := signedin.Page{Title: i18n.T("signin.page.done_title"), Open: true, Brand: c.signInBrand(),
+			Message: i18n.T("signin.page.done_org")}
 		if page.Brand != nil && page.Brand.Name != "" {
-			page.Message = "Blitz is signed in to " + page.Brand.Name + ". Go back to Blitz to carry on."
+			page.Message = i18n.T("signin.page.done_named", "org", page.Brand.Name)
 		}
 		if e := r.URL.Query().Get("error"); e != "" {
-			page.Title, page.Failed = "The sign-in didn't go through", true
-			page.Message = "Your organization's sign-in refused it (" + e + "). Try again from Blitz."
+			page.Title, page.Failed = i18n.T("signin.page.failed_title"), true
+			page.Message = i18n.T("signin.page.refused", "error", e)
 		}
 		signedin.Write(w, http.StatusOK, page)
 		select {

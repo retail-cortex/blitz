@@ -36,6 +36,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -325,6 +326,27 @@ func TestSignInDevice(t *testing.T) {
 		err := c.SignInDevice(context.Background(), func(Prompt) {})
 		assert.ErrorContains(t, err, "the identity provider")
 	})
+}
+
+// The page the browser ends on is in the person's language (N26
+// safety-enterprise#30).
+func TestSignInPageLocale(t *testing.T) {
+	_, _, c, _, _ := setup(t)
+	i18n.Setup("", "fr-CA", func(string) {})
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	page := make(chan string, 1)
+	show := func(pr Prompt) {
+		go func() {
+			res, err := http.Get(pr.URL)
+			if assert.NoError(t, err) {
+				body, _ := io.ReadAll(res.Body)
+				res.Body.Close()
+				page <- string(body)
+			}
+		}()
+	}
+	require.NoError(t, c.SignInBrowser(context.Background(), show, nil))
+	assert.Contains(t, <-page, "Vous êtes connecté")
 }
 
 func TestSignInBrowserPasted(t *testing.T) {

@@ -76,7 +76,6 @@ type Info struct {
 		Desktop  AppClient `json:"desktop"`
 		Device   AppClient `json:"device"`
 	} `json:"oidc"`
-	SessionHours int      `json:"session_hours"`
 	Capabilities []string `json:"capabilities"`
 	// CatalogKeys check what the service signs (its branding, its
 	// catalog), by key ID: Ed25519 public keys, base64.
