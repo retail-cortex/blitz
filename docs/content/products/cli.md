@@ -57,6 +57,16 @@ blitz --output-format json --json-schema person.json "Who wrote this repo?"   # 
 blitz --no-session-persistence "…"      # leave no session behind
 ```
 
+With `stream-json`, the lines are `session` first, then `text`, `tool_call` and `tool_result` as the turn goes, and these, then `result`:
+
+| `type` | Keys | What it is |
+|---|---|---|
+| `notice` | `text`, `error`, `transient`, `author` | A message from Blitz about the turn, such as a guardrail stopping it ("Send continue to go on"); `transient` marks a passing status, such as a retry |
+| `workflow_step` | `workflow`, `id`, `title`, `step_type`, `index`, `count`, `status`, `output`, `error`, `run` | A workflow's step starting (`running`) or ending (`done`, `failed`, `skipped`, `waiting`), step `index` of `count` |
+| `tasks` | `tasks` (`[{"content", "status"}]`), `author` | The agent's whole task list each time it changes; `status` is `pending`, `in_progress` or `done` |
+
+Every key is always there. Skip a `type` you don't know: new ones may come.
+
 Another program can drive a whole session over pipes: with `--input-format stream-json --output-format stream-json`, each stdin line is a prompt or an answer, and approvals and questions come out as lines to answer:
 
 ```text
