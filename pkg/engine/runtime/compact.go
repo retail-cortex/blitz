@@ -135,7 +135,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 	}
 
 	e.mu.RLock()
-	llm, gc := e.llm, e.generateConfig()
+	llm, gc := e.modelForLocked(e.active), e.generateConfig() // the active agent's model (it may be pinned)
 	e.mu.RUnlock()
 	focusLine := ""
 	if f := strings.TrimSpace(focus); f != "" {
@@ -160,7 +160,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 		return CompactResult{}, errors.New("the summarizer returned no text; history left unchanged")
 	}
 	e.restoreUsage(sessionID)
-	e.usage.Record(sessionID, llm.Name(), res.Usage)
+	e.usage.RecordCall(ctx, sessionID, settingsName(llm.Name()), res.Usage, 0)
 	e.saveUsage(ctx, sessionID)
 
 	ev, err := compactionEvent(window, events, summary)

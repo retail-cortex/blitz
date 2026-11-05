@@ -326,6 +326,54 @@ func TestAgentRunDefaults(t *testing.T) {
 	}
 }
 
+// A task with a cost cap on a model without a price is told, once, that
+// the cap can't stop it (N26 engine-runtime#5).
+func TestTaskCostCapOnAnUnpricedModel(t *testing.T) {
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	cases := []struct {
+		name   string
+		cap    float64
+		served string
+		told   bool
+	}{
+		{name: "an unpriced model", cap: 1, served: "local-llama", told: true},
+		{name: "a priced model", cap: 1, served: "gemini-3.8-flash"},
+		{name: "no cap", served: "local-llama"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sub := NewMockLLM(c.served, list, list, textContent("done"))
+			sub.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 1}
+			sub.ServedBy = c.served
+			var notices []string
+			var mu sync.Mutex
+			f, ctx, _ := taskEngine(t, sub, func(cfg *config.Config) { cfg.Tools.BackgroundAgentMaxCostUSD = c.cap })
+			f.eng.notice = func(m string) { mu.Lock(); notices = append(notices, m); mu.Unlock() }
+			_, err := f.eng.StartTask(ctx, "qa", "look", "")
+			require.NoError(t, err)
+			done, events, err := f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Second)
+			require.NoError(t, err)
+			require.Equal(t, api.TaskDone, done.State, "%+v", done)
+			told := 0
+			for _, e := range events {
+				if strings.Contains(e, "has no price") {
+					told++
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if c.told {
+				assert.Equal(t, 1, told, "told once in its events: %v", events)
+				require.Len(t, notices, 1)
+				assert.Contains(t, notices[0], "local-llama")
+			} else {
+				assert.Zero(t, told, "%v", events)
+				assert.Empty(t, notices)
+			}
+		})
+	}
+}
+
 // A background task keeps the restrictions of the run that started it: a
 // /plan turn, a read-only /btw or /search, or a command's allowed tools
 // can't write through a background agent (N26 engine-runtime#1).

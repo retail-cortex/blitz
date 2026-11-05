@@ -3787,6 +3787,7 @@
     "tasks.state.failed": "failed",
     "tasks.state.stopped": "stopped",
     "tasks.ended": "Background {id} ({agent}) {state} after {took}: {summary}",
+    "tasks.cost_unpriced": "Background {id} ({agent}) has a cost limit of ${limit}, but its model {model} has no price: the limit can't stop it. Add a price under [pricing], or watch its calls.",
     "exit.tasks_running.one": "{count} background task still running:",
     "exit.tasks_running.other": "{count} background tasks still running:",
     "exit.tasks_stopped.one": "Stopped {count} background task.",

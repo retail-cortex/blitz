@@ -95,15 +95,20 @@ func (e *Engine) askModel(ctx context.Context, llm model.LLM, instruction, promp
 	if err != nil {
 		return "", err
 	}
-	if usage != nil { // priced in the session's /cost
-		id := "default"
-		if st := stateFrom(ctx); st != nil && st.sessionID != "" {
-			id = st.sessionID
-		}
-		e.restoreUsage(id)
-		e.usage.RecordWrites(id, served, usage, 0)
-		e.saveUsage(ctx, id)
+	// Priced in the session's /cost, and a background task's own (its
+	// cost cap counts the reviewer's and hooks' calls it causes); without
+	// usage, a call of unknown cost.
+	id := "default"
+	st := stateFrom(ctx)
+	if st != nil && st.sessionID != "" {
+		id = st.sessionID
 	}
+	e.restoreUsage(id)
+	e.usage.RecordCall(ctx, id, served, usage, 0)
+	if st != nil && st.taskID != "" {
+		e.usage.RecordWrites(st.taskID, served, usage, 0)
+	}
+	e.saveUsage(ctx, id)
 	return text, nil
 }
 

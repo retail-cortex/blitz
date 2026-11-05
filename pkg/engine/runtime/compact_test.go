@@ -223,3 +223,38 @@ func TestCompactKeepsAtLeastOneTurnAndNeedsProse(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.TurnsKept)
 }
+
+// Compaction summarises with the active agent's model when it's pinned,
+// and prices the summary by it (N26 engine-runtime#25).
+func TestCompactUsesTheActiveAgentsModel(t *testing.T) {
+	cases := []struct {
+		name   string
+		pinned bool
+	}{
+		{name: "pinned", pinned: true},
+		{name: "the engine's model"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			replies := []*genai.Content{textContent("reply-one"), textContent("reply-two"), textContent("SUMMARY-XYZ")}
+			pinned := NewMockLLM("pinned-model", replies...)
+			var opts []Option
+			var engineReplies []*genai.Content
+			if c.pinned {
+				opts = append(opts, WithAgentModel("blitz", pinned))
+			} else {
+				engineReplies = replies
+			}
+			f := newEngineWith(t, fixtureOpts{opts: opts}, engineReplies...)
+			runTurns(t, f.eng, "s", "turn-one", "turn-two")
+			_, err := f.eng.Compact(context.Background(), "s", "", 1)
+			require.NoError(t, err)
+			if c.pinned {
+				assert.Zero(t, f.llm.CallCount, "the engine's model was asked")
+				assert.Equal(t, 3, pinned.CallCount)
+			} else {
+				assert.Equal(t, 3, f.llm.CallCount)
+			}
+		})
+	}
+}

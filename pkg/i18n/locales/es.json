@@ -3787,6 +3787,7 @@
     "tasks.state.failed": "fallida",
     "tasks.state.stopped": "detenida",
     "tasks.ended": "La tarea {id} ({agent}) quedó {state} tras {took}: {summary}",
+    "tasks.cost_unpriced": "La tarea {id} ({agent}) tiene un límite de costo de ${limit}, pero su modelo {model} no tiene precio: el límite no puede detenerla. Agrega un precio en [pricing] o vigila sus llamadas.",
     "exit.tasks_running.one": "{count} tarea en segundo plano sigue en curso:",
     "exit.tasks_running.other": "{count} tareas en segundo plano siguen en curso:",
     "exit.tasks_stopped.one": "Se detuvo {count} tarea en segundo plano.",

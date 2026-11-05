@@ -24,11 +24,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"github.com/retail-cortex/blitz/pkg/worktree"
 	"google.golang.org/adk/v2/session"
@@ -76,6 +78,9 @@ type task struct {
 	events []string     // guarded by taskManager.mu
 	cancel context.CancelCauseFunc
 	done   chan struct{}
+	// unpricedTold is set once the session heard its cost cap can't be
+	// enforced.
+	unpricedTold atomic.Bool
 }
 
 // taskManager holds a workspace's tasks.
@@ -390,8 +395,28 @@ func (e *Engine) taskEvent(t *task, ev *session.Event) {
 		t.events = slices.Delete(t.events, 0, over)
 	}
 	m.mu.Unlock()
-	if limit := e.cfg.Tools.BackgroundAgentMaxCostUSD; limit > 0 && e.usage.Session(t.info.ID).CostUSD > limit {
+	limit := e.cfg.Tools.BackgroundAgentMaxCostUSD
+	if limit <= 0 {
+		return
+	}
+	u := e.usage.Session(t.info.ID)
+	if u.CostUSD > limit {
 		t.cancel(fmt.Errorf("its cost limit ($%.2f, tools.background_agent_max_cost_usd)", limit))
+	}
+	// A call of unknown cost (an unpriced model, or no usage): the cap
+	// can't be enforced, which its session hears once.
+	if u.Calls > 0 && !u.Priced && t.unpricedTold.CompareAndSwap(false, true) {
+		model := ev.ModelVersion
+		if model == "" {
+			model, _ = e.AgentModel(t.info.Agent)
+		}
+		msg := i18n.T("tasks.cost_unpriced", "id", t.info.ID, "agent", t.info.Agent, "limit", fmt.Sprintf("%.2f", limit), "model", model)
+		m.mu.Lock()
+		t.events = append(t.events, msg)
+		m.mu.Unlock()
+		if e.notice != nil {
+			e.notice(msg)
+		}
 	}
 }
 

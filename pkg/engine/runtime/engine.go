@@ -535,7 +535,7 @@ func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int
 // A provider that reports no usage leaves the cost unknown.
 func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usage *genai.GenerateContentResponseUsageMetadata) {
 	e.restoreUsage(sessionID)
-	e.usage.RecordSpeech(sessionID, settingsName(model), usage)
+	e.usage.RecordSpeech(ctx, sessionID, settingsName(model), usage)
 	e.saveUsage(ctx, sessionID)
 }
 
@@ -552,10 +552,7 @@ func (e *Engine) EstimateCostUSD(model string, usage *genai.GenerateContentRespo
 // judge, a workflow's extract step), priced by the configured prices; a
 // call that reported no tokens is unpriced.
 func (e *Engine) EstimateUsage(model string, usage *genai.GenerateContentResponseUsageMetadata) api.Usage {
-	if usage == nil {
-		return api.Usage{Calls: 1}
-	}
-	return e.usage.Estimate(settingsName(model), usage, 0)
+	return e.usage.Estimate(settingsName(model), usage, 0) // no usage: unpriced
 }
 
 // saveUsage keeps sessionID's usage so far in the store.
@@ -804,9 +801,11 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 		return nil, nil
 	}
 	e.noteFallback(ctx, resp)
-	if resp.UsageMetadata == nil {
-		return nil, nil
+	if resp.UsageMetadata == nil && resp.Content == nil {
+		return nil, nil // not an answer (nothing to count)
 	}
+	// An answer without usage (a server that doesn't send it) is still a
+	// call, of unknown cost: the session's usage stops claiming a price.
 	id := "default"
 	if st := stateFrom(ctx); st != nil {
 		id = st.sessionID
@@ -831,9 +830,9 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 		writes = int64(v)
 	}
 	e.restoreUsage(id)
-	e.usage.RecordWrites(id, served, resp.UsageMetadata, writes)
+	e.usage.RecordCall(ctx, id, served, resp.UsageMetadata, writes)
 	if st := stateFrom(ctx); st != nil && st.taskID != "" {
-		e.usage.RecordWrites(st.taskID, served, resp.UsageMetadata, writes)
+		e.usage.RecordWrites(st.taskID, served, resp.UsageMetadata, writes) // counted once in the metrics
 	}
 	if st := stateFrom(ctx); st != nil {
 		e.saveUsage(ctx, id)
