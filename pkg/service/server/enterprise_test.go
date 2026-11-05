@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1111,7 +1112,7 @@ func TestShareWithOrganization(t *testing.T) {
 	// Kept in step where it is, through its own remote.
 	// Each wait ends as soon as it holds; a busy CI runner's commits and
 	// pushes take longer than 10 s now and then.
-	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+	synced := assert.EventuallyWithT(t, func(ct *assert.CollectT) {
 		st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: notes}))
 		require.NoError(ct, err)
 		if st.Msg.State == "" {
@@ -1133,6 +1134,17 @@ func TestShareWithOrganization(t *testing.T) {
 		}
 		assert.Equal(ct, "saved", st.Msg.State, "its sync's state")
 	}, 30*time.Second, 20*time.Millisecond)
+	if !synced {
+		// Where the sync is stuck: its goroutines' stacks.
+		buf := make([]byte, 1<<20)
+		buf = buf[:runtime.Stack(buf, true)]
+		for g := range strings.SplitSeq(string(buf), "\n\n") {
+			if strings.Contains(g, "orgsync") || strings.Contains(g, "os/exec") {
+				t.Log(g)
+			}
+		}
+		t.FailNow()
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(notes, "more.md"), []byte("More."), 0o644))
 	require.Eventually(t, func() bool {
 		out, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%s", "main").Output()
