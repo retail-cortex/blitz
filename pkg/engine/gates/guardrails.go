@@ -204,7 +204,7 @@ type guardMeta struct {
 }
 
 // ParseGuardrail reads a guardrail file; what doesn't hold is its
-// Problem (it's skipped).
+// Problem (it's skipped; a built-in's runs with its defaults).
 func ParseGuardrail(name, path string, data []byte) Guardrail {
 	g := Guardrail{Name: name, Path: path}
 	front, body, ok := frontmatter.Split(data)
@@ -246,7 +246,41 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 	}
 	g.Off = m.Enabled != nil && !*m.Enabled
 	g.Problem = checkGuardrail(&g)
+	if g.Problem == "" && g.Builtin == BuiltinLimits {
+		g.Problem = misplacedLimits(front)
+	}
 	return g
+}
+
+// limitKeys are the limits guardrail's settings, which go under limits:.
+var limitKeys = []string{"max_cost_usd", "max_turns", "max_files_changed", "allowed_domains", "commands"}
+
+// misplacedLimits is the problem of a limits file with a setting at the
+// top of its front matter, where it isn't read ("" for none): without
+// it, max_turns: 0 there would leave the turn at 200 model calls.
+func misplacedLimits(front []byte) string {
+	var top map[string]any
+	if yaml.Unmarshal(front, &top) != nil {
+		return ""
+	}
+	for _, k := range limitKeys {
+		if _, ok := top[k]; ok {
+			return fmt.Sprintf("%s goes under limits: (limits:\n  %s: …)", k, k)
+		}
+	}
+	return ""
+}
+
+// For is the built-in g stands for: its builtin, or, for a file with a
+// problem, the built-in it's named after ("" for neither).
+func (g Guardrail) For() string {
+	if _, ok := BuiltinOf(g.Builtin); ok {
+		return g.Builtin
+	}
+	if _, ok := BuiltinOf(g.Name); ok && g.Problem != "" {
+		return g.Name
+	}
+	return ""
 }
 
 // checkGuardrail fills in a built-in's stage and default action and says
@@ -343,11 +377,20 @@ func LoadGuardrails(dirs ...string) []Guardrail {
 }
 
 // Active are the guardrails that hold (no problem, not switched off) at
-// stage for agent.
+// stage for agent. A built-in whose file has a problem runs with its
+// defaults, as without a file: a mistake in limits.md mustn't take away
+// its ceilings and refused commands.
 func Active(all []Guardrail, stage, agent string) []Guardrail {
 	var out []Guardrail
 	for _, g := range all {
-		if g.Problem == "" && !g.Off && g.Stage == stage && g.GuardsAgent(agent) {
+		if g.Problem != "" {
+			b, ok := BuiltinOf(g.For())
+			if !ok || slices.ContainsFunc(all, func(o Guardrail) bool { return o.Problem == "" && o.Builtin == b.ID }) {
+				continue
+			}
+			g = BuiltinDefault(b)
+		}
+		if !g.Off && g.Stage == stage && g.GuardsAgent(agent) {
 			out = append(out, g)
 		}
 	}

@@ -123,6 +123,8 @@
     "guardrail.withheld_answer": "🛡 La barrera {name} retuvo parte de la respuesta",
     "guardrail.withheld_answer_why": "🛡 La barrera {name} retuvo la respuesta: {reason}",
     "guardrail.secret_seen": "⚠ La respuesta muestra lo que parece un secreto o un dato personal (barrera {name})",
+    "guardrail.limit_default": "la barrera {name} fija este límite por defecto; para cambiarlo, ponga {key} bajo limits: en {path} (0: sin límite)",
+    "guardrail.limit_file": "la barrera {name} fija este límite en {path} ({key} bajo limits:; 0: sin límite)",
     "rule.blocked": "La regla {name} detuvo este mensaje: {reason}",
     "rule.warned": "⚠ Regla {name}: {reason}",
     "rule.failed": "✗ La respuesta no cumple la regla {name}: {reason}",

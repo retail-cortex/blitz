@@ -17,6 +17,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -69,7 +70,7 @@ func (w *Workspace) guardrailDirs() []string {
 func (w *Workspace) Guardrails() []gates.Guardrail {
 	all := gates.LoadGuardrails(w.guardrailDirs()...)
 	if off := w.cfg.Org.Policy.Builtins.Off; len(off) > 0 {
-		all = slices.DeleteFunc(all, func(g gates.Guardrail) bool { return g.Builtin != "" && slices.Contains(off, g.Builtin) })
+		all = slices.DeleteFunc(all, func(g gates.Guardrail) bool { return g.For() != "" && slices.Contains(off, g.For()) })
 	}
 	return all
 }
@@ -86,22 +87,54 @@ type guarding struct {
 	turns sync.Map // session ID → *guardState
 }
 
+// turnLimits are the limits guardrails that set a turn's model-call and
+// cost limits (nil: the turn's own limit, or none).
+type turnLimits struct{ turns, cost *gates.Guardrail }
+
 // startGuardrails reads the guardrails for a turn in the session, and
 // applies the limits guardrail's turn and cost limits to t.
-func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) {
+func (w *Workspace) startGuardrails(sessionID string, t *api.Turn) turnLimits {
 	st := &guardState{all: w.Guardrails()}
 	w.guards.turns.Store(sessionID, st)
+	var lim turnLimits
 	for _, g := range gates.Active(st.all, gates.StageAction, w.engine.ActiveAgent()) {
 		if g.Builtin != gates.BuiltinLimits {
 			continue
 		}
 		if l := g.Limits.MaxTurns; l > 0 && (t.MaxTurns == 0 || l < t.MaxTurns) {
-			t.MaxTurns = l
+			t.MaxTurns, lim.turns = l, &g
 		}
 		if l := g.Limits.MaxCostUSD; l > 0 && (t.MaxCostUSD == 0 || l < t.MaxCostUSD) {
-			t.MaxCostUSD = l
+			t.MaxCostUSD, lim.cost = l, &g
 		}
 	}
+	return lim
+}
+
+// limitSource adds to a turn stopped at a limit a guardrail set which
+// guardrail set it and how to change it: "maximum turns reached" alone
+// sends people looking for a setting.
+func (w *Workspace) limitSource(err error, lim turnLimits) error {
+	var g *gates.Guardrail
+	var key string
+	switch {
+	case errors.Is(err, api.ErrMaxTurns):
+		g, key = lim.turns, "max_turns"
+	case errors.Is(err, api.ErrCostLimit):
+		g, key = lim.cost, "max_cost_usd"
+	}
+	if g == nil {
+		return err
+	}
+	if g.Path == "" {
+		return fmt.Errorf("%w: %s", err, i18n.T("guardrail.limit_default", "name", g.Name, "key", key,
+			"path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md")))
+	}
+	path := g.Path
+	if rel, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(rel, "..") {
+		path = rel
+	}
+	return fmt.Errorf("%w: %s", err, i18n.T("guardrail.limit_file", "name", g.Name, "key", key, "path", path))
 }
 
 // guardsFor are the guardrails of the session's turn. A call outside one

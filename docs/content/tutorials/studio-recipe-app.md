@@ -221,13 +221,14 @@ Rules are about quality. **Guardrails** are about what must never happen, and th
 - **prompt_injection** watches what web pages, the browser and MCP servers return for text aimed at the agent;
 - **secrets** masks credentials in answers.
 
-Tune two of them for this project. The app holds people's names and email addresses, so turn on **PII** for `secrets`. Deploys go through CI, never the agent, so add `gcloud run deploy*` to the commands `limits` refuses. The list you give replaces the defaults, so keep force pushes in it:
+Tune two of them for this project. The app holds people's names and email addresses, so turn on **PII** for `secrets`. Deploys go through CI, never the agent, so add `gcloud run deploy*` to the commands `limits` refuses. The list you give replaces the defaults, so start it with `defaults` to keep refusing force pushes and the rest:
 
 ```markdown
 ---
 builtin: limits
-max_cost_usd: 2
-commands: ["git push* --force", "git push* --force *", "git push* -f", "git push* -f *", "gcloud run deploy*"]
+limits:
+  max_cost_usd: 2
+  commands: [defaults, "gcloud run deploy*"]
 ---
 ```
 

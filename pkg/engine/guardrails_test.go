@@ -16,12 +16,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/health"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
@@ -72,6 +74,55 @@ func TestLimitsGuardrail(t *testing.T) {
 	turn = api.Turn{MaxTurns: 3}
 	w.startGuardrails("s", &turn)
 	assert.Equal(t, 3, turn.MaxTurns, "already lower")
+}
+
+// A turn the limits guardrail stopped says which guardrail set the limit
+// and where to change it (spec_041 GT-32); a broken limits.md holds the
+// defaults, but not against the organization's policy.
+func TestLimitSource(t *testing.T) {
+	w, _ := openTestWith(t, nil, toolCall("list_files", map[string]any{"path": "."}), text("done"))
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_turns: 1\n---\n")
+	var notices []api.Notice
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "look"}, collect(&notices))
+	require.ErrorIs(t, err, api.ErrMaxTurns)
+	assert.Contains(t, err.Error(), "maximum turns reached (1 model calls): the guardrail limits sets this in "+filepath.Join(".agents", "guardrails", "limits.md")+" (max_turns under limits:")
+
+	def := gates.BuiltinDefault(gates.Builtins[2])
+	for _, tc := range []struct {
+		name string
+		err  error
+		lim  turnLimits
+		want string
+	}{
+		{"the default ceiling", fmt.Errorf("%w ($10.00)", api.ErrCostLimit), turnLimits{cost: &def}, "set max_cost_usd under limits: in " + filepath.Join(".agents", "guardrails", "limits.md")},
+		{"the turn's own limit", api.ErrMaxTurns, turnLimits{cost: &def}, api.ErrMaxTurns.Error()},
+		{"not a guardrail's limit", api.ErrTimeLimit, turnLimits{turns: &def, cost: &def}, api.ErrTimeLimit.Error()},
+		{"no error", nil, turnLimits{turns: &def}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := w.limitSource(tc.err, tc.lim)
+			if tc.err == nil {
+				assert.NoError(t, got)
+				return
+			}
+			require.ErrorIs(t, got, tc.err, "still the limit's error")
+			assert.Contains(t, got.Error(), tc.want)
+		})
+	}
+
+	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nmax_turns: 0\n---\n")
+	turn := api.Turn{}
+	w.startGuardrails("s", &turn)
+	assert.Equal(t, gates.DefaultMaxTurns, turn.MaxTurns, "a broken file holds the defaults")
+
+	off, _ := openTestWith(t, func(cfg *config.Config) {
+		cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
+		cfg.Org.Policy.Builtins.Off = []string{gates.BuiltinLimits}
+	})
+	writeGuardrail(t, off, "limits", "---\nbuiltin: limits\nmax_turns: 0\n---\n")
+	turn = api.Turn{}
+	off.startGuardrails("s", &turn)
+	assert.Zero(t, turn.MaxTurns, "switched off by the organization, broken file or not")
 }
 
 // The limits guardrail holds a turn to its domains and its count of

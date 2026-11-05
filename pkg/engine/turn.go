@@ -198,8 +198,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
 	// The turn's guardrails, read now; their turn and cost limits apply.
+	var lim turnLimits
 	if !t.Aside {
-		w.startGuardrails(sessionID, &t.Turn)
+		lim = w.startGuardrails(sessionID, &t.Turn)
 		defer w.guards.turns.Delete(sessionID)
 	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
@@ -421,6 +422,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
+	err = w.limitSource(err, lim)
 	if !t.Aside {
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.

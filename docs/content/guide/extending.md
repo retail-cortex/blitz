@@ -32,15 +32,16 @@ Rules are about the quality of the work. **Guardrails** are about safety and lim
 ```markdown
 ---
 builtin: limits
-max_cost_usd: 2        # per turn
-max_turns: 40          # model calls per turn
-max_files_changed: 20
-allowed_domains: [example.com]
-commands: ["git push --force*"]
+limits:
+  max_cost_usd: 2        # per turn (0: no ceiling)
+  max_turns: 40          # model calls per turn (0: no ceiling)
+  max_files_changed: 20
+  allowed_domains: [example.com]
+  commands: [defaults, "dropdb *"]
 ---
 ```
 
-Without a file, `limits` refuses force pushes (`--force`, `-f` or a `+branch`; `--force-with-lease` is allowed, since it won't overwrite commits you haven't seen), deleting `/` or your home folder (`rm -r` or `rm -rf`, with its flags in any order, `$HOME` and `/*` too, even after `sudo` or inside `cd x && …`), `mkfs` and `dd` onto a disk; a file's `commands` replaces that list, and `defaults` in it stands for that list as your version of Blitz has it, so `commands: [defaults, "dropdb *"]` adds to it and keeps up with updates (no `commands` keeps the defaults; `commands: []` refuses none). Each pattern is matched against the whole line and against each command in it. A turn also stops at 200 model calls or $10 unless the file sets `max_turns` or `max_cost_usd` (0: no ceiling). `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent: a fast model confirms each match first, so a page that only quotes or discusses injection passes (`judge: false` acts on the pattern alone), and then `action: redact` (the default) takes the instructions out and keeps the rest of the page, `warn` tells the agent it's data, not orders, and `block` withholds it all. `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
+Without a file, `limits` refuses force pushes (`--force`, `-f` or a `+branch`; `--force-with-lease` is allowed, since it won't overwrite commits you haven't seen), deleting `/` or your home folder (`rm -r` or `rm -rf`, with its flags in any order, `$HOME` and `/*` too, even after `sudo` or inside `cd x && …`), `mkfs` and `dd` onto a disk; a file's `commands` replaces that list, and `defaults` in it stands for that list as your version of Blitz has it, so `commands: [defaults, "dropdb *"]` adds to it and keeps up with updates (no `commands` keeps the defaults; `commands: []` refuses none). Each pattern is matched against the whole line and against each command in it. A turn also stops at 200 model calls or $10 unless the file sets `max_turns` or `max_cost_usd` under `limits:` (0: no ceiling); when it stops, it says which guardrail set the limit and where to change it. A mistake in the file (a setting outside `limits:`, an action it doesn't have) shows in Studio, and the guardrail runs with its defaults until it's fixed. `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent: a fast model confirms each match first, so a page that only quotes or discusses injection passes (`judge: false` acts on the pattern alone), and then `action: redact` (the default) takes the instructions out and keeps the rest of the page, `warn` tells the agent it's data, not orders, and `block` withholds it all. `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
 
 ```markdown
 ---

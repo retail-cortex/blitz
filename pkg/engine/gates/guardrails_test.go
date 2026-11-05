@@ -230,6 +230,40 @@ func TestDescribe(t *testing.T) {
 	assert.Empty(t, Describe(Guardrail{Name: "tone", Text: "Be kind."}))
 }
 
+// A built-in whose file has a problem runs with its defaults, so a
+// mistake in limits.md keeps its ceilings and refused commands; a
+// setting outside limits: is a problem rather than read as nothing.
+func TestBrokenBuiltinFileRunsTheDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, problem string
+	}{
+		{"max_turns at the top", "---\nbuiltin: limits\nmax_turns: 0\n---\n", "max_turns goes under limits:"},
+		{"commands at the top", "---\nbuiltin: limits\nlimits:\n  max_turns: 0\ncommands: []\n---\n", "commands goes under limits:"},
+		{"an action it doesn't have", "---\nbuiltin: limits\naction: redact\n---\n", `action "redact"`},
+		{"front matter that isn't YAML", "---\nbuiltin: [limits\n---\n", "front matter"},
+		{"a built-in it isn't", "---\nbuiltin: limit\n---\n", `builtin "limit"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, "limits.md", tc.file)
+			all := LoadGuardrails(dir)
+			i := slices.IndexFunc(all, func(g Guardrail) bool { return g.Name == BuiltinLimits })
+			require.GreaterOrEqual(t, i, 0)
+			assert.Contains(t, all[i].Problem, tc.problem, "shown where the file is")
+			assert.Equal(t, BuiltinLimits, all[i].For())
+			assert.Equal(t, []Guardrail{BuiltinDefault(Builtins[2])}, Active(all, StageAction, ""), "the defaults hold")
+		})
+	}
+
+	dir := t.TempDir()
+	write(t, dir, "limits.md", "---\nbuiltin: limits\nlimits:\n  max_turns: 0\n---\n")
+	g := LoadGuardrails(dir)[2]
+	assert.Empty(t, g.Problem, "under limits: is right")
+	assert.Equal(t, 0, Active([]Guardrail{g}, StageAction, "")[0].Limits.MaxTurns)
+	assert.Empty(t, Guardrail{Name: "limits", Stage: StageAction, Text: "x"}.For(), "a custom guardrail of that name with no problem")
+	assert.Empty(t, Active([]Guardrail{{Name: "tone", Problem: "stage"}}, StageAction, ""), "a custom one is skipped")
+}
+
 // A built-in's file leaves out what it doesn't change: limits' ceilings
 // and commands, injection's judge; what it leaves out runs as the
 // defaults do, and saving the defaults writes none of them.

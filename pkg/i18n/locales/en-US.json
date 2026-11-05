@@ -123,6 +123,8 @@
     "guardrail.withheld_answer": "🛡 The guardrail {name} withheld part of the answer",
     "guardrail.withheld_answer_why": "🛡 The guardrail {name} withheld the answer: {reason}",
     "guardrail.secret_seen": "⚠ The answer shows what looks like a secret or personal data (guardrail {name})",
+    "guardrail.limit_default": "the guardrail {name} sets this by default; to change it, set {key} under limits: in {path} (0: no limit)",
+    "guardrail.limit_file": "the guardrail {name} sets this in {path} ({key} under limits:; 0: no limit)",
     "rule.blocked": "The rule {name} stopped this prompt: {reason}",
     "rule.warned": "⚠ Rule {name}: {reason}",
     "rule.failed": "✗ The answer fails the rule {name}: {reason}",
