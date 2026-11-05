@@ -25,7 +25,7 @@ export type GuardStage = "input" | "tool_result" | "output" | "action";
 /** The stages, in the order a turn meets them. */
 export const guardStages: GuardStage[] = ["input", "tool_result", "output", "action"];
 /** The built-in guardrails, in the order Studio lists them. */
-export const builtinIds = ["prompt_injection", "secrets", "limits"] as const;
+const builtinIds = ["prompt_injection", "secrets", "limits"] as const;
 /** A built-in guardrail's id. */
 export type BuiltinId = (typeof builtinIds)[number];
 

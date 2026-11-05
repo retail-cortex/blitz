@@ -49,7 +49,7 @@ export const itemKey = (it: Pick<HealthItem, "kind" | "name">) => `${it.kind}/${
 /** How often the dashboard is asked for while shown. */
 export const pollMs = 5_000;
 /** How often it's asked for while a check runs. */
-export const checkingPollMs = 1_500;
+const checkingPollMs = 1_500;
 
 /**
  * The dashboard of a workspace, asked for while shown (every pollMs, more

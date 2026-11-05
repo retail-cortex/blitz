@@ -82,7 +82,7 @@ export function skillName(text: string): string {
 }
 
 /** The kinds of skill (SK-97), in the order the form describes them. */
-export const skillKinds = ["simple", "references", "scripts", "meta"] as const;
+const skillKinds = ["simple", "references", "scripts", "meta"] as const;
 /** A kind of skill. */
 export type SkillKind = (typeof skillKinds)[number];
 

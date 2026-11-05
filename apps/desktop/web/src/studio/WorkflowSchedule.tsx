@@ -31,6 +31,10 @@ export function scheduleName(workflow: string, taken: string[]): string {
   return name;
 }
 
+/** Removing a schedule whose run was just stopped waits for the run to end: this many tries, this far apart. */
+const removeTries = 20,
+  removeTryMs = 500;
+
 /** When a scheduled worker runs next, in the user's words. */
 const next = (w: Worker) => (w.nextRun ? new Date(Number(w.nextRun.seconds) * 1000).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" }) : "");
 
@@ -114,15 +118,22 @@ export function WorkflowSchedule({ workspace, workflow, disabled, permissions = 
     act(async () => {
       setStopping(null);
       const going = (await workers.listRunningWorkerRuns({})).runs.filter((r) => r.workspace === workspace && r.worker === w.name);
-      for (const r of going) await workers.stopWorkerRun({ runId: r.id }).catch(() => {});
+      for (const r of going) {
+        try {
+          await workers.stopWorkerRun({ runId: r.id });
+        } catch (e) {
+          // One that ended meanwhile is what was wanted; any other failure is said.
+          if (reason(e) !== "RUN_NOT_RUNNING" && reason(e) !== "UNKNOWN_RUN") throw e;
+        }
+      }
       // The run ends as it's stopped; the removal waits for that.
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < removeTries; i++) {
         try {
           await workers.deleteWorker({ workspace, name: w.name });
           return;
         } catch (e) {
           if (reason(e) !== "RUN_IN_PROGRESS") throw e;
-          await new Promise((res) => setTimeout(res, 500));
+          await new Promise((res) => setTimeout(res, removeTryMs));
         }
       }
       throw new Error(t("desktop.flows.schedule.still_running"));

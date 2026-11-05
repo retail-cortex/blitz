@@ -53,7 +53,6 @@ import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
 
 type Tab = "cases" | "settings" | "runs";
 
-/** A result's (or a run's) icon and colour, by status. */
 /** A run's or a result's status, as an icon (a skill's scenarios share it). */
 export const statusIcon: Record<string, string> = {
   pass: mdiCheckCircleOutline,
@@ -66,7 +65,7 @@ export const statusIcon: Record<string, string> = {
   running: mdiLoading,
   stopped: mdiStop,
 };
-/** A status's colour. */
+/** A status's text class: its colour. */
 export const statusClass = (s: string) => (s === "fail" || s === "failed" || s === "error" ? "error-text" : s === "warn" ? "warn-text" : "muted");
 
 /** A run's counts, as "2 passed · 1 failed". */
@@ -143,14 +142,16 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
     void refresh();
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
     void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.flatMap((f) => (f.agent && !f.problem ? [f.agent.name] : [])), () => [] as string[]))).then((all) =>
       setOwnAgents([...new Set(all.flat())]),
     );
     workspaces.listSkills({ workspace }).then(
       (r) => setSkills(r.skills.map((s) => s.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
   }, [workspace, refresh]);
   // Opened for an agent (from its form): its eval, or a draft of one.
@@ -639,7 +640,6 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
 }
 
 /** A run's results, each a row that opens into the prompt, the output expected and the output, and why. */
-/** A run's results, each opening on what was expected and what came back. */
 export function Results({ results }: { results: EvalResult[] }) {
   const [open, setOpen] = useState<number | null>(null);
   if (!results.length) return null;

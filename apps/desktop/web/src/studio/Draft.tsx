@@ -22,7 +22,7 @@ import { t } from "../i18n";
 import { Button, Dialog } from "@blitz/webui";
 
 /** What a draft is of (spec_040_studio STU-05). */
-export type DraftKind = "agent" | "skill" | "script" | "rule" | "guardrail" | "eval" | "workflow_step" | "form";
+type DraftKind = "agent" | "skill" | "script" | "rule" | "guardrail" | "eval" | "workflow_step" | "form";
 
 /**
  * Redraft: the model writes or improves a field (an agent's instructions,

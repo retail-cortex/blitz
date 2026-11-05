@@ -21,7 +21,7 @@
 import type { WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 
 /** A step's type, in the order the palette shows them. */
-export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "human_task", "timer", "exclusive", "inclusive", "parallel", "email", "data"] as const;
+const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "human_task", "timer", "exclusive", "inclusive", "parallel", "email", "data"] as const;
 /** A step's type. */
 export type StepType = (typeof stepTypes)[number];
 /** The palette's groups, in order. */
@@ -118,7 +118,7 @@ export interface FieldForm {
 export type LinkKind = "always" | "when" | "if" | "default" | "error";
 
 /** A link from one step to another. */
-export interface LinkForm {
+interface LinkForm {
   from: string;
   to: string;
   kind: LinkKind;
@@ -143,6 +143,23 @@ export interface WorkflowForm {
 export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", mode: "auto", steps: [], links: [] };
 
 const asType = (t: string): StepType => ((stepTypes as readonly string[]).includes(t) ? (t as StepType) : "agent");
+
+/**
+ * The steps of w the canvas can't hold as they are, as "id (type)": a
+ * step type it doesn't know (a newer Blitz's, or a typo), or an extract
+ * field's. The canvas would show them as an agent step or a text field,
+ * and saving would rewrite them, so Studio doesn't save such a workflow.
+ */
+export function unknownSteps(w: Pick<WorkflowFile, "nodes">): string[] {
+  const fieldTypes = ["", "string", "number", "boolean", "list"];
+  const out: string[] = [];
+  for (const n of w.nodes) {
+    const field = n.fields.find((f) => !fieldTypes.includes(f.type));
+    if (!(stepTypes as readonly string[]).includes(n.type)) out.push(`${n.id} (${n.type})`);
+    else if (field) out.push(`${n.id} (${field.type})`);
+  }
+  return out;
+}
 
 /** The canvas for a workflow as read. */
 export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
@@ -434,6 +451,13 @@ function authSpec(a: AuthForm) {
     default:
       return { ...blank, type: a.type, tokenUrl: a.tokenUrl.trim(), clientId: a.clientId, clientSecret: a.clientSecret, scopes: a.scopes.split(/\s+/).filter(Boolean), audience: a.audience.trim() };
   }
+}
+
+/** base, or base-2, base-3, … past the names taken ("" stays ""). */
+export function untakenName(base: string, taken: readonly string[]): string {
+  let name = base;
+  for (let n = 2; name && taken.includes(name); n++) name = `${base}-${n}`;
+  return name;
 }
 
 /**

@@ -25,10 +25,10 @@ import type { Connector, ConnectorKind, ConnectorQuery } from "../gen/blitz/v1/w
 export type ConnectorScope = "workspace" | "global";
 
 /** A capability a kind of connector has (spec_047_connectors). */
-export type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
+type Capability = "test" | "try" | "queries" | "schema" | "query-builder";
 
 /** A query's parameter as the form holds it. */
-export interface ParamForm {
+interface ParamForm {
   name: string;
   type: string;
   description: string;
@@ -110,7 +110,7 @@ export function withKind(f: ConnectorForm, kind: ConnectorKind): ConnectorForm {
 let lastQueryKey = 0;
 
 /** A new key for a query in the form (QueryForm.key). */
-export function queryKey(): string {
+function queryKey(): string {
   return `q${++lastQueryKey}`;
 }
 
@@ -254,7 +254,7 @@ export function withSetting(f: ConnectorForm, key: string, value: string): Conne
 }
 
 /** A connection URL's parts, as a kind's fields name them. */
-export interface URLParts {
+interface URLParts {
   settings: Record<string, string>;
   secrets: Record<string, string>;
 }

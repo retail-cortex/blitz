@@ -67,7 +67,7 @@ export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "c
 }
 
 /** Whether the system asks for less transparency. */
-export function reducedTransparency(): boolean {
+function reducedTransparency(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-transparency: reduce)").matches;
 }
 

@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { flowModes, looser } from "../options";
-import { startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { untakenName, unknownSteps, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -116,6 +116,26 @@ describe("the workflow canvas", () => {
       for (const l of f.links) expect(f.steps.map((s) => s.id)).toEqual(expect.arrayContaining([l.from, l.to]));
     }
     expect(fromTemplate("brief", (k) => k).steps.map((s) => s.type)).toEqual(["read_file", "browser", "accumulate", "agent", "save_file"]);
+  });
+
+  it("won't save a workflow with a step it doesn't know", () => {
+    const w = create(WorkflowFileSchema, {
+      nodes: [
+        { id: "a", type: "agent" },
+        { id: "b", type: "vector_search" },
+        { id: "c", type: "extract", fields: [{ name: "n", type: "number" }, { name: "d", type: "date" }] },
+      ],
+    });
+    expect(unknownSteps(w)).toEqual(["b (vector_search)", "c (date)"]);
+    expect(unknownSteps(create(WorkflowFileSchema, { nodes: [{ id: "a", type: "save_file" }] }))).toEqual([]);
+  });
+
+  it.each([
+    { base: "brief", taken: [], want: "brief" },
+    { base: "brief", taken: ["brief", "brief-2"], want: "brief-3" },
+    { base: "", taken: [""], want: "" },
+  ])("names a drafted workflow $base past $taken: $want", ({ base, taken, want }) => {
+    expect(untakenName(base, taken)).toBe(want);
   });
 
   it("knows when a workflow starts on its input", () => {

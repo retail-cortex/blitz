@@ -28,7 +28,7 @@ import type { WorkflowRun, WorkflowRunStep } from "./gen/blitz/v1/workspace_pb";
 const pollMs = 10_000;
 
 /** What the store holds: the runs going, waiting and lately ended, newest first. */
-export interface RunsState {
+interface RunsState {
   runs: WorkflowRun[];
   loaded: boolean;
 }

@@ -43,7 +43,7 @@ Any step can run **once per item** of a list: set *For each* to an expression gi
 
 ## Calling services
 
-An **API call**'s values (URL, query, headers, body) take `{{ templates }}` and secrets as `{secrets:key}`, put in as the call is made and never kept in the workflow or shown. Only the secrets the step's own settings name are put in: one named in what a template brings (another step's answer, a fetched page) is sent as written. Its auth can be a bearer token, basic auth, an API key (in a header or the query) or **OAuth2 client credentials** (a token URL, a client ID and secret, scopes): the token is fetched and kept until it expires. Its output's data is `{status, headers, body}`, so a condition can read `output.data.body.total`; a status of 400 or more fails the step (catch it with an on error link), and so does a response over 256 KiB, the most a step keeps.
+A **Call an API** step's values (URL, query, headers, body) take `{{ templates }}` and secrets as `{secrets:key}`, put in as the call is made and never kept in the workflow or shown. Only the secrets the step's own settings name are put in: one named in what a template brings (another step's answer, a fetched page) is sent as written. Its auth can be a bearer token, basic auth, an API key (in a header or the query) or **OAuth2 client credentials** (a token URL, a client ID and secret, scopes): the token is fetched and kept until it expires. Its output's data is `{status, headers, body}`, so a condition can read `output.data.body.total`; a status of 400 or more fails the step (catch it with an on error link), and so does a response over 256 KiB, the most a step keeps.
 
 ```yaml
 - id: order
@@ -53,7 +53,7 @@ An **API call**'s values (URL, query, headers, body) take `{{ templates }}` and 
   auth: {type: bearer, token: "{secrets:shop_token}"}
 ```
 
-An **MCP call** names one of the workspace's [MCP servers](mcp.md), a tool and its arguments; it's approved as the agent's MCP calls are. A **remote agent** step sends a message over [A2A](https://a2a-protocol.org) to the agent whose card is at a URL.
+A **Call an MCP tool** step names one of the workspace's [MCP servers](mcp.md), a tool and its arguments; it's approved as the agent's MCP calls are. An **Ask a remote agent** step sends a message over [A2A](https://a2a-protocol.org) to the agent whose card is at a URL.
 
 Calls reach the network as `web_fetch` does: only when the web is on, public addresses only (unless `web.allow_private`), and you're asked before a new host, unless it's in `web.allow_domains` or a permission rule allows it.
 

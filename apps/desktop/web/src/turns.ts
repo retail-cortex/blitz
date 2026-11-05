@@ -115,7 +115,7 @@ export function splitAttachments(text: string): { text: string; images?: { url: 
 }
 
 /** A saved session's tool call (ListSessionTools), as withTools takes it. */
-export interface SavedTool {
+interface SavedTool {
   turn: number;
   prompt: string;
   call?: { id: string; name: string; args?: JsonObject };

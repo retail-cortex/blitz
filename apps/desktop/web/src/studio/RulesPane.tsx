@@ -92,7 +92,8 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
     void refresh();
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
-      () => {},
+      // A list a picker offers: a failure is said, not taken for none.
+      (e) => snack(message(e), { error: true }),
     );
   }, [workspace, refresh]);
 
