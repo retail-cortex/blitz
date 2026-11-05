@@ -259,6 +259,12 @@ func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEn
 		r.Msg.Url = u
 	}
 	if previous != nil && previous.URL() != r.Msg.Url {
+		// Its catalog's loop ends first, so nothing it fetches lands in
+		// the folder being removed; the next connection starts afresh.
+		h.s.ent.mu.Lock()
+		h.s.ent.stopCatalog()
+		h.s.ent.c = nil
+		h.s.ent.mu.Unlock()
 		// Another organization, or none: this one's session ends.
 		if err := previous.SignOut(ctx); err != nil {
 			slog.Warn("signing out of the organization's service", "error", err)

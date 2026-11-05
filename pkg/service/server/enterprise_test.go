@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -373,10 +374,13 @@ func TestEnterpriseCatalogLoop(t *testing.T) {
 	_ = stream.Close()
 	locked := filepath.Join(dir, "catalog", "locked")
 	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(locked, "agents", "reviewer.md")); return err == nil }, 5*time.Second, 20*time.Millisecond)
-	cfg, err := config.Load("")
-	require.NoError(t, err)
+	// The policy is written beside the catalog, not with it.
+	var cfg *config.Config
+	require.Eventually(t, func() bool {
+		cfg, err = config.Load("")
+		return err == nil && slices.Contains(cfg.Permissions.Deny, "web_fetch")
+	}, 5*time.Second, 20*time.Millisecond)
 	assert.True(t, cfg.Org.Active())
-	assert.Contains(t, cfg.Permissions.Deny, "web_fetch")
 
 	org.Mu.Lock()
 	org.Catalog["rules/style.md"] = enterprisetest.CatalogFile{Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."}
