@@ -16,6 +16,8 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,6 +25,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,4 +147,26 @@ func TestSkillReviewOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.Msg.Review, "a script added: review again")
 	assert.Len(t, got.Msg.Review.Scripts, 2)
+}
+
+// A skill edit's error says what went wrong: a path that won't do is
+// INVALID_PATH; a failure to write (a full disk, a folder it may not
+// write) isn't one, and comes through as the service's own error.
+func TestSkillErr(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		reason string
+	}{
+		{"unknown", fmt.Errorf("%w: %q", skills.ErrUnknownSkill, "x"), "SKILL_NOT_FOUND"},
+		{"changed", skills.ErrChanged, "HASH_MISMATCH"},
+		{"a path outside", fmt.Errorf("%w: ../x", skills.ErrBadPath), "INVALID_PATH"},
+		{"missing", &fs.PathError{Op: "remove", Path: "scripts/x", Err: fs.ErrNotExist}, "INVALID_PATH"},
+		{"may not write", &fs.PathError{Op: "open", Path: "scripts/x", Err: fs.ErrPermission}, "INTERNAL"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.reason, errorInfo(skillErr(tc.err)).GetReason())
+		})
+	}
 }

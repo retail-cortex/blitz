@@ -208,6 +208,9 @@ func TestSchedulerWaitsOncePerWorkerAndStops(t *testing.T) {
 	code, info := errorReason(t, sc.acquire("/w", "other", true))
 	assert.Equal(t, connect.CodeResourceExhausted, code, "manual run with no slot: %v %v", code, info)
 	assert.Equal(t, "TOO_MANY_RUNS", info.Reason, "manual run with no slot: %v %v", code, info)
+	assert.Contains(t, info.Message, "workers.policy.max_concurrent", "where the limit is set")
+	assert.Contains(t, info.Message, "restarts", "and when a change applies")
+	assert.Equal(t, "1", info.Metadata["max_concurrent"])
 
 	s.Close()
 	err = <-waited

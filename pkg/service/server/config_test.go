@@ -387,6 +387,19 @@ func TestListModelsOverTheAPI(t *testing.T) {
 
 	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: "relative"}))
 	assert.Error(t, err, "a workspace must be absolute")
+
+	// Settings changed while it listed: what it listed isn't kept.
+	listModels = func(_ context.Context, _ *config.Config, _ ...string) []runtime.ProviderModels {
+		calls++
+		s.models.forget()
+		return []runtime.ProviderModels{{Provider: "gemini", Models: []runtime.ListedModel{{ID: "old"}}}}
+	}
+	s.models.forget()
+	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	s.models.mu.Lock()
+	assert.Empty(t, s.models.byID, "the old settings' listing isn't kept")
+	s.models.mu.Unlock()
 }
 
 // CheckApiKey tries a key in place of the provider's own, saving nothing:
@@ -444,6 +457,11 @@ func TestCheckApiKeyOverTheAPI(t *testing.T) {
 		_, err := cc.CheckApiKey(ctx, connect.NewRequest(bad))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "%v", bad)
 	}
+
+	// No listing at all for the provider: an error, not a crash.
+	listModels = func(context.Context, *config.Config, ...string) []runtime.ProviderModels { return nil }
+	_, err = cc.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Provider: "gemini", Key: "x"}))
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
 // A workspace's search settings, set through the config service, apply at

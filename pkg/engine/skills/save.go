@@ -42,6 +42,10 @@ var ErrChanged = errors.New("the skill changed since it was opened")
 // ErrUnknownSkill means there's no skill folder of that name.
 var ErrUnknownSkill = errors.New("no such skill")
 
+// ErrBadPath means a path that isn't one of a skill's own files: outside
+// its folder, or not where its files go.
+var ErrBadPath = errors.New("not one of the skill's files")
+
 // Spec is what the form edits: the skill's name (its folder's), what
 // it's for, the tools it may use (allowed-tools, as written), the agents
 // it's offered to, the skills it combines and its instructions.
@@ -218,14 +222,14 @@ func Delete(dir, name string) error {
 func fileRel(rel string) (string, error) {
 	rel = path.Clean(strings.TrimSpace(rel))
 	if !inBundle(rel) {
-		return "", fmt.Errorf("%q is outside the skill's folder", rel)
+		return "", fmt.Errorf("%w: %q is outside the skill's folder", ErrBadPath, rel)
 	}
 	if IsPackageFile(rel) {
 		return rel, nil // requirements.txt, pyproject.toml, package.json, beside SKILL.md too
 	}
 	top, rest, _ := strings.Cut(rel, "/")
 	if (top != ReferencesDir && top != ScriptsDir) || rest == "" {
-		return "", fmt.Errorf("%q: a skill's files go in references/ or scripts/", rel)
+		return "", fmt.Errorf("%w: %q: a skill's files go in references/ or scripts/", ErrBadPath, rel)
 	}
 	return rel, nil
 }

@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,13 +35,14 @@ func registered(sc *scheduler, dir, name string) (string, bool) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	e, ok := sc.entries[key(dir, name)]
-	return e.hash, ok
+	return e.hash, ok && e.id != 0 // 0: kept unscheduled, its schedule bad
 }
 
 // A worker is registered once per version: the same one again changes
 // nothing, a new hash replaces it, a schedule that doesn't parse removes
-// it; a rescan skips workspaces that can't open and workers not enabled,
-// and forgets the rest.
+// it (said once, not at every rescan); a rescan keeps the jobs of a
+// workspace that can't be read now, skips workers not enabled, and
+// forgets the rest.
 func TestSchedulerRegistration(t *testing.T) {
 	c, s := serveScheduler(t, time.Hour, false)
 	sc := s.sched
@@ -65,6 +67,9 @@ func TestSchedulerRegistration(t *testing.T) {
 	sc.register(dir, info)
 	_, ok = registered(sc, dir, "a")
 	assert.False(t, ok, "a schedule that doesn't parse is dropped")
+	sc.mu.Lock()
+	assert.Equal(t, "whenever", sc.entries[key(dir, "a")].cron, "kept, so it's said once")
+	sc.mu.Unlock()
 
 	// One enabled worker, one new one, and a workspace that's gone.
 	addWorker(t, dir, "on", "---\nschedule: Daily at 6 AM\n---\nGo.\n")
@@ -83,7 +88,14 @@ func TestSchedulerRegistration(t *testing.T) {
 	}
 	require.NoError(t, sc.cfg.Store.Enable(filepath.Join(dir, "gone"), &workers.Worker{Name: "x", Hash: "h"}, "h"))
 	sc.register(dir, api.WorkerInfo{Name: "stale", Hash: "h", Cron: "0 6 * * *"})
+	// A workspace that doesn't open now (a file where its folder was).
+	unread := filepath.Join(t.TempDir(), "unread")
+	require.NoError(t, os.WriteFile(unread, nil, 0o600))
+	require.NoError(t, sc.cfg.Store.Enable(unread, &workers.Worker{Name: "kept", Hash: "h"}, "h"))
+	sc.register(unread, api.WorkerInfo{Name: "kept", Hash: "h", Cron: "0 6 * * *"})
 	sc.rescan(ctx)
+	_, ok = registered(sc, unread, "kept")
+	assert.True(t, ok, "kept while its workspace can't be read")
 	_, ok = registered(sc, dir, "on")
 	assert.True(t, ok, "the enabled worker")
 	_, ok = registered(sc, dir, "new")

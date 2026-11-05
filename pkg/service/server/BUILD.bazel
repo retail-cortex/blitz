@@ -169,6 +169,7 @@ go_test(
         "//pkg/engine/lsp/lsptest",
         "//pkg/engine/memory",
         "//pkg/engine/runtime",
+        "//pkg/engine/skills",
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/enterprise",

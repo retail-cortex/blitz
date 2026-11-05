@@ -43,6 +43,9 @@ const (
 type modelLists struct {
 	mu   sync.Mutex
 	byID map[string]modelList
+	// gen counts forget's calls: a listing made from settings since
+	// changed isn't kept.
+	gen int
 }
 
 type modelList struct {
@@ -66,6 +69,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		c.mu.Unlock()
 		return ok(l.res)
 	}
+	gen := c.gen
 	c.mu.Unlock()
 
 	var cfg *config.Config
@@ -105,7 +109,9 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if c.byID == nil {
 		c.byID = map[string]modelList{}
 	}
-	c.byID[key] = modelList{res: res, expires: time.Now().Add(fresh)}
+	if c.gen == gen { // else the settings changed as it listed
+		c.byID[key] = modelList{res: res, expires: time.Now().Add(fresh)}
+	}
 	c.mu.Unlock()
 	return ok(res)
 }
@@ -114,6 +120,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 func (c *modelLists) forget() {
 	c.mu.Lock()
 	c.byID = nil
+	c.gen++
 	c.mu.Unlock()
 }
 
@@ -152,7 +159,11 @@ func (h configService) CheckApiKey(ctx context.Context, r req[pb.CheckApiKeyRequ
 	default:
 		return nil, invalid(fmt.Errorf("provider %q takes no API key to check (gemini, anthropic or openai)", r.Msg.Provider))
 	}
-	pm := listModels(ctx, cfg, r.Msg.Provider)[0]
+	listed := listModels(ctx, cfg, r.Msg.Provider)
+	if len(listed) == 0 {
+		return nil, apiError(connect.CodeInternal, "INTERNAL", fmt.Errorf("no listing for %s", r.Msg.Provider))
+	}
+	pm := listed[0]
 	res := &pb.CheckApiKeyResponse{Works: pm.Err == nil}
 	if pm.Err != nil {
 		res.Error = pm.Err.Error()
