@@ -531,6 +531,9 @@ func TestOpenWarnings(t *testing.T) {
 			require.NoError(t, os.WriteFile(file, nil, 0o644))
 			c.Checkpoints.Enabled, c.Checkpoints.Dir = true, filepath.Join(file, "checkpoints")
 		}, want: "checkpoints are kept in memory only"},
+		// N26 engine-tools-2#28: a setting that's ignored says so.
+		{name: "a process limit that isn't a duration", mutate: func(_ *testing.T, c *config.Config) { c.Processes.BusyFor = "2 minutes" },
+			want: `processes.busy_for = "2 minutes" isn't a duration`},
 		{name: "old images are pruned", mutate: func(_ *testing.T, c *config.Config) { c.Images.Enabled, c.Images.RetainDays = true, 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
