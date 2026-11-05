@@ -18,6 +18,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +151,36 @@ func TestApplyPolicyDefaultsAndCostCap(t *testing.T) {
 	eff = Apply(&Worker{Limits: api.Limits{MaxCostUSD: 5}}, p)
 	assert.InDelta(t, 1.0, eff.Limits.MaxCostUSD, 1e-9)
 	assert.Contains(t, eff.Notes, "max_cost_usd 5.00 capped at 1.00")
+}
+
+// A [workers.policy] duration that can't be read is never "no limit":
+// the shipped 30m applies, as the default and as the cap, with a note
+// (N26 engine-sub-2#7).
+func TestApplyPolicyUnreadableDurations(t *testing.T) {
+	tests := []struct {
+		name, def, max string
+		asked, want    time.Duration
+		note           string
+	}{
+		{name: "default", def: "30 minutes", want: 30 * time.Minute, note: `workers.policy.default_timeout "30 minutes" can't be read`},
+		{name: "negative default", def: "-5m", want: 30 * time.Minute, note: "default_timeout"},
+		{name: "empty default", def: "", want: 30 * time.Minute},
+		{name: "cap", def: "10m", max: "1h 30m", asked: 5 * time.Hour, want: 30 * time.Minute, note: `workers.policy.max_timeout "1h 30m" can't be read`},
+		{name: "readable cap", def: "10m", max: "2h", asked: 5 * time.Hour, want: 2 * time.Hour, note: "timeout 5h0m0s capped at 2h0m0s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := config.DefaultConfig().Workers.Policy
+			p.DefaultTimeout, p.MaxTimeout = tt.def, tt.max
+			eff := Apply(&Worker{Limits: api.Limits{Timeout: tt.asked}}, p)
+			assert.Equal(t, tt.want, eff.Limits.Timeout)
+			if tt.note == "" {
+				assert.Empty(t, eff.Notes)
+				return
+			}
+			assert.True(t, slices.ContainsFunc(eff.Notes, func(n string) bool { return strings.Contains(n, tt.note) }), "notes %q", eff.Notes)
+		})
+	}
 }
 
 // TestStoreFileErrors checks a store that can't be read, parsed or saved.

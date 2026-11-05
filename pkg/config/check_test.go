@@ -56,6 +56,10 @@ func TestCheckSettings(t *testing.T) {
 			want: []Problem{{Line: 4, Error: true, Message: "[permissions] allow:"}},
 		},
 		{name: "plain-text key", text: "[llm.openai]\napi_key = \"sk-abc123\"\n", want: []Problem{{Line: 2, Message: "the openai API key is in the file as plain text"}}},
+		// N26 engine-sub-2#7.
+		{name: "job durations that aren't", text: "[workers.policy]\ndefault_timeout = \"30 minutes\"\n", want: []Problem{
+			{Line: 1, Error: true, Message: `workers.policy.default_timeout = "30 minutes" isn't a duration`},
+		}},
 		{name: "background limits that aren't", text: "[tools]\nbackground_agent_timeout = \"30 min\"\nbackground_agent_max_turns = 0\n", want: []Problem{
 			{Line: 2, Error: true, Message: "tools.background_agent_timeout is a length of time"},
 			{Line: 3, Error: true, Message: "tools.background_agent_max_turns is a task's model calls"},

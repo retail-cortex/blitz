@@ -299,6 +299,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			o.Warn(p)
 		}
 	}
+	for _, p := range cfg.Workers.Policy.Problems() {
+		o.Warn(p)
+	}
 
 	// Before the tools: they start the hooks and MCP servers.
 	if cfg.Blitz.TrustWorkspace {

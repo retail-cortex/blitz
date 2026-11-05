@@ -29,6 +29,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/retail-cortex/blitz/pkg/secrets"
@@ -503,6 +504,27 @@ type WorkerPolicy struct {
 	MaxConcurrent int `toml:"max_concurrent"`
 }
 
+// DefaultWorkerTimeout is [workers.policy] default_timeout as shipped,
+// which a job runs under when the setting can't be read.
+const DefaultWorkerTimeout = "30m"
+
+// Problems are the policy's durations that can't be read (a Go duration
+// such as 30m or 1h30m, above zero): never "no limit", they're reported
+// (spec_023 WK-22a).
+func (p WorkerPolicy) Problems() []string {
+	var probs []string
+	for key, v := range map[string]string{"default_timeout": p.DefaultTimeout, "max_timeout": p.MaxTimeout} {
+		if v == "" {
+			continue
+		}
+		if d, err := time.ParseDuration(v); err != nil || d <= 0 {
+			probs = append(probs, fmt.Sprintf("workers.policy.%s = %q isn't a duration such as 30m or 1h30m; %s is used", key, v, DefaultWorkerTimeout))
+		}
+	}
+	slices.Sort(probs)
+	return probs
+}
+
 // SkillPolicy is the host's limit on what skills' scripts may do. For each
 // setting the stricter of the skill's request and this policy applies.
 type SkillPolicy struct {
@@ -886,7 +908,7 @@ func DefaultConfig() *Config {
 				// that wants a cap sets max_*.
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
-				DefaultTimeout:    "30m",
+				DefaultTimeout:    DefaultWorkerTimeout,
 				MaxConcurrent:     2,
 			},
 		},

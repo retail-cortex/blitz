@@ -60,12 +60,28 @@ func Apply(w *Worker, p config.WorkerPolicy) Effective {
 		out.Notes = append(out.Notes, fmt.Sprintf("max_cost_usd %.2f capped at %.2f", l.MaxCostUSD, p.MaxCostUSD))
 		l.MaxCostUSD = p.MaxCostUSD
 	}
+	// A duration that can't be read is never "no limit" (N26
+	// engine-sub-2#7): the shipped default applies, as a default and as a
+	// cap (config.WorkerPolicy.Problems reports it).
+	shipped, _ := time.ParseDuration(config.DefaultWorkerTimeout)
 	if l.Timeout == 0 {
-		l.Timeout, _ = time.ParseDuration(p.DefaultTimeout)
+		l.Timeout = shipped
+		if d, err := time.ParseDuration(p.DefaultTimeout); err == nil && d > 0 {
+			l.Timeout = d
+		} else if p.DefaultTimeout != "" {
+			out.Notes = append(out.Notes, fmt.Sprintf("workers.policy.default_timeout %q can't be read: timeout %s", p.DefaultTimeout, shipped))
+		}
 	}
-	if max, err := time.ParseDuration(p.MaxTimeout); err == nil && max > 0 && l.Timeout > max {
-		out.Notes = append(out.Notes, fmt.Sprintf("timeout %s capped at %s", l.Timeout, max))
-		l.Timeout = max
+	if p.MaxTimeout != "" {
+		max, err := time.ParseDuration(p.MaxTimeout)
+		if err != nil || max <= 0 {
+			out.Notes = append(out.Notes, fmt.Sprintf("workers.policy.max_timeout %q can't be read: capped at %s", p.MaxTimeout, shipped))
+			max = shipped
+		}
+		if l.Timeout > max {
+			out.Notes = append(out.Notes, fmt.Sprintf("timeout %s capped at %s", l.Timeout, max))
+			l.Timeout = max
+		}
 	}
 	out.Limits = l
 	return out

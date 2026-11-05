@@ -518,9 +518,13 @@ func refPrefix(ref string) string {
 	return ref + ": "
 }
 
-// checkSkills reports skills that don't load, the skills policy's own
-// problems, and skills whose scripts the policy blocks.
+// checkSkills reports the jobs policy's durations that can't be read,
+// skills that don't load, the skills policy's own problems, and skills
+// whose scripts the policy blocks.
 func checkSkills(cfg *config.Config, add func(name string, st checkStatus, format string, args ...any)) {
+	for _, p := range cfg.Workers.Policy.Problems() {
+		add("jobs policy", statusWarn, "%s", p)
+	}
 	if !cfg.Skills.Enabled {
 		return
 	}

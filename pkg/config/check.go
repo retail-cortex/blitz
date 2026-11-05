@@ -101,6 +101,9 @@ func CheckSettings(text string) []Problem {
 	for _, msg := range cfg.Skills.Policy.Problems() {
 		out = append(out, Problem{Line: keyLine(text, toml.Key{"skills", "policy"}), Message: msg})
 	}
+	for _, msg := range cfg.Workers.Policy.Problems() {
+		out = append(out, Problem{Line: keyLine(text, toml.Key{"workers", "policy"}), Error: true, Message: msg})
+	}
 	// By line, errors first on a line.
 	slices.SortStableFunc(out, func(a, b Problem) int {
 		if c := cmp.Compare(a.Line, b.Line); c != 0 {
