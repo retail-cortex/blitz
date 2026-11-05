@@ -18,7 +18,9 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -26,6 +28,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/signedin"
 	"golang.org/x/oauth2"
 )
@@ -76,6 +79,27 @@ func idToken(t *oauth2.Token) (string, error) {
 		return "", errors.New("the identity provider answered without an ID token")
 	}
 	return id, nil
+}
+
+// nonceMatches reports whether an ID token's nonce claim is nonce, or it
+// has none to compare (the service checks the token's signature; this
+// is that it was issued for this sign-in, EN-12).
+func nonceMatches(idToken, nonce string) bool {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return true
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return true
+	}
+	var claims struct {
+		Nonce *string `json:"nonce"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Nonce == nil {
+		return true
+	}
+	return *claims.Nonce == nonce
 }
 
 // start discovers the service and its provider: the first steps of both
@@ -141,14 +165,14 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 			http.NotFound(w, r)
 			return
 		}
-		page := signedin.Page{Title: "You're signed in", Open: true, Brand: c.signInBrand(),
-			Message: "Blitz is signed in to your organization. Go back to Blitz to carry on."}
+		page := signedin.Page{Title: i18n.T("signin.page.done_title"), Open: true, Brand: c.signInBrand(),
+			Message: i18n.T("signin.page.done_org")}
 		if page.Brand != nil && page.Brand.Name != "" {
-			page.Message = "Blitz is signed in to " + page.Brand.Name + ". Go back to Blitz to carry on."
+			page.Message = i18n.T("signin.page.done_named", "org", page.Brand.Name)
 		}
 		if e := r.URL.Query().Get("error"); e != "" {
-			page.Title, page.Failed = "The sign-in didn't go through", true
-			page.Message = "Your organization's sign-in refused it (" + e + "). Try again from Blitz."
+			page.Title, page.Failed = i18n.T("signin.page.failed_title"), true
+			page.Message = i18n.T("signin.page.refused", "error", e)
 		}
 		signedin.Write(w, http.StatusOK, page)
 		select {
@@ -159,7 +183,8 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 	go srv.Serve(ln)
 	defer srv.Close()
 
-	show(Prompt{URL: cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", random()))})
+	nonce := random()
+	show(Prompt{URL: cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", nonce))})
 	var q url.Values
 	for q == nil {
 		select {
@@ -182,6 +207,9 @@ func (c *Client) SignInBrowser(ctx context.Context, show func(Prompt), pasted <-
 	t, err := cfg.Exchange(ctx, q.Get("code"), oauth2.VerifierOption(verifier))
 	if err != nil {
 		return fmt.Errorf("the identity provider: %w", err)
+	}
+	if id, _ := t.Extra("id_token").(string); id != "" && !nonceMatches(id, nonce) {
+		return errors.New("the identity provider's ID token isn't for this sign-in (its nonce differs)")
 	}
 	return c.finish(ctx, info, t)
 }

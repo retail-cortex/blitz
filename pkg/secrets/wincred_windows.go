@@ -105,6 +105,9 @@ func (wincred) Set(name, value string) error {
 		return err
 	}
 	blob := []byte(value)
+	if err := credFits(name, len(blob)); err != nil {
+		return err
+	}
 	c := credential{Type: credTypeGeneric, TargetName: t, Persist: credPersistLocalMachine, CredentialBlobSize: uint32(len(blob))}
 	if len(blob) > 0 {
 		c.CredentialBlob = &blob[0]

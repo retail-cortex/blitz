@@ -23,6 +23,7 @@ go_library(
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/secretscan",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/redact"],
 )
 
 go_test(
@@ -33,6 +34,7 @@ go_test(
     ],
     embed = [":secretscan"],
     deps = [
+        "//pkg/redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

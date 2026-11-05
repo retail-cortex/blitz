@@ -53,18 +53,6 @@ func TestFileFailures(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "x", "y"), 0o700))
 		assert.Error(t, writeFile(dir, "x", []byte("x")))
 	})
-	t.Run("forgetting a catalog that's a folder", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, catalogFile, "x"), 0o700))
-		assert.Error(t, ForgetCatalog(dir))
-	})
-	t.Run("forgetting layers it can't remove", func(t *testing.T) {
-		dir := t.TempDir()
-		layers := filepath.Join(dir, layersDir)
-		require.NoError(t, os.MkdirAll(filepath.Join(layers, "x"), 0o700))
-		readOnly(t, layers)
-		assert.Error(t, ForgetCatalog(dir))
-	})
 }
 
 func TestLayOutFailures(t *testing.T) {

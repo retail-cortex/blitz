@@ -29,6 +29,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // CatalogFile is one of the catalog's files for this person: what it is
@@ -46,30 +48,14 @@ type CatalogFile struct {
 }
 
 // Policy is the organization's policy (spec_053_enterprise EN-35), as far
-// as Blitz applies it.
+// as Blitz applies it: how often to fetch the catalog, and the rules
+// pkg/config applies from policy.json, one type for both so neither
+// drops what the other reads.
 type Policy struct {
 	// Refresh is how often to fetch the catalog when its stream isn't up,
 	// as a Go duration ("15m" when unset).
 	Refresh string `json:"refresh"`
-	Models  struct {
-		// OwnProviders lets people use their own providers beside the
-		// organization's models.
-		OwnProviders bool `json:"own_providers"`
-	} `json:"models"`
-	Tools struct {
-		// Off are tools no agent may use.
-		Off []string `json:"off"`
-		// ShellCommands lets people run their own ! commands.
-		ShellCommands bool `json:"shell_commands"`
-	} `json:"tools"`
-	MCP struct {
-		// Own lets people add their own MCP servers.
-		Own bool `json:"own"`
-	} `json:"mcp"`
-	Builtins struct {
-		// Off are Blitz's built-in agents and skills switched off, by name.
-		Off []string `json:"off"`
-	} `json:"builtins"`
+	config.OrgPolicy
 }
 
 // Manifest is a version of the catalog for this person.
@@ -119,21 +105,6 @@ func LayerDirs(dir string) (defaults, locked string) {
 	return filepath.Join(dir, layersDir, defaultLayer), filepath.Join(dir, layersDir, lockedLayer)
 }
 
-// ForgetCatalog removes the catalog from dir, keeping the branding.
-func ForgetCatalog(dir string) error {
-	for _, f := range []string{catalogFile, catalogETag, PolicyFile} {
-		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	for _, d := range []string{layersDir, filesDir} {
-		if err := os.RemoveAll(filepath.Join(dir, d)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // safePath is p as a path inside a layer, or false for one that would
 // leave it.
 func safePath(p string) (string, bool) {
@@ -149,7 +120,8 @@ func safePath(p string) (string, bool) {
 // lays it out in dir: the default and locked layers, built beside the
 // old ones and swapped in whole, and the policy. It returns the catalog
 // in dir after, and whether it changed; nil when the service has none.
-// A catalog that doesn't check is refused and the last one kept.
+// A catalog that doesn't check is refused and the last one kept, as it
+// is when the service answers 404 (unsigned) with one kept.
 func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, bool, error) {
 	token, err := c.AccessToken(ctx)
 	if err != nil {
@@ -176,8 +148,16 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 	case http.StatusNotModified:
 		return LoadCatalog(dir), false, nil
 	case http.StatusNotFound:
-		had := LoadCatalog(dir) != nil
-		return nil, had, ForgetCatalog(dir)
+		// "None published", but unsigned: a proxy or a misrouted deploy
+		// says the same. The kept catalog and its policy stay; only a
+		// signed manifest changes them (EN-33), an empty one to none.
+		kept := LoadCatalog(dir)
+		if kept == nil {
+			return nil, false, nil
+		}
+		var r struct{ Code, Message string }
+		_ = json.Unmarshal(data, &r)
+		return kept, false, &Refusal{Status: res.StatusCode, Code: r.Code, Message: r.Message}
 	case http.StatusOK:
 	default:
 		var r struct{ Code, Message string }
@@ -250,7 +230,9 @@ func (c *Client) fetchFiles(ctx context.Context, token, dir string, files []Cata
 			return err
 		}
 		if res.StatusCode != http.StatusOK {
-			return &Refusal{Status: res.StatusCode, Message: fmt.Sprintf("the organization's catalog file %s: %s", f.Path, res.Status)}
+			err := &Refusal{Status: res.StatusCode, Message: fmt.Sprintf("the organization's catalog file %s: %s", f.Path, res.Status)}
+			c.refused(err)
+			return err
 		}
 		if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != f.SHA256 {
 			return fmt.Errorf("%w: %s doesn't match its hash", ErrSignature, f.Path)
@@ -333,7 +315,9 @@ func (c *Client) WatchCatalog(ctx context.Context, on func()) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return &Refusal{Status: res.StatusCode}
+		err := &Refusal{Status: res.StatusCode}
+		c.refused(err)
+		return err
 	}
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {

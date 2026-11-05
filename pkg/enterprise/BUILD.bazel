@@ -32,6 +32,8 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/enterprise",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config",
+        "//pkg/i18n",
         "//pkg/secrets",
         "//pkg/signedin",
         "@org_golang_x_oauth2//:oauth2",
@@ -49,7 +51,9 @@ go_test(
     ],
     embed = [":enterprise"],
     deps = [
+        "//pkg/config",
         "//pkg/enterprise/enterprisetest",
+        "//pkg/i18n",
         "//pkg/secrets",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

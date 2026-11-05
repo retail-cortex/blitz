@@ -65,16 +65,23 @@ func (o OrgLayer) Expired(now time.Time) bool {
 	return o.Active() && !o.Expires.IsZero() && now.After(o.Expires)
 }
 
-// OrgPolicy is the organization's policy as Blitz applies it (EN-35).
+// OrgPolicy is the organization's policy as Blitz applies it (EN-35):
+// what pkg/enterprise decodes from the signed manifest and writes to
+// policy.json, read back here.
 type OrgPolicy struct {
 	Models struct {
+		// OwnProviders lets people use their own providers beside the
+		// organization's models.
 		OwnProviders bool `json:"own_providers"`
 	} `json:"models"`
 	Tools struct {
-		Off           []string `json:"off"`
-		ShellCommands bool     `json:"shell_commands"`
+		// Off are tools no agent may use.
+		Off []string `json:"off"`
+		// ShellCommands lets people run their own ! commands.
+		ShellCommands bool `json:"shell_commands"`
 	} `json:"tools"`
 	MCP struct {
+		// Own lets people add their own MCP servers.
 		Own bool `json:"own"`
 	} `json:"mcp"`
 	// Connectors says whether people may have connections of their own,
@@ -84,6 +91,8 @@ type OrgPolicy struct {
 		Kinds []string `json:"kinds"`
 	} `json:"connectors"`
 	Builtins struct {
+		// Off are Blitz's built-in agents, skills and guardrails switched
+		// off, by name.
 		Off []string `json:"off"`
 	} `json:"builtins"`
 }

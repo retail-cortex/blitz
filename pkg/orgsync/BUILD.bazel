@@ -19,6 +19,7 @@ go_library(
     srcs = ["orgsync.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/orgsync",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/secretscan"],
 )
 
 go_test(

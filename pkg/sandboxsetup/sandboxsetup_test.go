@@ -57,7 +57,10 @@ func newFakeSystem(t *testing.T, restriction string, withParser, withBwrap bool,
 		require.NoError(t, os.WriteFile(restrict, []byte(restriction+"\n"), 0o644))
 	}
 	old := []any{goos, lookPath, restrictFile, profileDir, parsers, probe, run}
+	oldOwner := trustedOwner
+	trustedOwner = func(uid uint32) bool { return uid == 0 || uid == uint32(os.Getuid()) }
 	t.Cleanup(func() {
+		trustedOwner = oldOwner
 		goos, lookPath, restrictFile, profileDir = old[0].(string), old[1].(func(string) (string, error)), old[2].(string), old[3].(string)
 		parsers = old[4].([]string)
 		probe = old[5].(func(context.Context, string) ([]byte, error))
@@ -196,6 +199,31 @@ func TestFix(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, Ready, st.State)
 		assert.Empty(t, f.ran)
+	})
+	// A bwrap others can change isn't given the profile (N26
+	// safety-enterprise#10).
+	t.Run("a bwrap others can write", func(t *testing.T) {
+		f := newFakeSystem(t, "1", true, true, "sudo")
+		require.NoError(t, os.Chmod(filepath.Join(f.dir, "bin", "bwrap"), 0o777))
+		_, err := Fix(context.Background(), Elevation{})
+		assert.ErrorIs(t, err, ErrNotSystemBwrap)
+		assert.Empty(t, f.ran)
+	})
+	t.Run("in a folder others can write", func(t *testing.T) {
+		f := newFakeSystem(t, "1", true, true, "sudo")
+		require.NoError(t, os.Chmod(filepath.Join(f.dir, "bin"), 0o777))
+		_, err := Fix(context.Background(), Elevation{})
+		assert.ErrorIs(t, err, ErrNotSystemBwrap)
+		assert.Empty(t, f.ran)
+	})
+	t.Run("a bwrap the person owns", func(t *testing.T) {
+		f := newFakeSystem(t, "1", true, true, "sudo")
+		trustedOwner = func(uid uint32) bool { return uid == 0 }
+		_, err := Fix(context.Background(), Elevation{})
+		if os.Getuid() != 0 {
+			assert.ErrorIs(t, err, ErrNotSystemBwrap)
+			assert.Empty(t, f.ran)
+		}
 	})
 	t.Run("not AppArmor's doing", func(t *testing.T) {
 		f := newFakeSystem(t, "0", true, true, "sudo")
