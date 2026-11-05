@@ -474,6 +474,8 @@
     "org.about_support": "Soporte: {url}",
     "org.about_terms": "Condiciones del servicio (versión {version}): {where}",
     "org.about_privacy": "Aviso de privacidad (versión {version}): {where}",
+    "org.watch_going.one": "{count} ejecución en curso en el servicio",
+    "org.watch_going.other": "{count} ejecuciones en curso en el servicio",
     "org.sync_saved": "Guardado: el servicio lo tiene todo",
     "org.sync_saving": "Guardando…",
     "org.sync_offline": "Sin guardar: no se puede contactar con el servicio, así que los cambios esperan en este equipo",

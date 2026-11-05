@@ -474,6 +474,8 @@
     "org.about_support": "Soutien : {url}",
     "org.about_terms": "Conditions d'utilisation (version {version}) : {where}",
     "org.about_privacy": "Avis de confidentialité (version {version}) : {where}",
+    "org.watch_going.one": "{count} exécution en cours sur le service",
+    "org.watch_going.other": "{count} exécutions en cours sur le service",
     "org.sync_saved": "Enregistré : le service a tout",
     "org.sync_saving": "Enregistrement…",
     "org.sync_offline": "Non enregistré : le service est injoignable, les modifications attendent donc sur cet ordinateur",

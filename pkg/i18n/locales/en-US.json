@@ -474,6 +474,8 @@
     "org.about_support": "Support: {url}",
     "org.about_terms": "Terms of service (version {version}): {where}",
     "org.about_privacy": "Privacy notice (version {version}): {where}",
+    "org.watch_going.one": "{count} run going on the service",
+    "org.watch_going.other": "{count} runs going on the service",
     "org.sync_saved": "Saved: the service has everything",
     "org.sync_saving": "Saving…",
     "org.sync_offline": "Not saved: the service can't be reached, so the changes wait on this computer",

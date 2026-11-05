@@ -17,7 +17,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -26,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -383,7 +386,22 @@ the service read it now.`,
 			return nil
 		},
 	}
-	cmd.AddCommand(runs, push, runNow, take, switchTo(true), switchTo(false), files, pending, answer(true), answer(false))
+	watch := &cobra.Command{
+		Use:   "watch",
+		Short: "Follow the runs going now on the service, as they start, change and end (Ctrl+C stops)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer stop()
+			out := cmd.OutOrStdout()
+			return s.WatchServiceRuns(ctx, func(runs []client.GoingServiceRun) { printGoingRuns(out, runs) })
+		},
+	}
+	cmd.AddCommand(runs, push, runNow, take, switchTo(true), switchTo(false), files, pending, answer(true), answer(false), watch)
 	return cmd
 }
 
@@ -711,4 +729,15 @@ answer only). Turning one off takes the =false: "--email off" is refused.`,
 	cmd.Flags().StringVar(&webhook, "webhook", "", `an https address to POST them to ("" for none)`)
 	cmd.Flags().BoolVar(&everyRun, "every-run", false, "every run's end, not only failures and runs waiting for your answer")
 	return cmd
+}
+
+// printGoingRuns writes the runs going now on the service, as the
+// Processes view shows them (EN-42), each time they change.
+func printGoingRuns(w io.Writer, runs []client.GoingServiceRun) {
+	fmt.Fprintf(w, "\n%s  %s\n", time.Now().Format("15:04:05"), i18n.N("org.watch_going", len(runs)))
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	for _, g := range runs {
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\n", g.Workspace, g.JobName, g.Run.ID, g.Run.Status, g.Run.Created.Local().Format("15:04"))
+	}
+	tw.Flush()
 }
