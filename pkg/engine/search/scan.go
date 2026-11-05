@@ -158,6 +158,11 @@ func (x *Index) scanSource(ctx context.Context, src Source) error {
 			delete(seen, it.Ref)
 			continue
 		}
+		if err != nil && ctx.Err() != nil {
+			// Stopped part way through its read, not unreadable: left as
+			// it was, read at the next scan (N26 engine-sub-2#19).
+			return b.commit()
+		}
 		hash := digest(doc)
 		if err != nil { // remembered, so it isn't read again until it changes
 			doc, hash = Doc{Title: it.Ref}, unreadableHash
@@ -216,10 +221,9 @@ func (x *Index) known(source string) (map[string]known, error) {
 
 // batch groups changes into transactions of batchSize.
 type batch struct {
-	x  *Index
-	t  *sql.Tx
-	n  int
-	ok bool
+	x *Index
+	t *sql.Tx
+	n int
 }
 
 func (b *batch) tx() (*sql.Tx, error) {
