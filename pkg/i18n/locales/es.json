@@ -251,6 +251,7 @@
     "approvals.revoked.other": "Se revocaron {count} reglas.",
     "approvals.still_saved": "Revocadas solo para esta sesión: {error}",
     "approvals.failed": "No se pudieron revocar las aprobaciones: {error}",
+    "approvals.save_failed": "Aprobado, pero no se pudo guardar la regla, así que solo vale para esta sesión: {error}",
     "search.open_failed": "La búsqueda en el espacio de trabajo está desactivada: {error}",
     "search.embed_failed": "La búsqueda semántica está desactivada: no se puede usar {model} ({error})",
     "search.enrich_failed": "La búsqueda no describirá archivos: {error}",

@@ -21,10 +21,11 @@ import (
 	"sync"
 )
 
-// callTargets are what permission rules of each kind see in a call of tool
-// with args: its name, and the command, path, host, skill or agent it
-// names.
-func callTargets(tool string, args map[string]any) map[string][]string {
+// CallTargets are what permission rules of each kind see in a call of tool
+// with args: its name, and the command, paths, host, skill or agent it
+// names. A hook's if matches against them, and the engine's file rules
+// take the read, write and delete paths.
+func CallTargets(tool string, args map[string]any) map[string][]string {
 	str := func(keys ...string) string {
 		for _, k := range keys {
 			if v, ok := args[k].(string); ok && v != "" {
@@ -42,10 +43,18 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 	switch tool {
 	case "run_shell_command":
 		add(RuleShell, str("command"))
-	case "read_file", "list_files", "glob", "grep", "view_image", "view_document", "view_media":
+	case "read_file", "list_files", "glob", "grep", "view_image", "view_document", "view_media", "lsp":
 		add(RuleRead, str("path"))
-	case "create_file", "replace_in_file", "edit", "delete_snippet", "apply_patch", "notebook_edit":
+	case "create_file", "replace_in_file", "edit", "delete_snippet", "notebook_edit":
 		add(RuleWrite, str("path"))
+	case "apply_patch": // the files the patch names
+		written, deleted := PatchTargets(str("patch"))
+		for _, p := range written {
+			add(RuleWrite, p)
+		}
+		for _, p := range deleted {
+			add(RuleDelete, p)
+		}
 	case "generate_audio":
 		add(RuleRead, str("text_path"))
 		add(RuleWrite, str("path"))
@@ -57,8 +66,12 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 		add(RuleWrite, ExportDocxOutputPath(str("path"), str("output")))
 	case "delete_file":
 		add(RuleDelete, str("path"))
-	case "web_fetch", "browser":
-		if u, err := url.Parse(str("url")); err == nil {
+	case "web_fetch", "browser", "open_page":
+		raw := str("url")
+		if tool == "open_page" && raw != "" && !strings.Contains(raw, "://") {
+			raw = "https://" + raw // as open_page takes a bare host
+		}
+		if u, err := url.Parse(raw); err == nil {
 			add(RuleWeb, strings.ToLower(u.Hostname()))
 		}
 	case "activate_skill", "run_skill_script":
@@ -73,20 +86,20 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 // if = "shell(git push *)").
 func (r PermissionRule) matchesCall(tool string, args map[string]any) bool {
 	if r.Kind == RuleShell { // any command of the script, as the command policy sees it
-		for _, script := range callTargets(tool, args)[RuleShell] {
+		for _, script := range CallTargets(tool, args)[RuleShell] {
 			cmds, err := extractCommands(script, 0)
-			if err != nil {
-				continue
-			}
 			for _, c := range cmds {
 				if _, ok := matchAny(r.cmd, c); ok {
 					return true
 				}
 			}
+			if err != nil {
+				return true // what didn't parse can't be ruled out: the hook decides
+			}
 		}
 		return false
 	}
-	for _, t := range callTargets(tool, args)[r.Kind] {
+	for _, t := range CallTargets(tool, args)[r.Kind] {
 		if r.matches(t) {
 			return true
 		}

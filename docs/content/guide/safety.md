@@ -69,7 +69,7 @@ File tools reach only the workspace, plus `sandbox.allowed_paths` (read-write; `
 
 ## Command policy
 
-Every shell command is parsed and each sub-command checked: pipes, `$(…)`, `bash -c`, `find -exec`, and wrappers such as `env`, `xargs` and `timeout`. Disguises like `s\udo` or `{r,}m` are caught. `sandbox.commands.deny` always wins; if `sandbox.commands.allow` is set, only matching commands run. This is a guardrail; the OS sandbox is the boundary.
+Every shell command is parsed and each sub-command checked: pipes, `$(…)`, `bash -c`, `find -exec`, and wrappers such as `env`, `xargs` and `timeout`. Disguises like `s\udo` or `{r,}m` are caught. `sandbox.commands.deny` always wins; if `sandbox.commands.allow` is set, only matching commands run. A command the parser can't read whole is checked on what it could read, then refused if any deny rule or allow-list is set, since a denied command can't be ruled out; with none, you're always asked about it, whatever the mode or remembered approvals. This is a guardrail; the OS sandbox is the boundary.
 
 ## OS sandbox
 

@@ -251,6 +251,7 @@
     "approvals.revoked.other": "Revoked {count} rules.",
     "approvals.still_saved": "Revoked for this session only: {error}",
     "approvals.failed": "Couldn't revoke approvals: {error}",
+    "approvals.save_failed": "Approved, but saving the rule failed, so it lasts only this session: {error}",
     "search.open_failed": "Workspace search is off: {error}",
     "search.embed_failed": "Semantic search is off: {model} can't be used ({error})",
     "search.enrich_failed": "Search won't describe files: {error}",

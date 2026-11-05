@@ -18,7 +18,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -76,15 +75,6 @@ func TestScopedRulesArriveWithTheFirstMatchingFile(t *testing.T) {
 	assert.Contains(t, got, "**/*.go", "rendered rule %q", got)
 }
 
-func TestPatchPaths(t *testing.T) {
-	unified := "--- a/src/x.go\t2026-01-01\n+++ b/src/x.go\n@@ -1 +1 @@\n-a\n+b\n--- /dev/null\n+++ b/new.go\n"
-	begin := "*** Begin Patch\n*** Update File: a.go\n*** Move to: b.go\n*** Add File: c.go\n*** Delete File: d.go\n*** End Patch"
-	got := strings.Join(patchPaths(unified), ",")
-	assert.Equal(t, "src/x.go,src/x.go,new.go", got, "unified %q", got)
-	got = strings.Join(patchPaths(begin), ",")
-	assert.Equal(t, "a.go,b.go,c.go,d.go", got, "begin patch %q", got)
-}
-
 func TestToolPaths(t *testing.T) {
 	ws := t.TempDir()
 	real, err := filepath.EvalSymlinks(ws)
@@ -100,6 +90,9 @@ func TestToolPaths(t *testing.T) {
 		{"generate_audio", map[string]any{"text_path": "s.md", "path": "audio/o.wav"}, []string{"s.md", "audio/o.wav"}},
 		{"export_pdf", map[string]any{"markdown": "# x", "output": "summary.pdf"}, []string{"summary.pdf"}},
 		{"list_files", map[string]any{"path": "."}, nil},
+		{"apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Update File: a.go\n*** Move to: b.go\n*** Add File: c.go\n+x\n*** Delete File: d.go\n*** End Patch"},
+			[]string{"a.go", "b.go", "c.go", "d.go"}},
+		{"apply_patch", map[string]any{"patch": "--- a/src/x.go\t2026-01-01\n+++ b/src/x.go\n@@ -1 +1 @@\n-a\n+b\n"}, []string{"src/x.go"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.tool, func(t *testing.T) {

@@ -98,7 +98,8 @@ func TestStartingMode(t *testing.T) {
 		{name: "nothing set", want: api.ModeAuto},
 		{name: "auto_approve", autoApprove: true, want: api.ModeBypass},
 		{name: "default", mode: "default", want: api.ModeDefault},
-		{name: "default with auto_approve", mode: "default", autoApprove: true, want: api.ModeBypass},
+		// A workspace restricted to default stays there (N26 engine-tools-1#6).
+		{name: "default with auto_approve", mode: "default", autoApprove: true, want: api.ModeDefault},
 		{name: "an alias", mode: "dontAsk", want: api.ModeDontAsk},
 	}
 	for _, tt := range tests {

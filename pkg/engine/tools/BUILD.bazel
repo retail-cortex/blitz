@@ -189,6 +189,7 @@ go_test(
         "guard_test.go",
         "harness_evidence_test.go",
         "hookdecisions_test.go",
+        "hookif_test.go",
         "hooks_cov_test.go",
         "images_test.go",
         "jobs_test.go",

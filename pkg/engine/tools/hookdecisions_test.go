@@ -107,7 +107,7 @@ func TestHookIf(t *testing.T) {
 		{"skill(pdf)", "activate_skill", map[string]any{"skill_name": "pdf"}, true},
 		{"agent(qa)", "invoke_agent", map[string]any{"agent_name": "qa"}, true},
 		{"web_search", "web_search", nil, true},
-		{"shell(echo *)", "run_shell_command", map[string]any{"command": "echo 'unterminated"}, false},
+		{"shell(echo *)", "run_shell_command", map[string]any{"command": "echo 'unterminated"}, true}, // can't be ruled out
 	}
 	for _, tt := range tests {
 		t.Run(tt.rule+" "+tt.tool, func(t *testing.T) {

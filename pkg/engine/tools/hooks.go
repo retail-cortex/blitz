@@ -25,6 +25,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -210,9 +211,6 @@ func (h *Hooks) RevokeSession(key string) bool {
 	return ok
 }
 
-// Approve returns nil when the action may proceed. It fails closed: with no
-// approver configured and no auto-approve policy or remembered rule covering
-// the action, the action is denied.
 // unattendedKey carries an unattended run's decision function.
 type unattendedKey struct{}
 
@@ -294,6 +292,13 @@ func taskAskerFrom(ctx context.Context) (TaskAsker, bool) {
 	return a, ok
 }
 
+// refusals are the audit decisions that refuse the action: logged as
+// denials, the rest as approvals.
+var refusals = map[string]bool{
+	"deny": true, "no-approver": true, "error": true,
+	"mode-dont-ask": true, "hook-deny": true, "background-refused": true,
+}
+
 // Approve decides whether a tool call may proceed, and records the
 // decision in the audit log. A deny rule refuses it in any mode. An
 // unattended run (a worker) decides by its own permissions and can't ask
@@ -350,7 +355,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 
 	record := func(decision string) {
 		kind := audit.KindApproval
-		if decision == "deny" || decision == "no-approver" || decision == "error" {
+		if refusals[decision] {
 			kind = audit.KindDenial
 		}
 		decided(audit.Entry{Kind: kind, Tool: req.Tool, Detail: req.Detail, Decision: decision})
@@ -391,13 +396,17 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		return fmt.Errorf("%w: %s would need approval, and the permission mode is dont-ask", ErrNotApproved, req.Tool)
 	}
 
-	// The user's permission_request hooks may answer instead of the user.
+	// The user's permission_request hooks may answer instead of the user,
+	// but only refuse what an ask rule says the user must see.
 	h.mu.RLock()
 	permHook, notify, reviewer := h.permHook, h.notify, h.reviewer
 	h.mu.RUnlock()
 	if permHook != nil {
 		switch out := permHook(ctx, req); out.Decision {
 		case "allow":
+			if mustAsk {
+				break
+			}
 			record("hook-allow")
 			return nil
 		case "deny":
@@ -466,9 +475,12 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		h.mu.Unlock()
 		if decision == api.DecisionAlways && store != nil {
 			if err := store.Add(req.Key, req.KeyLabel); err != nil {
-				// The user approved: allow it (for the session), but say the
-				// rule won't outlive it.
+				// The user approved: allow it (for the session), but tell
+				// them the rule won't outlive it.
 				slog.WarnContext(ctx, "approved, but saving the rule failed; it lasts only this session", "rule", req.Key, "error", err)
+				if f := turnNotices(ctx); f != nil {
+					f(i18n.T("approvals.save_failed", "error", err.Error()))
+				}
 			}
 		}
 		return nil
