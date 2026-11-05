@@ -54,7 +54,7 @@ Approvals and questions travel on the running turn's event stream: the client th
 
 ## Background runs
 
-`blitz --bg "<prompt>"` starts a turn in the service and returns. The run gets a session of its own and keeps going with no client attached; what it asks waits until someone answers. `blitz agents` lists the runs in every workspace, `blitz attach <id>` follows one in the REPL (answering its requests, then carrying on in its session), `blitz logs <id> -f` watches one, and `blitz stop <id>` stops it. The desktop app's inbox shows the same. Runs end when the service stops. A background run takes the workspace's own settings: with `--bg`, only `--plan`, `--image`, `--max-turns`, `--max-cost-usd` and `--timeout` go with the prompt, and a flag such as `--model`, `--permission-mode` or `--deny` is refused rather than dropped.
+`blitz --bg "<prompt>"` starts a turn in the service and returns. The run gets a session of its own and keeps going with no client attached; what it asks waits until someone answers. `blitz agents` lists the runs in every workspace, `blitz attach <id>` follows one in the REPL (answering its requests, then carrying on in its session), `blitz logs <id> -f` watches one, and `blitz stop <id>` stops it; each starts the service when it isn't running. The desktop app's inbox shows the same. Runs end when the service stops. A background run takes the workspace's own settings: with `--bg`, only `--plan`, `--image`, `--max-turns`, `--max-cost-usd` and `--timeout` go with the prompt, and a flag such as `--model`, `--permission-mode` or `--deny` is refused rather than dropped.
 
 ## Jobs
 
