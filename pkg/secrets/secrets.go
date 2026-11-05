@@ -31,6 +31,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
 )
@@ -114,7 +116,31 @@ func (keychain) Get(name string) (string, error) {
 		}
 		return "", fmt.Errorf("reading %s from the Keychain: %w", name, err)
 	}
-	return strings.TrimSuffix(string(out), "\n"), nil
+	return fromSecurity(strings.TrimSuffix(string(out), "\n")), nil
+}
+
+// fromSecurity is a value as find-generic-password -w printed it: a value
+// with anything but printable ASCII in it (a new line, an accent) comes in
+// hex. It's decoded when it decodes to such text, so a key that only
+// looks like hex (deadbeef…) is kept as it is.
+func fromSecurity(out string) string {
+	b, err := hex.DecodeString(out)
+	if err != nil || len(b) == 0 || !utf8.Valid(b) {
+		return out
+	}
+	hexed := false
+	for _, r := range string(b) {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || r > unicode.MaxASCII && unicode.IsPrint(r):
+			hexed = true
+		case r < ' ' || r == 0x7f || !unicode.IsPrint(r) && r != ' ':
+			return out // random bytes: a key written in hex
+		}
+	}
+	if !hexed {
+		return out
+	}
+	return string(b)
 }
 
 // Set writes through `security -i`, the command on stdin: the secret
@@ -142,6 +168,19 @@ func (keychain) Delete(name string) error {
 
 // quote quotes s for `security -i`'s command line.
 func quote(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
+
+// maxCredBlob is the most the Windows Credential Manager keeps in one
+// credential (CRED_MAX_CREDENTIAL_BLOB_SIZE).
+const maxCredBlob = 5 * 512
+
+// credFits is nil when a secret of n bytes fits in a Windows credential,
+// else an error that says so: CredWriteW's own says neither.
+func credFits(name string, n int) error {
+	if n > maxCredBlob {
+		return fmt.Errorf("saving %s in the Credential Manager: it's %d bytes, and Windows keeps at most %d in a secret", name, n, maxCredBlob)
+	}
+	return nil
+}
 
 // ---- Linux: the Secret Service, through secret-tool (libsecret).
 

@@ -186,6 +186,9 @@ func Fix(ctx context.Context, el Elevation) (Status, error) {
 	default:
 		return st, ErrCantFix
 	}
+	if err := systemProgram(st.Bwrap); err != nil {
+		return st, err
+	}
 	elevate := el.Command
 	if elevate == "" {
 		if elevate = pickElevation(el.Graphical); elevate == "" {
@@ -218,6 +221,33 @@ func Fix(ctx context.Context, el Elevation) (Status, error) {
 		return after, fmt.Errorf("the profile is in %s, but bubblewrap still fails: %s", after.Profile, after.Detail)
 	}
 	return after, nil
+}
+
+// trustedOwner reports whether a user ID may own the bwrap the profile is
+// written for and its folders: root's. Replaced in tests.
+var trustedOwner = func(uid uint32) bool { return uid == 0 }
+
+// ErrNotSystemBwrap means the bwrap found isn't a system program: the
+// profile, written as root, would lift the restriction for a file the
+// person (or anything running as them) could replace.
+var ErrNotSystemBwrap = errors.New("isn't a system program (owned by root and writable by root alone, in folders that are too): install bubblewrap from the system's packages, or put /usr/bin before it on PATH")
+
+// systemProgram is nil when path and every folder above it are owned by
+// root and writable by no one else.
+func systemProgram(path string) error {
+	for p := path; ; p = filepath.Dir(p) {
+		info, err := os.Stat(p)
+		if err != nil {
+			return fmt.Errorf("bwrap at %s: %w", path, err)
+		}
+		uid, ok := owner(info)
+		if !ok || !trustedOwner(uid) || info.Mode().Perm()&0o022 != 0 {
+			return fmt.Errorf("bwrap at %s %w", path, ErrNotSystemBwrap)
+		}
+		if p == filepath.Dir(p) {
+			return nil
+		}
+	}
 }
 
 // pickElevation is sudo or else pkexec, whichever is installed (pkexec

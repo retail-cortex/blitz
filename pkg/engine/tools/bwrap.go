@@ -40,10 +40,47 @@ func bwrapArgs(bwrap string, spec OSSandboxSpec, blockedFiles, blockedDirs []str
 	for _, d := range blockedDirs {
 		args = append(args, "--tmpfs", d, "--remount-ro", d)
 	}
+	args = hideServiceSockets(args)
 	if !spec.AllowNetwork {
 		args = append(args, "--unshare-net")
 	}
 	return append(args, "--")
+}
+
+// hideServiceSockets keeps commands from the service's sockets (spec_007
+// SH-23a): unsharing the network doesn't stop a connect to a socket on
+// disk. Blitz's run folder becomes an empty read-only tmpfs, with the
+// copies of credentials bound back in, and each socket elsewhere is
+// replaced by /dev/null (a mount point can't be moved away either).
+func hideServiceSockets(args []string) []string {
+	dirs, socks := serviceSockets()
+	creds, _ := credentialsDir()
+	var hidden []string
+	for _, d := range existing(dirs) {
+		args = append(args, "--tmpfs", d)
+		if c := creds; c != "" && strings.HasPrefix(c, d+string(filepath.Separator)) && len(existing([]string{c})) == 1 {
+			args = append(args, "--ro-bind", c, c)
+		}
+		args = append(args, "--remount-ro", d)
+		hidden = append(hidden, d)
+	}
+	for _, s := range socks {
+		if _, err := os.Lstat(s); err != nil || under(s, hidden) {
+			continue
+		}
+		args = append(args, "--ro-bind", "/dev/null", s)
+	}
+	return args
+}
+
+// under reports whether p lies inside one of dirs.
+func under(p string, dirs []string) bool {
+	for _, d := range dirs {
+		if strings.HasPrefix(p, d+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 func existing(dirs []string) []string {

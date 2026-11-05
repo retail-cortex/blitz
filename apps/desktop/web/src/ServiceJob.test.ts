@@ -30,6 +30,7 @@ describe("why the service hasn't got a job", () => {
     expect(r("saving", "", "conflicts")).toContain("both versions");
     expect(r("saving", "", "saved")).toBe(r("saving"));
     expect(r("saving", "remote unpack failed", "refused")).toContain("remote unpack failed");
+    expect(r("saving", ".env:1 (AWS access key AKIA••••)", "secrets")).toContain(".env:1");
   });
   it("says why the service doesn't run it", () => {
     expect(r("not_service", "", "")).toContain("doesn't run it");

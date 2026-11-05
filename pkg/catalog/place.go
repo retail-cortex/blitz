@@ -17,6 +17,7 @@ package catalog
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -25,8 +26,9 @@ import (
 
 // Place sets how the item at p (a path in the catalog) applies: its lock
 // (Locked or Default) and groups (none: everyone), in a Markdown file's
-// front matter, made when it has none, or an MCP server's TOML; any other
-// file (a skill's script) is as it was. The rest of the file is kept
+// front matter, made when it has none, an MCP server's TOML, or a
+// connector's "# lock:" and "# groups:" comments; any other file (a
+// skill's script) is as it was. The rest of the file is kept
 // (spec_053_enterprise EN-36, Publish to organization).
 func Place(p string, data []byte, lock string, groups []string) ([]byte, error) {
 	if lock != Locked && lock != Default {
@@ -38,7 +40,9 @@ func Place(p string, data []byte, lock string, groups []string) ([]byte, error) 
 		return nil, fmt.Errorf("%s isn't a catalog item's path", p)
 	case kind == MCP:
 		return placeTOML(data, lock, groups)
-	case kind == SkillFile || kind == Connector:
+	case kind == Connector:
+		return placeConnector(data, lock, groups), nil
+	case kind == SkillFile:
 		return data, nil
 	}
 	return placeMarkdown(data, lock, groups)
@@ -114,4 +118,38 @@ func placeTOML(data []byte, lock string, groups []string) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(b.String()), nil
+}
+
+// connectorLine is a connector's "# lock: …" or "# groups: …" line.
+var connectorLine = regexp.MustCompile(`(?m)^# (lock|groups):[ \t]*(.*?)[ \t]*\r?$`)
+
+// placeConnector sets lock and groups in a connector's comments at its
+// top, any it had taken out; its YAML is as it was.
+func placeConnector(data []byte, lock string, groups []string) []byte {
+	rest := connectorLine.ReplaceAll(data, nil)
+	rest = bytes.TrimLeft(rest, "\r\n")
+	head := "# lock: " + lock + "\n"
+	if len(groups) > 0 {
+		head += "# groups: " + strings.Join(groups, ", ") + "\n"
+	}
+	return append([]byte(head), rest...)
+}
+
+// connectorMeta is a connector's lock and groups from its comments; ok
+// is false when it has neither.
+func connectorMeta(data []byte) (lock string, groups []string, ok bool) {
+	for _, m := range connectorLine.FindAllSubmatch(data, -1) {
+		ok = true
+		v := string(m[2])
+		if string(m[1]) == "lock" {
+			lock = v
+			continue
+		}
+		for _, g := range strings.Split(strings.Trim(v, "[]"), ",") {
+			if g = strings.TrimSpace(g); g != "" {
+				groups = append(groups, g)
+			}
+		}
+	}
+	return lock, groups, ok
 }

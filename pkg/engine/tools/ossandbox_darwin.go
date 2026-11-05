@@ -18,6 +18,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,8 +33,16 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 		return nil, fmt.Errorf("%s not found", sandboxExec)
 	}
 	profile := seatbeltProfile(spec)
-	if out, err := exec.Command(sandboxExec, "-p", profile, "/usr/bin/true").CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("sandbox-exec probe failed: %v: %s", err, bytes.TrimSpace(out))
+	if spec.shared == nil || !spec.shared.probed.Load() {
+		ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+		out, err := exec.CommandContext(ctx, sandboxExec, "-p", profile, "/usr/bin/true").CombinedOutput()
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("sandbox-exec probe failed: %v: %s", err, bytes.TrimSpace(out))
+		}
+		if spec.shared != nil {
+			spec.shared.probed.Store(true)
+		}
 	}
 	return prefixWrapper(sandboxExec, "-p", profile), nil
 }

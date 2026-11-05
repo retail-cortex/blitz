@@ -138,7 +138,12 @@ func plainToCron(text string) (string, error) {
 			}
 			return fmt.Sprintf("0 */%d * * *", n), nil
 		case "day":
-			return fmt.Sprintf("0 0 */%d * *", n), nil
+			if n == 1 {
+				return "@daily", nil
+			}
+			// A day-of-month step (*/10) runs on the 1st, 11th, 21st and
+			// 31st, then the 1st again: no step fits every month.
+			return fmt.Sprintf("@every %dh", 24*n), nil
 		}
 	}
 	if m := reAt.FindStringSubmatch(s); m != nil {

@@ -95,6 +95,38 @@ func TestSavePlan(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// Blitz's own writes into the workspace go through its checks: not in a
+// read-only workspace (a Viewer's clone), and not through a link out of
+// it (N26 engine-tools-2#12).
+func TestOwnWritesStayInTheWorkspace(t *testing.T) {
+	t.Run("a read-only workspace", func(t *testing.T) {
+		dir := t.TempDir()
+		ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnly: "a Viewer's clone"})
+		require.NoError(t, err)
+		t.Cleanup(func() { ws.Close() })
+		_, err = savePlan(ws, "s", "p")
+		assert.ErrorIs(t, err, ErrReadOnlyPath)
+		_, err = ws.OwnDir(filepath.Join(SkillOutputDir, "x"), 0o700)
+		assert.ErrorIs(t, err, ErrReadOnlyPath)
+		assert.ErrorIs(t, ws.CheckOwnFile(".githooks/pre-commit"), ErrReadOnlyPath)
+		assert.NoDirExists(t, filepath.Join(dir, ".blitz"))
+	})
+	t.Run("a link out of the workspace", func(t *testing.T) {
+		ws, dir := newTestWorkspace(t)
+		outside := t.TempDir()
+		for _, link := range []string{".blitz", ".githooks"} {
+			require.NoError(t, os.Symlink(outside, filepath.Join(dir, link)))
+		}
+		_, err := savePlan(ws, "s", "p")
+		assert.Error(t, err)
+		_, err = ws.OwnDir(filepath.Join(SkillOutputDir, "x"), 0o700)
+		assert.Error(t, err)
+		assert.ErrorIs(t, ws.CheckOwnFile(".githooks/pre-commit"), ErrOutsideWorkspace)
+		entries, _ := os.ReadDir(outside)
+		assert.Empty(t, entries, "wrote outside the workspace")
+	})
+}
+
 // The todo list is bounded.
 func TestTodoToolTooManyItems(t *testing.T) {
 	items := make([]any, maxTodoItems+1)

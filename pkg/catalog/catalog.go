@@ -28,12 +28,15 @@
 //	commands/<name>.md        a slash command
 //	mcp/<name>.toml           an MCP server: [mcp.servers]'s fields, with
 //	                          secrets as {secrets:<name>}, never values
-//	connectors/…/<name>.yaml  a connector's descriptor or connection
+//	connectors/…/<name>.yaml  a connector's descriptor or connection, its
+//	                          lock and groups in "# lock:" and "# groups:"
+//	                          comments
 package catalog
 
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -47,6 +50,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 )
 
 // Kinds of item.
@@ -183,6 +187,11 @@ func Check(p string, data []byte) (Item, []string) {
 		}
 	case Connector:
 		readYAML(data)
+		// A connector says it in comments (Place): its YAML is read
+		// strictly, or by Toolbox, where a lock: key isn't allowed.
+		if lock, groups, ok := connectorMeta(data); ok {
+			m = meta{Lock: lock, Groups: groups}
+		}
 	}
 	if kind != SkillFile {
 		switch m.Lock {
@@ -227,8 +236,25 @@ func Check(p string, data []byte) (Item, []string) {
 	case MCP:
 		problems = append(problems, checkMCP(p, data)...)
 	}
+	if kind != MCP {
+		// What every person gets holds no secret (an MCP server's fields
+		// are checked one by one, above).
+		lines := strings.Split(string(data), "\n")
+		for _, f := range secretscan.Scan(p, data) {
+			if !strings.Contains(lines[f.Line-1], "{secrets:") {
+				bad("line %d holds what looks like a secret (%s %s): keep it in Secret Manager and name it, as {secrets:name}", f.Line, f.Kind, f.Masked)
+			}
+		}
+	}
 	return it, problems
 }
+
+// keyFlag is a command-line option that takes a secret (--api-key,
+// --token=…).
+var keyFlag = regexp.MustCompile(`(?i)^--?[a-z0-9_-]*(?:token|key|secret|password|passwd|credential)[a-z0-9_-]*$`)
+
+// keyParam is a URL's query parameter that holds a secret.
+var keyParam = regexp.MustCompile(`(?i)token|key|secret|password|passwd|sig|auth|credential`)
 
 // secretRef is a value that names a secret rather than holding one.
 var secretRef = regexp.MustCompile(`^\{secrets:[A-Za-z0-9_.-]+\}$`)
@@ -260,6 +286,29 @@ func checkMCP(p string, data []byte) []string {
 	}
 	for k, v := range s.Headers {
 		values["header "+k] = v
+	}
+	for i, a := range s.Args {
+		if name, v, ok := strings.Cut(a, "="); ok && keyFlag.MatchString(name) {
+			values[fmt.Sprintf("args[%d] %s", i, name)] = v
+			continue
+		}
+		if i > 0 && keyFlag.MatchString(s.Args[i-1]) && !secretRef.MatchString(a) {
+			problems = append(problems, fmt.Sprintf("%s: args[%d], after %s, holds a secret: name one in Secret Manager instead, as {secrets:name}", p, i, s.Args[i-1]))
+			continue
+		}
+		values[fmt.Sprintf("args[%d]", i)] = a
+	}
+	if u, err := url.Parse(s.URL); err == nil && s.URL != "" {
+		if _, ok := u.User.Password(); ok {
+			problems = append(problems, fmt.Sprintf("%s: url holds a password: name one in Secret Manager instead, in a header, as {secrets:name}", p))
+		}
+		for k, vs := range u.Query() {
+			for _, v := range vs {
+				if keyParam.MatchString(k) && v != "" && !secretRef.MatchString(v) {
+					problems = append(problems, fmt.Sprintf("%s: url's %s holds a secret: name one in Secret Manager instead, as {secrets:name}", p, k))
+				}
+			}
+		}
 	}
 	for where, v := range values {
 		if strings.Contains(v, "{secrets:") && !secretRef.MatchString(v) {

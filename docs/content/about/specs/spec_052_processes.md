@@ -51,6 +51,7 @@ An agent starts dev servers, watchers and test runners in the background and mov
 ## 8. Settings
 
 - **PR-70** `[processes]`: `cpu_percent`, `busy_for`, `memory_mb`, `growth_window`, `left_after` (Go durations); unset, 0 or not a duration keeps the default.
+- **PR-70a** *2026-11-05 (scan N26-engine-tools-2#28: `busy_for = "2 minutes"` kept the default without a word).* A duration that is set but isn't one is still ignored, and the workspace warns as it opens: `processes.busy_for = "2 minutes" isn't a duration (such as 2m or 90s), so the default is used` (`tools.ProcessLimitProblems`).
 
 ## 9. Not in scope
 

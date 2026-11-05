@@ -1070,16 +1070,23 @@ func TestShareWithOrganization(t *testing.T) {
 			}
 			return dir
 		}
-		// A long history only partly checked, a large file, and a remote
-		// called organization already there.
+		// A long history it can't check all of: nothing shared (N26
+		// safety-enterprise#9).
 		defer func(n int, size int64) { maxShareScan, largeShareFile = n, size }(maxShareScan, largeShareFile)
-		maxShareScan, largeShareFile = 1, 4
+		maxShareScan = 1
+		long := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
+		_, err := share(long, "Long", false)
+		_, unchecked := errorReason(t, err)
+		assert.Equal(t, "SECRETS_UNCHECKED", unchecked.Reason)
+		assert.ErrorContains(t, err, "more than 1 files")
+
+		// A large file, and a remote called organization already there.
+		maxShareScan, largeShareFile = 50_000, 4
 		big := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
 		git(big, "init", "-q")
 		git(big, "remote", "add", "organization", "https://old.example/x.git")
 		made, err := share(big, "Big", false)
 		require.NoError(t, err)
-		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "only its first 1 files")
 		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "data.csv is 0 MB")
 		assert.Equal(t, org.URL+"/git/big.git", git(big, "remote", "get-url", "organization"))
 		maxShareScan, largeShareFile = 50_000, 50<<20

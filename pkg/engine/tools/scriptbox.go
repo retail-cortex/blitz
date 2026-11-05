@@ -127,6 +127,7 @@ func scriptEnv(req ScriptRequest, tmp string) []string {
 // readable, as for shell commands.
 type osBox struct {
 	blocked *PathMatcher
+	shared  sharedSandbox // the probe and blocked-path scan, kept across runs
 }
 
 func (b *osBox) Name() string { return "os" }
@@ -168,7 +169,7 @@ func (b *osBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, error
 	}
 	box, err := NewOSSandbox(OSSandboxSpec{
 		Mode: SandboxRequired, WritableDirs: writable, ReadOnlyDirs: readOnly,
-		Blocked: b.blocked, AllowNetwork: req.Network,
+		Blocked: b.blocked, AllowNetwork: req.Network, shared: &b.shared,
 	})
 	if err != nil {
 		return ScriptResult{}, fmt.Errorf("%w: %v", ErrNoScriptBox, err)

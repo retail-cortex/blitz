@@ -170,7 +170,9 @@ func (c *Client) OpenResource(ctx context.Context, name string) (io.ReadCloser, 
 	}
 	if res.StatusCode/100 != 2 {
 		defer res.Body.Close()
-		return nil, refusal(res)
+		err := refusal(res)
+		c.refused(err)
+		return nil, err
 	}
 	return res.Body, nil
 }
@@ -187,7 +189,27 @@ func (c *Client) signedCall(ctx context.Context, method, path string, in, out an
 	if err != nil {
 		return err
 	}
+	err = call(ctx, c.hc, method, c.url+path, token, in, out)
+	if !c.refused(err) {
+		return err
+	}
+	// The service ended the token early (sessions ended elsewhere, a new
+	// role): renewed once, and asked again.
+	if token, err = c.AccessToken(ctx); err != nil {
+		return err
+	}
 	return call(ctx, c.hc, method, c.url+path, token, in, out)
+}
+
+// refused reports whether err is the service refusing the access token,
+// which it then drops so the next call renews it (EN-12).
+func (c *Client) refused(err error) bool {
+	var ref *Refusal
+	if errors.As(err, &ref) && ref.Status == http.StatusUnauthorized && c.run == nil {
+		c.Invalidate()
+		return true
+	}
+	return false
 }
 
 // GoingRun is a run going now, with its job's name and workspace's handle.

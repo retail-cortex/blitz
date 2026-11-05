@@ -133,6 +133,6 @@ func TestScriptWritesRefusedOrFailed(t *testing.T) {
 func TestActivateSaysTheSkillWrites(t *testing.T) {
 	_, r, _, _ := writerFixture(t, api.DecisionOnce)
 	p := config.DefaultConfig().Skills.Policy
-	out := runTool(t, toolOf(t)(NewActivateSkillTool(r.provider, &p)), map[string]any{"skill_name": "writer"})
+	out := runTool(t, toolOf(t)(NewActivateSkillTool(r.provider, &p, nil)), map[string]any{"skill_name": "writer"})
 	assert.Equal(t, true, out["writes_workspace"], "%v", out)
 }

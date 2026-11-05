@@ -53,6 +53,12 @@ func TestBwrapArgs(t *testing.T) {
 	assert.NotContains(t, strings.Join(bwrapArgs("bwrap", spec, nil, nil), " "), "--unshare-net", "network should be shared when allowed")
 }
 
+// expandBlocked resolves blocked-path patterns to concrete existing paths
+// with a fresh scan, since bubblewrap can only mask paths, not patterns.
+func expandBlocked(spec OSSandboxSpec) (files, dirs []string) {
+	return newBlockedScan(spec).expand()
+}
+
 func TestExpandBlocked(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

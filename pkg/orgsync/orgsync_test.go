@@ -129,6 +129,26 @@ func TestSync(t *testing.T) {
 	eventually(t, func() bool { return strings.Contains(read(bo, "plan.md"), "Ship it.") && read(bo, "a.md") == "a" }, "Bo has Ana's changes")
 }
 
+// A save with what looks like a secret in it is held back on this
+// computer, saying where, until it's taken out (N26
+// safety-enterprise#14).
+func TestSecretsHeldBack(t *testing.T) {
+	bare, ana, _ := shared(t)
+	anaSync := start(t, "Ana", ana, nil, nil)
+	eventually(t, func() bool { return anaSync.State().State == Saved }, "started")
+	key := "AKIA" + "Q3EXAMPLEZ7Y4WXN"
+	require.NoError(t, os.WriteFile(filepath.Join(ana, ".env"), []byte("AWS_KEY="+key+"\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ana, "notes.md"), []byte("notes"), 0o644))
+	eventually(t, func() bool { return anaSync.State().State == Secrets }, "held back")
+	assert.Contains(t, anaSync.State().Err, ".env:1 (AWS access key AKIA")
+	assert.NotContains(t, anaSync.State().Err, key)
+	assert.Equal(t, "First", strings.TrimSpace(run(t, bare, "log", "-1", "--format=%s", "main")), "nothing sent")
+
+	require.NoError(t, os.WriteFile(filepath.Join(ana, ".env"), []byte("AWS_KEY=\n"), 0o600))
+	eventually(t, func() bool { return anaSync.State().State == Saved }, "sent once it's out")
+	assert.Equal(t, "Ana: 2 files", strings.TrimSpace(run(t, bare, "log", "-1", "--format=%s", "main")))
+}
+
 // A file both changed keeps both versions: the shared one under its name,
 // this person's beside it; one deleted by one and changed by the other
 // stays changed (EN-63).

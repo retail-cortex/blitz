@@ -25,6 +25,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
 // AllowMarker on a line skips it.
@@ -44,23 +46,21 @@ type Finding struct {
 	Masked string
 }
 
-// known are key formats that are secrets wherever they appear.
-var known = []struct {
-	kind string
-	re   *regexp.Regexp
-}{
-	{"private key", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)},
-	{"AWS access key", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
-	{"Anthropic API key", regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_\-]{20,}`)},
-	{"OpenAI API key", regexp.MustCompile(`\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_\-]{20,}`)},
-	{"Google API key", regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{35}\b`)},
-	{"GitHub token", regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b`)},
-	{"GitHub token", regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{60,}\b`)},
-	{"GitLab token", regexp.MustCompile(`\bglpat-[A-Za-z0-9_\-]{20,}\b`)},
-	{"Slack token", regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9\-]{10,}`)},
-	{"Stripe key", regexp.MustCompile(`\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b`)},
-	{"Hugging Face token", regexp.MustCompile(`\bhf_[A-Za-z0-9]{30,}\b`)},
-}
+// known are key formats that are secrets wherever they appear: the
+// redactor's (redact.Formats), a private key by its first line, since
+// lines are scanned one at a time.
+var known = func() []redact.Format {
+	out := []redact.Format{{Kind: "private key", Pattern: pemHeader}}
+	for _, f := range redact.Formats {
+		if f.Kind != "private key" {
+			out = append(out, f)
+		}
+	}
+	return out
+}()
+
+// pemHeader is a private key's first line.
+var pemHeader = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
 
 // assignment is NAME=value with a key-like name, in env and config files.
 var assignment = regexp.MustCompile(`(?i)\b[A-Za-z0-9_.\-]*(?:password|passwd|secret|api[_\-]?key|access[_\-]?key|token|private[_\-]?key|credential)[A-Za-z0-9_.\-]*["']?\s*[:=]\s*["']?([^\s"',;#]{16,})`)
@@ -125,8 +125,8 @@ func Scan(name string, data []byte) []Finding {
 		}
 		found := false
 		for _, k := range known {
-			if m := k.re.FindString(line); m != "" {
-				out = append(out, Finding{Path: name, Line: i + 1, Kind: k.kind, Masked: mask(m)})
+			if m := k.Pattern.FindString(line); m != "" {
+				out = append(out, Finding{Path: name, Line: i + 1, Kind: k.Kind, Masked: mask(m)})
 				found = true
 				break
 			}

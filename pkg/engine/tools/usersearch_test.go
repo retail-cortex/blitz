@@ -30,10 +30,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// localRedirects lets the test servers on 127.0.0.1 stand for Google's
+// redirect host.
+func localRedirects(t *testing.T) {
+	old := groundingRedirectHost
+	groundingRedirectHost = func(host string) bool { return host == "127.0.0.1" }
+	t.Cleanup(func() { groundingRedirectHost = old })
+}
+
 // fakeGemini answers generateContent with grounding metadata whose links
 // are redirects served by the same server, like Google's.
 func fakeGemini(t *testing.T, got *captured) string {
 	t.Helper()
+	localRedirects(t)
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

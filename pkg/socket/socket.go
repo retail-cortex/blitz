@@ -51,6 +51,11 @@ func DefaultSocket() string {
 // a service already answers there, and replaces a socket left by one that
 // died.
 //
+// The 0600 mode (and the folder's 0700) is the only gate: there is no peer
+// check, so anything running as the user may connect. The model's commands
+// run as the user too; the OS sandbox keeps sandboxed processes away from
+// the socket (tools.GuardSocket, spec_007 SH-23a).
+//
 // On Windows, permission bits mean nothing (Chmod only sets read-only);
 // there the socket is as private as the folder it's in, whose access
 // control list the user's profile gives it: ~/.blitz/run is only the

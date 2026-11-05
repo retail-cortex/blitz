@@ -16,6 +16,7 @@ package guardrails
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -51,16 +52,25 @@ func (o *Output) found(f Finding) {
 }
 
 // Write takes the next piece of text and returns what can be sent now.
+// The word still arriving at the end (a run of the characters a key or
+// a password's value is made of) isn't checked yet: a key masked when
+// only its start had come would send the rest of it unmasked. It's
+// held, with the window before it, until something ends it or the
+// text does.
 func (o *Output) Write(piece string) string {
 	if o.withheld {
 		return ""
 	}
 	o.held += piece
-	o.held = o.check(o.held)
+	open := openStart(o.held)
+	head := o.check(o.held[:open])
 	if o.withheld {
-		return o.held
+		o.held = head
+		return head
 	}
-	cut := len(o.held) - Window
+	o.held = head + o.held[open:]
+	open = len(head)
+	cut := open - o.window()
 	if i := keyStart(o.held); i >= 0 {
 		cut = min(cut, i) // a key, not masked yet: held until it's whole
 	}
@@ -73,6 +83,26 @@ func (o *Output) Write(piece string) string {
 	out := o.held[:cut]
 	o.held = o.held[cut:]
 	return out
+}
+
+// window is how much is held before what's still arriving: Window, or
+// the longest secret the redactor knows by value when that's longer, so
+// a known value with spaces or new lines in it is whole before any of it
+// is sent.
+func (o *Output) window() int {
+	return max(Window, o.set.Redactor.Longest())
+}
+
+// openStart is where the run of characters at the end of s starts:
+// those a key or an assigned value may hold (anything but space and
+// "',;), so one that may still be growing.
+func openStart(s string) int {
+	i := strings.LastIndexFunc(s, func(r rune) bool { return unicode.IsSpace(r) || strings.ContainsRune(`"',;`, r) })
+	if i < 0 {
+		return 0
+	}
+	_, n := utf8.DecodeRuneInString(s[i:])
+	return i + n
 }
 
 // keyStart is where a private key starts in s, -1 for none: masked

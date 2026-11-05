@@ -169,8 +169,9 @@ type SkillScriptInfo struct {
 }
 
 // NewActivateSkillTool creates an ADK tool for activating a skill.
-// policy (nil: the defaults) decides which of its scripts may run.
-func NewActivateSkillTool(provider *skills.Provider, policy *config.SkillPolicy) (tool.Tool, error) {
+// policy (nil: the defaults) decides which of its scripts may run; rules
+// (nil: none) refuse a meta skill's members that deny skill(...) covers.
+func NewActivateSkillTool(provider *skills.Provider, policy *config.SkillPolicy, rules *PermissionRules) (tool.Tool, error) {
 	if policy == nil {
 		p := config.DefaultConfig().Skills.Policy
 		policy = &p
@@ -185,7 +186,7 @@ func NewActivateSkillTool(provider *skills.Provider, policy *config.SkillPolicy)
 				return ActivateSkillOutput{Error: "skills provider not initialized"}, nil
 			}
 
-			return activate(provider, *policy, input.SkillName, callerAgent(ctx), map[string]bool{}), nil
+			return activate(provider, *policy, rules, input.SkillName, callerAgent(ctx), map[string]bool{}), nil
 		},
 	)
 }
@@ -215,13 +216,23 @@ type SkillMember struct {
 	Error        string            `json:"error,omitempty"`
 }
 
+// skillDenied is the deny rule that covers the skill named, or nil.
+func skillDenied(rules *PermissionRules, name string) *PermissionRule {
+	if eff, r := rules.Decide(RuleSkill, []string{name}); eff == EffectDeny {
+		return r
+	}
+	return nil
+}
+
 // maxMembers bounds how many skills one activation brings in.
 const maxMembers = 16
 
 // activate is a skill's instructions, files and scripts for agent, with
 // a meta skill's members' (SK-99), theirs in turn, each once: seen holds
-// those already activated, so a loop ends.
-func activate(provider *skills.Provider, policy config.SkillPolicy, name, agent string, seen map[string]bool) ActivateSkillOutput {
+// those already activated, so a loop ends. A member a deny skill(...) rule
+// covers comes back as an error, without its content (the skill named in
+// the call is refused before, by ToolDenied).
+func activate(provider *skills.Provider, policy config.SkillPolicy, rules *PermissionRules, name, agent string, seen map[string]bool) ActivateSkillOutput {
 	skill, ok := provider.Get(name)
 	if !ok || skill == nil {
 		return ActivateSkillOutput{SkillName: name, Error: fmt.Sprintf("skill '%s' not found; use list_or_search_skills to see available skills", name)}
@@ -254,8 +265,11 @@ func activate(provider *skills.Provider, policy config.SkillPolicy, name, agent 
 			continue // activated already, here or above: a loop, or named twice
 		case len(seen) > maxMembers:
 			out.Members = append(out.Members, SkillMember{SkillName: m, Error: "too many skills combined; activate it on its own"})
+		case skillDenied(rules, m) != nil:
+			seen[m] = true
+			out.Members = append(out.Members, SkillMember{SkillName: m, Error: fmt.Sprintf("skill '%s' is denied by the permission rule deny %s", m, skillDenied(rules, m))})
 		default:
-			sub := activate(provider, policy, m, agent, seen)
+			sub := activate(provider, policy, rules, m, agent, seen)
 			out.Members = append(out.Members, SkillMember{SkillName: sub.SkillName, Instructions: sub.Instructions, References: sub.References, Scripts: sub.Scripts, Error: sub.Error})
 			out.Members = append(out.Members, sub.Members...)
 		}

@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -154,9 +155,11 @@ func (r *ucRegistry) create(ctx context.Context, hooks *Hooks, input UniversalCo
 		return UniversalConstructorOutput{Error: fmt.Sprintf("unsupported language %q; use bash, python, or go", input.Language)}
 	}
 
+	// Forging is writing code to run, outside the workspace: a command,
+	// not a file edit, so accept-edits doesn't let it through unasked.
 	if err := hooks.Approve(ctx, api.ApprovalRequest{
 		Tool:   "universal_constructor",
-		Kind:   api.ActionWrite,
+		Kind:   api.ActionCommand,
 		Diff:   unifiedDiff(input.ToolName+lang.ext, "", input.Code),
 		Detail: fmt.Sprintf("Forge %s tool %q in %s (%d bytes)", lang.canonical, input.ToolName, r.dir, len(input.Code)),
 	}); err != nil {
@@ -199,6 +202,10 @@ func (r *ucRegistry) run(ctx context.Context, hooks *Hooks, input UniversalConst
 	}
 
 	args := strings.Fields(input.Args)
+	code, err := os.ReadFile(meta.Path)
+	if err != nil {
+		return UniversalConstructorOutput{Error: fmt.Sprintf("failed to read tool: %v", err)}
+	}
 	// Script contents can't be inspected, so the policy sees a synthetic
 	// command; allow-lists must opt in with e.g. "universal_constructor *".
 	decision := r.policy.Evaluate(shellJoin(append([]string{"universal_constructor", meta.Name}, args...)))
@@ -207,11 +214,13 @@ func (r *ucRegistry) run(ctx context.Context, hooks *Hooks, input UniversalConst
 	}
 	if decision.Verdict != VerdictAutoApprove {
 		if err := hooks.Approve(ctx, api.ApprovalRequest{
-			Tool:     "universal_constructor",
-			Kind:     api.ActionCommand,
-			Detail:   fmt.Sprintf("Run forged tool %q with args %q", meta.Name, args),
-			Key:      "uc-run:" + meta.Name + "\x00" + strings.Join(args, "\x00"),
-			KeyLabel: "this forged tool with these arguments",
+			Tool:   "universal_constructor",
+			Kind:   api.ActionCommand,
+			Detail: fmt.Sprintf("Run forged tool %q with args %q", meta.Name, args),
+			// The code is part of the key: a tool forged again under the
+			// same name is asked about again.
+			Key:      fmt.Sprintf("uc-run:%s\x00%x\x00%s", meta.Name, sha256.Sum256(code), strings.Join(args, "\x00")),
+			KeyLabel: "this forged tool, as it is now, with these arguments",
 			MustAsk:  decision.MustAsk,
 		}); err != nil {
 			return UniversalConstructorOutput{Error: err.Error()}
