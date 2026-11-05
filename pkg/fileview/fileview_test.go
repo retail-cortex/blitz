@@ -23,8 +23,10 @@ import (
 	goruntime "runtime"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/language"
 )
 
 func TestOpenFolder(t *testing.T) {
@@ -214,4 +216,12 @@ func TestFileManager(t *testing.T) {
 	t.Cleanup(func() { folderHandler = orig })
 	want := map[string]string{"darwin": "Finder", "windows": "File Explorer", "linux": "Dolphin"}[goruntime.GOOS]
 	assert.Equal(t, want, FileManager())
+}
+
+// A refusal is in the person's language.
+func TestRefusalsTranslated(t *testing.T) {
+	t.Cleanup(func() { i18n.SetCurrent(nil) })
+	i18n.SetCurrent(i18n.Default().Localizer(language.Spanish))
+	assert.ErrorContains(t, OpenDocument("/tmp/run.sh"), "solo se abren imágenes")
+	assert.ErrorContains(t, RevealPath("relative"), "no es una ruta absoluta")
 }

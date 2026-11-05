@@ -308,6 +308,10 @@ func TestPluralCategory(t *testing.T) {
 		{"pt-PT", 0, "other"},
 		{"pt-PT", 1, "one"},
 		{"pt", 2, "other"},
+		{"pt", 0, "one"}, // a bare pt is Brazil's: its likely region
+		{"pt", 1, "one"},
+		{"pt-BR", 1, "one"},
+		{"pt-AO", 0, "other"},
 		{"en", 1, "one"},
 		{"en", 0, "other"},
 	}

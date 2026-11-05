@@ -113,7 +113,7 @@ func (s *Store) Get(uri string) ([]byte, string, error) {
 // from its header when that's cheap.
 func (s *Store) PutFile(name string, f io.ReaderAt, size int64) (*Image, error) {
 	if size > MaxMediaBytes {
-		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(int(min(size, 1<<40))), humanBytes(MaxMediaBytes))
+		return nil, tooLarge(name, int(min(size, 1<<40)), MaxMediaBytes)
 	}
 	head := make([]byte, min(size, 1<<20))
 	if _, err := f.ReadAt(head, 0); err != nil && err != io.EOF {

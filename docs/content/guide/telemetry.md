@@ -15,6 +15,8 @@ The [audit log](safety.md#audit-log) is separate: a record of what the agent did
 
 Telemetry is off by default, and nothing is sent unless you turn it on. With `[telemetry] enabled = true` (or `BLITZ_TELEMETRY=1`), traces, logs and metrics are exported over OTLP/HTTP to `telemetry.endpoint`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else `http://localhost:4318`. Other `OTEL_EXPORTER_OTLP_*` settings apply.
 
+The service exports, not the CLI, and it reads `[telemetry]` and `BLITZ_TELEMETRY` when it starts: after changing them, restart it (**Restart the service** in the desktop app's settings or the tray's menu). A service started at login doesn't see your shell's variables, so set `[telemetry]` in `~/.blitz/.env.toml` (Settings) for it; `BLITZ_TELEMETRY=1 blitz --local` runs a service of its own that exports.
+
 ```toml
 [telemetry]
 enabled = true

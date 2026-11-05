@@ -39,6 +39,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/markdown"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
@@ -187,7 +188,7 @@ func (w *writer) block(n ast.Node, p para) {
 				}
 			}
 			w.codeBlock(lines, p)
-			w.note("A Mermaid diagram, kept as its code.", p)
+			w.note(i18n.T("docx.mermaid_note"), p)
 			return
 		}
 		w.codeBlock(lines, p)
@@ -572,7 +573,7 @@ func (w *writer) picture(dest, alt string, width int) {
 func (w *writer) missing(alt, dest string) {
 	saved := w.italic
 	w.italic = true
-	w.run("[image: " + cmp.Or(alt, dest) + "]")
+	w.run(i18n.T("docx.image_placeholder", "name", cmp.Or(alt, dest)))
 	w.italic = saved
 }
 

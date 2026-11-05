@@ -19,6 +19,7 @@ go_library(
     srcs = ["fileview.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/fileview",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/i18n"],
 )
 
 go_test(
@@ -27,7 +28,9 @@ go_test(
     srcs = ["fileview_test.go"],
     embed = [":fileview"],
     deps = [
+        "//pkg/i18n",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_text//language",
     ],
 )

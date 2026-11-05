@@ -15,6 +15,7 @@
 package loginitem
 
 import (
+	"errors"
 	"html"
 	"os"
 	goruntime "runtime"
@@ -101,13 +102,15 @@ func ServiceProgram() string {
 }
 
 // missing reports whether a login entry's program is gone (an install
-// that moved, as the desktop app's did in v0.7.0).
+// that moved, as the desktop app's did in v0.7.0). Only a program that
+// isn't there is: one that can't be checked (no permission, a volume not
+// mounted yet at login) is left as it is.
 func missing(program string) bool {
 	if program == "" {
 		return false
 	}
 	_, err := os.Stat(program)
-	return err != nil
+	return errors.Is(err, os.ErrNotExist)
 }
 
 // RepairTray rewrites the tray's start-at-login entry when the program it
