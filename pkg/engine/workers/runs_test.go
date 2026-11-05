@@ -18,6 +18,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,4 +122,16 @@ func TestRunLogErrors(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.Mkdir(name, 0o700))
 	assert.Error(t, l.Append(api.Run{Workspace: "/ws", Worker: "deps"}), "the log file can't be opened")
+}
+
+// A run line longer than any scanner buffer doesn't hide the runs after
+// it (N26 engine-sub-2#11).
+func TestRunLogReadsLongLines(t *testing.T) {
+	l := OpenRunLog(filepath.Join(t.TempDir(), "runs"))
+	require.NoError(t, l.Append(api.Run{ID: "r1", Workspace: "/ws", Worker: "deps", Error: strings.Repeat("x", 5<<20)}))
+	require.NoError(t, l.Append(api.Run{ID: "r2", Workspace: "/ws", Worker: "deps"}))
+	runs, err := l.List("/ws", "deps", 0)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	assert.Equal(t, "r2", runs[0].ID)
 }

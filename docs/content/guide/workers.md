@@ -65,7 +65,7 @@ blitz jobs enable deps     # shows what it may do, then asks
 | `model` | the workspace's model | `provider/model`, for its runs only |
 | `workflow` | none | Run this [workflow](workflows.md) instead of a prompt; the text after the front matter, optional then, is its input |
 | `permissions` | none: read only | What it may do (below) |
-| `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout` |
+| `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout`. `0` means the default, not "no limit" (unlike a guardrail's `limits.md`): ask for a higher number instead |
 | `catch_up` | `none` | `once`: when the service starts or the job is enabled, run once if a scheduled time passed since its last run |
 | `overlap` | `skip` | A run that's due while one is still going is skipped |
 | `runs_on` | `here` | `service`: your organization's Blitz service runs it, on its own schedule, and this computer doesn't ([Jobs on the service](#jobs-on-the-service)) |
@@ -80,7 +80,7 @@ Nobody is there to approve anything, so a job gets exactly the permissions it li
 
 | Permission | Allows |
 |---|---|
-| `shell:go test ./...` | That command (a `*` glob matches any words) |
+| `shell:go test ./...` | That command exactly. A `*` matches any words but stops at a `/`: `shell:git add *` allows `git add notes.md`, not `git add reports/deps.md` (write `shell:git add reports/*`, or name the command in full) |
 | `write:reports/` or `write:reports/**` | Writing files anywhere under `reports/`, in folders too (`*` alone stays in one folder: `write:reports/*` is only the files directly in it) |
 | `delete:tmp/*.log` | Deleting matching files |
 | `web:api.github.com` | Fetching from that host (or using that search provider) |

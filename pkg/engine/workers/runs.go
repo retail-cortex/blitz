@@ -16,12 +16,15 @@ package workers
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -115,9 +118,13 @@ func (l *RunLog) Get(id string) (api.Run, bool, error) {
 	return api.Run{}, false, nil
 }
 
-// Last is the start of a worker's latest run (zero if none).
+// Last is the start of a worker's latest run (zero if none). A run log
+// that can't be read is logged: its latest run may be missing.
 func (l *RunLog) Last(workspace, worker string) time.Time {
-	runs, _ := l.List(workspace, worker, 1)
+	runs, err := l.List(workspace, worker, 1)
+	if err != nil {
+		slog.Warn("job run log unreadable", "workspace", workspace, "job", worker, "error", err)
+	}
 	if len(runs) == 0 {
 		return time.Time{}
 	}
@@ -134,13 +141,20 @@ func readRuns(path string) ([]api.Run, error) {
 	}
 	defer f.Close()
 	var out []api.Run
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
-	for sc.Scan() {
+	// Line by line, however long (a run with a long error): a line too
+	// long for a scanner's buffer would hide every later run.
+	rd := bufio.NewReader(f)
+	for {
+		line, err := rd.ReadBytes('\n')
 		var r api.Run
-		if json.Unmarshal(sc.Bytes(), &r) == nil {
+		if len(bytes.TrimSpace(line)) > 0 && json.Unmarshal(line, &r) == nil {
 			out = append(out, r) // a torn last line is skipped
 		}
+		if errors.Is(err, io.EOF) {
+			return out, nil
+		}
+		if err != nil {
+			return out, err
+		}
 	}
-	return out, sc.Err()
 }

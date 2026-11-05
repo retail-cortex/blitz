@@ -210,4 +210,12 @@ func TestStoreFileErrors(t *testing.T) {
 		t.Skip("running with privileges that ignore file modes")
 	}
 	assert.Error(t, err, "the store's directory is read-only")
+
+	// A change that can't be written isn't kept in memory either (N26
+	// engine-sub-2#12).
+	w, err := Load(writeWorker(t, t.TempDir(), "deps", valid))
+	require.NoError(t, err)
+	assert.Error(t, s.Enable("/ws", w, w.Hash))
+	assert.Equal(t, api.StateNew, s.State("/ws", w, nil), "not enabled until the service restarts")
+	assert.Empty(t, s.Known())
 }
