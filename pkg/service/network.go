@@ -83,15 +83,6 @@ type Refusal struct {
 // Error is the message, for the person.
 func (r *Refusal) Error() string { return r.Message }
 
-type callerKey struct{}
-
-// CallerFrom is the caller of a request that came in on the network
-// listener; false on the socket, whose callers are its owner.
-func CallerFrom(ctx context.Context) (Caller, bool) {
-	c, ok := ctx.Value(callerKey{}).(Caller)
-	return c, ok
-}
-
 // check is n's problems before it's used.
 func (n *Network) check() error {
 	switch {
@@ -106,8 +97,7 @@ func (n *Network) check() error {
 }
 
 // guard lets a request through to h only when n.Auth knows its caller
-// and n.Authz allows the call, with the caller in its context; others get
-// 401 or 403, with a JSON error as the enterprise service's (SV-21).
+// and n.Authz allows the call; others get 401 or 403, with a JSON error as the enterprise service's (SV-21).
 func (n *Network) guard(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := n.Auth.Authenticate(r)
@@ -115,14 +105,13 @@ func (n *Network) guard(h http.Handler) http.Handler {
 			refuse(w, http.StatusUnauthorized, "unauthenticated", err)
 			return
 		}
-		ctx := context.WithValue(r.Context(), callerKey{}, c)
 		if n.Authz != nil {
-			if err := n.Authz.Authorize(ctx, c, r.URL.Path); err != nil {
+			if err := n.Authz.Authorize(r.Context(), c, r.URL.Path); err != nil {
 				refuse(w, http.StatusForbidden, "forbidden", err)
 				return
 			}
 		}
-		h.ServeHTTP(w, r.WithContext(ctx))
+		h.ServeHTTP(w, r)
 	})
 }
 

@@ -14,7 +14,6 @@ The Blitz service itself, so another program can run it. Source: [`pkg/service`]
 | `Run(ctx, Options)` | Serve until `ctx` ends; an error wrapping `socket.ErrRunning` when a service already answers |
 | `Options` | The socket, the settings file, the version, idle exit, a private service's `RunOverrides`, and `Network` |
 | `Network` | A second listener, over TLS, for a program that serves many people: every request needs a `Caller` its `Authenticator` accepts, and its `Authorizer`'s yes. blitzd never sets it |
-| `CallerFrom(ctx)` | Who a network request is from |
 | `server` | The Connect handlers over `engine.Workspace`, and the approval and question broker |
 | `servicetest` | A service inside a test, on a socket of its own |
 

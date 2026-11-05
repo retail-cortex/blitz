@@ -66,20 +66,26 @@ func (s *Server) gitAs(c *enterprise.Client) orgsync.Git {
 	}
 }
 
+// signedOutSays are what git says when the service didn't take the
+// person's sign-in.
+var signedOutSays = []string{"Authentication failed", "could not read Username", "terminal prompts disabled", "returned error: 401", "HTTP 401"}
+
 // gitOut runs git in dir with the organization's credential helper, giving
 // its output; a failure to sign in is orgsync.ErrSignedOut.
 func (s *Server) gitOut(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	all := append([]string{"-c", "credential.helper=", "-c", "credential.helper=" + s.gitHelper()}, args...)
 	cmd := exec.CommandContext(ctx, "git", all...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	// Git's messages in English, as they're matched below (LANGUAGE is
+	// gettext's, ahead of LC_ALL).
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C", "LANGUAGE=C")
 	out, err := cmd.Output()
 	if err != nil {
 		msg := ""
 		if ee, ok := err.(*exec.ExitError); ok {
 			msg = strings.TrimSpace(string(ee.Stderr))
 		}
-		for _, s := range []string{"Authentication failed", "could not read Username", "terminal prompts disabled", "401"} {
+		for _, s := range signedOutSays {
 			if strings.Contains(msg, s) {
 				return out, fmt.Errorf("%w: %s", orgsync.ErrSignedOut, msg)
 			}
@@ -225,8 +231,9 @@ func (s *Server) startSync(parent context.Context, c *enterprise.Client, dir, ha
 			retry = 30 * time.Second
 		}
 		for ctx.Err() == nil {
+			// It always ends with an error: the stream ended, or why.
 			err := c.WatchWorkspace(ctx, handle, func(string, string, string) { sy.Remote() })
-			if err != nil && ctx.Err() == nil {
+			if ctx.Err() == nil {
 				slog.Debug("an organization workspace's stream", "workspace", handle, "error", err)
 			}
 			select {

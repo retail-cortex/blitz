@@ -490,3 +490,35 @@ func TestSamePath(t *testing.T) {
 		})
 	}
 }
+
+// gitOut reads a refused sign-in from git's own words, in English
+// whatever the computer's language, and not from any "401" in a message
+// (EN-64).
+func TestGitOutSignedOut(t *testing.T) {
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="blitz"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(refusing.Close)
+	t.Setenv("LANGUAGE", "de")
+	t.Setenv("LC_ALL", "de_DE.UTF-8")
+	s := &Server{}
+	s.ent.gitHelper = `!f() { echo username=blitz; echo password=wrong; }; f`
+	repo := t.TempDir()
+	require.NoError(t, exec.Command("git", "-C", repo, "init", "-q").Run())
+	cases := []struct {
+		name      string
+		args      []string
+		signedOut bool
+	}{
+		{"refused by the service", []string{"ls-remote", refusing.URL + "/x.git"}, true},
+		{"a 401 in another failure", []string{"rev-parse", "--verify", "x401"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.gitOut(context.Background(), repo, tc.args...)
+			require.Error(t, err)
+			assert.Equal(t, tc.signedOut, errors.Is(err, orgsync.ErrSignedOut), "%v", err)
+		})
+	}
+}
