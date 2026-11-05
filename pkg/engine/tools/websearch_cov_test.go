@@ -76,6 +76,7 @@ func TestWebSearchProviderErrors(t *testing.T) {
 // a link are dropped; redirect links that can't be resolved are kept.
 func TestGoogleSearchEdges(t *testing.T) {
 	ctx := context.Background()
+	localRedirects(t)
 	var c captured
 	empty := searcher(t, WebSearchConfig{Provider: "google", APIKey: "k", BaseURL: searchServer(t, `{"candidates":[]}`, 200, &c)})
 	assert.Contains(t, empty.search(ctx, allowAll(), WebSearchInput{Query: "q"}).Error, "no answer")
@@ -93,4 +94,33 @@ func TestGoogleSearchEdges(t *testing.T) {
 	assert.Equal(t, "Answer.", out.Answer, "thoughts left out")
 	require.Len(t, out.Results, 1, "the empty link and the unparsable one are dropped")
 	assert.Equal(t, gone.URL+"/grounding-api-redirect/abc", out.Results[0].URL, "an unresolved redirect is kept")
+}
+
+// Only Google's redirect host is resolved: a grounding-looking link on
+// another host is left alone, not fetched (N26 engine-tools-2#24).
+func TestGroundingRedirectHost(t *testing.T) {
+	fetched := false
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetched = true
+		http.Redirect(w, r, "https://elsewhere.example/", http.StatusFound)
+	}))
+	defer other.Close()
+	tests := []struct {
+		host string
+		want bool
+	}{
+		{"vertexaisearch.cloud.google.com", true},
+		{"VertexAISearch.cloud.google.com", true},
+		{"127.0.0.1", false},
+		{"vertexaisearch.cloud.google.com.evil.example", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			assert.Equal(t, tt.want, groundingRedirectHost(tt.host))
+		})
+	}
+	results := []SearchResult{{URL: other.URL + "/grounding-api-redirect/x"}}
+	(&webSearcher{}).resolveRedirects(context.Background(), results)
+	assert.False(t, fetched, "a link on another host was fetched")
+	assert.Equal(t, other.URL+"/grounding-api-redirect/x", results[0].URL)
 }
