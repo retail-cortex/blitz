@@ -17,9 +17,15 @@
 // package's and file's share of lines covered. It writes the summary as
 // JSON for the docs site's coverage page (--json), as Markdown for CI's
 // job summary (--markdown), and fails when the total is below the floor
-// (--floor), so coverage can only go up. tools/coverage.sh runs it.
+// (--floor), so coverage can't fall below it. tools/coverage.sh runs it.
 //
-//	bazel run //tools/coverage -- --lcov=FILE [--json=FILE] [--markdown=FILE] [--floor=FILE]
+// The LCOV report has only code some test links: a Go library with no
+// test target isn't in it, and so in neither the lines nor the total.
+// Given the libraries (--libraries, their package directories), the
+// summary lists those with no coverage at all as untested, so they're
+// seen, not silently left out.
+//
+//	bazel run //tools/coverage -- --lcov=FILE [--json=FILE] [--markdown=FILE] [--floor=FILE] [--libraries=FILE]
 package main
 
 import (
@@ -27,6 +33,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path"
@@ -70,6 +79,9 @@ type Report struct {
 	Floor    float64   `json:"floor"`
 	Total    Counts    `json:"total"`
 	Packages []Package `json:"packages"`
+	// Untested are the libraries with no coverage data (no test links
+	// them): their lines aren't in the total.
+	Untested []string `json:"untested,omitempty"`
 }
 
 func main() {
@@ -77,6 +89,7 @@ func main() {
 	jsonOut := flag.String("json", "", "write the summary as JSON to this file")
 	mdOut := flag.String("markdown", "", "append the summary as Markdown to this file (CI's $GITHUB_STEP_SUMMARY)")
 	floorFile := flag.String("floor", "tools/coverage/floor.txt", "fail when the total is below the percentage in this file (empty: don't check)")
+	libraries := flag.String("libraries", "", "a file of the Go libraries' package directories, one a line, to list those without coverage data")
 	commit := flag.String("commit", "", "the commit measured, for the report")
 	date := flag.String("date", "", "when it was measured, for the report")
 	flag.Parse()
@@ -96,6 +109,13 @@ func main() {
 		fail(fmt.Errorf("%s: %w", *lcov, err))
 	}
 	r.Commit, r.Date = *commit, *date
+	if *libraries != "" {
+		data, err := os.ReadFile(*libraries)
+		if err != nil {
+			fail(err)
+		}
+		r.Untested = untested(r, strings.Split(string(data), "\n"))
+	}
 	if *floorFile != "" {
 		if r.Floor, err = readFloor(*floorFile); err != nil {
 			fail(err)
@@ -126,6 +146,9 @@ func main() {
 	}
 
 	fmt.Printf("coverage: %.1f%% of %d lines in %d packages (floor %.1f%%)\n", r.Total.Percent, r.Total.Lines, len(r.Packages), r.Floor)
+	if len(r.Untested) > 0 {
+		fmt.Printf("not counted, no test links them: %s\n", strings.Join(r.Untested, ", "))
+	}
 	if r.Total.Percent < r.Floor {
 		fail(fmt.Errorf("coverage %.1f%% is below the floor of %.1f%% (%s): add tests", r.Total.Percent, r.Floor, *floorFile))
 	}
@@ -215,6 +238,57 @@ func parse(r io.Reader) (Report, error) {
 	return rep, nil
 }
 
+// untested are the libraries (package directories) r has no data for.
+func untested(r Report, libraries []string) []string {
+	seen := map[string]bool{}
+	for _, p := range r.Packages {
+		seen[p.Name] = true
+	}
+	var out []string
+	for _, l := range libraries {
+		if l = strings.TrimSpace(l); l != "" && !seen[l] && hasCode(l) {
+			seen[l] = true
+			out = append(out, l)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// hasCode reports whether the Go package in dir has code to run (a
+// function); one that only embeds files has none to cover. A directory
+// that can't be read is taken to have some.
+func hasCode(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return true
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+		if err != nil {
+			return true
+		}
+		found := false
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				found = found || n.Body != nil
+			case *ast.FuncLit:
+				found = true
+			}
+			return !found
+		})
+		if found {
+			return true
+		}
+	}
+	return false
+}
+
 // percent is covered/lines as a percentage, to one decimal place.
 func percent(covered, lines int) float64 {
 	if lines == 0 {
@@ -253,4 +327,7 @@ func writeMarkdown(w io.Writer, r Report) {
 		fmt.Fprintf(w, "| `%s` | %.1f%% | %d / %d |\n", p.Name, p.Percent, p.Covered, p.Lines)
 	}
 	fmt.Fprintln(w)
+	if len(r.Untested) > 0 {
+		fmt.Fprintf(w, "Not counted (no test links them): `%s`.\n\n", strings.Join(r.Untested, "`, `"))
+	}
 }

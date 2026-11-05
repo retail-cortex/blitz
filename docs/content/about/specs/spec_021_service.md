@@ -8,7 +8,7 @@ weight: 21
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `proto/blitz/v1/{session,workspace,turn,worker}.proto`, `buf.yaml`, `buf.gen.yaml`; `apps/service/main.go` (`blitzd`), `pkg/service/service.go`, `pkg/service/server/*.go`, `pkg/service/servicetest`; `pkg/socket`; `proto` (generated, never edited); `apps/cli/service.go` |
 | Tests | `apps/service/*_test.go`, `pkg/service/service_test.go`, `pkg/service/server/*_test.go`, `apps/cli/attach_test.go`, `service_test.go` |
 | Depends on | [spec_018_workspace](spec_018_workspace.md) |

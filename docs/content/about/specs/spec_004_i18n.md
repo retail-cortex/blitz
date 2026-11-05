@@ -8,7 +8,7 @@ weight: 4
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/i18n/i18n.go`, `pkg/i18n/locales/{en-US,es,fr-CA}.json`; `SetupLocale`/`SetLocale` in `pkg/engine`; `docs/content/development/translating.md` |
 | Tests | `pkg/i18n/i18n_test.go`, `apps/cli/internal/tui/i18n_lint_test.go` (`TestNoUntranslatedOutput`), `apps/cli/internal/tui/locale_test.go`, `apps/cli/locale_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md) |

@@ -8,7 +8,7 @@ weight: 14
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/agents/{manager,frontmatter,files}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/agentfiles.go`; `pkg/engine/runtime/settings.go`; `pkg/engine/tools/{agent_tools,universal_constructor}.go`; `pkg/service/server/agents.go`; `apps/desktop/web/src/AgentEditor.tsx` |
 | Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/agentfiles_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/{pin,settings}_test.go`; `pkg/service/server/handlers_test.go` |
 | Depends on | [spec_002_config](spec_002_config.md), [spec_007_shell](spec_007_shell.md), [spec_005_approvals](spec_005_approvals.md) |

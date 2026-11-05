@@ -127,3 +127,21 @@ func TestPackRefuses(t *testing.T) {
 		})
 	}
 }
+
+// The media types are Blitz's own, not the host's tables: the same on
+// every machine (N26 pkg-small-2#15).
+func TestContentTypes(t *testing.T) {
+	got := string(contentTypes([]entry{{name: "a/x.js"}, {name: "README.md"}, {name: "LICENSE.txt"}, {name: "x.js.map"}, {name: "y.weird"}, {name: "noext"}}))
+	for ext, want := range map[string]string{
+		".js":    "application/javascript",
+		".md":    "text/markdown",
+		".txt":   "text/plain",
+		".map":   "application/json",
+		".weird": "application/octet-stream",
+	} {
+		t.Run(ext, func(t *testing.T) {
+			assert.Contains(t, got, `<Default Extension="`+ext+`" ContentType="`+want+`"/>`)
+		})
+	}
+	assert.Equal(t, got, string(contentTypes([]entry{{name: "y.weird"}, {name: "x.js.map"}, {name: "LICENSE.txt"}, {name: "README.md"}, {name: "a/x.js"}, {name: "noext"}})), "in any order")
+}

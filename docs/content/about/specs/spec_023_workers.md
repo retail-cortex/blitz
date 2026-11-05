@@ -10,7 +10,7 @@ weight: 23
 
 | | |
 |---|---|
-| Status | Implemented, first version. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented, first version. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/workers/{worker,schedule,permission,policy,state,runs}.go`; `pkg/engine/workers.go`; `pkg/service/server/{scheduler,worker}.go`; `apps/cli/workers.go` |
 | Tests | `pkg/engine/workers/*_test.go`, `pkg/engine/workers_test.go`, `pkg/service/server/worker_test.go`, `apps/cli/workers_test.go` |
 | Depends on | [spec_005_approvals](spec_005_approvals.md) (unattended approvals), [spec_018_workspace](spec_018_workspace.md), [spec_021_service](spec_021_service.md) |

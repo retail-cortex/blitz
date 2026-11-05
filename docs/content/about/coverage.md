@@ -5,7 +5,7 @@ weight: 15
 
 How much of Blitz's code its Go tests run: every line in `apps/` and `pkg/`, measured with `bazel coverage` on Linux (where the sandbox and gVisor tests also run) on each push to `main`. Tools, generated code and dependencies aren't counted. The desktop page's TypeScript is measured separately, lines and branches, by `bazel test //apps/desktop/web:coverage` (Vitest's V8 coverage, over `src/` without the generated client and the development stand-ins), which fails below the thresholds in `apps/desktop/web/vite.config.ts`; its report is among that test's outputs.
 
-CI fails if the total drops below the floor in `tools/coverage/floor.txt`. When coverage rises, raise the floor with it, so it can only go up. Packages are listed least covered first: the top of the table is where tests are most needed.
+CI fails if the total drops below the floor in `tools/coverage/floor.txt`. When coverage rises, raise the floor with it, so the floor only goes up. A Go library no test links has no lines in the report, so it isn't in the total: it's listed under the table as not counted. Packages are listed least covered first: the top of the table is where tests are most needed.
 
 {{< coverage >}}
 

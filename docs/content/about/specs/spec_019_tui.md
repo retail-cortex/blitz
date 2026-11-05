@@ -8,7 +8,7 @@ weight: 19
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `apps/cli/internal/tui/*.go` |
 | Tests | `apps/cli/internal/tui/*_test.go` (notably `tui_test.go`, `steer_test.go`, `exit_test.go`, `btw_test.go`, `search_test.go`, `remote_test.go`, `i18n_lint_test.go`) |
 | Depends on | [spec_018_workspace](spec_018_workspace.md) (all behaviour goes through `api.Backend`), [spec_004_i18n](spec_004_i18n.md) |

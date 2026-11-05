@@ -8,7 +8,7 @@ weight: 11
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/images/*.go`, `pkg/pdftext/pdftext.go`, `pkg/engine/tools/images.go`, `documents.go`, `pkg/engine/runtime/images.go`, `media.go`, `geminifiles.go`, `openai_images.go`, `anthropic.go`, `contextparts.go`, `pkg/engine/media.go`; `/attach`, `/paste` in `apps/cli/internal/tui`; `apps/desktop/web/src/attachments.ts` |
 | Tests | `pkg/images/images_test.go`, `documents_test.go`, `media_test.go`, `pkg/engine/tools/images_test.go`, `documents_test.go`, `media_test.go`, `pkg/engine/runtime/images_test.go`, `geminifiles_test.go`, `contextparts_test.go`, `pkg/engine/media_test.go`, `apps/cli/internal/tui/attach_test.go`, `apps/cli/images_test.go`, `apps/desktop/web/src/attachments.test.ts` |
 | Depends on | [spec_006_filetools](spec_006_filetools.md) (sandboxed reads) |

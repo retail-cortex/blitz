@@ -8,7 +8,7 @@ weight: 16
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/runtime/engine.go`, `plan.go`, `steer.go`, `aside.go`, `compact.go`, `search.go`, `images.go`, `usage.go` |
 | Tests | `pkg/engine/runtime/engine_test.go`, `plan_test.go`, `steer_test.go`, `aside_test.go`, `compact_test.go`, `bulkhead_test.go`, `telemetry_test.go`, `runtime_security_test.go`, `mcp_agents_test.go` |
 | Related | [spec_015_models](spec_015_models.md), [spec_014_agents](spec_014_agents.md), [spec_018_workspace](spec_018_workspace.md) |

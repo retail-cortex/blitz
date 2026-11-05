@@ -8,7 +8,7 @@ weight: 2
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`, `providers.go`; `pkg/secrets`; template and key commands in `apps/cli/configcmd.go`, `configkeys.go` |
 | Tests | `pkg/config/*_test.go`, `pkg/secrets/secrets_test.go`, `apps/cli/configkeys_test.go`, `pkg/service/server/config_test.go` |
 | Related | [spec_020_cli](spec_020_cli.md), [spec_015_models](spec_015_models.md) |

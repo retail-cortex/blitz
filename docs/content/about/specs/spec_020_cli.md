@@ -8,7 +8,7 @@ weight: 20
 
 | | |
 |---|---|
-| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths checked 2026-09-27 (`//tools/specs`). |
 | Source | `apps/cli/main.go`, `exitcode.go`, `oneshot.go`, `setup.go`, `configcmd.go`, `doctor.go` |
 | Tests | `apps/cli/main_test.go`, `images_test.go`, `locale_test.go` |
 | Related | [spec_002_config](spec_002_config.md), [spec_018_workspace](spec_018_workspace.md), [spec_019_tui](spec_019_tui.md), [spec_021_service](spec_021_service.md), [spec_023_workers](spec_023_workers.md) |

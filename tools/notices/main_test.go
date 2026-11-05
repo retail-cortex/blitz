@@ -78,6 +78,38 @@ func TestReadComponent(t *testing.T) {
 	assert.Error(t, err, "an unaccepted license file accepted")
 }
 
+// Every license file counts, not the first recognised one: an accepted
+// license beside one that isn't is refused (N26 pkg-small-2#17).
+func TestReadComponentEveryLicense(t *testing.T) {
+	const mit = "Permission is hereby granted, free of charge, to any person"
+	const apache = "Apache License\nVersion 2.0, January 2004"
+	for name, tc := range map[string]struct {
+		files   map[string]string
+		license string // "" refused
+	}{
+		"GPL beside MIT":           {map[string]string{"COPYING": "GNU GENERAL PUBLIC LICENSE Version 3", "LICENSE-MIT": mit}, ""},
+		"unknown beside MIT":       {map[string]string{"LICENSE": "All rights reserved.", "LICENSE.thirdparty": mit}, ""},
+		"dual MIT and Apache":      {map[string]string{"LICENSE-APACHE": apache, "LICENSE-MIT": mit}, "Apache-2.0"},
+		"a NOTICE isn't a license": {map[string]string{"LICENSE": mit, "NOTICE": "Copyright Ada"}, "MIT"},
+		"docs, a logo and source":  {map[string]string{"LICENSE": mit, "LICENSE.docs": "Attribution-ShareAlike 4.0", "LICENSE-LOGO": "https://x", "license.go": "package x"}, "MIT"},
+		"SQLite's blessing":        {map[string]string{"LICENSE": mit, "LICENSE-SQLITE": "SQLite Is Public Domain\n\nAll of the code"}, "MIT"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			for f, text := range tc.files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte(text), 0o644))
+			}
+			c, err := readComponent("x", "1", dir)
+			if tc.license == "" {
+				assert.ErrorContains(t, err, "doesn't accept")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.license, c.license)
+		})
+	}
+}
+
 // A module that ships no license file takes the one kept for it under
 // the licenses folder; without one, it's a problem.
 func TestGoModulesLicenseFallback(t *testing.T) {
