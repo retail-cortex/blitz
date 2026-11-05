@@ -91,11 +91,44 @@ func (w *Workspace) Guardrails() []gates.Guardrail {
 type guardState struct {
 	all  []gates.Guardrail
 	said sync.Map
+	// turns is how many turns in the session hold it (a workflow's
+	// parallel steps share one); guarding.mu guards it.
+	turns int
 }
 
 // guarding holds the current turns' guardrails, by session.
 type guarding struct {
+	mu    sync.Mutex
 	turns sync.Map // session ID → *guardState
+}
+
+// begin is the guardrails of a turn starting in the session: those of a
+// turn already running there (a workflow's parallel steps: one set, its
+// notices once), else read reads them.
+func (g *guarding) begin(sessionID string, read func() []gates.Guardrail) *guardState {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if v, ok := g.turns.Load(sessionID); ok {
+		st := v.(*guardState)
+		st.turns++
+		return st
+	}
+	st := &guardState{all: read(), turns: 1}
+	g.turns.Store(sessionID, st)
+	return st
+}
+
+// end lets go of the session's guardrails once its last turn ends.
+func (g *guarding) end(sessionID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if v, ok := g.turns.Load(sessionID); ok {
+		if st := v.(*guardState); st.turns > 1 {
+			st.turns--
+			return
+		}
+		g.turns.Delete(sessionID)
+	}
 }
 
 // turnLimits are the limits guardrails that set a turn's model-call and
@@ -107,8 +140,7 @@ type turnLimits struct{ turns, cost, broken *gates.Guardrail }
 // applies the limits guardrail's turn and cost limits to t, as they
 // apply to agent, the turn's ("": the active agent).
 func (w *Workspace) startGuardrails(sessionID string, t *api.Turn, agent string) turnLimits {
-	st := &guardState{all: w.Guardrails()}
-	w.guards.turns.Store(sessionID, st)
+	st := w.guards.begin(sessionID, w.Guardrails)
 	var lim turnLimits
 	for _, g := range st.all {
 		if g.Problem != "" && g.For() == gates.BuiltinLimits {
@@ -337,7 +369,7 @@ type guard struct{ w *Workspace }
 // external reports whether a tool brings in outside content: the web,
 // the browser, an MCP server, a workflow's call step.
 func (g guard) external(tool string) bool {
-	if slices.Contains([]string{"web_fetch", "web_search", "browser", "mcp_call", "api_call", "a2a_call"}, tool) {
+	if slices.Contains([]string{"web_fetch", "web_search", "browser", "mcp_call", "read_mcp_resource", "api_call", "a2a_call"}, tool) {
 		return true
 	}
 	_, _, ok := g.w.tools.MCP().Lookup(tool)

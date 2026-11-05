@@ -216,7 +216,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	var lim turnLimits
 	if !t.Aside {
 		lim = w.startGuardrails(sessionID, &t.Turn, t.agent)
-		defer w.guards.turns.Delete(sessionID)
+		defer w.guards.end(sessionID)
 		ruleNotices = w.guardrailProblems(sessionID)
 	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())

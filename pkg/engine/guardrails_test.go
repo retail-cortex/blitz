@@ -595,3 +595,24 @@ func TestLimitSourceUnattended(t *testing.T) {
 	assert.Contains(t, err.Error(), "raise max_turns under limits:")
 	assert.NotContains(t, err.Error(), "continue", "nobody to send it")
 }
+
+// Turns running at once in a session (a workflow's parallel steps) share
+// its guardrails until the last one ends: the first to end doesn't take
+// them from the others (N26 engine-top-2#10).
+func TestGuardrailsSharedByParallelTurns(t *testing.T) {
+	var g guarding
+	reads := 0
+	read := func() []gates.Guardrail { reads++; return []gates.Guardrail{{Name: "x"}} }
+	a := g.begin("s", read)
+	b := g.begin("s", read)
+	assert.Same(t, a, b, "one set for the session's turns")
+	assert.Equal(t, 1, reads)
+	g.end("s")
+	v, ok := g.turns.Load("s")
+	require.True(t, ok, "still held by the other turn")
+	assert.Same(t, a, v)
+	g.end("s")
+	_, ok = g.turns.Load("s")
+	assert.False(t, ok, "let go once the last turn ended")
+	g.end("s") // nothing held: no panic
+}
