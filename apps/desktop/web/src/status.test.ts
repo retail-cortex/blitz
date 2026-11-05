@@ -16,7 +16,7 @@
 
 
 import { describe, expect, it } from "vitest";
-import { contextShare, forgetStatus, publishStatus, statusOf, tokens } from "./status";
+import { contextShare, forgetStatus, publishStatus, statusBarModels, statusOf, tokens } from "./status";
 
 describe("tokens", () => {
   it.each([
@@ -48,5 +48,21 @@ describe("publishStatus", () => {
     forgetStatus("/w");
     forgetStatus("/w"); // twice is fine
     expect(statusOf("/w")).toEqual({});
+  });
+});
+
+describe("statusBarModels", () => {
+  it("lists configured models first, then discovered provider chat models", () => {
+    const listed = new Set(["embedding", "image-qwen", "inference", "work-gpu", "laptop-gpu"]);
+    expect(statusBarModels("openai/work-gpu", "openai", ["openai/work-gpu", "openai/laptop-gpu", "gemini/gemini-4-argon"], listed)).toEqual([
+      "gemini/gemini-4-argon",
+      "openai/laptop-gpu",
+      "openai/work-gpu",
+      "openai/inference",
+    ]);
+  });
+  it("omits large provider catalogs while keeping configured and current models", () => {
+    const large = new Set(Array.from({ length: 20 }, (_, i) => `model-${i}`));
+    expect(statusBarModels("gemini/gemini-4-argon", "gemini", ["openai/work-gpu"], large)).toEqual(["openai/work-gpu", "gemini/gemini-4-argon"]);
   });
 });

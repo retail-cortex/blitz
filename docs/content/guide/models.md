@@ -5,7 +5,7 @@ weight: 30
 
 Spec: [models](../about/specs/spec_015_models.md).
 
-With no model set, Blitz uses Gemini's `gemini-4-argon` (for chat and for Google web searches). Choose another with `/model provider/model` in a session, `--model`, or `model` under `[llm.<provider>]` in the settings; a model you've set is kept across releases. Setting up a provider, its key or sign-in, is in [Providers](providers.md).
+With no model set, Blitz uses Gemini's `gemini-4-argon` (for chat and for Google web searches). Choose another with `/model provider/model` in a session, the agent and model button in the desktop app's status bar, `--model`, or `model` under `[llm.<provider>]` in the settings; a model you've set is kept across releases. Setting up a provider, its key or sign-in, is in [Providers](providers.md).
 
 ## Resilience
 

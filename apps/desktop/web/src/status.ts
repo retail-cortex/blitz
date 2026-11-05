@@ -98,3 +98,19 @@ export function contextShare(lastPrompt: bigint | number, threshold?: number): n
   if (!threshold || threshold <= 0 || !lastPrompt) return undefined;
   return Math.min(1, Number(lastPrompt) / threshold);
 }
+
+/**
+ * The models the status bar's agent-and-model menu offers to switch to
+ * (DSK-39): models with settings of their own ([model_settings]) first,
+ * then the active provider's chat models (when the list is short, without
+ * embedding or image utility endpoints) and the active model.
+ */
+export function statusBarModels(curModel: string, provider: string, configured: readonly string[], listed?: ReadonlySet<string>): string[] {
+  const cfgSet = new Set(configured.filter(Boolean));
+  const providerModels =
+    listed && listed.size <= 12
+      ? [...listed].filter((id) => id !== "embedding" && !id.startsWith("image")).map((id) => (provider ? `${provider}/${id}` : id))
+      : [];
+  const rest = [...new Set([...providerModels, curModel].filter((m) => m && !cfgSet.has(m)))].sort((a, b) => a.localeCompare(b));
+  return [...[...cfgSet].sort((a, b) => a.localeCompare(b)), ...rest];
+}

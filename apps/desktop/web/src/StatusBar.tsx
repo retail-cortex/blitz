@@ -63,11 +63,12 @@ import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
 import { displayName, openWorkspace, type Prefs } from "./prefs";
+import { useModelCatalog } from "./ModelInput";
 import { byWorkspace, countLabel, flaggedOf, isFlagged, processDetail, stopProcess, useProcesses } from "./processes";
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
-import { contextShare, tokens, useWorkspaceStatus } from "./status";
+import { contextShare, statusBarModels, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
 import { keepPermissionMode, setEffort as setEffortSetting } from "./workspaceSettings";
@@ -513,13 +514,21 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
     }
   };
   // The agent working on the conversation: /agent's list, switched from
-  // the next turn on (SetAgent), the history kept.
+  // the next turn on (SetAgent), the history kept; and the models
+  // available to switch in one click (SetModel).
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const loadAgents = () =>
+  const [models, setModels] = useState<string[]>([]);
+  const catalog = useModelCatalog(dir);
+  const loadAgents = () => {
     workspaces.listAgents({ workspace: dir }).then(
       (r) => setAgents(r.agents),
       () => {},
     );
+    workspaces.getModelSettings({ workspace: dir }).then(
+      (r) => setModels(Object.keys(r.all)),
+      () => {},
+    );
+  };
   const setAgent = async (name: string, shown: string) => {
     try {
       const r = await workspaces.setAgent({ workspace: dir, name });
@@ -529,6 +538,17 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
       snack(message(e), { error: true });
     }
   };
+  const setModel = async (ref: string) => {
+    try {
+      await workspaces.setModel({ workspace: dir, ref });
+      configChanged({ dir });
+      snack(t("desktop.rs.model_set", { model: ref }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  const curModel = s ? (s.provider ? `${s.provider}/${s.model}` : s.model) : "";
+  const modelList = statusBarModels(curModel, s?.provider ?? "", models, catalog.listed.get(s?.provider ?? ""));
   const total = st.total;
   const share = total ? contextShare(total.lastPrompt, st.threshold) : undefined;
   const c = st.cursor;
@@ -592,6 +612,17 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
               on: a.active,
               onSelect: () => void setAgent(a.name, a.displayName || a.name),
             })),
+            ...(modelList.length > 0
+              ? [
+                  "divider" as const,
+                  { heading: t("desktop.rs.model") },
+                  ...modelList.map((m) => ({
+                    label: m,
+                    on: m === curModel || m === s.model,
+                    onSelect: () => void setModel(m),
+                  })),
+                ]
+              : []),
             "divider",
             { label: `${t("desktop.run_settings")}…`, icon: mdiTuneVariant, onSelect: onWorkspaceSettings },
           ]}
