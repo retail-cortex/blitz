@@ -218,6 +218,25 @@ func TestRunLog(t *testing.T) {
 	assert.FileExists(t, filepath.Join(l.dir, mustFile(t, l, "/ws", "shop")))
 }
 
+// TestRunLogAfterATornLine checks that a run recorded after a torn last
+// line (a process that died mid-write) starts a line of its own, so both
+// whole runs list (N26 followups#2).
+func TestRunLogAfterATornLine(t *testing.T) {
+	l := OpenRunLog(t.TempDir())
+	require.NoError(t, l.Append(api.EvalRun{ID: "r1", Workspace: "/ws", Eval: "shop"}))
+	name := filepath.Join(l.dir, mustFile(t, l, "/ws", "shop"))
+	f, err := os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"id":"torn","works`)
+	require.NoError(t, errors.Join(err, f.Close()))
+	require.NoError(t, l.Append(api.EvalRun{ID: "r2", Workspace: "/ws", Eval: "shop"}))
+	runs, err := l.List("/ws", "shop", 0)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	assert.Equal(t, "r2", runs[0].ID)
+	assert.Equal(t, "r1", runs[1].ID)
+}
+
 func mustFile(t *testing.T, l *RunLog, ws, eval string) string {
 	t.Helper()
 	p, err := l.file(ws, eval)

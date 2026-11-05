@@ -29,6 +29,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 // RunLog keeps finished eval runs, one JSON line each, in a file per
@@ -52,7 +53,8 @@ func (l *RunLog) file(workspace, eval string) (string, error) {
 	return filepath.Join(l.dir, hex.EncodeToString(sum[:8])+"-"+base+".jsonl"), nil
 }
 
-// Append records a finished run.
+// Append records a finished run, on a line of its own after a torn one
+// (jsonl.Append).
 func (l *RunLog) Append(r api.EvalRun) error {
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -67,12 +69,7 @@ func (l *RunLog) Append(r api.EvalRun) error {
 	if err := os.MkdirAll(l.dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(append(data, '\n'))
-	return errors.Join(err, f.Close())
+	return jsonl.Append(name, 0o600, data)
 }
 
 // List returns an eval's runs, newest first, at most limit (0: all).

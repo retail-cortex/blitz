@@ -50,7 +50,6 @@ func TestLoadImageAuditsHashNotBytes(t *testing.T) {
 	os.WriteFile(filepath.Join(reg.Workspace().Dir(), "pic.png"), buf.Bytes(), 0o644)
 	img, err := reg.LoadImage("pic.png")
 	require.NoError(t, err)
-	log.Close()
 	files, _ := filepath.Glob(filepath.Join(logDir, "*.jsonl"))
 	data, _ := os.ReadFile(files[0])
 	s := string(data)

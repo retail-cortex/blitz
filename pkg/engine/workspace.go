@@ -553,7 +553,6 @@ func (w *Workspace) Close() error {
 		// hand its metadata to this one's stale copy.
 		w.storage.Release()
 	}
-	w.audit.Close()
 	w.lock.release()
 	return err
 }

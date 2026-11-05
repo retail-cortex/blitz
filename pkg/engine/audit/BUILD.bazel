@@ -29,7 +29,10 @@ go_library(
         "//pkg/engine:__subpackages__",
         "//pkg/pageserver:__pkg__",
     ],
-    deps = ["//pkg/redact"],
+    deps = [
+        "//pkg/engine/jsonl",
+        "//pkg/redact",
+    ],
 )
 
 go_test(
