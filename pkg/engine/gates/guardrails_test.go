@@ -137,6 +137,52 @@ func TestDomainsAndCommands(t *testing.T) {
 		assert.Empty(t, CommandDenied(c, DefaultCommands), c)
 	}
 	assert.Equal(t, []string{DefaultsEntry}, BuiltinDefault(Builtins[2]).Limits.Commands, "limits refuses the defaults without a file")
+}
+
+// The spellings the guide promises are refused: bundled short flags,
+// git's own options, sudo's and env's options, shells and subshells
+// (N26 safety-enterprise#3).
+func TestCommandDeniedSpellings(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		refused bool
+	}{
+		{"git push -uf origin main", true},
+		{"git push -fu origin main", true},
+		{"git push -fq", true},
+		{"git -C . push -f", true},
+		{"git -C ../repo push --force origin main", true},
+		{"git -c core.askPass=x push -f", true},
+		{"git --no-pager push --force", true},
+		{"git --git-dir=.git push origin +main", true},
+		{"/usr/bin/git push -f", true},
+		{"sudo -u root rm -rf ~", true},
+		{"sudo -E rm -rf /", true},
+		{"sudo -Eu root rm -rf ~", true},
+		{"sudo --user=root rm -rf /", true},
+		{"env -i rm -rf ~", true},
+		{"env -u PATH FOO=1 rm -rf /", true},
+		{"nice -n 10 rm -rf ~", true},
+		{"nohup rm -rf / &", true},
+		{"time rm -rf ~", true},
+		{`bash -c "rm -rf ~"`, true},
+		{`sh -c 'cd /tmp && rm -rf /'`, true},
+		{`bash -lc "git push -f"`, true},
+		{"echo $(rm -rf ~)", true},
+		{"echo `rm -rf ~`", true},
+		{"git -C . push -u origin main", false},
+		{"git push -u origin main", false},
+		{"git -c push.default=current push", false},
+		{"git commit -f -m x", false},
+		{"sudo -u root rm -rf /tmp/build", false},
+		{"env -i make test", false},
+		{`bash -c "rm -rf ./dist"`, false},
+		{"echo $(date)", false},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			assert.Equal(t, tc.refused, CommandDenied(tc.command, DefaultCommands) != "")
+		})
+	}
 	assert.Equal(t, DefaultCommands, ExpandCommands([]string{DefaultsEntry}))
 	assert.Equal(t, append(slices.Clone(DefaultCommands), "dropdb *"), ExpandCommands([]string{"Defaults", "dropdb *"}), "the defaults and its own")
 }
@@ -252,6 +298,30 @@ func TestBrokenBuiltinFileRunsTheDefaults(t *testing.T) {
 			assert.Contains(t, all[i].Problem, tc.problem, "shown where the file is")
 			assert.Equal(t, BuiltinLimits, all[i].For())
 			assert.Equal(t, []Guardrail{BuiltinDefault(Builtins[2])}, Active(all, StageAction, ""), "the defaults hold")
+		})
+	}
+
+	// A file named after a built-in that's another guardrail is a problem
+	// (N26 safety-enterprise#2): the built-in still runs, with its
+	// defaults, and the other built-ins too.
+	for _, tc := range []struct{ file, body string }{
+		{"limits.md", "---\nstage: action\naction: block\ntools: [run_shell_command]\n---\nDropping a table."},
+		{"secrets.md", "---\nstage: output\n---\nNo customer names."},
+		{"prompt_injection.md", "---\nstage: tool_result\naction: warn\n---\nNothing odd."},
+		{"limits.md", "---\nbuiltin: secrets\n---\n"},
+	} {
+		t.Run("a custom one named "+tc.file+" "+tc.body[:12], func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, tc.file, tc.body)
+			all := LoadGuardrails(dir)
+			name := tc.file[:len(tc.file)-3]
+			i := slices.IndexFunc(all, func(g Guardrail) bool { return g.Name == name })
+			require.GreaterOrEqual(t, i, 0)
+			assert.Equal(t, name+".md is the built-in "+name+" guardrail's file: add builtin: "+name+", or rename it", all[i].Problem)
+			assert.Equal(t, name, all[i].For())
+			for _, b := range Builtins {
+				assert.Contains(t, Active(all, b.Stage, ""), BuiltinDefault(b), b.ID+" runs with its defaults")
+			}
 		})
 	}
 

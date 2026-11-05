@@ -789,13 +789,27 @@ func TestCatalog(t *testing.T) {
 		assert.Error(t, <-done)
 	})
 
+	// An unsigned 404 (a proxy, a misrouted deploy) leaves the kept
+	// catalog and its policy as they are (N26 safety-enterprise#5).
 	s.Catalog = nil
+	kept, changed, err := c.RefreshCatalog(ctx, dir)
+	var refusal *Refusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, http.StatusNotFound, refusal.Status)
+	assert.False(t, changed)
+	require.NotNil(t, kept)
+	assert.Len(t, kept.Files, 4)
+	assert.FileExists(t, filepath.Join(dir, PolicyFile))
+	assert.DirExists(t, filepath.Join(dir, "catalog"))
+
+	// A signed manifest with nothing in it withdraws the catalog.
+	s.Catalog = map[string]enterprisetest.CatalogFile{}
 	m, changed, err = c.RefreshCatalog(ctx, dir)
 	require.NoError(t, err)
-	assert.Nil(t, m, "withdrawn")
+	assert.Empty(t, m.Files, "withdrawn")
 	assert.True(t, changed)
-	assert.Nil(t, LoadCatalog(dir))
-	assert.NoDirExists(t, filepath.Join(dir, "catalog"))
+	assert.NoFileExists(t, filepath.Join(defaults, "agents", "reviewer.md"))
+	assert.NoFileExists(t, filepath.Join(locked, "agents", "reviewer.md"))
 
 	t.Run("signed out of the stream", func(t *testing.T) {
 		_, _, c2, _, _ := setup(t)
@@ -855,9 +869,6 @@ func TestCatalogFailures(t *testing.T) {
 		assert.ErrorContains(t, err, "rules/b.md")
 		assert.Len(t, got.Files, 1)
 		delete(s.Catalog, "rules/b.md")
-	})
-	t.Run("forgetting what isn't there", func(t *testing.T) {
-		assert.NoError(t, ForgetCatalog(t.TempDir()))
 	})
 	t.Run("the organization's workspaces, signed out", func(t *testing.T) {
 		_, _, c2, _, _ := setup(t)

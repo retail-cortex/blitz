@@ -67,7 +67,9 @@ func TestRedactValuesAndEnv(t *testing.T) {
 	assert.NotContains(t, nested["cmd"].(string), "custom-secret", "nested redaction failed: %v", nested)
 	assert.Equal(t, 3, nested["n"], "nested redaction failed: %v", nested)
 	assert.Equal(t, mask, nested["list"].([]any)[1], "nested redaction failed: %v", nested)
+	assert.GreaterOrEqual(t, r.Longest(), len("custom-secret-value-123"), "the longest value it masks")
 	var nilR *Redactor
+	assert.GreaterOrEqual(t, nilR.Longest(), 0)
 	got := nilR.String("key sk-proj-abcdefghijklmnopqrstuvwxyz123456")
 	assert.NotContains(t, got, "sk-proj", "nil redactor should still apply built-in patterns")
 }

@@ -76,6 +76,7 @@ func TestCheck(t *testing.T) {
 		"agents/hot.md":         {"---\nname: hot\ntemperature: 9\n---\nx", "temperature"},
 		"rules/odd.md":          {"---\nwhen: sometimes\n---\nx", "before_agent or after_agent"},
 		"guardrails/odd.md":     {"---\nstage: nowhere\n---\nx", "nowhere"},
+		"guardrails/limits.md":  {"---\nstage: action\nlock: locked\n---\nDropping a table.", "add builtin: limits"},
 		"commands/open.md":      {"---\ndescription: x\nno end", "frontmatter"},
 		"skills/go/SKILL.md":    {"---\nname: rust\ndescription: d\n---\nx", "isn't its folder's"},
 		"skills/py/SKILL.md":    {"---\ndescription: d\n---\nx", "must specify a name"},

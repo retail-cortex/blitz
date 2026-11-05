@@ -114,6 +114,23 @@ func Mask(s string) string {
 	return s
 }
 
+// Longest is the length of the longest value r masks, its own or
+// remembered (0 for none): text streamed in pieces is held at least this
+// long so a value is whole when it's checked. A nil Redactor has the
+// remembered ones.
+func (r *Redactor) Longest() int {
+	n := 0
+	if r != nil && len(r.values) > 0 {
+		n = len(r.values[0])
+	}
+	remembered.RLock()
+	defer remembered.RUnlock()
+	if len(remembered.values) > 0 {
+		n = max(n, len(remembered.values[0]))
+	}
+	return n
+}
+
 // String masks secrets in s. A nil Redactor still applies the built-in
 // patterns and the remembered values.
 func (r *Redactor) String(s string) string {

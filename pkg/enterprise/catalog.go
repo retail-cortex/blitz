@@ -119,21 +119,6 @@ func LayerDirs(dir string) (defaults, locked string) {
 	return filepath.Join(dir, layersDir, defaultLayer), filepath.Join(dir, layersDir, lockedLayer)
 }
 
-// ForgetCatalog removes the catalog from dir, keeping the branding.
-func ForgetCatalog(dir string) error {
-	for _, f := range []string{catalogFile, catalogETag, PolicyFile} {
-		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	for _, d := range []string{layersDir, filesDir} {
-		if err := os.RemoveAll(filepath.Join(dir, d)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // safePath is p as a path inside a layer, or false for one that would
 // leave it.
 func safePath(p string) (string, bool) {
@@ -149,7 +134,8 @@ func safePath(p string) (string, bool) {
 // lays it out in dir: the default and locked layers, built beside the
 // old ones and swapped in whole, and the policy. It returns the catalog
 // in dir after, and whether it changed; nil when the service has none.
-// A catalog that doesn't check is refused and the last one kept.
+// A catalog that doesn't check is refused and the last one kept, as it
+// is when the service answers 404 (unsigned) with one kept.
 func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, bool, error) {
 	token, err := c.AccessToken(ctx)
 	if err != nil {
@@ -176,8 +162,16 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 	case http.StatusNotModified:
 		return LoadCatalog(dir), false, nil
 	case http.StatusNotFound:
-		had := LoadCatalog(dir) != nil
-		return nil, had, ForgetCatalog(dir)
+		// "None published", but unsigned: a proxy or a misrouted deploy
+		// says the same. The kept catalog and its policy stay; only a
+		// signed manifest changes them (EN-33), an empty one to none.
+		kept := LoadCatalog(dir)
+		if kept == nil {
+			return nil, false, nil
+		}
+		var r struct{ Code, Message string }
+		_ = json.Unmarshal(data, &r)
+		return kept, false, &Refusal{Status: res.StatusCode, Code: r.Code, Message: r.Message}
 	case http.StatusOK:
 	default:
 		var r struct{ Code, Message string }

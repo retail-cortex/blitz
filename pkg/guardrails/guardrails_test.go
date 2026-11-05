@@ -192,6 +192,48 @@ func stream(o *Output, text string, n int) string {
 	return out.String()
 }
 
+// A key of a format with no fixed length is masked whole however it's
+// split: masked when only its start had come, the rest of it would go
+// out (N26 safety-enterprise#1).
+func TestOutputHoldsAKeyStillArriving(t *testing.T) {
+	alnum := strings.Repeat("aB3dE6gH9kM2nP5qR8tW", 8)
+	keys := map[string]string{
+		"anthropic":     "sk-ant-api03-" + alnum[:95],
+		"openai":        "sk-proj-" + alnum[:156],
+		"github":        "ghp_" + alnum[:76],
+		"github_pat":    "github_pat_" + alnum[:82],
+		"slack":         "xoxb-" + alnum[:60],
+		"jwt":           "eyJ" + alnum[:40] + "." + alnum[:60] + "." + alnum[:50],
+		"an assignment": "OPENAI_API_KEY=" + alnum[:120],
+		"a quoted one":  `password: "` + alnum[:90] + `"`,
+	}
+	for name, key := range keys {
+		for _, n := range []int{1, 3, 7, 50} {
+			t.Run(name, func(t *testing.T) {
+				o := Set{All: Defaults()}.Output()
+				got := stream(o, strings.Repeat("Here is the plan. ", 12)+"Use "+key+" now. "+strings.Repeat("Then deploy. ", 15), n)
+				assert.NotContains(t, got, alnum[40:60], "pieces of %d: %s", n, got)
+				assert.Contains(t, got, "[REDACTED]")
+				assert.True(t, strings.HasSuffix(got, strings.Repeat("Then deploy. ", 15)), "the rest is sent")
+			})
+		}
+	}
+
+	o := Set{All: Defaults()}.Output()
+	sent := o.Write(strings.Repeat("Words come here. ", 20) + "sk-ant-" + alnum[:30])
+	assert.NotContains(t, sent, "sk-ant", "held from before the key")
+	assert.NotContains(t, o.Write(alnum[30:90]+" and more text"), alnum[:20])
+	assert.NotContains(t, o.Flush(), alnum[30:50])
+
+	// A known value longer than the window, with spaces in it, is whole
+	// before any of it is sent.
+	long := "-----service account----- " + strings.Repeat("line of the secret ", 20)
+	o = Set{All: Defaults(), Redactor: redact.New(long)}.Output()
+	got := stream(o, "Here: "+long+"done.", 5)
+	assert.NotContains(t, got, "line of the secret")
+	assert.Equal(t, "Here: [REDACTED]done.", got)
+}
+
 func TestOutput(t *testing.T) {
 	answer := strings.Repeat("Here is the plan. ", 20) + "Use key " + awsKey + " for the bucket. " + strings.Repeat("Then deploy. ", 20)
 	for _, n := range []int{1, 3, 7, 50, 1000} {
@@ -228,6 +270,6 @@ func TestOutput(t *testing.T) {
 	assert.Equal(t, Warn, o.Findings()[0].Action)
 
 	o = Set{All: Defaults()}.Output()
-	accents := strings.Repeat("é", 200)
+	accents := strings.Repeat("é", 200) + " " + strings.Repeat("ü", 200)
 	assert.Equal(t, accents, stream(o, accents, 5), "never cut inside a character")
 }
