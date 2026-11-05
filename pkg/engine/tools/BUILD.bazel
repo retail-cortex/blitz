@@ -214,6 +214,7 @@ go_test(
         "ossandbox_cov_test.go",
         "ossandbox_test.go",
         "patch_cov_test.go",
+        "patch_rules_test.go",
         "patch_test.go",
         "pathpolicy_test.go",
         "permrules_cov_test.go",

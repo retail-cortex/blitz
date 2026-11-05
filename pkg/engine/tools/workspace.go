@@ -79,11 +79,6 @@ type location struct {
 
 func (l location) abs() string { return filepath.Join(l.root.dir, l.rel) }
 
-// NewWorkspace opens dir as a single read-write root with no blocked paths.
-func NewWorkspace(dir string, maxFileSize int64) (*Workspace, error) {
-	return OpenWorkspace(WorkspaceOptions{Dir: dir, MaxFileSize: maxFileSize})
-}
-
 // OpenWorkspace opens the workspace and any additional roots. Additional
 // roots that don't exist are an error, so a typo can't silently widen or
 // narrow the sandbox.
@@ -222,13 +217,14 @@ func (w *Workspace) resolve(p string, write bool) (location, error) {
 }
 
 // locate finds the deepest root containing abs, so a read-only root nested
-// inside the workspace takes precedence.
+// inside the workspace takes precedence. Where the file system ignores
+// case, so does the match: VENDOR/x.go is inside the read-only vendor.
 func (w *Workspace) locate(abs string) (location, bool) {
 	var best *fsRoot
 	var bestRel string
 	for _, r := range w.roots {
-		rel, err := filepath.Rel(r.dir, abs)
-		if err != nil || escapesRoot(rel) {
+		rel, ok := relIn(r.dir, abs)
+		if !ok {
 			continue
 		}
 		if best == nil || len(r.dir) > len(best.dir) {
@@ -236,6 +232,23 @@ func (w *Workspace) locate(abs string) (location, bool) {
 		}
 	}
 	return location{root: best, rel: bestRel}, best != nil
+}
+
+// relIn is abs relative to dir, and whether abs is dir or inside it,
+// ignoring case where the file system does (caseInsensitiveFS).
+func relIn(dir, abs string) (string, bool) {
+	if !caseInsensitiveFS {
+		rel, err := filepath.Rel(dir, abs)
+		return rel, err == nil && !escapesRoot(rel)
+	}
+	switch {
+	case strings.EqualFold(dir, abs):
+		return ".", true
+	case len(abs) > len(dir) && strings.EqualFold(abs[:len(dir)], dir) &&
+		(abs[len(dir)] == filepath.Separator || strings.HasSuffix(dir, string(filepath.Separator))):
+		return strings.TrimPrefix(abs[len(dir):], string(filepath.Separator)), true
+	}
+	return "", false
 }
 
 func (w *Workspace) check(loc location, write bool) error {
@@ -249,8 +262,10 @@ func (w *Workspace) check(loc location, write bool) error {
 		return fmt.Errorf("%w (%s): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 	}
 	// A symlink can point at a blocked or read-only location that the
-	// lexical path doesn't reveal; check where it really leads.
-	if real, err := filepath.EvalSymlinks(loc.abs()); err == nil && real != loc.abs() {
+	// lexical path doesn't reveal; check where it really leads. A file not
+	// made yet is checked where its folder really is: a new file through a
+	// linked folder lands in the folder the link leads to.
+	if real, err := resolveExistingPrefix(loc.abs()); err == nil && real != loc.abs() {
 		if pat, blocked := w.blocked.Match(real); blocked {
 			return fmt.Errorf("%w (%s via symlink): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 		}

@@ -486,8 +486,11 @@ func NewApplyPatchTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 			}
 
 			var diff strings.Builder
-			var names, touched []string
+			var names, touched, deleted []string
 			for _, c := range plan {
+				if c.target != c.path || c.deleteIt {
+					deleted = append(deleted, c.path) // deleted, or moved away
+				}
 				d := unifiedDiff(c.path, c.before, c.after)
 				if c.target != c.path {
 					d = fmt.Sprintf("rename %s -> %s\n", c.path, c.target) + unifiedDiff(c.target, c.before, c.after)
@@ -499,8 +502,10 @@ func NewApplyPatchTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 					touched = append(touched, c.target)
 				}
 			}
-			if err := hooks.Approve(ctx, writeApproval(ws, "apply_patch",
-				fmt.Sprintf("Apply patch to %d file(s): %s", len(plan), strings.Join(names, ", ")), diff.String(), touched...)); err != nil {
+			req := writeApproval(ws, "apply_patch",
+				fmt.Sprintf("Apply patch to %d file(s): %s", len(plan), strings.Join(names, ", ")), diff.String(), touched...)
+			req.Deletes = deleted
+			if err := hooks.Approve(ctx, req); err != nil {
 				return fail(err)
 			}
 			for _, c := range plan {

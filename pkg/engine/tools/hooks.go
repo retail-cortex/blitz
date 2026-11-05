@@ -319,7 +319,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	h.mu.RLock()
 	rules := h.rules
 	h.mu.RUnlock()
-	effect, rule := rules.Decide(ruleKind(req), req.Targets)
+	effect, rule := rules.decideRequest(req)
 	if effect == EffectDeny {
 		decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
 		return fmt.Errorf("%w: %s is denied by the permission rule deny %s", ErrNotApproved, req.Detail, rule)

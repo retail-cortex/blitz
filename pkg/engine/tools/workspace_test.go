@@ -179,3 +179,81 @@ func TestWorkspaceWriteThroughSymlink(t *testing.T) {
 	info, _ := os.Lstat(filepath.Join(dir, "link.txt"))
 	assert.NotEqual(t, fs.FileMode(0), info.Mode()&os.ModeSymlink, "symlink was replaced by a regular file")
 }
+
+// Where the file system ignores case, a read-only root nested in the
+// workspace is matched whatever case the path is given in, and the
+// desktop's rule says the same (N26 engine-tools-2#2).
+func TestWorkspaceReadOnlyRootIgnoresCase(t *testing.T) {
+	old := caseInsensitiveFS
+	caseInsensitiveFS = true
+	t.Cleanup(func() { caseInsensitiveFS = old })
+	dir, err := canonicalDir(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "vendor"), 0o755))
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnlyPaths: []string{filepath.Join(dir, "vendor")}})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+
+	tests := []struct {
+		name, path string
+		readOnly   bool
+	}{
+		{"as named", "vendor/x.go", true},
+		{"upper case", "VENDOR/x.go", true},
+		{"mixed case, absolute", filepath.Join(dir, "Vendor", "x.go"), true},
+		{"the workspace in another case", strings.ToUpper(dir) + "/main.go", false},
+		{"a sibling", "vendors/x.go", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ws.WritablePath(tt.path)
+			if tt.readOnly {
+				assert.ErrorIs(t, err, ErrReadOnlyPath)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+	assert.Equal(t, "read_only", ws.AgentRule("VENDOR/x.go"))
+}
+
+// A new file made through a linked folder is checked where the folder
+// really is: a link into a read-only root or a blocked folder can't be
+// used to write there (N26 engine-tools-2#3).
+func TestWorkspaceNewFileThroughLinkedFolder(t *testing.T) {
+	dir, err := canonicalDir(t.TempDir())
+	require.NoError(t, err)
+	for _, d := range []string{"vendor", "secrets", "src"} {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, d), 0o755))
+	}
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnlyPaths: []string{filepath.Join(dir, "vendor")}, BlockedPaths: []string{"secrets/**"}})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	for link, target := range map[string]string{"lib": "vendor", "s": "secrets", "code": "src"} {
+		if err := os.Symlink(target, filepath.Join(dir, link)); err != nil {
+			t.Skipf("symlinks unsupported: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name, path string
+		want       error
+	}{
+		{"into a read-only root", "lib/new.go", ErrReadOnlyPath},
+		{"into a blocked folder", "s/new.txt", ErrBlockedPath},
+		{"deeper, into a blocked folder", "s/a/b/new.txt", ErrBlockedPath},
+		{"into a writable folder", "code/new.go", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ws.WritablePath(tt.path)
+			if tt.want == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, tt.want)
+			}
+		})
+	}
+	require.Error(t, ws.CreateExclusive(context.Background(), "lib/new.go", []byte("x")))
+	assert.NoFileExists(t, filepath.Join(dir, "vendor", "new.go"))
+}

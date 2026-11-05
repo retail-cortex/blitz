@@ -479,6 +479,27 @@ func (p *PermissionRules) Decide(kind string, targets []string) (Effect, *Permis
 	return EffectAllow, last
 }
 
+// decideRequest is Decide for an approval request: its kind's rules over
+// its targets and, for the files a write deletes, the delete rules too.
+// Deny wins over ask, and ask over allow; it's allowed only when every
+// rule that applies allows it.
+func (p *PermissionRules) decideRequest(req api.ApprovalRequest) (Effect, *PermissionRule) {
+	effect, rule := p.Decide(ruleKind(req), req.Targets)
+	if len(req.Deletes) == 0 || req.Kind == api.ActionDelete || effect == EffectDeny {
+		return effect, rule
+	}
+	de, dr := p.Decide(RuleDelete, req.Deletes)
+	switch {
+	case de == EffectDeny, de == EffectAsk && effect != EffectAsk:
+		return de, dr
+	case effect == EffectAsk:
+		return effect, rule
+	case effect == EffectAllow && de == EffectAllow:
+		return effect, rule
+	}
+	return "", nil
+}
+
 // shellPatterns returns the compiled shell patterns with effect, for the
 // command policy.
 func (p *PermissionRules) shellPatterns(effect Effect) []cmdPattern {

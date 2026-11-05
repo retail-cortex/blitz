@@ -167,15 +167,19 @@ func (c *wsCopy) diff(ws *Workspace, changes []wsChange) string {
 // through the workspace (checkpointed with the call's turn). It returns
 // the files written.
 func (c *wsCopy) keepChanges(ctx context.Context, ws *Workspace, hooks *Hooks, skill string, changes []wsChange) ([]string, error) {
-	var files []string
+	var files, deleted []string
 	for _, ch := range changes {
 		files = append(files, ch.path)
+		if ch.deleted {
+			deleted = append(deleted, ch.path)
+		}
 	}
 	if err := hooks.Approve(ctx, api.ApprovalRequest{
 		Tool: "run_skill_script", Kind: api.ActionWrite, MustAsk: true, // as tier 3: every time
 		Detail:  fmt.Sprintf("Keep the changes skill %s's script made: %s", skill, strings.Join(files, ", ")),
 		Diff:    c.diff(ws, changes),
 		Targets: files,
+		Deletes: deleted,
 	}); err != nil {
 		return nil, err
 	}
