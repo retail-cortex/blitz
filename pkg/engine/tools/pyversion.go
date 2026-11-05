@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -167,9 +168,15 @@ func satisfies(v []int, spec string) (bool, error) {
 	return true, nil
 }
 
+// probeTimeout bounds asking a program about itself (python --version, a
+// sandbox's test run): a wedged one doesn't hold up what's waiting on it.
+var probeTimeout = 10 * time.Second
+
 // pythonVersion asks an interpreter its version.
 func pythonVersion(python string) ([]int, error) {
-	out, err := exec.Command(python, "--version").CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, python, "--version").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%s --version: %w", python, err)
 	}

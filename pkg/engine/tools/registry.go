@@ -475,6 +475,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 	if r.tools["search_workspace"], err = NewSearchWorkspaceTool(r); err != nil {
+		r.Close()
 		return nil, fmt.Errorf("failed to create the search_workspace tool: %w", err)
 	}
 	r.tools["remember"], err = NewRememberTool(r)

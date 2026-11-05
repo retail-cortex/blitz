@@ -81,7 +81,12 @@ func newGVisorBox(cfg ScriptBoxConfig) (ScriptBox, error) {
 	if err := os.WriteFile(b.empty, nil, 0o400); err != nil && !os.IsPermission(err) {
 		return nil, err
 	}
-	b.sweep(context.Background())
+	// How sandboxexec finds runsc (it has no option for it): set once here,
+	// not on every run, which changed the environment under running code.
+	os.Setenv(sandbox.RunscPathEnvVar, b.runsc)
+	sctx, cancel := context.WithTimeout(context.Background(), gvisorCloseTimeout)
+	b.sweep(sctx) // a hung runsc doesn't hold the box up
+	cancel()
 	gvisorProbeMu.Lock()
 	defer gvisorProbeMu.Unlock()
 	perr, done := gvisorProbes[runsc]
@@ -185,7 +190,6 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	// The sandbox's name carries this process's ID, so a sandbox left behind
 	// by a Blitz that was killed can be found and removed (sweep).
 	id := fmt.Sprintf("cp-%d-%d", os.Getpid(), b.seq.Add(1))
-	os.Setenv(sandbox.RunscPathEnvVar, b.runsc) // how sandboxexec finds runsc
 
 	start := time.Now()
 	sb, err := sandbox.New(ctx,
@@ -217,7 +221,9 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	go func() {
 		select {
 		case <-runCtx.Done():
-			_ = exec.Command(b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
+			kctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gvisorCloseTimeout)
+			defer cancel()
+			_ = exec.CommandContext(kctx, b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
 		case <-finished:
 		}
 	}()

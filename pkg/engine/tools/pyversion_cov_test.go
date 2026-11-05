@@ -19,7 +19,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,4 +79,22 @@ func TestUVInstall(t *testing.T) {
 			assert.DirExists(t, root+"/cache")
 		})
 	}
+}
+
+// An interpreter that hangs when asked its version is given up on after
+// probeTimeout instead of holding the script run up (N26 engine-tools-2#23).
+func TestPythonVersionTimesOut(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands for the interpreter")
+	}
+	old := probeTimeout
+	probeTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { probeTimeout = old })
+	dir := t.TempDir()
+	hung := filepath.Join(dir, "python3")
+	require.NoError(t, os.WriteFile(hung, []byte("#!/bin/sh\nexec sleep 5\n"), 0o755))
+	start := time.Now()
+	_, err := pythonVersion(hung)
+	assert.Error(t, err)
+	assert.Less(t, time.Since(start), 3*time.Second)
 }

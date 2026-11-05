@@ -35,7 +35,10 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	if spec.shared == nil || !spec.shared.probed.Load() {
 		probe := bwrapArgs(bwrap, spec, nil, nil)
 		probe = append(probe, "/bin/true")
-		if out, err := exec.Command(probe[0], probe[1:]...).CombinedOutput(); err != nil {
+		pctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+		out, err := exec.CommandContext(pctx, probe[0], probe[1:]...).CombinedOutput()
+		cancel()
+		if err != nil {
 			return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, bytes.TrimSpace(out))
 		}
 		if spec.shared != nil {
