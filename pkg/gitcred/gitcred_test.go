@@ -27,7 +27,7 @@ import (
 func TestRun(t *testing.T) {
 	answer := func(_ context.Context, host string) (string, string, bool, error) {
 		switch host {
-		case "blitz.acme.com":
+		case "blitz.acme.com", "127.0.0.1:8080", "localhost", "[::1]:9000":
 			return "blitz", "at-1", true, nil
 		case "down.acme.com":
 			return "", "", false, errors.New("sign in to Blitz")
@@ -40,10 +40,15 @@ func TestRun(t *testing.T) {
 		"the service's host": {"get", "protocol=https\nhost=blitz.acme.com\npath=git/plans.git\n\n", "username=blitz\npassword=at-1\n", ""},
 		"another host":       {"get", "protocol=https\nhost=github.com\n", "", ""},
 		"not over http":      {"get", "protocol=ssh\nhost=blitz.acme.com\n", "", ""},
-		"signed out":         {"get", "protocol=https\nhost=down.acme.com\n", "", "sign in to Blitz"},
-		"store keeps none":   {"store", "protocol=https\nhost=blitz.acme.com\npassword=x\n", "", ""},
-		"erase":              {"erase", "protocol=https\n", "", ""},
-		"something else":     {"list", "", "", "isn't get, store or erase"},
+		// N26 safety-enterprise#23: http only to this computer.
+		"http elsewhere":    {"get", "protocol=http\nhost=blitz.acme.com\n", "", ""},
+		"http to 127.0.0.1": {"get", "protocol=http\nhost=127.0.0.1:8080\n", "username=blitz\npassword=at-1\n", ""},
+		"http to localhost": {"get", "protocol=http\nhost=localhost\n", "username=blitz\npassword=at-1\n", ""},
+		"http to ::1":       {"get", "protocol=http\nhost=[::1]:9000\n", "username=blitz\npassword=at-1\n", ""},
+		"signed out":        {"get", "protocol=https\nhost=down.acme.com\n", "", "sign in to Blitz"},
+		"store keeps none":  {"store", "protocol=https\nhost=blitz.acme.com\npassword=x\n", "", ""},
+		"erase":             {"erase", "protocol=https\n", "", ""},
+		"something else":    {"list", "", "", "isn't get, store or erase"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

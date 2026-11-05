@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,12 +43,33 @@ func TestCompareVersions(t *testing.T) {
 		{"v0.1.0", "v0.1.0-rc.2", 1},
 		{"v0.1.0-rc.2", "v0.1.0-rc.1", 1},
 		{"v1.0.0", "v0.99.99", 1},
+		// N26 safety-enterprise#24: SemVer's order of pre-releases.
+		{"v1.0.0-rc.10", "v1.0.0-rc.9", 1},
+		{"v1.0.0-beta", "v1.0.0-alpha.2", 1},
+		{"v1.0.0-alpha", "v1.0.0-alpha.1", -1},
+		{"v1.0.0-alpha.1", "v1.0.0-alpha.beta", -1},
+		{"v1.0.0-rc.1", "v1.0.0-rc.1", 0},
 	} {
 		t.Run(tt.a+" "+tt.b, func(t *testing.T) {
 			got := Compare(tt.a, tt.b)
 			assert.Equal(t, tt.want, sign(got))
 		})
 	}
+}
+
+// A release server that takes the request and never answers is given up
+// on (N26 safety-enterprise#25).
+func TestStalledServer(t *testing.T) {
+	stop := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-stop }))
+	t.Cleanup(func() { close(stop); srv.Close() })
+	tr := client.Transport.(*http.Transport)
+	old := tr.ResponseHeaderTimeout
+	tr.ResponseHeaderTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { tr.ResponseHeaderTimeout = old })
+	_, err := Source{API: srv.URL}.Latest(context.Background())
+	assert.ErrorContains(t, err, "timeout")
+	assert.ErrorContains(t, Fetch(context.Background(), srv.URL+"/x", filepath.Join(t.TempDir(), "x")), "timeout")
 }
 
 func sign(n int) int {

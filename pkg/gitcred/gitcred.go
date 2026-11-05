@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 )
 
@@ -52,6 +53,19 @@ func Read(in io.Reader) Request {
 // then tries its other helpers, or fails), or an error to say why.
 type Answer func(ctx context.Context, host string) (user, password string, ok bool, err error)
 
+// loopback reports whether host (with a port or not) is this computer.
+func loopback(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // Run is the helper: action is get, store or erase. Only get answers;
 // Blitz keeps nothing Git hands it, since the service renews the token.
 func Run(ctx context.Context, action string, in io.Reader, out io.Writer, answer Answer) error {
@@ -64,7 +78,9 @@ func Run(ctx context.Context, action string, in io.Reader, out io.Writer, answer
 		return fmt.Errorf("git-credential: %q isn't get, store or erase", action)
 	}
 	req := Read(in)
-	if req["protocol"] != "https" && req["protocol"] != "http" {
+	// Over http the token would go in clear: only to this computer, as
+	// the service's address allows (a development service).
+	if req["protocol"] != "https" && (req["protocol"] != "http" || !loopback(req["host"])) {
 		return nil
 	}
 	user, password, ok, err := answer(ctx, req["host"])

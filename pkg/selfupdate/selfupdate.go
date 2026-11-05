@@ -24,6 +24,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bufio"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -32,12 +33,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Source is where releases are: GitHub's API and its downloads.
@@ -59,6 +62,17 @@ func GitHub() Source {
 // File is a release's file's address.
 func (s Source) File(tag, name string) string { return s.Download + "/" + tag + "/" + name }
 
+// client fetches releases: without a deadline from its caller, a stalled
+// connection still ends (connecting, TLS and the answer's start; a
+// download's body takes as long as it takes).
+var client = &http.Client{Transport: func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	t.TLSHandshakeTimeout = 15 * time.Second
+	t.ResponseHeaderTimeout = 30 * time.Second
+	return t
+}()}
+
 // Latest is the latest release's tag (GitHub's latest: no drafts or
 // pre-releases).
 func (s Source) Latest(ctx context.Context) (string, error) {
@@ -67,7 +81,7 @@ func (s Source) Latest(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +116,7 @@ func Fetch(ctx context.Context, url, to string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -335,7 +349,33 @@ func Compare(a, b string) int {
 	case preb == "":
 		return -1
 	}
-	return strings.Compare(prea, preb)
+	return comparePre(prea, preb)
+}
+
+// comparePre compares two pre-releases as SemVer does (§11): dot by dot,
+// numbers as numbers and before words, a shorter one first when the rest
+// is the same (rc.9 before rc.10).
+func comparePre(a, b string) int {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := range min(len(pa), len(pb)) {
+		na, errA := strconv.Atoi(pa[i])
+		nb, errB := strconv.Atoi(pb[i])
+		switch {
+		case errA == nil && errB == nil:
+			if na != nb {
+				return cmp.Compare(na, nb)
+			}
+		case errA == nil:
+			return -1
+		case errB == nil:
+			return 1
+		default:
+			if c := strings.Compare(pa[i], pb[i]); c != 0 {
+				return c
+			}
+		}
+	}
+	return cmp.Compare(len(pa), len(pb))
 }
 
 func splitVersion(v string) ([3]int, string) {
