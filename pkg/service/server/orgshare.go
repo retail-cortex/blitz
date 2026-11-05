@@ -114,6 +114,11 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 	if err != nil {
 		return nil, invalid(err)
 	}
+	if !complete {
+		// What isn't checked isn't sent (EN-66).
+		return nil, apiError(connect.CodeFailedPrecondition, "SECRETS_UNCHECKED", fmt.Errorf(
+			"nothing was shared: its history has more than %d files, too many to check for secrets. Share a copy of the folder without its history (a new repository)", maxShareScan))
+	}
 	if len(found) > 0 {
 		var b strings.Builder
 		for i, f := range found {
@@ -129,9 +134,6 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		return nil, apiError(connect.CodeFailedPrecondition, "SECRETS_FOUND", fmt.Errorf(
 			"nothing was shared: the folder or its history holds what look like secrets: %s. Remove them from the files and the history, or mark a false alarm with %s on its line",
 			b.String(), secretscan.AllowMarker))
-	}
-	if !complete {
-		notes = append(notes, fmt.Sprintf("Its history is long: only its first %d files were checked for secrets.", maxShareScan))
 	}
 	if tree, err := gitText(ctx, dir, "ls-tree", "-r", "-l", "HEAD"); err == nil {
 		for _, line := range strings.Split(tree, "\n") {

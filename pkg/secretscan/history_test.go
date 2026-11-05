@@ -50,9 +50,26 @@ func TestHistory(t *testing.T) {
 	assert.Equal(t, "config.py", found[0].Path)
 	assert.Equal(t, "AWS access key", found[0].Kind)
 
-	_, complete, err = History(context.Background(), dir, "HEAD", 1)
+	// Two versions of config.py and README.md: three files, in folders
+	// that don't count (N26 safety-enterprise#9).
+	_, complete, err = History(context.Background(), dir, "HEAD", 3)
+	require.NoError(t, err)
+	assert.True(t, complete, "the files, not the folders, are counted")
+	_, complete, err = History(context.Background(), dir, "HEAD", 2)
 	require.NoError(t, err)
 	assert.False(t, complete, "more files than it reads")
+
+	// A value first seen as env.txt, then committed as .env, is read as
+	// a settings file.
+	value := "Zq8" + "rT4vL2mN7pX1wK9s"
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "a"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a", "env.txt"), []byte("DB_PASSWORD="+value+"\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_PASSWORD="+value+"\n"), 0o600))
+	git("add", "-A")
+	git("commit", "-q", "-m", "env")
+	found, _, err = History(context.Background(), dir, "HEAD", 100)
+	require.NoError(t, err)
+	assert.Contains(t, found, Finding{Path: ".env", Line: 1, Kind: "secret value", Masked: mask(value)})
 	_, _, err = History(context.Background(), dir, "nope", 10)
 	assert.Error(t, err)
 }

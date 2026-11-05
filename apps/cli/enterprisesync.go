@@ -81,7 +81,7 @@ func syncCmd(cmd *cobra.Command, save bool) error {
 // failedSync is whether a sync's state means the service hasn't got this
 // computer's saves.
 func failedSync(state string) bool {
-	return state == "offline" || state == "signed_out" || state == "refused"
+	return state == "offline" || state == "signed_out" || state == "refused" || state == "secrets"
 }
 
 func printOrgSync(w io.Writer, st client.OrgSync) {
@@ -96,6 +96,8 @@ func printOrgSync(w io.Writer, st client.OrgSync) {
 		fmt.Fprintln(w, "Not saved: signed out (blitz enterprise login)")
 	case "refused":
 		fmt.Fprintln(w, "Not saved: the service refused it")
+	case "secrets":
+		fmt.Fprintln(w, "Not saved: it holds what looks like a secret, so the changes wait on this computer")
 	case "conflicts":
 		fmt.Fprintln(w, "Saved, with both versions of these files kept:")
 		for _, p := range st.Pairs {

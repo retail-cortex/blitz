@@ -159,6 +159,7 @@ const orgSyncIcons: Record<string, string> = {
   signed_out: mdiAccountAlertOutline,
   conflicts: mdiFileCompare,
   refused: mdiCloudAlertOutline,
+  secrets: mdiCloudAlertOutline,
 };
 
 /**
@@ -171,7 +172,7 @@ function OrgSyncItem({ dir, state, onState }: { dir: string; state: GetOrgSyncRe
   const [saving, setSaving] = useState(false);
   const label = state.state === "conflicts" ? tn("desktop.org.sync.conflicts", state.pairs.length) : t(`desktop.org.sync.${state.state}`);
   const detail = [state.error, ...state.pairs.map((p) => t("desktop.org.sync.pair", { shared: p.shared, mine: p.mine }))].filter(Boolean).join("\n");
-  const warn = ["conflicts", "signed_out", "refused"].includes(state.state);
+  const warn = ["conflicts", "signed_out", "refused", "secrets"].includes(state.state);
   const saveNow = async () => {
     setSaving(true);
     try {
@@ -205,7 +206,7 @@ function OrgSyncItem({ dir, state, onState }: { dir: string; state: GetOrgSyncRe
 
 /** Whether a sync's state means the service hasn't got this computer's saves. */
 export function orgSyncFailed(state: string): boolean {
-  return state === "offline" || state === "signed_out" || state === "refused";
+  return state === "offline" || state === "signed_out" || state === "refused" || state === "secrets";
 }
 
 function GitItem({ dir }: { dir: string }) {
