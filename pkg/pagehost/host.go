@@ -183,7 +183,6 @@ func (h Host) methods() map[string]hostMethod {
 			defer cancel()
 			return u.Check(ctx, force), nil
 		}
-		m["UpdateStatus"] = func(context.Context, []json.RawMessage) (any, error) { return u.Status(), nil }
 		m["DownloadUpdate"] = func(ctx context.Context, _ []json.RawMessage) (any, error) {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 			defer cancel()

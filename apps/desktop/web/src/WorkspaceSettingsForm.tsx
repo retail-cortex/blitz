@@ -345,7 +345,7 @@ export function WorkspaceSettingsForm({
                 value={settings?.permissionMode ?? "auto"}
                 onChange={(e) => {
                   const mode = e.target.value;
-                  // Applied, then kept as the workspace's own: it opens in it again (WF-21).
+                  // Applied, then kept as the workspace's own: it opens in it again (spec_005 APR-14).
                   void act(async () => {
                     await workspaces.setPermissionMode({ workspace: dir, mode });
                     await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: mode });

@@ -62,7 +62,7 @@ import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
-import { displayName } from "./prefs";
+import { displayName, openWorkspace, type Prefs } from "./prefs";
 import { byWorkspace, countLabel, flaggedOf, isFlagged, processDetail, stopProcess, useProcesses } from "./processes";
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
@@ -127,10 +127,14 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
 
 /** How often an organization workspace's sync state is asked for. */
 const orgSyncPollMs = 3_000;
+/** How often a workspace that isn't one is asked whether it's become one. */
+const orgSyncIdleMs = 30_000;
 
 /**
  * An organization workspace's sync, while the service keeps it in step
- * (spec_053_enterprise EN-64); undefined for any other workspace.
+ * (spec_053_enterprise EN-64); undefined for any other workspace, which
+ * is asked again only now and then (orgSyncIdleMs: it may be shared
+ * meanwhile), not every few seconds.
  */
 function useOrgSync(dir: string): [GetOrgSyncResponse | undefined, (s: GetOrgSyncResponse) => void] {
   const [state, setState] = useState<GetOrgSyncResponse>();
@@ -138,16 +142,21 @@ function useOrgSync(dir: string): [GetOrgSyncResponse | undefined, (s: GetOrgSyn
     setState(undefined);
     if (!dir) return;
     let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const ask = () =>
-      config.getOrgSync({ workspace: dir }).then(
-        (r) => live && setState(r.state ? r : undefined),
-        () => live && setState(undefined),
-      );
+      config
+        .getOrgSync({ workspace: dir })
+        .then(
+          (r) => (live && setState(r.state ? r : undefined), r.state ? orgSyncPollMs : orgSyncIdleMs),
+          () => (live && setState(undefined), orgSyncPollMs), // the service may be starting
+        )
+        .then((next) => {
+          if (live) timer = setTimeout(() => void ask(), next);
+        });
     void ask();
-    const timer = setInterval(() => void ask(), orgSyncPollMs);
     return () => {
       live = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [dir]);
   return [state, setState];
@@ -178,8 +187,8 @@ function OrgSyncItem({ dir, state, onState }: { dir: string; state: GetOrgSyncRe
     setSaving(true);
     try {
       const r = await config.saveOrgSync({ workspace: dir });
-      onState({ ...state, state: r.state, error: r.error, pairs: r.pairs });
-      snack(r.state === "saved" || r.state === "conflicts" ? t("desktop.org.sync.saved_now") : t(`desktop.org.sync.${r.state}`), { error: orgSyncFailed(r.state) });
+      onState({ ...state, state: r.state, error: r.error, pairs: r.pairs, failed: r.failed });
+      snack(r.state === "saved" || r.state === "conflicts" ? t("desktop.org.sync.saved_now") : t(`desktop.org.sync.${r.state}`), { error: r.failed });
     } catch (e) {
       snack(reason(e) === "GIT_BUSY" ? t("desktop.org.sync.busy") : message(e), { error: reason(e) !== "GIT_BUSY" });
     } finally {
@@ -203,11 +212,6 @@ function OrgSyncItem({ dir, state, onState }: { dir: string; state: GetOrgSyncRe
       items={items}
     />
   );
-}
-
-/** Whether a sync's state means the service hasn't got this computer's saves. */
-export function orgSyncFailed(state: string): boolean {
-  return state === "offline" || state === "signed_out" || state === "refused" || state === "secrets";
 }
 
 function GitItem({ dir }: { dir: string }) {
@@ -297,7 +301,7 @@ function RunsItem() {
 // EN-43): a count, and a menu of what each asks to do with Approve and
 // Deny; each new one notifies, as an agent waiting does.
 function ApprovalsItem({ dir }: { dir: string }) {
-  const { prefs } = useApp();
+  const { prefs, update } = useApp();
   const snack = useSnackbar();
   const { runs, reload } = useServiceApprovals();
   const seen = useRef<Set<string> | null>(null);
@@ -328,7 +332,7 @@ function ApprovalsItem({ dir }: { dir: string }) {
       label: g.jobName,
       detail: [t("desktop.approvals.asks", { tool: g.run?.pending?.tool ?? "", detail: g.run?.pending?.detail ?? "" }), displayName(prefs.workspaces.find((w) => w.dir === g.dir) ?? { dir: g.dir })].join(" · "),
       icon: mdiCloudOutline,
-      onSelect: () => (g.dir === dir ? showView({ dir, view: "workers", worker: g.jobName }) : undefined),
+      onSelect: () => openServiceJob(g, dir, update),
       actions: [
         { icon: mdiCheck, label: t("desktop.approvals.approve"), removes: true, onSelect: () => void answer(g, true) },
         { icon: mdiClose, label: t("desktop.approvals.deny"), removes: true, onSelect: () => void answer(g, false) },
@@ -350,6 +354,17 @@ function ApprovalsItem({ dir }: { dir: string }) {
   );
 }
 
+/**
+ * Opens a service run's job in its workspace's Jobs view (spec_053 EN-42):
+ * another workspace is opened and brought forward first, the view waiting
+ * for it (showView keeps it until the workspace takes it).
+ */
+function openServiceJob(g: GoingServiceRun, dir: string, update: (f: (p: Prefs) => Prefs) => void) {
+  const where = g.dir || dir;
+  if (where !== dir) update((p) => openWorkspace(p, where));
+  showView({ dir: where, view: "workers", worker: g.jobName });
+}
+
 // Workflows' human tasks waiting, in any workspace: opens the tasks dialog.
 function TasksItem() {
   const { tasks } = useTasks();
@@ -369,7 +384,7 @@ function TasksItem() {
 // text. It opens a menu of them by workspace, each with what it uses and
 // Stop; a pick, or Output and details, opens the drawer on its output.
 function ProcessesItem({ dir }: { dir: string }) {
-  const { prefs } = useApp();
+  const { prefs, update } = useApp();
   const snack = useSnackbar();
   const { list, receivedAt } = useProcesses();
   const [confirm, setConfirm] = useState(false);
@@ -392,7 +407,7 @@ function ProcessesItem({ dir }: { dir: string }) {
           label: g.jobName,
           detail: [displayName(prefs.workspaces.find((w) => w.dir === g.dir) ?? { dir: g.dir }), t(`desktop.service_job.status.${g.run?.status}`), took(ms(g.run?.created), now)].join(" · "),
           icon: mdiCloudOutline,
-          onSelect: () => (g.dir === dir ? showView({ dir, view: "workers", worker: g.jobName }) : open()),
+          onSelect: () => openServiceJob(g, dir, update),
         })),
       ]
     : [];
@@ -413,7 +428,7 @@ function ProcessesItem({ dir }: { dir: string }) {
         ...service,
         "divider",
         ...(flagged.length > 0
-          ? [{ label: `${t("desktop.processes.stop_flagged")} (${flagged.length})`, icon: mdiStopCircleOutline, danger: true, onSelect: () => setConfirm(true) }]
+          ? [{ label: tn("desktop.processes.stop_flagged_count", flagged.length), icon: mdiStopCircleOutline, danger: true, onSelect: () => setConfirm(true) }]
           : []),
         { label: t("desktop.processes.details"), icon: mdiTextBoxOutline, onSelect: () => open() },
       ];

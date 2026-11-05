@@ -55,6 +55,18 @@ const (
 	Secrets = "secrets"
 )
 
+// Failed is whether a sync's state means the service hasn't got this
+// computer's saves: Offline, SignedOut, Refused or Secrets. The service
+// says so with the state (GetOrgSync's failed), so the clients needn't
+// keep their own list.
+func Failed(state string) bool {
+	switch state {
+	case Offline, SignedOut, Refused, Secrets:
+		return true
+	}
+	return false
+}
+
 // refusals are what Git says when the remote was reached and turned a
 // push down (beside a push behind others', which sync takes first).
 var refusals = []string{"remote unpack failed", "remote rejected", "remote failure", "pre-receive hook declined", "protected branch"}

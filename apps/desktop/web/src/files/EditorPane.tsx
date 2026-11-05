@@ -23,6 +23,7 @@ import { message } from "../errors";
 import { addToContext, findInFileEvent, openFile, openWeb, showHistory } from "../events";
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
+import { formatBytes } from "../bytes";
 import { t, tn } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { Preview } from "./Preview";
@@ -520,8 +521,8 @@ export function EditorPane({
           </div>
         )}
         {showPreview && !showVisual && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={previewText} line={atLine ? model.target?.line : undefined} find={found} onFound={model.clearTarget} />}
-        {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
-        {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
+        {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatBytes(tab.size) })}</p>}
+        {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatBytes(tab.size) })}</p>}
       </div>
       {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} items={tabMenuItems(tabMenu.path)} onClose={() => setTabMenu(null)} />}
       {closing && (
@@ -646,13 +647,6 @@ export function UnsavedDialog({ names, count, onSave, onDiscard, onCancel }: { n
       <p>{count ? tn("desktop.files.unsaved_workspace", count, { name: names.join(", ") }) : t("desktop.files.unsaved_body", { names: names.join(", ") })}</p>
     </Dialog>
   );
-}
-
-/** A size in bytes for people: B, kB or MB. */
-export function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /** Why a file has no language server's help, for the status bar ("" when it has). */

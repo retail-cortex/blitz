@@ -104,7 +104,6 @@ type AppMethods = {
   PrintPDF(html: string, pageSize: string): Promise<string>;
   Used(): Promise<void>;
   CheckUpdate(force?: boolean): Promise<UpdateStatus>;
-  UpdateStatus(): Promise<UpdateStatus>;
   DownloadUpdate(): Promise<UpdateStatus>;
   ApplyUpdate(): Promise<void>;
   Quit(): Promise<void>;
@@ -535,8 +534,6 @@ export const canUpdate = () => canCall("CheckUpdate");
  * after it last did, unless force (Check now).
  */
 export const checkUpdate = (force = false) => app().CheckUpdate(force);
-/** Where the update is, without asking for the latest release again (a download, followed). */
-export const updateStatus = () => app().UpdateStatus();
 /** Downloads, checks and unpacks the latest release; resolves when it's done. */
 export const downloadUpdate = () => app().DownloadUpdate();
 /**

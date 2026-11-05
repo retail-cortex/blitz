@@ -1112,6 +1112,7 @@ func TestShareWithOrganization(t *testing.T) {
 	saved, err := c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: notes}))
 	require.NoError(t, err)
 	assert.Equal(t, "saved", saved.Msg.State)
+	assert.False(t, saved.Msg.Failed)
 	assert.Equal(t, git(notes, "rev-parse", "HEAD"), git(bare, "rev-parse", "main"), "on the service's main")
 	_, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: t.TempDir()}))
 	_, info = errorReason(t, err)

@@ -93,7 +93,6 @@ func TestUpdater(t *testing.T) {
 	assert.ErrorIs(t, u.Apply(), ErrNotReady)
 
 	assert.True(t, u.Download(ctx).Ready, "the download is waited for")
-	assert.True(t, u.Status().Ready)
 	assert.True(t, u.Download(ctx).Ready, "downloaded once")
 
 	require.NoError(t, u.Apply())
@@ -165,8 +164,6 @@ func TestHostUpdateCalls(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code)
 	require.NoError(t, json.Unmarshal(body, &s))
 	assert.True(t, s.Ready, "the call returns when it's downloaded")
-	code, body = call(t, h, "UpdateStatus")
-	assert.Equal(t, http.StatusOK, code, string(body))
 	code, _ = call(t, h, "CheckUpdate", true)
 	assert.Equal(t, http.StatusOK, code)
 	code, _ = call(t, h, "CheckUpdate", "yes")

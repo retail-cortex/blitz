@@ -143,15 +143,6 @@ func (u *Updater) Check(ctx context.Context, force bool) UpdateStatus {
 	return s
 }
 
-// Status is where the update is, without asking for the latest release
-// (as Check last found it): for following a download.
-func (u *Updater) Status() UpdateStatus {
-	_, why := u.install()
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.statusLocked(why)
-}
-
 // statusLocked is the status now (u.mu held).
 func (u *Updater) statusLocked(why cannot) UpdateStatus {
 	s := UpdateStatus{Current: u.Version, Latest: u.latest, Can: why.Text == "", Reason: why.Text, ReasonKey: why.Key, Downloading: u.downloading, Error: u.err}

@@ -26,10 +26,12 @@ import (
 // State is saved, saving, offline, signed_out, conflicts or refused ("" when
 // no sync keeps the workspace in step); Error is why it's offline, signed
 // out or refused, in Git's words; Pairs are the files with both versions
-// kept (the shared one, this person's).
+// kept (the shared one, this person's); Failed is whether the service
+// hasn't got this computer's saves, as the service says.
 type OrgSync struct {
 	State, Error string
 	Pairs        [][2]string
+	Failed       bool
 }
 
 // OrgSync is the sync of the workspace at dir.
@@ -38,7 +40,7 @@ func (s *Settings) OrgSync(ctx context.Context, dir string) (OrgSync, error) {
 	if err != nil {
 		return OrgSync{}, fromAPI(err)
 	}
-	return orgSync(res.Msg.GetState(), res.Msg.GetError(), res.Msg.GetPairs()), nil
+	return orgSync(res.Msg.GetState(), res.Msg.GetError(), res.Msg.GetPairs(), res.Msg.GetFailed()), nil
 }
 
 // SaveOrgSync saves the workspace at dir's changes and sends what waits
@@ -48,11 +50,11 @@ func (s *Settings) SaveOrgSync(ctx context.Context, dir string) (OrgSync, error)
 	if err != nil {
 		return OrgSync{}, fromAPI(err)
 	}
-	return orgSync(res.Msg.GetState(), res.Msg.GetError(), res.Msg.GetPairs()), nil
+	return orgSync(res.Msg.GetState(), res.Msg.GetError(), res.Msg.GetPairs(), res.Msg.GetFailed()), nil
 }
 
-func orgSync(state, why string, pairs []*pb.OrgSyncPair) OrgSync {
-	out := OrgSync{State: state, Error: why}
+func orgSync(state, why string, pairs []*pb.OrgSyncPair, failed bool) OrgSync {
+	out := OrgSync{State: state, Error: why, Failed: failed}
 	for _, p := range pairs {
 		out.Pairs = append(out.Pairs, [2]string{p.GetShared(), p.GetMine()})
 	}

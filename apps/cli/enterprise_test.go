@@ -580,24 +580,22 @@ func TestMissingText(t *testing.T) {
 // How a sync stands, in words: never Git's alone.
 func TestPrintOrgSync(t *testing.T) {
 	for _, tt := range []struct {
-		st     client.OrgSync
-		want   string
-		failed bool
+		st   client.OrgSync
+		want string
 	}{
-		{client.OrgSync{State: "saved"}, "✓ Saved: the service has everything\n", false},
-		{client.OrgSync{State: "saving"}, "Saving…\n", false},
-		{client.OrgSync{State: "offline", Error: "could not resolve host"}, "Not saved: the service can't be reached, so the changes wait on this computer\n  could not resolve host\n", true},
-		{client.OrgSync{State: "signed_out"}, "Not saved: signed out (blitz enterprise login)\n", true},
-		{client.OrgSync{State: "refused", Error: "remote unpack failed"}, "Not saved: the service refused it\n  remote unpack failed\n", true},
-		{client.OrgSync{State: "secrets", Error: ".env:1 (AWS access key AKIA••••)"}, "Not saved: it holds what looks like a secret, so the changes wait on this computer\n  .env:1 (AWS access key AKIA••••)\n", true},
-		{client.OrgSync{State: "conflicts", Pairs: [][2]string{{"plan.md", "plan (conflict, Ana).md"}}}, "Saved, with both versions of these files kept:\n  plan.md (yours: plan (conflict, Ana).md)\n", false},
-		{client.OrgSync{State: "later"}, "later\n", false},
+		{client.OrgSync{State: "saved"}, "✓ Saved: the service has everything\n"},
+		{client.OrgSync{State: "saving"}, "Saving…\n"},
+		{client.OrgSync{State: "offline", Error: "could not resolve host"}, "Not saved: the service can't be reached, so the changes wait on this computer\n  could not resolve host\n"},
+		{client.OrgSync{State: "signed_out"}, "Not saved: signed out (blitz enterprise login)\n"},
+		{client.OrgSync{State: "refused", Error: "remote unpack failed"}, "Not saved: the service refused it\n  remote unpack failed\n"},
+		{client.OrgSync{State: "secrets", Error: ".env:1 (AWS access key AKIA••••)"}, "Not saved: it holds what looks like a secret, so the changes wait on this computer\n  .env:1 (AWS access key AKIA••••)\n"},
+		{client.OrgSync{State: "conflicts", Pairs: [][2]string{{"plan.md", "plan (conflict, Ana).md"}}}, "Saved, with both versions of these files kept:\n  plan.md (yours: plan (conflict, Ana).md)\n"},
+		{client.OrgSync{State: "later"}, "later\n"},
 	} {
 		t.Run(tt.st.State, func(t *testing.T) {
 			var b strings.Builder
 			printOrgSync(&b, tt.st)
 			assert.Equal(t, tt.want, b.String())
-			assert.Equal(t, tt.failed, failedSync(tt.st.State))
 		})
 	}
 }

@@ -253,7 +253,7 @@ func (h configService) GetOrgSync(_ context.Context, r req[pb.GetOrgSyncRequest]
 		return ok(&pb.GetOrgSyncResponse{})
 	}
 	state, why, pairs := syncMsg(sy.State())
-	return ok(&pb.GetOrgSyncResponse{State: state, Error: why, Pairs: pairs})
+	return ok(&pb.GetOrgSyncResponse{State: state, Error: why, Pairs: pairs, Failed: orgsync.Failed(state)})
 }
 
 func (h configService) SaveOrgSync(ctx context.Context, r req[pb.SaveOrgSyncRequest]) (*connect.Response[pb.SaveOrgSyncResponse], error) {
@@ -271,7 +271,7 @@ func (h configService) SaveOrgSync(ctx context.Context, r req[pb.SaveOrgSyncRequ
 		return nil, err
 	}
 	state, why, pairs := syncMsg(st)
-	return ok(&pb.SaveOrgSyncResponse{State: state, Error: why, Pairs: pairs})
+	return ok(&pb.SaveOrgSyncResponse{State: state, Error: why, Pairs: pairs, Failed: orgsync.Failed(state)})
 }
 
 // syncMsg is a sync's state for the window: why it isn't saved, in Git's

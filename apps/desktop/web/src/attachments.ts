@@ -17,8 +17,10 @@
 // Files attached to the next prompt: pasted, dropped or chosen, uploaded
 // to the service at once (AddImage), sent with the turn by ID. Which files
 // can be is the active agent's model's to say (GetSettings
-// accepted_media): the picker, paste and drop offer only those.
-import { language, t, tn } from "./i18n";
+// accepted_media): the picker offers only those, and paste and drop
+// refuse the others, saying why (rejectReason).
+import { formatBytes } from "./bytes";
+import { t, tn } from "./i18n";
 
 /** The largest file the window uploads: what fits a service request (larger ones attach from the workspace). */
 export const maxUploadBytes = 30 << 20;
@@ -81,15 +83,10 @@ export function acceptAttribute(list: Accepted[]): string {
   return [...new Set(list.flatMap((a) => [...a.extensions, ...a.mimeTypes]))].join(",");
 }
 
-/** The files among files the model takes (paste and drop carry others too). */
-export function attachableFiles(files: Iterable<File> | ArrayLike<File> | null | undefined, list: Accepted[]): File[] {
-  return Array.from(files ?? []).filter((f) => !!acceptedAs(list, f));
-}
-
 /** Why a file can't be attached ("" if it can): a type the model doesn't take, or too large. */
 export function rejectReason(f: Pick<File, "type" | "size" | "name">, list: Accepted[], model: string): string {
   const a = acceptedAs(list, f);
-  if (!a) return t("desktop.attach.unsupported", { name: f.name, model: model || "this model" });
+  if (!a) return t("desktop.attach.unsupported", { name: f.name, model: model || t("desktop.attach.this_model") });
   const limit = Math.min(Number(a.maxBytes), maxUploadBytes);
   if (f.size > limit) return f.size > maxUploadBytes && Number(a.maxBytes) > maxUploadBytes ? t("desktop.attach.from_workspace", { name: f.name }) : t("desktop.attach.too_large", { name: f.name, size: Math.round(limit / (1 << 20)) });
   return "";
@@ -105,9 +102,7 @@ export function clock(seconds: number): string {
 
 /** A short description of an uploaded file: dimensions, pages or length, and size. */
 export function describeImage(i: { width: number; height: number; size: bigint | number; resized: boolean; mimeType?: string; pages?: number; kind?: string; seconds?: number }): string {
-  const bytes = Number(i.size);
-  const fmt = (n: number, digits: number) => n.toLocaleString(language(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const size = bytes >= 1 << 20 ? t("desktop.attach.mb", { size: fmt(bytes / (1 << 20), 1) }) : t("desktop.attach.kb", { size: fmt(Math.max(1, Math.round(bytes / 1024)), 0) });
+  const size = formatBytes(i.size);
   if (i.mimeType === pdf) return `${tn("desktop.attach.pages", i.pages ?? 0)} · ${size}`;
   if (i.kind === "audio" || i.kind === "video") return i.seconds ? `${clock(i.seconds)} · ${size}` : size;
   if (i.kind === "text" || !i.width) return size;

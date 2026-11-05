@@ -115,7 +115,7 @@ export function TasksApp() {
  * the tasks, with Later (closing it) and Open Blitz; it closes when the
  * last one is answered.
  */
-export function TasksWindow() {
+function TasksWindow() {
   const { tasks } = useTasks();
   const close = () => window.close();
   // After the last answer, long enough to read that it was sent.

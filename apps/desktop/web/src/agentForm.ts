@@ -77,8 +77,8 @@ export const newAgentForm: AgentForm = { ...emptyAgentForm, tools: starterTools 
 /** A field the form can find wrong. */
 export type AgentField = "name" | "description" | "defaultModel" | "maxTurns" | "temperature" | "topP" | "maxTokens" | "thinkingBudget";
 
-/** Whether a name can be an agent's (as the service checks it). */
-export const validAgentName = (name: string) => /^[a-z0-9][a-z0-9_-]*$/.test(name);
+/** Whether a name can be an agent's (as the service checks it: agents.ValidName, up to 64 characters). */
+export const validAgentName = (name: string) => /^[a-z0-9][a-z0-9_-]{0,63}$/.test(name);
 
 const text = (n: number | undefined) => (n === undefined ? "" : String(n));
 

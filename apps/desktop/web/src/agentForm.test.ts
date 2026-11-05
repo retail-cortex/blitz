@@ -31,6 +31,8 @@ describe("the agent form", () => {
     ["-lead", false],
     ["two words", false],
     ["a/b", false],
+    ["a".repeat(64), true],
+    ["a".repeat(65), false],
   ])("checks the name %j", (name, ok) => {
     expect(validAgentName(name)).toBe(ok);
   });

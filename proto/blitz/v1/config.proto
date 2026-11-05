@@ -1524,6 +1524,9 @@ message GetOrgSyncResponse {
   repeated OrgSyncPair pairs = 2;
   // Why it's offline or refused, in Git's words ("" otherwise).
   string error = 3;
+  // Whether the service hasn't got this computer's saves (offline,
+  // signed_out, refused or secrets).
+  bool failed = 4;
 }
 
 // Request message for ConfigService.TakeServiceRun.
@@ -1551,6 +1554,9 @@ message SaveOrgSyncResponse {
   repeated OrgSyncPair pairs = 2;
   // Why it's offline or refused, in Git's words ("" otherwise).
   string error = 3;
+  // Whether the service hasn't got this computer's saves (offline,
+  // signed_out, refused or secrets).
+  bool failed = 4;
 }
 
 // A job the organization's service runs.

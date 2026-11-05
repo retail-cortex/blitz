@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/orgsync"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -44,7 +45,7 @@ func (f *fakeSync) GetOrgSync(context.Context, *connect.Request[pb.GetOrgSyncReq
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
-	out := &pb.GetOrgSyncResponse{State: f.state}
+	out := &pb.GetOrgSyncResponse{State: f.state, Failed: orgsync.Failed(f.state)}
 	if f.state == "conflicts" {
 		out.Pairs = []*pb.OrgSyncPair{{Shared: "plan.md", Mine: "plan (conflict, Ana).md"}}
 	} else {

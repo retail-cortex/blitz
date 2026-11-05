@@ -19,14 +19,22 @@
 
 import { useSyncExternalStore } from "react";
 import { sessions } from "./api";
+import { t } from "./i18n";
 import type { BackgroundRun } from "./gen/blitz/v1/session_pb";
 
-/** How often the runs are asked for while something shows them. */
+/** How often the runs are asked for while something shows them and one goes on. */
 const pollMs = 4000;
+/** How often while none goes on (one started here is asked for at once, with refreshRuns). */
+const idlePollMs = 20000;
+
+/** How long until the runs are asked for again: soon while one goes on, less often while none does. */
+export function nextPoll(list: Pick<BackgroundRun, "state">[]): number {
+  return list.some(isActive) ? pollMs : idlePollMs;
+}
 
 let runs: BackgroundRun[] = [];
 const listeners = new Set<() => void>();
-let timer: ReturnType<typeof setInterval> | undefined;
+let timer: ReturnType<typeof setTimeout> | undefined;
 
 /** Asks for the runs now (after starting or stopping one, say). */
 export async function refreshRuns() {
@@ -38,15 +46,19 @@ export async function refreshRuns() {
   for (const f of listeners) f();
 }
 
+// Asks, then asks again after nextPoll while anything listens.
+async function poll() {
+  await refreshRuns();
+  clearTimeout(timer);
+  if (listeners.size > 0) timer = setTimeout(poll, nextPoll(runs));
+}
+
 function subscribe(f: () => void) {
   listeners.add(f);
-  if (listeners.size === 1) {
-    refreshRuns();
-    timer = setInterval(refreshRuns, pollMs);
-  }
+  if (listeners.size === 1) void poll();
   return () => {
     listeners.delete(f);
-    if (listeners.size === 0) clearInterval(timer);
+    if (listeners.size === 0) clearTimeout(timer);
   };
 }
 
@@ -71,10 +83,10 @@ export function runInSession(list: BackgroundRun[], sessionId: string): Backgrou
   return list.find((r) => r.sessionId === sessionId && isActive(r));
 }
 
-/** How long a run has gone on (or went on), as 1h 5m, 3m 20s or 12s. */
+/** How long a run has gone on (or went on), as 1h 5m, 3m 20s or 12s (in the page's language). */
 export function runAge(started: Date, ended: Date | undefined, now: Date): string {
   const s = Math.max(0, Math.round(((ended ?? now).getTime() - started.getTime()) / 1000));
-  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-  if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`;
-  return `${s}s`;
+  if (s >= 3600) return t("desktop.inbox.age.hours", { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) });
+  if (s >= 60) return t("desktop.inbox.age.minutes", { m: Math.floor(s / 60), s: s % 60 });
+  return t("desktop.inbox.age.seconds", { s });
 }

@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { firstPage, lastPlace, savePlace } from "./place";
+import { firstPage, keepScroll, lastPlace, savePlace } from "./place";
 
 // A stand-in for the window's storage.
 function memory(): Storage {
@@ -45,5 +45,13 @@ describe("where the guide was left", () => {
     const refusing = { setItem: () => { throw new Error("quota"); } };
     expect(() => savePlace({ page: "guide" }, refusing)).not.toThrow();
     expect(lastPlace({ getItem: () => { throw new Error("denied"); } })).toEqual({ page: firstPage });
+  });
+});
+
+describe("keepScroll", () => {
+  it("keeps how far down the place left was, and nothing else", () => {
+    const h = [{ page: "guide" }, { page: "guide/workers", anchor: "your-first-job" }];
+    expect(keepScroll(h, 1, 420)).toEqual([{ page: "guide" }, { page: "guide/workers", anchor: "your-first-job", scroll: 420 }]);
+    expect(h[1]).not.toHaveProperty("scroll");
   });
 });

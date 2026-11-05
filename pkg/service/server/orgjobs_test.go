@@ -466,10 +466,12 @@ func TestSaveOrgSyncRefusals(t *testing.T) {
 		return err == nil
 	}, 5*time.Second, 20*time.Millisecond)
 	assert.Equal(t, "offline", saved.Msg.State)
+	assert.True(t, saved.Msg.Failed, "the service says it hasn't got the saves")
 	assert.NotEmpty(t, saved.Msg.Error, "Git's words")
 	st, err := c.GetOrgSync(ctx, connect.NewRequest(&pb.GetOrgSyncRequest{Workspace: repo}))
 	require.NoError(t, err)
 	assert.Equal(t, "offline", st.Msg.State)
+	assert.True(t, st.Msg.Failed)
 
 	_, err = c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: "relative/nowhere\x00"}))
 	_, info := errorReason(t, err)

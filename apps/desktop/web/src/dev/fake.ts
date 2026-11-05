@@ -2779,11 +2779,11 @@ export function installFake() {
             ? fakeParam("conflict")
               ? { state: "conflicts", pairs: [{ shared: "plan.md", mine: "plan (conflict, Ana).md" }] }
               : fakeParam("refused")
-                ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" }
+                ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found", failed: true }
                 : { state: "saved", pairs: [] }
             : { state: "", pairs: [] },
         // Save now: the refused one stays refused, as the dev service did.
-        saveOrgSync: () => (fakeParam("refused") ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found" } : { state: "saved", pairs: [] }),
+        saveOrgSync: () => (fakeParam("refused") ? { state: "refused", pairs: [], error: "exit status 1: error: remote unpack failed: reference delta not found", failed: true } : { state: "saved", pairs: [] }),
         enterpriseSignOut: () => {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };
