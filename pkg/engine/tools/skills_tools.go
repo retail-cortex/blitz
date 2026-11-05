@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -141,7 +142,7 @@ func skillAssets(skill *skills.Skill) []SkillAsset {
 			Content: textutil.Ellipsize(r.InlineContent, assetTextLimit)}
 		if st := r.Storage; st != nil {
 			a.SizeBytes = st.SizeBytes
-			a.MimeType = cmpOr(a.MimeType, st.MimeType)
+			a.MimeType = cmp.Or(a.MimeType, st.MimeType)
 			a.URL = st.PublicURL
 			if a.URL == "" && st.GCSURI != "" {
 				a.URL, _ = skills.StorageURL(st.GCSURI)

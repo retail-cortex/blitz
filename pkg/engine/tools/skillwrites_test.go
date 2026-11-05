@@ -66,7 +66,7 @@ func writerFixture(t *testing.T, d api.Decision) (string, *SkillScripts, *Checkp
 	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir, BlockedPaths: config.DefaultBlockedPaths})
 	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
-	cps := NewCheckpoints(ws, 0)
+	cps := newTestCheckpoints(ws, 0)
 	hooks, reqs := decisionHooks(d)
 	policy := config.DefaultConfig().Skills.Policy
 	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),

@@ -293,7 +293,8 @@ func TestMCPElicitationKinds(t *testing.T) {
 				asked = append(asked, q)
 				return tt.answer, tt.askErr
 			}}
-			s := &mcpServer{cfg: config.MCPServerConfig{Name: "srv"}, call: context.Background()}
+			s := &mcpServer{cfg: config.MCPServerConfig{Name: "srv"}}
+			defer s.startCall(context.Background())()
 			res, err := m.elicit(s, &mcp.ElicitRequest{Params: tt.params})
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAction, res.Action)

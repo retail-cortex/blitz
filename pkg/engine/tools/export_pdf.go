@@ -49,12 +49,6 @@ type ExportOutput struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// ExportPDFInput and ExportPDFOutput are export_pdf's input and output.
-type (
-	ExportPDFInput  = ExportInput
-	ExportPDFOutput = ExportOutput
-)
-
 // maxExportImage bounds an image a document may include.
 const maxExportImage = 20 << 20
 

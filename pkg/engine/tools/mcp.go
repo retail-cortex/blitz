@@ -33,6 +33,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/mcpauth"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/agent"
@@ -71,7 +72,8 @@ type mcpServer struct {
 	sessionMu sync.Mutex
 	session   *mcp.ClientSession // the live session, as the client last used it
 	callMu    sync.Mutex
-	call      context.Context // the tool call in progress, for elicitation
+	calls     map[int]context.Context // the tool calls in progress, for elicitation
+	callSeq   int
 
 	stateMu sync.Mutex
 	listed  bool   // its tools were listed at least once
@@ -804,15 +806,7 @@ func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, p.srv.callTimeout())
 	defer cancel()
-	p.srv.callMu.Lock()
-	prev := p.srv.call
-	p.srv.call = ctx
-	p.srv.callMu.Unlock()
-	defer func() {
-		p.srv.callMu.Lock()
-		p.srv.call = prev
-		p.srv.callMu.Unlock()
-	}()
+	defer p.srv.startCall(ctx)()
 	res, err := p.inner.Run(toolWith{ctx, cctx}, args)
 	switch {
 	case err == nil:
@@ -849,25 +843,28 @@ func (m *MCPManager) recordFailure(ctx context.Context, s *mcpServer, err error)
 	slog.WarnContext(ctx, "mcp server call failed", "server", s.cfg.Name, "error", err)
 	switch streak, opened, cooldown := s.health.Failure(); {
 	case opened:
-		m.tell(ctx, fmt.Sprintf("mcp server %q keeps failing; its tools are paused for %s", s.cfg.Name, cooldown))
+		m.tell(ctx, fmt.Sprintf("mcp server %q keeps failing; its tools are paused for %s", s.cfg.Name, cooldown),
+			i18n.T("tools.mcp.paused", "server", s.cfg.Name, "wait", cooldown.String()))
 	case streak == 1:
-		m.tell(ctx, fmt.Sprintf("mcp server %q unavailable: %v", s.cfg.Name, err))
+		m.tell(ctx, fmt.Sprintf("mcp server %q unavailable: %v", s.cfg.Name, err),
+			i18n.T("tools.mcp.unavailable", "server", s.cfg.Name, "error", err.Error()))
 	}
 }
 
 func (m *MCPManager) recordSuccess(ctx context.Context, s *mcpServer) {
 	if s.health.Success() {
 		slog.InfoContext(ctx, "mcp server recovered", "server", s.cfg.Name)
-		m.tell(ctx, fmt.Sprintf("mcp server %q is available again", s.cfg.Name))
+		m.tell(ctx, fmt.Sprintf("mcp server %q is available again", s.cfg.Name), i18n.T("tools.mcp.available", "server", s.cfg.Name))
 	}
 }
 
 // tell says msg to the workspace's warnings (the service's log) and, in a
-// turn, to the conversation, so the person using it sees why a tool went.
-func (m *MCPManager) tell(ctx context.Context, msg string) {
+// turn, says shown (msg in the person's language) to the conversation, so
+// the person using it sees why a tool went.
+func (m *MCPManager) tell(ctx context.Context, msg, shown string) {
 	m.Warn(msg)
 	if f := turnNotices(ctx); f != nil {
-		f(msg)
+		f(shown)
 	}
 }
 

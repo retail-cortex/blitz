@@ -365,10 +365,11 @@ func TestMCPHealthToldInTheTurn(t *testing.T) {
 	}
 	m.recordSuccess(ctx, srv)
 	require.Len(t, said, 3, "%v", said)
-	assert.Contains(t, said[0], `mcp server "gh" unavailable: down`)
+	assert.Contains(t, said[0], `The MCP server "gh" is unavailable: down`)
 	assert.Contains(t, said[1], "keeps failing")
 	assert.Contains(t, said[2], "available again")
-	assert.Equal(t, said, warned, "the log hears the same")
+	require.Len(t, warned, 3, "the log hears the same, in English")
+	assert.Contains(t, warned[0], `mcp server "gh" unavailable: down`)
 	// Outside a turn: the log only.
 	m.recordFailure(context.Background(), srv, errors.New("down again"))
 	assert.Len(t, said, 3)

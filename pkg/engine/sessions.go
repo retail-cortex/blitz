@@ -219,6 +219,7 @@ func (w *Workspace) DeleteSession(ctx context.Context, id string) error {
 	}
 	w.engine.ForgetSession(ctx, id)
 	w.tools.Processes().SessionGone(id) // what it started was left running
+	w.tools.SessionGone(id)             // its chat's answers about pages
 	return nil
 }
 

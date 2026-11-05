@@ -22,6 +22,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHarnessEvidenceTool(t *testing.T) {
@@ -129,6 +130,7 @@ func TestSaveGlobalExperienceTool(t *testing.T) {
 		off     bool
 		entry   string
 		fail    error
+		decline bool
 		want    string
 		wantErr string
 	}{
@@ -138,10 +140,16 @@ func TestSaveGlobalExperienceTool(t *testing.T) {
 		{name: "two lines", ctx: context.Background(), entry: "a\nb", wantErr: "one line"},
 		{name: "off", ctx: context.Background(), off: true, entry: "x", wantErr: "isn't available"},
 		{name: "the save fails", ctx: context.Background(), entry: "x", fail: errors.New("read-only"), wantErr: "read-only"},
+		{name: "the user declines", ctx: context.Background(), entry: "x", decline: true, wantErr: "declined"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &Registry{}
+			d := api.DecisionOnce
+			if tt.decline {
+				d = api.DecisionDeny
+			}
+			hooks, reqs := decisionHooks(d)
+			r := &Registry{hooks: hooks}
 			var saved string
 			if !tt.off {
 				r.SetGlobalExperienceSaver(func(_ context.Context, entry string) (string, error) {
@@ -152,9 +160,15 @@ func TestSaveGlobalExperienceTool(t *testing.T) {
 			out := runToolCtx(t, tt.ctx, toolOf(t)(NewSaveGlobalExperienceTool(r)), map[string]any{"entry": tt.entry})
 			if tt.wantErr != "" {
 				assert.Contains(t, errOf(out), tt.wantErr)
+				if tt.decline {
+					assert.Empty(t, saved, "nothing saved without a yes")
+				}
 				return
 			}
 			assert.Empty(t, errOf(out))
+			require.Len(t, *reqs, 1, "the person approves the entry (N26 engine-tools-1#22)")
+			assert.True(t, (*reqs)[0].MustAsk)
+			assert.Contains(t, (*reqs)[0].Detail, tt.want)
 			assert.Equal(t, tt.want, saved)
 			assert.Equal(t, "/home/me/.blitz/BLITZ.md", out["path"])
 		})

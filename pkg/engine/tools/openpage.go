@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -41,13 +43,6 @@ const (
 // (PageEmbedded) or the system's browser (PageSystem); an error when no
 // window is watching the workspace.
 type PageOpener func(ctx context.Context, url, where string) error
-
-// openAsk is the question browser.open "ask" puts, and its answers.
-const (
-	openAsk      = "Open %s in Blitz's embedded browser or your system browser?"
-	openEmbedded = "Embedded browser"
-	openSystem   = "System browser"
-)
 
 // openSystemBrowser opens u in the system's browser on this machine
 // (replaced in tests).
@@ -101,6 +96,9 @@ func NewOpenPageTool(r *Registry) (tool.Tool, error) {
 			if err != nil {
 				return OpenPageOutput{Error: err.Error()}, nil
 			}
+			if err := r.askRulePage(ctx, u); err != nil {
+				return OpenPageOutput{URL: u, Error: err.Error()}, nil
+			}
 			where, err := r.openPage(ctx, u)
 			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
@@ -138,6 +136,37 @@ func (r *Registry) pageURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
+// askRulePage puts u to the person when an ask web(…) rule names its
+// host: open_page otherwise needs no approval (AB-10), but an ask rule is
+// the person saying they want to see it.
+func (r *Registry) askRulePage(ctx context.Context, u string) error {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if effect, _ := r.rules.Decide(RuleWeb, []string{host}); effect != EffectAsk {
+		return nil
+	}
+	return r.hooks.Approve(ctx, api.ApprovalRequest{
+		Tool: "open_page", Kind: api.ActionNetwork, Detail: "open " + u + " in a browser",
+		Targets: []string{host}, MustAsk: true,
+	})
+}
+
+// SessionGone forgets what session's chat answered about pages and the
+// browser, once the session is deleted.
+func (r *Registry) SessionGone(session string) {
+	r.page.mu.Lock()
+	delete(r.page.where, session)
+	r.page.mu.Unlock()
+	if r.browser != nil {
+		r.browser.actMu.Lock()
+		delete(r.browser.shows, session)
+		r.browser.actMu.Unlock()
+	}
+}
+
 // openPage shows u where browser.open says, or for "ask" where the chat
 // answers (asked once; the embedded browser if no one answers). No
 // desktop window: the system's browser on this machine. A run no one
@@ -152,8 +181,14 @@ func (r *Registry) openPage(ctx context.Context, u string) (string, error) {
 	p.mu.Unlock()
 	if opener != nil {
 		where := r.pageWhere(ctx, u)
-		if err := opener(ctx, u, where); err == nil {
+		err := opener(ctx, u, where)
+		switch {
+		case err == nil:
 			return where, nil
+		case p.open == PageEmbedded:
+			// Asked for the app's web tab: never a browser on the
+			// service's machine instead.
+			return "", fmt.Errorf("couldn't open the page in the app (browser.open = \"embedded\"): %w", err)
 		}
 	}
 	if err := openSystemBrowser(u); err != nil {
@@ -181,7 +216,8 @@ func (r *Registry) pageWhere(ctx context.Context, u string) string {
 		host = parsed.Hostname()
 	}
 	v = PageEmbedded
-	if answer, err := r.hooks.askUser(ctx, fmt.Sprintf(openAsk, host), []string{openEmbedded, openSystem}); err == nil && answer == openSystem {
+	options := []string{i18n.T("tools.open_page.embedded"), i18n.T("tools.open_page.system")}
+	if answer, err := r.hooks.askUser(ctx, i18n.T("tools.open_page.ask", "host", host), options); err == nil && answer == options[1] {
 		v = PageSystem
 	}
 	p.mu.Lock()

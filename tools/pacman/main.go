@@ -27,6 +27,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"crypto/md5"
 	"crypto/sha256"
@@ -216,7 +217,7 @@ func pkginfo(m meta, entries []entry, when time.Time) []byte {
 	line("pkgdesc", m.desc)
 	line("url", m.url)
 	line("builddate", strconv.FormatInt(when.Unix(), 10))
-	line("packager", cmpOr(m.packager, "Unknown Packager"))
+	line("packager", cmp.Or(m.packager, "Unknown Packager"))
 	line("size", strconv.FormatInt(size, 10))
 	line("arch", m.arch)
 	for _, l := range m.licenses {
@@ -226,13 +227,6 @@ func pkginfo(m meta, entries []entry, when time.Time) []byte {
 		line("depend", d)
 	}
 	return b.Bytes()
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 // mtree is the package's .MTREE, gzipped, as makepkg writes it with

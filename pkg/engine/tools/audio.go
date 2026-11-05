@@ -229,6 +229,12 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 				return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
 			}
 
+			// The file is a write: write rules decide it as for the file
+			// tools, deny refusing and ask asking the person.
+			effect, rule := hooks.Rules().Decide(RuleWrite, []string{rel})
+			if effect == EffectDeny {
+				return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", rel, rule))
+			}
 			voices := "one voice"
 			if len(speakers) == 2 {
 				voices = fmt.Sprintf("%s and %s", speakers[0].Name, speakers[1].Name)
@@ -237,6 +243,7 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 				Tool: "generate_audio", Kind: api.ActionNetwork,
 				Detail: fmt.Sprintf("Speak %d characters with %s (%s) → %s", n, speaker.Model(), voices, rel),
 				Key:    "audio:" + speaker.Model(), KeyLabel: "speech with " + speaker.Model(), Targets: []string{speaker.Host()},
+				MustAsk: effect == EffectAsk,
 			}); err != nil {
 				return fail(err.Error())
 			}

@@ -51,6 +51,37 @@ func testBrowserTool(t *testing.T, hooks *Hooks, mutate func(*config.BrowserConf
 	return bt
 }
 
+// TestBrowserScriptApproval checks a page's scripts aren't approved by
+// tools.auto_approve_commands, and web rules on the page's host apply to
+// them, browser.allow_scripts or not (N26 engine-tools-1#21).
+func TestBrowserScriptApproval(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		host         string
+		allowScripts bool
+		autoCommands bool
+		wantErr      string
+	}{
+		{name: "auto_approve_commands doesn't cover scripts", host: "ok.example", autoCommands: true, wantErr: "no interactive approver"},
+		{name: "deny rule on the page", host: "evil.example", allowScripts: true, wantErr: "denied by the permission rule deny web(evil.example)"},
+		{name: "ask rule on the page", host: "ask.example", allowScripts: true, wantErr: "must be asked about"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hooks := NewHooks(Policy{AutoApproveCommands: tc.autoCommands})
+			bt := testBrowserTool(t, hooks, func(c *config.BrowserConfig, w *WebFetchConfig) {
+				c.AllowScripts = tc.allowScripts
+				rules, err := NewPermissionRules(config.PermissionsConfig{Deny: []string{"web(evil.example)"}, Ask: []string{"web(ask.example)"}}, "test")
+				require.NoError(t, err)
+				w.Rules = rules
+			})
+			bt.host = tc.host
+			out := bt.run(context.Background(), BrowserInput{Action: "script", Script: "1+1"})
+			assert.Contains(t, out.Error, tc.wantErr)
+			assert.Nil(t, bt.b, "no browser started")
+		})
+	}
+}
+
 func TestBrowserToolRefusesWithoutLaunching(t *testing.T) {
 	tests := []struct {
 		name    string

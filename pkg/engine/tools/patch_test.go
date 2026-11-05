@@ -197,7 +197,7 @@ func TestApplyPatchAllOrNothing(t *testing.T) {
 
 func TestApplyPatchIsUndoable(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "a.txt"), "a\n")
 	cp.Begin("patch")
 	out := runTool(t, toolOf(t)(NewApplyPatchTool(ws, allowAll())), map[string]any{"patch": "*** Begin Patch\n*** Update File: a.txt\n-a\n+A\n*** Add File: n.txt\n+n\n*** End Patch"})

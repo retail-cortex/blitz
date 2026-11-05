@@ -125,7 +125,7 @@ func TestExportPDF(t *testing.T) {
 func TestExportPDFApprovalAndUndo(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 	writeFile(t, filepath.Join(dir, "notes.md"), "# Notes\n\nText.")
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 
 	// Denied: nothing is written.
 	h, reqs := approverHooks(false)

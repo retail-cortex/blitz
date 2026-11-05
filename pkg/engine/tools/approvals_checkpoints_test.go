@@ -118,7 +118,7 @@ func TestWriteToolsSendDiffAndKey(t *testing.T) {
 
 func TestCheckpointUndo(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	path := filepath.Join(dir, "f.txt")
 	writeFile(t, path, "v1\n")
 	os.Chmod(path, 0o755)
@@ -160,7 +160,7 @@ func TestCheckpointUndo(t *testing.T) {
 
 func TestCheckpointUndoConflict(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	path := filepath.Join(dir, "f.txt")
 	writeFile(t, path, "orig\n")
 	cp.Begin("edit")
@@ -179,7 +179,7 @@ func TestCheckpointUndoConflict(t *testing.T) {
 
 func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	os.Mkdir(filepath.Join(dir, "adir"), 0o755)
 	cp.Begin("t")
 	require.Error(t, ws.WriteFileAtomic(context.Background(), "adir", []byte("x")), "expected write over directory to fail")
@@ -194,7 +194,7 @@ func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
 
 func TestCheckpointMemoryBudget(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 100)
+	cp := newTestCheckpoints(ws, 100)
 	for i, name := range []string{"a", "b", "c"} {
 		writeFile(t, filepath.Join(dir, name), strings.Repeat("x", 60))
 		cp.Begin(name)

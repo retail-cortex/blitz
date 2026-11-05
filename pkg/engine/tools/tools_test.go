@@ -109,6 +109,12 @@ func approverHooks(approve bool) (*Hooks, *[]api.ApprovalRequest) {
 	return decisionHooks(d)
 }
 
+// newTestCheckpoints attaches an in-memory checkpoint store to ws.
+func newTestCheckpoints(ws *Workspace, maxBytes int64) *Checkpoints {
+	c, _ := OpenCheckpoints(ws, CheckpointOptions{MaxBytes: maxBytes})
+	return c
+}
+
 // decisionHooks records requests and answers with d.
 func decisionHooks(d api.Decision) (*Hooks, *[]api.ApprovalRequest) {
 	var reqs []api.ApprovalRequest

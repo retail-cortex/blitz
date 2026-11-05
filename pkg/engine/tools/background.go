@@ -390,17 +390,29 @@ type ManageBackgroundOutput struct {
 	Error     string            `json:"error,omitempty"`
 }
 
-// NewManageBackgroundTool creates the tool for inspecting and stopping background processes.
+// NewManageBackgroundTool creates the tool for inspecting and stopping
+// background processes: the calling chat's own, never another chat's in
+// the same workspace (the person sees and stops those in the app).
 func NewManageBackgroundTool(pm *ProcessManager) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "manage_background_process",
-			Description: "List background processes started by run_shell_command, read their output, or kill them",
+			Description: "List background processes this chat started with run_shell_command, read their output, or kill them",
 		},
 		func(ctx agent.Context, input ManageBackgroundInput) (ManageBackgroundOutput, error) {
+			session := sessionOf(ctx)
+			if input.Action == "output" || input.Action == "kill" {
+				owner, err := pm.SessionOf(input.ProcessID)
+				if err != nil {
+					return ManageBackgroundOutput{Error: err.Error()}, nil
+				}
+				if owner != session {
+					return ManageBackgroundOutput{Error: fmt.Sprintf("background process %d belongs to another chat", input.ProcessID)}, nil
+				}
+			}
 			switch input.Action {
 			case "list":
-				return ManageBackgroundOutput{Processes: pm.List()}, nil
+				return ManageBackgroundOutput{Processes: pm.ListIn([]string{session})}, nil
 			case "output":
 				out, info, err := pm.Output(input.ProcessID)
 				if err != nil {

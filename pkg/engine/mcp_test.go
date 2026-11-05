@@ -139,5 +139,5 @@ func TestMCPUnavailableToldInTheTurn(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
-	assert.True(t, slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, `mcp server "gone" unavailable`) }), "notices: %v", notices)
+	assert.True(t, slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, `The MCP server "gone" is unavailable`) }), "notices: %v", notices)
 }

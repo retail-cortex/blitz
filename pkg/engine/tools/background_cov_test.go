@@ -118,3 +118,42 @@ func TestManageBackgroundKillUnknown(t *testing.T) {
 	res := runTool(t, mgr, map[string]any{"action": "kill", "process_id": 7})
 	assert.Contains(t, errOf(res), "no background process with ID 7")
 }
+
+// The agent's tool sees and stops only its own chat's processes (N26
+// engine-tools-1#9).
+func TestManageBackgroundOwnSession(t *testing.T) {
+	pm := NewProcessManager(0, 0)
+	t.Cleanup(pm.Shutdown)
+	ws := t.TempDir()
+	mine, err := pm.Start("a", "sleep 5", ws)
+	require.NoError(t, err)
+	theirs, err := pm.Start("b", "sleep 5", ws)
+	require.NoError(t, err)
+	mgr := toolOf(t)(NewManageBackgroundTool(pm))
+	ctx := WithOwnerSession(context.Background(), "a")
+	for _, tc := range []struct {
+		name    string
+		args    map[string]any
+		wantErr string
+	}{
+		{"output of another chat's", map[string]any{"action": "output", "process_id": theirs.ID}, "belongs to another chat"},
+		{"kill another chat's", map[string]any{"action": "kill", "process_id": theirs.ID}, "belongs to another chat"},
+		{"output of its own", map[string]any{"action": "output", "process_id": mine.ID}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runToolCtx(t, ctx, mgr, tc.args)
+			if tc.wantErr == "" {
+				assert.Empty(t, errOf(res))
+			} else {
+				assert.Contains(t, errOf(res), tc.wantErr)
+			}
+		})
+	}
+	res := runToolCtx(t, ctx, mgr, map[string]any{"action": "list"})
+	procs, _ := res["processes"].([]any)
+	require.Len(t, procs, 1, "only its own: %v", res)
+	_, err = pm.Kill(mine.ID)
+	require.NoError(t, err)
+	_, err = pm.Kill(theirs.ID)
+	require.NoError(t, err)
+}

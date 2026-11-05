@@ -160,7 +160,6 @@ func newCellID() string {
 	return hex.EncodeToString(b)
 }
 
-// render is the notebook as its cells with their outputs, for read_file.
 // NotebookText is a Jupyter notebook's cells as text, as read_file shows
 // them, each headed "## Cell N [kind]" (workspace search indexes it).
 func NotebookText(data []byte) (string, error) {

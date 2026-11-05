@@ -143,7 +143,7 @@ func TestWorkspaceCheckpointsSymlinkAndLargeFiles(t *testing.T) {
 	ws, err := NewWorkspace(dir, 4)
 	require.NoError(t, err)
 	defer ws.Close()
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "target"), []byte("ab"), 0o600))
 	require.NoError(t, os.Symlink("target", filepath.Join(dir, "link")))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "short"), []byte("0123456789"), 0o644))
@@ -176,7 +176,7 @@ func TestWorkspaceFailedChangeIsNotCheckpointed(t *testing.T) {
 		t.Skip("root ignores directory permissions")
 	}
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	sub := filepath.Join(dir, "sub")
 	require.NoError(t, os.Mkdir(sub, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "f"), []byte("x"), 0o644))
@@ -199,7 +199,7 @@ func TestWorkspaceCheckpointsUnreadableFile(t *testing.T) {
 		t.Skip("root reads any file")
 	}
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	p := filepath.Join(dir, "f")
 	require.NoError(t, os.WriteFile(p, []byte("secret"), 0o000))
 	cp.Begin("t")
@@ -265,7 +265,7 @@ func TestResolveExistingPrefix(t *testing.T) {
 // /undo can put the target back.
 func TestWorkspaceInPlaceWriteFailureKeepsSnapshot(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	target := filepath.Join(dir, "target")
 	writeFile(t, target, "original")
 	require.NoError(t, os.Symlink("target", filepath.Join(dir, "link")))

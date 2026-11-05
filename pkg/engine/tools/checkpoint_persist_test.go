@@ -104,7 +104,7 @@ func TestCheckpointsOutliveTheProcess(t *testing.T) {
 
 func TestRewindRestoresEveryChangeFromAPrompt(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	writeFile(t, filepath.Join(dir, "b.txt"), "b0\n")
 	cp.BeginTurn("s", 0, "p0")
@@ -137,7 +137,7 @@ func TestRewindRestoresEveryChangeFromAPrompt(t *testing.T) {
 
 func TestRewindChecksEveryFileFirst(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	writeFile(t, filepath.Join(dir, "b.txt"), "b0\n")
 	cp.BeginTurn("s", 0, "p0")
@@ -161,7 +161,7 @@ func TestRewindChecksEveryFileFirst(t *testing.T) {
 // from that prompt on belong before the next prompt.
 func TestDetachAfterAConversationRewind(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
-	cp := NewCheckpoints(ws, 0)
+	cp := newTestCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	cp.BeginTurn("s", 0, "p0")
 	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a1\n"))
