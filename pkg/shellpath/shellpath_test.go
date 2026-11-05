@@ -17,7 +17,9 @@ package shellpath
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,28 @@ func TestUserPath(t *testing.T) {
 	t.Setenv("PATH", "/app/bin")
 	assert.Equal(t, []string{"/a", "/b"}, UserPath(shell))
 	assert.Equal(t, []string{"/app/bin"}, UserPath(filepath.Join(dir, "missing")))
+}
+
+// A startup file that leaves a program running with the shell's output
+// open, or a shell that never ends, doesn't hold up the start: past the
+// timeout, this process's PATH (N26 pkg-small-2#12).
+func TestUserPathDoesntHang(t *testing.T) {
+	timeout, waitDelay = 200*time.Millisecond, 200*time.Millisecond
+	t.Cleanup(func() { timeout, waitDelay = 5*time.Second, time.Second })
+	dir := t.TempDir()
+	for name, script := range map[string]string{
+		"a program left running": "#!/bin/sh\n/bin/sleep 5 &\n/bin/sleep 5\n",
+		"a shell reading input":  "#!/bin/sh\nread line\n/bin/sleep 5\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			shell := filepath.Join(dir, strings.ReplaceAll(name, " ", "-"))
+			require.NoError(t, os.WriteFile(shell, []byte(script), 0o755))
+			t.Setenv("PATH", "/app/bin")
+			start := time.Now()
+			assert.Equal(t, []string{"/app/bin"}, UserPath(shell))
+			assert.Less(t, time.Since(start), 2*time.Second)
+		})
+	}
 }
 
 // A program on this process's PATH, else on the login shell's; a file
