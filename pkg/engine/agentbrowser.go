@@ -39,6 +39,10 @@ var ErrNoBrowserWindow = errors.New("no desktop window to browse in")
 // agentBrowserOpenWait is how long a window gets to open its view.
 var agentBrowserOpenWait = 15 * time.Second
 
+// agentBrowserWriteWait is how long a command waits for a window that
+// isn't taking them: past it the view is given up.
+var agentBrowserWriteWait = 15 * time.Second
+
 // openedMessage is the window's first reply: its view is ready.
 const openedMessage = `{"blitz":"opened"}`
 
@@ -246,7 +250,16 @@ func (r *browserRelay) WriteJSON(v any) error {
 	if err != nil {
 		return err
 	}
-	return r.push(context.Background(), api.AgentBrowserCommand{BrowserID: r.id, Kind: "message", Message: string(data)})
+	ctx, cancel := context.WithTimeout(context.Background(), agentBrowserWriteWait)
+	defer cancel()
+	if err := r.push(ctx, api.AgentBrowserCommand{BrowserID: r.id, Kind: "message", Message: string(data)}); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errors.New("the desktop window stopped taking the view's commands")
+			r.shut(err)
+		}
+		return err
+	}
+	return nil
 }
 
 // ReadJSON is the view's next message.

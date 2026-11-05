@@ -202,3 +202,32 @@ func TestStore(t *testing.T) {
 	live.Unlock()
 	assert.Len(t, live.Turns, 2)
 }
+
+// The store's sweep doesn't read a session a turn holds (its Updated is
+// the turn's to write): two composer conversations at once don't race.
+func TestStoreSweepWhileTurn(t *testing.T) {
+	var st Store
+	live := st.New("thing", "/w", "", "x")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 100 {
+			live.Lock()
+			live.Updated = time.Now()
+			live.Unlock()
+		}
+	}()
+	for range 100 {
+		_, err := st.Get("/w", live.ID)
+		require.NoError(t, err)
+		st.New("thing", "/w", "", "y")
+	}
+	<-done
+	live.Lock()
+	live.Updated = time.Now().Add(-Keep - time.Minute)
+	_, err := st.Get("/w", live.ID)
+	live.Unlock()
+	require.NoError(t, err, "held by a turn: kept")
+	_, err = st.Get("/w", live.ID)
+	assert.ErrorIs(t, err, ErrNoSession, "let go, and past Keep: ended")
+}

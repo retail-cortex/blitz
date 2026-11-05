@@ -263,6 +263,21 @@ func TestFlowReceiptsOnDisk(t *testing.T) {
 	left, _ := filepath.Glob(filepath.Join(dir, "*.json"))
 	assert.Len(t, left, 2, "room for the new one")
 	assert.NoFileExists(t, filepath.Join(dir, "old.json"), "the oldest went")
+
+	// A paused run's receipt (its record in flows/runs) stays, however old.
+	storage = t.TempDir()
+	dir = FlowReceiptsDir(storage)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	write(FlowReceipt{Run: "paused", Status: RunWaiting}, 3*time.Hour)
+	write(FlowReceipt{Run: "older", Status: RunDone}, 2*time.Hour)
+	write(FlowReceipt{Run: "newer", Status: RunDone}, time.Hour)
+	records := FlowRecordsDir(storage)
+	require.NoError(t, os.MkdirAll(records, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(records, "paused.json"), []byte("{}"), 0o600))
+	pruneReceipts(dir)
+	assert.FileExists(t, filepath.Join(dir, "paused.json"), "waiting on a task")
+	assert.NoFileExists(t, filepath.Join(dir, "older.json"), "the oldest of the others")
+	assert.FileExists(t, filepath.Join(dir, "newer.json"))
 }
 
 // A step's meter adds its calls (and a called workflow's steps' to the

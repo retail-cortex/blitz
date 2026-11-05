@@ -21,7 +21,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 	"time"
 
@@ -97,11 +96,10 @@ func (w *Workspace) GitDiff(ctx context.Context, color bool) (string, error) {
 	if color {
 		ui = "always"
 	}
-	base := []string{"-c", "color.ui=" + ui, "-c", "core.fsmonitor=false"}
-	base = append(base, noFilters(ctx, w.Dir())...)
 	git := func(args ...string) ([]byte, error) {
-		cmd := exec.CommandContext(ctx, "git", append(slices.Clone(base), args...)...)
+		cmd := exec.CommandContext(ctx, "git", gitArgs(ctx, w.Dir(), false, append([]string{"-c", "color.ui=" + ui}, args...)...)...)
 		cmd.Dir = w.Dir()
+		cmd.Env = gitEnv()
 		return cmd.CombinedOutput()
 	}
 	// Against the last commit; before the first, against an empty tree.
@@ -149,10 +147,11 @@ func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	base := append([]string{"-c", "core.fsmonitor=false", "--no-optional-locks"}, noFilters(ctx, w.Dir())...)
+	filters := noFilters(ctx, w.Dir()) // once for the status's calls
 	git := func(args ...string) ([]byte, error) {
-		cmd := exec.CommandContext(ctx, "git", append(slices.Clone(base), args...)...)
+		cmd := exec.CommandContext(ctx, "git", append(append([]string{"-c", "core.fsmonitor=false"}, filters...), args...)...)
 		cmd.Dir = w.Dir()
+		cmd.Env = gitEnv()
 		return cmd.Output()
 	}
 	st := api.GitStatus{Git: true}

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -47,9 +46,6 @@ var ErrNothingStaged = errors.New("nothing is staged to commit")
 
 // ErrEmptyMessage is Commit's error without a message.
 var ErrEmptyMessage = errors.New("a commit needs a message")
-
-// commitTimeout bounds a commit, which runs the repository's hooks.
-const commitTimeout = 2 * time.Minute
 
 // maxCommitDiffChars is how much of the staged diff the model sees.
 const maxCommitDiffChars = 24_000
@@ -185,7 +181,12 @@ func (w *Workspace) Commit(ctx context.Context, message string) (hash, subject s
 	if len(files) == 0 {
 		return "", "", ErrNothingStaged
 	}
-	if _, err := w.gitDoFor(ctx, commitTimeout, []byte(message+"\n"), "commit", "-F", "-"); err != nil {
+	// Signing runs gpg.program or gpg.ssh.defaultKeyCommand: not from the
+	// repository's own config, which the agent can write.
+	if err := w.checkRepoConfig(ctx); err != nil {
+		return "", "", err
+	}
+	if _, err := w.gitDoFor(ctx, w.gitLongTimeout(), []byte(message+"\n"), "commit", "-F", "-"); err != nil {
 		return "", "", fmt.Errorf("git commit: %w", err)
 	}
 	out, err := w.gitDo(ctx, nil, "log", "-1", "--format=%h%x00%s")

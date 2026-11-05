@@ -38,9 +38,6 @@ var composeSessions compose.Store
 // ErrNoRecipe means the composer can't make that kind (yet).
 var ErrNoRecipe = errors.New("the composer can't make that kind of component")
 
-// ComposeKinds are the kinds the composer makes.
-func ComposeKinds() []string { return []string{"workflow", "job"} }
-
 // recipe is kind's recipe for this workspace.
 func (w *Workspace) recipe(kind string) (compose.Recipe, error) {
 	switch kind {
@@ -123,7 +120,7 @@ Step types and their settings:
 - workflow: workflow (another workflow's name, run as one step)
 - human_task: form (A2UI v0.9 components: Column/Row/Text/TextField/CheckBox/ChoicePicker/Button with action {event: {name: approve, context: {…}}}); its answer's data has action and the values
 - timer: wait (a duration: 2h) or until (a time)
-- exclusive / inclusive / parallel: gateways; their links take when (a condition in plain words, judged by a model) or if (a CEL expression on output.data / steps.<id>.data), and one default: true
+- exclusive / inclusive / parallel: gateways; their links take when (a CEL expression on output.data / steps.<id>.data) or if (a condition in plain words, judged by a model), and one default: true
 Any step: retry {attempts, delay}, timeout (30s), for_each (a CEL list; the step sees {{ item }}), error links (an edge with error: true catches its failure).
 Settings take {{ templates }}: {{ input }}, {{ steps.<id>.text }}, {{ steps.<id>.data.<field> }}; secrets as {secrets:name}.
 Keep it as small as the job allows.`
@@ -204,31 +201,31 @@ func (w *Workspace) composeAsker() compose.Asker {
 // StartCompose starts a composer conversation for kind with the user's
 // request (current: the component being changed, as its file, or "") and
 // runs its first turn.
-func (w *Workspace) StartCompose(ctx context.Context, kind, request, current string) (compose.Session, error) {
+func (w *Workspace) StartCompose(ctx context.Context, kind, request, current string) (*compose.Session, error) {
 	r, err := w.recipe(kind)
 	if err != nil {
-		return compose.Session{}, err
+		return nil, err
 	}
 	s := composeSessions.New(kind, w.Dir(), current, request)
 	s.Lock()
 	defer s.Unlock()
 	if err := compose.Step(ctx, r, w.composeContext(ctx), s, w.composeAsker()); err != nil {
 		composeSessions.Drop(w.Dir(), s.ID)
-		return compose.Session{}, err
+		return nil, err
 	}
 	return s.Snapshot(), nil
 }
 
 // AnswerCompose gives session id the user's answer (or a change to its
 // draft) and runs the composer's next turn.
-func (w *Workspace) AnswerCompose(ctx context.Context, id, answer string) (compose.Session, error) {
+func (w *Workspace) AnswerCompose(ctx context.Context, id, answer string) (*compose.Session, error) {
 	s, err := composeSessions.Get(w.Dir(), id)
 	if err != nil {
-		return compose.Session{}, err
+		return nil, err
 	}
 	r, err := w.recipe(s.Kind)
 	if err != nil {
-		return compose.Session{}, err
+		return nil, err
 	}
 	s.Lock()
 	defer s.Unlock()

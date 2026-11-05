@@ -181,6 +181,9 @@ type turn struct {
 	// run is the worker run the turn is: its file changes are the run's
 	// own checkpoint (blitz workers undo), not the sessions' /undo.
 	run string
+	// ownLimit says what set the turn's own MaxTurns, for a turn stopped
+	// at it ("": nothing to say).
+	ownLimit string
 }
 
 // run is Run recording the transcript in st, which holds the session as
@@ -197,19 +200,21 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
+	// What before-agent rules said, and guardrails that can't run, shown
+	// once the prompt is recorded.
+	var ruleNotices []api.Notice
 	// The turn's guardrails, read now; their turn and cost limits apply.
 	var lim turnLimits
 	if !t.Aside {
 		lim = w.startGuardrails(sessionID, &t.Turn)
 		defer w.guards.turns.Delete(sessionID)
+		ruleNotices = w.guardrailProblems(sessionID)
 	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
 	ctx = tools.WithPlanGate(ctx, gate)
 	var hookContext, ruleGuidance string
-	// What before-agent rules said, shown once the prompt is recorded.
-	var ruleNotices []api.Notice
 	if !t.Accepted {
 		var err error
 		if hookContext, err = w.accept(ctx, sessionID, t.Text, ""); err != nil {
@@ -422,7 +427,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
-	err = w.limitSource(err, lim, t.run != "")
+	err = w.limitSource(err, lim, tools.Attended(ctx), t.ownLimit)
 	if !t.Aside {
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.

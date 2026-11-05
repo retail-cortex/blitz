@@ -43,7 +43,7 @@ Any step can run **once per item** of a list: set *For each* to an expression gi
 
 ## Calling services
 
-An **API call**'s values (URL, query, headers, body) take `{{ templates }}` and secrets as `{secrets:key}`, put in as the call is made and never kept in the workflow or shown. Its auth can be a bearer token, basic auth, an API key (in a header or the query) or **OAuth2 client credentials** (a token URL, a client ID and secret, scopes): the token is fetched and kept until it expires. Its output's data is `{status, headers, body}`, so a condition can read `output.data.body.total`; a status of 400 or more fails the step (catch it with an on error link).
+An **API call**'s values (URL, query, headers, body) take `{{ templates }}` and secrets as `{secrets:key}`, put in as the call is made and never kept in the workflow or shown. Its auth can be a bearer token, basic auth, an API key (in a header or the query) or **OAuth2 client credentials** (a token URL, a client ID and secret, scopes): the token is fetched and kept until it expires. Its output's data is `{status, headers, body}`, so a condition can read `output.data.body.total`; a status of 400 or more fails the step (catch it with an on error link), and so does a response over 256 KiB, the most a step keeps.
 
 ```yaml
 - id: order
@@ -67,7 +67,7 @@ A link can carry a **condition**: an expression in [CEL](https://cel.dev) on the
 | Inclusive | every link whose condition holds, else its *otherwise* link |
 | Parallel | every link: the branches run side by side |
 
-Branches that aren't taken are skipped, and so is everything only they lead to; a step that branches lead back to runs once, after every branch that was taken. A step can be **tried again** when it fails (how many times, how long to wait first) and stopped after a **timeout**; an **on error** link catches a failure and goes on, the error as the next step's input.
+Branches that aren't taken are skipped, and so is everything only they lead to; a step that branches lead back to runs once, after every branch that was taken. A step can be **tried again** when it fails (how many times, how long to wait first; a refusal, such as a call you declined or the web being off, isn't tried again) and stopped after a **timeout**; an **on error** link catches a failure and goes on, the error as the next step's input.
 
 Steps pass on text and, when there is some, **data**: JSON an agent answered with, a `.json` file, an Extract step's fields. Later steps read it in their settings as `{{ steps.pull.data.order }}` (any CEL expression in `{{ }}` is filled in as the step starts), and conditions as `steps.pull.data.amount` (`steps["look-up"]` for an ID with a hyphen).
 

@@ -474,6 +474,64 @@ edges:
 	assert.FileExists(t, filepath.Join(w.Dir(), "out", "later.md"))
 }
 
+// Answers to one task at once (two windows, a double click, a timer's
+// tick) resume its run once: the others find it answered.
+func TestResumeFlowOnce(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	writeFlow(t, w, "later", "nodes:\n  - {id: wait, type: timer, title: Wait, wait: 1h}\n  - {id: save, type: save_file, path: out/later.md}\nedges: [{from: wait, to: save}]\n")
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "/later", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	tasks := w.FlowTasks()
+	require.Len(t, tasks, 1)
+	id := tasks[0].Tasks[0].ID
+	var mu sync.Mutex
+	var saves, resumed int
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			_, err := w.ResumeFlow(context.Background(), id, map[string]any{"fired_at": "now"}, func(e api.Event) {
+				if e.Step != nil && e.Step.ID == "save" && e.Step.Status == "done" {
+					mu.Lock()
+					saves++
+					mu.Unlock()
+				}
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				resumed++
+			}
+		})
+	}
+	wg.Wait()
+	assert.Equal(t, 1, resumed, "one answer resumes it")
+	assert.Equal(t, 1, saves, "its next step runs once")
+}
+
+// A workflow a job started, paused and then resumed, goes on under the
+// job's permissions, unattended, as its run did: not the workspace's
+// approvals.
+func TestResumedJobWorkflowKeepsPermissions(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	writeFlow(t, w, "later", `nodes:
+  - {id: wait, type: timer, title: Wait, wait: 1h}
+  - {id: ok, type: save_file, path: reports/a.md}
+  - {id: out, type: save_file, path: out/b.md}
+edges: [{from: wait, to: ok}, {from: ok, to: out}]
+`)
+	addWorker(t, w, "night", "---\nschedule: daily at 6 AM\nworkflow: later\npermissions: [\"write:reports/\"]\n---\nsummary\n")
+	enable(t, w, "night")
+	_, err := w.RunWorker(context.Background(), "night", RunOptions{Manual: true})
+	require.NoError(t, err)
+	tasks := w.FlowTasks()
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "worker", tasks[0].Origin)
+	_, err = w.ResumeFlow(context.Background(), tasks[0].Tasks[0].ID, map[string]any{"fired_at": "now"}, func(api.Event) {})
+	require.Error(t, err, "out/ isn't among the job's permissions")
+	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "a.md"), "reports/ is")
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "out", "b.md"))
+}
+
 // A worker can run a workflow: its steps under the worker's permissions,
 // in its run's chat, its prompt the input (WF-17).
 func TestWorkerRunsWorkflow(t *testing.T) {

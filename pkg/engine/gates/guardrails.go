@@ -216,7 +216,9 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 			return g
 		}
 	}
-	g.Builtin, g.Stage, g.Action = strings.TrimSpace(m.Builtin), strings.TrimSpace(m.Stage), strings.TrimSpace(m.Action)
+	// Written as "Action" or "Block" is meant as action and block.
+	low := func(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+	g.Builtin, g.Stage, g.Action = low(m.Builtin), low(m.Stage), low(m.Action)
 	g.Agents, g.Tools, g.Description, g.PII = m.Agents, m.Tools, m.Description, m.PII
 	g.Judge = m.Judge != nil && *m.Judge
 	l := m.Limits
@@ -230,7 +232,7 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 	// What a built-in's file leaves out runs as it would without one: the
 	// injection judge on; limits' ceilings and commands (commands: [] is
 	// none).
-	switch strings.TrimSpace(m.Builtin) {
+	switch g.Builtin {
 	case BuiltinInjection:
 		g.Judge = m.Judge == nil || *m.Judge
 	case BuiltinLimits:

@@ -161,9 +161,12 @@ type BlitzConfig struct {
 	// user's own settings or --trust-workspace can set it.
 	TrustWorkspace bool `toml:"trust_workspace"`
 	// GoalMaxContinues caps how often a /goal sends the agent on before it
-	// stops to ask.
+	// stops to ask (0: DefaultGoalMaxContinues).
 	GoalMaxContinues int `toml:"goal_max_continues"`
 }
+
+// DefaultGoalMaxContinues is goal_max_continues' default.
+const DefaultGoalMaxContinues = 20
 
 // LLMConfig holds provider configurations for LLM backends.
 type LLMConfig struct {
@@ -438,6 +441,9 @@ type GitConfig struct {
 	// were there before, nor files git ignores or temporary ones (*.tmp,
 	// *.swp, tmp/ and the like).
 	AutoAdd bool `toml:"auto_add"`
+	// TimeoutSeconds is how long a commit (its hooks included), fetch,
+	// pull or push may take before it's stopped (0: two minutes).
+	TimeoutSeconds int `toml:"timeout_seconds"`
 }
 
 // SuggestionsConfig shapes the welcome tiles a new chat shows: tiles from
@@ -844,7 +850,7 @@ func DefaultConfig() *Config {
 			AutoApprove:  false,
 			PlanReview:   PlanReviewAgent,
 
-			GoalMaxContinues: 20,
+			GoalMaxContinues: DefaultGoalMaxContinues,
 		},
 		Health:  HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
 		Harness: HarnessConfig{MaxCostUSD: 0.5, ReflectThreshold: DefaultReflectThreshold},

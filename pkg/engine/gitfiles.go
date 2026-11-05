@@ -81,11 +81,28 @@ func (w *Workspace) gitDo(ctx context.Context, stdin []byte, args ...string) ([]
 
 // gitDoFor is gitDo with its own time limit (a commit runs hooks).
 func (w *Workspace) gitDoFor(ctx context.Context, timeout time.Duration, stdin []byte, args ...string) ([]byte, error) {
+	return w.gitExec(ctx, timeout, false, stdin, args...)
+}
+
+// gitWithFilters is gitDo with the filters git config names run (Git
+// LFS's smudge, say), for what writes a file's content as the user has it:
+// a restore. Only once checkRepoConfig has refused a repository whose own
+// config names a filter.
+func (w *Workspace) gitWithFilters(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
+	if err := w.checkRepoConfig(ctx); err != nil {
+		return nil, err
+	}
+	return w.gitExec(ctx, gitTimeout, true, stdin, args...)
+}
+
+// gitExec runs git for gitDoFor and gitWithFilters: fsmonitor off, and
+// the filters blanked unless filters.
+func (w *Workspace) gitExec(ctx context.Context, timeout time.Duration, filters bool, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	base := append([]string{"-c", "core.fsmonitor=false"}, noFilters(ctx, w.Dir())...)
-	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
+	cmd := exec.CommandContext(ctx, "git", gitArgs(ctx, w.Dir(), filters, args...)...)
 	cmd.Dir = w.Dir()
+	cmd.Env = gitEnv()
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
@@ -95,7 +112,7 @@ func (w *Workspace) gitDoFor(ctx context.Context, timeout time.Duration, stdin [
 	if err != nil && stderr.Len() > 0 {
 		err = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	return out, err
+	return out, gitTimedOut(ctx, err, timeout, timeout == w.gitLongTimeout(), args)
 }
 
 // inRepository reports whether the workspace is in a git work tree.

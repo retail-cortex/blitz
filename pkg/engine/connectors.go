@@ -150,13 +150,6 @@ func (w *Workspace) ConnectorState(category connectors.Category) tools.MCPState 
 	return tools.MCPState{}
 }
 
-// HasConnectorSecret says whether a connection's secret field (its
-// password) has a value.
-func (w *Workspace) HasConnectorSecret(c connectors.Connection, field string) bool {
-	cat, ok := w.ConnectorCatalog().Category(c.Category)
-	return ok && connectors.HasSecret(w.connectorDirs(), cat, c, field)
-}
-
 // SaveConnector writes one of the workspace's connections from Studio's
 // form, in place of previous ("" for a new one), keeping the secret
 // values given; problems, with nothing written, when it can't be saved.

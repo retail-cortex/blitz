@@ -274,10 +274,11 @@ var previewTypes = map[string]string{
 func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext(p))] }
 
 // ErrNoPreview means the file has no preview: ReadPreview shows only
-// images, PDFs and sound, up to 32 MB.
+// images, PDFs, sound and video, up to 32 MB, and Word documents as
+// Markdown.
 var ErrNoPreview = errors.New("no preview")
 
-// ReadPreview returns an image, PDF or sound file's bytes and media type,
+// ReadPreview returns an image, PDF, sound or video file's bytes and media type,
 // for the editor to show or play (FIL-54); a Word document's, its text as
 // Markdown.
 func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
@@ -497,11 +498,25 @@ func (g gitStatus) status(p string, folder bool) string {
 	return ""
 }
 
+// gitArgs are args with the options every git run here (but a remote
+// action's) has: fsmonitor off and, unless filters, every filter blanked.
+func gitArgs(ctx context.Context, dir string, filters bool, args ...string) []string {
+	base := []string{"-c", "core.fsmonitor=false"}
+	if !filters {
+		base = append(base, noFilters(ctx, dir)...)
+	}
+	return append(base, args...)
+}
+
+// gitEnv is the environment every git run here (but a remote action's)
+// has: no optional locks, so reading the status doesn't hold up the user's
+// own git, and never a prompt.
+func gitEnv() []string { return append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0") }
+
 func (w *Workspace) git(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
-	full := append([]string{"-c", "core.fsmonitor=false"}, noFilters(ctx, w.Dir())...)
-	cmd := exec.CommandContext(ctx, "git", append(full, args...)...)
+	cmd := exec.CommandContext(ctx, "git", gitArgs(ctx, w.Dir(), false, args...)...)
 	cmd.Dir = w.Dir()
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = gitEnv()
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}

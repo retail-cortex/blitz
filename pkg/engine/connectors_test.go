@@ -102,7 +102,9 @@ func TestConnectorsInATurn(t *testing.T) {
 	tables, err := w.ReadConnectorSchema(ctx, c, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "recipes", tables[0].Name)
-	assert.False(t, w.HasConnectorSecret(c, "password"))
+	cat, ok := w.ConnectorCatalog().Category(c.Category)
+	require.True(t, ok)
+	assert.False(t, connectors.HasSecret(w.connectorDirs(), cat, c, "password"))
 
 	require.NoError(t, w.DeleteConnector(ctx, "databases", connectors.ScopeWorkspace, "kitchen"))
 	assert.Empty(t, w.ListMCPServers(), "no files: the server stops")

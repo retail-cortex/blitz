@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -511,7 +512,7 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 		m.try()
 		res, err = once(sctx)
 		cancel()
-		if err == nil || try >= attempts || ctx.Err() != nil {
+		if err == nil || try >= attempts || ctx.Err() != nil || !retryable(err) {
 			break
 		}
 		r.emit(api.Event{Notice: &api.Notice{Text: fmt.Sprintf("↻ /%s › %s: %v (try %d of %d)", r.f.Name, r.title(n.ID), err, try+1, attempts)}})
@@ -602,11 +603,11 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 	case n.Type == flows.Extract:
 		return w.extractStep(ctx, n, input)
 	case n.Type == flows.MCPCall:
-		return w.mcpStep(ctx, n)
+		return w.guardCallResult(ctx, r, n.Type)(w.mcpStep(ctx, n))
 	case n.Type == flows.APICall:
-		return w.apiStep(ctx, n, input)
+		return w.guardCallResult(ctx, r, n.Type)(w.apiStep(ctx, n, input))
 	case n.Type == flows.A2ACall:
-		return w.a2aStep(ctx, n, input)
+		return w.guardCallResult(ctx, r, n.Type)(w.a2aStep(ctx, n, input))
 	case n.Type == flows.Call:
 		return w.callStep(ctx, r, n, input)
 	case flows.Pauses(n.Type):
@@ -868,3 +869,43 @@ func (w *Workspace) callStep(ctx context.Context, r *flowRun, n flows.Node, inpu
 
 // maxCallDepth is how deep workflows may call each other.
 const maxCallDepth = 8
+
+// retryable reports whether a step's error may go away when it's tried
+// again: not a refusal (an approval denied, a guardrail or hook's block)
+// or the web being off, which would only be asked or refused again.
+func retryable(err error) bool {
+	var blocked *api.BlockedError
+	return !errors.Is(err, tools.ErrNotApproved) && !errors.Is(err, tools.ErrWebOff) && !errors.As(err, &blocked)
+}
+
+// guardCallResult has the tool-result guardrails (prompt injection,
+// custom checks) read what a call step (tool: its type) brought back
+// before the next step does, as they read an agent's tool results: the
+// result as they leave it, with their warning on top, or the step failed
+// when one withholds it.
+func (w *Workspace) guardCallResult(ctx context.Context, r *flowRun, tool string) func(flows.Result, error) (flows.Result, error) {
+	return func(res flows.Result, err error) (flows.Result, error) {
+		if err != nil {
+			return res, err
+		}
+		in := map[string]any{"text": res.Text}
+		if res.Data != nil {
+			in["data"] = res.Data
+		}
+		v := guard{w}.ToolResult(ctx, runtime.GuardCall{Session: r.session, Tool: tool, Agent: w.engine.ActiveAgent()}, in)
+		for _, text := range v.Notices {
+			r.emit(api.Event{Notice: &api.Notice{Text: text}})
+		}
+		if v.Result == nil {
+			return res, nil
+		}
+		if e, ok := v.Result["error"].(string); ok {
+			return flows.Result{}, &api.BlockedError{Reason: e}
+		}
+		text, _ := v.Result["text"].(string)
+		if note, ok := v.Result["guardrail"].(string); ok {
+			text = note + "\n\n" + text
+		}
+		return flows.Result{Text: text, Data: v.Result["data"]}, nil
+	}
+}

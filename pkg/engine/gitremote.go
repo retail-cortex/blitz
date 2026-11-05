@@ -117,8 +117,35 @@ const (
 	MarkResolved ConflictChoice = "resolved"
 )
 
-// remoteTimeout bounds a fetch, pull or push: the network, and hooks.
+// remoteTimeout bounds a fetch, pull or push (the network, and hooks), and
+// a commit (its hooks), unless [git] timeout_seconds says otherwise.
 var remoteTimeout = 2 * time.Minute
+
+// gitLongTimeout is how long a commit, fetch, pull or push may take.
+func (w *Workspace) gitLongTimeout() time.Duration {
+	if s := w.cfg.Git.TimeoutSeconds; s > 0 {
+		return time.Duration(s) * time.Second
+	}
+	return remoteTimeout
+}
+
+// gitTimedOut is err, for git args stopped at limit (ctx's deadline
+// passed), saying so: "signal: killed" alone doesn't. setting says
+// [git] timeout_seconds sets the limit.
+func gitTimedOut(ctx context.Context, err error, limit time.Duration, setting bool, args []string) error {
+	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	cmd := ""
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+	msg := i18n.T("git.timed_out", "cmd", cmd, "limit", limit.String())
+	if setting {
+		msg += " " + i18n.T("git.timed_out_setting")
+	}
+	return fmt.Errorf("%s: %w", msg, err)
+}
 
 // remoteState adds the remote, the upstream with its ahead and behind
 // counts, and a merge or rebase in progress with its conflicts to st. git
@@ -189,8 +216,10 @@ func mergingName(git func(args ...string) ([]byte, error)) string {
 }
 
 // commandKeys are the git settings whose values run commands (or let a
-// remote URL do so) when fetching, merging or pushing.
-var commandKeys = regexp.MustCompile(`^(core\.(sshcommand|gitproxy|askpass)|credential\..*helper|filter\..*\.(clean|smudge|process)|merge\..*\.driver|remote\..*\.(uploadpack|receivepack)|protocol\.(.*\.)?allow|gpg\.(.*\.)?program)$`)
+// remote URL do so) when fetching, merging, pushing or committing: any
+// "…command" or "…program" (core.sshCommand, core.alternateRefsCommand,
+// gpg.ssh.defaultKeyCommand, gpg.program) among them.
+var commandKeys = regexp.MustCompile(`^(.*(command|program)|core\.(gitproxy|askpass)|credential\..*helper|filter\..*\.(clean|smudge|process)|merge\..*\.driver|remote\..*\.(uploadpack|receivepack)|protocol\.(.*\.)?allow)$`)
 
 // trustedHelpers are the credential helpers a repository's own config may
 // name: Blitz's own, which Blitz sets in a folder shared with the
@@ -236,7 +265,8 @@ func (w *Workspace) checkRepoConfig(ctx context.Context) error {
 // remoteTimeout. Its output is stdout and stderr together, git's progress
 // and hints included.
 func (w *Workspace) gitRemote(ctx context.Context, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, remoteTimeout)
+	limit := w.gitLongTimeout()
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.fsmonitor=false"}, args...)...)
 	cmd.Dir = w.Dir()
@@ -250,7 +280,7 @@ func (w *Workspace) gitRemote(ctx context.Context, args ...string) (string, erro
 	err := cmd.Run()
 	text := strings.TrimSpace(out.String())
 	if err != nil {
-		return text, remoteError(err, text)
+		return text, gitTimedOut(ctx, remoteError(err, text), limit, true, args)
 	}
 	return text, nil
 }

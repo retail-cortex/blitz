@@ -58,9 +58,9 @@ func (w *Workspace) ruleDirs() []string {
 	if w.cfg.Memory.GlobalRules != "" {
 		out = append(out, config.ExpandHome(w.cfg.Memory.GlobalRules))
 	}
-	// The organization's locked rules and guardrails before them, its
-	// defaults after (spec_053_enterprise EN-31).
-	return w.cfg.Org.LockedFirst(out, "rules", "guardrails")
+	// The organization's locked rules before them, its defaults after
+	// (spec_053_enterprise EN-31); its guardrails are guardrailDirs'.
+	return w.cfg.Org.LockedFirst(out, "rules")
 }
 
 // Rules are the workspace's rules, gates first (in the order they run),

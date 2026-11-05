@@ -230,6 +230,23 @@ func TestBrowserRelayEnds(t *testing.T) {
 	require.NoError(t, r.Close(), "twice")
 }
 
+// A window that stops taking commands doesn't hold a write for good: past
+// agentBrowserWriteWait the view is given up.
+func TestBrowserRelayWriteWaits(t *testing.T) {
+	old := agentBrowserWriteWait
+	agentBrowserWriteWait = 20 * time.Millisecond
+	t.Cleanup(func() { agentBrowserWriteWait = old })
+	h := &browserHub{}
+	h.init()
+	win := &browserWindow{send: make(chan api.AgentBrowserCommand)} // nobody reads
+	r := &browserRelay{id: "agent-1", w: win, in: make(chan json.RawMessage, 1), opened: make(chan error, 1), closed: make(chan struct{}), hub: h}
+	h.relays[r.id] = r
+	err := r.WriteJSON(map[string]any{"id": 1})
+	assert.ErrorContains(t, err, "stopped taking")
+	var m map[string]any
+	assert.Error(t, r.ReadJSON(&m), "the view is given up")
+}
+
 // A command that can't be written as JSON never reaches the window.
 func TestBrowserRelayRefusesWhatIsntJSON(t *testing.T) {
 	assert.Error(t, (&browserRelay{}).WriteJSON(make(chan int)))

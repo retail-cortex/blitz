@@ -55,6 +55,8 @@ func TestComposeWorkflow(t *testing.T) {
 	assert.Contains(t, sent, "existing: Already here", "the workspace's workflows")
 	assert.Contains(t, sent, "Agents:")
 	assert.Contains(t, sent, "a brief from my notes")
+	assert.Contains(t, sent, "when (a CEL expression", "when is CEL, if plain words (flows.Edge)")
+	assert.Contains(t, sent, "if (a condition in plain words")
 
 	s, err = w.AnswerCompose(context.Background(), s.ID, "notes.md")
 	require.NoError(t, err)
@@ -70,7 +72,6 @@ func TestComposeWorkflow(t *testing.T) {
 	w.DropCompose(s.ID)
 	_, err = w.AnswerCompose(context.Background(), s.ID, "again")
 	assert.ErrorIs(t, err, compose.ErrNoSession)
-	assert.Equal(t, []string{"workflow", "job"}, ComposeKinds())
 }
 
 // A job composed in a conversation (WK-74): a draft that doesn't load goes

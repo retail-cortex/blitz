@@ -27,12 +27,15 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/a2ui"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	adksession "google.golang.org/adk/v2/session"
@@ -354,24 +357,14 @@ func answerResult(n flows.Node, reply any) flows.Result {
 // resumed; its record goes.
 func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[string]any, on func(api.Event)) (api.TurnResult, error) {
 	runID, _, _ := strings.Cut(taskID, "/")
-	rec, err := w.loadRecord(runID)
+	rec, f, err := w.takeTask(runID, taskID)
 	if err != nil {
 		return api.TurnResult{}, err
 	}
-	if !slices.ContainsFunc(rec.Tasks, func(t FlowTask) bool { return t.ID == taskID }) {
-		return api.TurnResult{}, fmt.Errorf("%w: %s", ErrNoTask, taskID)
-	}
-	f, ok := w.workflow(rec.Workflow)
-	if !ok || flowHash(f) != rec.Hash {
-		w.forgetRun(runID)
-		return api.TurnResult{}, fmt.Errorf("the workflow %s changed since its run paused: it can't be resumed; run it again", rec.Workflow)
-	}
-	// The task is answered: the record keeps the others.
-	rec.Tasks = slices.DeleteFunc(rec.Tasks, func(t FlowTask) bool { return t.ID == taskID })
-	if data, err := json.MarshalIndent(rec, "", "  "); err == nil {
-		_ = os.WriteFile(w.recordPath(runID), data, 0o600)
-	}
 	ctx = withFlowOrigin(ctx, rec.Origin)
+	if rec.Origin == "worker" {
+		ctx = w.resumedJobContext(ctx, rec.Session)
+	}
 	if st := w.storage; st.Active() == nil || st.Active().ID != rec.Session {
 		other, err := session.NewStorage(w.cfg.Session.StorageDir)
 		if err != nil {
@@ -384,7 +377,7 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 			// disk: it starts now, under its ID.
 			created, cerr := other.CreateSession(rec.Session, "/"+rec.Workflow, w.engine.ActiveAgent())
 			if cerr != nil {
-				return api.TurnResult{}, fmt.Errorf("the run's chat: %w", err)
+				return api.TurnResult{}, fmt.Errorf("the run's chat: %w", cerr)
 			}
 			created.Origin = session.OriginBackground
 		}
@@ -392,6 +385,68 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 	}
 	resp := &genai.FunctionResponse{ID: taskID, Name: workflow.WorkflowInputFunctionCallName, Response: map[string]any{"payload": answer}}
 	return w.driveFlow(ctx, rec.Session, f, rec.Input, on, runID, resp, rec.Done)
+}
+
+// resumedJobContext is ctx for resuming a workflow a job started (its run
+// chat sessionID): unattended, under that job's permissions as it has them
+// now, as its run was; none (everything refused) when the job is gone.
+func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) context.Context {
+	var perms []workers.Permission
+	infos, _ := w.ListWorkers()
+	for _, info := range infos {
+		runs, _ := w.runLog.List(w.Dir(), info.Name, 0)
+		if !slices.ContainsFunc(runs, func(r api.Run) bool { return r.SessionID == sessionID }) {
+			continue
+		}
+		if wk, loadErr, err := w.worker(info.Name); err == nil && loadErr == nil {
+			perms = workers.Apply(wk, w.workerPolicy()).Permissions
+		}
+		break
+	}
+	return tools.Unattended(ctx, func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
+		if workers.Allows(perms, req) {
+			return api.DecisionOnce, nil
+		}
+		return api.DecisionDeny, nil
+	})
+}
+
+// resuming holds a run's record, by its path, while a task of it is
+// taken: two answers at once (two windows, a double click, a timer's tick)
+// resume it once.
+var resuming sync.Map // record path → *sync.Mutex
+
+// takeTask takes task taskID out of run runID's record, which it rewrites
+// (the others kept), returning the record and its workflow: ErrNoTask when
+// it isn't there (answered already). A run whose workflow changed since
+// it paused can't be resumed; its record goes.
+func (w *Workspace) takeTask(runID, taskID string) (FlowRecord, flows.Flow, error) {
+	path := w.recordPath(runID)
+	mu, _ := resuming.LoadOrStore(path, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
+	rec, err := w.loadRecord(runID)
+	if err != nil {
+		return FlowRecord{}, flows.Flow{}, err
+	}
+	if !slices.ContainsFunc(rec.Tasks, func(t FlowTask) bool { return t.ID == taskID }) {
+		return FlowRecord{}, flows.Flow{}, fmt.Errorf("%w: %s", ErrNoTask, taskID)
+	}
+	f, ok := w.workflow(rec.Workflow)
+	if !ok || flowHash(f) != rec.Hash {
+		w.forgetRun(runID)
+		return FlowRecord{}, flows.Flow{}, fmt.Errorf("the workflow %s changed since its run paused: it can't be resumed; run it again", rec.Workflow)
+	}
+	// The task is answered: the record keeps the others.
+	rec.Tasks = slices.DeleteFunc(rec.Tasks, func(t FlowTask) bool { return t.ID == taskID })
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err == nil {
+		err = os.WriteFile(path, data, 0o600)
+	}
+	if err != nil {
+		return FlowRecord{}, flows.Flow{}, fmt.Errorf("the run's record: %w", err)
+	}
+	return rec, f, nil
 }
 
 // FlowTasks are the tasks the workspace's paused runs wait on, with their
