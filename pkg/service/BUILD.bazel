@@ -61,6 +61,7 @@ go_test(
         "@com_connectrpc_connect//:connect",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_adk_v2//model",
         "@org_golang_google_genai//:genai",
     ],
 )

@@ -316,6 +316,10 @@ type File struct {
 	Size      int64  `json:"size"`
 }
 
+// maxRunFiles is how many files the service keeps a run (blitz-enterprise's
+// jobs.MaxRunFiles): a new one past it is refused.
+const maxRunFiles = 1000
+
 // Artifact is one file a run kept.
 type Artifact struct {
 	MediaType, Body string
@@ -1038,6 +1042,10 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		if s.Kept[id] == nil {
 			s.Kept[id] = map[string]Artifact{}
+		}
+		if _, again := s.Kept[id][r.PathValue("path")]; !again && len(s.Kept[id]) >= maxRunFiles {
+			refuse(w, http.StatusRequestEntityTooLarge, "too_many", fmt.Sprintf("A run keeps at most %d files.", maxRunFiles))
+			return
 		}
 		s.Kept[id][r.PathValue("path")] = Artifact{MediaType: r.Header.Get("Content-Type"), Body: string(body)}
 		w.WriteHeader(http.StatusCreated)
