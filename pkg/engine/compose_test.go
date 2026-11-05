@@ -72,7 +72,6 @@ func TestComposeWorkflow(t *testing.T) {
 	w.DropCompose(s.ID)
 	_, err = w.AnswerCompose(context.Background(), s.ID, "again")
 	assert.ErrorIs(t, err, compose.ErrNoSession)
-	assert.Equal(t, []string{"workflow", "job"}, ComposeKinds())
 }
 
 // A job composed in a conversation (WK-74): a draft that doesn't load goes

@@ -38,9 +38,6 @@ var composeSessions compose.Store
 // ErrNoRecipe means the composer can't make that kind (yet).
 var ErrNoRecipe = errors.New("the composer can't make that kind of component")
 
-// ComposeKinds are the kinds the composer makes.
-func ComposeKinds() []string { return []string{"workflow", "job"} }
-
 // recipe is kind's recipe for this workspace.
 func (w *Workspace) recipe(kind string) (compose.Recipe, error) {
 	switch kind {

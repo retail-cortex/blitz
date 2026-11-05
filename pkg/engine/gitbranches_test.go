@@ -174,6 +174,37 @@ func TestMergeBranch(t *testing.T) {
 	}
 }
 
+// A branch with a tag of its name is merged, not the tag (git prefers
+// refs/tags for a bare name), with git's message for the branch.
+func TestMergeBranchNotItsTag(t *testing.T) {
+	w, _ := remoteRepos(t)
+	dir := w.Dir()
+	gitOut(t, dir, "tag", "v2")
+	gitOut(t, dir, "switch", "-q", "-c", "v2")
+	commitIn(t, dir, "h.txt", "h\n", "v2's", false)
+	gitOut(t, dir, "switch", "-q", "main")
+	commitIn(t, dir, "i.txt", "i\n", "main's", false)
+	res, err := w.MergeBranch(context.Background(), "v2")
+	require.NoError(t, err)
+	assert.Equal(t, PullMerged, res.Outcome)
+	assert.Equal(t, "h\n", read(t, dir, "h.txt"), "the branch's commit, not the tag's")
+	assert.Equal(t, "Merge branch 'v2'", strings.TrimSpace(gitOut(t, dir, "log", "-1", "--format=%s")))
+
+	for _, tc := range []struct {
+		name, into string
+		remote     bool
+		want       string
+	}{
+		{"feature", "main", false, "Merge branch 'feature'"},
+		{"feature", "dev", false, "Merge branch 'feature' into dev"},
+		{"origin/feature", "master", true, "Merge remote-tracking branch 'origin/feature'"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			assert.Equal(t, tc.want, mergeMessage(tc.name, tc.remote, tc.into))
+		})
+	}
+}
+
 func TestMergeBranchConflicts(t *testing.T) {
 	w, _ := remoteRepos(t)
 	ctx := context.Background()

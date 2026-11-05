@@ -211,7 +211,7 @@ func (w *Workspace) MergeBranch(ctx context.Context, name string) (MergeResult, 
 	if err != nil {
 		return MergeResult{Status: before}, err
 	}
-	ref, _, err := w.branchRef(ctx, name)
+	ref, remote, err := w.branchRef(ctx, name)
 	if err != nil {
 		return MergeResult{Status: before}, err
 	}
@@ -219,8 +219,10 @@ func (w *Workspace) MergeBranch(ctx context.Context, name string) (MergeResult, 
 		return MergeResult{Status: before}, ErrMergeSelf
 	}
 	head := w.head(ctx)
-	// The short name, so the merge commit says "Merge branch 'feature'".
-	_, mergeErr := w.gitRemote(ctx, "merge", "--no-edit", "--autostash", "--no-stat", "--end-of-options", name)
+	// The full ref, so a tag of the same name isn't merged instead (git
+	// prefers refs/tags); git's message for the short name, so the merge
+	// commit says "Merge branch 'feature'".
+	_, mergeErr := w.gitRemote(ctx, "merge", "--no-edit", "--autostash", "--no-stat", "-m", mergeMessage(name, remote, before.Branch), "--end-of-options", ref)
 	after, err := w.GitStatus(ctx)
 	if err != nil {
 		return MergeResult{}, err
@@ -250,4 +252,18 @@ func branchError(action string, err error, out string) error {
 		return fmt.Errorf("%w (%s)", ErrLocalChanges, lastLine(out))
 	}
 	return fmt.Errorf("git %s: %w", action, err)
+}
+
+// mergeMessage is git's message for merging branch name (a remote's when
+// remote) into into: "Merge branch 'feature'", " into dev" unless into is
+// main or master.
+func mergeMessage(name string, remote bool, into string) string {
+	msg := fmt.Sprintf("Merge branch '%s'", name)
+	if remote {
+		msg = fmt.Sprintf("Merge remote-tracking branch '%s'", name)
+	}
+	if into != "" && into != "main" && into != "master" {
+		msg += " into " + into
+	}
+	return msg
 }

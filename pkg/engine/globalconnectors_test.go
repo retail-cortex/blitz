@@ -85,8 +85,10 @@ func TestMakeConnectorGlobal(t *testing.T) {
 	assert.False(t, moved.On, "still off here")
 	assert.NoFileExists(t, saved.Path)
 	assert.FileExists(t, moved.Path)
-	assert.True(t, g.HasSecret(moved, "password"), "the password moved")
-	assert.False(t, w.HasConnectorSecret(saved, "password"), "and left the workspace")
+	cat, ok := g.Catalog().Category(moved.Category)
+	require.True(t, ok)
+	assert.True(t, connectors.HasSecret(g.Dirs(), cat, global(moved), "password"), "the password moved")
+	assert.False(t, connectors.HasSecret(w.connectorDirs(), cat, saved, "password"), "and left the workspace")
 	require.Len(t, g.List(), 1)
 
 	_, _, err = w.MakeConnectorGlobal(ctx, "databases", "shop")

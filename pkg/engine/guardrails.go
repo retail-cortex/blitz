@@ -138,12 +138,7 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error 
 	if g == nil {
 		return err
 	}
-	rel := func(path string) string {
-		if r, rerr := filepath.Rel(w.Dir(), path); rerr == nil && !strings.HasPrefix(r, "..") {
-			return r
-		}
-		return path
-	}
+	rel := w.workspaceRel
 	var hint string
 	switch {
 	case g.Path == "" && lim.broken != nil:
@@ -159,6 +154,23 @@ func (w *Workspace) limitSource(err error, lim turnLimits, attended bool) error 
 		hint += " " + i18n.T("guardrail.limit_continue")
 	}
 	return fmt.Errorf("%w: %s", err, hint)
+}
+
+// workspaceRel is path relative to the workspace when it's in it.
+func (w *Workspace) workspaceRel(path string) string {
+	if r, err := filepath.Rel(w.Dir(), path); err == nil && !strings.HasPrefix(r, "..") {
+		return r
+	}
+	return path
+}
+
+// limitSetting says which setting of the limits guardrail gr refused a
+// call, and where it's set (or would be, for its defaults).
+func (w *Workspace) limitSetting(gr gates.Guardrail, key string) string {
+	if gr.Path == "" {
+		return i18n.T("guardrail.limit_setting_default", "key", key, "path", filepath.Join(".agents", "guardrails", gates.BuiltinLimits+".md"))
+	}
+	return i18n.T("guardrail.limit_setting", "key", key, "path", w.workspaceRel(gr.Path))
 }
 
 // guardsFor are the guardrails of the session's turn. A call outside one
@@ -295,11 +307,11 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 	switch {
 	case c.Tool == "web_fetch" || (c.Tool == "browser" && str("action") == "navigate"):
 		if u := str("url"); !gates.DomainAllowed(u, l.AllowedDomains) {
-			return i18n.T("guardrail.domain", "url", u, "domains", strings.Join(l.AllowedDomains, ", "))
+			return i18n.T("guardrail.domain", "url", u, "domains", strings.Join(l.AllowedDomains, ", ")) + " " + g.w.limitSetting(gr, "allowed_domains")
 		}
 	case c.Tool == "run_shell_command":
 		if glob := gates.CommandDenied(str("command"), gates.ExpandCommands(l.Commands)); glob != "" {
-			return i18n.T("guardrail.command", "glob", glob)
+			return i18n.T("guardrail.command", "glob", glob) + " " + g.w.limitSetting(gr, "commands")
 		}
 	case slices.Contains(writeTools, c.Tool) && l.MaxFilesChanged > 0:
 		changed := g.w.tools.Checkpoints().LatestTurnFiles(c.Session)
@@ -308,7 +320,7 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 			target = filepath.Join(g.w.Dir(), target)
 		}
 		if len(changed) >= l.MaxFilesChanged && !slices.Contains(changed, target) {
-			return i18n.T("guardrail.files", "n", l.MaxFilesChanged)
+			return i18n.T("guardrail.files", "n", l.MaxFilesChanged) + " " + g.w.limitSetting(gr, "max_files_changed")
 		}
 	}
 	return ""

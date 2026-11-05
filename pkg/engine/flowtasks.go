@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -148,7 +149,7 @@ func withFlowOrigin(ctx context.Context, origin string) context.Context {
 // before) and says in the chat what it waits on.
 func (w *Workspace) pauseRun(ctx context.Context, r *flowRun, tasks []FlowTask, done map[string]Replayed) error {
 	origin, _ := ctx.Value(flowOriginKey{}).(string)
-	rec := FlowRecord{Run: r.runID, Workspace: w.Dir(), Workflow: r.f.Name, Hash: flowHash(r.f), Session: r.session, Origin: cmpOr(origin, "chat"), Input: r.input, Started: time.Now(), Tasks: tasks, Done: done}
+	rec := FlowRecord{Run: r.runID, Workspace: w.Dir(), Workflow: r.f.Name, Hash: flowHash(r.f), Session: r.session, Origin: cmp.Or(origin, "chat"), Input: r.input, Started: time.Now(), Tasks: tasks, Done: done}
 	if old, err := w.loadRecord(r.runID); err == nil {
 		rec.Started = old.Started
 	}
@@ -170,13 +171,6 @@ func (w *Workspace) pauseRun(ctx context.Context, r *flowRun, tasks []FlowTask, 
 		r.emit(api.Event{Notice: &api.Notice{Text: text}})
 	}
 	return nil
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 func (w *Workspace) loadRecord(runID string) (FlowRecord, error) {
@@ -204,9 +198,9 @@ func (w *Workspace) pauseStep(ctx agent.Context, r *flowRun, n flows.Node, vars 
 		s := r.step(n, api.StepFailed)
 		s.Error = err.Error()
 		r.emit(api.Event{Step: s})
-		return flows.Result{}, &stepFailure{title: cmpOr(n.Title, n.ID), err: err}
+		return flows.Result{}, &stepFailure{title: cmp.Or(n.Title, n.ID), err: err}
 	}
-	task := FlowTask{ID: r.runID + "/" + n.ID, Step: n.ID, Title: cmpOr(n.Title, n.ID), Kind: n.Type, Message: filled.Instructions, Form: form, Created: time.Now()}
+	task := FlowTask{ID: r.runID + "/" + n.ID, Step: n.ID, Title: cmp.Or(n.Title, n.ID), Kind: n.Type, Message: filled.Instructions, Form: form, Created: time.Now()}
 	if n.Type == flows.Timer {
 		if task.FireAt, err = fireAt(filled); err != nil {
 			s := r.step(n, api.StepFailed)

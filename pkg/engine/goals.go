@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
@@ -79,11 +80,12 @@ func (w *Workspace) ClearGoal() error {
 	return nil
 }
 
+// goalMax is how often a /goal sends the agent on before it stops to ask.
 func (w *Workspace) goalMax() int {
 	if n := w.cfg.Blitz.GoalMaxContinues; n > 0 {
 		return n
 	}
-	return 20
+	return config.DefaultGoalMaxContinues
 }
 
 func (w *Workspace) goalOf(id string) (api.Goal, bool) {

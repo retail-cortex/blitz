@@ -25,6 +25,25 @@ import (
 	"google.golang.org/genai"
 )
 
+// goal_max_continues unset (0) is its default, named once in config.
+func TestGoalMax(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  int
+		want int
+	}{
+		{"unset", 0, config.DefaultGoalMaxContinues},
+		{"set", 3, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := openTest(t)
+			w.cfg.Blitz.GoalMaxContinues = tc.set
+			assert.Equal(t, tc.want, w.goalMax())
+		})
+	}
+	assert.Equal(t, config.DefaultGoalMaxContinues, config.DefaultConfig().Blitz.GoalMaxContinues)
+}
+
 // A goal sends the agent on until the judge says it holds, or can't, or
 // the limit is reached (spec_027_parity PAR-SES-30).
 func TestGoals(t *testing.T) {

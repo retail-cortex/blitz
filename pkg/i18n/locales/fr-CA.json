@@ -126,6 +126,8 @@
     "guardrail.limit_default": "le garde-fou {name} fixe cette limite par défaut; pour en permettre plus par tour, mettez {key} sous limits: dans {path} (0 : aucune limite).",
     "guardrail.limit_file": "le garde-fou {name} fixe cette limite dans {path}; pour en permettre plus par tour, augmentez {key} sous limits: (0 : aucune limite).",
     "guardrail.limit_broken": "le garde-fou {name} fonctionne avec ses valeurs par défaut, qui fixent cette limite, car {path} a un problème : {problem}. Corrigez-le là pour changer {key} sous limits: (0 : aucune limite).",
+    "guardrail.limit_setting": "({key} sous limits: dans {path})",
+    "guardrail.limit_setting_default": "(par défaut; mettez {key} sous limits: dans {path} pour le changer)",
     "guardrail.limit_continue": "Envoyez « continue » pour reprendre là où il s’est arrêté.",
     "rule.blocked": "La règle {name} a arrêté ce message : {reason}",
     "rule.warned": "⚠ Règle {name} : {reason}",

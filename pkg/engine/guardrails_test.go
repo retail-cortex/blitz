@@ -64,6 +64,7 @@ func TestLimitsGuardrail(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Contains(t, got["error"], "guardrail limits")
 	assert.Contains(t, got["error"], "git push --force*")
+	assert.Contains(t, got["error"], "(commands under limits: in "+filepath.Join(".agents", "guardrails", "limits.md")+")", "the setting and its file")
 	require.NotEmpty(t, notices)
 	assert.Contains(t, notices[0].Text, "limits")
 
@@ -149,6 +150,7 @@ func TestLimitsDomainsAndFiles(t *testing.T) {
 	}
 	assert.Empty(t, call("web_fetch", map[string]any{"url": "https://docs.example.com/x"}))
 	assert.Contains(t, call("web_fetch", map[string]any{"url": "https://evil.test/"}), "allowed domains")
+	assert.Contains(t, call("web_fetch", map[string]any{"url": "https://evil.test/"}), "(allowed_domains under limits: in "+filepath.Join(".agents", "guardrails", "limits.md")+")")
 	assert.Contains(t, call("browser", map[string]any{"action": "navigate", "url": "https://evil.test/"}), "allowed domains")
 	assert.Empty(t, call("browser", map[string]any{"action": "read"}))
 	assert.Empty(t, call("create_file", map[string]any{"path": "a.txt"}), "nothing changed yet")
@@ -360,6 +362,15 @@ func TestBuiltinGuardrailHealthFile(t *testing.T) {
 	before := hashOf()
 	writeGuardrail(t, w, "limits", "---\nbuiltin: limits\nlimits:\n  max_files_changed: 4\n---\n")
 	assert.NotEqual(t, before, hashOf())
+}
+
+// A limits guardrail's defaults say where to set what refused a call.
+func TestLimitSettingDefault(t *testing.T) {
+	w := openTest(t)
+	turn := api.Turn{}
+	w.startGuardrails("s", &turn)
+	got := guard{w}.ToolCall(context.Background(), runtime.GuardCall{Session: "s", Tool: "run_shell_command", Args: map[string]any{"command": "rm -rf /"}}).Refusal
+	assert.Contains(t, got, "(by default; set commands under limits: in "+filepath.Join(".agents", "guardrails", "limits.md")+" to change it)")
 }
 
 // The organization's guardrails are guardrails, not rules (spec_053

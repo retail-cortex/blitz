@@ -274,10 +274,11 @@ var previewTypes = map[string]string{
 func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext(p))] }
 
 // ErrNoPreview means the file has no preview: ReadPreview shows only
-// images, PDFs and sound, up to 32 MB.
+// images, PDFs, sound and video, up to 32 MB, and Word documents as
+// Markdown.
 var ErrNoPreview = errors.New("no preview")
 
-// ReadPreview returns an image, PDF or sound file's bytes and media type,
+// ReadPreview returns an image, PDF, sound or video file's bytes and media type,
 // for the editor to show or play (FIL-54); a Word document's, its text as
 // Markdown.
 func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
