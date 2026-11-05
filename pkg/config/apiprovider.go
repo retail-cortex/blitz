@@ -138,8 +138,10 @@ func checkAPIBaseURL(base string) error {
 // reports it.
 type APIHeaderInfo struct {
 	Name string
-	// Value is given only when it is exactly TokenPlaceholder: a header can
-	// hold a credential, so other values never leave the settings file.
+	// Value is given only when it uses TokenPlaceholder (as UsesToken
+	// checks, anywhere in it: "Bearer {{TOKEN_SCRIPT}}"), the token then
+	// being the script's; a header can hold a credential, so other values
+	// never leave the settings file.
 	Value    string
 	HasValue bool
 }
@@ -163,8 +165,8 @@ func describeAPI(raw map[string]any) APIProviderInfo {
 	headers := fileHeaders(raw)
 	for _, name := range sortedKeys(headers) {
 		h := APIHeaderInfo{Name: name, HasValue: headers[name] != ""}
-		if headers[name] == TokenPlaceholder {
-			h.Value = TokenPlaceholder
+		if strings.Contains(headers[name], TokenPlaceholder) {
+			h.Value = headers[name]
 		}
 		info.Headers = append(info.Headers, h)
 	}

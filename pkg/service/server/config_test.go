@@ -248,6 +248,10 @@ func TestConfigServicePermissions(t *testing.T) {
 			_, err := cfg.SetReadOnlyDefaults(ctx, connect.NewRequest(&pb.SetReadOnlyDefaultsRequest{Value: "maybe"}))
 			return err
 		},
+		func() error {
+			_, err := cfg.RemovePermission(ctx, connect.NewRequest(&pb.RemovePermissionRequest{Rule: "shell(x)", Effect: "maybe"}))
+			return err
+		},
 	} {
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
 	}

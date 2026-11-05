@@ -81,6 +81,20 @@ func AddPermissionRule(prefixDir, workspace, effect, rule string) (path, canonic
 // form, from every list in a scope's file, returning the file and how many
 // went.
 func RemovePermissionRule(prefixDir, workspace, rule string) (path string, removed int, err error) {
+	return RemovePermissionRuleFrom(prefixDir, workspace, rule, "")
+}
+
+// RemovePermissionRuleFrom removes a rule as RemovePermissionRule does,
+// from the effect's list alone (allow, ask or deny; "" for every list), so
+// the same rule under another effect stays.
+func RemovePermissionRuleFrom(prefixDir, workspace, rule, effect string) (path string, removed int, err error) {
+	effects := []string{"allow", "ask", "deny"}
+	if effect != "" {
+		if !slices.Contains(effects, effect) {
+			return "", 0, fmt.Errorf("unknown permission effect %q (allow, ask or deny)", effect)
+		}
+		effects = []string{effect}
+	}
 	p, path, err := ScopePermissions(prefixDir, workspace)
 	if err != nil {
 		return path, 0, err
@@ -89,7 +103,7 @@ func RemovePermissionRule(prefixDir, workspace, rule string) (path string, remov
 	if c, err := validRule("deny", rule); err == nil {
 		want = append(want, c)
 	}
-	for _, effect := range []string{"allow", "ask", "deny"} {
+	for _, effect := range effects {
 		list := permList(&p, effect)
 		kept := slices.DeleteFunc(slices.Clone(*list), func(r string) bool { return slices.Contains(want, strings.TrimSpace(r)) })
 		if n := len(*list) - len(kept); n > 0 {

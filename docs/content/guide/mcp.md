@@ -37,7 +37,7 @@ blitz mcp login docs
 | `blitz mcp … --workspace` (`-w`) | Any of the above for this workspace's own servers (`--dir`, else the current directory): `list -w` shows every server it runs with its scope, `disable -w` on a global one turns it off here alone |
 | `blitz mcp make-global <name>` | Moves one of this workspace's servers to the global settings, for every workspace |
 
-In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Connectors › MCP servers**, and a workspace's own in **Studio › Connectors** ([one workspace's servers](#one-workspaces-servers)).
+In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Connectors › MCP servers**, and a workspace's own in **Studio › Connectors** ([one workspace's servers](#one-workspaces-servers)). The app's form has every setting below but `disabled` (that's the switch); it never shows the environment and header values you've saved (a `{secrets:…}` name aside): leave one empty to keep it.
 
 ## In the settings file
 

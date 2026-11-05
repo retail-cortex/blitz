@@ -93,6 +93,7 @@ func TestSetProviderAPI(t *testing.T) {
 		TokenScript:         "curl -s https://auth.example.com/token\n| jq -r .token",
 		TokenScriptLanguage: ScriptShell,
 		Headers: []APIHeader{
+			{Name: "Authorization", Value: "Bearer " + TokenPlaceholder},
 			{Name: "X-Api-Key", Value: TokenPlaceholder},
 			{Name: "X-Tenant", Value: "secret-tenant"},
 			{Name: "X.Odd", Value: "quoted key"},
@@ -104,17 +105,18 @@ func TestSetProviderAPI(t *testing.T) {
 	assert.Equal(t, "gpt-5", cfg.ModelName())
 	assert.Equal(t, "https://gateway.example.com", cfg.LLM.API.BaseURL, "trimmed")
 	assert.Equal(t, "curl -s https://auth.example.com/token\n| jq -r .token", cfg.LLM.API.TokenScript, "a multi-line script round-trips")
-	assert.Equal(t, map[string]string{"X-Api-Key": TokenPlaceholder, "X-Tenant": "secret-tenant", "X.Odd": "quoted key"}, cfg.LLM.API.Headers)
+	assert.Equal(t, map[string]string{"Authorization": "Bearer " + TokenPlaceholder, "X-Api-Key": TokenPlaceholder, "X-Tenant": "secret-tenant", "X.Odd": "quoted key"}, cfg.LLM.API.Headers)
 
 	info, err := Describe("", "")
 	require.NoError(t, err)
 	assert.Equal(t, "https://gateway.example.com", info.API.BaseURL)
 	assert.Equal(t, ScriptShell, info.API.TokenScriptLanguage)
 	assert.Equal(t, []APIHeaderInfo{
+		{Name: "Authorization", Value: "Bearer " + TokenPlaceholder, HasValue: true},
 		{Name: "X-Api-Key", Value: TokenPlaceholder, HasValue: true},
 		{Name: "X-Tenant", HasValue: true},
 		{Name: "X.Odd", HasValue: true},
-	}, info.API.Headers, "only the placeholder is shown")
+	}, info.API.Headers, "only values using the token are shown, with the text around it")
 
 	t.Run("empty value keeps it, missing header is removed", func(t *testing.T) {
 		require.NoError(t, save(APIProviderSettings{

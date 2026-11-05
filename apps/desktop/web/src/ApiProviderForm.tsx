@@ -16,7 +16,7 @@
 
 import { useId, useRef, type KeyboardEvent } from "react";
 import { mdiDeleteOutline, mdiPlus } from "@mdi/js";
-import { newHeader, scriptLanguages, tokenPlaceholder, usesToken, type ApiForm, type ApiHeaderRow } from "./apiForm";
+import { newHeader, scriptLanguages, tokenPlaceholder, tokenValue, usesToken, type ApiForm, type ApiHeaderRow } from "./apiForm";
 import { t } from "./i18n";
 import { Button, IconButton, Switch } from "@blitz/webui";
 
@@ -72,7 +72,7 @@ export function ApiProviderForm({ form, onChange, problems, busy, onEnter }: { f
                 onKeyDown={onEnter}
               />
               {h.useToken ? (
-                <input className="input mono" aria-label={t("desktop.keys.api.header_value", { n })} value={tokenPlaceholder} readOnly disabled={busy} />
+                <input className="input mono" aria-label={t("desktop.keys.api.header_value", { n })} value={tokenValue(h)} readOnly disabled={busy} />
               ) : (
                 <input
                   className="input mono"

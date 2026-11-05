@@ -39,6 +39,24 @@ describe("the form", () => {
     expect(fromForm(f)).toMatchObject({ name: "fs", command: "npx", args: ["@acme/fs", "--ro"], env: { ROOT: "/srv" }, url: "", sandbox: false, timeoutSeconds: 60, agents: ["qa", "*"], disabled: true, autoApprove: true });
   });
 
+  // N26 desktop-1#10: an edit kept neither, so every tool was offered
+  // under another name.
+  it("keeps its tools and prefix", () => {
+    const f = toForm(create(MCPServerConfigSchema, { name: "github", command: "npx", tools: ["create_issue", "list_issues"], prefix: "gh" }));
+    expect(f).toMatchObject({ tools: "create_issue, list_issues", prefix: "gh" });
+    expect(fromForm({ ...f, timeout: "60" })).toMatchObject({ tools: ["create_issue", "list_issues"], prefix: "gh", timeoutSeconds: 60 });
+    expect(fromForm({ ...f, tools: " ", prefix: " " })).toMatchObject({ tools: [], prefix: "" });
+  });
+
+  // N26 desktop-1#11: the service withholds values; one sent back empty
+  // keeps what's saved.
+  it("sends a withheld value back empty", () => {
+    const f = toForm(create(MCPServerConfigSchema, { name: "github", command: "npx", env: { GITHUB_TOKEN: "", TEAM: "{secrets:team}" } }));
+    expect(f.env).toBe("GITHUB_TOKEN=\nTEAM={secrets:team}");
+    expect(formProblems(f, [])).toEqual([]);
+    expect(fromForm(f).env).toEqual({ GITHUB_TOKEN: "", TEAM: "{secrets:team}" });
+  });
+
   it("round-trips a URL server, leaving out what's for commands", () => {
     const f = toForm(create(MCPServerConfigSchema, { name: "docs", url: "https://mcp.example/docs", headers: { "X-Team": "core" } }));
     expect(f).toMatchObject({ kind: "url", headers: "X-Team: core", sandbox: true, timeout: "" });
