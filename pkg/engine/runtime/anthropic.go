@@ -635,7 +635,7 @@ func genaiSchemaToJSON(s *genai.Schema) map[string]any {
 // messageToResponse converts a Messages API response to an ADK response.
 func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	content := &genai.Content{Role: genai.RoleModel}
-	for _, block := range msg.Content {
+	for i, block := range msg.Content {
 		switch b := block.AsAny().(type) {
 		case anthropic.BetaTextBlock:
 			if b.Text != "" {
@@ -647,8 +647,16 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 			content.Parts = append(content.Parts, &genai.Part{Thought: true, ThoughtSignature: []byte(redactedPrefix + b.Data)})
 		case anthropic.BetaToolUseBlock:
 			args := map[string]any{}
+			var bad error
 			if raw := b.JSON.Input.Raw(); raw != "" {
-				_ = json.Unmarshal([]byte(raw), &args)
+				bad = json.Unmarshal([]byte(raw), &args)
+			}
+			// A call the reply stopped in (max_tokens; a stream's cut-off
+			// input becomes {}) isn't run with arguments it never
+			// finished: the reply says so.
+			if bad != nil || msg.StopReason == anthropic.BetaStopReasonMaxTokens && i == len(msg.Content)-1 {
+				content.Parts = append(content.Parts, &genai.Part{Text: fmt.Sprintf("\n\n(The call to %s was cut off before its arguments were complete, so it wasn't run.)", b.Name)})
+				continue
 			}
 			content.Parts = append(content.Parts, &genai.Part{FunctionCall: &genai.FunctionCall{ID: b.ID, Name: b.Name, Args: args}})
 		}

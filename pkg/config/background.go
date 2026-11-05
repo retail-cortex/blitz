@@ -20,6 +20,10 @@ import (
 	"time"
 )
 
+// DefaultStallTimeoutSeconds is llm.stall_timeout_seconds' default, the
+// one place it is defined (spec_015_models MDL-51).
+const DefaultStallTimeoutSeconds = 600
+
 // The background tasks' defaults (spec_032_background_agents BGA-06),
 // the one place they are defined.
 const (

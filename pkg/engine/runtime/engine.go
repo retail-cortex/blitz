@@ -1094,6 +1094,13 @@ func (e *Engine) subInstruction(spec *agents.AgentSpec) string {
 	return text
 }
 
+// rootPrompt is spec's prompt as the active agent: at the session's
+// agency level, with its skills listed (newLLMAgent adds the image,
+// diagram and project instructions).
+func (e *Engine) rootPrompt(spec *agents.AgentSpec) string {
+	return spec.InterpolatePrompt(e.agencyLevel()) + e.skillIndex(spec.Name)
+}
+
 // skillIndex lists the skills offered to the named agent, for its
 // instruction; empty with skills off or none offered.
 func (e *Engine) skillIndex(agent string) string {
@@ -1175,7 +1182,7 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		subAgents = append(subAgents, sub)
 	}
 
-	rootInstruction := rootSpec.InterpolatePrompt(e.agencyLevel()) + e.skillIndex(rootSpec.Name)
+	rootInstruction := e.rootPrompt(rootSpec)
 
 	// MCP servers choose their agents; by default only the primary agent.
 	llm := e.modelInTreeLocked(active, active, override)
@@ -1448,6 +1455,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	hooks.Async(ctx, "subagent_start", agentName, tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Prompt: prompt})
 	var out strings.Builder
 	defer func() {
+		e.scoped.forget(sessionID) // its session ends here: what it was handed goes with it
 		ev := tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Output: out.String()}
 		if err != nil {
 			ev.Error = err.Error()

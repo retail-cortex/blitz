@@ -133,8 +133,8 @@ func TestFallbackTakesOverThenPrimaryReturns(t *testing.T) {
 	require.Equal(t, "from gemini-x", text, "primary not back: %q from=%q calls=%d", text, from, primary.count())
 	require.Equal(t, "", from, "primary not back: %q from=%q calls=%d", text, from, primary.count())
 	require.Equal(t, 2, primary.count(), "primary not back: %q from=%q calls=%d", text, from, primary.count())
-	require.Equal(t, "gemini-x", f.Name(), "name %q models %v", f.Name(), f.Models())
-	require.Equal(t, "gemini-x,claude-y", strings.Join(f.Models(), ","), "name %q models %v", f.Name(), f.Models())
+	require.Equal(t, "gemini-x", f.Name(), "name %q models %v", f.Name(), chainNames(f))
+	require.Equal(t, "gemini-x,claude-y", strings.Join(chainNames(f), ","), "name %q models %v", f.Name(), chainNames(f))
 }
 
 func TestNoFallbackAfterOutputOrOnCancel(t *testing.T) {
@@ -237,7 +237,7 @@ func TestNewModelBuildsACrossProviderChain(t *testing.T) {
 	require.NoError(t, err)
 	fm, ok := m.(*fallbackModel)
 	require.True(t, ok, "chain = %T %v", m, fm)
-	require.Equal(t, "gpt-test,claude-sonnet-5,nosuchprovider/x", strings.Join(fm.Models(), ","), "chain = %T %v", m, fm)
+	require.Equal(t, "gpt-test,claude-sonnet-5,nosuchprovider/x", strings.Join(chainNames(fm), ","), "chain = %T %v", m, fm)
 	text, err := generateText(t, m)
 	require.NoError(t, err, "got %q, %v after %d primary calls", text, err, oaiCalls.Load())
 	require.Equal(t, "ok", text, "got %q, %v after %d primary calls", text, err, oaiCalls.Load())
@@ -352,4 +352,13 @@ func TestFallbackNoticesPerRun(t *testing.T) {
 			assert.Equal(t, c.want, got)
 		})
 	}
+}
+
+// chainNames are a fallback chain's models' names, in order.
+func chainNames(f *fallbackModel) []string {
+	names := make([]string, len(f.chain))
+	for i, m := range f.chain {
+		names[i] = m.Name()
+	}
+	return names
 }

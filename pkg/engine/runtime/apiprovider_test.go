@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -66,6 +67,15 @@ func newFakeGateway(t *testing.T, replies ...[2]any) *fakeGateway {
 		_ = json.Unmarshal(data, &body)
 		g.mu.Lock()
 		g.got = append(g.got, gwRequest{r.Method, r.URL.Path, r.URL.Query(), r.Header.Clone(), body})
+		if strings.HasSuffix(r.URL.Path, "/messages") && r.Method == http.MethodPost {
+			if why := invalidMessages(body); why != "" { // as the Messages API behind it would
+				g.mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"type":"error","error":{"type":"invalid_request_error","message":`+strconv.Quote(why)+`}}`)
+				return
+			}
+		}
 		status, reply := http.StatusOK, gwText
 		if len(g.replies) > 0 {
 			status, reply = g.replies[0][0].(int), g.replies[0][1].(string)

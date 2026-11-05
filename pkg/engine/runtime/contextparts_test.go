@@ -106,3 +106,27 @@ func testPDF(t *testing.T, n int) []byte {
 	require.NoError(t, f.Output(&buf))
 	return buf.Bytes()
 }
+
+// The system prompt is counted as the agent gets it: at the session's
+// agency level, with the skills, image and diagram instructions (N26
+// engine-runtime#30).
+func TestContextPartsSystemPromptIsTheAgents(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{cfg: imagesDir(t)}, textContent("hi"))
+	f.eng.SetAgency("extreme")
+	_, err := collect(t, f.eng, "s", "hello")
+	require.NoError(t, err)
+	req := f.llm.Requests[len(f.llm.Requests)-1]
+	require.NotNil(t, req.Config)
+	require.NotNil(t, req.Config.SystemInstruction)
+	sent := 0
+	for _, p := range req.Config.SystemInstruction.Parts {
+		sent += len(p.Text)
+	}
+	spec, ok := f.eng.agentReg.Get("blitz")
+	require.True(t, ok)
+	ours := spec.InterpolatePrompt("extreme") + f.eng.imageInstruction(spec) + diagramInstruction
+	got := partsByName(f.eng.ContextParts(context.Background(), "s", 0))
+	// ADK adds a little of its own (the agent's name, its sub-agents).
+	assert.GreaterOrEqual(t, got["system_prompt"], int64(len(ours)/4), "the agency, image and diagram instructions counted")
+	assert.LessOrEqual(t, got["system_prompt"], int64(sent/4), "no more than was sent")
+}

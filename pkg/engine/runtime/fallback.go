@@ -61,15 +61,6 @@ func newFallbackModel(chain []model.LLM) model.LLM {
 // Name is the primary model's name: the one configured and shown.
 func (f *fallbackModel) Name() string { return f.chain[0].Name() }
 
-// Models returns the names in fallback order.
-func (f *fallbackModel) Models() []string {
-	names := make([]string, len(f.chain))
-	for i, m := range f.chain {
-		names[i] = m.Name()
-	}
-	return names
-}
-
 func (f *fallbackModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		var errs []error

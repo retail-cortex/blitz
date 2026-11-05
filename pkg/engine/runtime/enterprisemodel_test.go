@@ -27,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -323,4 +324,20 @@ func TestEnterprisePolicy(t *testing.T) {
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
 	assert.ErrorContains(t, err, "catalog is out of date")
+}
+
+// fixedSource gives one access token.
+type fixedSource string
+
+func (f fixedSource) AccessToken(context.Context) (string, error) { return string(f), nil }
+func (f fixedSource) Invalidate()                                 {}
+
+// The organization's access token is remembered by the redactor, as a
+// token script's is (MDL-108; N26 engine-runtime#27).
+func TestEnterpriseTokenIsMasked(t *testing.T) {
+	p := &apiProvider{source: fixedSource("org-access-token-27")}
+	tok, err := p.token(context.Background(), "s")
+	require.NoError(t, err)
+	assert.Equal(t, "org-access-token-27", tok)
+	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-access-token-27"), "org-access-token-27")
 }

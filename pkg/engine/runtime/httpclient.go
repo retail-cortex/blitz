@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	defaultStallTimeout = 10 * time.Minute
+	defaultStallTimeout = config.DefaultStallTimeoutSeconds * time.Second
 	dialTimeout         = 30 * time.Second
 	tlsTimeout          = 15 * time.Second
 )
@@ -171,7 +171,7 @@ func (b *stallBody) Read(p []byte) (int, error) {
 		b.timer.Reset(b.stall)
 	}
 	if err != nil && errors.Is(context.Cause(b.ctx), ErrStalled) {
-		return n, fmt.Errorf("%w: no data for %s", ErrStalled, b.stall)
+		return n, fmt.Errorf("%w: no data for %s (llm.stall_timeout_seconds sets how long to wait)", ErrStalled, b.stall)
 	}
 	return n, err
 }

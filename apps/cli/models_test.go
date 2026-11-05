@@ -33,7 +33,7 @@ func TestModelsCommand(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err), "no provider set up: %v", err)
 	out, err := runCLI(t, "models", "carrier-pigeon")
 	assert.Equal(t, exitFailure, exitCodeFor(err))
-	assert.Contains(t, out, "can't list its models: unknown provider carrier-pigeon")
+	assert.Contains(t, out, `can't list its models: unknown provider "carrier-pigeon"`)
 }
 
 // blitz models lists each configured provider's models, with the prices

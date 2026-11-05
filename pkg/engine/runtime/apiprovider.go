@@ -344,7 +344,13 @@ func keepErrorBody(ctx context.Context, res *http.Response, err error) {
 // token is session's token, or "" when nothing uses one.
 func (p *apiProvider) token(ctx context.Context, session string) (string, error) {
 	if p.source != nil {
-		return p.source.AccessToken(ctx)
+		// The organization's token is remembered by the redactor too, as a
+		// script's is (MDL-108): a gateway error echoing it is masked.
+		tok, err := p.source.AccessToken(ctx)
+		if err == nil {
+			redact.Remember(tok)
+		}
+		return tok, err
 	}
 	if p.tokens == nil {
 		return "", nil
