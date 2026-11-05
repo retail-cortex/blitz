@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   mdiAccountClockOutline,
@@ -61,6 +61,16 @@ export function size(n: bigint | number): string {
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Sync states waiting won't clear: the person acts (signs in, resolves, fixes the file), then Check again. */
+const stuckSync = ["offline", "signed_out", "conflicts", "refused", "secrets"];
+
+/** How often, and how many times, Studio looks again while sync puts a job on main (5 minutes). */
+const syncPollMs = 5000;
+const syncPolls = 60;
+
+/** Whether to look again by itself: sync is putting the job on main, in a state that moves, and it hasn't looked syncPolls times. */
+export const waitsForSync = (r: Pick<GetServiceJobResponse, "reason" | "syncState"> | null, polls: number) => r?.reason === "saving" && !stuckSync.includes(r.syncState) && polls < syncPolls;
+
 /** whyNot is what Studio says of a job the service hasn't got, by its reason (GetServiceJob's). */
 export function whyNot(r: Pick<GetServiceJobResponse, "reason" | "detail" | "syncState">): string {
   switch (r.reason) {
@@ -105,10 +115,12 @@ export function ServiceJobView({ dir, worker, onEdit, onDelete }: { dir: string;
       setError(message(e));
     }
   }, [dir, worker.name, worker.path]);
-  // While sync puts it on main, look again until the service has it.
+  // While sync puts it on main, look again until the service has it, for
+  // a while; a state waiting won't clear stops it (Check again is there).
+  const polls = useRef(0);
   useEffect(() => {
-    if (missing?.reason !== "saving") return;
-    const id = window.setTimeout(() => void refresh(), 5000);
+    if (!waitsForSync(missing, polls.current)) return;
+    const id = window.setTimeout(() => ((polls.current += 1), void refresh()), syncPollMs);
     return () => window.clearTimeout(id);
   }, [missing, refresh]);
   const push = async () => {

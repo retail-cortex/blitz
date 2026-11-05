@@ -597,8 +597,10 @@ export function Conversation({
             } else if (k?.case === "task" && ["done", "failed", "stopped"].includes(k.value.state)) {
               const task = k.value;
               setEntries((e) => [...e, { kind: "notice", text: t("desktop.task.ended", { id: task.id, agent: task.agent, state: t(`tasks.state.${task.state}`) }), tone: task.state === "failed" ? "error" : "info" }]);
-              const { running: busy, run: go, continueOn } = latest.current;
-              if (continueOn && !busy) go(t("desktop.task.continue_prompt", { id: task.id }));
+              // The ref, not the rendered state: run sets it at once, so two
+              // tasks ending together start one turn, not two.
+              const { run: go, continueOn } = latest.current;
+              if (continueOn && !latestRunning.current) go(t("desktop.task.continue_prompt", { id: task.id }));
             }
           }
         } catch {

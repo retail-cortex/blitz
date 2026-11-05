@@ -2021,6 +2021,7 @@
     "desktop.secrets.value": "Valor",
     "desktop.secrets.add": "Añadir",
     "desktop.secrets.bad_key": "Usa letras, dígitos, _, . y - en el nombre (hasta 64).",
+    "desktop.secrets.key_taken": "{key} ya es un secreto: reemplaza su valor con el lápiz que tiene al lado.",
     "desktop.secrets.saved": "{key} guardado",
     "desktop.secrets.stored": "Guardado como {urn}",
     "desktop.secrets.updated": "Definido {when}",

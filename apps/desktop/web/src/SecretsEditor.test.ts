@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { secretPlaceholder, storedName, validSecretKey } from "./SecretsEditor";
+import { addProblem, secretPlaceholder, storedName, validSecretKey } from "./SecretsEditor";
 
 describe("secrets", () => {
   it.each([
@@ -25,6 +25,18 @@ describe("secrets", () => {
     { key: "has space", ok: false },
     { key: "a".repeat(65), ok: false },
   ])("$key is a name: $ok", ({ key, ok }) => expect(validSecretKey(key)).toBe(ok));
+
+  // N26 desktop-1#33: Add replaced a listed secret's value without asking.
+  it.each([
+    { key: "", want: "" },
+    { key: "new_one", want: "" },
+    { key: "has space", want: "Use letters" },
+    { key: "github_token", want: "already" },
+  ])("adding $key: $want", ({ key, want }) => {
+    const got = addProblem(key, [{ key: "github_token" }]);
+    if (want) expect(got).toContain(want);
+    else expect(got).toBe("");
+  });
 
   it("names a secret with its scope", () => {
     expect(secretPlaceholder("db")).toBe("{secrets:global:db}");

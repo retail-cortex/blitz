@@ -50,7 +50,8 @@ var ErrEmptyMessage = errors.New("a commit needs a message")
 // maxCommitDiffChars is how much of the staged diff the model sees.
 const maxCommitDiffChars = 24_000
 
-// commitInstruction asks for a commit message from a staged diff.
+// commitInstruction asks for a commit message from a staged diff. Its 72
+// characters are the desktop commit dialog's subjectLimit (commit.ts).
 const commitInstruction = `You write the git commit message for the staged changes of a software project, on the developer's behalf, from their diff. Reply with the message only: no Markdown fences, no commentary, no quotes around it.
 First line: a summary of what the commit does and why, imperative mood ("Fix", "Add"), at most 72 characters, no trailing period. Follow the style of the recent commit subjects if they show one (a prefix such as "feat:" or "pkg/x:", capitalisation); otherwise plain.
 Then, only if the change needs it, a blank line and a short body (wrapped at 72 characters) saying what changed and why, as plain sentences or "- " bullets. No body for a small, obvious change.

@@ -22,5 +22,8 @@ describe("workspaceOf", () => {
     ["/home/me/shop/.agents/skills/lit-review", "/home/me/shop"],
     ["/home/me/.blitz/skills/lit-review", ""],
     ["/home/me/shop/.agents/skills/a/b", ""],
+    // N26 desktop-1#32: a Windows folder went to the user's scope.
+    ["C:\\code\\shop\\.agents\\skills\\lit-review", "C:\\code\\shop"],
+    ["C:\\Users\\me\\.blitz\\skills\\lit-review", ""],
   ])("%s is in %j", (dir, want) => expect(workspaceOf(dir)).toBe(want));
 });
