@@ -32,7 +32,7 @@ Sensitive tool actions (edits, deletions, commands, network, MCP tools, forged t
 | Web fetch | `web:<host>` (per host) | |
 | Web search | per provider | |
 | MCP tool | `mcp:<server>:<tool>` | |
-| Forged tool run | `uc-run:…` | |
+| Forged tool run | `uc-run:<name>\x00<script sha256>\x00<args>` | this forged tool, as it is now, with these arguments |
 | Tier-3 skill script | none (never rememberable) | |
 
 ## 3. Evaluation order (`Approve`)

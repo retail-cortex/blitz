@@ -97,7 +97,7 @@ func TestUniversalConstructorApproval(t *testing.T) {
 	// Create approved, run denied: separate approvals for write and execution.
 	h := NewHooks(Policy{})
 	h.SetApprover(func(_ context.Context, r api.ApprovalRequest) (api.Decision, error) {
-		if r.Kind == api.ActionWrite {
+		if strings.HasPrefix(r.Detail, "Forge") {
 			return api.DecisionOnce, nil
 		}
 		return api.DecisionDeny, nil
@@ -107,6 +107,42 @@ func TestUniversalConstructorApproval(t *testing.T) {
 	require.Equal(t, true, out["success"], "approved create failed: %v", out)
 	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "t2"})
 	assert.Contains(t, errOf(out), "not approved", "expected run to be denied, got %v", out)
+}
+
+// Forging is asked about in accept-edits too, and a run approved for the
+// session doesn't cover the tool forged again with other code (N26
+// engine-tools-2#7).
+func TestUniversalConstructorReforgeAsksAgain(t *testing.T) {
+	ucDir := filepath.Join(t.TempDir(), "uc")
+	var asked []string
+	h := NewHooks(Policy{Mode: api.ModeAcceptEdits})
+	h.SetApprover(func(_ context.Context, r api.ApprovalRequest) (api.Decision, error) {
+		asked = append(asked, r.Detail)
+		return api.DecisionSession, nil
+	})
+	rt := toolOf(t)(NewUniversalConstructorTool(ucDir, h, nil, nil))
+	steps := []struct {
+		name, action, code string
+		asks               bool
+	}{
+		{"forge", "create", "echo one", true},
+		{"first run", "run", "", true},
+		{"run again: remembered", "run", "", false},
+		{"forge again with other code", "create", "echo two", true},
+		{"run the new code", "run", "", true},
+	}
+	for _, st := range steps {
+		t.Run(st.name, func(t *testing.T) {
+			before := len(asked)
+			args := map[string]any{"action": st.action, "tool_name": "fmt"}
+			if st.code != "" {
+				args["code"] = st.code
+			}
+			out := runTool(t, rt, args)
+			require.Equal(t, true, out["success"], "%v", out)
+			assert.Equal(t, st.asks, len(asked) > before, "asked: %v", asked)
+		})
+	}
 }
 
 func TestInvokeAgentTool(t *testing.T) {
