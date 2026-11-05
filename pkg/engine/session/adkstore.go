@@ -28,6 +28,8 @@ import (
 	"sync"
 
 	adksession "google.golang.org/adk/v2/session"
+
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 const eventsSuffix = ".events.jsonl"
@@ -236,15 +238,7 @@ func (p *PersistentService) AppendEvent(ctx context.Context, s adksession.Sessio
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return jsonl.Append(path, filePerm, line)
 }
 
 // Truncate keeps the first keep events of a session and drops the rest,

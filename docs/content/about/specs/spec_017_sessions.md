@@ -28,6 +28,7 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 ## 3. Transcript store
 
 - **SES-10** Per session: `<id>.meta.json` (metadata, rewritten atomically via temp + rename) and `<id>.jsonl` (messages appended, so adding a message costs O(message)). A torn last line (crash mid-append) is skipped. Legacy single-file sessions are still read.
+- **SES-10a** *2026-11-05 (scan N26-engine-sub-2#8).* After a torn last line, the next message, event or sub-agent record starts a line of its own (spec_023 WK-44a), so it isn't skipped with the torn one.
 - **SES-11** Metadata: `id, title, agent, created_at, updated_at, message_count, workspace, last_turn{traceparent,index}, name (snapshot), from`. Messages: `role (user|model|tool), content, timestamp`.
 - **SES-12** Title: a new session is named after its first user prompt — first non-empty line, whitespace collapsed, max 60 runes ending "…". `/rename <name>` sets it (empty refused). Titles show in `/session list` and the terminal window title.
 - **SES-13** `List` returns metadata sorted by update time, newest first, without reading message bodies.

@@ -36,6 +36,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 // Session transcripts can contain secrets pasted by the user or echoed by
@@ -283,15 +285,7 @@ func (s *Storage) appendLocked(rec *SessionRecord, msg Message) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.path(rec.ID, messagesSuffix), os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
+	if err := jsonl.Append(s.path(rec.ID, messagesSuffix), filePerm, line); err != nil {
 		return err
 	}
 	if rec == s.active {

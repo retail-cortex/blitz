@@ -17,7 +17,8 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 // subagentsSuffix names a session's log of what its foreground sub-agents
@@ -38,13 +39,5 @@ func (s *Storage) AppendSubagentEvent(id string, ev any) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f, err := os.OpenFile(s.path(id, subagentsSuffix), os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return jsonl.Append(s.path(id, subagentsSuffix), filePerm, line)
 }

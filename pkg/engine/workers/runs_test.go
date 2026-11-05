@@ -82,6 +82,14 @@ func TestRunLogSkipsTornLinesAndOtherFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runs, 1)
 	assert.Equal(t, "r1", runs[0].ID)
+
+	// The next run after the crash isn't lost with the torn one (N26
+	// engine-sub-2#8).
+	require.NoError(t, l.Append(api.Run{ID: "r3", Workspace: "/ws", Worker: "deps"}))
+	runs, err = l.List("/ws", "deps", 0)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	assert.Equal(t, "r3", runs[0].ID)
 	_, ok, err := l.Get("r1")
 	require.NoError(t, err)
 	assert.True(t, ok)

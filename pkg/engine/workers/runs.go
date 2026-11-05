@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 )
 
 // RunLog keeps finished runs, one JSON line each, in a file per worker.
@@ -66,15 +68,7 @@ func (l *RunLog) Append(r api.Run) error {
 	if err := os.MkdirAll(l.dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(name, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return jsonl.Append(name, 0o600, data)
 }
 
 // List returns a worker's runs, newest first, at most limit (0: all).
