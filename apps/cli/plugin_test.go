@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,6 +89,45 @@ func TestPluginCommand(t *testing.T) {
 	assert.Contains(t, out, "No marketplaces")
 	_, err = runCLI(t, "plugin", "marketplace", "remove", "nope")
 	assert.Error(t, err)
+}
+
+// An organization's policy that turns off the person's own plugins:
+// blitz plugin list and install say so; one that doesn't say, or allows
+// them, says nothing (spec_053_enterprise EN-35).
+func TestPluginListOrgPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, policy string
+		off          bool
+	}{
+		{"no organization", "", false},
+		{"the policy doesn't say", `{"policy":{}}`, false},
+		{"own allowed", `{"policy":{"plugins":{"own":true}}}`, false},
+		{"own off", `{"policy":{"plugins":{"own":false}}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isolate(t)
+			if tc.policy != "" {
+				_, err := config.SetEnterpriseURL("", "https://blitz.acme.com")
+				require.NoError(t, err)
+				dir := config.EnterpriseDir("", "https://blitz.acme.com")
+				require.NoError(t, os.MkdirAll(dir, 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "policy.json"), []byte(tc.policy), 0o600))
+			}
+			out, err := runCLI(t, "plugin", "list")
+			require.NoError(t, err)
+			assert.Contains(t, out, "No plugins installed")
+			out2, err := runCLIWithInput(t, "", "plugin", "install", "--yes", pluginDir(t))
+			require.NoError(t, err)
+			assert.Contains(t, out2, "Installed kit")
+			for _, o := range []string{out, out2} {
+				if tc.off {
+					assert.Contains(t, o, "Your organization turns off your own plugins")
+				} else {
+					assert.NotContains(t, o, "turns off your own plugins")
+				}
+			}
+		})
+	}
 }
 
 func TestPluginImport(t *testing.T) {

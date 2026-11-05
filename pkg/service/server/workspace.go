@@ -536,7 +536,7 @@ func (h workspaceService) Undo(ctx context.Context, r req[pb.UndoRequest]) (*con
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.Undo(r.Msg.Force)
+	res, err := w.Undo(r.Msg.SessionId, r.Msg.Force)
 	// A conflict before anything was restored fails the call; anything
 	// else is reported with what was restored.
 	if err != nil && len(res.Restored) == 0 && errors.Is(err, api.ErrUndoConflict) {

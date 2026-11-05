@@ -25,6 +25,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -187,7 +188,7 @@ func TestUndoAfterResume(t *testing.T) {
 	require.NoError(t, err)
 	d := w2.SessionDiff()
 	assert.Contains(t, d, "+hi", "diff after resuming:\n%s", d)
-	res, err := w2.Undo(false)
+	res, err := w2.Undo("", false)
 	require.NoError(t, err, "undo after reopening: %+v", res)
 	require.Equal(t, "make notes", res.Label, "undo after reopening: %+v %v", res, err)
 	_, err = os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt"))
@@ -338,4 +339,49 @@ func TestGitDiffColorAndNoSessionDiff(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, diff, "\x1b[", "colored")
 	assert.Contains(t, diff, "two")
+}
+
+// /undo undoes the latest turn of the chat it's run from, never another
+// chat's, and says so when that chat has nothing to undo; with no session
+// given it's the active session's (FS-63a).
+func TestUndoIsPerChat(t *testing.T) {
+	w := openTest(t)
+	a, err := w.NewSession()
+	require.NoError(t, err)
+	b, err := w.NewSession() // the active one
+	require.NoError(t, err)
+	cps, ws := w.tools.Checkpoints(), w.tools.Workspace()
+	write := func(session, name string) {
+		require.NoError(t, ws.WriteFileAtomic(tools.WithOwnerSession(context.Background(), session), name, []byte(session)))
+	}
+	cps.BeginTurn(a.ID, 0, "a's prompt")
+	write(a.ID, "a.txt")
+	cps.BeginTurn(b.ID, 0, "b's prompt")
+	write(b.ID, "b.txt")
+	exists := func(name string) bool { _, err := os.Stat(filepath.Join(ws.Dir(), name)); return err == nil }
+
+	cases := []struct {
+		name, session, label string
+		gone                 []string
+	}{
+		{name: "a's own turn, not b's later one", session: a.ID, label: "a's prompt", gone: []string{"a.txt"}},
+		{name: "the active session's without one", session: "", label: "b's prompt", gone: []string{"a.txt", "b.txt"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := w.Undo(tc.session, false)
+			require.NoError(t, err)
+			assert.Equal(t, tc.label, res.Label)
+			for _, f := range tc.gone {
+				assert.False(t, exists(f), "%s is still there", f)
+			}
+		})
+	}
+
+	cps.BeginTurn(b.ID, 2, "b again")
+	write(b.ID, "b2.txt")
+	_, err = w.Undo(a.ID, false)
+	require.ErrorIs(t, err, api.ErrNothingToUndo)
+	assert.EqualError(t, err, "nothing to undo in this chat")
+	assert.True(t, exists("b2.txt"), "a's /undo undid b's turn")
 }

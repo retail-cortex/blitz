@@ -32,7 +32,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
-	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"github.com/spf13/cobra"
 )
@@ -41,23 +40,12 @@ import (
 // the service and returns; blitz agents lists them, and attach, logs and
 // stop work with one.
 
-// errNeedsService means the Blitz service isn't running: background runs
-// live in it.
-var errNeedsService = errors.New("background runs need the Blitz service: start it with 'blitz service install' (or run blitzd)")
-
-// serviceSocket is the running service's socket, or errNeedsService.
-func serviceSocket() (string, error) {
-	sock := socket.DefaultSocket()
-	if !socket.Running(sock) {
-		return "", errNeedsService
-	}
-	return sock, nil
-}
-
 // startBackground starts prompt as a background run in cfg's workspace
 // (blitz --bg) and says how to follow it.
 func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t api.Turn, imagePaths []string) error {
-	sock, err := serviceSocket()
+	// Background runs live in the shared service: started when it isn't
+	// running, as for every other command that needs it (N26 cli-behaviour).
+	sock, err := ensureService(ctx)
 	if err != nil {
 		return err
 	}
@@ -90,7 +78,7 @@ func newAgentsCommand() *cobra.Command {
 		Short: "List the background runs in the Blitz service (blitz --bg), in every workspace",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sock, err := serviceSocket()
+			sock, err := ensureService(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -155,7 +143,7 @@ func newLogsCommand() *cobra.Command {
 		Short: "Show what a background run has done (with -f, as it goes on)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sock, err := serviceSocket()
+			sock, err := ensureService(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -194,7 +182,7 @@ func newStopCommand() *cobra.Command {
 		Short: "Stop a background run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sock, err := serviceSocket()
+			sock, err := ensureService(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -217,7 +205,7 @@ func newAttachCommand(o *rootOptions) *cobra.Command {
 		Short: "Open a background run's session in the REPL, following the run and answering what it asks until it ends",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sock, err := serviceSocket()
+			sock, err := ensureService(cmd.Context())
 			if err != nil {
 				return err
 			}

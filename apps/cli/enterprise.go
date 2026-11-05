@@ -33,6 +33,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/gitcred"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // newEnterpriseCommand is `blitz enterprise connect|disconnect|login|
@@ -398,7 +399,10 @@ func describeBranding(w io.Writer, b client.Branding, why string) {
 // askTerms shows the organization's terms when a version waits to be
 // accepted, and asks [y/N] (spec_053_enterprise EN-53): yes records it
 // with the organization, anything else signs out of it, since its service
-// refuses everything else until they're accepted.
+// refuses everything else until they're accepted. Without a terminal to
+// ask in (a script), it asks nothing and stays signed in, saying how to
+// accept them (EN-53a): the service still refuses the organization's
+// features until they are.
 func askTerms(ctx context.Context, cmd *cobra.Command, s *client.Settings, name string) error {
 	out := cmd.OutOrStdout()
 	t, err := s.Terms(ctx)
@@ -407,6 +411,10 @@ func askTerms(ctx context.Context, cmd *cobra.Command, s *client.Settings, name 
 	}
 	if t.Version == "" || t.Accepted {
 		fmt.Fprintln(out, i18n.T("org.terms_none", "name", name))
+		return nil
+	}
+	if f, ok := cmd.InOrStdin().(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+		fmt.Fprintln(out, i18n.T("org.terms_waiting", "name", name, "version", t.Version))
 		return nil
 	}
 	fmt.Fprintf(out, "\n%s\n\n", i18n.T("org.terms_ask", "name", name, "version", t.Version))

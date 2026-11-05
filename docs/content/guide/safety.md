@@ -24,7 +24,7 @@ In plan mode, with `/plan`, or when the agent chooses to plan first, it presents
 | `dont-ask` | Anything that would ask is refused instead (for CI and scripts) |
 | `bypass` | Everything; only while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply |
 
-A workspace starts in `auto` unless you choose another with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session. To restrict one workspace, choose its mode in its settings (**Settings › Workspaces**, Behaviour): it's kept for that workspace and it opens in it again. A [workflow](workflows.md#its-permission-mode) runs in its own mode, but never a looser one than its workspace's.
+A workspace starts in `auto` unless you choose another with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session. To restrict one workspace, choose its mode in its settings (**Settings › Workspaces**, Behaviour) or from the mode menu in the desktop's status bar: either way it's kept for that workspace, and new chats and the workspace after a restart open in it. Bypass can only be picked while the OS sandbox is on. `/mode` changes it until the workspace closes. A [workflow](workflows.md#its-permission-mode) runs in its own mode, but never a looser one than its workspace's.
 
 In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. A denial goes back to the agent with the reason, and every decision is in the audit log (`auto-allow`, `auto-deny`); its tokens count in `/cost`. When the reviewer can't answer (or takes more than two minutes), you're asked. A small, fast model is enough:
 
@@ -99,7 +99,7 @@ Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_
 
 ## Checkpoints and undo
 
-Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. Checkpoints are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30). `/rewind` goes back to before any earlier prompt: its files, the conversation, or both. Only the file tools' changes are tracked: if a file changed since, by a command or by you, `/undo` stops and says so (`--force` overwrites).
+Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. `/undo` takes back the latest turn of the chat you run it from, including what its sub-agents and background tasks changed; another chat's turns in the same workspace are left alone, and a chat with nothing of its own to undo says so. Checkpoints are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30). `/rewind` goes back to before any earlier prompt: its files, the conversation, or both. Only the file tools' changes are tracked: if a file changed since, by a command or by you, `/undo` stops and says so (`--force` overwrites).
 
 ## Audit log
 

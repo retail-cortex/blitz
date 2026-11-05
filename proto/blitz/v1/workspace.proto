@@ -1656,6 +1656,10 @@ message UndoRequest {
   string workspace = 1;
   // Restore even files changed since the agent's edit.
   bool force = 2;
+  // The chat whose latest turn with changes to undo, counting its
+  // sub-agents' and tasks'; other chats' turns are left alone. Empty: the
+  // workspace's active session.
+  string session_id = 3;
 }
 
 // Response message for WorkspaceService.Undo.

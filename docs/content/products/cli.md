@@ -57,6 +57,16 @@ blitz --output-format json --json-schema person.json "Who wrote this repo?"   # 
 blitz --no-session-persistence "…"      # leave no session behind
 ```
 
+With `stream-json`, the lines are `session` first, then `text`, `tool_call` and `tool_result` as the turn goes, and these, then `result`:
+
+| `type` | Keys | What it is |
+|---|---|---|
+| `notice` | `text`, `error`, `transient`, `author` | A message from Blitz about the turn, such as a guardrail stopping it ("Send continue to go on"); `transient` marks a passing status, such as a retry |
+| `workflow_step` | `workflow`, `id`, `title`, `step_type`, `index`, `count`, `status`, `output`, `error`, `run` | A workflow's step starting (`running`) or ending (`done`, `failed`, `skipped`, `waiting`), step `index` of `count` |
+| `tasks` | `tasks` (`[{"content", "status"}]`), `author` | The agent's whole task list each time it changes; `status` is `pending`, `in_progress` or `done` |
+
+Every key is always there. Skip a `type` you don't know: new ones may come.
+
 Another program can drive a whole session over pipes: with `--input-format stream-json --output-format stream-json`, each stdin line is a prompt or an answer, and approvals and questions come out as lines to answer:
 
 ```text
@@ -133,7 +143,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 
 | Command | |
 |---|---|
-| `/undo [--force]` | Revert the last turn's file changes (checkpoints are kept between runs) |
+| `/undo [--force]` | Revert this session's last turn's file changes, not another chat's (checkpoints are kept between runs) |
 | `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt: its files, the conversation, or both, or summarize from or up to it |
 | `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session, a file at a time (or `git diff`) |
 | `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold and what it's made of |

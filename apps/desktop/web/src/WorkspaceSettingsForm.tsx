@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { setEffort, sliderCommit, useOnConfigChanged } from "./workspaceSettings";
+import { keepPermissionMode, setEffort, sliderCommit, useOnConfigChanged } from "./workspaceSettings";
 import {
   mdiAlertCircleOutline,
   mdiBrain,
@@ -346,10 +346,7 @@ export function WorkspaceSettingsForm({
                 onChange={(e) => {
                   const mode = e.target.value;
                   // Applied, then kept as the workspace's own: it opens in it again (spec_005 APR-14).
-                  void act(async () => {
-                    await workspaces.setPermissionMode({ workspace: dir, mode });
-                    await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: mode });
-                  });
+                  void act(() => keepPermissionMode(dir, mode));
                 }}
               >
                 {modes().map((m) => (

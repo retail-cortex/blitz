@@ -827,10 +827,10 @@ func (r *Remote) ListCheckpoints() []api.Checkpoint {
 	return out
 }
 
-// Undo restores the files the last turn changed; force overwrites files
-// changed since (WorkspaceService.Undo).
-func (r *Remote) Undo(force bool) (api.UndoResult, error) {
-	res, err := r.workspaces.Undo(context.Background(), connect.NewRequest(&pb.UndoRequest{Workspace: r.dir, Force: force}))
+// Undo restores the files sessionID's last turn changed ("": the active
+// session's); force overwrites files changed since (WorkspaceService.Undo).
+func (r *Remote) Undo(sessionID string, force bool) (api.UndoResult, error) {
+	res, err := r.workspaces.Undo(context.Background(), connect.NewRequest(&pb.UndoRequest{Workspace: r.dir, Force: force, SessionId: sessionID}))
 	if err != nil {
 		return api.UndoResult{}, fromAPI(err)
 	}

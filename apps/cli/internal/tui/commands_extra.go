@@ -113,7 +113,10 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 
 func cmdUndo(args []string, app *App) {
 	force := len(args) > 0 && (args[0] == "--force" || args[0] == "-f")
-	res, err := app.Workspace.Undo(force)
+	// This chat's latest turn only: another client's in the same workspace
+	// isn't this one's to undo.
+	active, _ := app.Workspace.ActiveSession()
+	res, err := app.Workspace.Undo(active.ID, force)
 	if errors.Is(err, api.ErrUndoConflict) {
 		fmt.Printf("%s!  %v%s\n", Yellow, err, Reset)
 		return
@@ -124,8 +127,8 @@ func cmdUndo(args []string, app *App) {
 	if err != nil {
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
 		// Changes made before /cd are in the other workspace's checkpoints.
-		if s, ok := app.Workspace.ActiveSession(); ok && s.MovedFrom != "" && errors.Is(err, api.ErrNothingToUndo) {
-			fmt.Printf("%s%s%s\n", Dim, i18n.T("undo.moved", "dir", s.MovedFrom), Reset)
+		if active.MovedFrom != "" && errors.Is(err, api.ErrNothingToUndo) {
+			fmt.Printf("%s%s%s\n", Dim, i18n.T("undo.moved", "dir", active.MovedFrom), Reset)
 		}
 	}
 }

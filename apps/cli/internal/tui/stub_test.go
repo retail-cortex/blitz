@@ -38,7 +38,7 @@ type stubBackend struct {
 	renameSession    func(title string) (api.SessionInfo, error)
 	forkSession      func(turn int) (api.SessionInfo, error)
 	exportSession    func(id string) (string, error)
-	undo             func(force bool) (api.UndoResult, error)
+	undo             func(session string, force bool) (api.UndoResult, error)
 	listCheckpoints  func() []api.Checkpoint
 	gitDiff          func() (string, error)
 	sessionDiff      func() string
@@ -156,11 +156,11 @@ func (s *stubBackend) ExportSession(id string) (string, error) {
 	return s.Backend.ExportSession(id)
 }
 
-func (s *stubBackend) Undo(force bool) (api.UndoResult, error) {
+func (s *stubBackend) Undo(session string, force bool) (api.UndoResult, error) {
 	if s.undo != nil {
-		return s.undo(force)
+		return s.undo(session, force)
 	}
-	return s.Backend.Undo(force)
+	return s.Backend.Undo(session, force)
 }
 
 func (s *stubBackend) ListCheckpoints() []api.Checkpoint {
