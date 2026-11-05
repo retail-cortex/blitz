@@ -16,7 +16,11 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sandboxsetup",
-    srcs = ["sandboxsetup.go"],
+    srcs = [
+        "owner_unix.go",
+        "owner_windows.go",
+        "sandboxsetup.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/sandboxsetup",
     visibility = ["//visibility:public"],
 )
