@@ -119,11 +119,6 @@ func (s *OSSandbox) Status() string {
 	}
 }
 
-func (s *OSSandbox) wrap(argv []string) []string {
-	out, _ := s.wrapCtx(context.Background(), argv) // never cancelled, so no error
-	return out
-}
-
 // wrapCtx is argv sandboxed, or ctx's error if ctx ends while the sandbox
 // gets ready for it.
 func (s *OSSandbox) wrapCtx(ctx context.Context, argv []string) ([]string, error) {
@@ -188,7 +183,28 @@ func seatbeltProfile(spec OSSandboxSpec) string {
 	if !spec.AllowNetwork {
 		sb.WriteString("(deny network*)\n(allow network* (remote unix-socket))\n")
 	}
+	denyServiceSockets(&sb)
 	return sb.String()
+}
+
+// denyServiceSockets keeps commands from connecting to the service's
+// sockets and anything in Blitz's run folder, or writing (moving a socket
+// away) there, whatever the network setting: last, so it wins over the
+// Unix sockets allowed above. The copies of credentials in the run folder
+// stay readable.
+func denyServiceSockets(sb *strings.Builder) {
+	dirs, socks := serviceSockets()
+	if len(dirs)+len(socks) == 0 {
+		return
+	}
+	sb.WriteString("(deny network-outbound file-write*\n")
+	for _, d := range dirs {
+		fmt.Fprintf(sb, "  (subpath %s)\n", sbplString(d))
+	}
+	for _, s := range socks {
+		fmt.Fprintf(sb, "  (literal %s)\n", sbplString(s))
+	}
+	sb.WriteString(")\n")
 }
 
 // privateDirs are the folders macOS guards with a prompt ("Blitz would like

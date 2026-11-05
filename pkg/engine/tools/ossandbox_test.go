@@ -47,7 +47,7 @@ func TestSeatbeltProfile(t *testing.T) {
 	allowAt := strings.Index(profile, "(allow file-write*")
 	assert.GreaterOrEqual(t, strings.Index(profile, "(deny file-read*"), allowAt, "read-only and blocked rules must follow writable allowances")
 	assert.GreaterOrEqual(t, strings.Index(profile, "(subpath \"/ws/ro\")"), allowAt, "read-only and blocked rules must follow writable allowances")
-	assert.NotContains(t, seatbeltProfile(OSSandboxSpec{AllowNetwork: true}), "deny network", "network should not be denied when allowed")
+	assert.NotContains(t, seatbeltProfile(OSSandboxSpec{AllowNetwork: true}), "(deny network*)", "network should not be denied when allowed")
 }
 
 func TestNewOSSandboxModes(t *testing.T) {
@@ -60,7 +60,8 @@ func TestNewOSSandboxModes(t *testing.T) {
 	off, _ := NewOSSandbox(OSSandboxSpec{Mode: SandboxOff})
 	assert.False(t, off.Active(), "off mode: %s", off.Status())
 	assert.Contains(t, off.Status(), "disabled", "off mode: %s", off.Status())
-	got := off.wrap([]string{"ls"})
+	got, err := off.wrapCtx(context.Background(), []string{"ls"})
+	require.NoError(t, err)
 	assert.Len(t, got, 1, "inactive sandbox must not wrap: %v", got)
 
 	platformSandbox = func(OSSandboxSpec) (sandboxWrapper, error) { return nil, errors.New("no sandbox here") }
@@ -76,7 +77,9 @@ func TestNewOSSandboxModes(t *testing.T) {
 
 	platformSandbox = func(OSSandboxSpec) (sandboxWrapper, error) { return prefixWrapper("sbx", "--"), nil }
 	on, _ := NewOSSandbox(OSSandboxSpec{Mode: SandboxRequired})
-	assert.Equal(t, "sbx -- ls -l", strings.Join(on.wrap([]string{"ls", "-l"}), " "), "wrap")
+	got, err = on.wrapCtx(context.Background(), []string{"ls", "-l"})
+	require.NoError(t, err)
+	assert.Equal(t, "sbx -- ls -l", strings.Join(got, " "), "wrap")
 }
 
 func TestRegistryFailsClosedWhenSandboxRequired(t *testing.T) {

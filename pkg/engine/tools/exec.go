@@ -55,8 +55,9 @@ type Credential struct {
 }
 
 // credentialsDir holds the copies, one directory per process, removed
-// when it ends: beside the service's socket, which sandboxed commands can
-// read but not write. Not the cache directory, which they can write: a
+// when it ends: beside the service's socket, in the run folder sandboxed
+// commands can read but not write or connect in (bubblewrap binds only
+// this folder back into it). Not the cache directory, which they can write: a
 // command could put a link there, and Blitz, unsandboxed, would follow it
 // (privateDir checks). Tests replace it.
 var credentialsDir = func() (string, error) {

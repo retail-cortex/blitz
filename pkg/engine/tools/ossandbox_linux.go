@@ -42,6 +42,11 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 		if err != nil {
 			return nil, err
 		}
+		// The run folder is made now, so the sandbox hides it even before
+		// the service first starts.
+		if c, err := credentialsDir(); err == nil {
+			_ = privateDir(c)
+		}
 		return append(bwrapArgs(bwrap, spec, files, dirs), argv...), nil
 	}, nil
 }

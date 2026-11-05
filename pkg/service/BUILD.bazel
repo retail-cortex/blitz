@@ -28,6 +28,7 @@ go_library(
         "//pkg/api",
         "//pkg/config",
         "//pkg/engine",
+        "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/enterprise",
         "//pkg/jobspec",

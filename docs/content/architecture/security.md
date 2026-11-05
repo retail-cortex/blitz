@@ -48,7 +48,7 @@ flowchart LR
 
 - **git configuration.** The agent can write `.git/config`, and git runs filters and fsmonitor hooks from it. When Blitz runs `git diff` for you, outside the sandbox, it blanks every configured filter and turns fsmonitor off.
 - **Rendered output.** The desktop app renders model output as React elements, never HTML, fetches no images from it, and opens links only in the system browser.
-- **The service.** It runs commands, so it is reachable only through an owner-only Unix socket.
+- **The service.** It runs commands, so it is reachable only through an owner-only Unix socket. The agent's commands run as you too, so the OS sandbox keeps them from connecting to it, network on or off.
 
 ## Limits
 
