@@ -653,6 +653,7 @@
     "desktop.agents.title": "**Agentes**",
     "desktop.app.closed": "Se cerró {name}.",
     "desktop.app.lost": "El servicio de Blitz no responde. Reconectando…",
+    "desktop.app.prefs_unread": "No se pudo leer tu configuración ({error}). Los cambios que hagas ahora duran hasta que salgas y no se guardan, así que tu archivo de configuración queda como está.",
     "desktop.app.reconnected": "Reconectado al servicio de Blitz.",
     "desktop.app.starting": "Iniciando…",
     "desktop.app.stop_close": "Detener y cerrar",

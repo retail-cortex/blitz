@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { normalizePrefs, maxMarkdownCSS, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
+import { PrefsKeeper, normalizePrefs, maxMarkdownCSS, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
 import { paletteOf, resolveTheme } from "./theme";
 import { workspaceColor } from "./palette";
 
@@ -150,5 +150,83 @@ describe("markdown css", () => {
     const p = normalizePrefs({ markdown_css_light: v, markdown_css_dark: v });
     expect(p.markdown_css_light).toBe(want);
     expect(p.markdown_css_dark).toBe(want);
+  });
+});
+
+describe("keeping the preferences", () => {
+  const keeper = () => {
+    const saved: Prefs[] = [];
+    const shown: Prefs[] = [];
+    const errors: unknown[] = [];
+    const k = new PrefsKeeper({ show: (p) => shown.push(p), save: async (p) => saved.push(p), error: (e) => errors.push(e) });
+    return { k, saved, shown, errors };
+  };
+  const mine: Prefs = { ...defaultPrefs, theme: "dark", workspaces: [{ dir: "/w/shop", name: "Shop", open: true }] };
+
+  it.each([
+    {
+      name: "a change before the load waits, and is made to what loads",
+      run: (k: PrefsKeeper) => {
+        k.update((p) => openWorkspace(p, "/w/notes"));
+        k.loaded(mine);
+      },
+      want: { theme: "dark", dirs: ["/w/shop", "/w/notes"], saves: 1, errors: 0 },
+    },
+    {
+      name: "loading alone saves nothing",
+      run: (k: PrefsKeeper) => k.loaded(mine),
+      want: { theme: "dark", dirs: ["/w/shop"], saves: 0, errors: 0 },
+    },
+    {
+      name: "a change after the load is saved",
+      run: (k: PrefsKeeper) => {
+        k.loaded(mine);
+        k.update((p) => ({ ...p, theme: "light" }));
+      },
+      want: { theme: "light", dirs: ["/w/shop"], saves: 1, errors: 0 },
+    },
+    {
+      name: "unread: changes show but are never saved over the file",
+      run: (k: PrefsKeeper) => {
+        k.update((p) => openWorkspace(p, "/w/notes"));
+        k.unread("disk error");
+        k.update((p) => ({ ...p, theme: "light" }));
+        k.loaded(mine); // too late: ignored
+      },
+      want: { theme: "light", dirs: ["/w/notes"], saves: 0, errors: 1 },
+    },
+  ])("$name", async ({ run, want }) => {
+    const { k, saved, shown, errors } = keeper();
+    run(k);
+    await k.saved();
+    expect(k.prefs.theme).toBe(want.theme);
+    expect(k.prefs.workspaces.map((w) => w.dir)).toEqual(want.dirs);
+    expect(shown.at(-1)).toBe(k.prefs);
+    expect(saved).toHaveLength(want.saves);
+    if (want.saves) expect(saved.at(-1)).toEqual(k.prefs);
+    expect(errors).toHaveLength(want.errors);
+  });
+
+  it("saves one after another, ending with the latest", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const first = new Promise<void>((r) => (release = r));
+    const k = new PrefsKeeper({
+      show: () => {},
+      save: async (p) => {
+        if (order.length === 0) {
+          order.push(`start ${p.theme}`);
+          await first;
+        }
+        order.push(`saved ${p.theme}`);
+      },
+      error: () => {},
+    });
+    k.loaded(defaultPrefs);
+    k.update((p) => ({ ...p, theme: "dark" }));
+    k.update((p) => ({ ...p, theme: "light" }));
+    release();
+    await k.saved();
+    expect(order).toEqual(["start dark", "saved dark", "saved light"]);
   });
 });

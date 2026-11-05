@@ -292,6 +292,8 @@ export function Conversation({
   }, [dir, show, refreshList, fail]);
 
   useEffect(() => setActivity(dir, { running, waiting: !!pending }), [dir, running, pending, setActivity]);
+  // A closed (or remounted) workspace's activity goes with it.
+  useEffect(() => () => setActivity(dir, null), [dir, setActivity]);
 
   // Tell the user, when they're looking elsewhere, that the agent waits or is done.
   const started = useRef(0);

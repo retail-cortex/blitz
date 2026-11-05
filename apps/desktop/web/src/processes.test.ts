@@ -15,9 +15,11 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
-import { WorkspaceProcessSchema } from "./gen/blitz/v1/workspace_pb";
-import { byWorkspace, countLabel, cpu, duration, flaggedOf, flagLabel, isFlagged, lastLines, memory, processDetail, processKey, runningFor } from "./processes";
+import { setTransport } from "./api";
+import { WorkspaceProcessSchema, WorkspaceService } from "./gen/blitz/v1/workspace_pb";
+import { byWorkspace, countLabel, cpu, duration, flaggedOf, flagLabel, isFlagged, lastLines, memory, processDetail, processesNow, processKey, runningFor, subscribeProcesses } from "./processes";
 
 const proc = (workspace: string, id: number, flags: string[] = []) => create(WorkspaceProcessSchema, { workspace, process: { id, command: `npm run dev:${id}`, running: true, flags } });
 
@@ -128,5 +130,34 @@ describe("lastLines", () => {
     ["nothing", "", 3, ""],
   ])("%s", (_, text, n, want) => {
     expect(lastLines(text, n)).toBe(want);
+  });
+});
+
+describe("the processes stream", () => {
+  it("skips keepalives, and shows none once the stream breaks", async () => {
+    const seen: number[] = [];
+    let broke!: () => void;
+    const broken = new Promise<void>((r) => (broke = r));
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(WorkspaceService, {
+          async *watchProcesses() {
+            yield { processes: [proc("/w", 1), proc("/w", 2)], listed: true };
+            yield {}; // a keepalive (pkg/pageserver)
+            throw new Error("the service went");
+          },
+        });
+      }),
+    );
+    const stop = subscribeProcesses(() => {
+      seen.push(processesNow().list.length);
+      if (seen.length === 2) broke();
+    });
+    try {
+      await broken;
+      expect(seen).toEqual([2, 0]);
+    } finally {
+      stop();
+    }
   });
 });
