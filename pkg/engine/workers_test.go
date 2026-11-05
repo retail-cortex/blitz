@@ -187,7 +187,7 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 
 	// Its change is its own: not the sessions' /undo, but the run's undo
 	// (BL-WK-01, BL-WK-02).
-	_, err = w.Undo(false)
+	_, err = w.Undo("", false)
 	assert.ErrorIs(t, err, api.ErrNothingToUndo, "/undo reached the worker's change")
 	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "deps.md"))
 	undone, err := w.UndoWorkerRun(run.ID, false)

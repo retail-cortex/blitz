@@ -66,7 +66,7 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 | `/skills list\|show <n>\|search <q>` | Skills and policy verdicts |
 | `/envs [prune\|remove <key>]` | Script environments |
 | `/session list [--all]\|new\|load <ref>\|save <name> [--force]`, `/resume <ref>`, `/rename <name>` | Sessions ([spec_017_sessions](spec_017_sessions.md)); resuming prints a recap |
-| `/undo [--force]`, `/checkpoints`, `/diff [git]` | Checkpoints ([spec_006_filetools](spec_006_filetools.md)) |
+| `/undo [--force]`, `/checkpoints`, `/diff [git]` | Checkpoints ([spec_006_filetools](spec_006_filetools.md)); `/undo` takes back this session's latest turn only (FS-63a) |
 | `/cost`, `/context` | Usage incl. cache reads/writes and cost; context size vs threshold |
 | `/compact [focus]` | Manual compaction with before/after |
 | `/memory [show\|reload\|add <note>]` | Project memory |

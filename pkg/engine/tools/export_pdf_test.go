@@ -146,7 +146,7 @@ func TestExportPDFApprovalAndUndo(t *testing.T) {
 	out = runTool(t, toolOf(t)(NewExportPDFTool(ws, h, "")), map[string]any{"path": "notes.md"})
 	require.Empty(t, errOf(out))
 	assert.FileExists(t, filepath.Join(dir, "notes.pdf"))
-	_, err := cp.Undo(false)
+	_, err := cp.Undo("", false)
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(dir, "notes.pdf"))
 }

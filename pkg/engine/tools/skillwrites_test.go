@@ -108,7 +108,7 @@ func TestScriptWritesWorkspace(t *testing.T) {
 	assert.Equal(t, "<none>", read(t, dir, "gone.txt"))
 	assert.Equal(t, "SECRET=1\n", read(t, dir, ".env"), "a blocked file isn't copied, so it can't change")
 
-	_, err := cps.Undo(false)
+	_, err := cps.Undo("", false)
 	require.NoError(t, err)
 	assert.Equal(t, "original\n", read(t, dir, "README.md"), "/undo reverts the script's changes")
 	assert.Equal(t, "bye\n", read(t, dir, "gone.txt"))

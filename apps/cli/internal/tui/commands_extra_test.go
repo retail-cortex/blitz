@@ -66,13 +66,13 @@ func TestChangeCommandOutputs(t *testing.T) {
 	runCommandCases(t, map[string]commandCase{
 		"undo conflict": {
 			setup: func(s *stubBackend) {
-				s.undo = func(bool) (api.UndoResult, error) { return api.UndoResult{}, api.ErrUndoConflict }
+				s.undo = func(string, bool) (api.UndoResult, error) { return api.UndoResult{}, api.ErrUndoConflict }
 			},
 			line: "/undo", want: []string{api.ErrUndoConflict.Error()},
 		},
 		"undo restores": {
 			setup: func(s *stubBackend) {
-				s.undo = func(force bool) (api.UndoResult, error) {
+				s.undo = func(_ string, force bool) (api.UndoResult, error) {
 					if !force {
 						return api.UndoResult{}, errBoom
 					}
@@ -81,9 +81,21 @@ func TestChangeCommandOutputs(t *testing.T) {
 			},
 			line: "/undo --force", want: []string{`Undid "fix it": restored a.go, b.go`},
 		},
+		"undo passes this chat's session": {
+			setup: func(s *stubBackend) {
+				s.activeSession = func() (api.SessionInfo, bool) { return api.SessionInfo{ID: "chat-1"}, true }
+				s.undo = func(session string, _ bool) (api.UndoResult, error) {
+					if session != "chat-1" {
+						return api.UndoResult{}, fmt.Errorf("undid session %q", session)
+					}
+					return api.UndoResult{Label: "mine", Restored: []string{"m.go"}}, nil
+				}
+			},
+			line: "/undo", want: []string{`Undid "mine": restored m.go`}, notWant: []string{"undid session"},
+		},
 		"undo after cd": {
 			setup: func(s *stubBackend) {
-				s.undo = func(bool) (api.UndoResult, error) {
+				s.undo = func(string, bool) (api.UndoResult, error) {
 					return api.UndoResult{}, fmt.Errorf("reworded: %w", api.ErrNothingToUndo)
 				}
 				s.activeSession = func() (api.SessionInfo, bool) { return api.SessionInfo{ID: "s", MovedFrom: "/old/place"}, true }
