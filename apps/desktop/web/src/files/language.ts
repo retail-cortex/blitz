@@ -98,6 +98,16 @@ export function languageSession(dir: string): LanguageSession {
   return s;
 }
 
+/**
+ * Ends the language session of the workspace in dir (it closed, or
+ * remounted on a reconnect): its documents close on the service, and the
+ * keeping and watching stop.
+ */
+export function endLanguageSession(dir: string) {
+  sessions.get(dir)?.closeAll();
+  sessions.delete(dir);
+}
+
 /** A workspace's documents on its language servers. */
 export class LanguageSession {
   private docs = new Map<string, Doc>();
@@ -232,6 +242,12 @@ export class LanguageSession {
     this.docs.delete(key);
     if (d.id) void api.closeDocument({ workspace: this.dir, document: d.id }).catch(() => {});
     if (this.docs.size === 0) this.stop();
+  }
+
+  /** Closes every document. */
+  closeAll() {
+    for (const key of [...this.docs.keys()]) this.close(key);
+    this.stop();
   }
 
   /** Renames an open document's path, and its blocks' (moved in the Files shelf). */
