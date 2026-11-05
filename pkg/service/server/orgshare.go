@@ -33,9 +33,14 @@ import (
 
 // Sharing a folder with the organization where it is (spec_053 EN-66).
 
-// maxShareScan bounds the files of a history read for secrets before it's
-// shared (a variable for tests).
+// maxShareScan bounds the files read for secrets before a folder is shared,
+// its changes and its history together: a folder with more isn't shared
+// (a variable for tests).
 var maxShareScan = 50_000
+
+// maxShareFile is the size past which a changed file isn't read for
+// secrets, as History leaves its larger files.
+const maxShareFile = 1 << 20
 
 // largeShareFile is the size past which a file is mentioned before it's
 // shared (the service's own limit is the workspace's; a variable for
@@ -75,7 +80,7 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		return nil, already
 	}
 	for _, sf := range sharedFor(c.URL()) {
-		if filepath.Clean(sf.Dir) == dir {
+		if samePath(sf.Dir, dir) {
 			return nil, already
 		}
 	}
@@ -86,6 +91,12 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		if _, err := gitText(ctx, dir, "init", "-q", "-b", "main"); err != nil {
 			return nil, invalid(err)
 		}
+		// A refusal before its first commit leaves the folder as it was.
+		defer func() {
+			if _, err := gitText(context.WithoutCancel(ctx), dir, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
+				_ = os.RemoveAll(filepath.Join(dir, ".git"))
+			}
+		}()
 	} else if real, _ := filepath.EvalSymlinks(dir); filepath.Clean(top) != dir && filepath.Clean(top) != real {
 		return nil, apiError(connect.CodeFailedPrecondition, "INSIDE_REPOSITORY",
 			fmt.Errorf("%s is inside the repository %s: share that folder instead", dir, top))
@@ -96,23 +107,21 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 		return nil, invalid(err)
 	}
 	_, noHead := gitText(ctx, dir, "rev-parse", "--verify", "-q", "HEAD")
-	if changes != "" || noHead != nil {
-		if _, err := gitText(ctx, dir, "add", "-A"); err != nil {
-			return nil, invalid(err)
-		}
-		msg := "Shared with " + filepath.Base(folder)
-		if _, err := gitText(ctx, dir, append(who, "commit", "-q", "--allow-empty", "-m", msg)...); err != nil {
-			return nil, invalid(err)
-		}
-		if changes != "" {
-			notes = append(notes, "Your changes not yet committed were committed first, as “"+msg+"”.")
-		}
-	}
 
-	// Nothing secret goes, in its files or its history.
-	found, complete, err := secretscan.History(ctx, dir, "HEAD", maxShareScan)
+	// Nothing secret goes, in its files or its history: its changes are
+	// read before they're committed, so a refusal leaves no commit behind.
+	found, read, err := changedSecrets(ctx, dir, maxShareScan)
 	if err != nil {
 		return nil, invalid(err)
+	}
+	complete := read <= maxShareScan
+	if complete && noHead == nil {
+		var more []secretscan.Finding
+		more, complete, err = secretscan.History(ctx, dir, "HEAD", maxShareScan-read)
+		if err != nil {
+			return nil, invalid(err)
+		}
+		found = append(found, more...)
 	}
 	if len(found) > 0 {
 		var b strings.Builder
@@ -131,7 +140,24 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 			b.String(), secretscan.AllowMarker))
 	}
 	if !complete {
-		notes = append(notes, fmt.Sprintf("Its history is long: only its first %d files were checked for secrets.", maxShareScan))
+		// What wasn't read could hold a key: nothing goes unread.
+		return nil, apiError(connect.CodeFailedPrecondition, "TOO_LARGE_TO_CHECK", fmt.Errorf(
+			"nothing was shared: the folder and its history hold more than %d files, too many to check for secrets", maxShareScan),
+			"max_files", strconv.Itoa(maxShareScan))
+	}
+
+	// Its work committed.
+	if changes != "" || noHead != nil {
+		if _, err := gitText(ctx, dir, "add", "-A"); err != nil {
+			return nil, invalid(err)
+		}
+		msg := "Shared with " + filepath.Base(folder)
+		if _, err := gitText(ctx, dir, append(who, "commit", "-q", "--allow-empty", "-m", msg)...); err != nil {
+			return nil, invalid(err)
+		}
+		if changes != "" {
+			notes = append(notes, "Your changes not yet committed were committed first, as “"+msg+"”.")
+		}
 	}
 	if tree, err := gitText(ctx, dir, "ls-tree", "-r", "-l", "HEAD"); err == nil {
 		for _, line := range strings.Split(tree, "\n") {
@@ -162,14 +188,57 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 	if err := h.s.setHelper(ctx, dir, c.URL()); err != nil {
 		return nil, invalid(err)
 	}
-	if err := h.s.git(ctx, dir, "push", "-q", sharedRemote, "HEAD:main"); err != nil {
-		return nil, apiError(connect.CodeUnavailable, "PUSH_FAILED",
-			fmt.Errorf("the workspace %s was made, but the folder couldn't be sent to it: %w", w.Handle, err))
-	}
-	trackShared(ctx, dir, sharedRemote)
+	// Recorded before it's sent: a push that fails leaves the folder
+	// shared, and its sync sends it (sharing again would make a second
+	// workspace, or find the handle taken).
 	if err := addShared(c.URL(), w.Handle, sharedFolder{Dir: dir, Remote: sharedRemote}); err != nil {
 		return nil, apiError(connect.CodeInternal, "INTERNAL", err)
 	}
+	if err := h.s.git(ctx, dir, "push", "-q", sharedRemote, "HEAD:main"); err != nil {
+		h.s.ent.kickCatalog()
+		return nil, apiError(connect.CodeUnavailable, "PUSH_FAILED",
+			fmt.Errorf("the workspace %s was made and the folder is shared with it, but it couldn't be sent yet: it's sent as it syncs (Save now in Changes tries at once): %w", w.Handle, err),
+			"handle", w.Handle)
+	}
+	trackShared(ctx, dir, sharedRemote)
 	h.s.ent.kickCatalog() // a folder to keep in step
 	return ok(&pb.ShareWithOrganizationResponse{Workspace: h.s.orgWorkspaceMsg(w, folder, sharedFor(c.URL())), Notes: notes})
+}
+
+// changedSecrets finds the secrets in what committing everything in the
+// repository at dir would add (its untracked files git doesn't ignore, and
+// its files that differ from HEAD), reading them from the folder, at most
+// maxFiles of them; read is how many there were.
+func changedSecrets(ctx context.Context, dir string, maxFiles int) (found []secretscan.Finding, read int, err error) {
+	untracked, err := gitText(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard")
+	if err != nil {
+		return nil, 0, err
+	}
+	changed, err := gitText(ctx, dir, "diff", "--name-only", "-z", "HEAD")
+	if err != nil {
+		// No HEAD yet: every file in the index is new.
+		if changed, err = gitText(ctx, dir, "ls-files", "-z", "-c"); err != nil {
+			return nil, 0, err
+		}
+	}
+	seen := map[string]bool{}
+	for name := range strings.SplitSeq(untracked+"\x00"+changed, "\x00") {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		fi, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(name)))
+		if err != nil || !fi.Mode().IsRegular() || fi.Size() > maxShareFile {
+			continue // removed, a link or a folder, or too large to read (as History)
+		}
+		if read++; read > maxFiles {
+			return found, read, nil
+		}
+		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+		if err != nil {
+			return nil, 0, err
+		}
+		found = append(found, secretscan.Scan(name, data)...)
+	}
+	return found, read, nil
 }

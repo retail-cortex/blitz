@@ -982,6 +982,50 @@ func TestShareWithOrganization(t *testing.T) {
 		assert.False(t, made, "nothing made")
 	})
 
+	// A key in changes not yet committed: refused before they're
+	// committed, so nothing is left in the history (a new folder isn't
+	// left a repository either).
+	t.Run("a key not yet committed", func(t *testing.T) {
+		repo := t.TempDir()
+		git(repo, "init", "-q")
+		require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("Hello.\n"), 0o644))
+		git(repo, "add", "-A")
+		git(repo, "commit", "-q", "-m", "first")
+		head := git(repo, "rev-parse", "HEAD")
+		plain := t.TempDir()
+		cases := []struct {
+			name, dir, file string
+			check           func(t *testing.T)
+		}{
+			{"an untracked file", repo, ".env", func(t *testing.T) {
+				assert.Equal(t, head, git(repo, "rev-parse", "HEAD"), "no commit made")
+				assert.Equal(t, "?? .env", git(repo, "status", "--porcelain"))
+			}},
+			{"a changed file", repo, "README.md", func(t *testing.T) {
+				assert.Equal(t, head, git(repo, "rev-parse", "HEAD"), "no commit made")
+			}},
+			{"a folder that isn't a repository", plain, "config.py", func(t *testing.T) {
+				assert.NoDirExists(t, filepath.Join(plain, ".git"), "left as it was")
+			}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				require.NoError(t, os.WriteFile(filepath.Join(tc.dir, tc.file), []byte("KEY = 'AKIAIOSFODNN7EXAMPLE'\n"), 0o644))
+				defer git(repo, "checkout", "-q", "--", "README.md")
+				_, err := share(tc.dir, "Unsaved", false)
+				_, info := errorReason(t, err)
+				assert.Equal(t, "SECRETS_FOUND", info.Reason)
+				assert.Contains(t, err.Error(), tc.file+":1")
+				tc.check(t)
+				require.NoError(t, os.Remove(filepath.Join(tc.dir, tc.file)))
+			})
+		}
+		org.Mu.Lock()
+		_, made := org.Workspaces["unsaved"]
+		org.Mu.Unlock()
+		assert.False(t, made, "nothing made")
+	})
+
 	t.Run("inside another repository", func(t *testing.T) {
 		outer := t.TempDir()
 		git(outer, "init", "-q")
@@ -1070,16 +1114,35 @@ func TestShareWithOrganization(t *testing.T) {
 			}
 			return dir
 		}
-		// A long history only partly checked, a large file, and a remote
-		// called organization already there.
+		// Too many files to check, in its changes or its history: nothing
+		// shared, nothing committed (EN-66).
 		defer func(n int, size int64) { maxShareScan, largeShareFile = n, size }(maxShareScan, largeShareFile)
-		maxShareScan, largeShareFile = 1, 4
+		maxShareScan = 1
 		big := folder(map[string]string{"data.csv": "a,b,c\n1,2,3\n", "notes.md": "x"})
 		git(big, "init", "-q")
 		git(big, "remote", "add", "organization", "https://old.example/x.git")
+		_, err := share(big, "Big", false)
+		code, info := errorReason(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, code)
+		assert.Equal(t, "TOO_LARGE_TO_CHECK", info.Reason)
+		assert.Equal(t, "1", info.Metadata["max_files"])
+		_, noHead := exec.Command("git", "-C", big, "rev-parse", "--verify", "-q", "HEAD").Output()
+		assert.Error(t, noHead, "nothing committed")
+		long := folder(map[string]string{"a.md": "a"})
+		git(long, "init", "-q")
+		git(long, "add", "-A")
+		git(long, "commit", "-q", "-m", "first")
+		require.NoError(t, os.WriteFile(filepath.Join(long, "b.md"), []byte("b"), 0o644))
+		git(long, "add", "-A")
+		git(long, "commit", "-q", "-m", "second")
+		_, err = share(long, "Long", false)
+		_, info = errorReason(t, err)
+		assert.Equal(t, "TOO_LARGE_TO_CHECK", info.Reason, "a history past the limit")
+
+		// A large file, and a remote called organization already there.
+		maxShareScan, largeShareFile = 50_000, 4
 		made, err := share(big, "Big", false)
 		require.NoError(t, err)
-		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "only its first 1 files")
 		assert.Contains(t, strings.Join(made.Msg.Notes, " "), "data.csv is 0 MB")
 		assert.Equal(t, org.URL+"/git/big.git", git(big, "remote", "get-url", "organization"))
 		maxShareScan, largeShareFile = 50_000, 50<<20
@@ -1088,12 +1151,27 @@ func TestShareWithOrganization(t *testing.T) {
 		_, err = share(folder(map[string]string{"a.md": "a"}), "Big", false)
 		assert.Error(t, err)
 
-		// A push the service refuses.
+		// A push the service refuses: the folder is shared all the same,
+		// and sent as it syncs; sharing it again is refused.
 		t.Setenv("BLITZ_TEST_TOKEN", "not a token")
-		_, err = share(folder(map[string]string{"b.md": "b"}), "Refused", false)
-		_, info := errorReason(t, err)
+		refused := folder(map[string]string{"b.md": "b"})
+		_, err = share(refused, "Refused", false)
+		_, info = errorReason(t, err)
 		assert.Equal(t, "PUSH_FAILED", info.Reason)
+		assert.Equal(t, "refused", info.Metadata["handle"])
+		assert.Equal(t, refused, sharedFor(org.URL)["refused"].Dir, "recorded before it's sent")
 		t.Setenv("BLITZ_TEST_TOKEN", token)
+		_, err = share(refused, "Refused", false)
+		_, info = errorReason(t, err)
+		assert.Equal(t, "ALREADY_SHARED", info.Reason)
+		require.Eventually(t, func() bool {
+			_, err := c.SaveOrgSync(ctx, connect.NewRequest(&pb.SaveOrgSyncRequest{Workspace: refused}))
+			if err != nil {
+				return false
+			}
+			out, _ := exec.Command("git", "-C", org.Repo("refused"), "show", "main:b.md").Output()
+			return string(out) == "b"
+		}, 10*time.Second, 50*time.Millisecond, "sent by its sync")
 
 		// The record of shared folders can't be read.
 		require.NoError(t, os.WriteFile(sharedPath(), []byte("not JSON"), 0o600))

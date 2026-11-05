@@ -1614,7 +1614,7 @@
     "desktop.org.name": "Nom",
     "desktop.org.personal": "Juste pour moi",
     "desktop.org.personal_hint": "À vous seul, nommé ~vous/{handle} : chacun peut en avoir un de ce nom. Sinon, c'est un espace d'équipe où vous pouvez inviter des gens.",
-    "desktop.org.share_body": "Il reste où il est, tenu à jour avec {org} pendant que vous travaillez. Vos modifications sont d'abord validées, et le dossier et son historique sont vérifiés pour y trouver des secrets : rien n'est envoyé s'il y en a. L'origin propre d'un dépôt reste tel quel.",
+    "desktop.org.share_body": "Il reste où il est, tenu à jour avec {org} pendant que vous travaillez. Le dossier, vos modifications et son historique sont d'abord vérifiés pour y trouver des secrets : s'il y en a, ou s'il y a trop de fichiers à vérifier, rien n'est validé ni envoyé. Vos modifications sont ensuite validées. L'origin propre d'un dépôt reste tel quel.",
     "desktop.org.create": "Créer",
     "desktop.org.share_go": "Partager",
     "desktop.org.working": "En cours…",

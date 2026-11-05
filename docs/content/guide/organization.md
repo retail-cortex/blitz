@@ -84,7 +84,7 @@ Signed in, the **Workspaces** menu lists your organization's workspaces you have
 
 **New workspace…** in the same menu makes one, with you its owner. Switch on **Just for me** to make it yours alone: it's named `~you/<name>`, so everyone can have one called `home`. Otherwise it's a team workspace you can invite people to.
 
-To share a folder you already have, open it and choose **Share <folder> with <organization>…**. It stays where it is and is kept in step from then on. Your changes are committed first, and the folder and its history are checked for secrets: if any are found, nothing is sent, and Blitz tells you which file and line. A repository's own `origin` (GitHub, say) stays as it was; your organization's is the remote `organization`.
+To share a folder you already have, open it and choose **Share <folder> with <organization>…**. It stays where it is and is kept in step from then on. The folder, your changes and its history are checked for secrets first: if any are found, nothing is committed or sent, and Blitz tells you which file and line. A folder with more than 50,000 files to check, in its changes and its history together, isn't shared. Then your changes are committed. If the folder can't be sent at once (the service is out of reach, say), it's shared all the same and sent as it syncs. A repository's own `origin` (GitHub, say) stays as it was; your organization's is the remote `organization`.
 
 From the terminal: `blitz enterprise workspaces`, `blitz enterprise open <workspace>`, `blitz enterprise create <name>` (`--personal` for one of your own), and `blitz enterprise share [folder]` (`--name`, `--personal`).
 

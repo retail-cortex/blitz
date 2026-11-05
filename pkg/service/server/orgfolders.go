@@ -101,6 +101,20 @@ func addShared(service, handle string, sf sharedFolder) error {
 	return os.Rename(tmp, sharedPath())
 }
 
+// samePath reports whether a and b are the same folder, links followed
+// (as canonical; a path that can't be resolved is compared as given).
+func samePath(a, b string) bool {
+	ka, err := canonical(a)
+	if err != nil {
+		ka = filepath.Clean(a)
+	}
+	kb, err := canonical(b)
+	if err != nil {
+		kb = filepath.Clean(b)
+	}
+	return ka == kb
+}
+
 // orgDir is where handle's workspace is on this computer, and its remote:
 // a folder shared from here, else its clone in folder.
 func orgDir(shared map[string]sharedFolder, folder, handle string) (string, string) {

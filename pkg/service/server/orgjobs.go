@@ -54,11 +54,18 @@ func (s *Server) orgHandle(dir string) (*enterprise.Client, string, error) {
 		return nil, "", enterpriseError(enterprise.ErrNotSignedIn)
 	}
 	for handle, sf := range sharedFor(c.URL()) {
-		if filepath.Clean(sf.Dir) == filepath.Clean(dir) {
+		if samePath(sf.Dir, dir) {
 			return c, handle, nil
 		}
 	}
-	rel, err := filepath.Rel(s.orgFolder(c, cfg), filepath.Clean(dir))
+	folder, at := s.orgFolder(c, cfg), filepath.Clean(dir)
+	if real, err := canonical(folder); err == nil {
+		folder = real
+	}
+	if real, err := canonical(at); err == nil {
+		at = real
+	}
+	rel, err := filepath.Rel(folder, at)
 	handle := filepath.ToSlash(rel)
 	if err != nil || !enterprise.ValidHandle(handle) {
 		return nil, "", apiError(connect.CodeFailedPrecondition, "NOT_ORG_WORKSPACE", fmt.Errorf("%s isn't one of the organization's workspaces", dir))

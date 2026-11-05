@@ -1614,7 +1614,7 @@
     "desktop.org.name": "Nombre",
     "desktop.org.personal": "Solo para mí",
     "desktop.org.personal_hint": "Solo tuyo, llamado ~tú/{handle}: cada persona puede tener uno con este nombre. Si no, es un espacio de equipo al que puedes invitar a otras personas.",
-    "desktop.org.share_body": "Se queda donde está y se mantiene al día con {org} mientras trabajas. Primero se confirman tus cambios, y se revisa que la carpeta y su historial no contengan secretos: si se encuentra alguno, no se envía nada. El origin propio de un repositorio queda como estaba.",
+    "desktop.org.share_body": "Se queda donde está y se mantiene al día con {org} mientras trabajas. Primero se revisa que la carpeta, tus cambios y su historial no contengan secretos: si se encuentra alguno, o hay demasiados archivos para revisarlos, no se confirma ni se envía nada. Después se confirman tus cambios. El origin propio de un repositorio queda como estaba.",
     "desktop.org.create": "Crear",
     "desktop.org.share_go": "Compartir",
     "desktop.org.working": "Trabajando…",
