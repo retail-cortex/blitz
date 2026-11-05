@@ -235,7 +235,7 @@ var helpGroups = []struct {
 	{"help.group.safety", [][2]string{
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
 		{"/hooks", "help.hooks"},
-		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
+		{"/mode [auto|default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
 		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
 		{"/sandbox", "help.sandbox"},
 	}},

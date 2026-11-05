@@ -675,7 +675,7 @@ export const builtinCommands: Builtin[] = [
   },
   {
     name: "mode",
-    args: "[default|accept-edits|plan|dont-ask|bypass]",
+    args: "[auto|default|accept-edits|plan|dont-ask|bypass]",
     group: "safety",
     async run(c) {
       if (!c.args) return c.say(t("desktop.mode.is", { mode: modeOf(c.settings?.permissionMode ?? "auto").label }), "info", true);

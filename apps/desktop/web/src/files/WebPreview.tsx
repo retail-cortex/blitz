@@ -23,14 +23,24 @@ import { t } from "../i18n";
 import { Button, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
 import { SaveWebDialog } from "./SaveWebDialog";
 import type { EditorModel, Tab } from "./useEditor";
-import { consoleBlock, covered, overlays, pageBlock, webId, webTabName } from "./webTabs";
+import { consoleBlock, covered, openedPreviews, overlays, pageBlock, webId, webTabName } from "./webTabs";
 
 // The previews this page has opened in the window (a tab shown again
-// keeps its page).
-const opened = new Set<string>();
+// keeps its page); a closed tab's leaves (useEditor).
+const opened = openedPreviews;
 
 /** Takes the window's view id as opened: the agent's (AB-03), which it opened itself. */
 export const adoptPreview = (id: string) => opened.add(id);
+
+/** Runs act, then done; a failure (thrown or rejected) goes to fail, said on the tab's bar. */
+export async function attempt(act: () => Promise<unknown>, done: () => void, fail: (message: string) => void) {
+  try {
+    await act();
+  } catch (e) {
+    return fail(message(e));
+  }
+  done();
+}
 
 /**
  * A web page in the editor (spec_038_electron EL-100): its toolbar (back,
@@ -186,10 +196,10 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
         <div className="card row t-body-sm web-agent-bar" role="status">
           <Icon path={mdiRobotOutline} size="sm" />
           <span className="spacer">{t("desktop.web.agent_browsing")}</span>
-          <Button small onClick={() => void agentBrowser.takeOver(id).then(() => model.setWeb(tab.path, { agent: false }))}>
+          <Button small onClick={() => void attempt(() => agentBrowser.takeOver(id), () => model.setWeb(tab.path, { agent: false }), setError)}>
             {t("desktop.web.take_over")}
           </Button>
-          <Button small onClick={() => void agentBrowser.close(id).then(() => model.close(tab.path))}>
+          <Button small onClick={() => void attempt(() => agentBrowser.close(id), () => model.close(tab.path), setError)}>
             {t("desktop.web.stop_agent")}
           </Button>
         </div>

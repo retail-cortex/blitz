@@ -17,7 +17,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { EditorModel, Tab } from "./useEditor";
-import { WebPreview } from "./WebPreview";
+import { attempt, WebPreview } from "./WebPreview";
 
 const tab = (url: string): Tab & { web: NonNullable<Tab["web"]> } => ({
   path: "web:w1",
@@ -46,5 +46,23 @@ describe("WebPreview", () => {
   it("shows the page's address", () => {
     const html = renderToStaticMarkup(<WebPreview tab={tab("http://localhost:3000/")} model={model} />);
     expect(html).toMatch(/<input class="web-address"[^>]*value="http:\/\/localhost:3000\/"/);
+  });
+});
+
+describe("the agent bar's buttons", () => {
+  it.each([
+    { name: "done", act: async () => {}, want: ["done"] },
+    { name: "refused", act: () => Promise.reject(new Error("the view is gone")), want: ["fail the view is gone"] },
+    {
+      name: "thrown",
+      act: () => {
+        throw new Error("no window");
+      },
+      want: ["fail no window"],
+    },
+  ])("say what happened: $name", async ({ act, want }) => {
+    const got: string[] = [];
+    await attempt(act, () => got.push("done"), (m) => got.push(`fail ${m}`));
+    expect(got).toEqual(want);
   });
 });

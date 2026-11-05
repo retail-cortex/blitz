@@ -22,6 +22,7 @@ import { setTransport } from "../api";
 import { FileService } from "../gen/blitz/v1/file_pb";
 import { LanguageService, ServerState } from "../gen/blitz/v1/language_pb";
 import type { EditorModel } from "./useEditor";
+import { openedPreviews } from "./webTabs";
 
 const closedPreviews: string[] = [];
 vi.mock("../desktop", async (actual) => ({ ...(await actual<typeof import("../desktop")>()), previewClose: async (id: string) => void closedPreviews.push(id) }));
@@ -82,10 +83,12 @@ describe("a workspace's editor", () => {
     const ed = mount("/w/shop");
     act(() => void ed.ref.model!.openWeb("http://localhost:3000/"));
     const web = ed.ref.model!.tabs.find((t) => t.web)!.path;
+    openedPreviews.add(web.slice("web:".length)); // as its preview does
     await m.languageSession("/w/shop").open("main.go", "package main\n");
     ed.unmount();
     await vi.waitFor(() => expect(f.calls).toEqual(["open main.go", "close doc:main.go"]));
     expect(closedPreviews).toEqual([web.slice("web:".length)]);
+    expect(openedPreviews.has(web.slice("web:".length))).toBe(false);
     expect(m.languageSession("/w/shop").status("main.go")).toBeUndefined(); // a new session: nothing kept
   });
 

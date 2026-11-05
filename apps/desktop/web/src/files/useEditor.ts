@@ -27,7 +27,7 @@ import { fileState, languageSupport } from "./codemirror";
 import { endLanguageSession, languageExtension, languageSession, type LanguageHooks } from "./language";
 import { afterClosing } from "./tabMenu";
 import { nameOf } from "./tree";
-import { isWebPath, newWebId, webId, webPath, webTabName } from "./webTabs";
+import { isWebPath, newWebId, openedPreviews, webId, webPath, webTabName } from "./webTabs";
 
 /** An open file: its tab, the version its text is based on, and what the editor knows about it. */
 export interface Tab {
@@ -107,6 +107,12 @@ export interface EditorModel {
   /** The language servers' hooks, for the visual editor's code blocks (none: no servers). */
   language?: LanguageHooks;
   dirtyCount: number;
+}
+
+// Closes a web tab's page in the window, and forgets it was opened.
+function closePreview(id: string) {
+  openedPreviews.delete(id);
+  void previewClose(id);
 }
 
 /**
@@ -202,7 +208,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     (paths: readonly string[]) => {
       const closed = new Set(paths);
       for (const path of closed) {
-        if (isWebPath(path)) void previewClose(webId(path));
+        if (isWebPath(path)) closePreview(webId(path));
         languageSession(dir).close(path);
         states.current.delete(path);
         saved.current.delete(path);
@@ -317,7 +323,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
   // go with it, rather than running on unseen.
   useEffect(
     () => () => {
-      for (const t of tabsRef.current) if (t.web) void previewClose(webId(t.path));
+      for (const t of tabsRef.current) if (t.web) closePreview(webId(t.path));
       endLanguageSession(dir);
     },
     [dir],
