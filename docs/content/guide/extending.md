@@ -214,4 +214,6 @@ enable  = ["lint-kit"]   # needs trust
 disable = ["noisy-kit"]
 ```
 
+If you're connected to an [organization](organization.md) whose policy turns off your own plugins, none of them loads, in any workspace: Blitz says so when a workspace opens, and `blitz plugin list` and `install` say so too.
+
 The importers convert what maps from Claude Code plugins and Gemini CLI extensions (commands, skills, agents, hooks, MCP servers) and list what they couldn't. See the [plugins spec](../about/specs/spec_033_plugins.md).

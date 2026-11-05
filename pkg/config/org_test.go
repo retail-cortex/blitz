@@ -134,6 +134,25 @@ func TestOrgLayer(t *testing.T) {
 		assert.NotContains(t, names, "notes", "the person's own servers are dropped")
 		assert.Len(t, cfg.Warnings, 1)
 	})
+	t.Run("the person's own plugins", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, policy string
+			off          bool
+		}{
+			{"the policy doesn't say: allowed, as from an older service", `{"policy":{"mcp":{"own":true}}}`, false},
+			{"own allowed", `{"policy":{"plugins":{"own":true}}}`, false},
+			{"own off", `{"policy":{"plugins":{"own":false}}}`, true},
+			{"a policy that can't be read", `{"policy":`, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				writeOrg(t, home, tc.policy, nil)
+				cfg, err := Load("")
+				require.NoError(t, err)
+				assert.Equal(t, tc.off, cfg.Org.PluginsOff())
+			})
+		}
+		assert.False(t, OrgLayer{}.PluginsOff(), "no organization")
+	})
 	t.Run("the organization's folder", func(t *testing.T) {
 		assert.Equal(t, "", EnterpriseDir("", ""))
 		assert.Equal(t, "", EnterpriseDir("", "::nope"))

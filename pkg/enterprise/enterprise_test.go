@@ -782,7 +782,7 @@ func TestCatalog(t *testing.T) {
 		"skills/deploy/SKILL.md": {Kind: "skill", Name: "deploy", Lock: "default", Data: "---\nname: deploy\n---\nDeploy."},
 		"skills/deploy/run.sh":   {Kind: "skill_file", Name: "deploy", Lock: "default", Data: "echo hi"},
 	}
-	s.CatalogPolicy = map[string]any{"models": map[string]any{"own_providers": true}, "tools": map[string]any{"off": []string{"web_fetch"}}, "connectors": map[string]any{"own": true, "kinds": []string{"postgres"}}}
+	s.CatalogPolicy = map[string]any{"models": map[string]any{"own_providers": true}, "tools": map[string]any{"off": []string{"web_fetch"}}, "connectors": map[string]any{"own": true, "kinds": []string{"postgres"}}, "plugins": map[string]any{"own": false}}
 	s.CatalogExpiry = time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
 	m, changed, err = c.RefreshCatalog(ctx, dir)
 	require.NoError(t, err)
@@ -809,6 +809,8 @@ func TestCatalog(t *testing.T) {
 	assert.True(t, st.Policy.Connectors.Own)
 	assert.Equal(t, []string{"postgres"}, st.Policy.Connectors.Kinds)
 	assert.Equal(t, []string{"web_fetch"}, st.Policy.Tools.Off)
+	require.NotNil(t, st.Policy.Plugins.Own, "plugins too (EN-35)")
+	assert.False(t, *st.Policy.Plugins.Own)
 	assert.Equal(t, m, LoadCatalog(dir))
 
 	again, changed, err := c.RefreshCatalog(ctx, dir)

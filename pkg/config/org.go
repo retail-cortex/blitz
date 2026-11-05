@@ -64,6 +64,14 @@ func (o OrgLayer) LockOf(path string) string {
 	return ""
 }
 
+// PluginsOff reports whether the person's own plugins (installed, from a
+// marketplace or a folder) don't load: the organization's policy says
+// [plugins] own = false, or it couldn't be read (EN-35).
+func (o OrgLayer) PluginsOff() bool {
+	own := o.Policy.Plugins.Own
+	return o.Active() && (o.Problem != "" || own != nil && !*own)
+}
+
 // Active reports whether a catalog applies.
 func (o OrgLayer) Active() bool { return o.Defaults != "" || o.Locked != "" }
 
@@ -99,6 +107,11 @@ type OrgPolicy struct {
 		Own   bool     `json:"own"`
 		Kinds []string `json:"kinds"`
 	} `json:"connectors"`
+	// Plugins says whether people's own plugins load (allowed when the
+	// policy doesn't say, as from a service that predates it).
+	Plugins struct {
+		Own *bool `json:"own,omitempty"`
+	} `json:"plugins"`
 	Builtins struct {
 		// Off are Blitz's built-in agents, skills and guardrails switched
 		// off, by name.
@@ -149,7 +162,7 @@ func applyOrg(cfg *Config, prefixDir string) {
 		if errors.Is(err, os.ErrNotExist) {
 			cfg.Org.Problem = "not fetched yet"
 		}
-		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Organization or with blitz enterprise login", path, cfg.Org.Problem))
+		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, plugins, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Organization or with blitz enterprise login", path, cfg.Org.Problem))
 	}
 	cfg.Org.Policy, cfg.Org.Expires = st.Policy, st.Expires
 	orgLayers.Store(ConfigDir(prefixDir), cfg.Org)
@@ -167,6 +180,10 @@ func applyOrg(cfg *Config, prefixDir string) {
 // used: the organization's policy doesn't allow MCP servers of the
 // person's own (EN-35).
 var ErrOrgMCP = errors.New("your organization's policy doesn't allow MCP servers of your own")
+
+// ErrOrgPlugins is why the person's own plugins aren't loaded: the
+// organization's policy turns them off (EN-35).
+var ErrOrgPlugins = errors.New("your organization turns off your own plugins")
 
 // ErrMCPNameTaken is why an MCP server added after the settings load isn't
 // used: one of its name is there already, and that one stays.
