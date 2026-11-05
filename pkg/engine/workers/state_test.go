@@ -308,3 +308,45 @@ func TestHashWithoutWorkflowUnchanged(t *testing.T) {
 
 // flowSuffix is the flows package's.
 func TestFlowSuffix(t *testing.T) { assert.Equal(t, flows.Suffix, flowSuffix) }
+
+// Load hands back the workflow's file as it hashed it, so a run takes
+// the workflow's steps and grants from the bytes its enabled hash covers,
+// not from another read (WK-05b, N26 engine-decisions).
+func TestLoadKeepsTheWorkflowItHashed(t *testing.T) {
+	const flow = "nodes:\n  - {id: save, type: save_file, path: out.md}\n"
+	cases := []struct {
+		name, job, flow string
+		want            bool
+	}{
+		{name: "its workflow", job: "---\nschedule: hourly\nworkflow: digest\n---\n", flow: flow, want: true},
+		{name: "its workflow is missing", job: "---\nschedule: hourly\nworkflow: digest\n---\n"},
+		{name: "no workflow", job: valid, flow: flow},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ws := t.TempDir()
+			wf := filepath.Join(ws, ".agents", "workflows")
+			require.NoError(t, os.MkdirAll(wf, 0o755))
+			path := filepath.Join(wf, "digest"+flowSuffix)
+			if c.flow != "" {
+				require.NoError(t, os.WriteFile(path, []byte(c.flow), 0o644))
+			}
+			w, err := Load(writeWorker(t, filepath.Join(ws, ".agents", "workers"), "digest", c.job), wf)
+			require.NoError(t, err)
+			if !c.want {
+				assert.Nil(t, w.FlowFile)
+				return
+			}
+			require.NotNil(t, w.FlowFile)
+			assert.Equal(t, path, w.FlowFile.Path)
+			assert.Equal(t, c.flow, string(w.FlowFile.Data))
+			// The bytes kept are the bytes hashed: the file edited after
+			// Load changes the hash, not what Load handed back.
+			require.NoError(t, os.WriteFile(path, []byte(flow+"  - {id: web, type: browser}\n"), 0o644))
+			assert.Equal(t, c.flow, string(w.FlowFile.Data))
+			now, err := HashDir(w.Dir, wf)
+			require.NoError(t, err)
+			assert.NotEqual(t, w.Hash, now)
+		})
+	}
+}

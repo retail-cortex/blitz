@@ -357,6 +357,32 @@ func TestWorkflowChangeSuspendsJob(t *testing.T) {
 	}
 }
 
+// A run reads its job's workflow once: the steps it runs, and what they
+// may write, are those of the bytes its enabled hash covers. An edit made
+// after the hash was checked (afterJobCheck) can't give that run steps
+// or permissions nobody reviewed (spec_023 WK-05b, N26 engine-decisions).
+func TestJobRunUsesTheWorkflowItsHashCovers(t *testing.T) {
+	const save = "nodes:\n  - {id: s, type: save_file, path: out/report.md}\n"
+	const swapped = "nodes:\n  - {id: s, type: save_file, path: notes/b.md}\n"
+	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Policy.Allow = []string{"write"} })
+	writeFlow(t, w, "save", save)
+	addWorker(t, w, "flow", "---\nschedule: hourly\nworkflow: save\n---\nThe report.\n")
+	enable(t, w, "flow")
+	swap := func() { writeFlow(t, w, "save", swapped) }
+	afterJobCheck = swap
+	t.Cleanup(func() { afterJobCheck = func() {} })
+
+	run, err := w.RunWorker(context.Background(), "flow", RunOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, api.RunSucceeded, run.Status, "run %+v", run)
+	assert.FileExists(t, filepath.Join(w.Dir(), "out", "report.md"), "the reviewed step didn't run")
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "notes", "b.md"), "a step edited in after the check ran")
+
+	// The edit made the job changed: the next run doesn't start.
+	_, err = w.RunWorker(context.Background(), "flow", RunOptions{})
+	assert.ErrorIs(t, err, api.ErrWorkerNotEnabled)
+}
+
 // A job whose body is a workflow keeps the job's limits across its
 // steps, runs them on its model, and its steps' changes are the run's to
 // undo (spec_023 WK-43, WK-54; N26 engine-top-2#2).

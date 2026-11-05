@@ -532,6 +532,68 @@ edges: [{from: wait, to: ok}, {from: ok, to: out}]
 	assert.NoFileExists(t, filepath.Join(w.Dir(), "summary-b.md"))
 }
 
+// A job's paused run resumes only while the job is enabled as it is, and
+// under the permissions of the workflow bytes its hash covers: an edit
+// made after that check grants nothing (WK-05b, N26 engine-decisions).
+func TestResumedJobReadsItsWorkflowOnce(t *testing.T) {
+	const later = `nodes:
+  - {id: wait, type: timer, title: Wait, wait: 1h}
+  - {id: ok, type: save_file, path: reports/a.md}
+  - {id: out, type: save_file, path: "{{ input }}-b.md"}
+edges: [{from: wait, to: ok}, {from: ok, to: out}]
+`
+	// Its save step's literal path would grant write:summary-b.md.
+	const widened = `nodes:
+  - {id: wait, type: timer, title: Wait, wait: 1h}
+  - {id: ok, type: save_file, path: reports/a.md}
+  - {id: out, type: save_file, path: summary-b.md}
+edges: [{from: wait, to: ok}, {from: ok, to: out}]
+`
+	const job = "---\nschedule: daily at 6 AM\nworkflow: later\npermissions: [\"write:reports/\"]\n---\nsummary\n"
+	cases := []struct {
+		name string
+		// edit changes the job between its pause and its resume.
+		edit, swap func(t *testing.T, w *Workspace)
+		errIs      error
+		resumed    bool
+	}{
+		{name: "an edit after the check grants nothing", resumed: true,
+			swap: func(t *testing.T, w *Workspace) { writeFlow(t, w, "later", widened) }},
+		{name: "a job changed since its run paused waits", errIs: api.ErrWorkerNotEnabled,
+			edit: func(t *testing.T, w *Workspace) {
+				addWorker(t, w, "night", strings.Replace(job, `"write:reports/"`, `"write:reports/", "write:summary-b.md"`, 1))
+			}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w, _ := openTestWith(t, configtest.RunTools)
+			writeFlow(t, w, "later", later)
+			addWorker(t, w, "night", job)
+			enable(t, w, "night")
+			_, err := w.RunWorker(context.Background(), "night", RunOptions{Manual: true})
+			require.NoError(t, err)
+			tasks := w.FlowTasks()
+			require.Len(t, tasks, 1)
+			if c.edit != nil {
+				c.edit(t, w)
+			}
+			if c.swap != nil {
+				afterJobCheck = func() { c.swap(t, w) }
+				t.Cleanup(func() { afterJobCheck = func() {} })
+			}
+			_, err = w.ResumeFlow(context.Background(), tasks[0].Tasks[0].ID, map[string]any{"fired_at": "now"}, func(api.Event) {})
+			require.Error(t, err)
+			if c.errIs != nil {
+				assert.ErrorIs(t, err, c.errIs)
+				assert.Len(t, w.FlowTasks(), 1, "the paused run was dropped")
+			}
+			_, statErr := os.Stat(filepath.Join(w.Dir(), "reports", "a.md"))
+			assert.Equal(t, c.resumed, statErr == nil, "resumed: %v", statErr)
+			assert.NoFileExists(t, filepath.Join(w.Dir(), "summary-b.md"), "written under permissions nobody reviewed")
+		})
+	}
+}
+
 // A worker can run a workflow: its steps under the worker's permissions,
 // in its run's chat, its prompt the input (WF-17).
 func TestWorkerRunsWorkflow(t *testing.T) {

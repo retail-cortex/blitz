@@ -136,6 +136,11 @@ func (w *Workspace) forgetRun(runID string) { os.Remove(w.recordPath(runID)) }
 // flowHash identifies a workflow file as it is.
 func flowHash(f flows.Flow) string {
 	data, _ := os.ReadFile(f.Path)
+	return flowDataHash(data)
+}
+
+// flowDataHash identifies a workflow file's content (flowHash).
+func flowDataHash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
@@ -354,16 +359,46 @@ func answerResult(n flows.Node, reply any) flows.Result {
 // ResumeFlow answers a paused run's task and runs it on from there (the
 // form's values, or {fired_at} for a timer), its agent steps in the chat
 // it started in. A run whose workflow changed since it paused isn't
-// resumed; its record goes.
+// resumed; its record goes. A job's run resumes only while the job is
+// enabled as it is (WK-05b): its workflow and the permissions its steps
+// grant are read once, from the bytes its hash covers.
 func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[string]any, on func(api.Event)) (api.TurnResult, error) {
 	runID, _, _ := strings.Cut(taskID, "/")
-	rec, f, err := w.takeTask(runID, taskID)
+	var job *workers.Worker
+	rec, f, err := w.takeTask(runID, taskID, func(rec FlowRecord) (flows.Flow, string, error) {
+		workflow := func() (flows.Flow, string, error) {
+			if f, ok := w.workflow(rec.Workflow); ok {
+				return f, flowHash(f), nil
+			}
+			return flows.Flow{}, "", nil
+		}
+		if rec.Origin != "worker" {
+			return workflow()
+		}
+		var err error
+		if job, err = w.resumedJobOf(rec.Session); err != nil {
+			return flows.Flow{}, "", err
+		}
+		if job == nil { // the job is gone: everything refused
+			return workflow()
+		}
+		afterJobCheck()
+		f, ok := w.jobWorkflow(job)
+		if !ok || job.Flow != rec.Workflow {
+			return flows.Flow{}, "", nil
+		}
+		return f, flowDataHash(job.FlowFile.Data), nil
+	})
 	if err != nil {
 		return api.TurnResult{}, err
 	}
 	ctx = withFlowOrigin(ctx, rec.Origin)
 	if rec.Origin == "worker" {
-		ctx = w.resumedJobContext(ctx, rec.Session)
+		var perms []workers.Permission
+		if job != nil {
+			perms = workers.Apply(withFlowGrants(job, f, true), w.workerPolicy()).Permissions
+		}
+		ctx = resumedJobContext(ctx, perms)
 	}
 	if st := w.storage; st.Active() == nil || st.Active().ID != rec.Session {
 		other, err := session.NewStorage(w.cfg.Session.StorageDir)
@@ -387,23 +422,34 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 	return w.driveFlow(ctx, rec.Session, f, rec.Input, on, runID, resp, rec.Done)
 }
 
-// resumedJobContext is ctx for resuming a workflow a job started (its run
-// chat sessionID): unattended, under that job's permissions as it has them
-// now (its workflow's steps' too, WF-20a), as its run was; none
-// (everything refused) when the job is gone.
-func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) context.Context {
-	var perms []workers.Permission
+// resumedJobOf is the job that started the run whose chat is sessionID,
+// read once (its workflow's bytes with it), nil when the job is gone. A
+// job that isn't enabled as it is now (changed, disabled, invalid) is
+// ErrWorkerNotEnabled: its run waits until it is (WK-05b).
+func (w *Workspace) resumedJobOf(sessionID string) (*workers.Worker, error) {
 	infos, _ := w.ListWorkers()
 	for _, info := range infos {
 		runs, _ := w.runLog.List(w.Dir(), info.Name, 0)
 		if !slices.ContainsFunc(runs, func(r api.Run) bool { return r.SessionID == sessionID }) {
 			continue
 		}
-		if wk, loadErr, err := w.worker(info.Name); err == nil && loadErr == nil {
-			perms = workers.Apply(withFlowGrants(wk, w.workflow), w.workerPolicy()).Permissions
+		wk, loadErr, err := w.worker(info.Name)
+		if err != nil {
+			return nil, nil
 		}
-		break
+		if state := w.workerStore.State(w.Dir(), wk, loadErr); state != api.StateEnabled {
+			return nil, fmt.Errorf("%w (it is %s): enable it to resume its run", api.ErrWorkerNotEnabled, state)
+		}
+		return wk, nil
 	}
+	return nil, nil
+}
+
+// resumedJobContext is ctx for resuming a workflow a job started:
+// unattended, under perms, that job's permissions as it has them now (its
+// workflow's steps' too, WF-20a), as its run was; none (everything
+// refused) when the job is gone.
+func resumedJobContext(ctx context.Context, perms []workers.Permission) context.Context {
 	return tools.Unattended(ctx, func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		if workers.Allows(perms, req) {
 			return api.DecisionOnce, nil
@@ -418,10 +464,12 @@ func (w *Workspace) resumedJobContext(ctx context.Context, sessionID string) con
 var resuming sync.Map // record path → *sync.Mutex
 
 // takeTask takes task taskID out of run runID's record, which it rewrites
-// (the others kept), returning the record and its workflow: ErrNoTask when
-// it isn't there (answered already). A run whose workflow changed since
-// it paused can't be resumed; its record goes.
-func (w *Workspace) takeTask(runID, taskID string) (FlowRecord, flows.Flow, error) {
+// (the others kept), returning the record and its workflow as read reads
+// it with its file's hash (flowHash): ErrNoTask when it isn't there
+// (answered already). A run whose workflow changed since it paused (gone:
+// read's hash "", or another hash) can't be resumed; its record goes. An
+// error from read leaves the task where it is.
+func (w *Workspace) takeTask(runID, taskID string, read func(FlowRecord) (flows.Flow, string, error)) (FlowRecord, flows.Flow, error) {
 	path := w.recordPath(runID)
 	mu, _ := resuming.LoadOrStore(path, &sync.Mutex{})
 	mu.(*sync.Mutex).Lock()
@@ -433,8 +481,11 @@ func (w *Workspace) takeTask(runID, taskID string) (FlowRecord, flows.Flow, erro
 	if !slices.ContainsFunc(rec.Tasks, func(t FlowTask) bool { return t.ID == taskID }) {
 		return FlowRecord{}, flows.Flow{}, fmt.Errorf("%w: %s", ErrNoTask, taskID)
 	}
-	f, ok := w.workflow(rec.Workflow)
-	if !ok || flowHash(f) != rec.Hash {
+	f, hash, err := read(rec)
+	if err != nil {
+		return FlowRecord{}, flows.Flow{}, err
+	}
+	if hash == "" || hash != rec.Hash {
 		w.forgetRun(runID)
 		return FlowRecord{}, flows.Flow{}, fmt.Errorf("the workflow %s changed since its run paused: it can't be resumed; run it again", rec.Workflow)
 	}

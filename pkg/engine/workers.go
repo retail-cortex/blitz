@@ -122,7 +122,8 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		info.Problems = []string{loadErr.Error()}
 	}
 	if loadErr == nil {
-		eff := workers.Apply(withFlowGrants(wk, w.workflow), w.workerPolicy())
+		f, ok := w.jobWorkflow(wk)
+		eff := workers.Apply(withFlowGrants(wk, f, ok), w.workerPolicy())
 		for _, p := range eff.Permissions {
 			info.Permissions = append(info.Permissions, p.String())
 		}
@@ -442,14 +443,13 @@ type RunOptions struct {
 }
 
 // withFlowGrants is wk with, for a workflow's job, what the workflow's
-// steps do as they are now (flows.SchedulePermissions, WF-20) added to its
-// own permissions: the grants follow the workflow, never a copy made when
-// its schedule was added. The policy then applies to them all.
-func withFlowGrants(wk *workers.Worker, workflow func(string) (flows.Flow, bool)) *workers.Worker {
-	if wk.Flow == "" {
-		return wk
-	}
-	f, ok := workflow(wk.Flow)
+// steps do (flows.SchedulePermissions, WF-20) added to its own
+// permissions: the grants follow the workflow, never a copy made when its
+// schedule was added. f is the workflow as wk's hash covers it
+// (jobWorkflow; ok false: none), so a run's grants are those of the steps
+// it runs, never of an edit made after its hash was checked (WK-05b). The
+// policy then applies to them all.
+func withFlowGrants(wk *workers.Worker, f flows.Flow, ok bool) *workers.Worker {
 	if !ok {
 		return wk
 	}
@@ -462,6 +462,10 @@ func withFlowGrants(wk *workers.Worker, workflow func(string) (flows.Flow, bool)
 	}
 	return &c
 }
+
+// afterJobCheck runs once a job's hash has been checked, at a run's start
+// and when a paused run resumes; tests change the job's files in it.
+var afterJobCheck = func() {}
 
 // RunWorker runs the named worker once, as its schedule would: in a
 // session of its own, with only the permissions it declares and within its
@@ -477,6 +481,10 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	if state := w.workerStore.State(w.Dir(), wk, loadErr); state != api.StateEnabled {
 		return api.Run{}, fmt.Errorf("%w (it is %s)", api.ErrWorkerNotEnabled, state)
 	}
+	// From here on the job is what it was when its hash was checked: its
+	// workflow's steps and their grants come from the bytes hashed
+	// (wk.FlowFile), not from the file again (WK-05b).
+	afterJobCheck()
 	w.runsMu.Lock()
 	if w.running[name] {
 		w.runsMu.Unlock()
@@ -499,7 +507,8 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	}()
 
 	policy := w.workerPolicy()
-	eff := workers.Apply(withFlowGrants(wk, w.workflow), policy)
+	flow, hasFlow := w.jobWorkflow(wk)
+	eff := workers.Apply(withFlowGrants(wk, flow, hasFlow), policy)
 	hints := w.jobLimitHints(wk, policy)
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}
@@ -567,8 +576,8 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	case wk.Flow != "":
 		// A workflow (WF-17): its steps run under the worker's permissions,
 		// in its run's chat, the prompt as its input.
-		f, ok := w.workflow(wk.Flow)
-		if !ok {
+		f := flow
+		if !hasFlow {
 			runErr = fmt.Errorf("there's no workflow %q", wk.Flow)
 			break
 		}
