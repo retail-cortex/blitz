@@ -627,7 +627,7 @@ func (p *PermissionRules) ToolDenied(tool string, args map[string]any) *Permissi
 		return ""
 	}
 	switch tool {
-	case "activate_skill", "run_skill_script":
+	case "activate_skill", "run_skill_script", "read_skill_file":
 		if s := name("skill_name", "skill", "name"); s != "" {
 			if eff, r := p.Decide(RuleSkill, []string{s}); eff == EffectDeny {
 				return r

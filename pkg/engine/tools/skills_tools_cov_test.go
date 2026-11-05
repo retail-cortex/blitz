@@ -62,10 +62,10 @@ func TestSkillToolsListAndActivate(t *testing.T) {
 		})
 	}
 
-	activate := toolOf(t)(NewActivateSkillTool(prov, nil))
+	activate := toolOf(t)(NewActivateSkillTool(prov, nil, nil))
 	pyOnly := config.DefaultConfig().Skills.Policy
 	pyOnly.Languages = []string{"python"}
-	strict := toolOf(t)(NewActivateSkillTool(prov, &pyOnly))
+	strict := toolOf(t)(NewActivateSkillTool(prov, &pyOnly, nil))
 	out := runTool(t, activate, map[string]any{"skill_name": "pdf-tools"})
 	assert.Equal(t, "", errOf(out))
 	assert.Contains(t, out["instructions"], "Use it.")
@@ -81,7 +81,7 @@ func TestSkillToolsListAndActivate(t *testing.T) {
 
 	for name, rt := range map[string]runnerTool{
 		"list":     toolOf(t)(NewListSkillsTool(nil)),
-		"activate": toolOf(t)(NewActivateSkillTool(nil, nil)),
+		"activate": toolOf(t)(NewActivateSkillTool(nil, nil, nil)),
 	} {
 		t.Run(name+" without a provider", func(t *testing.T) {
 			args := map[string]any{"skill_name": "x"}
@@ -115,7 +115,7 @@ func TestMetaSkillsAgentsAndReferences(t *testing.T) {
 	require.NoError(t, prov.DiscoverExternal([]string{dir}))
 	policy := config.DefaultConfig().Skills.Policy
 
-	out := activate(prov, policy, "combo", "", map[string]bool{})
+	out := activate(prov, policy, nil, "combo", "", map[string]bool{})
 	assert.Equal(t, "Combine.", out.Instructions)
 	var names []string
 	for _, m := range out.Members {
@@ -125,9 +125,25 @@ func TestMetaSkillsAgentsAndReferences(t *testing.T) {
 	assert.Equal(t, []string{"references/style.md"}, out.Members[0].References)
 	assert.Contains(t, out.Members[3].Error, "not found")
 
-	assert.Contains(t, activate(prov, policy, "staff", "blitz", map[string]bool{}).Error, "offered to reviewer")
-	assert.Empty(t, activate(prov, policy, "staff", "reviewer", map[string]bool{}).Error)
-	assert.Empty(t, activate(prov, policy, "staff", "", map[string]bool{}).Error, "an agent that can't be told")
+	// A member a deny rule covers is refused, without its content (N26
+	// engine-tools-2#14); so is reading its files.
+	rules, err := NewPermissionRules(config.PermissionsConfig{Deny: []string{"skill(plain)"}}, "test")
+	require.NoError(t, err)
+	denied := activate(prov, policy, rules, "combo", "", map[string]bool{})
+	var plain *SkillMember
+	for i := range denied.Members {
+		if denied.Members[i].SkillName == "plain" {
+			plain = &denied.Members[i]
+		}
+	}
+	require.NotNil(t, plain, "%+v", denied.Members)
+	assert.Contains(t, plain.Error, "deny skill(plain)")
+	assert.Empty(t, plain.Instructions)
+	assert.NotNil(t, rules.ToolDenied("read_skill_file", map[string]any{"skill_name": "plain"}))
+
+	assert.Contains(t, activate(prov, policy, nil, "staff", "blitz", map[string]bool{}).Error, "offered to reviewer")
+	assert.Empty(t, activate(prov, policy, nil, "staff", "reviewer", map[string]bool{}).Error)
+	assert.Empty(t, activate(prov, policy, nil, "staff", "", map[string]bool{}).Error, "an agent that can't be told")
 
 	read := toolOf(t)(NewReadSkillFileTool(prov))
 	got := runTool(t, read, map[string]any{"skill_name": "guide", "path": "references/style.md"})
