@@ -29,7 +29,6 @@ import { Button, Dialog, Icon, Segmented, useSnackbar } from "@blitz/webui";
 import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, limitHints, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
 import type { RewriteWorkerResponse, WorkerPolicySettings } from "./gen/blitz/v1/worker_pb";
 
-// An example of the permissions field (syntax, not prose).
 /** The worker a dialog edits: its name, its WORKER.md, and whether saving pauses it. */
 export interface WorkerEdit {
   name: string;

@@ -60,7 +60,7 @@ import { A2uiForm } from "../a2ui/A2uiForm";
 import { TaskCard } from "../a2ui/TaskCard";
 import type { FormAction } from "../a2ui/model";
 import { answerTask, useTasks } from "../humanTasks";
-import { parseForm, starterForm } from "../a2ui/model";
+import { parseForm, problemText, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
 import { ApprovalCard } from "../Conversation";
@@ -1332,7 +1332,7 @@ function HumanTaskFields({ step, workspace, onChange }: { step: StepForm; worksp
         <DraftButton workspace={workspace} kind="form" name={step.title || step.id} description={step.instructions} current={step.formJson} onUse={(v) => onChange({ formJson: v })} />
       </div>
       <textarea className="input mono flow-form-json" rows={10} aria-label={t("desktop.flows.form")} value={step.formJson} spellCheck={false} onChange={(e) => onChange({ formJson: e.target.value })} />
-      <span className={`t-body-sm ${parsed.problem ? "error-text" : "muted"}`}>{parsed.problem ? t("desktop.flows.form_problem", { problem: parsed.problem }) : t("desktop.flows.form_hint")}</span>
+      <span className={`t-body-sm ${parsed.problem ? "error-text" : "muted"}`}>{parsed.problem ? t("desktop.flows.form_problem", { problem: problemText(parsed.problem) }) : t("desktop.flows.form_hint")}</span>
       {parsed.form && (
         <div className="card outlined flow-form-preview">
           <span className="t-label">{t("desktop.flows.form_preview")}</span>

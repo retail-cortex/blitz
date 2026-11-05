@@ -25,6 +25,22 @@ import { configChangedEvent, type ConfigChangedDetail } from "./events";
 import type { GetSettingsResponse, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { needsDecision } from "./project";
 
+/**
+ * What a model-settings slider saves when it's let go or left: its value,
+ * only when the person moved it to something other than the setting's (a
+ * click, a Tab onto it or a blur with no change saves nothing, so a
+ * setting left at Default stays unset); undefined when there's nothing to
+ * save.
+ */
+export function sliderCommit(moved: boolean, shown: number, value: number | undefined): string | undefined {
+  return moved && shown !== value ? String(shown) : undefined;
+}
+
+/** Saves a workspace's effort; "" (the model's own) is saved as auto, which the service reads as unset. */
+export function setEffort(dir: string, value: string) {
+  return workspaces.setSetting({ workspace: dir, key: "effort", value: value || "auto" });
+}
+
 /** A workspace's settings, and the project-settings review to show. */
 export function useWorkspaceSettings(dir: string) {
   const [settings, setSettings] = useState<GetSettingsResponse>();

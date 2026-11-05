@@ -1,0 +1,88 @@
+{
+  "about": "Cases both copies of the A2UI catalog must judge alike: pkg/a2ui (the service, which decides) and the desktop page's apps/desktop/web/src/a2ui/model.ts (which shows the problems first). Each test suite reads this file.",
+  "functions": [
+    {"name": "length counts code points", "value": {"call": "length", "args": {"value": "😀😀😀", "max": 3}}, "want": true},
+    {"name": "length over in code points", "value": {"call": "length", "args": {"value": "😀😀😀😀", "max": 3}}, "want": false},
+    {"name": "length with a bound that isn't a number", "value": {"call": "length", "args": {"value": "ab", "min": "x"}}, "want": true},
+    {"name": "numeric spaces only", "value": {"call": "numeric", "args": {"value": "  "}}, "want": false},
+    {"name": "numeric a bool", "value": {"call": "numeric", "args": {"value": true}}, "want": false},
+    {"name": "numeric null", "value": {"call": "numeric", "args": {"value": null}}, "want": false},
+    {"name": "numeric hex", "value": {"call": "numeric", "args": {"value": "0x10"}}, "want": false},
+    {"name": "numeric spaces around", "value": {"call": "numeric", "args": {"value": " 5 ", "min": "1"}}, "want": true},
+    {"name": "regex lookahead (not RE2)", "value": {"call": "regex", "args": {"value": "a1", "pattern": "(?=.*\\d)"}}, "want": false},
+    {"name": "regex backreference (not RE2)", "value": {"call": "regex", "args": {"value": "aa", "pattern": "(a)\\1"}}, "want": false},
+    {"name": "regex an escaped backslash then a digit", "value": {"call": "regex", "args": {"value": "\\1", "pattern": "^\\\\1$"}}, "want": true},
+    {"name": "regex leading flag", "value": {"call": "regex", "args": {"value": "ABC", "pattern": "(?i)^abc$"}}, "want": true},
+    {"name": "regex one-letter class", "value": {"call": "regex", "args": {"value": "abc", "pattern": "^\\pL+$"}}, "want": true},
+    {"name": "regex text anchors", "value": {"call": "regex", "args": {"value": "ab", "pattern": "\\Aab\\z"}}, "want": true},
+    {"name": "regex a dot is a code point", "value": {"call": "regex", "args": {"value": "😀", "pattern": "^.$"}}, "want": true},
+    {"name": "regex escaped punctuation", "value": {"call": "regex", "args": {"value": "-_", "pattern": "^[\\-\\_]+$"}}, "want": true},
+    {"name": "regex a pattern that isn't text", "value": {"call": "regex", "args": {"value": "1", "pattern": 1}}, "want": false},
+    {"name": "not of a zero", "value": {"call": "not", "args": {"value": 0}}, "want": true},
+    {"name": "not of the text 0", "value": {"call": "not", "args": {"value": "0"}}, "want": false},
+    {"name": "and of truthy values", "value": {"call": "and", "args": {"values": [1, "x", true, {}]}}, "want": true},
+    {"name": "or of falsy values", "value": {"call": "or", "args": {"values": [0, "", false, null]}}, "want": false},
+    {"name": "formatNumber of text", "value": {"call": "formatNumber", "args": {"value": "12", "decimals": 2}}, "want": "12.00"},
+    {"name": "formatNumber of a bool", "value": {"call": "formatNumber", "args": {"value": true}}, "want": ""},
+    {"name": "pluralize a count in text", "value": {"call": "pluralize", "args": {"count": "1", "singular": "item", "plural": "items"}}, "want": "item"},
+    {"name": "a list's length isn't an index", "value": {"call": "required", "args": {"value": {"path": "/list/length"}}}, "data": {"list": [1, 2]}, "want": false},
+    {"name": "a list's item", "value": {"call": "required", "args": {"value": {"path": "/list/1"}}}, "data": {"list": [1, 2]}, "want": true},
+    {"name": "an inherited name isn't data", "value": {"call": "required", "args": {"value": {"path": "/constructor"}}}, "data": {}, "want": false}
+  ],
+  "forms": [
+    {
+      "name": "a template's items checked on their own paths",
+      "form": {"components": [
+        {"id": "root", "component": "Column", "children": ["items"]},
+        {"id": "items", "component": "List", "children": {"path": "/items", "componentId": "item"}},
+        {"id": "item", "component": "TextField", "value": {"path": "name"}, "checks": [{"call": "required", "args": {"value": {"path": "name"}}, "message": "name it"}]}
+      ]},
+      "data": {"items": [{"name": "kettle"}, {"name": "toaster"}]},
+      "failing": []
+    },
+    {
+      "name": "a template's empty item fails",
+      "form": {"components": [
+        {"id": "root", "component": "Column", "children": ["items"]},
+        {"id": "items", "component": "List", "children": {"path": "/items", "componentId": "item"}},
+        {"id": "item", "component": "TextField", "value": {"path": "name"}, "checks": [{"call": "required", "args": {"value": {"path": "name"}}, "message": "name it"}]}
+      ]},
+      "data": {"items": [{"name": "kettle"}, {"name": ""}]},
+      "failing": ["item"]
+    },
+    {
+      "name": "a component the form never shows isn't checked",
+      "form": {"components": [
+        {"id": "root", "component": "Column", "children": ["note"]},
+        {"id": "note", "component": "TextField", "value": {"path": "/note"}, "checks": [{"call": "required", "args": {"value": {"path": "/note"}}, "message": "say why"}]},
+        {"id": "hidden", "component": "TextField", "checks": [{"call": "required", "args": {"value": ""}, "message": "never shown"}]}
+      ]},
+      "data": {"note": "ok"},
+      "failing": []
+    },
+    {
+      "name": "a card's child, a tab's and a modal's are checked",
+      "form": {"components": [
+        {"id": "root", "component": "Column", "children": ["card", "tabs", "modal"]},
+        {"id": "card", "component": "Card", "child": "a"},
+        {"id": "tabs", "component": "Tabs", "tabs": [{"title": "B", "child": "b"}]},
+        {"id": "modal", "component": "Modal", "entryPointChild": "c", "contentChild": "d"},
+        {"id": "a", "component": "Text", "checks": [{"call": "required", "args": {"value": ""}}]},
+        {"id": "b", "component": "Text", "checks": [{"call": "required", "args": {"value": ""}}]},
+        {"id": "c", "component": "Text", "checks": [{"call": "required", "args": {"value": ""}}]},
+        {"id": "d", "component": "Text", "checks": [{"call": "required", "args": {"value": ""}}]}
+      ]},
+      "data": {},
+      "failing": ["a", "b", "c", "d"]
+    },
+    {
+      "name": "a validationRegexp RE2 refuses",
+      "form": {"components": [
+        {"id": "root", "component": "Column", "children": ["code"]},
+        {"id": "code", "component": "TextField", "value": {"path": "/code"}, "validationRegexp": "^(?=.*\\d).+$"}
+      ]},
+      "data": {"code": "a1"},
+      "failing": ["code"]
+    }
+  ]
+}

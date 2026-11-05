@@ -19,7 +19,7 @@ import type { HumanTask } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
 import { Icon } from "@blitz/webui";
 import { A2uiForm } from "./A2uiForm";
-import { parseMessages, type FormAction } from "./model";
+import { parseMessages, problemText, type FormAction } from "./model";
 
 /** A human task a run waits on: its title, message and form, answered by the form's buttons. */
 export function TaskCard({ task, onAnswer, busy }: { task: HumanTask; onAnswer: (action: FormAction) => void; busy?: boolean }) {
@@ -33,7 +33,7 @@ export function TaskCard({ task, onAnswer, busy }: { task: HumanTask; onAnswer: 
       </span>
       <small className="muted">{t("desktop.human_tasks.from", { workflow: task.workflow })}</small>
       {task.message && <p className="t-body task-message">{task.message}</p>}
-      {parsed.form ? <A2uiForm form={parsed.form} onAction={onAnswer} disabled={busy} /> : <span className="t-body-sm error-text">{t("desktop.flows.form_problem", { problem: parsed.problem ?? "" })}</span>}
+      {parsed.form ? <A2uiForm form={parsed.form} onAction={onAnswer} disabled={busy} /> : <span className="t-body-sm error-text">{t("desktop.flows.form_problem", { problem: parsed.problem ? problemText(parsed.problem) : "" })}</span>}
     </div>
   );
 }

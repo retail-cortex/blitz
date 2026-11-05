@@ -21,6 +21,10 @@
 // catalog function), the basic catalog's checks, and the context a
 // button's action sends. No code is ever run from a form: functions are
 // named from this file's catalog.
+//
+// The service (pkg/a2ui) judges an answer; this copy shows its problems
+// before a button is pressed, so it must agree with it. Both test suites
+// read pkg/a2ui/testdata/checks.json, which holds the cases they share.
 
 import { t } from "../i18n";
 
@@ -45,7 +49,14 @@ export function getPath(data: unknown, path: string): unknown {
   for (const raw of path.replace(/^\//, "").split("/")) {
     const key = raw.replace(/~1/g, "/").replace(/~0/g, "~");
     if (cur == null || typeof cur !== "object") return undefined;
-    cur = (cur as Record<string, unknown>)[key];
+    if (Array.isArray(cur)) {
+      // An index, as the service reads one (not "length", "-1" or "01x").
+      const i = /^[+-]?\d+$/.test(key) ? Number(key) : -1;
+      if (i < 0 || i >= cur.length) return undefined;
+      cur = cur[i];
+      continue;
+    }
+    cur = Object.hasOwn(cur, key) ? (cur as Record<string, unknown>)[key] : undefined;
   }
   return cur;
 }
@@ -72,24 +83,47 @@ export function scoped(path: string, scope: string): string {
 /** The catalog's functions: validation, formatting and logic (by name; nothing else is called). */
 const functions: Record<string, (args: Record<string, unknown>) => unknown> = {
   required: ({ value }) => !(value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0)),
-  regex: ({ value, pattern }) => typeof value === "string" && safeRegex(String(pattern))?.test(value) === true,
-  length: ({ value, min, max }) => {
+  regex: ({ value, pattern }) => typeof value === "string" && typeof pattern === "string" && safeRegex(pattern)?.test(value) === true,
+  length: (args) => {
+    const { value } = args;
     // Code points, as the service counts them (an emoji is one).
     const n = typeof value === "string" ? [...value].length : Array.isArray(value) ? value.length : 0;
-    return (min === undefined || n >= Number(min)) && (max === undefined || n <= Number(max));
+    return within(n, args);
   },
-  numeric: ({ value, min, max }) => {
-    const n = numberOf(value);
-    return n !== null && (min === undefined || n >= Number(min)) && (max === undefined || n <= Number(max));
+  numeric: (args) => {
+    const n = numberOf(args.value);
+    return n !== null && within(n, args);
   },
   email: ({ value }) => typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-  and: ({ values }) => Array.isArray(values) && values.every(Boolean),
-  or: ({ values }) => Array.isArray(values) && values.some(Boolean),
-  not: ({ value }) => !value,
-  formatString: ({ value, template }) => String(template ?? value ?? "").replace(/\$\{([^}]*)\}/g, (_, k: string) => String((value as Record<string, unknown>)?.[k] ?? "")),
-  formatNumber: ({ value, decimals }) => (Number.isFinite(Number(value)) ? Number(value).toFixed(decimals === undefined ? 0 : Number(decimals)) : ""),
-  pluralize: ({ count, singular, plural }) => (Number(count) === 1 ? String(singular ?? "") : String(plural ?? "")),
+  and: ({ values }) => Array.isArray(values) && values.every(truthy),
+  or: ({ values }) => Array.isArray(values) && values.some(truthy),
+  not: ({ value }) => !truthy(value),
+  formatString: ({ value, template }) => {
+    const vals = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    return (typeof template === "string" ? template : String(value ?? "")).replace(/\$\{([^}]*)\}/g, (_, k: string) => (vals[k] == null ? "" : String(vals[k])));
+  },
+  formatNumber: ({ value, decimals }) => {
+    const n = numberOf(value);
+    return n === null ? "" : n.toFixed(Math.min(100, Math.max(0, Math.trunc(numberOf(decimals) ?? 0))));
+  },
+  pluralize: ({ count, singular, plural }) => (numberOf(count) === 1 ? (typeof singular === "string" ? singular : "") : typeof plural === "string" ? plural : ""),
 };
+
+/** Whether n is within the arguments' min and max (one that isn't a number is no bound), as the service checks. */
+function within(n: number, { min, max }: Record<string, unknown>): boolean {
+  const lo = numberOf(min);
+  const hi = numberOf(max);
+  return (lo === null || n >= lo) && (hi === null || n <= hi);
+}
+
+/** A value as the service's logic reads it: nothing, false, "" and 0 are false; anything else true. */
+function truthy(v: unknown): boolean {
+  if (v === undefined || v === null) return false;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") return v !== "";
+  if (typeof v === "number") return v !== 0;
+  return true;
+}
 
 /** A number, or a decimal number written as a string (spaces around it allowed), as the service reads one; null otherwise. */
 function numberOf(value: unknown): number | null {
@@ -108,14 +142,76 @@ function callsUnknown(value: unknown): boolean {
   return Object.values(v).some(callsUnknown);
 }
 
-/** A pattern from a form, or null when it isn't one (or is too long to trust). */
-function safeRegex(pattern: string): RegExp | null {
-  if (pattern.length > 200) return null;
-  try {
-    return new RegExp(pattern);
-  } catch {
-    return null;
+/**
+ * A form's RE2 pattern (the service's syntax) as JavaScript's, or null
+ * when RE2 would refuse it: lookahead and lookbehind, and backreferences
+ * ("\1", "\k<name>"), which only JavaScript has. RE2's \A and \z become
+ * ^ and $, its \pL \p{L}, and its leading flags ("(?i)", "(?s)", "(?m)")
+ * the RegExp's.
+ */
+export function re2ToJs(pattern: string): { source: string; flags: string } | null {
+  const lead = /^\(\?([ims]+)\)/.exec(pattern);
+  const flags = lead ? [...new Set(lead[1])].join("") : "";
+  let out = "";
+  let inClass = false;
+  for (let i = lead ? lead[0].length : 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "\\") {
+      const n = pattern[i + 1] ?? "";
+      if (/[1-9k]/.test(n)) return null;
+      i++;
+      if (!inClass && n === "A") out += "^";
+      else if (!inClass && n === "z") out += "$";
+      else if (n === "p" || n === "P") {
+        if (pattern[i + 1] === "{") out += `\\${n}`;
+        else {
+          out += `\\${n}{${pattern[i + 1] ?? ""}}`;
+          i++;
+        }
+      } else out += c + n;
+      continue;
+    }
+    if (inClass) inClass = c !== "]";
+    else if (c === "[") {
+      inClass = true;
+      // A ] first in a class is a character, in both.
+      if (pattern[i + 1] === "^" && pattern[i + 2] === "]") {
+        out += "[^\\]";
+        i += 2;
+        continue;
+      }
+      if (pattern[i + 1] === "]") {
+        out += "[\\]";
+        i++;
+        continue;
+      }
+    } else if (c === "(" && /^\(\?<?[=!]/.test(pattern.slice(i, i + 4))) return null;
+    out += c;
   }
+  return { source: out, flags };
+}
+
+/**
+ * A pattern from a form, or null when it isn't one (or is too long to
+ * trust), read as close to RE2 as JavaScript allows (re2ToJs), matching
+ * code points (a "." is one emoji). What can't be matched exactly: \s,
+ * which in JavaScript also takes Unicode spaces (RE2's is [\t\n\f\r ]);
+ * "." without (?s), which in JavaScript also stops at \r,   and
+ *  ; POSIX classes ("[[:alpha:]]"), which JavaScript doesn't know;
+ * and case folding, which differs at the edges. Forms keep to ASCII
+ * classes to be judged alike.
+ */
+function safeRegex(pattern: string): RegExp | null {
+  const re = new TextEncoder().encode(pattern).length > 200 ? null : re2ToJs(pattern);
+  if (!re) return null;
+  for (const f of [re.flags + "u", re.flags]) {
+    try {
+      return new RegExp(re.source, f);
+    } catch {
+      // Without u: an escape JavaScript's Unicode mode refuses ("\-", "\_"), which RE2 takes.
+    }
+  }
+  return null;
 }
 
 /** A dynamic value: a literal, {path} in the data (scoped to a template item), or {call} of a catalog function. */
@@ -142,7 +238,7 @@ export function failing(c: Component, data: Record<string, unknown>, scope = "")
   const checks = Array.isArray(c.checks) ? (c.checks as Record<string, unknown>[]) : [];
   const out: string[] = [];
   for (const check of checks) {
-    if (callsUnknown(check) || resolve(check, data, scope) === false) out.push(String(check.message ?? t("desktop.a2ui.check")));
+    if (callsUnknown(check) || resolve(check, data, scope) === false) out.push(typeof check?.message === "string" && check.message !== "" ? check.message : t("desktop.a2ui.check"));
   }
   if (typeof c.validationRegexp === "string") {
     const re = safeRegex(c.validationRegexp);
@@ -152,14 +248,33 @@ export function failing(c: Component, data: Record<string, unknown>, scope = "")
   return out;
 }
 
-/** Every failing check in the form, by component id (for a button's own checks, and the whole form's). */
+/**
+ * Every failing check of the components shown, by component id, as the
+ * service's Form.Problems finds them: walked from root, through every
+ * child (templates over the data's lists included, each item's checks on
+ * its own paths), in the order they're drawn. A component the form never
+ * shows isn't checked.
+ */
 export function formProblems(form: Form, data: Record<string, unknown>): Map<string, string[]> {
+  const all = byId(form);
   const out = new Map<string, string[]>();
-  for (const c of form.components) {
-    const f = failing(c, data);
-    if (f.length) out.set(c.id, f);
-  }
+  const walk = (id: string, scope: string, depth: number) => {
+    const c = all.get(id);
+    if (!c || depth > 24) return;
+    const f = failing(c, data, scope);
+    if (f.length) out.set(id, [...(out.get(id) ?? []), ...f]);
+    for (const k of shownChildren(c, data, scope)) walk(k.id, k.scope, depth + 1);
+  };
+  walk("root", "", 0);
   return out;
+}
+
+/** Every component a component shows, as the service walks them: its child, content and tabs too, besides its children. */
+function shownChildren(c: Component, data: Record<string, unknown>, scope: string): { id: string; scope: string }[] {
+  const out: { id: string; scope: string }[] = [];
+  for (const key of ["child", "content", "entryPointChild", "contentChild"]) if (typeof c[key] === "string") out.push({ id: c[key] as string, scope });
+  if (Array.isArray(c.tabs)) for (const tab of c.tabs as { child?: unknown }[]) if (typeof tab?.child === "string") out.push({ id: tab.child, scope });
+  return [...out, ...childrenOf(c, data, scope)];
 }
 
 /** What a button's action sends: its event's name, and its context with every binding resolved. */
@@ -191,12 +306,12 @@ export const actionMessage = (surfaceId: string, a: FormAction, now = new Date()
  * createSurface, updateComponents, updateDataModel; a path's update is
  * applied), with its surface's ID, or why it isn't one.
  */
-export function parseMessages(text: string): { form?: Form; surface?: string; problem?: string } {
+export function parseMessages(text: string): { form?: Form; surface?: string; problem?: FormProblem } {
   let list: unknown;
   try {
     list = JSON.parse(text);
-  } catch (e) {
-    return { problem: String((e as Error).message) };
+  } catch {
+    return { problem: "json" };
   }
   if (!Array.isArray(list)) return { problem: "messages" };
   let surface = "";
@@ -231,17 +346,25 @@ export function childrenOf(c: Component, data: Record<string, unknown>, scope = 
 /** Whether a URL may be shown (https, or an inline image). */
 export const safeUrl = (u: unknown): u is string => typeof u === "string" && (/^https:\/\//i.test(u) || /^data:image\/(png|jpeg|gif|webp);base64,/i.test(u));
 
+/** Why a text isn't a form: not JSON, no messages list, no surface, no root, empty, or no components. */
+export type FormProblem = "json" | "messages" | "createSurface" | "root" | "empty" | "components";
+
 /** A form from a step's JSON, or why it isn't one. */
-export function parseForm(text: string): { form?: Form; problem?: string } {
+export function parseForm(text: string): { form?: Form; problem?: FormProblem } {
   if (!text.trim()) return { problem: "empty" };
   try {
     const v = JSON.parse(text) as Form;
     if (!v || !Array.isArray(v.components)) return { problem: "components" };
     if (!v.components.some((c) => c?.id === "root")) return { problem: "root" };
     return { form: v };
-  } catch (e) {
-    return { problem: String((e as Error).message) };
+  } catch {
+    return { problem: "json" };
   }
+}
+
+/** Why a form isn't one, from parseForm's or parseMessages' problem, in words. */
+export function problemText(problem: string): string {
+  return t(`desktop.a2ui.problem.${problem}`);
 }
 
 /** The form a new human task starts with: a note, and approve or reject. */

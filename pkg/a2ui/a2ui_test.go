@@ -16,6 +16,7 @@ package a2ui
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -294,4 +295,45 @@ func TestValueEdges(t *testing.T) {
 	got, probs := f.Answer(Action{Name: "go", SourceComponentID: "root", Context: map[string]any{"n": 2, "fixed": 1}}, nil)
 	assert.Empty(t, probs)
 	assert.Equal(t, map[string]any{"action": "go", "n": 2, "fixed": 1}, got)
+}
+
+// sharedCases are the cases in testdata/checks.json, which the desktop
+// page's copy of the catalog (apps/desktop/web/src/a2ui/model.ts) is
+// tested against too: the two judge every one of them alike.
+type sharedCases struct {
+	Functions []struct {
+		Name  string         `json:"name"`
+		Value any            `json:"value"`
+		Data  map[string]any `json:"data"`
+		Want  any            `json:"want"`
+	} `json:"functions"`
+	Forms []struct {
+		Name    string         `json:"name"`
+		Form    Form           `json:"form"`
+		Data    map[string]any `json:"data"`
+		Failing []string       `json:"failing"`
+	} `json:"forms"`
+}
+
+func TestSharedCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/checks.json")
+	require.NoError(t, err)
+	var cases sharedCases
+	require.NoError(t, json.Unmarshal(raw, &cases))
+	for _, c := range cases.Functions {
+		t.Run(c.Name, func(t *testing.T) {
+			assert.Equal(t, c.Want, Resolve(c.Value, c.Data, ""))
+		})
+	}
+	for _, c := range cases.Forms {
+		t.Run(c.Name, func(t *testing.T) {
+			failing := []string{}
+			for _, p := range c.Form.Problems(c.Data) {
+				if len(failing) == 0 || failing[len(failing)-1] != p.Component {
+					failing = append(failing, p.Component)
+				}
+			}
+			assert.Equal(t, c.Failing, failing)
+		})
+	}
 }

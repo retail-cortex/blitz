@@ -446,9 +446,9 @@ var functions = map[string]func(map[string]any) any{
 	},
 	"regex": func(a map[string]any) any {
 		v, ok := a["value"].(string)
-		p, _ := a["pattern"].(string)
+		p, isText := a["pattern"].(string) // no pattern isn't "match anything"
 		r := safeRegexp(p)
-		return ok && r != nil && r.MatchString(v)
+		return ok && isText && r != nil && r.MatchString(v)
 	},
 	"length": func(a map[string]any) any {
 		n := 0

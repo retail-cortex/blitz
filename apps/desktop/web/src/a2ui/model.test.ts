@@ -15,7 +15,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { actionMessage, actionOf, byId, childrenOf, failing, formProblems, getPath, parseForm, parseMessages, resolve, safeUrl, setPath, starterForm, type Component } from "./model";
+import shared from "../../../../../pkg/a2ui/testdata/checks.json";
+import { actionMessage, actionOf, byId, childrenOf, failing, formProblems, getPath, parseForm, parseMessages, problemText, re2ToJs, resolve, safeUrl, setPath, starterForm, type Component, type Form } from "./model";
 
 describe("A2UI forms", () => {
   const data = { form: { note: "hi", tags: ["a"] }, items: [{ name: "x" }, { name: "y" }] };
@@ -46,7 +47,7 @@ describe("A2UI forms", () => {
     expect(failing(field, data)).toEqual(["Required"]);
     expect(failing({ ...field, value: { path: "/form/note" }, checks: [{ call: "length", args: { value: { path: "/form/note" }, min: 5 }, message: "Too short" }] }, data)).toEqual(["Too short"]);
     expect(failing({ id: "r", component: "TextField", value: { path: "/form/note" }, validationRegexp: "^[0-9]+$" }, data)).toHaveLength(1);
-    expect(formProblems({ components: [field] }, data).get("f")).toEqual(["Required"]);
+    expect(formProblems({ components: [{ ...field, id: "root" }] }, data).get("root")).toEqual(["Required"]);
     const button: Component = { id: "b", component: "Button", child: "l", action: { event: { name: "approve", context: { note: { path: "/form/note" }, fixed: 1 } } } };
     const a = actionOf(button, data)!;
     expect(a).toEqual({ name: "approve", context: { note: "hi", fixed: 1 } });
@@ -87,14 +88,14 @@ describe("A2UI forms", () => {
     expect(byId(starterForm()).get("approve")?.component).toBe("Button");
     expect(parseForm("").problem).toBe("empty");
     expect(parseForm('{"components": [{"id": "x"}]}').problem).toBe("root");
-    expect(parseForm("{").problem).toBeTruthy();
+    expect(parseForm("{").problem).toBe("json");
     expect(safeUrl("https://example.com/a.png")).toBe(true);
     expect(safeUrl("javascript:alert(1)")).toBe(false);
     expect(safeUrl("http://example.com/a.png")).toBe(false);
   });
 
   it.each([
-    ["not JSON", "{", undefined],
+    ["not JSON", "{", "json"],
     ["not a list", "{}", "messages"],
     ["no surface", JSON.stringify([{ version: "v0.9", updateComponents: { surfaceId: "s", components: [{ id: "root", component: "Text" }] } }]), "createSurface"],
     ["no root", JSON.stringify([{ version: "v0.9", createSurface: { surfaceId: "s", catalogId: "c" } }]), "root"],
@@ -116,5 +117,34 @@ describe("A2UI forms", () => {
     expect(r.surface).toBe("run-7/ok");
     expect(r.form?.data).toEqual({ note: "later", n: 1 });
     expect(r.form?.components).toHaveLength(1);
+  });
+
+  it.each(["json", "messages", "createSurface", "root", "empty", "components"] as const)("says the problem %s in words", (problem) => {
+    expect(problemText(problem)).not.toContain("desktop.a2ui");
+  });
+
+  it.each([
+    ["a lookahead", "(?=a)", null],
+    ["a lookbehind", "(?<!a)b", null],
+    ["a backreference", "(a)\\1", null],
+    ["a named backreference", "(?<x>a)\\k<x>", null],
+    ["an escaped backslash then a digit", "\\\\1", { source: "\\\\1", flags: "" }],
+    ["a lookahead's text in a class", "[(?=]", { source: "[(?=]", flags: "" }],
+    ["leading flags", "(?is)a.b", { source: "a.b", flags: "is" }],
+    ["text anchors", "\\Aab\\z", { source: "^ab$", flags: "" }],
+    ["a one-letter class", "\\pL\\PN", { source: "\\p{L}\\P{N}", flags: "" }],
+    ["a ] first in a class", "[]a]", { source: "[\\]a]", flags: "" }],
+  ])("reads an RE2 pattern: %s", (_, pattern, want) => {
+    expect(re2ToJs(pattern)).toEqual(want);
+  });
+});
+
+// The cases the service's copy (pkg/a2ui) is tested against too.
+describe("A2UI cases shared with the service", () => {
+  it.each(shared.functions.map((c) => [c.name, c] as const))("%s", (_, c) => {
+    expect(resolve(c.value, ("data" in c ? c.data : {}) as Record<string, unknown>)).toEqual(c.want);
+  });
+  it.each(shared.forms.map((c) => [c.name, c] as const))("%s", (_, c) => {
+    expect([...formProblems(c.form as unknown as Form, c.data as Record<string, unknown>).keys()]).toEqual(c.failing);
   });
 });

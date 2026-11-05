@@ -70,6 +70,7 @@ import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
+import { setEffort as setEffortSetting } from "./workspaceSettings";
 
 /** How often the branch and changed files are asked for while shown. */
 const gitPollMs = 10_000;
@@ -489,7 +490,7 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
   const effort = efforts().find((e) => e.value === (s?.effort ?? "")) ?? efforts()[0];
   const setEffort = async (value: string) => {
     try {
-      await workspaces.setSetting({ workspace: dir, key: "effort", value: value || "auto" });
+      await setEffortSetting(dir, value);
       configChanged({ dir });
     } catch (e) {
       snack(message(e), { error: true });

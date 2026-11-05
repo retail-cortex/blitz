@@ -37,11 +37,10 @@ import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webu
 const overviewPollMs = 10000;
 
 /**
- * Settings › Workers (spec_023_workers WK-60–WK-62): the global workers,
- * saved in ~/.blitz/workers and run in the home workspace, listed and
- * edited as Studio lists a workspace's; the limits on every worker; the
- * worker runs going now, in
- * every workspace; and every workspace the service has workers on record
+ * Settings › Library › Jobs (spec_023_workers WK-60–WK-63, spec_040
+ * STU-03): the global jobs, saved in ~/.blitz/workers and run in the home
+ * workspace, listed and edited as Studio lists a workspace's; the limits
+ * on every job (WK-63); the job runs going now, in every workspace; and every workspace the service has workers on record
  * for, open in the app or not, so none is forgotten: one not in the app's
  * workspaces says so, with Open; one whose folder is gone, with Forget.
  * onLeave closes Settings (a workspace opened, a run's conversation).
