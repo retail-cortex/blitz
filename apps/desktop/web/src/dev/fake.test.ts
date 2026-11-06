@@ -87,4 +87,36 @@ describe("the fake service", () => {
     ctl.abort();
     expect(got.slice(1).some((m) => (m as { tasks: unknown[] }).tasks.length === 0)).toBe(true);
   });
+
+  it("lists, creates, updates and checks stage specs", async () => {
+    const listed = await workspaces.listSpecs({ workspace: "/w" });
+    expect(listed.stages.length).toBeGreaterThanOrEqual(3);
+    const created = await workspaces.updateSpec({
+      workspace: "/w",
+      name: "",
+      title: "Search & Filter",
+      context: "Full-text search.",
+      setDependsOn: true,
+      dependsOn: ["002-cart"],
+      addRequirement: "Query under 50 ms.",
+      addDoneWhen: "Index tests pass.",
+    });
+    expect(created.stage?.name).toBe("004-search-filter");
+    expect(created.stage?.hash).toMatch(/^sha256:/);
+    const toggled = await workspaces.updateSpec({
+      workspace: "/w",
+      name: "004-search-filter",
+      hash: created.stage?.hash,
+      toggleItemId: "SEA-01",
+      itemDone: true,
+    });
+    expect(toggled.stage?.items[0]?.done).toBe(true);
+    expect(toggled.stage?.hash).not.toBe(created.stage?.hash);
+    await expect(workspaces.updateSpec({ workspace: "/w", name: "004-search-filter", hash: created.stage?.hash, status: "done" })).rejects.toThrow("changed since it was opened");
+    const drafted = await workspaces.draftManifest({ workspace: "/w", kind: "spec_stage", name: "Caching", request: "Add Redis cache." });
+    expect(drafted.text).toContain("# 004. Caching");
+    await expect(workspaces.updateSpec({ workspace: "/w", name: "999-missing", status: "done" })).rejects.toThrow("unknown spec");
+    await expect(workspaces.updateSpec({ workspace: "/w", name: "001-overview", status: "bad" })).rejects.toThrow("unknown spec status");
+    await expect(workspaces.updateSpec({ workspace: "/w", name: "001-overview", setDependsOn: true, dependsOn: ["004-search-filter"] })).rejects.toThrow("cycle");
+  });
 });

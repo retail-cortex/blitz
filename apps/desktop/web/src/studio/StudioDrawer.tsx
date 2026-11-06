@@ -17,7 +17,7 @@
 import { PublishDialog, useOrgAdmin } from "./PublishDialog";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiFileDocumentOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -35,6 +35,7 @@ import { EvalsPane } from "./EvalsPane";
 import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
+import { SpecsPane } from "./SpecsPane";
 import { WorkersPane } from "./WorkersPane";
 import { WorkflowsPane } from "./WorkflowsPane";
 import { GradesContext } from "./GradeBadge";
@@ -44,15 +45,16 @@ import { OverviewPane } from "./OverviewPane";
 
 /**
  * The kinds Studio holds (spec_040_studio), after the Overview of them all
- * (spec_044_health), in the order an agent is built: the agent and the
- * evals that prove it, what it follows (skills, rules, guardrails), what
- * runs (workflows, workers), and what it reaches (connectors, secrets).
+ * (spec_044_health), in the order an agent is built: the specification it is
+ * built against, the agent and the evals that prove it, what it follows
+ * (skills, rules, guardrails), what runs (workflows, workers), and what it
+ * reaches (connectors, secrets).
  */
-const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
+const studioKinds = ["overview", "specs", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
-/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */
-export const studioGroups: readonly (readonly StudioKind[])[] = [["overview"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["connectors", "secrets"]];
+/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard and specification; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */
+export const studioGroups: readonly (readonly StudioKind[])[] = [["overview", "specs"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["connectors", "secrets"]];
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -65,6 +67,7 @@ export interface StudioOpen {
 /** Each kind's icon. */
 export const studioIcons: Record<StudioKind, string> = {
   overview: mdiViewDashboardOutline,
+  specs: mdiFileDocumentOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
   workflows: mdiSitemapOutline,
@@ -209,6 +212,7 @@ export function StudioDrawer({
         <GradesContext.Provider value={grades}>
         <div className="settings-pane" key={listed}>
           {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} onStarted={refreshHealth} />}
+          {kind === "specs" && <SpecsPane workspace={dir} onClose={onClose} onCanvas={setCompact} />}
           {kind === "agents" && (
             <AgentEditor
               workspace={dir}

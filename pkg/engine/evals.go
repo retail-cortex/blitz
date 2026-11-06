@@ -244,10 +244,28 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 		r.Duration = time.Since(started)
 		return r
 	}
-	if _, ok := w.agents.Get(agent); !ok && agent != w.engine.ActiveAgent() {
-		return fail(fmt.Errorf("agent %q isn't defined", agent))
+	var (
+		output   string
+		spent    float64
+		refusals []string
+		err      error
+	)
+	if kind, ok := strings.CutPrefix(agent, "draft:"); ok {
+		req, cur := splitDraftPrompt(c.Prompt)
+		d, derr := w.DraftManifest(ctx, DraftRequest{Kind: kind, Name: c.Name, Request: req, Current: cur})
+		if derr != nil {
+			return fail(derr)
+		}
+		if d.Problem != "" {
+			return fail(errors.New(d.Problem))
+		}
+		output = d.Text
+	} else {
+		if _, ok := w.agents.Get(agent); !ok && agent != w.engine.ActiveAgent() {
+			return fail(fmt.Errorf("agent %q isn't defined", agent))
+		}
+		output, spent, refusals, err = w.unattended(ctx, fmt.Sprintf("eval %s %s", e.Name, c.ID), agent, api.Turn{Text: c.Prompt, Prompt: c.Prompt + note}, e.Allow, nil)
 	}
-	output, spent, refusals, err := w.unattended(ctx, fmt.Sprintf("eval %s %s", e.Name, c.ID), agent, api.Turn{Text: c.Prompt, Prompt: c.Prompt + note}, e.Allow, nil)
 	r.CostUSD, r.Refusals = spent, refusals
 	if err != nil {
 		return fail(err)
@@ -328,4 +346,16 @@ func (w *Workspace) unattended(ctx context.Context, label, agent string, t api.T
 	mu.Lock()
 	defer mu.Unlock()
 	return res.Output, costUSD, slices.Clone(refusals), err
+}
+
+// splitDraftPrompt separates an eval prompt for a draft:<kind> target into
+// the user's request and the existing text after a "---" divider line.
+func splitDraftPrompt(p string) (req, cur string) {
+	if after, ok := strings.CutPrefix(strings.TrimSpace(p), "---\n"); ok {
+		return "", strings.TrimSpace(after)
+	}
+	if before, after, ok := strings.Cut(p, "\n---\n"); ok {
+		return strings.TrimSpace(before), strings.TrimSpace(after)
+	}
+	return strings.TrimSpace(p), ""
 }

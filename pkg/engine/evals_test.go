@@ -123,6 +123,13 @@ func TestRunEvalRefusals(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, api.EvalFailed, run.Status)
 	assert.Contains(t, run.Error, "search.embedding_model")
+
+	drafter := runtime.NewMockLLM("drafter", text(`{"text": "# 001. Overview\n", "changes": ["Kept"]}`))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return drafter, nil }
+	writeEval(t, w, "draft-eval", "---\nagents: [draft:spec_stage]\n---\n| ID | Name | Prompt | Output | Type |\n|-|-|-|-|-|\n| s1 | 001-overview | Tighten<br>---<br># 001. Overview | # 001. Overview | exact |\n")
+	run, err = w.RunEval(context.Background(), "draft-eval", api.EvalOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, api.EvalPassed, run.Status)
 }
 
 func TestEvalFiles(t *testing.T) {

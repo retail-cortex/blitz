@@ -280,3 +280,74 @@ func TestDraftManifestOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.Msg.Text != "" || res.Msg.Problem != "", "a draft or why not")
 }
+
+// ListSpecs and UpdateSpec read and update stage specs in .agents/specs/
+// over Connect.
+func TestSpecsOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, ".agents", "specs")
+	require.NoError(t, os.MkdirAll(specsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(specsDir, "001-overview.md"), []byte("# 001. Overview\nStatus: draft\nKind: software\nDepends on: none\n\n## Requirements\n- **OVR-01** — Fast.\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(specsDir, "002-api.md"), []byte("# 002. API\nStatus: draft\nDepends on: 001-overview\n"), 0o644))
+
+	listed, err := c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, listed.Msg.Stages, 2, "two stages returned")
+	assert.Equal(t, "software", listed.Msg.Kind, "project kind")
+	assert.Len(t, listed.Msg.Stages[0].Items, 1, "one requirement parsed")
+	assert.NotEmpty(t, listed.Msg.Stages[1].GetHash(), "stage content hash returned")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{
+		Workspace: dir,
+		Name:      "002-api",
+		Hash:      "sha256:stale",
+		Status:    "done",
+	}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "stale hash is FAILED_PRECONDITION")
+	assert.Equal(t, "HASH_MISMATCH", reason(t, err), "stale hash reason is HASH_MISMATCH")
+
+	up, err := c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{
+		Workspace:    dir,
+		Name:         "002-api",
+		Hash:         listed.Msg.Stages[1].GetHash(),
+		Status:       "done",
+		SetDependsOn: true,
+		DependsOn:    []string{"001-overview"},
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "done", up.Msg.Stage.GetStatus(), "status updated")
+	assert.NotEqual(t, listed.Msg.Stages[1].GetHash(), up.Msg.Stage.GetHash(), "hash updated after write")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{Workspace: dir, Name: "999-missing", Status: "done"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "missing spec is NOT_FOUND")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{Workspace: dir, Name: "002-api", Status: "bad"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "bad status is INVALID_ARGUMENT")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{Workspace: dir, Name: "", Title: "   "}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "blank title is INVALID_ARGUMENT")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{Workspace: dir, Name: "001-overview", SetDependsOn: true, DependsOn: []string{"002-api"}}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "dependency cycle is INVALID_ARGUMENT")
+
+	created, err := c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{
+		Workspace:      dir,
+		Title:          "Search",
+		Context:        "Full-text search.",
+		SetDependsOn:   true,
+		DependsOn:      []string{"002-api"},
+		AddRequirement: "Index documents.",
+		AddDoneWhen:    "Index test passes.",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "003-search", created.Msg.Stage.GetName(), "new stage created over Connect")
+
+	_, err = c.workspaces.UpdateSpec(ctx, connect.NewRequest(&pb.UpdateSpecRequest{Workspace: "relative/path", Name: "002-api"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "non-absolute workspace in UpdateSpec is INVALID_ARGUMENT")
+	_, err = c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: "relative/path"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "non-absolute workspace in ListSpecs is INVALID_ARGUMENT")
+	_, err = c.workspaces.DraftManifest(ctx, connect.NewRequest(&pb.DraftManifestRequest{Workspace: "relative/path", Kind: "spec_stage"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "non-absolute workspace in DraftManifest is INVALID_ARGUMENT")
+}

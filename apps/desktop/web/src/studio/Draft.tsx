@@ -22,7 +22,7 @@ import { t } from "../i18n";
 import { Button, Dialog } from "@blitz/webui";
 
 /** What a draft is of (spec_040_studio STU-05). */
-type DraftKind = "agent" | "skill" | "script" | "rule" | "guardrail" | "eval" | "workflow_step" | "form";
+type DraftKind = "agent" | "skill" | "script" | "rule" | "guardrail" | "eval" | "workflow_step" | "form" | "spec_stage";
 
 /**
  * Redraft: the model writes or improves a field (an agent's instructions,
@@ -48,7 +48,7 @@ export function DraftButton({
   description: string;
   current: string;
   language?: string;
-  onUse: (text: string) => void;
+  onUse: (text: string, changes: string[]) => void;
   disabled?: boolean;
   /** What to ask, filled in when the dialog opens (Refine from eval failures). */
   request?: string;
@@ -105,7 +105,7 @@ export function DraftButton({
                 <Button
                   variant="filled"
                   onClick={() => {
-                    onUse(draft.text);
+                    onUse(draft.text, draft.changes);
                     close();
                   }}
                 >

@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.5.3
-weight: 20
+weight: 21
 ---
 
 **Start with what you're building.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.5.3).

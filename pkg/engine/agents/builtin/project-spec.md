@@ -47,14 +47,17 @@ Work through these steps in order, and keep the user's checklist of them with to
    - writing: `002-outline`, `003-research`, `004-draft`, `005-review`, `006-publish`.
    Fit the stages to this project rather than copying the example. Show the list (number, name, one line each) as one question to confirm or change before you write.
 
-5. **Write the specs.** Each `.agents/specs/NNN-<name>.md`:
-   - `# NNN. <Title>`, then `Status: draft` and `Depends on:` the earlier specs it needs (none for 001). `001-overview.md` also has `Kind: software|research|analysis|writing|other` (more than one, comma-separated, when mixed) on its own line after the status, for the agents that read it.
-   - **Context:** why it exists, in a few sentences.
-   - **Goals** and **Non-goals.**
-   - The numbered items, each with an ID made of a short prefix of the spec's name and a number (`AUTH-01`, `DATA-02`), each one checkable, under the heading that fits the kind: **Requirements** (software), **Objectives** (research, analysis), **Content** (writing), **Requirements** otherwise. Put the numbers the user gave (users, latency, sample sizes, word counts, deadlines) in the items, not in prose.
-   - **Done when:** how anyone can tell it's finished.
-   - **Open questions:** what's undecided or assumed.
-   Then write `.agents/specs/README.md`: a sentence on what the project is and its kind, then the specs in order with one line each.
+5. **Write the specs.** Each `.agents/specs/NNN-<name>.md` uses this exact Markdown structure so Studio › Specs can parse and track it:
+   - `# NNN. <Title>`, followed on separate lines by:
+     - `Status: draft`
+     - `Depends on: none` (for `001-overview.md`) or comma-separated earlier stage stems (`Depends on: 001-overview` for `002-...`; every stage file, including `001-overview.md`, must include a `Depends on:` line).
+     - `Kind: software|research|analysis|writing|other` (on `001-overview.md` only, on its own line after `Depends on: none`).
+   - `## Context` — why the stage exists, in a few sentences.
+   - `## Goals` and `## Non-goals` — bullet lists (`- ...`).
+   - `## Requirements` (software or other), `## Objectives` (research, analysis), or `## Content` (writing) — each item is a Markdown checkbox with a bold ID prefix made of a short uppercase prefix of the stage's name and a two-digit number: `- [ ] **<PREFIX>-01** <text>` (for example `- [ ] **OVR-01** ...`, `- [ ] **POL-01** ...`, `- [ ] **AUTH-01** ...`). Put the concrete numbers the user gave (users, latency, sample sizes, word counts, deadlines) inside the items, not only in prose.
+   - `## Done when` — each criterion is a Markdown checkbox: `- [ ] <how anyone can verify it is finished>`.
+   - `## Open questions` — each undecided or assumed point as a bullet `- <question>`, or `- None.` when none remain.
+   Then write `.agents/specs/README.md`: a sentence on what the project is and its kind, then the specs in order with one line each (`- [NNN-<name>.md](NNN-<name>.md) — <Title>: <one-line summary>`).
 
 6. **Revise.** For a change (`/spec <what changed>`) or a run over existing specs: read them, ask only about what's new or unclear, and update the specs it touches, keeping their IDs. A new stage takes the next free number, and `Depends on:` carries where it falls in the order. The kind can change (a study grows a tool): update the `Kind:` line and add the specs the new kind needs. Renumber existing specs only after asking. Update the README to match.
 

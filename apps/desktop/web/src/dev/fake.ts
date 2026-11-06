@@ -1176,6 +1176,101 @@ const fakeFlowProblem = (f: FakeFlow) => {
   return q ? `step ${q.id}: say what it's to do` : "";
 };
 const fakeFlowFile = (workspace: string, f: FakeFlow) => ({ ...f, path: `${workspace}/.agents/workflows/${f.name}.flow.yaml`, problem: fakeFlowProblem(f) });
+// Studio › Specs: three numbered specification stages for the shop workspace.
+type FakeSpec = {
+  name: string;
+  number: string;
+  title: string;
+  status: string;
+  kind: string;
+  dependsOn: string[];
+  context: string;
+  goals: string[];
+  nonGoals: string[];
+  items: { id: string; section: string; text: string; done?: boolean }[];
+  doneWhen: string[];
+  doneWhenDone?: boolean[];
+  openQuestions: string[];
+  skills: string[];
+  agents: string[];
+  content?: string;
+  rev?: number;
+};
+const fakeSpecs: FakeSpec[] = [
+  {
+    name: "001-overview",
+    number: "001",
+    title: "Overview & Domain",
+    status: "done",
+    kind: "software",
+    dependsOn: [],
+    context: "Online store selling physical goods with cent-accurate pricing and Postgres persistence.",
+    goals: ["Keep pricing deterministic in integer cents."],
+    nonGoals: ["Multi-currency exchange rates."],
+    items: [
+      { id: "OVR-01", section: "requirements", text: "Prices and totals are represented in integer cents.", done: true },
+      { id: "OVR-02", section: "requirements", text: "Postgres queries are generated via sqlc.", done: true },
+    ],
+    doneWhen: ["go test ./... passes with -race."],
+    doneWhenDone: [true],
+    openQuestions: [],
+    skills: ["release-notes"],
+    agents: ["reviewer"],
+  },
+  {
+    name: "002-cart",
+    number: "002",
+    title: "Cart & Coupon Pricing",
+    status: "in-progress",
+    kind: "",
+    dependsOn: ["001-overview"],
+    context: "Line-item discounts and rounding rules in internal/cart.",
+    goals: ["Apply coupon discounts per line item."],
+    nonGoals: [],
+    items: [
+      { id: "CRT-01", section: "requirements", text: "Round each discounted line item half-to-even before summing.", done: true },
+      { id: "CRT-02", section: "requirements", text: "Reject expired coupons with ErrCouponExpired.", done: false },
+    ],
+    doneWhen: ["TestCartTotalRounds and TestExpiredCoupon pass."],
+    doneWhenDone: [false],
+    openQuestions: ["CRT-Q1: Can two percentage coupons stack on the same line item?"],
+    skills: [],
+    agents: ["reviewer"],
+  },
+  {
+    name: "003-checkout",
+    number: "003",
+    title: "Checkout & Receipts",
+    status: "draft",
+    kind: "",
+    dependsOn: ["002-cart"],
+    context: "Idempotent payment capture and receipt emails.",
+    goals: ["Avoid duplicate charges on retry."],
+    nonGoals: [],
+    items: [{ id: "CHK-01", section: "requirements", text: "Capture payment with an idempotency key per cart revision.", done: false }],
+    doneWhen: ["Duplicate checkout requests return the same receipt."],
+    doneWhenDone: [false],
+    openQuestions: [],
+    skills: ["release-notes"],
+    agents: [],
+  },
+];
+const fakeSpecHash = (s: FakeSpec) => `sha256:${s.name}-v${s.rev ?? 1}`;
+const fakeSpecFile = (s: FakeSpec) => ({
+  ...s,
+  path: `.agents/specs/${s.name}.md`,
+  hash: fakeSpecHash(s),
+  dependsOn: [...s.dependsOn],
+  goals: [...s.goals],
+  nonGoals: [...s.nonGoals],
+  items: s.items.map((r) => ({ ...r, done: Boolean(r.done) })),
+  doneWhen: [...s.doneWhen],
+  doneWhenDone: s.doneWhen.map((_, i) => Boolean(s.doneWhenDone?.[i])),
+  openQuestions: [...s.openQuestions],
+  skills: [...s.skills],
+  agents: [...s.agents],
+  content: s.content ?? `# ${s.number}. ${s.title}\n\nStatus: ${s.status}\nDepends on: ${s.dependsOn.join(", ") || "none"}\n\n## Context\n\n${s.context}\n`,
+});
 // A form as A2UI's server-to-client messages, as the service sends a task's.
 const fakeMessages = (surfaceId: string, form: { components: unknown[]; data: unknown }) =>
   JSON.stringify([
@@ -1741,10 +1836,23 @@ export function installFake() {
           ],
         }),
         restartMCPServer: () => ({}),
-        draftManifest: ({ name, current }) => ({
-          text: `# ${name || "Reviewer"}\n\nYou review changes for correctness first, then clarity.\n\n## How you work\n- Read the diff and the files it touches.\n- List real bugs with the line and why.\n- Suggest the smallest fix.\n${current ? "\n(Improved from the instructions there.)" : ""}`,
-          changes: ["Said what the agent is for and how it works", "Added a short checklist"],
-        }),
+        draftManifest: ({ kind, name, current, request }) => {
+          if (kind === "spec_stage") {
+            const title = name || "Stage";
+            const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 3).toUpperCase() || "STG";
+            const text = current
+              ? current.replace(/## Open questions[\s\S]*$/, "## Open questions\n\n- None.\n")
+              : `# 004. ${title}\n\nStatus: draft\nDepends on: 001-overview\n\n## Context\n\n${request || `Specification stage for ${title}.`}\n\n## Goals\n\n- Deliver ${title}.\n\n## Non-goals\n\n- None.\n\n## Requirements\n\n- [ ] **${slug}-01** Implement ${title} end to end.\n\n## Done when\n\n- [ ] Automated tests for ${title} pass.\n\n## Open questions\n\n- None.\n`;
+            return {
+              text,
+              changes: ["Drafted stage context, requirements, and Done when criteria", "Resolved open questions into concrete requirements"],
+            };
+          }
+          return {
+            text: `# ${name || "Reviewer"}\n\nYou review changes for correctness first, then clarity.\n\n## How you work\n- Read the diff and the files it touches.\n- List real bugs with the line and why.\n- Suggest the smallest fix.\n${current ? "\n(Improved from the instructions there.)" : ""}`,
+            changes: ["Said what the agent is for and how it works", "Added a short checklist"],
+          };
+        },
         pinModel: ({ agent, ref }) => ({ agent, model: ref }),
         unpinModel: ({ agent, workspace }) => ({ agent, model: state(workspace).settings.model }),
         reloadMemory: () => ({ paths: ["/home/me/blitz/AGENTS.md", "/home/me/blitz/.agents/AGENTS.md"], files: ["AGENTS.md"] }),
@@ -1878,6 +1986,109 @@ export function installFake() {
           if ("problems" in r) throw fakeInvalid(`the answer isn't accepted: ${r.problems.join("; ")}`, "ANSWER_INVALID", { problems: r.problems.join("\n") });
           fakeTasks.splice(i, 1);
           return {};
+        },
+        // Studio › Specs: the project's numbered specification stages and dependency graph.
+        listSpecs: ({ workspace }) => ({
+          dir: `${workspace}/.agents/specs`,
+          kind: "software",
+          overview: "Online store with cent-accurate pricing, line-item coupons and idempotent checkout.",
+          harnessStale: fakeParam("stalespecs"),
+          stages: fakeSpecs.map((s) => fakeSpecFile(s)),
+        }),
+        updateSpec: ({
+          name,
+          hash,
+          title,
+          context,
+          status,
+          setDependsOn,
+          dependsOn,
+          toggleItemId,
+          itemDone,
+          toggleDoneWhenIndex,
+          doneWhenDone,
+          addRequirement,
+          addDoneWhen,
+          addOpenQuestion,
+          removeOpenQuestionIndex,
+          content,
+        }) => {
+          if (!name) {
+            if (!title.trim()) throw fakeInvalid("spec stage title is required");
+            const num = String(fakeSpecs.length + 1).padStart(3, "0");
+            const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "stage";
+            const prefix = slug.replace(/-/g, "").toUpperCase().slice(0, 3) || "REQ";
+            const created: FakeSpec = {
+              name: `${num}-${slug}`,
+              number: num,
+              title: title.trim(),
+              status: status || "draft",
+              kind: "",
+              dependsOn: [...dependsOn],
+              context: context || "New specification stage.",
+              goals: [`Deliver ${title.trim()}.`],
+              nonGoals: [],
+              items: [{ id: `${prefix}-01`, section: "requirements", text: addRequirement || `Define ${title.trim()}.`, done: false }],
+              doneWhen: [addDoneWhen || "All stage checks pass."],
+              doneWhenDone: [false],
+              openQuestions: [],
+              skills: [],
+              agents: [],
+              content: content || undefined,
+              rev: 1,
+            };
+            fakeSpecs.push(created);
+            return { stage: fakeSpecFile(created) };
+          }
+          const s = fakeSpecs.find((x) => x.name === name);
+          if (!s) throw new ConnectError("unknown spec", Code.NotFound);
+          if (hash && fakeSpecHash(s) !== hash) {
+            throw fakeError("the spec stage changed since it was opened", "HASH_MISMATCH");
+          }
+          if (status) {
+            if (!["draft", "in-progress", "done"].includes(status)) throw fakeInvalid("unknown spec status");
+            s.status = status;
+          }
+          if (setDependsOn) {
+            const byName = new Map(fakeSpecs.map((x) => [x.name, x.dependsOn]));
+            for (const dep of dependsOn) {
+              if (!byName.has(dep) || dep === name) throw fakeInvalid("unknown spec");
+            }
+            byName.set(name, dependsOn);
+            const seen = new Set<string>();
+            const hasCycle = (cur: string): boolean => {
+              if (cur === name && seen.size > 0) return true;
+              if (seen.has(cur)) return false;
+              seen.add(cur);
+              return (byName.get(cur) ?? []).some(hasCycle);
+            };
+            if (hasCycle(name)) throw fakeInvalid("spec dependency cycle");
+            s.dependsOn = [...new Set(dependsOn)].sort();
+          }
+          if (toggleItemId) {
+            const it = s.items.find((x) => x.id === toggleItemId);
+            if (it) it.done = itemDone;
+          }
+          if (toggleDoneWhenIndex > 0 && toggleDoneWhenIndex <= s.doneWhen.length) {
+            s.doneWhenDone ??= s.doneWhen.map(() => false);
+            s.doneWhenDone[toggleDoneWhenIndex - 1] = doneWhenDone;
+          }
+          if (addRequirement) {
+            const prefix = s.items[0]?.id.split("-")[0] ?? "REQ";
+            const nextId = `${prefix}-${String(s.items.length + 1).padStart(2, "0")}`;
+            s.items.push({ id: nextId, section: "requirements", text: addRequirement, done: false });
+          }
+          if (addDoneWhen) {
+            s.doneWhen.push(addDoneWhen);
+            (s.doneWhenDone ??= []).push(false);
+          }
+          if (addOpenQuestion) s.openQuestions.push(addOpenQuestion);
+          if (removeOpenQuestionIndex > 0 && removeOpenQuestionIndex <= s.openQuestions.length) {
+            s.openQuestions.splice(removeOpenQuestionIndex - 1, 1);
+          }
+          if (content) s.content = content;
+          s.rev = (s.rev ?? 1) + 1;
+          return { stage: fakeSpecFile(s) };
         },
         // Studio › Workflows: listed, saved and deleted; runs are background runs.
         listWorkflows: ({ workspace }) => ({ dir: `${workspace}/.agents/workflows`, workflows: fakeFlows.map((f) => fakeFlowFile(workspace, f)) }),

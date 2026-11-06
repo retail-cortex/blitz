@@ -18,6 +18,7 @@ Studio only ever changes the workspace it's open in. What every workspace shares
 | Area | What it's for |
 |---|---|
 | [Overview](overview.md) | The workspace's health at a glance: a grade for each kind, the last 30 days' runs, eval coverage, and what needs attention |
+| [Specs](specs.md) | The workspace's numbered specification stages (`.agents/specs/NNN-<name>.md`) on a dependency canvas: status, dependencies, requirements, open questions, and the skills and agents that cite each stage |
 | [Agents](agents.md) | Specialists with their own instructions, tools and limits |
 | [Evals](evals.md) | Prompts with the answers you expect, to prove an agent still works after a change |
 | [Skills](skills.md) | Recipes the agent follows for one kind of task, some with scripts |

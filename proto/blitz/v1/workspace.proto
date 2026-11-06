@@ -356,6 +356,16 @@ service WorkspaceService {
   // Has the model write or improve a manifest field (an agent's or a
   // skill's instructions, a script, a rule): nothing is saved.
   rpc DraftManifest(DraftManifestRequest) returns (DraftManifestResponse);
+  // Returns the workspace's specification stages in .agents/specs/
+  // (spec_012_memory MEM-45, spec_040_studio STU-11), in execution order,
+  // with the skills and agents that cite each stage.
+  rpc ListSpecs(ListSpecsRequest) returns (ListSpecsResponse);
+  // Updates a specification stage in .agents/specs/<name>.md (status,
+  // dependencies, checklist items, inline additions, open questions or the
+  // stage's Markdown), or creates the next numbered stage when name is
+  // empty and title is given (SPEC_NOT_FOUND for an unknown stage;
+  // INVALID_ARGUMENT for a bad status, missing title or a dependency loop).
+  rpc UpdateSpec(UpdateSpecRequest) returns (UpdateSpecResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -4047,3 +4057,114 @@ message AgentBrowserReplyRequest {
 
 // Response message for WorkspaceService.AgentBrowserReply.
 message AgentBrowserReplyResponse {}
+
+// One numbered requirement, objective or content item in a stage spec.
+message SpecItem {
+  // Its identifier (for example, "API-01").
+  string id = 1;
+  // The heading it appears under ("requirements", "objectives", "content").
+  string section = 2;
+  // What the item requires.
+  string text = 3;
+  // Whether its task-list checkbox in the stage file is checked ([x]).
+  bool done = 4;
+}
+
+// One numbered stage in .agents/specs/NNN-<name>.md.
+message SpecStage {
+  // The file stem without .md (for example, "001-overview").
+  string name = 1;
+  // The path relative to the workspace (".agents/specs/001-overview.md").
+  string path = 2;
+  // The three-digit stage prefix ("001").
+  string number = 3;
+  // The stage's heading after "# NNN.".
+  string title = 4;
+  // The stage's progress: "draft", "in-progress" or "done".
+  string status = 5;
+  // The project kind on 001-overview ("software", "research", ...).
+  string kind = 6;
+  // Earlier stage names ("001-overview", ...) this stage depends on.
+  repeated string depends_on = 7;
+  // Why the stage exists ("## Context").
+  string context = 8;
+  // The bullets under "## Goals".
+  repeated string goals = 9;
+  // The bullets under "## Non-goals".
+  repeated string non_goals = 10;
+  // The numbered items under Requirements, Objectives or Content.
+  repeated SpecItem items = 11;
+  // How anyone can tell the stage is finished ("## Done when").
+  repeated string done_when = 12;
+  // What's undecided or assumed ("## Open questions").
+  repeated string open_questions = 13;
+  // Workspace skills in .agents/skills/ whose SKILL.md cites this stage.
+  repeated string skills = 14;
+  // Workspace agents in .agents/agents/ whose file cites this stage.
+  repeated string agents = 15;
+  // For each entry in done_when, whether its checkbox is checked ([x]).
+  repeated bool done_when_done = 16;
+  // The stage file's full Markdown text, for in-place AI redrafting.
+  string content = 17;
+  // The stage file's SHA-256 content hash, for optimistic concurrency.
+  string hash = 18;
+}
+
+// Request message for WorkspaceService.ListSpecs.
+message ListSpecsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListSpecs.
+message ListSpecsResponse {
+  // Where the workspace's specs live (<workspace>/.agents/specs).
+  string dir = 1;
+  // The project kind from 001-overview.
+  string kind = 2;
+  // The one-line summary from .agents/specs/README.md.
+  string overview = 3;
+  // Whether a spec changed after every workspace skill and agent.
+  bool harness_stale = 4;
+  // The numbered stage specs, in execution order.
+  repeated SpecStage stages = 5;
+}
+
+// Request message for WorkspaceService.UpdateSpec.
+message UpdateSpecRequest {
+  string workspace = 1;
+  // The stage stem (for example, "002-data-model"); empty when creating a new stage.
+  string name = 2;
+  // The new status ("draft", "in-progress" or "done"; "" keeps the current one).
+  string status = 3;
+  // Whether depends_on replaces the stage's dependencies.
+  bool set_depends_on = 4;
+  // Earlier stage stems this stage depends on.
+  repeated string depends_on = 5;
+  // Requirement/objective ID (for example, "API-01") whose checkbox to set to item_done.
+  string toggle_item_id = 6;
+  bool item_done = 7;
+  // 1-based index into done_when whose checkbox to set to done_when_done (0 when unused).
+  int32 toggle_done_when_index = 8;
+  bool done_when_done = 9;
+  // A new requirement/objective to append (auto-assigned the stage's next ID).
+  string add_requirement = 10;
+  // A new acceptance criterion to append under "## Done when".
+  string add_done_when = 11;
+  // A new question to append under "## Open questions".
+  string add_open_question = 12;
+  // 1-based index into open_questions to remove (0 when unused).
+  int32 remove_open_question_index = 13;
+  // Replacement Markdown for the stage (or initial Markdown for a new stage).
+  string content = 14;
+  // Title when creating a new stage (name == "") or renaming an existing one.
+  string title = 15;
+  // Context summary when creating a new stage.
+  string context = 16;
+  // The stage file's SHA-256 content hash when read; refuses with HASH_MISMATCH if changed.
+  string hash = 17;
+}
+
+// Response message for WorkspaceService.UpdateSpec.
+message UpdateSpecResponse {
+  SpecStage stage = 1;
+}

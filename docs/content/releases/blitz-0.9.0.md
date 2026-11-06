@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.0
-weight: 2
+weight: 3
 ---
 
 **Blitz for your whole organization.** Connect Blitz to your organization's Blitz Enterprise service and it becomes your company's Blitz: you sign in the way your company does, use the models it offers through its gateway, work under its catalog of agents, skills and rules, keep shared workspaces in step with your team, and run jobs on the service while your laptop is closed. It wears your organization's name, logo and colours. When the service is down, Blitz carries on with your files.

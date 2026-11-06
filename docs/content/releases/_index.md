@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.2](blitz-0.9.2.md): **Studio › Specs**: your project's numbered specification stages on a dependency canvas, with persistent requirement and acceptance-criteria checklists, inline open-question resolution, AI stage drafting and one-click build and review turns.
 - [Blitz 0.9.1](blitz-0.9.1.md): safer by default and steadier under load: every file checked against its spec and docs, so limits say how to keep going, misspelt settings show up, the sandbox and guardrails hold in the corner cases, organizations' locked items stay locked, and language servers work in monorepos.
 - [Blitz 0.9.0](blitz-0.9.0.md): Blitz for your whole organization: sign in the way your company does, its models and catalog, shared workspaces kept in step, jobs that run on the service, its branding everywhere, and work that carries on when the service is down; HTML files open in a browser.
 - [Blitz 0.8.11](blitz-0.8.11.md): counting who uses Blitz, in the open: one message on a day you use it (a random ID, the day, the front end, the version and platform; nothing about your work), with `[usage] count = false` to turn it off.
