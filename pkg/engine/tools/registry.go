@@ -399,7 +399,11 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	// there's one (hidden).
 	r.speech = &speech{speechState: speechState{cfg: cfg.Audio}}
 	entries = append(entries, entry{[]string{"generate_audio"}, func() (tool.Tool, error) {
-		return NewGenerateAudioTool(ws, r.hooks, r.speech, sb.AllowNetwork)
+		var load func(string) (*images.Image, error)
+		if r.images != nil {
+			load = r.LoadImage
+		}
+		return NewGenerateAudioTool(ws, r.hooks, r.speech, sb.AllowNetwork, load)
 	}})
 	if cfg.Web.Enabled && cfg.Web.SearchProvider != "" {
 		sc := WebSearchConfig{

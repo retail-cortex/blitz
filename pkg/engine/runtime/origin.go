@@ -212,6 +212,7 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 	if o.API == "anthropic" && len(cp.Contents) > 0 && cp.Contents[0].Role != genai.RoleUser {
 		cp.Contents = append([]*genai.Content{summaryAsUser(cp.Contents[0])}, cp.Contents[1:]...)
 	}
+	cp.Contents = placeMedia(o, cp.Contents)
 	switch o.API {
 	case "gemini":
 		signCurrentCalls(cp.Contents)

@@ -118,6 +118,9 @@ type Event struct {
 	Notice *Notice
 	// Step is a workflow's step starting or ending (spec_043_workflows).
 	Step *FlowStep
+	// File is a file the model made: an image it drew, audio
+	// (spec_056_conversation_adapters CA-71).
+	File *File
 	// Reflect, at a chat turn's end, says the runs since the last
 	// reflection hit enough problems to /reflect on
 	// (spec_048_harness_learning HE-63).
@@ -160,6 +163,18 @@ const (
 	// its time: the run is paused until then.
 	StepWaiting = "waiting"
 )
+
+// File is a file a model made, kept in the attachment store.
+type File struct {
+	// URI is its reference there (blitz-image:<sha256>).
+	URI  string
+	Name string
+	MIME string
+	// Path is where it's kept on this machine, and Size its size ("" and 0
+	// when that isn't known).
+	Path string
+	Size int64
+}
 
 // Notice is a message from Blitz itself about a turn.
 type Notice struct {

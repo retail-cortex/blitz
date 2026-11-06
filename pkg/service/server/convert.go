@@ -192,6 +192,9 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 			tasks.Items = append(tasks.Items, &pb.Task{Content: t.Content, Status: t.Status})
 		}
 		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
+	case e.File != nil:
+		f := e.File
+		out.Kind = &pb.TurnEvent_ModelFile{ModelFile: &pb.ModelFile{Uri: f.URI, Name: f.Name, MimeType: f.MIME, Path: f.Path, Size: f.Size}}
 	case e.Reflect != nil:
 		out.Kind = &pb.TurnEvent_ReflectDue{ReflectDue: &pb.ReflectDue{Patterns: int32(e.Reflect.Patterns), Score: int32(e.Reflect.Score)}}
 	case e.Notice != nil:

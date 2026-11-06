@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/mdpdf"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -136,21 +137,26 @@ type SpeakerInput struct {
 
 // GenerateAudioOutput describes the audio written.
 type GenerateAudioOutput struct {
-	Path    string  `json:"path"`
-	Bytes   int     `json:"bytes,omitempty"`
-	Seconds float64 `json:"seconds,omitempty"`
-	Model   string  `json:"model,omitempty"`
-	Note    string  `json:"note,omitempty"`
-	Success bool    `json:"success"`
-	Error   string  `json:"error,omitempty"`
+	Path string `json:"path"`
+	// ImageURI is the audio's reference in the attachment store, so the
+	// next model can hear it where it takes audio (spec_056 CA-73).
+	ImageURI string  `json:"image_uri,omitempty"`
+	MIME     string  `json:"mime_type,omitempty"`
+	Bytes    int     `json:"bytes,omitempty"`
+	Seconds  float64 `json:"seconds,omitempty"`
+	Model    string  `json:"model,omitempty"`
+	Note     string  `json:"note,omitempty"`
+	Success  bool    `json:"success"`
+	Error    string  `json:"error,omitempty"`
 }
 
 // NewGenerateAudioTool reads text aloud with the [audio] speech model and
 // writes the audio into the workspace: an audio overview of notes, a
 // two-voice conversation about a paper. One approval covers the call (it
 // sends the text to the provider) and the file it writes, which a
-// checkpoint can undo.
-func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork bool) (tool.Tool, error) {
+// checkpoint can undo. With load (the attachment store's, nil without
+// one) the result refers to the stored audio, as view_media's does.
+func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork bool, load func(path string) (*images.Image, error)) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name: "generate_audio",
@@ -272,7 +278,13 @@ func NewGenerateAudioTool(ws *Workspace, hooks *Hooks, s *speech, allowNetwork b
 			if err != nil {
 				return fail(fmt.Sprintf("failed to write file: %v", err))
 			}
-			return GenerateAudioOutput{Path: rel, Bytes: len(sp.Data), Seconds: sp.Seconds, Model: speaker.Model(), Note: note, Success: true}, nil
+			done := GenerateAudioOutput{Path: rel, Bytes: len(sp.Data), Seconds: sp.Seconds, Model: speaker.Model(), Note: note, Success: true}
+			if load != nil {
+				if m, err := load(rel); err == nil {
+					done.ImageURI, done.MIME = m.URI(), m.MIME
+				}
+			}
+			return done, nil
 		},
 	)
 }

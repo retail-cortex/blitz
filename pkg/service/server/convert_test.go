@@ -46,6 +46,14 @@ func TestReflectDueEvent(t *testing.T) {
 	assert.Equal(t, int32(8), k.ReflectDue.Score)
 }
 
+// A file the model made goes to clients as its own event (spec_056 CA-71).
+func TestModelFileEvent(t *testing.T) {
+	got := eventMsg(api.Event{Author: "blitz", File: &api.File{URI: "blitz-image:abc", Name: "gemini-3-pro-1a2b3c4d.png", MIME: "image/png", Path: "/store/abc.png", Size: 42}})
+	k, ok := got.Kind.(*pb.TurnEvent_ModelFile)
+	require.True(t, ok, "kind %T", got.Kind)
+	assert.Equal(t, &pb.ModelFile{Uri: "blitz-image:abc", Name: "gemini-3-pro-1a2b3c4d.png", MimeType: "image/png", Path: "/store/abc.png", Size: 42}, k.ModelFile)
+}
+
 // The engine's values become the API's messages field for field; values
 // the engine leaves out stay unset.
 func TestConversions(t *testing.T) {

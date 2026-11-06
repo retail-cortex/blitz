@@ -2331,6 +2331,8 @@ export function installFake() {
         },
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
+        // A file a model made (spec_056 CA-71): a 1×1 picture.
+        readStoredFile: () => ({ data: Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0)), mimeType: "image/png" }),
         // ?oldservice: a service older than the app (the stale banner).
         getServiceInfo: () => ({ version: new URLSearchParams(location.search).has("oldservice") ? "0.6.1" : "dev", executable: "" }),
         listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),

@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -889,6 +890,13 @@ func TestWorkspaceHandlers(t *testing.T) {
 		assert.Equal(t, loaded.Msg.Image.Id, added.Msg.Image.Id, "the same image")
 		assert.Error(t, unary(w.LoadImage, &pb.LoadImageRequest{Workspace: dir, Path: "missing.png"}))
 		assert.Error(t, unary(w.AddImage, &pb.AddImageRequest{Workspace: dir, Name: "x.png", Data: []byte("not an image")}))
+
+		// A stored file comes back by its reference (spec_056 CA-71).
+		stored, err := w.ReadStoredFile(ctx, connect.NewRequest(&pb.ReadStoredFileRequest{Workspace: dir, Uri: "blitz-image:" + added.Msg.Image.Id}))
+		require.NoError(t, err)
+		assert.Equal(t, "image/png", stored.Msg.MimeType)
+		assert.NotEmpty(t, stored.Msg.Data)
+		assert.Equal(t, "FILE_NOT_FOUND", reason(t, unary(w.ReadStoredFile, &pb.ReadStoredFileRequest{Workspace: dir, Uri: "blitz-image:" + strings.Repeat("0", 64)})))
 	})
 
 	t.Run("web search", func(t *testing.T) {

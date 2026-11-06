@@ -78,3 +78,8 @@ In the desktop app it's **Speech model** in a workspace's settings, under **Agen
 - Gemini makes `.wav` files; OpenAI makes `.mp3`. Markdown formatting isn't read out. A call takes at most `max_chars` (9,000, about ten minutes); split a longer script into parts.
 - It asks first (it sends the text to the provider), and its cost goes in the session's `/cost`. With `sandbox.allow_network = false` it's refused.
 - The desktop app plays `.wav`, `.mp3`, `.m4a`, `.ogg`, `.opus` and `.flac` files when you open them.
+- The next model in the conversation can hear what it made, if it takes audio (Gemini does).
+
+## What a model makes
+
+A model that makes pictures or audio (Gemini's image models, for one) puts them in the conversation: a picture shows as one, audio with a player, anything else as a chip. **Save** writes it into the workspace under its name, which says the model that made it (`gemini-3-pro-image-1a2b3c4d.png`). In the terminal, Blitz prints where it's kept. It stays part of the conversation: switch to another model and that model sees it too, if it takes pictures.

@@ -140,6 +140,9 @@ func answerGemini(f *Fake, _ map[string]any, r Reply) any {
 	for _, c := range r.Calls {
 		calls = append(calls, sign(map[string]any{"functionCall": map[string]any{"name": c.Name, "args": orEmpty(c.Args)}}))
 	}
+	for _, file := range r.Files {
+		parts = append(parts, sign(map[string]any{"inlineData": map[string]any{"mimeType": file.MIME, "data": base64.StdEncoding.EncodeToString(file.Data)}}))
+	}
 	if r.Text != "" {
 		p := map[string]any{"text": r.Text}
 		if len(calls) == 0 {
