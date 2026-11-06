@@ -126,7 +126,7 @@ func TestGeminiStrict(t *testing.T) {
 		{name: "a plain question", contents: []any{text("user", "hi")}},
 		{name: "a signed tool loop", contents: []any{text("user", "hi"), call(sig), response}},
 		{name: "an unsigned call in an earlier turn", contents: []any{text("user", "hi"), call(""), response, text("model", "ok"), text("user", "next")}},
-		{name: "an unsigned call in this turn", contents: []any{text("user", "hi"), call(""), response}, refusal: "missing a `thought_signature`"},
+		{name: "an unsigned call in this turn", contents: []any{text("user", "hi"), call(""), response}, refusal: "missing a thought_signature"},
 		{name: "a foreign signature", contents: []any{text("user", "hi"), call(base64.StdEncoding.EncodeToString([]byte("anthropic-signature-1"))), response}, refusal: "not valid"},
 		{name: "a response with no call", contents: []any{text("user", "hi"), response}, refusal: "immediately after a function call"},
 		{name: "a call with no response", contents: []any{text("user", "hi"), call(sig), text("user", "next")}, refusal: "immediately after a function call"},

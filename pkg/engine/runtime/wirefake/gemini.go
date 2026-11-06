@@ -88,7 +88,7 @@ func checkGemini(f *Fake, req map[string]any) string {
 					return fmt.Sprintf("contents[%d].parts[%d]: a function call must be in a model turn", i, j)
 				}
 				if firstCall && i >= current && str(p["thoughtSignature"]) == "" {
-					return fmt.Sprintf("Unable to submit request because function call `%s` in the %d. content block is missing a `thought_signature`.", str(obj(p["functionCall"])["name"]), i+1)
+					return fmt.Sprintf("Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly (function call `%s`, content %d).", str(obj(p["functionCall"])["name"]), i)
 				}
 				firstCall = false
 			}
@@ -118,8 +118,10 @@ func checkGemini(f *Fake, req map[string]any) string {
 	return ""
 }
 
-// skipSignatures are the placeholders Gemini documents for function calls
-// it didn't make (another model's, in a conversation moved to Gemini).
+// skipSignatures are the placeholders Google documents for function calls
+// Gemini didn't make (another model's, or history written by hand), to use
+// as a last resort since they cost the model some quality (Vertex AI's
+// "Thought signatures" page, seen 2026-11-05).
 var skipSignatures = map[string]bool{"skip_thought_signature_validator": true, "context_engineering_is_the_way_to_go": true}
 
 func answerGemini(f *Fake, _ map[string]any, r Reply) any {

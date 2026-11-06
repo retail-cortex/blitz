@@ -167,12 +167,8 @@ Each wire API has one adapter (`Adapter.Request`). It runs at every call, inside
   - **Pairing.** A call with no result (a turn stopped mid-tool) gets a result saying it didn't run, so no API sees an unpaired call.
   - **Calls from text.** Tool calls parsed from text (CA-24) get Blitz's IDs.
 - **CA-24** **Tools are sent natively.** They're parsed from text only for a model whose record says it can't call tools natively. Only those models need their whole reply before tool calls can be read (CA-50).
-- **CA-25** **Tool schemas** are converted to each API's dialect:
-  - **Gemini:**
-    - its OpenAPI subset;
-    - `$ref` inlined;
-    - `oneOf`/`anyOf` and `additionalProperties` handled as Gemini takes them;
-    - `nullable`.
+- **CA-25** **Tool schemas** are sent in each API's dialect:
+  - **Gemini:** JSON Schema in `parametersJsonSchema`, which Gemini has taken since November 2025 (it's exclusive with the older OpenAPI-subset `parameters`). Which keywords it refuses (`$ref` is undocumented) is checked in the paid run (CA-151); a keyword it refuses is resolved before sending (`$ref` inlined).
   - **Anthropic:** JSON Schema with `"type"` lower case and `nullable` as `[t, "null"]`.
   - **OpenAI:** JSON Schema, `strict` off.
   
