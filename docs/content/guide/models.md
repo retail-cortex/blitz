@@ -58,6 +58,19 @@ The key is the model name. Every model uses its own settings: the main model, pi
 
 `/effort high` (or `--effort high`) sets the reasoning effort for every model call in the session, over each model's own; `/effort auto` goes back to them.
 
+## What Blitz learns about a model
+
+Blitz knows the main families (Claude, Gemini, GPT, o-series): their context windows, maximum output, whether they think and which settings they take. Claude through Bedrock or Vertex AI counts as the Claude model it names. For Ollama, Blitz asks Ollama itself whether a model calls tools or reads images, and how much context it holds. For your organization's models, the organization's catalog says.
+
+Nobody can know every model, though. When a model refuses something with an error that says what (it doesn't call tools, doesn't read images, doesn't stream, doesn't take a setting, holds fewer tokens than sent), Blitz:
+- remembers it;
+- sends the same request again once without it;
+- tells you once, for example "llama3.2 can't use tools: it answers without them from now on".
+
+A model that can't use tools answers without them. If a fallback can use them, it takes calls that offer tools.
+
+What Blitz learned is kept in `~/.blitz/models.learned.toml` and checked again after 30 days. `blitz models forget <model>` (`ollama/llama3.2`, or just `llama3.2` for every provider) clears it.
+
 ## Context and cost
 
-History is compacted automatically once a prompt reaches `context.token_threshold` tokens, or on demand with `/compact [focus]`. List prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). `blitz doctor` warns when the active model has no price. `/cost` shows the session's tokens, including cache reads and writes, and its estimated cost. Web searches through Google are billed per query and shown on their own line, priced by `[search_pricing.google] per_1k_queries` (default $14).
+History is compacted automatically before it fills the model's context window: at the window less the model's maximum output, less a tenth, for a model Blitz knows. Set `context.token_threshold` to choose the point yourself (its default, 120,000, leaves it to the model). `/compact [focus]` compacts on demand. List prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). `blitz doctor` warns when the active model has no price. `/cost` shows the session's tokens, including cache reads and writes, and its estimated cost. Web searches through Google are billed per query and shown on their own line, priced by `[search_pricing.google] per_1k_queries` (default $14).

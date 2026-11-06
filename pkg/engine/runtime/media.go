@@ -16,7 +16,6 @@ package runtime
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/images"
 	"google.golang.org/adk/v2/model"
@@ -62,41 +61,17 @@ func mimesOf(kind images.Kind) []string {
 	return out
 }
 
-// AcceptedMedia is what a model of provider takes (spec_011_images):
+// AcceptedMedia is what a model of provider takes (spec_011_images), as
+// its record says (spec_056 CA-10, ModelInfo.Accepts):
 //   - Gemini: pictures (HEIC too), PDFs, text, audio and video; audio and
 //     video over 14 MB through the Files API when upload is possible (the
 //     Gemini API, not Vertex AI), else no larger than that.
-//   - Claude (Anthropic's API, Vertex AI): pictures, PDFs and text.
+//   - Claude (Anthropic's API, Vertex AI, Bedrock): pictures, PDFs and text.
 //   - Others: pictures, text, and PDFs as their text.
+//
+// A model that doesn't read images takes none (CA-64).
 func AcceptedMedia(provider, modelName string, upload bool) []Accept {
-	text := Accept{Kind: images.KindText, MIMEs: plainText, MaxBytes: images.MaxTextBytes, AsText: true}
-	pdfAsText := Accept{Kind: images.KindDocument, MIMEs: pdf, MaxBytes: images.MaxDocumentBytes, AsText: true}
-	name := strings.ToLower(strings.TrimPrefix(modelName, "models/"))
-	switch {
-	case provider == "gemini":
-		media := Accept{MaxBytes: geminiInline, Inline: geminiInline}
-		if upload {
-			media.MaxBytes, media.Upload = images.MaxMediaBytes, true
-		}
-		audio, video := media, media
-		audio.Kind, audio.MIMEs = images.KindAudio, mimesOf(images.KindAudio)
-		video.Kind, video.MIMEs = images.KindVideo, mimesOf(images.KindVideo)
-		return []Accept{
-			{Kind: images.KindImage, MIMEs: geminiImages, MaxBytes: 20 << 20, Inline: 20 << 20},
-			{Kind: images.KindDocument, MIMEs: pdf, MaxBytes: images.MaxDocumentBytes, Inline: geminiInline, Pages: 1000, AsText: true},
-			text, audio, video,
-		}
-	case (provider == "anthropic" || provider == "vertex-anthropic") && strings.HasPrefix(name, "claude-"):
-		return []Accept{
-			{Kind: images.KindImage, MIMEs: commonImages, MaxBytes: 20 << 20, Inline: 20 << 20},
-			{Kind: images.KindDocument, MIMEs: pdf, MaxBytes: images.MaxDocumentBytes, Inline: anthropicBytes, Pages: 100, AsText: true},
-			text,
-		}
-	}
-	return []Accept{
-		{Kind: images.KindImage, MIMEs: commonImages, MaxBytes: 20 << 20, Inline: 20 << 20},
-		pdfAsText, text,
-	}
+	return Info(wireAPI(provider), provider, modelName).Accepts(upload)
 }
 
 // accepts finds the entry that takes mime, if any.
@@ -118,7 +93,7 @@ func acceptedFor(m model.LLM, upload bool) []Accept {
 	case *imageModel:
 		return acceptedFor(m.inner, upload)
 	case *settingsModel:
-		return AcceptedMedia(m.provider, m.inner.Name(), upload)
+		return m.info().Accepts(upload)
 	case *fallbackModel:
 		var out []Accept
 		for i, member := range m.chain {

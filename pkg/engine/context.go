@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -61,7 +62,9 @@ func (w *Workspace) Context(parts bool) (api.ContextInfo, error) {
 		return api.ContextInfo{}, err
 	}
 	c := w.cfg.Context
-	info := api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}
+	// The active model's compaction point (spec_056 CA-110), else the setting.
+	threshold := cmp.Or(w.engine.CompactionThreshold(), c.TokenThreshold)
+	info := api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: threshold, Keep: c.RetainEvents}
 	if parts {
 		id, _ := w.activeID()
 		info.Parts = w.engine.ContextParts(context.Background(), id, u.LastPrompt)

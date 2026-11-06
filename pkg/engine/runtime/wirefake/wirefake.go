@@ -47,6 +47,10 @@ type Reply struct {
 	// Status, when set, refuses the request with this HTTP status (a 503:
 	// the model is overloaded) instead of answering.
 	Status int
+	// Refusal is the refusal's message, in the API's error shape (its
+	// status's text when empty): a model refusing what it can't do, in
+	// the words its server uses ("… does not support tools").
+	Refusal string
 }
 
 // Call is one scripted tool call.
@@ -174,7 +178,11 @@ func (f *Fake) handle(w http.ResponseWriter, r *http.Request) {
 	if reply.Status != 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(reply.Status)
-		_ = json.NewEncoder(w).Encode(errorBody(r.URL.Path, http.StatusText(reply.Status)))
+		msg := reply.Refusal
+		if msg == "" {
+			msg = http.StatusText(reply.Status)
+		}
+		_ = json.NewEncoder(w).Encode(errorBody(r.URL.Path, msg))
 		return
 	}
 	answer := f.answer(f, req, reply)

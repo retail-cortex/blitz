@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -117,6 +118,10 @@ type modelServer struct {
 func newModelServer(t *testing.T) *modelServer {
 	m := &modelServer{}
 	m.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/responses") { // Ollama's own API (/api/show) isn't a model call
+			http.NotFound(w, r)
+			return
+		}
 		var req struct {
 			Model string `json:"model"`
 		}

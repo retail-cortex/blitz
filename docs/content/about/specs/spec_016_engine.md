@@ -68,7 +68,7 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 ## 7. Compaction
 
-- **ENG-60** Automatic: the ADK runner compacts once a prompt reaches `context.token_threshold`, retaining `retain_events` raw events.
+- **ENG-60** Automatic: the ADK runner compacts once a prompt reaches `context.token_threshold`, retaining `retain_events` raw events. *Since 2026-11-05* ([spec_056](spec_056_conversation_adapters.md) CA-110), left at its default the threshold is the active model's own point: its context window less its maximum output, less 10%.
 - **ENG-61** Manual `Compact(session, focus, keepTurns≥1)`: find the start of the keepTurns-th most recent **user turn** (a user-authored event that is not a function response and not a compaction), so a tool call is never separated from its result. Nothing before it, or everything already compacted, is `ErrNothingToCompact`.
 - **ENG-62** The window is summarised by the current model with a fixed prompt (goals and constraints, decisions and why, files read/changed, commands and outcomes, unresolved errors, next steps) plus "Pay particular attention to: <focus>", timeout 3 min. Earlier summaries inside the window are fed as "[Summary of earlier conversation]" events, and the events they cover are omitted, so a second compaction never loses the first summary's content.
 - **ENG-62a** *2026-11-04 (scan N26-engine-runtime#25: the summary was written by the engine's model even with the active agent pinned).* "The current model" is the active agent's: its pin if it has one, else the configured model; the summary's usage is recorded by that model's name, and a summarizer that reports none is an unpriced call (ENG-22a).

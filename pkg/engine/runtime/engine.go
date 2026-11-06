@@ -45,6 +45,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -285,6 +286,9 @@ type Engine struct {
 
 	cfg   *config.Config
 	tasks *taskManager
+	// compactAt is the active model's compaction point (spec_056 CA-110),
+	// set as the agents are built (under mu).
+	compactAt int
 	// projectTrusted means the project's agents may loosen the mode.
 	projectTrusted bool
 	// reviewModel reviews actions in the auto mode (nil: e.llm).
@@ -348,6 +352,12 @@ func NewEngine(
 	llm model.LLM,
 	opts ...Option,
 ) (*Engine, error) {
+	// The models' records read the settings' prices and what was learned
+	// of them, kept in Blitz's home (spec_056 CA-11, CA-14).
+	setPricing(cfg.Pricing)
+	if learnedStore() == nil {
+		SetLearnedStore(modelfacts.Open(modelfacts.Path(config.Dir())))
+	}
 	e := &Engine{
 		agency:    cfg.Blitz.AgencyLevel,
 		cfg:       cfg,
@@ -820,6 +830,14 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 		return nil, nil
 	}
 	e.noteFallback(ctx, resp)
+	if lines, _ := resp.CustomMetadata[LearnedKey].([]string); len(lines) > 0 {
+		// What a refusal taught about the model, told once (spec_056 CA-13).
+		if notice := e.noticeTo(ctx); notice != nil {
+			for _, l := range lines {
+				notice(l)
+			}
+		}
+	}
 	if resp.UsageMetadata == nil && resp.Content == nil {
 		return nil, nil // not an answer (nothing to count)
 	}
@@ -1159,7 +1177,7 @@ func (e *Engine) rebuildLocked() error {
 	if err != nil {
 		return err
 	}
-	e.runner, e.rootAgent, e.compactionCfg = t.runner, t.root, t.compaction
+	e.runner, e.rootAgent, e.compactionCfg, e.compactAt = t.runner, t.root, t.compaction, t.point
 	return nil
 }
 
@@ -1169,6 +1187,7 @@ type tree struct {
 	root       agent.Agent
 	compaction *compaction.Config
 	models     map[string]model.LLM
+	point      int // the root model's compaction point, automatic or not
 }
 
 // modelInTreeLocked is the model agent runs on in a tree rooted at active
@@ -1236,6 +1255,10 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		retain = 20
 	}
 	threshold := c.TokenThreshold
+	if info, ok := infoOf(llm); ok {
+		threshold = info.CompactionPoint(threshold) // the model's own (spec_056 CA-110)
+	}
+	point := threshold
 	if !c.Compaction || threshold <= 0 {
 		threshold = math.MaxInt32
 	}
@@ -1244,8 +1267,16 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 	if err != nil {
 		return tree{}, fmt.Errorf("failed to instantiate ADK runner: %w", err)
 	}
-	t.runner, t.root, t.compaction = r, rootAgent, rc.Compaction
+	t.runner, t.root, t.compaction, t.point = r, rootAgent, rc.Compaction, point
 	return t, nil
+}
+
+// CompactionThreshold is where the active model's conversations are
+// compacted (spec_056 CA-110), for the context meter.
+func (e *Engine) CompactionThreshold() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.compactAt
 }
 
 // ExecOption configures one Execute call.

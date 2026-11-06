@@ -183,8 +183,8 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 	}
 	// The settings' max_tokens is applied first, then capped at what the
 	// model turns out to allow (outputcap.go).
-	sm := &settingsModel{inner: capOutput(m), provider: providerOf(m), configured: provider}
-	return sm, nil
+	capped := &outputCapModel{inner: m, provider: cmp.Or(provider, providerOf(m))}
+	return &settingsModel{inner: capped, provider: providerOf(m), configured: provider}, nil
 }
 
 // providerOf names the API a built model talks to; with provider "" the
@@ -226,6 +226,9 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		m, err := newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
 		if t, ok := m.(*toolCallParsingModel); ok {
 			t.provider, t.key = provider, apiKey
+		}
+		if err == nil && provider == "ollama" {
+			go listOllama(baseURL, modelName) // what Ollama says of it (spec_056 CA-11)
 		}
 		return m, err
 

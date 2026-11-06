@@ -17,12 +17,14 @@ package runtime
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"iter"
 	"log/slog"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -49,6 +51,11 @@ type settingsModel struct {
 	// for the origin of what the model writes (spec_056 CA-02); provider
 	// when unset.
 	configured string
+}
+
+// info is the model's record now (spec_056 CA-10).
+func (m *settingsModel) info() ModelInfo {
+	return Info(m.provider, cmp.Or(m.configured, m.provider), m.inner.Name())
 }
 
 // origin is where this model's answers come from.
@@ -88,13 +95,50 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			ctx = context.WithValue(ctx, effortKey{}, *s.ReasoningEffort)
 		}
 	}
+	info := m.info()
+	req, stream = applyFacts(info, req, stream)
 	return func(yield func(*model.LLMResponse, error) bool) {
-		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
-			stampResponse(o, resp)
-			nameCallsBack(resp, back)
-			if !yield(resp, asQuota(err)) {
+		// A refusal for something the record let through, before any
+		// output, teaches the record; the call goes again without it, once
+		// (spec_056 CA-13).
+		var tell []string
+		send := req
+		for attempt := 0; ; attempt++ {
+			var learned *modelfacts.Fact
+			answered := false
+			for resp, err := range m.inner.GenerateContent(ctx, send, stream) {
+				if err != nil && !answered && attempt == 0 {
+					if f, ok := recogniseRefusal(err); ok {
+						if line := learn(o.Provider, info.Name, f); line != "" {
+							tell = append(tell, line)
+						}
+						if retryable(f) {
+							learned = &f
+							break
+						}
+					}
+				}
+				answered = true
+				stampResponse(o, resp)
+				nameCallsBack(resp, back)
+				if resp != nil && !resp.Partial {
+					tellLearned(resp, tell)
+					tell = nil
+				}
+				if err != nil && len(tell) > 0 {
+					err = fmt.Errorf("%w (%s)", err, strings.Join(tell, " "))
+					tell = nil
+				}
+				if !yield(resp, asQuota(err)) {
+					return
+				}
+			}
+			if learned == nil {
 				return
 			}
+			slog.InfoContext(ctx, "model refused part of a request: learned and sent again", "model", info.Name, "fact", learned.Kind, "value", learned.Value)
+			info = withFact(info, *learned)
+			send, stream = applyFacts(info, req, stream)
 		}
 	}
 }

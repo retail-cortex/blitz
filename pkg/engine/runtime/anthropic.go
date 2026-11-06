@@ -252,6 +252,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 // models (Opus 5, Sonnet 5, Fable, Opus 4.7+) reject sampling parameters with
 // a 400, so only older families receive them.
 func supportsSampling(model string) bool {
+	model = canonicalModel(model) // Bedrock's and Vertex AI's IDs too (spec_056 CA-10)
 	for _, p := range []string{"claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-6", "claude-sonnet-4-5", "claude-opus-4-5", "claude-opus-4-1", "claude-sonnet-4-", "claude-opus-4-0", "claude-3"} {
 		if strings.HasPrefix(model, p) {
 			return true
@@ -268,6 +269,7 @@ func supportsFallbacks(model string) bool {
 // supportsEffort reports whether a model takes output_config.effort (the
 // Claude 4.5 generation's Opus and later).
 func supportsEffort(model string) bool {
+	model = canonicalModel(model)
 	for _, p := range []string{"claude-opus-4-5", "claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8"} {
 		if strings.HasPrefix(model, p) {
 			return true
@@ -279,6 +281,7 @@ func supportsEffort(model string) bool {
 // supportsThinking reports whether a model has extended thinking (Claude
 // 3.7 Sonnet and later).
 func supportsThinking(model string) bool {
+	model = canonicalModel(model)
 	for _, p := range []string{"claude-3-5", "claude-3-haiku", "claude-3-opus", "claude-3-sonnet"} {
 		if strings.HasPrefix(model, p) {
 			return false
@@ -297,6 +300,7 @@ func adaptiveThinking(model string) bool {
 // alwaysThinks reports whether a model refuses to have thinking turned off
 // (Opus 5.5, Fable).
 func alwaysThinks(model string) bool {
+	model = canonicalModel(model)
 	return strings.HasPrefix(model, "claude-opus-5-5") || strings.HasPrefix(model, "claude-fable")
 }
 
