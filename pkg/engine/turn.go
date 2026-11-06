@@ -324,10 +324,29 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if t.MaxCostUSD > 0 {
 			inner := on
 			spent := w.costSince(sessionID, res.Before.CostUSD)
+			limit := fmt.Sprintf("$%.2f", t.MaxCostUSD)
+			// A call to a model with no price can't be counted toward the
+			// limit: said the first time the session uses such a model, as
+			// the turn starts on it or when a call is made to it (a
+			// fallback's), never again (spec_056 CA-124).
+			told := map[string]bool{}
+			for _, m := range w.engine.UnpricedModels(sessionID) {
+				told[m] = true
+			}
+			if model, _ := w.engine.AgentModel(w.engine.ActiveAgent()); !told[model] && !w.engine.HasPrice(model) {
+				told[model] = true
+				inner(api.Event{Notice: &api.Notice{Text: i18n.T("turn.cost_limit_unpriced", "limit", limit, "model", model)}})
+			}
 			on = func(e api.Event) {
 				inner(e)
 				if spent() > t.MaxCostUSD {
 					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, t.MaxCostUSD))
+				}
+				for _, m := range w.engine.UnpricedModels(sessionID) {
+					if !told[m] {
+						told[m] = true
+						inner(api.Event{Notice: &api.Notice{Text: i18n.T("turn.cost_limit_uncounted", "limit", limit, "model", m)}})
+					}
 				}
 			}
 		}

@@ -62,7 +62,27 @@ func usageMsg(u api.Usage) *pb.Usage {
 		Calls: int32(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUsd: u.CostUSD, Priced: u.Priced,
 		SearchQueries: int32(u.SearchQueries), SearchCostUsd: u.SearchCostUSD,
+		Reasoning: u.Reasoning, Unpriced: int32(u.Unpriced),
 	}
+}
+
+func usageGroupsMsg(gs []api.Group) []*pb.UsageGroup {
+	out := make([]*pb.UsageGroup, len(gs))
+	for i, g := range gs {
+		out[i] = &pb.UsageGroup{Name: g.Name, Usage: usageMsg(g.Usage)}
+	}
+	return out
+}
+
+func usageCallMsg(c api.Call) *pb.UsageCall {
+	m := &pb.UsageCall{Api: c.API, Provider: c.Provider, Model: c.Model, Purpose: c.Purpose, Task: c.Task, Usage: usageMsg(c.Usage)}
+	if !c.Time.IsZero() {
+		m.Time = timestamppb.New(c.Time)
+	}
+	if p := c.Price; p != nil {
+		m.Price = &pb.Price{Input: p.Input, CachedInput: p.CachedInput, CacheWrite: p.CacheWrite, Output: p.Output}
+	}
+	return m
 }
 
 func savedMsg(s api.Saved) *pb.Saved {

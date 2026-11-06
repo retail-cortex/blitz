@@ -36,6 +36,24 @@ func enterpriseClient(cfg *config.Config) (*enterprise.Client, error) {
 	return enterprise.Shared(u, func() secrets.Store { return secrets.Default(config.ConfigDir("")) }, enterprise.Options{}), nil
 }
 
+// catalogPrices prices the organization's models by its catalog (its
+// last list, never asking the service), for models the price table
+// doesn't price (spec_056 CA-123).
+func catalogPrices(cfg *config.Config) func(model string) (config.ModelPrice, bool) {
+	return func(name string) (config.ModelPrice, bool) {
+		c, err := enterpriseClient(cfg)
+		if err != nil {
+			return config.ModelPrice{}, false
+		}
+		for _, m := range c.CachedModels() {
+			if m.ID == name && m.Price != nil {
+				return config.ModelPrice{InputPerMTok: m.Price.InputPerMTok, OutputPerMTok: m.Price.OutputPerMTok}, true
+			}
+		}
+		return config.ModelPrice{}, false
+	}
+}
+
 // modelsTimeout bounds asking the organization for its models as a
 // workspace opens.
 var modelsTimeout = 8 * time.Second

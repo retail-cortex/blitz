@@ -150,6 +150,7 @@ go_test(
         "images_test.go",
         "keycommand_test.go",
         "leak_test.go",
+        "ledger_test.go",
         "mcp_agents_test.go",
         "model_factory_test.go",
         "ollama_test.go",

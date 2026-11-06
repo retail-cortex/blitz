@@ -9,7 +9,7 @@ weight: 56
 |---|---|
 | Status | **Draft** (2026-11-05). The owner decided, on PR #92: a model switch belongs to the conversation, takes effect from its next turn, and drops the previous provider's reasoning; history stays in ADK's event log, tagged with where each part came from; the status bar offers a new chat before switching one that has history. Its other decisions are in §18. |
 | Source | `pkg/engine/runtime` (`origin.go`: origins, tagging and adapting; adapters: `model_factory.go`, `anthropic.go`, `apiprovider.go`, `apiresponse.go`, `enterprisemodel.go`, `cloud.go`, `ollama.go`, `openai_images.go`; wrappers: `settings.go`, `signatures.go`, `fallback.go`, `outputcap.go`, `guard.go`, `images.go`, `media.go`, `geminifiles.go`; `usage.go`, `compact.go`, `contextparts.go`, `listmodels.go`, `httpclient.go`, `quota.go`, `speech.go`), `pkg/engine/session`, `pkg/engine/models.go`, `pkg/images`, `pkg/config/features.go`, `pkg/enterprise/models.go` |
-| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict) |
+| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict), `pkg/engine/runtime/ledger_test.go` (CA-152: a mixed conversation priced by hand; the ledger of turns and a compaction a fallback answered; an old session), `pkg/api/ledger_test.go`, `pkg/engine/session/ledger_test.go`, `pkg/engine/turn_test.go` (TestCostLimitSaysWhatItCantCount), `pkg/service/server/handlers_test.go` (TestSessionHandlers), `apps/cli/sessions_test.go`, `apps/cli/internal/tui/status_test.go` (TestCostBreakdown), `apps/desktop/web/src/status.test.ts` |
 | Depends on | [spec_015_models](spec_015_models.md) (models, fallbacks MDL-60–65), [spec_018_workspace](spec_018_workspace.md) (WS-40), [spec_011_images](spec_011_images.md) (attachments), [spec_017_sessions](spec_017_sessions.md), [spec_039_secrets](spec_039_secrets.md), [spec_053_enterprise](spec_053_enterprise.md) (the organization's models), [spec_055_urns](spec_055_urns.md) (artifacts), [spec_024_desktop](spec_024_desktop.md) (DSK-39) |
 
 ## 1. Purpose
@@ -349,36 +349,37 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
 
 ## 14. Cost
 
-- **CA-120** **Each model call adds a record to the conversation's ledger:**
+- **CA-120** *Built 2026-11-05.* **Each model call adds a record to the conversation's ledger** (`api.Call`; `UsageTracker.Charge` prices it, the engine keeps it, `Engine.Ledger` reads it):
   - when it happened;
-  - its origin (CA-02);
-  - what it was for (the turn, compaction, review, a judge, a background task, a subagent);
-  - its usage, each kind once: input, cached input, cache writes (by lifetime), output, reasoning, provider tool requests;
-  - the price it was charged at, and its cost; or that it had no price.
+  - its origin (CA-02): the wire API, the provider as configured, and the model it's priced as (the one that answered);
+  - what it was for (`api.Purpose*`): the conversation's turn, compaction, review (the review model, and hooks' and rules' calls made through it), a background task (with the task's ID; the task's own total is kept too, for its cost cap), speech, a search's billed queries;
+  - its usage, each kind once: input, cached input, cache writes, output, reasoning (`Usage.Reasoning`);
+  - the price it was charged at (`api.Price`), and its cost; or that it had no price (`Usage.Unpriced`).
   
-  The ledger is kept with the session (`<id>.usage.jsonl`), copied by forks and snapshots, and cut back with a rewind.
-- **CA-121** **Totals are sums of the ledger**, by conversation, model, provider and purpose.
-  - **A call with no price** makes only that call's cost unknown. The total says "$X, plus N calls with no price".
-  - **Speech and search** are recorded the same way, with their own origin.
+  The ledger is kept with the session (`<id>.usage.jsonl`, spec_017 SES-23a; a torn line is skipped) and deleted with it. It's what the session spent, so a fork or a snapshot starts its own (what was spent getting there is the source's, as its total already said) and a rewind keeps it. A judge's call outside a session (an eval's, a rule's) isn't a session's and isn't in a ledger.
+- **CA-121** *Built 2026-11-05.* **Totals are sums of the ledger** (`api.Sum`), by conversation, model and purpose, costliest first.
+  - **A call with no price** makes only that call's cost unknown (`Usage.Unpriced` counts them; `Priced` stays "every call priced", for older clients). The total says "$X, plus N calls with no price".
+  - **Speech and search** are recorded the same way: a search's queries have no model and group under `search`.
+  - The session's running total (in its metadata, restored after a restart) and its ledger agree: both are added to by the same `Charge`.
 - **CA-122** **Usage is normalised once per wire API:**
-  - OpenAI's reasoning tokens are inside its output tokens and aren't added again;
+  - OpenAI's reasoning tokens are inside its output tokens and aren't added again (built: `stampResponse`);
   - Gemini's thoughts are added to its candidates;
   - Claude's thinking is inside its output;
-  - cache writes are counted from Anthropic's `cache_creation` (per lifetime).
-- **CA-123** **Prices** come from the model's record (CA-11), including the organization's prices for its models. Long-context tiers and per-request charges apply when the record has them.
-- **CA-124** **Cost limits read the ledger:** `Turn.max_cost_usd`, the limits guardrail (spec_041 GT-32), a job's and a background task's. A limit can't be kept with calls that have no price, and the turn says so when it starts, as `--max-cost-usd` does today.
-- **CA-125** **Showing it.**
-  - `SessionService.GetUsage` returns the ledger's totals by model and purpose, and the calls when asked.
-  - The desktop's cost (the status bar's hover, DSK-39) and the CLI's `/usage` show the breakdown.
-  - `blitz sessions show <id> --usage` lists the calls.
-- **CA-126** **Sessions from before this spec** keep their total as one record ("before 0.9.x, by model unknown"). Calls from then on are recorded by model.
+  - cache writes are counted from Anthropic's `cache_creation` (per lifetime: the 1-hour rate waits for the model record, CA-10).
+- **CA-123** **Prices** come from the model's record (CA-11), including the organization's prices for its models. Long-context tiers and per-request charges apply when the record has them. *Built 2026-11-05, until the record:* one function reads every price (`UsageTracker.priceFor`): the price table (Blitz's, with `[pricing]` over it), then the organization's catalog (`enterprise.Client.CachedModels`, never asking the service) for its models the table doesn't price.
+- **CA-124** *Built 2026-11-05.* **Cost limits read the ledger's totals:** `Turn.max_cost_usd`, the limits guardrail (spec_041 GT-32), a job's and a background task's. A limit can't count calls to a model with no price: a turn with a limit says so the first time the session uses such a model, as the turn starts on it ("This turn's $0.50 cost limit can't count calls to llama: it has no price") or when a call is made to it (a fallback's: "Calls to llama have no price and don't count toward this turn's $0.50 cost limit"), and not again in that session (`Engine.UnpricedModels`), as a background task already did (`tasks.cost_unpriced`) and `--max-cost-usd` does. Every turn has a limit (the limits guardrail's $10 by default), so the notice is once, not per turn; a call that reported no usage, to a model with a price, doesn't raise it.
+- **CA-125** *Built 2026-11-05.* **Showing it.**
+  - `SessionService.GetUsage` returns the totals by model and purpose (`by_model`, `by_purpose`), the calls with `calls`, and another saved session's with `session_id` (`SESSION_NOT_FOUND`).
+  - The desktop's cost (the status bar, DSK-39) says "$0.42 + 3 not priced" when some calls had no price, and its hover breaks it down by model when more than one answered. The CLI's `/cost` (and `/usage`) shows the breakdown by model and by purpose when there's more than one.
+  - `blitz sessions usage <id>` lists the calls (when, what for, which model, tokens and cost), then the totals.
+- **CA-126** *Built 2026-11-05.* **Sessions from before this spec** keep their total, and what it holds that the ledger doesn't is shown as one record at its head (purpose `before`, no model: `api.Before`). Calls from then on are recorded by model.
 
 ## 15. The service, the CLI and the desktop
 
 - **CA-130** **The service.** `SessionService` gains:
   - `SetModel(session, ref)`;
   - `PreviewModel(session, ref)` (CA-101);
-  - `GetUsage` by model (CA-125).
+  - `GetUsage` by model and purpose, with the calls and for another saved session (CA-125; built 2026-11-05).
   
   `WorkspaceService.SetModel` keeps setting the workspace's default for new conversations (WS-40). The fields are added, never renumbered (`buf breaking`).
 - **CA-131** **The CLI.**

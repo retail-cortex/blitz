@@ -285,6 +285,11 @@ message Usage {
   // estimated price: not part of cost_usd.
   int32 search_queries = 9;
   double search_cost_usd = 10;
+  // Thinking tokens among output, where the provider reports them apart.
+  int64 reasoning = 11;
+  // Calls whose model had no price: cost_usd is the others', and only
+  // these calls' cost is unknown (spec_056 CA-121).
+  int32 unpriced = 12;
 }
 
 // TurnFinished ends a turn's events.

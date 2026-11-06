@@ -334,6 +334,11 @@ message GetUsageRequest {
   string workspace = 1;
   // Also estimate what the context is made of (parts).
   bool parts = 2;
+  // Also list the session's calls, oldest first (spec_056 CA-125).
+  bool calls = 3;
+  // Another saved session's usage, not the active one's ("": the active
+  // session). Its context and parts aren't given.
+  string session_id = 4;
 }
 
 // Response message for SessionService.GetUsage.
@@ -346,6 +351,45 @@ message GetUsageResponse {
   int32 keep = 4;
   // What the context is made of, estimated by category, when asked for.
   repeated ContextPart parts = 5;
+  // The session's usage by model and by purpose (turn, compaction,
+  // review, task, speech, search, before), costliest first (spec_056
+  // CA-125).
+  repeated UsageGroup by_model = 6;
+  repeated UsageGroup by_purpose = 7;
+  // Its calls, oldest first, when asked for.
+  repeated UsageCall calls = 8;
+}
+
+// UsageGroup is the usage of one model, or one purpose, in a session.
+message UsageGroup {
+  string name = 1;
+  Usage usage = 2;
+}
+
+// UsageCall is one entry of a session's ledger: a model call, a speech
+// call or a search's billed queries (spec_056 CA-120).
+message UsageCall {
+  google.protobuf.Timestamp time = 1;
+  // Who answered: the wire API, the provider as configured and the model.
+  string api = 2;
+  string provider = 3;
+  string model = 4;
+  // What it was for: turn, compaction, review, task, speech, search, or
+  // before (what was spent before the ledger was kept).
+  string purpose = 5;
+  // The background task it ran for, if any.
+  string task = 6;
+  Usage usage = 7;
+  // What it was charged per million tokens; unset with no price.
+  Price price = 8;
+}
+
+// Price is a model's, in dollars per million tokens.
+message Price {
+  double input = 1;
+  double cached_input = 2;
+  double cache_write = 3;
+  double output = 4;
 }
 
 // ContextPart is one category of what a prompt carries.

@@ -18,6 +18,7 @@ go_library(
     name = "session",
     srcs = [
         "adkstore.go",
+        "ledger.go",
         "search.go",
         "session.go",
         "snapshot.go",
@@ -50,6 +51,7 @@ go_test(
         "adkstore_test.go",
         "fork_test.go",
         "leak_test.go",
+        "ledger_test.go",
         "owner_test.go",
         "search_test.go",
         "session_test.go",

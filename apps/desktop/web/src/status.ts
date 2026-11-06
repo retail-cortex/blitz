@@ -19,8 +19,10 @@
 // of the page that know it: the workspace its settings and view, the
 // conversation its usage, the editor its cursor.
 import { useSyncExternalStore } from "react";
+import type { UsageGroup } from "./gen/blitz/v1/session_pb";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import { t } from "./i18n";
 
 /** Where the editor's cursor is, in the file shown. */
 export interface Cursor {
@@ -42,6 +44,8 @@ interface WorkspaceStatus {
   settings?: GetSettingsResponse;
   /** The session's usage so far. */
   total?: Usage;
+  /** The session's usage by model, costliest first (spec_056 CA-125). */
+  byModel?: UsageGroup[];
   /** The last turn's usage, a line ("" before one ends). */
   turn?: string;
   /** The context is compacted past threshold tokens (autoCompact). */
@@ -97,4 +101,35 @@ export function tokens(n: bigint | number): string {
 export function contextShare(lastPrompt: bigint | number, threshold?: number): number | undefined {
   if (!threshold || threshold <= 0 || !lastPrompt) return undefined;
   return Math.min(1, Number(lastPrompt) / threshold);
+}
+
+/** Dollars as the status bar shows them: four decimals below $1. */
+export function dollars(n: number): string {
+  return `$${n.toFixed(n < 1 ? 4 : 2)}`;
+}
+
+/**
+ * The session's cost: its priced calls', and how many had no price, whose
+ * cost alone is unknown (spec_056 CA-121).
+ */
+export function costText(u: Usage): string {
+  if (u.priced) return dollars(u.costUsd);
+  if (u.unpriced > 0 && u.unpriced < u.calls) return t("desktop.status.partly_priced", { cost: dollars(u.costUsd), count: u.unpriced });
+  return t("desktop.status.unpriced");
+}
+
+/** Each model's cost, for the cost's hover: nothing when one model did all of it. */
+export function costByModel(groups?: readonly UsageGroup[]): string[] {
+  if (!groups || groups.length < 2) return [];
+  return [
+    t("desktop.status.by_model"),
+    ...groups.map(({ name: model, usage }) => {
+      // A search's queries, and what was spent before the ledger, have no model.
+      const name = model === "search" || model === "before" ? t(`cost.purpose.${model}`) : model;
+      const calls = usage?.calls ?? 0;
+      if (!usage || (calls > 0 && usage.unpriced >= calls)) return t("desktop.status.model_unpriced", { name, calls });
+      if (calls === 0) return t("cost.row_search", { name, queries: usage.searchQueries, cost: dollars(usage.searchCostUsd) });
+      return t("desktop.status.model_cost", { name, cost: dollars(usage.costUsd + usage.searchCostUsd), calls });
+    }),
+  ];
 }
