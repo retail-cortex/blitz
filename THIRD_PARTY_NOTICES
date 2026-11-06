@@ -150,7 +150,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 MIT
   github.com/jackc/pgx/v5 v5.11.0                                MIT
   github.com/jackc/puddle/v2 v2.2.3                              MIT
-  github.com/klauspost/compress v1.18.6                          Apache-2.0
+  github.com/klauspost/compress v1.20.2                          Apache-2.0
   github.com/klauspost/cpuid/v2 v2.2.5                           MIT
   github.com/kylelemons/godebug v1.1.0                           Apache-2.0
   github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0   BSD-3-Clause
@@ -2485,7 +2485,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-github.com/klauspost/compress v1.18.6
+github.com/klauspost/compress v1.20.2
 -------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
