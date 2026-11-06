@@ -55,6 +55,29 @@ type ModelInfo struct {
 	Provider string // the configured provider
 }
 
+// ModelPreview is what moving a conversation to a model means before it
+// moves (spec_056_conversation_adapters CA-101).
+type ModelPreview struct {
+	// Model is the model reference ("" for the workspace's model).
+	Model string
+	// Tokens is about how much the next turn reads again: the
+	// conversation's context, on a model with none of it cached.
+	Tokens int64
+	// CostUSD is what reading Tokens costs, when Priced.
+	CostUSD float64
+	Priced  bool
+	// Compacts is set when the conversation is compacted first, to fit.
+	Compacts bool
+	// Unseen names the attachments the model can't see, which are
+	// described to it instead.
+	Unseen []string
+	// NoTools is set for a model that can't call tools: the agent only
+	// answers on it.
+	NoTools bool
+	// ActivePin is the active agent's pinned model, which it keeps.
+	ActivePin string
+}
+
 // PinResult describes an agent's model after PinModel or Unpin.
 type PinResult struct {
 	Agent string

@@ -381,7 +381,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
-		base := append([]runtime.ExecOption(nil), extra...)
+		// The conversation's own model first: a command's or a job's own
+		// (in extra) wins over it.
+		var base []runtime.ExecOption
+		if base, err = w.conversationModel(ctx, st, sessionID); err != nil {
+			return res, err
+		}
+		base = append(base, extra...)
 		base = append(base, runtime.WithBudget(budget))
 		if t.ReadOnly != "" {
 			base = append(base, runtime.WithReadOnly(t.ReadOnly))

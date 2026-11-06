@@ -50,6 +50,14 @@ service SessionService {
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
   // Sets the active session's title.
   rpc RenameSession(RenameSessionRequest) returns (RenameSessionResponse);
+  // Moves a conversation to a model from its next turn ("" back to the
+  // workspace's), compacting it first when it wouldn't fit, and says what
+  // the move means (spec_056_conversation_adapters CA-100, CA-101;
+  // BAD_MODEL_REF, SESSION_NOT_FOUND).
+  rpc SetSessionModel(SetSessionModelRequest) returns (SetSessionModelResponse);
+  // Says what moving a conversation to a model would mean, without moving
+  // it (CA-101).
+  rpc PreviewSessionModel(PreviewSessionModelRequest) returns (PreviewSessionModelResponse);
   // Deletes a saved session or snapshot, by ID (another workspace's too):
   // its transcript and history. The workspace's active session, or one a
   // background run uses, is refused (SESSION_OPEN); an unknown ID is
@@ -142,6 +150,9 @@ message SessionInfo {
   // What started it: "worker" (a worker's run), "background" (a detached
   // run, blitz --bg), or "" for a chat.
   string origin = 13;
+  // The conversation's own model (a model reference), "" when it runs on
+  // the workspace's (spec_056_conversation_adapters CA-100).
+  string model = 14;
 }
 
 // Message is one message in a transcript.
@@ -240,6 +251,51 @@ message RenameSessionRequest {
 // Response message for SessionService.RenameSession.
 message RenameSessionResponse {
   SessionInfo session = 1;
+}
+
+// What moving a conversation to a model means (spec_056 CA-101).
+message ModelPreview {
+  // The model reference ("" for the workspace's model).
+  string model = 1;
+  // About how many tokens the next turn reads again, with none cached.
+  int64 tokens = 2;
+  // What reading them costs, when priced.
+  double cost_usd = 3;
+  bool priced = 4;
+  // Whether the conversation is compacted first, to fit the model.
+  bool compacts = 5;
+  // The attachments the model can't see, described to it instead.
+  repeated string unseen = 6;
+  // Whether the model can't call tools (the agent only answers on it).
+  bool no_tools = 7;
+  // The active agent's pinned model, which it keeps.
+  string active_pin = 8;
+}
+
+// Request message for SessionService.SetSessionModel.
+message SetSessionModelRequest {
+  string workspace = 1;
+  string session_id = 2;
+  // A model reference ("provider/model" or a name); "" for the
+  // workspace's model.
+  string model = 3;
+}
+
+// Response message for SessionService.SetSessionModel.
+message SetSessionModelResponse {
+  ModelPreview preview = 1;
+}
+
+// Request message for SessionService.PreviewSessionModel.
+message PreviewSessionModelRequest {
+  string workspace = 1;
+  string session_id = 2;
+  string model = 3;
+}
+
+// Response message for SessionService.PreviewSessionModel.
+message PreviewSessionModelResponse {
+  ModelPreview preview = 1;
 }
 
 // Request message for SessionService.DeleteSession.

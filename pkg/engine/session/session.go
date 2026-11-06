@@ -87,6 +87,10 @@ type SessionRecord struct {
 	// Usage is the session's usage so far (calls, tokens, cost, the last
 	// prompt's size), kept after each model call so it survives a restart.
 	Usage *api.Usage `json:"usage,omitempty"`
+	// Model is the conversation's own model (a model reference, such as
+	// anthropic/claude-opus-5-5), set by /model; "" runs it on the
+	// workspace's (spec_056_conversation_adapters CA-100).
+	Model string `json:"model,omitempty"`
 	// Name labels a snapshot saved with /session save; "" otherwise.
 	Name string `json:"name,omitempty"`
 	// From is the session this one was copied from: the saved session for
@@ -588,6 +592,49 @@ func (s *Storage) SetUsage(id string, u api.Usage) error {
 		return err
 	}
 	rec.Usage = &u
+	return s.writeMeta(rec)
+}
+
+// Model returns session id's own model ("" when it has none).
+func (s *Storage) Model(id string) string {
+	if o := s.ownerOf(id); o != nil {
+		return o.Model(id)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.active != nil && s.active.ID == id {
+		return s.active.Model
+	}
+	if ValidateID(id) != nil {
+		return ""
+	}
+	rec, err := s.readMeta(id)
+	if err != nil {
+		return ""
+	}
+	return rec.Model
+}
+
+// SetModel saves session id's own model in its metadata ("" for the
+// workspace's).
+func (s *Storage) SetModel(id, ref string) error {
+	if err := ValidateID(id); err != nil {
+		return err
+	}
+	if o := s.ownerOf(id); o != nil {
+		return o.SetModel(id, ref)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active != nil && s.active.ID == id {
+		s.active.Model = ref
+		return s.writeMeta(s.active)
+	}
+	rec, err := s.readMeta(id)
+	if err != nil {
+		return err
+	}
+	rec.Model = ref
 	return s.writeMeta(rec)
 }
 

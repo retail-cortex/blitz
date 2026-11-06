@@ -81,12 +81,15 @@ type (
 
 // runState is carried in the context of one Execute call.
 type runState struct {
-	sessionID   string
-	maxTurns    int
-	turns       atomic.Int64
-	attachments []*genai.Part
-	planOnly    bool   // refuse tools that could change anything (see WithPlanOnly)
-	mode        string // names a read-only mode other than plan in refusals (see WithReadOnly)
+	// conversationModel is the conversation's own model, if it has one
+	// (WithConversationModel).
+	conversationModel model.LLM
+	sessionID         string
+	maxTurns          int
+	turns             atomic.Int64
+	attachments       []*genai.Part
+	planOnly          bool   // refuse tools that could change anything (see WithPlanOnly)
+	mode              string // names a read-only mode other than plan in refusals (see WithReadOnly)
 	// allowed limits the run to these tools (see WithAllowedTools); nil
 	// means no limit.
 	allowed map[string]bool
@@ -1155,7 +1158,7 @@ func (e *Engine) rebuildLocked() error {
 		}
 		e.active = "blitz"
 	}
-	t, err := e.buildTreeLocked(e.active, nil)
+	t, err := e.buildTreeLocked(e.active, runModel{})
 	if err != nil {
 		return err
 	}
@@ -1175,20 +1178,30 @@ type tree struct {
 // whose configured model is replaced by override (nil: none): the override
 // runs the root agent even when it is pinned, and every unpinned agent.
 // e.mu must be held.
-func (e *Engine) modelInTreeLocked(agentName, active string, override model.LLM) model.LLM {
-	if override != nil {
-		if _, pinned := e.agentModels[agentName]; agentName == active || !pinned {
-			return override
+func (e *Engine) modelInTreeLocked(agentName, active string, o runModel) model.LLM {
+	if o.llm != nil {
+		_, pinned := e.agentModels[agentName]
+		if !pinned || agentName == active && !o.pins {
+			return o.llm
 		}
 	}
 	return e.modelForLocked(agentName)
 }
 
+// runModel is the model a run uses in place of the configured one: a
+// run's own (WithModel), which its root agent runs on even if pinned, or
+// its conversation's (WithConversationModel), which every pinned agent
+// keeps its pin over (spec_056 CA-100). The zero value is none.
+type runModel struct {
+	llm  model.LLM
+	pins bool
+}
+
 // buildTreeLocked builds a runner whose root is active, with every other
-// agent as a sub-agent. override (nil: none) replaces the configured model
-// (see modelInTreeLocked). It changes nothing in e, so e.mu may be held
-// for reading only.
-func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error) {
+// agent as a sub-agent. override (the zero value: none) replaces the
+// configured model (see modelInTreeLocked). It changes nothing in e, so
+// e.mu may be held for reading only.
+func (e *Engine) buildTreeLocked(active string, override runModel) (tree, error) {
 	rootSpec, ok := e.agentReg.Get(active)
 	if !ok {
 		return tree{}, fmt.Errorf("agent '%s' not found", active)
@@ -1263,6 +1276,24 @@ func WithAgent(name string) ExecOption { return func(s *runState) { s.agent = na
 // every unpinned agent (e.g. a worker's model).
 func WithModel(llm model.LLM) ExecOption { return func(s *runState) { s.model = llm } }
 
+// WithConversationModel runs the prompt on its conversation's own model
+// (spec_056 CA-100): every agent without a pin runs on it, a pinned one on
+// its pin. A run's own model (WithModel) wins over it.
+func WithConversationModel(llm model.LLM) ExecOption {
+	return func(s *runState) { s.conversationModel = llm }
+}
+
+// runModelOf is the model st's run uses in place of the configured one.
+func (e *Engine) runModelOf(st *runState) runModel {
+	switch {
+	case st.model != nil:
+		return runModel{llm: withImages(st.model, e.media)}
+	case st.conversationModel != nil:
+		return runModel{llm: withImages(st.conversationModel, e.media), pins: true}
+	}
+	return runModel{}
+}
+
 // Execute runs a prompt within a session and streams ADK events to the handler.
 func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler EventHandler, opts ...ExecOption) error {
 	if sessionID == "" {
@@ -1329,18 +1360,14 @@ type pinner interface {
 func (e *Engine) runnerFor(st *runState) (*runner.Runner, string, string, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if st.agent == "" && st.model == nil {
+	if st.agent == "" && st.model == nil && st.conversationModel == nil {
 		if e.runner == nil {
 			return nil, "", "", fmt.Errorf("runner is not initialized")
 		}
 		return e.runner, e.active, e.modelForLocked(e.active).Name(), nil
 	}
 	active := cmp.Or(st.agent, e.active)
-	var override model.LLM
-	if st.model != nil {
-		override = withImages(st.model, e.media)
-	}
-	t, err := e.buildTreeLocked(active, override)
+	t, err := e.buildTreeLocked(active, e.runModelOf(st))
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -1454,8 +1481,8 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 
 	e.mu.RLock()
 	llm := e.modelForLocked(spec.Name)
-	if st := stateFrom(ctx); st != nil && st.model != nil { // a run with its own model
-		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.media))
+	if st := stateFrom(ctx); st != nil && (st.model != nil || st.conversationModel != nil) { // a run with its own model
+		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), e.runModelOf(st))
 	}
 	reg := e.toolReg
 	if r, ok := ctx.Value(isolatedToolsKey{}).(*tools.Registry); ok { // a task in its own worktree

@@ -148,6 +148,30 @@ func (h sessionService) RenameSession(ctx context.Context, r req[pb.RenameSessio
 	return ok(&pb.RenameSessionResponse{Session: sessionMsg(s)})
 }
 
+func (h sessionService) SetSessionModel(ctx context.Context, r req[pb.SetSessionModelRequest]) (*connect.Response[pb.SetSessionModelResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	p, err := w.SetSessionModel(ctx, r.Msg.SessionId, r.Msg.Model)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.SetSessionModelResponse{Preview: modelPreviewMsg(p)})
+}
+
+func (h sessionService) PreviewSessionModel(ctx context.Context, r req[pb.PreviewSessionModelRequest]) (*connect.Response[pb.PreviewSessionModelResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	p, err := w.PreviewModel(ctx, r.Msg.SessionId, r.Msg.Model)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.PreviewSessionModelResponse{Preview: modelPreviewMsg(p)})
+}
+
 func (h sessionService) DeleteSession(ctx context.Context, r req[pb.DeleteSessionRequest]) (*connect.Response[pb.DeleteSessionResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

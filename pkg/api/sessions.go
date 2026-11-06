@@ -39,7 +39,10 @@ type SessionInfo struct {
 	MovedAt   int
 	// Origin is what started the session: "worker" (a worker's run),
 	// "background" (blitz --bg), or "" for a chat.
-	Origin       string
+	Origin string
+	// Model is the conversation's own model, "" when it runs on the
+	// workspace's (spec_056 CA-100).
+	Model        string
 	MessageCount int
 	Created      time.Time
 	Updated      time.Time

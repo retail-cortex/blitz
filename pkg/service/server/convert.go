@@ -40,13 +40,20 @@ func timestamp(t time.Time) *timestamppb.Timestamp {
 func sessionMsg(s api.SessionInfo) *pb.SessionInfo {
 	out := &pb.SessionInfo{
 		Id: s.ID, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
-		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt), Origin: s.Origin,
+		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt), Origin: s.Origin, Model: s.Model,
 		MessageCount: int32(s.MessageCount), Created: timestamp(s.Created), Updated: timestamp(s.Updated),
 	}
 	for _, m := range s.Messages {
 		out.Messages = append(out.Messages, &pb.Message{Role: m.Role, Text: m.Text, Time: timestamp(m.Time), Kind: m.Kind})
 	}
 	return out
+}
+
+func modelPreviewMsg(p api.ModelPreview) *pb.ModelPreview {
+	return &pb.ModelPreview{
+		Model: p.Model, Tokens: p.Tokens, CostUsd: p.CostUSD, Priced: p.Priced,
+		Compacts: p.Compacts, Unseen: p.Unseen, NoTools: p.NoTools, ActivePin: p.ActivePin,
+	}
 }
 
 func sessionMsgs(list []api.SessionInfo) []*pb.SessionInfo {
