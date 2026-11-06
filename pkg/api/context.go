@@ -105,6 +105,25 @@ var ErrNothingToCompact = errors.New("nothing to compact yet")
 // call cut short is dropped, which looks like nothing happened.
 var ErrOutputLimit = errors.New("the model's reply hit its output limit (max_tokens) and was cut off: raise max_tokens for this model (Run settings › Generation, or max_tokens in [model_settings]) and ask again")
 
+// ErrRefused means the model declined the request: its words are the
+// turn's last reply (spec_056_conversation_adapters CA-31).
+var ErrRefused = errors.New("the model declined this request")
+
+// ErrBlocked means the provider's safety filters stopped the model's reply.
+var ErrBlocked = errors.New("the provider's safety filters stopped the model's reply")
+
+// ErrRecitation means the provider stopped the model's reply because it
+// repeated material it may not reproduce (Gemini's RECITATION).
+var ErrRecitation = errors.New("the provider stopped the model's reply because it repeated protected material: ask for it in other words")
+
+// ErrMalformedToolCall means the model wrote a tool call that couldn't be
+// read, again after being told so.
+var ErrMalformedToolCall = errors.New("the model wrote a tool call that couldn't be read, twice: ask again, or try another model")
+
+// ErrContextLength means the conversation is longer than the model takes,
+// even summarised (CA-111).
+var ErrContextLength = errors.New("the conversation is longer than the model can read, even summarised: start a new conversation, or switch to a model with a larger context window")
+
 // ErrNoSearch is returned by Registry.WebSearch when no search provider is
 // configured (web.search_provider), or it can't be used.
 var ErrNoSearch = errors.New("web search is not set up")

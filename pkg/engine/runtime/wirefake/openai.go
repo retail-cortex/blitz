@@ -27,7 +27,7 @@ import (
 // output item added and done, then the response completed.
 func OpenAI(t testing.TB) *Fake {
 	f := newFake(t, `/responses$`, checkResponses, answerResponses)
-	f.streamed = func(_ *http.Request, req map[string]any) bool { return req["stream"] == true }
+	f.isStream = func(_ *http.Request, req map[string]any) bool { return req["stream"] == true }
 	f.stream = streamResponses
 	return f
 }
@@ -56,6 +56,10 @@ func streamResponses(w io.Writer, answer any) {
 			}
 		}
 		send("response.output_item.done", map[string]any{"output_index": i, "item": item})
+	}
+	if str(resp["status"]) == "incomplete" {
+		send("response.incomplete", map[string]any{"response": resp})
+		return
 	}
 	send("response.completed", map[string]any{"response": resp})
 }
@@ -134,13 +138,20 @@ func answerResponses(f *Fake, req map[string]any, r Reply) any {
 			"content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}},
 		})
 	}
+	for _, x := range r.Extra {
+		out = append(out, x)
+	}
 	for _, c := range r.Calls {
 		args, _ := json.Marshal(orEmpty(c.Args))
 		out = append(out, map[string]any{"type": "function_call", "id": f.id("fc_"), "call_id": f.id("call_"), "name": c.Name, "arguments": string(args), "status": "completed"})
 	}
 	u := r.Usage.orDefault()
+	status, incomplete := "completed", any(nil)
+	if r.Finish != "" {
+		status, incomplete = "incomplete", map[string]any{"reason": r.Finish}
+	}
 	return map[string]any{
-		"id": f.id("resp_"), "object": "response", "created_at": 0, "status": "completed", "model": str(req["model"]),
+		"id": f.id("resp_"), "object": "response", "created_at": 0, "status": status, "incomplete_details": incomplete, "model": str(req["model"]),
 		"output": out,
 		"usage": map[string]any{
 			"input_tokens": u.Input, "input_tokens_details": map[string]any{"cached_tokens": u.Cached},

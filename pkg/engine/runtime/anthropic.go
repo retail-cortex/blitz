@@ -635,6 +635,7 @@ func genaiSchemaToJSON(s *genai.Schema) map[string]any {
 // messageToResponse converts a Messages API response to an ADK response.
 func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	content := &genai.Content{Role: genai.RoleModel}
+	var unshown []map[string]any
 	for i, block := range msg.Content {
 		switch b := block.AsAny().(type) {
 		case anthropic.BetaTextBlock:
@@ -659,6 +660,12 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 				continue
 			}
 			content.Parts = append(content.Parts, &genai.Part{FunctionCall: &genai.FunctionCall{ID: b.ID, Name: b.Name, Args: args}})
+		default:
+			// A server tool's call or result, or a block Blitz has no form
+			// for: kept with the answer and noted (spec_056 CA-30).
+			var raw map[string]any
+			_ = json.Unmarshal([]byte(block.RawJSON()), &raw)
+			unshown = append(unshown, map[string]any{"type": string(block.Type), "raw": raw})
 		}
 	}
 
@@ -685,6 +692,7 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	u := msg.Usage
 	prompt := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
 	resp.CustomMetadata = map[string]any{CacheWriteTokensKey: u.CacheCreationInputTokens}
+	attachUnshown(resp, unshown)
 	resp.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
 		PromptTokenCount:        int32(prompt),
 		CachedContentTokenCount: int32(u.CacheReadInputTokens),

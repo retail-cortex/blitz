@@ -820,6 +820,7 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 		return nil, nil
 	}
 	e.noteFallback(ctx, resp)
+	e.noteUnshown(ctx, resp)
 	if resp.UsageMetadata == nil && resp.Content == nil {
 		return nil, nil // not an answer (nothing to count)
 	}
@@ -1300,7 +1301,28 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		defer p.Pin(sessionID)() // its events go to the session the runner loaded
 	}
 	before := e.Usage(sessionID)
-	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
+	answered := false
+	seen := func(ev *session.Event) error {
+		if ev != nil && ev.Author != "user" && ev.Content != nil {
+			answered = true
+		}
+		if handler == nil {
+			return nil
+		}
+		return handler(ev)
+	}
+	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), seen)
+	if errors.Is(err, api.ErrContextLength) && !answered && ctx.Err() == nil {
+		// Longer than the model reads: summarised to fit, without asking
+		// (the owner's decision), and the same model tried once more
+		// (spec_056 CA-111). The turn's prompt is in the session already.
+		if _, cerr := e.Compact(ctx, sessionID, "", 1); cerr == nil {
+			if notice := e.noticeTo(ctx); notice != nil {
+				notice(i18n.T("model.context_summarised", "model", modelName))
+			}
+			err = drain(r.Run(withCompactedRetry(ctx), "user", sessionID, nil, rc), seen)
+		}
+	}
 	after := e.usage.Session(sessionID)
 	span.SetAttributes(
 		attribute.Int64("model_calls", int64(after.Calls-before.Calls)),
@@ -1413,7 +1435,7 @@ func (e *Engine) recordTurn(ctx context.Context, sessionID string, span trace.Sp
 // or the tool call it was writing, was cut off, and without a word the
 // turn would seem to have done nothing.
 func drain(events func(yield func(*session.Event, error) bool), handler EventHandler) error {
-	cut := false
+	var ended error // why the last model reply ended badly (spec_056 CA-31)
 	for ev, err := range events {
 		if err != nil {
 			if errors.Is(err, api.ErrMaxTurns) {
@@ -1424,7 +1446,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 		if ev != nil && !ev.Partial && ev.Author != "user" {
 			// The last model reply decides: a tool's result after a cut-off
 			// one (the call was whole) clears it.
-			cut = ev.FinishReason == genai.FinishReasonMaxTokens
+			ended = finishError(&ev.LLMResponse)
 		}
 		if handler != nil && ev != nil {
 			if hErr := handler(ev); hErr != nil {
@@ -1432,10 +1454,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 			}
 		}
 	}
-	if cut {
-		return api.ErrOutputLimit
-	}
-	return nil
+	return ended
 }
 
 // InvokeSubagent runs a single registered agent on prompt in a fresh, isolated

@@ -183,7 +183,7 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 	}
 	// The settings' max_tokens is applied first, then capped at what the
 	// model turns out to allow (outputcap.go).
-	sm := &settingsModel{inner: capOutput(m), provider: providerOf(m), configured: provider}
+	sm := &settingsModel{inner: capOutput(&streamingModel{inner: m}), provider: providerOf(m), configured: provider}
 	return sm, nil
 }
 
@@ -524,7 +524,7 @@ func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...o
 	m, err := openaimodel.NewModel(ctx, name, &openaimodel.ClientConfig{
 		APIKey:  apiKey,
 		BaseURL: baseURL,
-		Options: append([]option.RequestOption{option.WithMiddleware(openAIImageMiddleware)}, opts...),
+		Options: append([]option.RequestOption{option.WithMiddleware(openAIImageMiddleware, openAIOutputMiddleware)}, opts...),
 	})
 	if err != nil {
 		return nil, err
@@ -537,11 +537,6 @@ type toolCallParsingModel struct {
 	// provider and key, when set, let a failed call say what the provider
 	// said (providerError), with the key masked.
 	provider, key string
-	// streams passes a streaming call's partial replies on, parsing only
-	// the whole one: for a gateway whose models make real function calls
-	// (the api and enterprise providers), so its reply shows as it's
-	// written.
-	streams bool
 }
 
 func (m *toolCallParsingModel) Name() string {
@@ -550,10 +545,13 @@ func (m *toolCallParsingModel) Name() string {
 
 func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
-		// Text-encoded tool calls can only be recognised in complete responses,
-		// so this wrapper streams only when told to, parsing the whole reply.
+		// A streamed reply's text goes on as it's written; text-encoded tool
+		// calls can only be recognised in the whole reply, which is parsed
+		// (spec_056 CA-50). What the adapter can't read is taken out of the
+		// reply on its way in and kept with the answer (CA-30).
 		ctx, req := replaceImagesWithMarkers(ctx, req)
-		for resp, err := range m.inner.GenerateContent(ctx, req, stream && m.streams) {
+		ctx, unshown := withUnshown(ctx)
+		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			if err != nil {
 				if !yield(nil, providerError(err, m.provider, m.inner.Name(), m.key)) {
 					return
@@ -562,6 +560,9 @@ func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.L
 			}
 			if resp != nil && resp.Content != nil && !resp.Partial {
 				parseTextToolCalls(resp.Content, offeredTools(req))
+			}
+			if resp != nil && !resp.Partial {
+				attachUnshown(resp, unshown.take())
 			}
 			if !yield(resp, nil) {
 				return

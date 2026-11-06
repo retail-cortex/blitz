@@ -30,7 +30,7 @@ import (
 // deltas, stopped, then the message's stop reason and usage.
 func Anthropic(t testing.TB) *Fake {
 	f := newFake(t, `/v1/messages$`, checkMessages, answerMessages)
-	f.streamed = func(_ *http.Request, req map[string]any) bool { return req["stream"] == true }
+	f.isStream = func(_ *http.Request, req map[string]any) bool { return req["stream"] == true }
 	f.stream = streamMessages
 	return f
 }
@@ -58,9 +58,13 @@ func streamMessages(w io.Writer, answer any) {
 			empty = map[string]any{"type": "tool_use", "id": block["id"], "name": block["name"], "input": map[string]any{}}
 			in, _ := json.Marshal(block["input"])
 			delta = map[string]any{"type": "input_json_delta", "partial_json": string(in)}
+		default: // a block that comes whole, such as a server tool's
+			empty = block
 		}
 		event(w, "content_block_start", map[string]any{"type": "content_block_start", "index": i, "content_block": empty})
-		event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": delta})
+		if delta != nil {
+			event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": delta})
+		}
 		if str(block["type"]) == "thinking" {
 			event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": map[string]any{"type": "signature_delta", "signature": block["signature"]}})
 		}
@@ -214,10 +218,16 @@ func answerMessages(f *Fake, req map[string]any, r Reply) any {
 	if r.Text != "" {
 		content = append(content, map[string]any{"type": "text", "text": r.Text})
 	}
+	for _, x := range r.Extra {
+		content = append(content, x)
+	}
 	stop := "end_turn"
 	for _, c := range r.Calls {
 		content = append(content, map[string]any{"type": "tool_use", "id": f.id("toolu_"), "name": c.Name, "input": orEmpty(c.Args)})
 		stop = "tool_use"
+	}
+	if r.Finish != "" {
+		stop = r.Finish
 	}
 	u := r.Usage.orDefault()
 	return map[string]any{

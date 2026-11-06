@@ -29,7 +29,7 @@ import (
 // client at it with GOOGLE_GEMINI_BASE_URL.
 func Gemini(t testing.TB) *Fake {
 	f := newFake(t, `^/v1beta/models/[^/:]+:(generate|streamGenerate)Content$`, checkGemini, answerGemini)
-	f.streamed = func(r *http.Request, _ map[string]any) bool {
+	f.isStream = func(r *http.Request, _ map[string]any) bool {
 		return strings.HasSuffix(r.URL.Path, ":streamGenerateContent")
 	}
 	f.stream = func(w io.Writer, answer any) { event(w, "", answer) }
@@ -148,11 +148,15 @@ func answerGemini(f *Fake, _ map[string]any, r Reply) any {
 		parts = append(parts, p)
 	}
 	parts = append(parts, calls...)
+	finish := "STOP"
+	if r.Finish != "" {
+		finish = r.Finish
+	}
 	u := r.Usage.orDefault()
 	return map[string]any{
 		"candidates": []any{map[string]any{
 			"content":      map[string]any{"role": "model", "parts": parts},
-			"finishReason": "STOP", "index": 0,
+			"finishReason": finish, "index": 0,
 		}},
 		"usageMetadata": map[string]any{
 			"promptTokenCount": u.Input, "cachedContentTokenCount": u.Cached,

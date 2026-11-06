@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
 	"google.golang.org/adk/v2/model"
 )
@@ -123,6 +124,10 @@ func (f *fallbackModel) try(ctx context.Context, i int, m model.LLM, req *model.
 				f.health[i].Abandon() // no verdict on the model
 			case produced: // too late to switch: part of the answer is out
 				f.health[i].Failure()
+			case errors.Is(err, api.ErrContextLength) && !compactedRetry(ctx):
+				// Summarised to fit first, then tried again on this model
+				// (spec_056 CA-111); the model isn't failing.
+				f.health[i].Abandon()
 			default:
 				f.health[i].Failure()
 				slog.WarnContext(ctx, "model failed; trying the next fallback", "model", m.Name(), "error", err)
