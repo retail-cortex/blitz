@@ -116,6 +116,11 @@ type Backend interface {
 	SetAgent(ctx context.Context, name string) (AgentInfo, error)
 	Model() ModelInfo
 	SetModel(ctx context.Context, ref string) (string, error)
+	// SetSessionModel moves conversation id to ref from its next turn (""
+	// back to the workspace's model), and PreviewSessionModel says what
+	// that would mean without moving it (spec_056 CA-100, CA-101).
+	SetSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
+	PreviewSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
 	PinModel(ctx context.Context, agent, ref string) (PinResult, error)
 	Unpin(ctx context.Context, agent string) (PinResult, error)
 	AllModelSettings() map[string]config.ModelSettings

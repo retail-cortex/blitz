@@ -375,15 +375,16 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
 
 ## 15. The service, the CLI and the desktop
 
-- **CA-130** **The service.** `SessionService` gains:
-  - `SetModel(session, ref)`;
-  - `PreviewModel(session, ref)` (CA-101);
+- **CA-130** **The service.** *Built 2026-11-05.* `SessionService` gains:
+  - `SetSessionModel(workspace, session_id, model)`: moves the conversation, compacting it first when it wouldn't fit (`SESSION_NOT_FOUND`, `BAD_MODEL_REF`);
+  - `PreviewSessionModel(workspace, session_id, model)` (CA-101);
+  - `SessionInfo.model`: the conversation's own model, "" for the workspace's;
   - `GetUsage` by model (CA-125).
   
-  `WorkspaceService.SetModel` keeps setting the workspace's default for new conversations (WS-40). The fields are added, never renumbered (`buf breaking`).
-- **CA-131** **The CLI.**
-  - `/model <ref>` switches this conversation with CA-101's notice; `/model <ref> --new` starts a new one.
-  - `/model` alone shows the conversation's model, the workspace's default, the active agent's pin, and the record's main facts: context, input kinds, tools, reasoning, streaming, price.
+  `WorkspaceService.SetModel` keeps setting the workspace's default for new conversations (WS-40). The fields are added, never renumbered (`buf breaking`). The conversation's model is kept in the session's metadata (`SessionRecord.Model`), copied by forks and snapshots, and runs its turns (`runtime.WithConversationModel`; a command's or job's own model, `WithModel`, wins over it).
+- **CA-131** **The CLI.** *Built 2026-11-05.*
+  - `/model <ref>` switches the open conversation with CA-101's notice ("From the next turn, <model> reads this conversation again: about N tokens, $X."); with no conversation open, it sets the workspace's model, which the next one starts on. `/model <ref> --new` sets the workspace's model and starts a new conversation on it.
+  - `/model` alone shows the conversation's model and the workspace's default (and, once CA-10 is in, the record's main facts: context, input kinds, tools, reasoning, streaming, price).
   - The notices are translated (the owner's decision 2026-11-05: CLI output is translated).
 - **CA-132** **The desktop's status bar** (DSK-39) lists models under **Model**: models with settings of their own first, then the provider's chat models from their records (never embedding, image-only or speech models).
   - In a conversation with history, choosing one offers **New chat with <model>** first and **Switch this conversation** second, with CA-101's preview.

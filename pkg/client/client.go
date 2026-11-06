@@ -379,6 +379,26 @@ func (r *Remote) SetModel(ctx context.Context, ref string) (string, error) {
 	return res.Msg.ActivePin, nil
 }
 
+// SetSessionModel moves conversation id to ref from its next turn
+// (SessionService.SetSessionModel).
+func (r *Remote) SetSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+	res, err := r.sessions.SetSessionModel(ctx, connect.NewRequest(&pb.SetSessionModelRequest{Workspace: r.dir, SessionId: id, Model: ref}))
+	if err != nil {
+		return api.ModelPreview{}, fromAPI(err)
+	}
+	return modelPreview(res.Msg.Preview), nil
+}
+
+// PreviewSessionModel says what moving conversation id to ref would mean
+// (SessionService.PreviewSessionModel).
+func (r *Remote) PreviewSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+	res, err := r.sessions.PreviewSessionModel(ctx, connect.NewRequest(&pb.PreviewSessionModelRequest{Workspace: r.dir, SessionId: id, Model: ref}))
+	if err != nil {
+		return api.ModelPreview{}, fromAPI(err)
+	}
+	return modelPreview(res.Msg.Preview), nil
+}
+
 // PinModel runs agent on the model ref from now on, and saves the pin in
 // the configuration (WorkspaceService.PinModel).
 func (r *Remote) PinModel(ctx context.Context, agent, ref string) (api.PinResult, error) {

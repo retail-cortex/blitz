@@ -241,6 +241,34 @@ func newTestApp(t *testing.T, factory modelFactory) *App {
 	return app
 }
 
+// With a conversation open, /model moves it, not the workspace, and says
+// what the move costs; /model --new starts a new conversation on the
+// model (spec_056 CA-100, CA-131).
+func TestModelMovesTheConversation(t *testing.T) {
+	app := newTestApp(t, func(_ context.Context, _ *config.Config, name string) (model.LLM, error) {
+		return runtime.NewMockLLM(name), nil
+	})
+	first, err := app.Workspace.NewSession()
+	require.NoError(t, err)
+
+	out := runCmd(t, app, "/model mock-b")
+	assert.Contains(t, out, "From the next turn, mock-b reads this conversation again")
+	cur, ok := app.Workspace.ActiveSession()
+	require.True(t, ok)
+	assert.Equal(t, first.ID, cur.ID)
+	assert.Equal(t, "mock-b", cur.Model)
+	assert.Equal(t, "mock-a", local(app).Engine().ModelName(), "the workspace's model is unchanged")
+	assert.Contains(t, runCmd(t, app, "/model"), "This conversation's model: ")
+
+	out = runCmd(t, app, "/model mock-c --new")
+	assert.Contains(t, out, "Started a new conversation on")
+	cur, ok = app.Workspace.ActiveSession()
+	require.True(t, ok)
+	assert.NotEqual(t, first.ID, cur.ID)
+	assert.Empty(t, cur.Model, "a new conversation runs on the workspace's model")
+	assert.Equal(t, "mock-c", local(app).Engine().ModelName())
+}
+
 func TestHandleCommandModel(t *testing.T) {
 	ctx := context.Background()
 	app := newTestApp(t, func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error) {

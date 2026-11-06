@@ -158,13 +158,23 @@ func timeOf(t *timestamppb.Timestamp) time.Time {
 	return t.AsTime()
 }
 
+func modelPreview(p *pb.ModelPreview) api.ModelPreview {
+	if p == nil {
+		return api.ModelPreview{}
+	}
+	return api.ModelPreview{
+		Model: p.Model, Tokens: p.Tokens, CostUSD: p.CostUsd, Priced: p.Priced,
+		Compacts: p.Compacts, Unseen: p.Unseen, NoTools: p.NoTools, ActivePin: p.ActivePin,
+	}
+}
+
 func session(s *pb.SessionInfo) api.SessionInfo {
 	if s == nil {
 		return api.SessionInfo{}
 	}
 	out := api.SessionInfo{
 		ID: s.Id, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
-		MovedFrom: s.MovedFrom, MovedAt: int(s.MovedAt), Origin: s.Origin,
+		MovedFrom: s.MovedFrom, MovedAt: int(s.MovedAt), Origin: s.Origin, Model: s.Model,
 		MessageCount: int(s.MessageCount), Created: timeOf(s.Created), Updated: timeOf(s.Updated),
 	}
 	for _, m := range s.Messages {
