@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.3](blitz-0.9.3.md): what you see in the terminal is what the model did: with Gemini the CLI showed every tool call twice, so files looked like they were read twice; each call shows once now.
 - [Blitz 0.9.2](blitz-0.9.2.md): change models mid-conversation and keep going: each conversation has its own model and says what a switch costs, Gemini, Claude and OpenAI pick up each other's conversations, fallbacks really fall back, models search with their own tools and list their sources, pictures they make show in the chat, costs come by model, and Blitz learns what each model can do.
 - [Blitz 0.9.1](blitz-0.9.1.md): safer by default and steadier under load: every file checked against its spec and docs, so limits say how to keep going, misspelt settings show up, the sandbox and guardrails hold in the corner cases, organizations' locked items stay locked, and language servers work in monorepos.
 - [Blitz 0.9.0](blitz-0.9.0.md): Blitz for your whole organization: sign in the way your company does, its models and catalog, shared workspaces kept in step, jobs that run on the service, its branding everywhere, and work that carries on when the service is down; HTML files open in a browser.
