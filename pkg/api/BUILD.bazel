@@ -24,6 +24,7 @@ go_library(
         "doc.go",
         "evals.go",
         "extensions.go",
+        "ledger.go",
         "models.go",
         "permissions.go",
         "search.go",
@@ -47,6 +48,7 @@ go_test(
     size = "small",
     srcs = [
         "api_test.go",
+        "ledger_test.go",
         "suggestions_test.go",
         "version_test.go",
     ],

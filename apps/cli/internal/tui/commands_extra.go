@@ -178,15 +178,64 @@ func cmdCost(app *App) {
 	fmt.Printf("  %s\n", i18n.T("cost.calls", "count", u.Calls))
 	fmt.Printf("  %s\n", i18n.T("cost.input", "input", humanTokens(u.Input), "cached", humanTokens(u.Cached), "written", humanTokens(u.CacheWrite)))
 	fmt.Printf("  %s\n", i18n.T("cost.output", "output", humanTokens(u.Output)))
-	if u.Priced {
+	switch {
+	case u.Priced:
 		fmt.Printf("  %s\n", i18n.T("cost.estimate", "cost", fmt.Sprintf("$%.4f", u.CostUSD)))
-	} else {
+	case u.Unpriced > 0 && u.Unpriced < u.Calls:
+		// Only the calls with no price are unknown (spec_056 CA-121).
+		fmt.Printf("  %s\n", i18n.T("cost.partial", "cost", fmt.Sprintf("$%.4f", u.CostUSD), "count", u.Unpriced))
+	default:
 		fmt.Printf("  %s\n", i18n.T("cost.unknown", "model", strconv.Quote(app.Workspace.Model().Name)))
 	}
 	if u.SearchQueries > 0 { // billed apart from the tokens (BL-WEB-01)
 		fmt.Printf("  %s\n", i18n.T("cost.search", "queries", u.SearchQueries, "cost", fmt.Sprintf("$%.4f", u.SearchCostUSD)))
 	}
+	if _, totals, err := app.Workspace.SessionLedger(); err == nil {
+		for _, line := range CostBreakdown(totals) {
+			fmt.Println(line)
+		}
+	}
 	fmt.Println()
+}
+
+// CostBreakdown is a session's usage by model, and by purpose when it had
+// more than one (spec_056 CA-125): nothing for a single model's turns.
+func CostBreakdown(t api.Totals) []string {
+	var out []string
+	group := func(title string, gs []api.Group, name func(string) string) {
+		out = append(out, "  "+i18n.T(title))
+		for _, g := range gs {
+			out = append(out, "    "+costRow(name(g.Name), g.Usage))
+		}
+	}
+	if len(t.ByModel) > 1 {
+		group("cost.by_model", t.ByModel, func(n string) string {
+			switch n {
+			case "unknown":
+				return i18n.T("cost.model_unknown")
+			case api.PurposeSearch, api.PurposeBefore: // no model: what they were
+				return i18n.T("cost.purpose." + n)
+			}
+			return n
+		})
+	}
+	if len(t.ByPurpose) > 1 {
+		group("cost.by_purpose", t.ByPurpose, func(n string) string { return i18n.T("cost.purpose." + n) })
+	}
+	return out
+}
+
+// costRow is one model's or purpose's calls and cost.
+func costRow(name string, u api.Usage) string {
+	cost := u.CostUSD + u.SearchCostUSD
+	switch {
+	case u.Calls == 0:
+		return i18n.T("cost.row_search", "name", name, "queries", u.SearchQueries, "cost", fmt.Sprintf("$%.4f", cost))
+	case u.Unpriced >= u.Calls:
+		return i18n.T("cost.row_unpriced", "name", name, "calls", u.Calls)
+	default:
+		return i18n.T("cost.row", "name", name, "calls", u.Calls, "cost", fmt.Sprintf("$%.4f", cost))
+	}
 }
 
 func cmdContext(app *App) {

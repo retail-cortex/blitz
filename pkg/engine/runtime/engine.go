@@ -210,7 +210,15 @@ type UsageStore interface {
 	SetUsage(sessionID string, u api.Usage) error
 }
 
-// WithUsageStore keeps sessions' usage in s.
+// LedgerStore is a UsageStore that also keeps each session's ledger: its
+// calls one by one (spec_056_conversation_adapters CA-120).
+type LedgerStore interface {
+	AppendCall(sessionID string, c api.Call) error
+	Calls(sessionID string) ([]api.Call, error)
+}
+
+// WithUsageStore keeps sessions' usage in s (and their ledgers, when s is
+// a LedgerStore too).
 func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore = s } }
 
 // WithProjectTrusted says whether the workspace's project settings are
@@ -365,6 +373,9 @@ func NewEngine(
 		active:    cfg.Blitz.DefaultAgent,
 		settings:  map[string]config.ModelSettings{},
 		tasks:     newTaskManager(),
+	}
+	if cfg.Enterprise.URL != "" {
+		e.usage.SetCatalogPrices(catalogPrices(cfg))
 	}
 	// Sorted, so that when "gpt-5" and "openai/gpt-5" are both written the
 	// bare name wins every time.
@@ -563,7 +574,7 @@ func (e *Engine) restoreUsage(sessionID string) {
 // sessionID's usage, and saves it (BL-WEB-01).
 func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int, costUSD float64) {
 	e.restoreUsage(sessionID)
-	e.usage.RecordSearch(sessionID, queries, costUSD)
+	e.keepCall(ctx, sessionID, e.usage.RecordSearch(sessionID, queries, costUSD))
 	e.saveUsage(ctx, sessionID)
 }
 
@@ -572,8 +583,56 @@ func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int
 // A provider that reports no usage leaves the cost unknown.
 func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usage *genai.GenerateContentResponseUsageMetadata) {
 	e.restoreUsage(sessionID)
-	e.usage.RecordSpeech(ctx, sessionID, settingsName(model), usage)
+	e.keepCall(ctx, sessionID, e.usage.RecordSpeech(ctx, sessionID, settingsName(model), usage))
 	e.saveUsage(ctx, sessionID)
+}
+
+// charge records a model call in its session's totals and ledger, and
+// saves the totals.
+func (e *Engine) charge(ctx context.Context, c Charge) {
+	e.restoreUsage(c.Session)
+	e.keepCall(ctx, c.Session, e.usage.Charge(ctx, c))
+	e.saveUsage(ctx, c.Session)
+}
+
+// keepCall adds c to sessionID's ledger, when the store keeps ledgers.
+func (e *Engine) keepCall(ctx context.Context, sessionID string, c api.Call) {
+	ls, ok := e.usageStore.(LedgerStore)
+	if !ok {
+		return
+	}
+	if err := ls.AppendCall(sessionID, c); err != nil {
+		slog.WarnContext(ctx, "could not keep the call in the session's ledger", "session", sessionID, "error", err)
+	}
+}
+
+// HasPrice reports whether model ("provider/" prefix optional) has a
+// price, so its calls count toward cost limits.
+func (e *Engine) HasPrice(model string) bool {
+	return e.usage.HasPrice(settingsName(model))
+}
+
+// UnpricedModels are the models sessionID called that have no price.
+func (e *Engine) UnpricedModels(sessionID string) []string {
+	return e.usage.UnpricedModels(sessionID)
+}
+
+// Ledger is sessionID's calls, oldest first, with what was spent before
+// its ledger was kept as one call at the head (spec_056 CA-126), and their
+// totals by model and purpose (CA-121).
+func (e *Engine) Ledger(sessionID string) ([]api.Call, api.Totals, error) {
+	total := e.Usage(sessionID)
+	var calls []api.Call
+	if ls, ok := e.usageStore.(LedgerStore); ok {
+		var err error
+		if calls, err = ls.Calls(sessionID); err != nil {
+			return nil, api.Totals{}, err
+		}
+	}
+	if before, ok := api.Before(total, calls); ok {
+		calls = append([]api.Call{before}, calls...)
+	}
+	return calls, api.Sum(calls), nil
 }
 
 // EstimateCostUSD is what a model call outside a session cost (an eval's
@@ -877,14 +936,18 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	case float64:
 		writes = int64(v)
 	}
-	e.restoreUsage(id)
-	e.usage.RecordCall(ctx, id, served, resp.UsageMetadata, writes)
-	if st := stateFrom(ctx); st != nil && st.taskID != "" {
-		e.usage.RecordWrites(st.taskID, served, resp.UsageMetadata, writes) // counted once in the metrics
+	o, _ := originOf(resp)
+	c := Charge{Session: id, Purpose: api.PurposeTurn, Model: served, Origin: o, Usage: resp.UsageMetadata, CacheWrites: writes}
+	st := stateFrom(ctx)
+	if st != nil && st.taskID != "" {
+		c.Task, c.Purpose = st.taskID, api.PurposeTask // its cost cap counts its own
 	}
-	if st := stateFrom(ctx); st != nil {
-		e.saveUsage(ctx, id)
+	if st == nil {
+		e.restoreUsage(id)
+		e.usage.Charge(ctx, c) // no session to keep it in
+		return nil, nil
 	}
+	e.charge(ctx, c)
 	return nil, nil
 }
 

@@ -287,6 +287,19 @@ func (h sessionService) GetUsage(ctx context.Context, r req[pb.GetUsageRequest])
 	if err != nil {
 		return nil, err
 	}
+	if id := r.Msg.SessionId; id != "" {
+		calls, totals, err := w.SessionLedgerOf(id)
+		if err != nil {
+			return nil, toAPI(err)
+		}
+		res := &pb.GetUsageResponse{Usage: usageMsg(totals.All), ByModel: usageGroupsMsg(totals.ByModel), ByPurpose: usageGroupsMsg(totals.ByPurpose)}
+		if r.Msg.Calls {
+			for _, c := range calls {
+				res.Calls = append(res.Calls, usageCallMsg(c))
+			}
+		}
+		return ok(res)
+	}
 	u, err := w.SessionUsage()
 	if err != nil {
 		return nil, toAPI(err)
@@ -298,6 +311,16 @@ func (h sessionService) GetUsage(ctx context.Context, r req[pb.GetUsageRequest])
 	res := &pb.GetUsageResponse{Usage: usageMsg(u), AutoCompact: c.AutoCompact, Threshold: int32(c.Threshold), Keep: int32(c.Keep)}
 	for _, p := range c.Parts {
 		res.Parts = append(res.Parts, &pb.ContextPart{Name: p.Name, Tokens: p.Tokens})
+	}
+	calls, totals, err := w.SessionLedger()
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	res.ByModel, res.ByPurpose = usageGroupsMsg(totals.ByModel), usageGroupsMsg(totals.ByPurpose)
+	if r.Msg.Calls {
+		for _, c := range calls {
+			res.Calls = append(res.Calls, usageCallMsg(c))
+		}
 	}
 	return ok(res)
 }

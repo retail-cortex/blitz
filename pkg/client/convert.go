@@ -211,7 +211,27 @@ func usage(u *pb.Usage) api.Usage {
 		Calls: int(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUSD: u.CostUsd, Priced: u.Priced,
 		SearchQueries: int(u.SearchQueries), SearchCostUSD: u.SearchCostUsd,
+		Reasoning: u.Reasoning, Unpriced: int(u.Unpriced),
 	}
+}
+
+func usageGroups(gs []*pb.UsageGroup) []api.Group {
+	out := make([]api.Group, len(gs))
+	for i, g := range gs {
+		out[i] = api.Group{Name: g.Name, Usage: usage(g.Usage)}
+	}
+	return out
+}
+
+func usageCall(c *pb.UsageCall) api.Call {
+	out := api.Call{API: c.Api, Provider: c.Provider, Model: c.Model, Purpose: c.Purpose, Task: c.Task, Usage: usage(c.Usage)}
+	if c.Time != nil {
+		out.Time = c.Time.AsTime()
+	}
+	if p := c.Price; p != nil {
+		out.Price = &api.Price{Input: p.Input, CachedInput: p.CachedInput, CacheWrite: p.CacheWrite, Output: p.Output}
+	}
+	return out
 }
 
 func modelSettings(s *pb.ModelSettings) config.ModelSettings {

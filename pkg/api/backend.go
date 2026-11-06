@@ -149,6 +149,9 @@ type Backend interface {
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)
+	// SessionLedger is the active session's calls, oldest first, and their
+	// totals by model and purpose (spec_056 CA-120, CA-121).
+	SessionLedger() ([]Call, Totals, error)
 	// Context is how full the context is, with its breakdown by category
 	// when parts is set (which reads the session).
 	Context(parts bool) (ContextInfo, error)

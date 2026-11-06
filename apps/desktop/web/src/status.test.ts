@@ -15,8 +15,38 @@
  */
 
 
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { contextShare, forgetStatus, publishStatus, statusOf, tokens } from "./status";
+import { UsageGroupSchema } from "./gen/blitz/v1/session_pb";
+import { UsageSchema } from "./gen/blitz/v1/turn_pb";
+import { contextShare, costByModel, costText, dollars, forgetStatus, publishStatus, statusOf, tokens } from "./status";
+
+// The session's cost: a call with no price makes only its own cost unknown
+// (spec_056 CA-121), and the hover breaks it down by model (CA-125).
+describe("cost", () => {
+  it.each([
+    ["all priced", { calls: 3, costUsd: 0.0123, priced: true }, "$0.0123"],
+    ["dollars and up", { calls: 3, costUsd: 12.5, priced: true }, "$12.50"],
+    ["some calls with no price", { calls: 5, costUsd: 0.0123, unpriced: 2 }, "$0.0123 + 2 not priced"],
+    ["no call priced", { calls: 2, unpriced: 2 }, "not priced"],
+    ["a session from before the ledger", { calls: 2, costUsd: 0.5 }, "not priced"],
+  ] as const)("%s", (_, u, want) => {
+    expect(costText(create(UsageSchema, u))).toBe(want);
+  });
+
+  it("is broken down by model when more than one answered", () => {
+    const group = (name: string, u: Parameters<typeof create<typeof UsageSchema>>[1]) => create(UsageGroupSchema, { name, usage: create(UsageSchema, u) });
+    expect(costByModel([group("gemini-3-pro", { calls: 4, costUsd: 0.2 })])).toEqual([]);
+    expect(costByModel(undefined)).toEqual([]);
+    expect(costByModel([group("claude-opus-5-5", { calls: 2, costUsd: 1.5, priced: true }), group("search", { calls: 0, searchQueries: 2, searchCostUsd: 0.07 }), group("llama-local", { calls: 3, unpriced: 3 })])).toEqual([
+      "By model:",
+      "claude-opus-5-5: $1.50 (2 calls)",
+      "web searches: 2 queries, $0.0700",
+      "llama-local: not priced (3 calls)",
+    ]);
+    expect(dollars(0.5)).toBe("$0.5000");
+  });
+});
 
 describe("tokens", () => {
   it.each([

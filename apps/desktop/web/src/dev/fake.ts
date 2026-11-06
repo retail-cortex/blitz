@@ -25,7 +25,7 @@ import { setTransport } from "../api";
 import { parseMessages } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
 import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
-import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
+import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, UsageGroupSchema, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
@@ -1725,7 +1725,7 @@ export function installFake() {
           state(workspace).pending.get(requestId)?.(answer);
           return {};
         },
-        getUsage: ({ workspace }) => ({ usage: state(workspace).usage }),
+        getUsage: ({ workspace }) => ({ usage: state(workspace).usage, byModel: [create(UsageGroupSchema, { name: "gemini-4-argon", usage: state(workspace).usage })] }),
         compact: () => ({ eventsCompacted: 12, summaryChars: 1840 }),
         rewind: ({ workspace, index, mode }) => {
           const sess = active(state(workspace));

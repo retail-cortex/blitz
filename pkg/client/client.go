@@ -666,6 +666,26 @@ func (r *Remote) SessionUsage() (api.Usage, error) {
 	return usage(u.Usage), nil
 }
 
+// SessionLedger is the active session's calls and their totals by model
+// and purpose (SessionService.GetUsage with calls).
+func (r *Remote) SessionLedger() ([]api.Call, api.Totals, error) {
+	return r.SessionLedgerOf("")
+}
+
+// SessionLedgerOf is SessionLedger for saved session id ("": the active
+// one).
+func (r *Remote) SessionLedgerOf(id string) ([]api.Call, api.Totals, error) {
+	res, err := r.sessions.GetUsage(context.Background(), connect.NewRequest(&pb.GetUsageRequest{Workspace: r.dir, Calls: true, SessionId: id}))
+	if err != nil {
+		return nil, api.Totals{}, fromAPI(err)
+	}
+	calls := make([]api.Call, len(res.Msg.Calls))
+	for i, c := range res.Msg.Calls {
+		calls[i] = usageCall(c)
+	}
+	return calls, api.Totals{All: usage(res.Msg.Usage), ByModel: usageGroups(res.Msg.ByModel), ByPurpose: usageGroups(res.Msg.ByPurpose)}, nil
+}
+
 // Context describes how full the active session's context is (from
 // SessionService.GetUsage).
 func (r *Remote) Context(parts bool) (api.ContextInfo, error) {

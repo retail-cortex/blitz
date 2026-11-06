@@ -243,7 +243,7 @@ export function Conversation({
     try {
       const r = await sessions.getUsage({ workspace: dir });
       setTotal(r.usage);
-      publishStatus(dir, { threshold: r.threshold, autoCompact: r.autoCompact });
+      publishStatus(dir, { threshold: r.threshold, autoCompact: r.autoCompact, byModel: r.byModel });
     } catch {
       // the total is a nicety
     }
@@ -410,6 +410,7 @@ export function Conversation({
           if (ev.kind.case === "finished") {
             setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
             setTotal(ev.kind.value.after);
+            void refreshTotal(); // and its cost by model
             leftover = ev.kind.value.leftover;
             const f = ev.kind.value;
             tell("finished", f.error ? t("desktop.notify.failed", { name }) : t("desktop.notify.done", { name }), f.error ? f.error.message : f.output || t("desktop.notify.finished"));
@@ -441,7 +442,7 @@ export function Conversation({
       latestRunning.current = false;
       if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
     },
-    [dir, session, refreshList, fail, onSettingsChanged, tell, name, snack],
+    [dir, session, refreshList, refreshTotal, fail, onSettingsChanged, tell, name, snack],
   );
 
   // Stopping a followed background run stops the run, whose stream then

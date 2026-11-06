@@ -15,11 +15,14 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -28,10 +31,46 @@ import (
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/session/compaction"
 	"google.golang.org/genai"
 )
+
+// answeredBy passes calls to its model and remembers who answered the
+// last one: its origin and the model it reported (a fallback's, when the
+// primary failed).
+type answeredBy struct {
+	inner  model.LLM
+	mu     sync.Mutex
+	origin Origin
+	model  string
+}
+
+func (a *answeredBy) Name() string { return a.inner.Name() }
+
+func (a *answeredBy) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		for resp, err := range a.inner.GenerateContent(ctx, req, stream) {
+			if resp != nil && !resp.Partial {
+				o, _ := originOf(resp)
+				a.mu.Lock()
+				a.origin, a.model = o, cmp.Or(resp.ModelVersion, o.Model)
+				a.mu.Unlock()
+			}
+			if !yield(resp, err) {
+				return
+			}
+		}
+	}
+}
+
+// served is who answered the last call ("" for the model when unknown).
+func (a *answeredBy) served() (Origin, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.origin, a.model
+}
 
 // compactTimeout bounds a manual summarization call.
 const compactTimeout = 3 * time.Minute
@@ -141,8 +180,9 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 	if f := strings.TrimSpace(focus); f != "" {
 		focusLine = "\n\nPay particular attention to: " + f
 	}
+	answered := &answeredBy{inner: llm}
 	summarizer, err := compaction.NewLLMSummarizer(compaction.LLMSummarizerConfig{
-		Model:                 llm,
+		Model:                 answered,
 		PromptTemplate:        fmt.Sprintf(compactPromptTemplate, focusLine),
 		Timeout:               compactTimeout,
 		GenerateContentConfig: gc,
@@ -159,9 +199,10 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 		// Recording an empty summary would delete the covered turns outright.
 		return CompactResult{}, errors.New("the summarizer returned no text; history left unchanged")
 	}
-	e.restoreUsage(sessionID)
-	e.usage.RecordCall(ctx, sessionID, settingsName(llm.Name()), res.Usage, 0)
-	e.saveUsage(ctx, sessionID)
+	// Charged as the model that wrote the summary: a fallback's, when the
+	// primary failed (spec_056 CA-92).
+	o, served := answered.served()
+	e.charge(ctx, Charge{Session: sessionID, Purpose: api.PurposeCompaction, Model: cmp.Or(served, settingsName(llm.Name())), Origin: o, Usage: res.Usage})
 
 	ev, err := compactionEvent(window, events, summary)
 	if err != nil {

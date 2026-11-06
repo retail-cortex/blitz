@@ -246,6 +246,12 @@ type Usage struct {
 	LastPrompt int64   `json:"last_prompt"` // prompt size of the latest call: the current context size
 	CostUSD    float64 `json:"cost_usd"`
 	Priced     bool    `json:"priced"` // false if any call's model had no price
+	// Reasoning is the thinking tokens among Output, where the provider
+	// reports them apart.
+	Reasoning int64 `json:"reasoning,omitempty"`
+	// Unpriced counts the calls whose model had no price: CostUSD is the
+	// others', and only these calls' cost is unknown (spec_056 CA-121).
+	Unpriced int `json:"unpriced,omitempty"`
 	// SearchQueries are the web searches a search provider billed (Google
 	// grounding's queries), priced apart from the tokens: SearchCostUSD
 	// isn't part of CostUSD.
@@ -262,6 +268,8 @@ func (u *Usage) Add(o Usage) {
 	u.Output += o.Output
 	u.CostUSD += o.CostUSD
 	u.Priced = u.Priced && o.Priced
+	u.Reasoning += o.Reasoning
+	u.Unpriced += o.Unpriced
 	u.SearchQueries += o.SearchQueries
 	u.SearchCostUSD += o.SearchCostUSD
 	if o.LastPrompt > 0 {

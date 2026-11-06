@@ -367,6 +367,42 @@ func TestCostLimitLeavesOutBackgroundTasks(t *testing.T) {
 	assert.NoError(t, err, "the task's spending stopped the turn")
 }
 
+// A cost limit can't count calls to a model with no price: the turn says
+// so the first time the session uses one, not again, and the call doesn't
+// stop it (spec_056 CA-124).
+func TestCostLimitSaysWhatItCantCount(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		pricing map[string]config.ModelPrice // nil: Blitz's table
+		want    [][]string                   // each turn's notices
+	}{
+		{"a priced model", nil, [][]string{nil, nil}},
+		{"a model with no price", map[string]config.ModelPrice{}, [][]string{{"$0.50 cost limit can't count calls to"}, nil}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) {
+				if tc.pricing != nil {
+					c.Pricing = tc.pricing
+				}
+			}, text("hello"), text("again"))
+			s := newSession(t, w)
+			for i, want := range tc.want {
+				var notices []string
+				_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "hi", MaxCostUSD: 0.5}, func(e api.Event) {
+					if e.Notice != nil {
+						notices = append(notices, e.Notice.Text)
+					}
+				})
+				require.NoError(t, err, "a call of unknown cost doesn't stop the turn")
+				require.Len(t, notices, len(want), "turn %d: %q", i, notices)
+				for j, text := range want {
+					assert.Contains(t, notices[j], text)
+				}
+			}
+		})
+	}
+}
+
 // A stop hook that asks to go on without saying why gets a default
 // reason.
 func TestStopHookWithoutAReason(t *testing.T) {

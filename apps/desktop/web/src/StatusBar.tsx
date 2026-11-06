@@ -67,7 +67,7 @@ import { byWorkspace, countLabel, flaggedOf, isFlagged, processDetail, stopProce
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
-import { contextShare, tokens, useWorkspaceStatus } from "./status";
+import { contextShare, costByModel, costText, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
 import { keepPermissionMode, setEffort as setEffortSetting } from "./workspaceSettings";
@@ -642,8 +642,8 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
         </span>
       )}
       {total && total.calls > 0 && (
-        <span className="sb-item sb-cost sb-low" title={[st.turn, t("desktop.status.session", { tokens: tokens(total.input + total.output) })].filter(Boolean).join("\n")}>
-          {total.priced ? `$${total.costUsd.toFixed(total.costUsd < 1 ? 4 : 2)}` : t("desktop.status.unpriced")}
+        <span className="sb-item sb-cost sb-low" title={[st.turn, t("desktop.status.session", { tokens: tokens(total.input + total.output) }), ...costByModel(st.byModel)].filter(Boolean).join("\n")}>
+          {costText(total)}
         </span>
       )}
     </>

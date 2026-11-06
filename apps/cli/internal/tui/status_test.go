@@ -254,4 +254,35 @@ func TestCostShowsSearches(t *testing.T) {
 	local(app).Engine().RecordSearch(context.Background(), s.ID, 4, 0.056)
 	out := captureStdout(t, func() { cmdCost(app) })
 	assert.Contains(t, out, "Web searches: 4 queries, estimated $0.0560")
+	// The model's turn and the searches: a breakdown by model and purpose
+	// (spec_056 CA-125).
+	assert.Contains(t, out, "By model:")
+	assert.Contains(t, out, "web searches: 4 queries, $0.0560")
+	assert.Contains(t, out, "By purpose:")
+}
+
+// /cost breaks a session down by model and purpose, and says which
+// calls had no price (spec_056 CA-121, CA-125).
+func TestCostBreakdown(t *testing.T) {
+	priced := api.Usage{Calls: 2, CostUSD: 0.25, Priced: true}
+	tests := []struct {
+		name   string
+		totals api.Totals
+		want   []string
+	}{
+		{"one model, one purpose", api.Totals{ByModel: []api.Group{{Name: "gemini-3-pro", Usage: priced}}, ByPurpose: []api.Group{{Name: "turn", Usage: priced}}}, nil},
+		{"two models", api.Totals{
+			ByModel:   []api.Group{{Name: "claude-opus-5-5", Usage: priced}, {Name: "llama", Usage: api.Usage{Calls: 3, Unpriced: 3}}, {Name: "before", Usage: priced}, {Name: "unknown", Usage: priced}},
+			ByPurpose: []api.Group{{Name: "turn", Usage: priced}},
+		}, []string{"  By model:", "    claude-opus-5-5: 2 calls, $0.2500", "    llama: 3 calls, no price", "    before calls were recorded one by one: 2 calls, $0.2500", "    model not recorded: 2 calls, $0.2500"}},
+		{"two purposes", api.Totals{
+			ByModel:   []api.Group{{Name: "gemini-3-pro", Usage: priced}},
+			ByPurpose: []api.Group{{Name: "turn", Usage: priced}, {Name: "compaction", Usage: priced}},
+		}, []string{"  By purpose:", "    the conversation: 2 calls, $0.2500", "    summaries: 2 calls, $0.2500"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CostBreakdown(tt.totals))
+		})
+	}
 }

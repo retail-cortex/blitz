@@ -56,7 +56,7 @@ const (
 
 // sessionSuffixes are every file a session has, metadata first, so a
 // session being removed stops being listed even if a later removal fails.
-var sessionSuffixes = []string{metaSuffix, messagesSuffix, eventsSuffix, subagentsSuffix, legacySuffix}
+var sessionSuffixes = []string{metaSuffix, messagesSuffix, eventsSuffix, subagentsSuffix, usageSuffix, legacySuffix}
 
 var validID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 

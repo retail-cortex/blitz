@@ -53,6 +53,26 @@ func (w *Workspace) SessionUsage() (api.Usage, error) {
 	return w.engine.Usage(id), nil
 }
 
+// SessionLedger returns the active session's calls, oldest first (what it
+// spent before its ledger was kept as one, at the head), and their totals
+// by model and purpose (spec_056 CA-120, CA-121).
+func (w *Workspace) SessionLedger() ([]api.Call, api.Totals, error) {
+	id, err := w.activeID()
+	if err != nil {
+		return nil, api.Totals{}, err
+	}
+	return w.engine.Ledger(id)
+}
+
+// SessionLedgerOf is SessionLedger for saved session id, active or not;
+// api.ErrSessionNotFound for an ID with no saved session.
+func (w *Workspace) SessionLedgerOf(id string) ([]api.Call, api.Totals, error) {
+	if _, err := w.storage.Load(id); err != nil {
+		return nil, api.Totals{}, fmt.Errorf("%w: %s", api.ErrSessionNotFound, id)
+	}
+	return w.engine.Ledger(id)
+}
+
 // Context returns the active session's context size and compaction
 // setting, with its breakdown by category when parts is set (it reads the
 // session's events).
