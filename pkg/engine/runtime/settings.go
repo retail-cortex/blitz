@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"iter"
 	"log/slog"
@@ -44,6 +45,15 @@ func withSettingsLookup(ctx context.Context, f settingsLookup) context.Context {
 type settingsModel struct {
 	inner    model.LLM
 	provider string
+	// configured is the provider as configured (bedrock, vertex, …),
+	// for the origin of what the model writes (spec_056 CA-02); provider
+	// when unset.
+	configured string
+}
+
+// origin is where this model's answers come from.
+func (m *settingsModel) origin() Origin {
+	return Origin{API: m.provider, Provider: cmp.Or(m.configured, m.provider), Model: m.inner.Name()}
 }
 
 func withModelSettings(m model.LLM, provider string) model.LLM {
@@ -56,6 +66,8 @@ func withModelSettings(m model.LLM, provider string) model.LLM {
 func (m *settingsModel) Name() string { return m.inner.Name() }
 
 func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	o := m.origin()
+	req = adaptRequest(o, req)
 	if m.provider == "gemini" {
 		req = attachLoneSignatures(req)
 	}
@@ -77,6 +89,7 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	}
 	return func(yield func(*model.LLMResponse, error) bool) {
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
+			stampResponse(o, resp)
 			if !yield(resp, asQuota(err)) {
 				return
 			}

@@ -832,7 +832,12 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	// Price by the model that actually answered: with server-side fallback
 	// it can differ from the configured one.
 	served := resp.ModelVersion
-	if served == "" || !e.usage.HasPrice(served) {
+	if o, ok := originOf(resp); ok && (served == "" || !e.usage.HasPrice(served)) {
+		// The model that answered, priced or not: a fallback with no price
+		// is unpriced, never charged at the primary's (spec_056 CA-92).
+		served = o.Model
+	}
+	if served == "" || (!e.usage.HasPrice(served) && !isFallback(resp)) {
 		name, _ := e.AgentModel(ctx.AgentName()) // the calling agent's model (it may be pinned)
 		if st := stateFrom(ctx); st != nil && st.models[ctx.AgentName()] != "" {
 			name = st.models[ctx.AgentName()] // a run with its own agent or model

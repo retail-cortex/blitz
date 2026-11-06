@@ -183,7 +183,8 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 	}
 	// The settings' max_tokens is applied first, then capped at what the
 	// model turns out to allow (outputcap.go).
-	return withModelSettings(capOutput(m), providerOf(m)), nil
+	sm := &settingsModel{inner: capOutput(m), provider: providerOf(m), configured: provider}
+	return sm, nil
 }
 
 // providerOf names the API a built model talks to; with provider "" the
