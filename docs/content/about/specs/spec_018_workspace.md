@@ -77,7 +77,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 
 ## 6. Context, memory, locale, search
 
-- **WS-50** `Context()` returns the latest prompt size (`Usage.LastPrompt`), whether auto-compaction is active (`compaction && token_threshold > 0`), the threshold and retained events.
+- **WS-50** `Context()` returns the latest prompt size (`Usage.LastPrompt`), whether auto-compaction is active (`compaction && token_threshold > 0`), the threshold (the active model's compaction point, `Engine.CompactionThreshold`: spec_056 CA-110) and retained events.
 - **WS-51** `Compact(focus)` summarises all but the latest user turn (keep = 1) and returns events compacted, summary length and usage before/after; `ErrNothingToCompact` when too short.
 - **WS-52** `ReloadMemory` re-reads memory files and rebuilds instructions; `AddMemory(text)` appends to the last configured memory file (default `BLITZ.md`) in the workspace and reloads.
 - **WS-53** `SetLocale(input)` resolves a tag or language name (`ErrUnknownLocale`), changes the **reply** language for this workspace, rebuilds instructions, and saves `[ui] locale`. The interface language belongs to the client, which switches its own catalog with the returned tag.

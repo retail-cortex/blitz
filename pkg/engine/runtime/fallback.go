@@ -88,9 +88,16 @@ func (f *fallbackModel) GenerateContent(ctx context.Context, req *model.LLMReque
 		// First pass: models whose breakers allow a call. Allow is asked
 		// just before each attempt because it reserves a half-open trial.
 		// If every breaker was open, try them all rather than fail unasked.
+		toolless := f.toolless(req)
 		for _, force := range []bool{false, true} {
 			tried := false
 			for i, m := range f.chain {
+				if toolless[i] {
+					// A call that offers tools skips a member that can't
+					// use them (spec_056 CA-103).
+					errs = append(errs, fmt.Errorf("%s: can't use tools", m.Name()))
+					continue
+				}
 				if !force {
 					if ok, _ := f.health[i].Allow(); !ok {
 						continue
@@ -147,6 +154,28 @@ func (f *fallbackModel) try(ctx context.Context, i int, m model.LLM, req *model.
 	}
 	f.health[i].Success()
 	return true, nil
+}
+
+// toolless marks the members to skip for req: those that can't use tools,
+// when req offers tools and another member can (none is skipped when none
+// can: the first then answers without them).
+func (f *fallbackModel) toolless(req *model.LLMRequest) []bool {
+	if req == nil || !offersFunctions(req) {
+		return make([]bool, len(f.chain))
+	}
+	out := make([]bool, len(f.chain))
+	can := false
+	for i, m := range f.chain {
+		if info, ok := infoOf(m); ok && info.Tools == ToolsNone {
+			out[i] = true
+		} else {
+			can = true
+		}
+	}
+	if !can {
+		return make([]bool, len(f.chain))
+	}
+	return out
 }
 
 // setLastErr records why model i failed.

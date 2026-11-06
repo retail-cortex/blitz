@@ -163,6 +163,10 @@ func scriptedModel(t *testing.T, home string, outputs ...string) {
 	n := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
+		if !strings.HasSuffix(r.URL.Path, "/responses") { // Ollama's own API (/api/show): not scripted
+			http.NotFound(w, r)
+			return
+		}
 		mu.Lock()
 		out := `[{"type":"message","content":[{"type":"output_text","text":"done"}]}]`
 		if n < len(outputs) {

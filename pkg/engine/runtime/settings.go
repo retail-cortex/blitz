@@ -17,12 +17,14 @@ package runtime
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"iter"
 	"log/slog"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -51,6 +53,11 @@ type settingsModel struct {
 	configured string
 }
 
+// info is the model's record now (spec_056 CA-10).
+func (m *settingsModel) info() ModelInfo {
+	return Info(m.provider, cmp.Or(m.configured, m.provider), m.inner.Name())
+}
+
 // origin is where this model's answers come from.
 func (m *settingsModel) origin() Origin {
 	return Origin{API: m.provider, Provider: cmp.Or(m.configured, m.provider), Model: m.inner.Name()}
@@ -69,7 +76,9 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	o := m.origin()
 	back := namesBack(req)
 	req = adaptRequest(o, req)
-	req = withProviderTools(req, providerToolsToUse(ctx, o, req))
+	if m.info().Tools != ToolsNone { // a model that can't call tools gets none of its provider's either (CA-80, CA-103)
+		req = withProviderTools(req, providerToolsToUse(ctx, o, req))
+	}
 	var sink *openAISink
 	if m.provider == "openai" && req != nil {
 		// ADK's OpenAI adapter takes function tools only: the provider's go
@@ -101,22 +110,63 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			ctx = context.WithValue(ctx, effortKey{}, *s.ReasoningEffort)
 		}
 	}
+	info := m.info()
+	req, stream = applyFacts(info, req, stream)
 	return func(yield func(*model.LLMResponse, error) bool) {
-		gen := func(req *model.LLMRequest) iter.Seq2[*model.LLMResponse, error] {
-			return m.inner.GenerateContent(ctx, req, stream)
-		}
-		for resp, err := range retryMalformed(req, gen) {
-			switch m.provider {
-			case "gemini":
-				geminiProviderTools(o, resp)
-			case "openai":
-				sink.apply(resp)
+		// A refusal for something the record let through, before any
+		// output, teaches the record; the call goes again without it, once
+		// (spec_056 CA-13). A malformed tool call is asked for again once
+		// (CA-31).
+		var tell []string
+		send := req
+		for attempt := 0; ; attempt++ {
+			var learned *modelfacts.Fact
+			answered := false
+			gen := func(req *model.LLMRequest) iter.Seq2[*model.LLMResponse, error] {
+				return m.inner.GenerateContent(ctx, req, stream)
 			}
-			stampResponse(o, resp)
-			nameCallsBack(resp, back)
-			if !yield(resp, asContextLength(asQuota(err))) {
+			for resp, err := range retryMalformed(send, gen) {
+				if err != nil && !answered && attempt == 0 {
+					if f, ok := recogniseRefusal(err); ok {
+						if line := learn(o.Provider, info.Name, f); line != "" {
+							tell = append(tell, line)
+						}
+						if retryable(f) {
+							learned = &f
+							break
+						}
+					}
+				}
+				answered = true
+				switch m.provider {
+				case "gemini":
+					geminiProviderTools(o, resp)
+				case "openai":
+					sink.apply(resp)
+				}
+				stampResponse(o, resp)
+				nameCallsBack(resp, back)
+				if resp != nil && !resp.Partial {
+					tellLearned(resp, tell)
+					tell = nil
+				}
+				if err != nil && len(tell) > 0 {
+					err = fmt.Errorf("%w (%s)", err, strings.Join(tell, " "))
+					tell = nil
+				}
+				if !yield(resp, asContextLength(asQuota(err))) {
+					return
+				}
+			}
+			if learned == nil {
 				return
 			}
+			slog.InfoContext(ctx, "model refused part of a request: learned and sent again", "model", info.Name, "fact", learned.Kind, "value", learned.Value)
+			info = withFact(info, *learned)
+			if info.Tools == ToolsNone && sink != nil {
+				sink.kinds = nil // nor its provider's tools, through the client's middleware
+			}
+			send, stream = applyFacts(info, req, stream)
 		}
 	}
 }

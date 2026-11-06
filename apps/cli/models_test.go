@@ -22,10 +22,32 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// `blitz models forget` clears what Blitz learned of a model, by
+// provider/model or a bare name under any provider (spec_056 CA-14).
+func TestModelsForget(t *testing.T) {
+	home := isolate(t)
+	s := modelfacts.Open(modelfacts.Path(filepath.Join(home, ".blitz")))
+	for _, k := range [][2]string{{"ollama", "gemma3"}, {"api", "gemma3"}, {"openai", "gpt-5"}} {
+		_, err := s.Learn(k[0], k[1], modelfacts.Fact{Kind: modelfacts.NoTools, Why: "x", At: time.Now()})
+		require.NoError(t, err)
+	}
+	out, err := runCLI(t, "models", "forget", "gemma3")
+	require.NoError(t, err)
+	assert.Contains(t, out, "api/gemma3, ollama/gemma3")
+	out, err = runCLI(t, "models", "forget", "gemma3")
+	require.NoError(t, err)
+	assert.Contains(t, out, "hasn't learned anything about gemma3")
+	assert.Len(t, modelfacts.Open(modelfacts.Path(filepath.Join(home, ".blitz"))).All(), 1)
+	_, err = runCLI(t, "models", "forget")
+	assert.Error(t, err, "a model is named")
+}
 
 func TestModelsCommand(t *testing.T) {
 	isolate(t)

@@ -46,7 +46,7 @@ var droppableParams = []string{"temperature", "top_p", "reasoning", "max_output_
 // temperature and top_p: current Claude models (as for the anthropic
 // provider) and OpenAI's reasoning models.
 func rejectsSampling(model string) bool {
-	m := strings.ToLower(model)
+	m := canonicalModel(model)
 	if strings.HasPrefix(m, "claude-") {
 		return !supportsSampling(m)
 	}

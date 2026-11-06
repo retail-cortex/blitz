@@ -89,6 +89,7 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if !ok {
 		return nil, fmt.Errorf("your organization (%s) offers you no models: ask its admins", c.URL())
 	}
+	setCatalog(m) // what the organization says of it (spec_056 CA-11)
 	headers := map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder}
 	if cfg.Tools.OrgWorkspace != "" {
 		// The organization's workspace the call is for, so the service

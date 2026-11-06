@@ -8,8 +8,8 @@ weight: 56
 | | |
 |---|---|
 | Status | **Draft** (2026-11-05). The owner decided, on PR #92: a model switch belongs to the conversation, takes effect from its next turn, and drops the previous provider's reasoning; history stays in ADK's event log, tagged with where each part came from; the status bar offers a new chat before switching one that has history. Its other decisions are in §18. |
-| Source | `pkg/engine/runtime` (`origin.go`: origins, tagging and adapting; `replies.go`: reply parts, why replies end, context too long, streaming; adapters: `model_factory.go`, `anthropic.go`, `apiprovider.go`, `apiresponse.go`, `enterprisemodel.go`, `cloud.go`, `ollama.go`, `openai_images.go`; wrappers: `settings.go`, `signatures.go`, `fallback.go`, `outputcap.go`, `guard.go`, `images.go`, `media.go`, `geminifiles.go`; `usage.go`, `compact.go`, `contextparts.go`, `listmodels.go`, `httpclient.go`, `quota.go`, `speech.go`), `pkg/engine/session`, `pkg/engine/models.go`, `pkg/images`, `pkg/config/features.go`, `pkg/enterprise/models.go` |
-| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/conformance_replies_test.go` (the grid streamed; finish reasons, unshown parts, context too long), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/replies_test.go`, `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict), `pkg/engine/runtime/ledger_test.go` (CA-152: a mixed conversation priced by hand; the ledger of turns and a compaction a fallback answered; an old session), `pkg/api/ledger_test.go`, `pkg/engine/session/ledger_test.go`, `pkg/engine/turn_test.go` (TestCostLimitSaysWhatItCantCount), `pkg/service/server/handlers_test.go` (TestSessionHandlers), `apps/cli/sessions_test.go`, `apps/cli/internal/tui/status_test.go` (TestCostBreakdown), `apps/desktop/web/src/status.test.ts` |
+| Source | `pkg/engine/runtime` (`origin.go`: origins, tagging and adapting; `modelinfo.go`: the model record; `learn.go`: learning from refusals; `ollamashow.go`; `replies.go`: reply parts, why replies end, context too long, streaming; adapters: `model_factory.go`, `anthropic.go`, `apiprovider.go`, `apiresponse.go`, `enterprisemodel.go`, `cloud.go`, `ollama.go`, `openai_images.go`; wrappers: `settings.go`, `signatures.go`, `fallback.go`, `outputcap.go`, `guard.go`, `images.go`, `media.go`, `geminifiles.go`; `usage.go`, `compact.go`, `contextparts.go`, `listmodels.go`, `httpclient.go`, `quota.go`, `speech.go`), `pkg/engine/session`, `pkg/engine/models.go`, `pkg/images`, `pkg/config/features.go`, `pkg/enterprise/models.go`, `pkg/modelfacts` (the learned facts), `apps/cli/models.go` (`blitz models forget`) |
+| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/conformance_replies_test.go` (the grid streamed; finish reasons, unshown parts, context too long), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/replies_test.go`, `pkg/engine/runtime/modelinfo_test.go`, `pkg/engine/runtime/learn_test.go` (and `TestConformanceLearnsARefusal`), `pkg/modelfacts/modelfacts_test.go`, `apps/cli/models_test.go` (`TestModelsForget`), `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict), `pkg/engine/runtime/ledger_test.go` (CA-152: a mixed conversation priced by hand; the ledger of turns and a compaction a fallback answered; an old session), `pkg/api/ledger_test.go`, `pkg/engine/session/ledger_test.go`, `pkg/engine/turn_test.go` (TestCostLimitSaysWhatItCantCount), `pkg/service/server/handlers_test.go` (TestSessionHandlers), `apps/cli/sessions_test.go`, `apps/cli/internal/tui/status_test.go` (TestCostBreakdown), `apps/desktop/web/src/status.test.ts` |
 | Depends on | [spec_015_models](spec_015_models.md) (models, fallbacks MDL-60–65), [spec_018_workspace](spec_018_workspace.md) (WS-40), [spec_011_images](spec_011_images.md) (attachments), [spec_017_sessions](spec_017_sessions.md), [spec_039_secrets](spec_039_secrets.md), [spec_053_enterprise](spec_053_enterprise.md) (the organization's models), [spec_055_urns](spec_055_urns.md) (artifacts), [spec_024_desktop](spec_024_desktop.md) (DSK-39) |
 
 ## 1. Purpose
@@ -33,7 +33,7 @@ Found on 2026-11-05 by reading the code. None of the providers' answers has been
     - a compaction summary is stored as the model's turn, and the Claude adapter refuses a history that opens with it;
     - masking a secret inside Claude's signed thinking changes what was signed.
 - **Capabilities are decided by a model's name, or not at all:**
-  - **Claude on Bedrock is misread.** Its IDs (`us.anthropic.claude-…`) don't start with `claude-`, so it is treated as a model without PDFs, thinking, effort or sampling.
+  - **Claude on Bedrock is misread.** Its IDs (`us.anthropic.claude-…`) don't start with `claude-`, so it is treated as a model without thinking, effort or sampling settings. (It gets a PDF's text by design: spec_011_images IMG-51.)
   - **A Gemini model behind the gateway** is treated as OpenAI and gets no audio or video.
   - **Vision is assumed.** Every model is assumed to read images.
   - **The organization's catalog is ignored.** It gives each model's capabilities and maximum output; neither is used.
@@ -146,6 +146,29 @@ Found on 2026-11-05 by reading the code. None of the providers' answers has been
   - **Rechecking:** a fact learned from a refusal is tried again after 30 days, or when the provider's model list shows the model changed, since servers and models are updated.
   - **The organization's models:** a learned fact never changes what its catalog says. It's reported to the organization's service with the model's name (spec_053), so its admins can correct the catalog.
 - **CA-15** **A refusal that isn't recognised** is an error as today (CA-32), with the provider's words. It's never retried blindly. The conformance suite (CA-150) has a case for each refusal CA-13 recognises, in each wire API's words.
+- **CA-15a** *Built 2026-11-05 (step 4).* `ModelInfo` and `Info(api, provider, model)` (`pkg/engine/runtime/modelinfo.go`) hold the record. Its sources:
+  - Blitz's table: the Claude, Gemini, GPT-5, GPT-4.1, GPT-4o and o-series families. Everything else gets the wire API's usual record, marked as guesses.
+  - Names: Bedrock's, Vertex AI's and Gemini's are read as the model they name (`canonicalModel`), so Claude on Bedrock keeps its thinking, effort and sampling.
+  - Ollama's `/api/show`, asked in the background as an Ollama model is built.
+  - What was learned.
+  - The organization's catalog (capabilities, `max_output_tokens`, price), which wins over what was learned.
+  - The settings' prices.
+  
+  `AcceptedMedia` and the Claude checks read the record. **Learning** (`learn.go`):
+  - It recognises refusals of tools, images, a stream, a setting (`temperature`, `top_p`, `top_k`, `seed`), reasoning settings and system instructions, and a stated context window, in Gemini's, Anthropic's, OpenAI's and Ollama's words.
+  - It sends the call again once without the refused part (not for a context window or structured output, which resending can't meet). It tells the person once per model and fact (`model.learned.*`, in every shipped language) through the turn's notices.
+  - The facts are kept by `pkg/modelfacts` in `~/.blitz/models.learned.toml`, read again when the file changes, asked again after 30 days, and cleared by `blitz models forget <model>`.
+  - The output limit the provider states (`outputcap.go`) is kept there too.
+  
+  **Not yet:**
+  - facts about provider tools (§10), a tool-count limit and attachment size limits;
+  - streaming with tools as a fact of its own;
+  - a recheck when a provider's listing shows the model changed;
+  - the Settings button;
+  - reporting learned facts to the organization's service;
+  - `blitz doctor` and the model list naming which facts are guesses.
+  
+  The `api` provider keeps its own learning (MDL-104b's dropped fields, MDL-100c's unstreamed gateway) on the provider.
 
 ## 5. Requests
 
@@ -271,7 +294,7 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
 - **CA-63** *Built 2026-11-05: each call routes each file for the model reading it (`imageModel`); `unseenAttachments` names what a model won't see as it is, for the switch's preview (CA-101).* **Attachments are checked against the model that will read them at its next call**, not only the active agent's model when they're added.
   - **On a switch,** the switch says what the new model won't see: "3 videos and 1 audio file will be described, not shown, to <model>".
   - **On adding a file,** one no model of the conversation can take is still refused (IMG-63).
-- **CA-64** **Vision is a capability, not an assumption.** A model whose record doesn't read images gets each image as a note naming it. A local model's vision is read from Ollama where it says so, and taken from `[model_settings]` otherwise.
+- **CA-64** **Vision is a capability, not an assumption.** A model whose record doesn't read images gets each image as a note naming it. A local model's vision is read from Ollama where it says so, and taken from `[model_settings]` otherwise. *Built 2026-11-05:* `ModelInfo.Vision` from the table, Ollama's `/api/show`, the organization's catalog and a learned refusal. A model without it accepts no images (`Accepts`), and an image already in its request becomes a note (`applyFacts`, "[An image was here: this model can't take images.]"). A `[model_settings]` key for it is not yet.
 
 ## 9. Model output and artifacts
 
@@ -347,6 +370,8 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - **On a switch:** the preview says so: "<model> can't use tools: <agent> will only answer, without reading or changing files".
   - **On choosing one:** `/model` and the status bar mark these models.
   - **In a fallback chain:** a call that offers tools skips such a member, and the notice says why.
+  
+  *Built 2026-11-05:* a model whose record says it can't call tools gets no function declarations. The history's calls and results go to it as text. A fallback chain skips such a member for a call offering tools while another member can (`fallbackModel.toolless`); when none can, the first answers without them. The preview and the marks in `/model` and the status bar are step 6's.
 
 ## 13. Context and tokens
 
@@ -355,6 +380,12 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - otherwise the model's context window, less its maximum output, less 10%.
   
   The meter (DSK-39) is measured against it.
+  
+  *Built 2026-11-05:*
+  - **"When set"** means changed from its default (`config.DefaultTokenThreshold`, 120,000), which can't be told apart from not set.
+  - **A guessed window** keeps the setting. So does a model with no record (a test's).
+  - **Where it's read:** the active model's point is the runner's compaction threshold and the context meter's (`Engine.CompactionThreshold`), worked out again whenever the agents are rebuilt (a model or agent switched).
+  - **A context window learned from a refusal** (CA-13) moves the point.
 - **CA-111** **A `context_length` error** is summarised away automatically: the conversation is compacted, with nothing asked (the owner's decision 2026-11-05), the turn notes "The conversation was summarised to fit <model>", and the same model is tried once more. If it still fails, the error goes to the fallback chain (MDL-61a). Without compaction, it ends the turn with `CONTEXT_LENGTH`.
   *Built 2026-11-05:* `Engine.Execute` compacts (`Compact`, keeping the turn under way) and runs the turn on from the session (its prompt is in it already), with `withCompactedRetry` telling the fallback chain it may now move on. A chain doesn't move on from a context too long before that (`fallback.go`), and the model's breaker isn't charged for it.
 - **CA-112** **Counting before a call:**
@@ -362,6 +393,8 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - an estimate otherwise (today's: characters/4, 1500 per image and per PDF page, audio and video by length), scaled to the last count the model reported.
   
   The meter says which it shows.
+  
+  *2026-11-05:* the estimate is today's. The count-tokens APIs aren't called yet; they're step 6's, for the switch preview.
 
 ## 14. Cost
 

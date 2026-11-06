@@ -23,6 +23,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +31,7 @@ import (
 // configured provider offers, from its API, with the prices Blitz knows
 // (spec_027_parity PAR-MOD-03).
 func newModelsCommand(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "models [provider…]",
 		Short: "List the models your providers offer, with the prices Blitz knows",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -83,6 +84,32 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 			if failed > 0 {
 				return withCode(exitFailure, fmt.Errorf("%d provider(s) couldn't list their models", failed))
 			}
+			return nil
+		},
+	}
+	cmd.AddCommand(newModelsForgetCommand())
+	return cmd
+}
+
+// newModelsForgetCommand is `blitz models forget <model>`: clears what
+// Blitz learned about a model from its refusals (spec_056 CA-14), so the
+// model is asked again; <model> is provider/model, or a model's name under
+// any provider. The service reads the change at its next call.
+func newModelsForgetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "forget <model>",
+		Short: "Forget what Blitz learned about a model from its refusals",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			gone, err := modelfacts.Open(modelfacts.Path(config.Dir())).Forget(args[0])
+			if err != nil {
+				return err
+			}
+			if len(gone) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("model.cli_forgot_none", "model", args[0]))
+				return nil
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("model.cli_forgot", "models", strings.Join(gone, ", ")))
 			return nil
 		},
 	}
