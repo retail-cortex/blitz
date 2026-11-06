@@ -42,6 +42,7 @@ A conversation that's too long for its new model is summarised first.
 OpenAI and Ollama models now stream their answers.
 
 **Fixes:**
+- A long conversation no longer makes Blitz use more memory with every turn. Once part of it is summarised, that part stays only in the session's file, and the model is sent the same prompts as before.
 - A Claude conversation that had been compacted could stop with "conversation must start with a user message". It now goes on.
 - OpenAI's reasoning tokens were counted twice. They're counted once.
 - Tools from MCP servers with dots or long names in their names now work with every provider.

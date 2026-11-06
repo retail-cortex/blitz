@@ -164,7 +164,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 	}()
 	sess := got.Session
 
-	events := finalEvents(sess)
+	events := e.storedEvents(sess)
 	window, keptTurns, err := pick(events)
 	if err != nil {
 		return CompactResult{}, err
@@ -229,13 +229,37 @@ func finalEvents(sess session.Session) []*session.Event {
 	return events
 }
 
+// storedLog is a session service that keeps the events a summary stands
+// in for out of memory, in the session's file only
+// (session.PersistentService).
+type storedLog interface {
+	Hidden(id string) int
+	Log(id string) ([]*session.Event, error)
+}
+
+// storedEvents are a session's events as stored: with those a summary
+// stands in for, which the session in memory may not hold, so an event's
+// index is its place in the log (as /rewind and Truncate count).
+func (e *Engine) storedEvents(sess session.Session) []*session.Event {
+	if l, ok := e.sessions.(storedLog); ok && l.Hidden(sess.ID()) > 0 {
+		if all, err := l.Log(sess.ID()); err == nil {
+			return all
+		}
+	}
+	return finalEvents(sess)
+}
+
 // EventCount is how many events a session's log holds (0 for a new one).
 func (e *Engine) EventCount(ctx context.Context, sessionID string) int {
 	got, err := e.sessions.Get(ctx, &session.GetRequest{AppName: appName, UserID: "user", SessionID: sessionID})
 	if err != nil {
 		return 0
 	}
-	return len(finalEvents(got.Session))
+	n := len(finalEvents(got.Session))
+	if l, ok := e.sessions.(storedLog); ok {
+		n += l.Hidden(sessionID)
+	}
+	return n
 }
 
 // ForgetSession drops a session's event log, in memory and on disk, once

@@ -164,6 +164,8 @@ go_test(
         "leak_test.go",
         "learn_test.go",
         "ledger_test.go",
+        "live_test.go",
+        "longconversation_test.go",
         "mcp_agents_test.go",
         "mediaplace_test.go",
         "model_factory_test.go",

@@ -54,6 +54,7 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 ## 4. ADK event log
 
 - **SES-20** `PersistentService` implements the ADK session service in memory and appends every **final** event as JSON to `<id>.events.jsonl`. On `Create`/`Get` of a known ID after restart, stored events are replayed. `Delete` removes the log.
+- **SES-20a** *2026-11-06 (the spec_056 soak: one conversation of 10,000 turns grew blitzd by about 35 KB a turn, on 0.9.1 too).* A session in memory keeps only the events a prompt can still use: those a summary stands in for stay in its event log only. They're left out as the session loads, and after a summary is recorded once no turn runs in it (`withoutSummarised`; the session is rebuilt from what's kept). An event is left out only when ADK's prompt assembly would drop it, asked more strictly: a usable summary on its branch covers its time, every summary over its time was written after it, no summary names it as a hole, it changes no session state and takes no part in a long-running tool call; each summary keeps the first event under its range, where ADK puts the summary. So the prompts are the ones the whole log makes (tested turn by turn against a store that keeps everything). Positions stay the log's: `EventCount` adds the events left out (`Hidden`), and `/compact` and the summarize rewinds read the whole log (`Log`).
 
 ## 5. Selecting a session (`OpenSession`)
 
