@@ -20,6 +20,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -129,6 +130,37 @@ func TestConformanceSwitchAtTurnEnd(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Empty(t, next.fake.Refusals(), "%s refused the history %s left", to, from)
 				assert.Zero(t, next.fake.Remaining(), "%s didn't get as far as its tool call and answer", to)
+			})
+		}
+	}
+}
+
+// A fallback that takes over in the middle of a tool loop goes on from
+// the calls another model made (CA-91): Claude, which needs its own
+// thinking there, reads them as text; Gemini, which needs its signature on
+// the turn's calls, gets the placeholder it documents.
+func TestConformanceFallbackMidLoop(t *testing.T) {
+	names := []string{"gemini", "anthropic", "openai"}
+	for _, from := range names {
+		for _, to := range names {
+			if from == to {
+				continue
+			}
+			t.Run(from+" to "+to, func(t *testing.T) {
+				cfg := conformanceConfig(t)
+				ws := wires(t, cfg)
+				primary, backup := ws[from], ws[to]
+				chain := newFallbackModel([]model.LLM{modelFor(t, cfg, primary), modelFor(t, cfg, backup)})
+				eng := conformanceEngine(t, cfg, chain)
+
+				primary.fake.Script(toolTurn()[0], wirefake.Reply{Status: 503})
+				backup.fake.Script(wirefake.Reply{Thought: "The tool said hello.", Text: "The notes say hello."})
+				_, err := collect(t, eng, "s", "What do my notes say?")
+				assert.NoError(t, err)
+				assert.Empty(t, backup.fake.Refusals(), "%s refused to go on from %s's tool call", to, from)
+				assert.Zero(t, primary.fake.Remaining()+backup.fake.Remaining(), "the turn didn't reach the fallback's answer")
+				require.NotEmpty(t, backup.fake.Requests())
+				assert.Equal(t, strings.TrimPrefix(backup.ref, to+"/"), wirefake.ModelOf(backup.fake.Requests()[0]), "the fallback asked for another model than itself")
 			})
 		}
 	}

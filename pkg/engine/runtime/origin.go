@@ -16,9 +16,16 @@ package runtime
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"reflect"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"google.golang.org/adk/v2/model"
@@ -135,6 +142,10 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 		return nil
 	}
 	cp := *req
+	// ADK names the agent's model on every request, which for a fallback
+	// chain is its primary: each member asks for itself (MDL-60).
+	cp.Model = o.Model
+	cp.Config = wireTools(req.Config)
 	cp.Contents = make([]*genai.Content, 0, len(req.Contents))
 	var pending []*genai.FunctionCall // calls of the previous content without an ID
 	legacy := 0
@@ -166,6 +177,7 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 			}
 			if fc := p.FunctionCall; fc != nil {
 				call := *fc
+				call.Name = wireName(call.Name)
 				switch {
 				case o.API == "gemini" && strings.HasPrefix(call.ID, bzPrefix):
 					call.ID = "" // Gemini pairs by position; it gave these calls no ID
@@ -178,6 +190,7 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 			}
 			if fr := p.FunctionResponse; fr != nil {
 				resp := *fr
+				resp.Name = wireName(resp.Name)
 				switch {
 				case o.API == "gemini" && strings.HasPrefix(resp.ID, bzPrefix):
 					resp.ID = ""
@@ -199,7 +212,211 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 	if o.API == "anthropic" && len(cp.Contents) > 0 && cp.Contents[0].Role != genai.RoleUser {
 		cp.Contents = append([]*genai.Content{summaryAsUser(cp.Contents[0])}, cp.Contents[1:]...)
 	}
+	switch o.API {
+	case "gemini":
+		signCurrentCalls(cp.Contents)
+	case "anthropic":
+		cp.Contents = flattenForeignLoop(cp.Contents)
+	}
 	return &cp
+}
+
+// wireTool is the pattern a tool's name matches for every API Blitz
+// speaks: Anthropic's and OpenAI's (letters, digits, _ and -, at most 64)
+// and Gemini's, which also wants a letter or _ first.
+var wireTool = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$`)
+
+// wireName is name as every API takes it (CA-26): as it is when it can
+// be, else its other characters as _, cut to fit, with a hash of the name
+// so two names never map to one. MCP servers may name tools with dots or
+// at length.
+func wireName(name string) string {
+	if name == "" || wireTool.MatchString(name) {
+		return name
+	}
+	var b strings.Builder
+	for i, r := range name {
+		switch {
+		case r == '_' || r == '-' && i > 0 || r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) && i > 0):
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	sum := sha256.Sum256([]byte(name))
+	safe := b.String()
+	if len(safe) > 55 {
+		safe = safe[:55]
+	}
+	return safe + "_" + hex.EncodeToString(sum[:4])
+}
+
+// wireTools is cfg with its tools named as every API takes them; cfg
+// itself is shared, so a changed one is a copy.
+func wireTools(cfg *genai.GenerateContentConfig) *genai.GenerateContentConfig {
+	if cfg == nil || !slices.ContainsFunc(cfg.Tools, func(t *genai.Tool) bool {
+		return t != nil && slices.ContainsFunc(t.FunctionDeclarations, func(d *genai.FunctionDeclaration) bool { return d != nil && wireName(d.Name) != d.Name })
+	}) {
+		return cfg
+	}
+	cp := *cfg
+	cp.Tools = make([]*genai.Tool, len(cfg.Tools))
+	for i, t := range cfg.Tools {
+		if t == nil {
+			continue
+		}
+		nt := *t
+		nt.FunctionDeclarations = make([]*genai.FunctionDeclaration, len(t.FunctionDeclarations))
+		for j, d := range t.FunctionDeclarations {
+			if d == nil {
+				continue
+			}
+			nd := *d
+			nd.Name = wireName(d.Name)
+			nt.FunctionDeclarations[j] = &nd
+		}
+		cp.Tools[i] = &nt
+	}
+	return &cp
+}
+
+// namesBack maps each tool name of req the API was sent changed back to
+// the tool's own (nil when none was changed).
+func namesBack(req *model.LLMRequest) map[string]string {
+	if req == nil || req.Config == nil {
+		return nil
+	}
+	var back map[string]string
+	for _, t := range req.Config.Tools {
+		if t == nil {
+			continue
+		}
+		for _, d := range t.FunctionDeclarations {
+			if d != nil && wireName(d.Name) != d.Name {
+				if back == nil {
+					back = map[string]string{}
+				}
+				back[wireName(d.Name)] = d.Name
+			}
+		}
+	}
+	return back
+}
+
+// nameCallsBack gives resp's tool calls their tools' own names.
+func nameCallsBack(resp *model.LLMResponse, back map[string]string) {
+	if resp == nil || resp.Content == nil || back == nil {
+		return
+	}
+	for _, p := range resp.Content.Parts {
+		if p != nil && p.FunctionCall != nil {
+			if own, ok := back[p.FunctionCall.Name]; ok {
+				p.FunctionCall.Name = own
+			}
+		}
+	}
+}
+
+// currentTurn is where the turn under way starts: the last user content
+// with text (tool results are the user's too, but go on a turn).
+func currentTurn(cs []*genai.Content) int {
+	for i := len(cs) - 1; i >= 0; i-- {
+		if cs[i].Role != genai.RoleUser {
+			continue
+		}
+		for _, p := range cs[i].Parts {
+			if p.Text != "" {
+				return i
+			}
+		}
+	}
+	return 0
+}
+
+// geminiSkipSignature is the signature Gemini documents for function calls
+// it didn't make (another model's, before a fallback took over), in the
+// turn under way, where it otherwise requires its own (CA-91).
+const geminiSkipSignature = "skip_thought_signature_validator"
+
+// signCurrentCalls gives each of the current turn's steps whose first call
+// has no signature Gemini's placeholder, in place (contents are copies).
+func signCurrentCalls(cs []*genai.Content) {
+	for _, c := range cs[currentTurn(cs):] {
+		if c.Role != genai.RoleModel {
+			continue
+		}
+		for _, p := range c.Parts {
+			if p.FunctionCall != nil {
+				if len(p.ThoughtSignature) == 0 {
+					p.ThoughtSignature = []byte(geminiSkipSignature)
+				}
+				break
+			}
+		}
+	}
+}
+
+// flattenForeignLoop is cs for Claude when the turn under way goes on
+// from another model's tool calls (a fallback took over, CA-91): with
+// thinking on, Claude needs its own thinking at the head of the assistant
+// message a tool loop goes on from, which another model's calls don't
+// have, and a model that always thinks can't have it turned off. The other
+// model's calls and their results go as text instead.
+func flattenForeignLoop(cs []*genai.Content) []*genai.Content {
+	last := len(cs) - 1
+	for last >= 0 && cs[last].Role != genai.RoleModel {
+		last--
+	}
+	if last < currentTurn(cs) || !hasCalls(cs[last]) || hasThought(cs[last]) {
+		return cs
+	}
+	out := slices.Clone(cs)
+	for i := currentTurn(cs); i < len(out); i++ {
+		c := out[i]
+		if c.Role != genai.RoleModel || !hasCalls(c) || hasThought(c) {
+			continue
+		}
+		out[i] = asText(c)
+		if i+1 < len(out) && out[i+1].Role == genai.RoleUser {
+			out[i+1] = asText(out[i+1])
+		}
+	}
+	return out
+}
+
+func hasCalls(c *genai.Content) bool {
+	return slices.ContainsFunc(c.Parts, func(p *genai.Part) bool { return p.FunctionCall != nil })
+}
+
+func hasThought(c *genai.Content) bool {
+	return slices.ContainsFunc(c.Parts, func(p *genai.Part) bool { return p.Thought })
+}
+
+// asText is c with its tool calls and results written out as text.
+func asText(c *genai.Content) *genai.Content {
+	out := &genai.Content{Role: c.Role}
+	for _, p := range c.Parts {
+		switch {
+		case p.FunctionCall != nil:
+			args, _ := json.Marshal(p.FunctionCall.Args)
+			out.Parts = append(out.Parts, &genai.Part{Text: fmt.Sprintf("[Called %s with %s]", p.FunctionCall.Name, args)})
+		case p.FunctionResponse != nil:
+			res, _ := json.Marshal(p.FunctionResponse.Response)
+			out.Parts = append(out.Parts, &genai.Part{Text: fmt.Sprintf("[%s returned %s]", p.FunctionResponse.Name, res)})
+		default:
+			out.Parts = append(out.Parts, p)
+		}
+	}
+	return out
+}
+
+// signedState reports whether sig carries a provider's signature (not
+// only an origin): reasoning a provider signed, which mustn't be edited.
+func signedState(sig []byte) bool {
+	if _, payload, ok := untagState(sig); ok {
+		return len(payload) > 0
+	}
+	return len(sig) > 0
 }
 
 // takeCall returns the ID of the first pending call of name, removing it.

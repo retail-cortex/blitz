@@ -141,6 +141,8 @@ func TestAdaptRequestIDs(t *testing.T) {
 				{FunctionResponse: &genai.FunctionResponse{Name: "c"}},
 				{FunctionResponse: &genai.FunctionResponse{Name: "b"}},
 			}},
+			genai.NewContentFromText("done", genai.RoleModel),
+			genai.NewContentFromText("next", genai.RoleUser), // the calls are an earlier turn's
 		}}
 	}
 	got := adaptRequest(fromGemini, history())
@@ -176,4 +178,82 @@ func TestAdaptRequestOpensWithTheUser(t *testing.T) {
 
 	empty := &model.LLMRequest{Contents: []*genai.Content{{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "bz-1", Name: "a"}}}}}}
 	assert.Equal(t, "[Earlier in this conversation]", adaptRequest(fromClaude, empty).Contents[0].Parts[0].Text)
+}
+
+// A fallback mid-turn goes on from another model's calls (CA-91): Gemini's
+// placeholder signs the turn's first call of each step; Claude reads the
+// calls as text, unless they're its own, with its thinking.
+func TestAdaptRequestMidLoop(t *testing.T) {
+	loop := func(own *genai.Part) *model.LLMRequest {
+		calls := []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "bz-1", Name: "read_file", Args: map[string]any{"path": "a"}}}}
+		if own != nil {
+			calls = append([]*genai.Part{own}, calls...)
+		}
+		return &model.LLMRequest{Contents: []*genai.Content{
+			genai.NewContentFromText("hi", genai.RoleUser),
+			{Role: genai.RoleModel, Parts: calls},
+			{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: "bz-1", Name: "read_file", Response: map[string]any{"content": "x"}}}}},
+		}}
+	}
+	got := adaptRequest(fromGemini, loop(nil))
+	assert.Equal(t, []byte(geminiSkipSignature), got.Contents[1].Parts[0].ThoughtSignature)
+
+	got = adaptRequest(fromClaude, loop(nil))
+	require.Len(t, got.Contents, 3)
+	assert.Equal(t, `[Called read_file with {"path":"a"}]`, got.Contents[1].Parts[0].Text)
+	assert.Equal(t, `[read_file returned {"content":"x"}]`, got.Contents[2].Parts[0].Text)
+
+	thought := &genai.Part{Text: "plan", Thought: true, ThoughtSignature: tagState(fromClaude, []byte("c"))}
+	got = adaptRequest(fromClaude, loop(thought))
+	assert.NotNil(t, got.Contents[1].Parts[1].FunctionCall, "Claude's own calls stay calls")
+}
+
+func TestSignedState(t *testing.T) {
+	assert.True(t, signedState(tagState(fromClaude, []byte("sig"))))
+	assert.False(t, signedState(tagState(fromGPT, nil)), "unsigned reasoning")
+	assert.True(t, signedState([]byte("untagged")))
+	assert.False(t, signedState(nil))
+}
+
+// A tool's name every API takes stays as it is; another is made one, never
+// two to one, and the model's calls get the tool's own name back (CA-26).
+func TestWireNames(t *testing.T) {
+	for _, tc := range []struct{ name, want string }{
+		{"read_file", "read_file"},
+		{"github__search-issues", "github__search-issues"},
+		{"", ""},
+	} {
+		assert.Equal(t, tc.want, wireName(tc.name))
+	}
+	long := strings.Repeat("x", 80)
+	for _, name := range []string{"github.search.issues", "github_search.issues", "1password-lookup", long, "-dash", "café"} {
+		got := wireName(name)
+		assert.Regexp(t, `^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$`, got, name)
+		assert.NotEqual(t, name, got)
+	}
+	assert.NotEqual(t, wireName("a.b"), wireName("a_b.c"))
+	assert.NotEqual(t, wireName("a.b"), wireName("a:b"), "different names, different hashes")
+
+	inner := NewMockLLM("m", &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: wireName("github.search"), ID: "x"}}}})
+	m := &settingsModel{inner: inner, provider: "anthropic"}
+	cfg := &genai.GenerateContentConfig{Tools: []*genai.Tool{{FunctionDeclarations: []*genai.FunctionDeclaration{{Name: "github.search"}, {Name: "read_file"}}}}}
+	req := &model.LLMRequest{Config: cfg, Contents: []*genai.Content{
+		genai.NewContentFromText("hi", genai.RoleUser),
+		{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "a", Name: "github.search"}}}},
+		{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: "a", Name: "github.search"}}}},
+		genai.NewContentFromText("again", genai.RoleUser),
+	}}
+	var got []*model.LLMResponse
+	for resp, err := range m.GenerateContent(t.Context(), req, false) {
+		require.NoError(t, err)
+		got = append(got, resp)
+	}
+	sent := inner.Requests[0]
+	assert.Equal(t, wireName("github.search"), sent.Config.Tools[0].FunctionDeclarations[0].Name)
+	assert.Equal(t, "read_file", sent.Config.Tools[0].FunctionDeclarations[1].Name)
+	assert.Equal(t, wireName("github.search"), sent.Contents[1].Parts[0].FunctionCall.Name)
+	assert.Equal(t, wireName("github.search"), sent.Contents[2].Parts[0].FunctionResponse.Name)
+	assert.Equal(t, "github.search", cfg.Tools[0].FunctionDeclarations[0].Name, "the shared config was changed")
+	require.NotEmpty(t, got)
+	assert.Equal(t, "github.search", got[len(got)-1].Content.Parts[0].FunctionCall.Name)
 }

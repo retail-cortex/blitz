@@ -44,6 +44,9 @@ type Reply struct {
 	Calls []Call
 	// Usage is what the answer reports; zero gives a small default.
 	Usage Usage
+	// Status, when set, refuses the request with this HTTP status (a 503:
+	// the model is overloaded) instead of answering.
+	Status int
 }
 
 // Call is one scripted tool call.
@@ -148,6 +151,9 @@ func (f *Fake) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":{"message":"wirefake: body is not JSON"}}`, http.StatusBadRequest)
 		return
 	}
+	if m := pathModel.FindStringSubmatch(r.URL.Path); m != nil {
+		req[pathModelKey] = m[1] // Gemini names the model in the path
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reqs = append(f.reqs, req)
@@ -165,6 +171,12 @@ func (f *Fake) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	reply := f.script[0]
 	f.script = f.script[1:]
+	if reply.Status != 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(reply.Status)
+		_ = json.NewEncoder(w).Encode(errorBody(r.URL.Path, http.StatusText(reply.Status)))
+		return
+	}
 	answer := f.answer(f, req, reply)
 	if f.streamed != nil && f.streamed(r, req) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -194,6 +206,20 @@ func errorBody(path, why string) any {
 	default:
 		return map[string]any{"error": map[string]any{"message": why, "type": "invalid_request_error", "param": nil, "code": nil}}
 	}
+}
+
+var pathModel = regexp.MustCompile(`/models/([^/:]+):`)
+
+// pathModelKey holds, in a recorded request, the model its path named.
+const pathModelKey = "wirefake_path_model"
+
+// ModelOf is the model a recorded request asked for: in its body
+// (Anthropic, OpenAI) or its path (Gemini).
+func ModelOf(req map[string]any) string {
+	if m := str(req[pathModelKey]); m != "" {
+		return m
+	}
+	return str(req["model"])
 }
 
 // Helpers for reading a JSON request.

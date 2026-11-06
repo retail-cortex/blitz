@@ -67,6 +67,7 @@ func (m *settingsModel) Name() string { return m.inner.Name() }
 
 func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	o := m.origin()
+	back := namesBack(req)
 	req = adaptRequest(o, req)
 	if m.provider == "gemini" {
 		req = attachLoneSignatures(req)
@@ -90,6 +91,7 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	return func(yield func(*model.LLMResponse, error) bool) {
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			stampResponse(o, resp)
+			nameCallsBack(resp, back)
 			if !yield(resp, asQuota(err)) {
 				return
 			}

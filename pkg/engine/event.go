@@ -17,6 +17,7 @@ package engine
 import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/redact"
 	adksession "google.golang.org/adk/v2/session"
 )
 
@@ -30,7 +31,11 @@ func events(ev *adksession.Event) []api.Event {
 	for _, p := range ev.Content.Parts {
 		switch {
 		case p.Text != "":
-			out = append(out, api.Event{Author: ev.Author, Text: &api.Text{Text: p.Text, Partial: ev.Partial, Thought: p.Thought}})
+			text := p.Text
+			if p.Thought {
+				text = redact.Mask(text) // signed reasoning is kept as written (spec_056 CA-29)
+			}
+			out = append(out, api.Event{Author: ev.Author, Text: &api.Text{Text: text, Partial: ev.Partial, Thought: p.Thought}})
 		case p.FunctionCall != nil:
 			out = append(out, api.Event{Author: ev.Author, ToolCall: &api.ToolCall{ID: p.FunctionCall.ID, Name: p.FunctionCall.Name, Args: p.FunctionCall.Args, Partial: ev.Partial}})
 		case p.FunctionResponse != nil:

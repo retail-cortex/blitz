@@ -79,7 +79,7 @@ func checkGemini(f *Fake, req map[string]any) string {
 			p := obj(rp)
 			if sig := str(p["thoughtSignature"]); sig != "" {
 				raw, err := base64.StdEncoding.DecodeString(sig)
-				if err != nil || !f.signed(string(raw)) {
+				if err != nil || !(f.signed(string(raw)) || skipSignatures[string(raw)]) {
 					return fmt.Sprintf("Unable to submit request because Thought signature is not valid. (contents[%d].parts[%d])", i, j)
 				}
 			}
@@ -117,6 +117,10 @@ func checkGemini(f *Fake, req map[string]any) string {
 	}
 	return ""
 }
+
+// skipSignatures are the placeholders Gemini documents for function calls
+// it didn't make (another model's, in a conversation moved to Gemini).
+var skipSignatures = map[string]bool{"skip_thought_signature_validator": true, "context_engineering_is_the_way_to_go": true}
 
 func answerGemini(f *Fake, _ map[string]any, r Reply) any {
 	// Gemini 3 thinks on every call and signs the first function call it

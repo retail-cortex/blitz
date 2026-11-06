@@ -28,6 +28,7 @@ Found on 2026-11-05 by reading the code. None of the providers' answers has been
   - **Gemini to Claude.** Tool calls go out with an empty ID. ADK gives Gemini's calls `adk-…` IDs and blanks every `adk-` ID before each call (`RemoveClientFunctionCallID`).
   - **Claude to Gemini.** Claude's thinking goes to Gemini with Claude's signature on it. Gemini 3 wants its own signature on the current turn's function calls.
   - **To OpenAI.** Any `FileData` part is a hard error (`unsupported content part`). Claude's adapter drops it silently instead.
+  - **Fallbacks:** each member of a chain was sent the primary's model name (ADK names the agent's model on the request, and the Gemini and Claude adapters prefer it): a fallback to Claude asked Anthropic for a Gemini model, and a fallback between Gemini models called the primary again.
   - **With no switch at all:**
     - a compaction summary is stored as the model's turn, and the Claude adapter refuses a history that opens with it;
     - masking a secret inside Claude's signed thinking changes what was signed.
@@ -306,11 +307,13 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
 ## 11. Fallbacks
 
 - **CA-90** **Each member of a fallback chain gets its own adapter** (CA-20–29), so a member never receives another's provider state.
-- **CA-91** **A fallback mid-turn** sends the partial turn (the tool calls and results so far) through its own adapter. When its API requires state only the first model has (Claude's thinking on a tool loop's last turn with thinking on, Gemini's signature on the current turn's calls), the adapter meets the requirement:
-  - Claude: thinking off for that call.
-  - Gemini: the documented placeholder signature.
+- **CA-91** **A fallback mid-turn** sends the partial turn (the tool calls and results so far) through its own adapter (`adaptRequest`). When its API requires state only the first model has, the adapter meets the requirement:
+  - **Gemini**, which requires its signature on the first call of each step in the turn under way: the placeholder it documents (`skip_thought_signature_validator`).
+  - **Claude**, which with thinking on requires its own thinking at the head of the assistant message a tool loop goes on from (and Opus 5.5 and Fable always think): the other model's calls and their results in the turn under way go as text ("[Called read_file with {…}]", "[read_file returned {…}]"). Claude's own calls, with their thinking, stay calls.
+  - **OpenAI** needs nothing: it reads any paired calls.
   
   Where nothing can meet it, the chain moves on as for any error before output (MDL-61a), and the notice says why.
+- **CA-91a** *2026-11-05 (found by the conformance suite).* **Each member of a chain asks for its own model.** ADK names the agent's model on every request (`LLMRequest.Model`), which for a chain is its primary, and the Gemini and Claude adapters prefer that name to their own: a Claude fallback asked Anthropic for `gemini-3-pro`, and a Gemini Flash fallback asked for Pro again. Each member's request now names the member (`adaptRequest`).
 - **CA-92** **A fallback's answer** records its own origin (CA-02) and is priced at its own model's price. It's unpriced when its model has no price, never charged at the primary's.
 
 ## 12. A conversation's model
