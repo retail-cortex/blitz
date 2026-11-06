@@ -241,9 +241,16 @@ func (s *Syncer) Run(ctx context.Context) {
 	want := true // others' changes to take, once no turn runs
 	for {
 		if want && !s.busy() {
-			// Others' changes in, then this person's saves out.
-			if s.take(ctx) && s.ahead(ctx) {
-				s.push(ctx)
+			// Others' changes in, then this person's saves out. Asked
+			// again, ahead can have changed since take asked (Changes
+			// pushed meanwhile): nothing left to send is in step, not
+			// stateless until the next fetch.
+			if s.take(ctx) {
+				if s.ahead(ctx) {
+					s.push(ctx)
+				} else {
+					s.settle()
+				}
 			}
 			want = false
 		}
