@@ -374,6 +374,14 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anth
 			return p, err
 		}
 		p.Tools = tools
+		for _, kind := range builtinKinds(cfg) {
+			switch kind {
+			case ptWebFetch:
+				p.Betas = append(p.Betas, "web-fetch-2025-09-10")
+			case ptCodeExecution:
+				p.Betas = append(p.Betas, "code-execution-2025-08-25")
+			}
+		}
 	}
 
 	msgs, err := convertContents(req.Contents)
@@ -429,6 +437,13 @@ func convertContents(contents []*genai.Content) ([]anthropic.BetaMessageParam, e
 				continue
 			}
 			switch {
+			case p.ToolCall != nil || p.ToolResponse != nil:
+				// Claude's own server tool blocks, as it sent them (spec_056
+				// CA-82); another model's reach here as client calls.
+				var block anthropic.BetaContentBlockParamUnion
+				if role == anthropic.BetaMessageParamRoleAssistant && len(p.ThoughtSignature) > 0 && json.Unmarshal(p.ThoughtSignature, &block) == nil {
+					blocks = append(blocks, block)
+				}
 			case p.Thought:
 				// Thinking blocks go back unchanged (signature intact) so tool
 				// loops with thinking keep working; unsigned ones are dropped.
@@ -530,6 +545,16 @@ func convertTools(tools []*genai.Tool) ([]anthropic.BetaToolUnionParam, error) {
 	for _, t := range tools {
 		if t == nil {
 			continue
+		}
+		// The provider's own tools (spec_056 CA-80): genai's built-in
+		// fields, as Anthropic's server tools.
+		switch {
+		case t.GoogleSearch != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfWebSearchTool20250305: &anthropic.BetaWebSearchTool20250305Param{}})
+		case t.URLContext != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfWebFetchTool20250910: &anthropic.BetaWebFetchTool20250910Param{}})
+		case t.CodeExecution != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfCodeExecutionTool20250825: &anthropic.BetaCodeExecutionTool20250825Param{}})
 		}
 		for _, fd := range t.FunctionDeclarations {
 			if fd == nil {
@@ -635,12 +660,16 @@ func genaiSchemaToJSON(s *genai.Schema) map[string]any {
 // messageToResponse converts a Messages API response to an ADK response.
 func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	content := &genai.Content{Role: genai.RoleModel}
+	var cites []Citation
 	for i, block := range msg.Content {
 		switch b := block.AsAny().(type) {
 		case anthropic.BetaTextBlock:
 			if b.Text != "" {
 				content.Parts = append(content.Parts, &genai.Part{Text: b.Text})
 			}
+			cites = append(cites, anthropicCitations(b)...)
+		case anthropic.BetaServerToolUseBlock:
+			content.Parts = append(content.Parts, anthropicServerToolUse(b))
 		case anthropic.BetaThinkingBlock:
 			content.Parts = append(content.Parts, &genai.Part{Text: b.Thinking, Thought: true, ThoughtSignature: []byte(b.Signature)})
 		case anthropic.BetaRedactedThinkingBlock:
@@ -659,6 +688,10 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 				continue
 			}
 			content.Parts = append(content.Parts, &genai.Part{FunctionCall: &genai.FunctionCall{ID: b.ID, Name: b.Name, Args: args}})
+		default:
+			if p := anthropicServerToolResult(block.Type, block.RawJSON()); p != nil {
+				content.Parts = append(content.Parts, p)
+			}
 		}
 	}
 
@@ -691,6 +724,16 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 		CandidatesTokenCount:    int32(u.OutputTokens),
 		TotalTokenCount:         int32(prompt + u.OutputTokens),
 	}
+	addCitations(resp, cites)
+	countRequests(resp, ptWebSearch, int(u.ServerToolUse.WebSearchRequests))
+	countRequests(resp, ptWebFetch, int(u.ServerToolUse.WebFetchRequests))
+	code := 0
+	for _, p := range content.Parts {
+		if p.ToolCall != nil && p.PartMetadata[providerToolKey] == ptCodeExecution {
+			code++
+		}
+	}
+	countRequests(resp, ptCodeExecution, code)
 	return resp
 }
 

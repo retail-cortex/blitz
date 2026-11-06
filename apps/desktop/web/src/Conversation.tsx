@@ -121,7 +121,7 @@ import { effortIcon } from "./options";
 import { useAdvanced, useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Citation, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
 import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
@@ -1250,6 +1250,12 @@ const EntryView = memo(function EntryView({
  * Model text, with actions to copy it as shown or as its Markdown, and the
  * whole turn's answer when it came in parts. They show once it's complete.
  */
+/** The sources an answer cites, as a numbered list of links (spec_056 CA-84). */
+function sourcesMarkdown(cites: Citation[]): string {
+  const label = (s: string) => s.replace(/[[\]\\]/g, "\\$&");
+  return `${t("desktop.sources")}\n\n${cites.map((c, i) => `${i + 1}. [${label(c.title || c.url)}](<${c.url}>)`).join("\n")}`;
+}
+
 function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
   const advanced = useAdvanced(); // copy as Markdown and the whole turn: advanced
   const snack = useSnackbar();
@@ -1269,6 +1275,11 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
       <div ref={body}>
         <Markdown text={entry.text} />
       </div>
+      {!!entry.citations?.length && (
+        <div className="t-body-sm muted">
+          <Markdown text={sourcesMarkdown(entry.citations)} />
+        </div>
+      )}
       {!entry.open && entry.text.trim() && (
         <div className="bubble-actions answer-actions">
           <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />

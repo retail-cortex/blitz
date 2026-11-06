@@ -16,6 +16,7 @@ package engine
 
 import (
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	adksession "google.golang.org/adk/v2/session"
@@ -29,6 +30,16 @@ func events(ev *adksession.Event) []api.Event {
 	}
 	var out []api.Event
 	for _, p := range ev.Content.Parts {
+		if name, id, args, call, ok := runtime.ProviderToolPart(p); ok {
+			// The provider's own tool, shown as the client tool it stands
+			// for (spec_056 CA-82).
+			if call {
+				out = append(out, api.Event{Author: ev.Author, ToolCall: &api.ToolCall{ID: id, Name: name, Args: args}})
+			} else {
+				out = append(out, api.Event{Author: ev.Author, ToolResult: &api.ToolResult{ID: id, Name: name, Result: args}})
+			}
+			continue
+		}
 		switch {
 		case p.Text != "":
 			text := p.Text
@@ -49,6 +60,15 @@ func events(ev *adksession.Event) []api.Event {
 					out = append(out, api.Event{Author: ev.Author, Tasks: tasks})
 				}
 			}
+		}
+	}
+	if !ev.Partial {
+		if cs := runtime.Citations(&ev.LLMResponse); len(cs) > 0 {
+			cites := make([]api.Citation, len(cs))
+			for i, c := range cs {
+				cites[i] = api.Citation{Title: c.Title, URL: c.URL, Text: c.Text}
+			}
+			out = append(out, api.Event{Author: ev.Author, Citations: cites})
 		}
 	}
 	return out

@@ -223,6 +223,11 @@ func (p *Printer) Handle(ev api.Event) {
 		p.flushText()
 		fmt.Fprintf(p.out, "%s%s%s\n", Dim, i18n.N("repl.reflect_hint", ev.Reflect.Patterns), Reset)
 		p.spin.Start(i18n.T("spinner.working"))
+	case len(ev.Citations) > 0:
+		p.spin.Stop()
+		p.flushText()
+		fmt.Fprint(p.out, FormatCitations(ev.Citations))
+		p.spin.Start(i18n.T("spinner.working"))
 	case ev.Notice != nil:
 		p.spin.Stop()
 		p.flushText()

@@ -73,7 +73,7 @@ func (e *Engine) Aside(ctx context.Context, sessionID, prompt string, handler Ev
 
 	st := &runState{sessionID: sessionID, planOnly: true, mode: asideMode}
 	ctx = context.WithValue(ctx, runStateKey{}, st)
-	ctx = withSettingsLookup(ctx, e.lookupSettings)
+	ctx = WithProviderToolPolicy(withSettingsLookup(ctx, e.lookupSettings), e.providerToolPolicy())
 	if n := e.cfg.Tools.MaxParallel; n > 0 {
 		ctx = platform.WithTaskRunner(ctx, boundedRunner(n))
 	}

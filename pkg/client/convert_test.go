@@ -42,6 +42,13 @@ func TestReflectDueFromTheService(t *testing.T) {
 	assert.Equal(t, &api.ReflectDue{Patterns: 6, Score: 8}, got.Reflect)
 }
 
+// An answer's sources reach the front end as api.Event.Citations (spec_056 CA-84).
+func TestCitationsFromTheService(t *testing.T) {
+	got, ok := event(&pb.TurnEvent{Kind: &pb.TurnEvent_Citations{Citations: &pb.Citations{Items: []*pb.Citation{{Title: "Blitz", Url: "https://b", Text: "an agent"}}}}})
+	require.True(t, ok)
+	assert.Equal(t, []api.Citation{{Title: "Blitz", URL: "https://b", Text: "an agent"}}, got.Citations)
+}
+
 // Each typed error the service reports comes back as api's error, with
 // its data; an unknown reason keeps the service's message.
 func TestErrorsFromTheService(t *testing.T) {

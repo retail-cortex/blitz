@@ -52,17 +52,24 @@ func streamMessages(w io.Writer, answer any) {
 			empty = map[string]any{"type": "thinking", "thinking": ""}
 			delta = map[string]any{"type": "thinking_delta", "thinking": block["thinking"]}
 		case "text":
-			empty = map[string]any{"type": "text", "text": ""}
+			empty = map[string]any{"type": "text", "text": "", "citations": []any{}}
 			delta = map[string]any{"type": "text_delta", "text": block["text"]}
-		case "tool_use":
-			empty = map[string]any{"type": "tool_use", "id": block["id"], "name": block["name"], "input": map[string]any{}}
+		case "tool_use", "server_tool_use":
+			empty = map[string]any{"type": block["type"], "id": block["id"], "name": block["name"], "input": map[string]any{}}
 			in, _ := json.Marshal(block["input"])
 			delta = map[string]any{"type": "input_json_delta", "partial_json": string(in)}
+		default: // a server tool's result: whole at its start
+			empty = block
 		}
 		event(w, "content_block_start", map[string]any{"type": "content_block_start", "index": i, "content_block": empty})
-		event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": delta})
+		if delta != nil {
+			event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": delta})
+		}
 		if str(block["type"]) == "thinking" {
 			event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": map[string]any{"type": "signature_delta", "signature": block["signature"]}})
+		}
+		for _, c := range list(block["citations"]) {
+			event(w, "content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": map[string]any{"type": "citations_delta", "citation": c}})
 		}
 		event(w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
 	}
@@ -70,7 +77,28 @@ func streamMessages(w io.Writer, answer any) {
 	event(w, "message_stop", map[string]any{"type": "message_stop"})
 }
 
-var toolUseID = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+var (
+	toolUseID       = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	serverToolUseID = regexp.MustCompile(`^srvtoolu_[a-zA-Z0-9_]+$`)
+	// serverTools are the server tools the fake knows, by type, with the
+	// name each must have.
+	serverTools = map[string]string{
+		"web_search_20250305":     "web_search",
+		"web_fetch_20250910":      "web_fetch",
+		"code_execution_20250825": "code_execution",
+	}
+)
+
+// offersServerTool reports whether req offers the server tool named name.
+func offersServerTool(req map[string]any, name string) bool {
+	for _, tl := range list(req["tools"]) {
+		t := obj(tl)
+		if serverTools[str(t["type"])] == name {
+			return true
+		}
+	}
+	return false
+}
 
 // checkMessages is why the Messages API would refuse req ("" if it
 // wouldn't), from its documentation: the conversation starts with the
@@ -87,7 +115,14 @@ func checkMessages(f *Fake, req map[string]any) string {
 		return "model: Field required"
 	}
 	for i, tl := range list(req["tools"]) {
-		if n := str(obj(tl)["name"]); !toolName.MatchString(n) {
+		t := obj(tl)
+		if typ := str(t["type"]); typ != "" && typ != "custom" {
+			if name, ok := serverTools[typ]; !ok || str(t["name"]) != name {
+				return fmt.Sprintf("tools.%d: Input tag '%s' found using 'type' does not match any of the expected tags", i, typ)
+			}
+			continue
+		}
+		if n := str(t["name"]); !toolName.MatchString(n) {
 			return fmt.Sprintf("tools.%d.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}$'", i)
 		}
 	}
@@ -111,9 +146,29 @@ func checkMessages(f *Fake, req map[string]any) string {
 		answered := map[string]bool{}
 		seenOther := false
 		var uses []string
+		serverUses := map[string]bool{}
 		for j, b := range blocks {
 			block := obj(b)
 			switch typ := str(block["type"]); typ {
+			case "server_tool_use":
+				if role != "assistant" {
+					return fmt.Sprintf("messages.%d.content.%d: server_tool_use blocks may only be in assistant messages", i, j)
+				}
+				if !serverToolUseID.MatchString(str(block["id"])) {
+					return fmt.Sprintf("messages.%d.content.%d.server_tool_use.id: String should match pattern '^srvtoolu_[a-zA-Z0-9_]+$'", i, j)
+				}
+				serverUses[str(block["id"])] = true
+				seenOther = true
+			case "web_search_tool_result", "web_fetch_tool_result", "code_execution_tool_result":
+				if role != "assistant" || !serverUses[str(block["tool_use_id"])] {
+					return fmt.Sprintf("messages.%d.content.%d: `%s` block's `tool_use_id` must match a `server_tool_use` block before it in the same assistant message", i, j, typ)
+				}
+				for _, r := range list(block["content"]) {
+					if enc := str(obj(r)["encrypted_content"]); enc != "" && !f.signed(enc) {
+						return fmt.Sprintf("messages.%d.content.%d: Invalid `encrypted_content` in `web_search_result` block", i, j)
+					}
+				}
+				seenOther = true
 			case "tool_use":
 				if role != "assistant" {
 					return fmt.Sprintf("messages.%d.content.%d: tool_use blocks may only be in assistant messages", i, j)
@@ -211,8 +266,26 @@ func answerMessages(f *Fake, req map[string]any, r Reply) any {
 	if r.Thought != "" && thinks(req) {
 		content = append(content, map[string]any{"type": "thinking", "thinking": r.Thought, "signature": f.sign("anthropic")})
 	}
+	searches := 0
+	var cites []any
+	if s := r.Search; s != nil && offersServerTool(req, "web_search") {
+		id := f.id("srvtoolu_")
+		var results []any
+		for _, src := range s.Results {
+			results = append(results, map[string]any{"type": "web_search_result", "url": src.URL, "title": src.Title, "encrypted_content": f.sign("anthropic-enc"), "page_age": nil})
+			cites = append(cites, map[string]any{"type": "web_search_result_location", "url": src.URL, "title": src.Title, "encrypted_index": f.sign("anthropic-idx"), "cited_text": r.Text})
+		}
+		content = append(content,
+			map[string]any{"type": "server_tool_use", "id": id, "name": "web_search", "input": map[string]any{"query": s.Query}},
+			map[string]any{"type": "web_search_tool_result", "tool_use_id": id, "content": results})
+		searches = 1
+	}
 	if r.Text != "" {
-		content = append(content, map[string]any{"type": "text", "text": r.Text})
+		text := map[string]any{"type": "text", "text": r.Text}
+		if cites != nil {
+			text["citations"] = cites
+		}
+		content = append(content, text)
 	}
 	stop := "end_turn"
 	for _, c := range r.Calls {
@@ -223,7 +296,10 @@ func answerMessages(f *Fake, req map[string]any, r Reply) any {
 	return map[string]any{
 		"id": f.id("msg_"), "type": "message", "role": "assistant", "model": str(req["model"]),
 		"content": content, "stop_reason": stop, "stop_sequence": nil,
-		"usage": map[string]any{"input_tokens": u.Input - u.Cached, "cache_read_input_tokens": u.Cached, "cache_creation_input_tokens": 0, "output_tokens": u.Output},
+		"usage": map[string]any{
+			"input_tokens": u.Input - u.Cached, "cache_read_input_tokens": u.Cached, "cache_creation_input_tokens": 0, "output_tokens": u.Output,
+			"server_tool_use": map[string]any{"web_search_requests": searches, "web_fetch_requests": 0},
+		},
 	}
 }
 

@@ -524,7 +524,7 @@ func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...o
 	m, err := openaimodel.NewModel(ctx, name, &openaimodel.ClientConfig{
 		APIKey:  apiKey,
 		BaseURL: baseURL,
-		Options: append([]option.RequestOption{option.WithMiddleware(openAIImageMiddleware)}, opts...),
+		Options: append([]option.RequestOption{option.WithMiddleware(openAIImageMiddleware), option.WithMiddleware(openAIProviderToolsMiddleware)}, opts...),
 	})
 	if err != nil {
 		return nil, err

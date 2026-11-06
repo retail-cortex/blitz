@@ -34,6 +34,21 @@ Set `web.search_provider` to one of:
 
 The agent's `web_search` asks for approval (rememberable per provider), because the query leaves your machine. Results from `web.deny_domains` are dropped. `blitz doctor --online` runs a test search.
 
+## The model's own tools
+
+Some models come with their provider's own web search, web fetch and code execution: Claude (on Anthropic and on Vertex AI), Gemini 3 and OpenAI's GPT models (web search). Blitz uses them in place of its own `web_search`, `web_fetch` and code runs wherever the model has them: the provider runs the search or the code, and the model reads the results in the same call. You don't need a search provider set for this.
+
+They follow the same rules as Blitz's tools:
+
+- An agent gets the model's search only if its `tools` list `web_search`, and the model's fetch only if `web_fetch` is on (`[web] enabled`).
+- Code execution runs in the provider's sandbox, not on your machine, and only for an agent that may run commands. Plan mode and read-only runs (`/search`) keep search and fetch and leave code execution out.
+- Switch them off with `[tools] provider = false`, or for one agent in its `tools` with `-provider:web_search`, `-provider:web_fetch`, `-provider:code_execution` or `-provider:*`. Your organization can switch them off with `provider:<name>` in its policy's `tools.off`.
+- A `deny` rule for `web_search` or `web_fetch` switches the model's off too.
+
+The model's search doesn't ask before each query: the query goes to the provider that already has the conversation, not to a third party. Each search and fetch shows in the conversation as a `web_search` or `web_fetch` call with its results, and the answer's sources are listed under it. The provider bills these per request: Anthropic $10 per 1,000 searches, Google per grounded query, OpenAI per call. Blitz counts them with the call that made them.
+
+If you switch a conversation to another model, it reads those searches as ordinary `web_search` calls and results.
+
 ## /search
 
 ```text

@@ -277,6 +277,10 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 		}
 	case *pb.TurnEvent_ReflectDue:
 		out.Reflect = &api.ReflectDue{Patterns: int(k.ReflectDue.Patterns), Score: int(k.ReflectDue.Score)}
+	case *pb.TurnEvent_Citations:
+		for _, c := range k.Citations.Items {
+			out.Citations = append(out.Citations, api.Citation{Title: c.Title, URL: c.Url, Text: c.Text})
+		}
 	case *pb.TurnEvent_Notice:
 		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error, Transient: k.Notice.Transient}
 	case *pb.TurnEvent_FlowStep:

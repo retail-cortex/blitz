@@ -112,7 +112,23 @@ message TurnEvent {
     // At a chat turn's end: the runs since the last reflection hit
     // enough problems to /reflect on (spec_048_harness_learning HE-63).
     ReflectDue reflect_due = 12;
+    // The sources the answer before it cites, from the provider's own
+    // search or fetch (spec_056_conversation_adapters CA-84).
+    Citations citations = 13;
   }
+}
+
+// The sources an answer cites.
+message Citations {
+  repeated Citation items = 1;
+}
+
+// One source an answer cites.
+message Citation {
+  string title = 1;
+  string url = 2;
+  // The text of the answer it supports.
+  string text = 3;
 }
 
 // The evidence that suggests /reflect.

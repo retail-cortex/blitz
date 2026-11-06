@@ -122,6 +122,15 @@ type Event struct {
 	// reflection hit enough problems to /reflect on
 	// (spec_048_harness_learning HE-63).
 	Reflect *ReflectDue
+	// Citations are the sources the answer before it cites, from the
+	// provider's own search or fetch (spec_056 CA-84).
+	Citations []Citation
+}
+
+// Citation is one source an answer cites: its title, its address, and the
+// text of the answer it supports.
+type Citation struct {
+	Title, URL, Text string
 }
 
 // ReflectDue is the evidence that suggests /reflect: its patterns, and

@@ -145,11 +145,12 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 	// ADK names the agent's model on every request, which for a fallback
 	// chain is its primary: each member asks for itself (MDL-60).
 	cp.Model = o.Model
-	cp.Config = wireTools(req.Config)
-	cp.Contents = make([]*genai.Content, 0, len(req.Contents))
+	contents, called := asClientCalls(o, req.Contents) // another model's provider tools (CA-82)
+	cp.Config = declareCalled(wireTools(req.Config), called)
+	cp.Contents = make([]*genai.Content, 0, len(contents))
 	var pending []*genai.FunctionCall // calls of the previous content without an ID
 	legacy := 0
-	for _, c := range req.Contents {
+	for _, c := range contents {
 		if c == nil {
 			continue
 		}
@@ -161,6 +162,9 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 				continue
 			}
 			np := *p
+			if o.API == "gemini" {
+				np.PartMetadata = nil // Blitz's own; Vertex AI refuses the field
+			}
 			if p.Thought || len(p.ThoughtSignature) > 0 {
 				key, payload, ok := untagState(p.ThoughtSignature)
 				if ok && key == o.key() {
