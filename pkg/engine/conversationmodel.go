@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 )
@@ -40,23 +40,23 @@ func (w *Workspace) SessionModel(id string) string { return w.storage.Model(id) 
 // conversation is compacted first, and what the model can't do.
 func (w *Workspace) PreviewSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
 	ref = strings.TrimSpace(ref)
-	name := w.engine.ModelName()
-	if ref != "" {
-		llm, err := w.newModel(ctx, w.settings(), ref)
-		if err != nil {
-			return api.ModelPreview{}, err
-		}
-		name = llm.Name()
-	}
 	cfg := w.settings()
+	llm, err := w.newModel(ctx, cfg, cmp.Or(ref, cfg.ModelName()))
+	if err != nil {
+		return api.ModelPreview{}, err
+	}
 	u := w.engine.Usage(id)
 	p := api.ModelPreview{Model: ref, Tokens: u.LastPrompt}
-	if price, ok := config.PriceFor(cfg.Pricing, name); ok {
+	if price, ok := w.engine.PriceOf(llm.Name()); ok {
 		p.Priced = true
 		p.CostUSD = float64(u.LastPrompt) * price.InputPerMTok / 1e6
 	}
-	c := cfg.Context
-	p.Compacts = c.Compaction && c.TokenThreshold > 0 && u.LastPrompt > int64(c.TokenThreshold)
+	// What the engine knows of the model: where it compacts, what it
+	// won't see, whether it can call tools (CA-63, CA-103, CA-110).
+	facts := w.engine.SwitchFacts(ctx, id, llm)
+	p.Compacts = facts.CompactAt > 0 && u.LastPrompt > int64(facts.CompactAt)
+	p.Unseen = facts.Unseen
+	p.NoTools = facts.NoTools
 	if m, pinned := w.engine.AgentModel(w.engine.ActiveAgent()); pinned {
 		p.ActivePin = m
 	}

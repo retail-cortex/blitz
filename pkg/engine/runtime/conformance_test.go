@@ -240,3 +240,25 @@ func TestConformanceUnpricedFallbackIsUnpriced(t *testing.T) {
 	assert.False(t, u.Priced, "a call by an unpriced model was priced")
 	assert.Zero(t, u.CostUSD, "a call by an unpriced model was charged %v", u.CostUSD)
 }
+
+// A switch's facts come from the model's record and the conversation:
+// where the model compacts, what it won't see, whether it calls tools
+// (spec_056 CA-63, CA-101, CA-103, CA-110).
+func TestSwitchFacts(t *testing.T) {
+	cfg := conformanceConfig(t)
+	ws := wires(t, cfg)
+	g := ws["gemini"]
+	eng := conformanceEngine(t, cfg, modelFor(t, cfg, g))
+	g.fake.Script(toolTurn()...)
+	_, err := collect(t, eng, "s", "What do my notes say?")
+	require.NoError(t, err)
+
+	claude := modelFor(t, cfg, ws["anthropic"])
+	f := eng.SwitchFacts(context.Background(), "s", claude)
+	assert.Positive(t, f.CompactAt)
+	assert.False(t, f.NoTools)
+	assert.Empty(t, f.Unseen, "no attachments yet")
+
+	cfg.Context.Compaction = false
+	assert.Zero(t, eng.SwitchFacts(context.Background(), "s", claude).CompactAt, "nothing is compacted with compaction off")
+}

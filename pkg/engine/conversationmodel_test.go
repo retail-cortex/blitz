@@ -33,7 +33,7 @@ import (
 // CA-100, CA-101).
 func TestConversationModel(t *testing.T) {
 	w, workspaceModel := openTestWith(t, func(c *config.Config) {
-		c.Pricing = map[string]config.ModelPrice{"anthropic/claude-x": {InputPerMTok: 3}}
+		c.Pricing = map[string]config.ModelPrice{"claude-x": {InputPerMTok: 3}} // prices are by model name
 	})
 	var mu sync.Mutex
 	built := map[string][]*runtime.MockLLM{}
@@ -69,6 +69,8 @@ func TestConversationModel(t *testing.T) {
 	assert.False(t, p.Compacts)
 	assert.Equal(t, "anthropic/claude-x", w.SessionModel(moved.ID))
 	assert.Empty(t, w.SessionModel(other.ID))
+	assert.False(t, p.NoTools)
+	assert.Empty(t, p.Unseen)
 
 	before := len(workspaceModel.Requests)
 	_, err = w.Run(ctx, moved.ID, api.Turn{Text: "hi"}, func(api.Event) {})

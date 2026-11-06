@@ -89,6 +89,9 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			req = &cp
 			sink = &openAISink{kinds: kinds}
 			ctx = context.WithValue(ctx, openAISinkKey{}, sink)
+			// The middleware takes the provider's items out of a whole
+			// reply: a call offering them isn't streamed (CA-80, CA-50).
+			stream = false
 		}
 	}
 	if m.provider == "gemini" {

@@ -60,6 +60,7 @@ go_library(
         "signatures.go",
         "speech.go",
         "steer.go",
+        "switchfacts.go",
         "tasks.go",
         "unavailable.go",
         "usage.go",

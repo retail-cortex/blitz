@@ -75,6 +75,10 @@ var wireNames = []string{"gemini", "anthropic", "openai"}
 // The switch and the mid-loop fallback hold with the reply streamed, as
 // the service runs them (CA-50, CA-54).
 func TestConformanceStreamed(t *testing.T) {
+	// The streaming path itself: a call offering OpenAI's own web search
+	// isn't streamed (CA-50), so provider tools are off here; their own
+	// grid is providertools_conformance_test.go.
+	off := false
 	for _, from := range wireNames {
 		for _, to := range wireNames {
 			if from == to {
@@ -82,6 +86,7 @@ func TestConformanceStreamed(t *testing.T) {
 			}
 			t.Run("switch "+from+" to "+to, func(t *testing.T) {
 				cfg := conformanceConfig(t)
+				cfg.Tools.Provider = &off
 				ws := wires(t, cfg)
 				first, next := ws[from], ws[to]
 				eng, _ := streamedEngine(t, cfg, modelFor(t, cfg, first), true)

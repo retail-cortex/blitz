@@ -622,6 +622,12 @@ func (e *Engine) HasPrice(model string) bool {
 	return e.usage.HasPrice(settingsName(model))
 }
 
+// PriceOf is model's price as the ledger charges it: the price table,
+// then the organization's catalog (spec_056 CA-123).
+func (e *Engine) PriceOf(model string) (config.ModelPrice, bool) {
+	return e.usage.priceFor(settingsName(model))
+}
+
 // UnpricedModels are the models sessionID called that have no price.
 func (e *Engine) UnpricedModels(sessionID string) []string {
 	return e.usage.UnpricedModels(sessionID)
