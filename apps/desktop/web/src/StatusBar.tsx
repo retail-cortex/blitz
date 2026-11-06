@@ -568,13 +568,13 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           trigger={(p) => (
             <button
               className="sb-item sb-button sb-model"
-              title={t("desktop.status.model_title", { agent: s.agent, model: s.model, provider: s.provider })}
+              title={t("desktop.status.model_title", { agent: s.agent, model: st.conversationModel || s.model, provider: s.provider })}
               {...p}
               onClick={() => (loadAgents(), p.onClick())}
             >
               <Icon path={mdiRobotOutline} size="sm" />
               <span className="sb-low ellipsis">{s.agent}</span>
-              <span className="ellipsis">{s.model}</span>
+              <span className="ellipsis">{st.conversationModel || s.model}</span>
             </button>
           )}
           items={[

@@ -202,6 +202,7 @@ export function Conversation({
   const [total, setTotal] = useState<Usage>();
   // The status bar shows the session's usage, and the last turn's.
   useEffect(() => publishStatus(dir, { total, turn: turnUsage }), [dir, total, turnUsage]);
+  useEffect(() => publishStatus(dir, { conversationModel: session?.model || undefined }), [dir, session?.model]);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);

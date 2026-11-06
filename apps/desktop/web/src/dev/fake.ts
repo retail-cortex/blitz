@@ -1693,6 +1693,12 @@ export function installFake() {
           s.sessions = s.sessions.filter((x) => x.id !== sessionId);
           return {};
         },
+        setSessionModel: ({ workspace, model }) => {
+          const sess = active(state(workspace));
+          (sess as { model?: string }).model = model;
+          return { preview: { model, tokens: 12_000n, costUsd: 0.04, priced: true, compacts: false, unseen: [], noTools: false, activePin: "" } };
+        },
+        previewSessionModel: ({ model }) => ({ preview: { model, tokens: 12_000n, costUsd: 0.04, priced: true, compacts: false, unseen: [], noTools: false, activePin: "" } }),
         renameSession: ({ workspace, title }) => {
           const sess = active(state(workspace));
           sess.title = title;

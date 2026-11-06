@@ -48,6 +48,8 @@ interface WorkspaceStatus {
   threshold?: number;
   autoCompact?: boolean;
   cursor?: Cursor;
+  /** The open conversation's own model, when it has one (spec_056 CA-100). */
+  conversationModel?: string;
 }
 
 const empty: WorkspaceStatus = {};

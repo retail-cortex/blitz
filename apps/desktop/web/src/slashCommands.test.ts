@@ -46,6 +46,7 @@ beforeEach(() => {
         compact: (r) => (rec(`compact ${r.focus}`), { eventsCompacted: 3, summaryChars: 40 }),
         saveSnapshot: (r) => (rec(`snapshot ${r.name} ${r.force}`), { snapshot: { snapshot: r.name } }),
         searchSession: () => ({ found: 0 }),
+        setSessionModel: (r) => (rec(`setSessionModel ${r.sessionId} ${r.model}`), { preview: { model: r.model, tokens: 12_300n, costUsd: 0.04, priced: true, compacts: false, unseen: [], noTools: false, activePin: "" } }),
       });
       service(WorkspaceService, {
         getModel: () => ({ provider: "gemini", name: "gemini-4-argon" }),
@@ -276,7 +277,8 @@ describe("commands", () => {
     ["/plan add a cache", "", [], [], ['add a cache {"plan":true}']],
     ["/btw why?", "", [], [], ['why? {"aside":true,"shown":"/btw why?"}']],
     ["/agent qa", "QA", ["setAgent qa"], ["settingsChanged"], []],
-    ["/model openai/gpt-5", "openai/gpt-5", ["setModel openai/gpt-5"], ["settingsChanged"], []],
+    ["/model openai/gpt-5", "From the next turn, openai/gpt-5 reads this conversation again: about 12.3k tokens, $0.04.", ["setSessionModel s1 openai/gpt-5"], [], []],
+    ["/model openai/gpt-5 --new", "Started a new conversation on openai/gpt-5", ["setModel openai/gpt-5"], ["newSession", "settingsChanged"], []],
     ["/mode plan", "", ["mode plan"], ["settingsChanged"], []],
     ["/effort high", "high", ["set effort=high"], ["settingsChanged"], []],
     ["/search session cart", "cart", [], [], []],
