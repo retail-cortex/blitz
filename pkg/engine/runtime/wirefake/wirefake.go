@@ -42,11 +42,21 @@ type Reply struct {
 	Text string
 	// Calls are the tool calls the answer makes.
 	Calls []Call
+	// Files are files the answer makes (an image model's pictures), which
+	// only the Gemini fake returns, as Gemini does: inline data in the
+	// model's turn.
+	Files []File
 	// Usage is what the answer reports; zero gives a small default.
 	Usage Usage
 	// Status, when set, refuses the request with this HTTP status (a 503:
 	// the model is overloaded) instead of answering.
 	Status int
+}
+
+// File is a file a model makes.
+type File struct {
+	MIME string
+	Data []byte
 }
 
 // Call is one scripted tool call.
