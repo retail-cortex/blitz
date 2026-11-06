@@ -370,6 +370,14 @@ helper process (IMG-52).
   dialogs, notifications, deep links, the tray, `window.blitzElectron`). Done: both
   tiers green in CI on Linux and macOS.
 
+- **An image-generation tool (M).** Decided 2026-11-05 with spec 056
+  (CA-161): Blitz handles images a model returns now; a tool that makes
+  them comes later. A client tool (`generate_image`) backed by an image
+  model (`[images]` like `[audio]`: Gemini's or OpenAI's), priced per
+  image in the ledger (CA-120), its output kept as CA-70 says (shown with
+  Save, in a job's `out/`). Done: the tool in the CLI and the desktop,
+  its cost in `/usage`, a journey test, and a page in the guide.
+
 ## Waiting on something
 
 - **Drive the user's own Chrome (L), left out of v0.8.4 (owner, 2026-10-23).**
