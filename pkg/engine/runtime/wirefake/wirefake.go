@@ -55,6 +55,18 @@ type Reply struct {
 	// before its Text, which cites the results; only when the request
 	// offers that tool, as a real model can search only then.
 	Search *Search
+	// Finish, when set, is why the answer ended, in the API's own words:
+	// Anthropic's stop_reason ("refusal"), Gemini's finishReason ("SAFETY",
+	// "RECITATION", "MALFORMED_FUNCTION_CALL"), OpenAI's incomplete reason
+	// ("content_filter").
+	Finish string
+	// Extra are parts of the answer Blitz has no form for, as the API
+	// sends them: an Anthropic content block (a server_tool_use), an
+	// OpenAI output item (a web_search_call).
+	Extra []map[string]any
+	// TooLong refuses the request as longer than the model's context
+	// window, in the API's words.
+	TooLong bool
 }
 
 // Search is a provider web search: its query and what it found.
@@ -72,6 +84,18 @@ type Source struct {
 type File struct {
 	MIME string
 	Data []byte
+}
+
+// tooLong is each API's refusal of a request longer than its model reads.
+func tooLong(path string) string {
+	switch {
+	case regexp.MustCompile(`/messages$`).MatchString(path):
+		return "prompt is too long: 212000 tokens > 200000 maximum"
+	case regexp.MustCompile(`:(generate|streamGenerate)Content$`).MatchString(path):
+		return "The input token count (1100000) exceeds the maximum number of tokens allowed (1048576)."
+	default:
+		return "Your input exceeds the context window of this model. Please adjust your input and try again."
+	}
 }
 
 // Call is one scripted tool call.
@@ -103,11 +127,13 @@ type Fake struct {
 	refuse []string
 	issued map[string]bool
 	n      int
-	check  func(f *Fake, req map[string]any) string
-	answer func(f *Fake, req map[string]any, r Reply) any
+	// streamed counts the answers given as streams.
+	streamed int
+	check    func(f *Fake, req map[string]any) string
+	answer   func(f *Fake, req map[string]any, r Reply) any
 	// streamed reports whether a request asks for a stream, and stream
 	// writes an answer as the API streams it (server-sent events).
-	streamed func(r *http.Request, req map[string]any) bool
+	isStream func(r *http.Request, req map[string]any) bool
 	stream   func(w io.Writer, answer any)
 	path     *regexp.Regexp
 }
@@ -134,6 +160,13 @@ func (f *Fake) Remaining() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.script)
+}
+
+// Streamed is how many answers the fake gave as streams.
+func (f *Fake) Streamed() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.streamed
 }
 
 // Requests are the bodies the fake was sent, accepted or not.
@@ -196,6 +229,16 @@ func (f *Fake) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	reply := f.script[0]
 	f.script = f.script[1:]
+	if reply.TooLong {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		body := errorBody(r.URL.Path, tooLong(r.URL.Path))
+		if e := obj(obj(body)["error"]); e != nil && !regexp.MustCompile(`(/messages|Content)$`).MatchString(r.URL.Path) {
+			e["code"] = "context_length_exceeded"
+		}
+		_ = json.NewEncoder(w).Encode(body)
+		return
+	}
 	if reply.Status != 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(reply.Status)
@@ -203,7 +246,8 @@ func (f *Fake) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	answer := f.answer(f, req, reply)
-	if f.streamed != nil && f.streamed(r, req) {
+	if f.isStream != nil && f.isStream(r, req) {
+		f.streamed++
 		w.Header().Set("Content-Type", "text/event-stream")
 		f.stream(w, answer)
 		return

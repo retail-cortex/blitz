@@ -293,3 +293,36 @@ func TestProviderToolsStrict(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code)
 	require.Len(t, o.Refusals(), 1)
 }
+
+// Each fake refuses a request too long in its API's words, ends a reply as
+// scripted, and sends parts Blitz has no form for as its API sends them.
+func TestRepliesAsEachAPIGivesThem(t *testing.T) {
+	a, g, o := Anthropic(t), Gemini(t), OpenAI(t)
+	msgs := map[string]any{"model": "m", "messages": []any{user("hi")}}
+	gemini := map[string]any{"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}}}
+	responses := map[string]any{"model": "m", "input": "hi"}
+
+	a.Script(Reply{TooLong: true}, Reply{Text: "no", Finish: "refusal", Extra: []map[string]any{{"type": "server_tool_use", "id": "s1"}}})
+	code, body := post(t, a.URL()+"/v1/messages", msgs)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Contains(t, str(obj(body["error"])["message"]), "prompt is too long")
+	_, body = post(t, a.URL()+"/v1/messages", msgs)
+	assert.Equal(t, "refusal", body["stop_reason"])
+	assert.Equal(t, "server_tool_use", str(obj(list(body["content"])[1])["type"]))
+
+	g.Script(Reply{TooLong: true}, Reply{Finish: "RECITATION", Text: "x"})
+	code, body = post(t, g.URL()+"/v1beta/models/m:generateContent", gemini)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Contains(t, str(obj(body["error"])["message"]), "exceeds the maximum number of tokens")
+	_, body = post(t, g.URL()+"/v1beta/models/m:generateContent", gemini)
+	assert.Equal(t, "RECITATION", obj(list(body["candidates"])[0])["finishReason"])
+
+	o.Script(Reply{TooLong: true}, Reply{Text: "x", Finish: "content_filter", Extra: []map[string]any{{"type": "web_search_call"}}})
+	code, body = post(t, o.URL()+"/v1/responses", responses)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Equal(t, "context_length_exceeded", obj(body["error"])["code"])
+	_, body = post(t, o.URL()+"/v1/responses", responses)
+	assert.Equal(t, "incomplete", body["status"])
+	assert.Equal(t, "web_search_call", str(obj(list(body["output"])[1])["type"]))
+	assert.Zero(t, a.Streamed()+g.Streamed()+o.Streamed())
+}

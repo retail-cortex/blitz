@@ -102,7 +102,10 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 		}
 	}
 	return func(yield func(*model.LLMResponse, error) bool) {
-		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
+		gen := func(req *model.LLMRequest) iter.Seq2[*model.LLMResponse, error] {
+			return m.inner.GenerateContent(ctx, req, stream)
+		}
+		for resp, err := range retryMalformed(req, gen) {
 			switch m.provider {
 			case "gemini":
 				geminiProviderTools(o, resp)
@@ -111,7 +114,7 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			}
 			stampResponse(o, resp)
 			nameCallsBack(resp, back)
-			if !yield(resp, asQuota(err)) {
+			if !yield(resp, asContextLength(asQuota(err))) {
 				return
 			}
 		}

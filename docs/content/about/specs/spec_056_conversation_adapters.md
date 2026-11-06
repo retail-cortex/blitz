@@ -8,8 +8,8 @@ weight: 56
 | | |
 |---|---|
 | Status | **Draft** (2026-11-05). The owner decided, on PR #92: a model switch belongs to the conversation, takes effect from its next turn, and drops the previous provider's reasoning; history stays in ADK's event log, tagged with where each part came from; the status bar offers a new chat before switching one that has history. Its other decisions are in §18. |
-| Source | `pkg/engine/runtime` (`origin.go`: origins, tagging and adapting; adapters: `model_factory.go`, `anthropic.go`, `apiprovider.go`, `apiresponse.go`, `enterprisemodel.go`, `cloud.go`, `ollama.go`, `openai_images.go`; wrappers: `settings.go`, `signatures.go`, `fallback.go`, `outputcap.go`, `guard.go`, `images.go`, `media.go`, `geminifiles.go`; `usage.go`, `compact.go`, `contextparts.go`, `listmodels.go`, `httpclient.go`, `quota.go`, `speech.go`), `pkg/engine/session`, `pkg/engine/models.go`, `pkg/images`, `pkg/config/features.go`, `pkg/enterprise/models.go` |
-| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict) |
+| Source | `pkg/engine/runtime` (`origin.go`: origins, tagging and adapting; `replies.go`: reply parts, why replies end, context too long, streaming; adapters: `model_factory.go`, `anthropic.go`, `apiprovider.go`, `apiresponse.go`, `enterprisemodel.go`, `cloud.go`, `ollama.go`, `openai_images.go`; wrappers: `settings.go`, `signatures.go`, `fallback.go`, `outputcap.go`, `guard.go`, `images.go`, `media.go`, `geminifiles.go`; `usage.go`, `compact.go`, `contextparts.go`, `listmodels.go`, `httpclient.go`, `quota.go`, `speech.go`), `pkg/engine/session`, `pkg/engine/models.go`, `pkg/images`, `pkg/config/features.go`, `pkg/enterprise/models.go` |
+| Tests | `pkg/engine/runtime/conformance_test.go` (CA-150: the switch grid, compaction on Claude, cost), `pkg/engine/runtime/conformance_replies_test.go` (the grid streamed; finish reasons, unshown parts, context too long), `pkg/engine/runtime/origin_test.go`, `pkg/engine/runtime/replies_test.go`, `pkg/engine/runtime/wirefake` (the strict fakes, and `wirefake_test.go` proving them strict) |
 | Depends on | [spec_015_models](spec_015_models.md) (models, fallbacks MDL-60–65), [spec_018_workspace](spec_018_workspace.md) (WS-40), [spec_011_images](spec_011_images.md) (attachments), [spec_017_sessions](spec_017_sessions.md), [spec_039_secrets](spec_039_secrets.md), [spec_053_enterprise](spec_053_enterprise.md) (the organization's models), [spec_055_urns](spec_055_urns.md) (artifacts), [spec_024_desktop](spec_024_desktop.md) (DSK-39) |
 
 ## 1. Purpose
@@ -206,12 +206,14 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - images, audio and files (CA-70).
   
   A part Blitz doesn't know is kept as provider state, and the turn notes "<model> returned <type>, which Blitz doesn't show yet".
+  *Built 2026-11-05.* What OpenAI's adapter (ADK's) would refuse, an output item or message content it has no form for (a `web_search_call`, `output_audio`), is taken out of the reply, whole or streamed, on its way in (`openAIOutputMiddleware`, `sanitizeStream`); Claude's blocks Blitz has no form for (a `server_tool_use`, a web search's result) are kept too. Either way they're kept with the answer (`CustomMetadata["blitz_unshown"]`: each part's type and raw form) and the person is told once per answer (`model.unshown`). Showing them is CA-70 and CA-80's.
 - **CA-31** **Why a reply ended** is normalised: `stop`, `tool_calls`, `max_tokens`, `refusal`, `safety`, `recitation`, `malformed_tool_call`, `context_length`, `other`.
   - `max_tokens` keeps today's handling: a cut-off tool call is noted and not run, and the turn ends with `OUTPUT_LIMIT`.
   - `refusal` and `safety` end the turn with the provider's words and `REFUSED` or `BLOCKED`.
   - `recitation` ends it with `RECITATION`.
   - `malformed_tool_call` is retried once with a note to the model, then ends with `MALFORMED_TOOL_CALL`.
   - `context_length` is CA-111.
+  *Built 2026-11-05* (`finishError`, `retryMalformed`): the turn ends with `MODEL_REFUSED` (Claude's `refusal`; `REFUSED` was the organization's already), `BLOCKED` (Gemini's `SAFETY` and its kin, OpenAI's `content_filter`), `RECITATION`, `OUTPUT_LIMIT` or `MALFORMED_TOOL_CALL`; a malformed call is asked for again once with a note in the person's language (`model.malformed_retry`). OpenAI's own refusal stays the reply's text (ADK makes it text).
 - **CA-32** **Errors** are normalised per wire API to one set:
   - `auth`;
   - `quota` (the provider's, or the organization's, `ErrOrgLimit`);
@@ -223,6 +225,7 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - `canceled`.
   
   Retries keep today's settings (`llm.max_retries`, backoff from 1 s to 30 s). Only `rate_limit`, `overloaded` and `unavailable` are retried.
+  *Partly built 2026-11-05:* `context_length` is recognised in each API's words (`asContextLength`, `api.ErrContextLength`, the provider's words kept); the rest of the set keeps today's handling (`asQuota`, `providerError`, the SDKs' retries) until it's moved here.
 
 ## 7. Streaming
 
@@ -231,13 +234,16 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - **With tools offered,** it also depends on whether the model streams with tools.
   
   A model that parses tool calls from text (CA-24) streams its text to the person and parses the whole reply at the end. OpenAI and Ollama models with native tool calls stream.
+  *Built 2026-11-05:* a call streams when it's asked to (the service asks) and the model hasn't refused to (`streamingModel`, `streamsFor`, which the model record will answer, CA-10). OpenAI and Ollama now stream: a reply's text goes on as it's written, and text-encoded tool calls are parsed from the whole reply. An OpenAI-compatible server that ignores "stream" and answers whole has its reply passed on as the stream's last event (`openAIOutputMiddleware`), which the adapter rebuilds the answer from: read as a stream it would be an empty answer.
 - **CA-51** **One stream shape.** A streamed reply is passed on as partial text and partial reasoning (shown as "thinking", never as answer). Tool calls are passed on only once complete. A non-streamed reply is passed on whole, as one final response, the same shape. The desktop and the CLI show "writing…" while a non-streamed call runs.
 - **CA-52** **A long non-streamed call** isn't cut by the stall timeout:
   - a model whose record says a long call is safe gets a timeout sized to its maximum output;
   - one that isn't safe is streamed internally and passed on whole (today's Anthropic behaviour, made general).
   
   The stall timeout applies to the gaps between chunks of a stream, not to a whole call.
+  *Not built yet:* Claude's adapter already streams a long unstreamed call internally; doing so for every model (a call asked for whole, streamed and passed on whole) needs each test fake to stream, and is left for the model record (CA-10), which knows which are safe.
 - **CA-53** **A model that refuses to stream** (a 400 on `stream`) is called unstreamed from then on. This is learned per model (CA-13), not per wrapper. The record says so, and `/model` shows it.
+  *Built 2026-11-05* (`unstreamed`, for the service's life; kept per model in `models.learned.toml` once CA-14 is). The gateway's own learning (`apiProvider`) is unchanged.
 - **CA-54** **What reaches the screen keeps today's rules** (MDL-61):
   - a fallback moves on only before anything has been passed on;
   - masking holds back a possible secret's tail (`guardrails.Hold`) whether the reply streamed or not;
@@ -350,6 +356,7 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   
   The meter (DSK-39) is measured against it.
 - **CA-111** **A `context_length` error** is summarised away automatically: the conversation is compacted, with nothing asked (the owner's decision 2026-11-05), the turn notes "The conversation was summarised to fit <model>", and the same model is tried once more. If it still fails, the error goes to the fallback chain (MDL-61a). Without compaction, it ends the turn with `CONTEXT_LENGTH`.
+  *Built 2026-11-05:* `Engine.Execute` compacts (`Compact`, keeping the turn under way) and runs the turn on from the session (its prompt is in it already), with `withCompactedRetry` telling the fallback chain it may now move on. A chain doesn't move on from a context too long before that (`fallback.go`), and the model's breaker isn't charged for it.
 - **CA-112** **Counting before a call:**
   - the provider's count-tokens API, where the record has one, for a switch's preview (CA-101) and before a call that would be close to the limit;
   - an estimate otherwise (today's: characters/4, 1500 per image and per PDF page, audio and video by length), scaled to the last count the model reported.
