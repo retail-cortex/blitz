@@ -34,6 +34,23 @@ const finished = (message = ""): TurnEvent =>
 const run = (events: TurnEvent[]) => events.reduce<Entry[]>(applyEvent, []);
 
 describe("applyEvent", () => {
+  it("puts an answer's sources under it (spec_056 CA-84)", () => {
+    const cites = (url: string): TurnEvent => create(TurnEventSchema, { kind: { case: "citations", value: { items: [{ title: "Blitz", url, text: "" }] } } });
+    const got = run([text("Blitz is an agent."), cites("https://a"), cites("https://b")]);
+    expect(got).toEqual([
+      {
+        kind: "model",
+        text: "Blitz is an agent.",
+        author: "blitz",
+        open: false,
+        citations: [
+          { title: "Blitz", url: "https://a", text: "" },
+          { title: "Blitz", url: "https://b", text: "" },
+        ],
+      },
+    ]);
+    expect(run([cites("https://a")])).toEqual([]);
+  });
   it("shows a notice as one, closing the answer before it", () => {
     const notice = (t: string, error: boolean): TurnEvent => create(TurnEventSchema, { kind: { case: "notice", value: { text: t, error } } });
     const got = run([text("Hel", { partial: true }), notice("Couldn't save this message", true), notice("Using the fallback model", false)]);

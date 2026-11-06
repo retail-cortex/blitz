@@ -35,10 +35,10 @@ import (
 // workspace's).
 func (w *Workspace) SessionModel(id string) string { return w.storage.Model(id) }
 
-// PreviewModel says what moving session id to ref would mean, without
+// PreviewSessionModel says what moving session id to ref would mean, without
 // moving it: what the next turn reads again and costs, whether the
 // conversation is compacted first, and what the model can't do.
-func (w *Workspace) PreviewModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+func (w *Workspace) PreviewSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
 	ref = strings.TrimSpace(ref)
 	name := w.engine.ModelName()
 	if ref != "" {
@@ -65,12 +65,12 @@ func (w *Workspace) PreviewModel(ctx context.Context, id, ref string) (api.Model
 
 // SetSessionModel moves session id to ref from its next turn ("" back to
 // the workspace's model), compacting it first when it wouldn't fit, and
-// returns what the move means (PreviewModel).
+// returns what the move means (PreviewSessionModel).
 func (w *Workspace) SetSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
 	if session.ValidateID(id) != nil {
 		return api.ModelPreview{}, fmt.Errorf("%w: %q", api.ErrSessionNotFound, id)
 	}
-	p, err := w.PreviewModel(ctx, id, ref)
+	p, err := w.PreviewSessionModel(ctx, id, ref)
 	if err != nil {
 		return api.ModelPreview{}, err
 	}

@@ -75,3 +75,26 @@ func TestReadStoredFile(t *testing.T) {
 	_, _, err = w.ReadStoredFile("not a reference")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
+
+// A provider's search shows as the web_search call and result it stands
+// for, and the answer's sources follow it (spec_056 CA-82, CA-84).
+func TestEventsProviderTools(t *testing.T) {
+	ev := &adksession.Event{Author: "blitz", LLMResponse: adkmodel.LLMResponse{
+		Content: &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{
+			{ToolCall: &genai.ToolCall{ID: "srvtoolu_1", Args: map[string]any{"query": "blitz"}}, PartMetadata: map[string]any{"blitz_provider_tool": "web_search"}},
+			{ToolResponse: &genai.ToolResponse{ID: "srvtoolu_1", Response: map[string]any{"result": "Blitz — https://b"}}, PartMetadata: map[string]any{"blitz_provider_tool": "web_search"}},
+			{Text: "Blitz is an agent."},
+		}},
+		CustomMetadata: map[string]any{"blitz_citations": []any{map[string]any{"title": "Blitz", "url": "https://b", "text": "an agent"}}},
+	}}
+	out := events(ev)
+	require.Len(t, out, 4)
+	assert.Equal(t, "web_search", out[0].ToolCall.Name)
+	assert.Equal(t, map[string]any{"query": "blitz"}, out[0].ToolCall.Args)
+	assert.Equal(t, out[0].ToolCall.ID, out[1].ToolResult.ID)
+	assert.Equal(t, "Blitz is an agent.", out[2].Text.Text)
+	assert.Equal(t, []api.Citation{{Title: "Blitz", URL: "https://b", Text: "an agent"}}, out[3].Citations)
+
+	ev.Partial = true
+	assert.Len(t, events(ev), 3, "a partial answer's sources wait for the whole one")
+}

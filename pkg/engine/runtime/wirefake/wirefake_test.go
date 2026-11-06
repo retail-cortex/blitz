@@ -209,3 +209,87 @@ func TestUsageAsEachAPIReportsIt(t *testing.T) {
 	assert.EqualValues(t, 300, usage["output_tokens"])
 	assert.EqualValues(t, 100, obj(usage["output_tokens_details"])["reasoning_tokens"])
 }
+
+var search = &Search{Query: "blitz agent", Results: []Source{{Title: "Blitz", URL: "https://example.com/blitz"}}}
+
+// Each fake searches with its provider's own tool only when it's offered,
+// and answers in its API's form: Claude's server tool blocks and
+// citations, Gemini's grounding, OpenAI's web_search_call and URL
+// citations.
+func TestProviderSearch(t *testing.T) {
+	a := Anthropic(t)
+	a.Script(Reply{Search: search, Text: "Blitz is an agent."}, Reply{Search: search, Text: "No tool offered."})
+	_, body := post(t, a.URL()+"/v1/messages", map[string]any{"model": "claude-test", "messages": []any{user("hi")}, "tools": []any{map[string]any{"type": "web_search_20250305", "name": "web_search"}}})
+	content := list(body["content"])
+	require.Len(t, content, 3)
+	assert.Equal(t, "server_tool_use", str(obj(content[0])["type"]))
+	assert.Equal(t, "web_search_tool_result", str(obj(content[1])["type"]))
+	assert.Len(t, list(obj(content[2])["citations"]), 1)
+	assert.EqualValues(t, 1, obj(obj(body["usage"])["server_tool_use"])["web_search_requests"])
+	_, body = post(t, a.URL()+"/v1/messages", map[string]any{"model": "claude-test", "messages": []any{user("hi")}})
+	assert.Len(t, list(body["content"]), 1, "no search without the tool")
+
+	g := Gemini(t)
+	g.Script(Reply{Search: search, Text: "Blitz is an agent."})
+	_, body = post(t, g.URL()+"/v1beta/models/gemini-3-pro:generateContent", map[string]any{"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}}, "tools": []any{map[string]any{"googleSearch": map[string]any{}}}})
+	grounding := obj(obj(list(body["candidates"])[0])["groundingMetadata"])
+	assert.Equal(t, []any{"blitz agent"}, grounding["webSearchQueries"])
+	assert.Len(t, list(grounding["groundingChunks"]), 1)
+
+	o := OpenAI(t)
+	o.Script(Reply{Search: search, Text: "Blitz is an agent."})
+	_, body = post(t, o.URL()+"/v1/responses", map[string]any{"model": "gpt-test", "input": "hi", "tools": []any{map[string]any{"type": "web_search"}}})
+	out := list(body["output"])
+	require.Len(t, out, 2)
+	assert.Equal(t, "web_search_call", str(obj(out[0])["type"]))
+	ann := list(obj(list(obj(out[1])["content"])[0])["annotations"])
+	assert.Equal(t, "url_citation", str(obj(ann[0])["type"]))
+}
+
+// The fakes refuse provider tools used as their APIs refuse them.
+func TestProviderToolsStrict(t *testing.T) {
+	assistant := func(blocks ...any) map[string]any { return map[string]any{"role": "assistant", "content": blocks} }
+	use := map[string]any{"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search", "input": map[string]any{"query": "q"}}
+	result := func(enc string) map[string]any {
+		return map[string]any{"type": "web_search_tool_result", "tool_use_id": "srvtoolu_1", "content": []any{map[string]any{"type": "web_search_result", "url": "u", "title": "t", "encrypted_content": enc}}}
+	}
+	for _, tc := range []struct {
+		name, refusal string
+		req           map[string]any
+	}{
+		{"an unknown server tool", "does not match any of the expected tags", map[string]any{"messages": []any{user("hi")}, "tools": []any{map[string]any{"type": "web_search_99", "name": "web_search"}}}},
+		{"a result with no server_tool_use", "must match a `server_tool_use`", map[string]any{"messages": []any{user("hi"), assistant(result("x"))}}},
+		{"a result it didn't give", "Invalid `encrypted_content`", map[string]any{"messages": []any{user("hi"), assistant(use, result("forged"))}}},
+		{"a bad server_tool_use ID", "srvtoolu_", map[string]any{"messages": []any{user("hi"), assistant(map[string]any{"type": "server_tool_use", "id": "bz-1", "name": "web_search", "input": map[string]any{}})}}},
+	} {
+		t.Run("anthropic "+tc.name, func(t *testing.T) {
+			f := Anthropic(t)
+			tc.req["model"] = "claude-test"
+			code, _ := post(t, f.URL()+"/v1/messages", tc.req)
+			assert.Equal(t, http.StatusBadRequest, code)
+			require.Len(t, f.Refusals(), 1)
+			assert.Contains(t, f.Refusals()[0], tc.refusal)
+		})
+	}
+	text := map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}
+	for _, tc := range []struct {
+		name, model, refusal string
+		body                 map[string]any
+	}{
+		{"search with functions before Gemini 3", "gemini-2.5-pro", "function calling is unsupported", map[string]any{"contents": []any{text}, "tools": []any{map[string]any{"googleSearch": map[string]any{}}, map[string]any{"functionDeclarations": []any{map[string]any{"name": "f"}}}}}},
+		{"a tool it doesn't know", "gemini-3-pro", "Unknown name", map[string]any{"contents": []any{text}, "tools": []any{map[string]any{"fileSearch": map[string]any{}}}}},
+		{"a server tool call sent back", "gemini-3-pro", "Unknown name", map[string]any{"contents": []any{text, map[string]any{"role": "model", "parts": []any{map[string]any{"toolCall": map[string]any{}}}}}}},
+	} {
+		t.Run("gemini "+tc.name, func(t *testing.T) {
+			f := Gemini(t)
+			code, _ := post(t, f.URL()+"/v1beta/models/"+tc.model+":generateContent", tc.body)
+			assert.Equal(t, http.StatusBadRequest, code)
+			require.Len(t, f.Refusals(), 1)
+			assert.Contains(t, f.Refusals()[0], tc.refusal)
+		})
+	}
+	o := OpenAI(t)
+	code, _ := post(t, o.URL()+"/v1/responses", map[string]any{"model": "m", "input": "hi", "tools": []any{map[string]any{"type": "code_interpreter"}}})
+	assert.Equal(t, http.StatusBadRequest, code)
+	require.Len(t, o.Refusals(), 1)
+}

@@ -670,7 +670,15 @@ type ToolsConfig struct {
 	// BackgroundAgentMaxCostUSD stops a background task that has cost more
 	// (0: no cap).
 	BackgroundAgentMaxCostUSD float64 `toml:"background_agent_max_cost_usd"`
+	// Provider lets models use their provider's own tools (web search, web
+	// fetch, code execution) in place of Blitz's, where they have them
+	// (spec_056 CA-80); false keeps Blitz's. Unset: on.
+	Provider *bool `toml:"provider"`
 }
+
+// ProviderToolsOn reports whether models may use their provider's own
+// tools ([tools] provider, on unless set false).
+func (t ToolsConfig) ProviderToolsOn() bool { return t.Provider == nil || *t.Provider }
 
 // ProcessesConfig says when an agent's background process looks bad: the
 // processes view, /processes and the tray flag it (spec_052_processes).

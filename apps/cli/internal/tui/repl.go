@@ -228,6 +228,10 @@ func (p *Printer) Handle(ev api.Event) {
 		p.spin.Stop()
 		p.flushText()
 		fmt.Fprintf(p.out, "%s%s%s\n", Dim, safe(i18n.T("repl.model_file", "name", ev.File.Name, "path", cmp.Or(ev.File.Path, ev.File.URI))), Reset)
+	case len(ev.Citations) > 0:
+		p.spin.Stop()
+		p.flushText()
+		fmt.Fprint(p.out, FormatCitations(ev.Citations))
 		p.spin.Start(i18n.T("spinner.working"))
 	case ev.Notice != nil:
 		p.spin.Stop()

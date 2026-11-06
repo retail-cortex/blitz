@@ -165,7 +165,7 @@ func (h sessionService) PreviewSessionModel(ctx context.Context, r req[pb.Previe
 	if err != nil {
 		return nil, err
 	}
-	p, err := w.PreviewModel(ctx, r.Msg.SessionId, r.Msg.Model)
+	p, err := w.PreviewSessionModel(ctx, r.Msg.SessionId, r.Msg.Model)
 	if err != nil {
 		return nil, toAPI(err)
 	}

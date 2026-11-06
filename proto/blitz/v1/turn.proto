@@ -115,6 +115,9 @@ message TurnEvent {
     // A file the model made: an image it drew, audio
     // (spec_056_conversation_adapters CA-71).
     ModelFile model_file = 13;
+    // The sources the answer before it cites, from the provider's own
+    // search or fetch (spec_056_conversation_adapters CA-84).
+    Citations citations = 14;
   }
 }
 
@@ -129,6 +132,19 @@ message ModelFile {
   // Where it's kept on the service's machine, and its size.
   string path = 4;
   int64 size = 5;
+}
+
+// The sources an answer cites.
+message Citations {
+  repeated Citation items = 1;
+}
+
+// One source an answer cites.
+message Citation {
+  string title = 1;
+  string url = 2;
+  // The text of the answer it supports.
+  string text = 3;
 }
 
 // The evidence that suggests /reflect.

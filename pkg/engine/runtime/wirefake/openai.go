@@ -68,8 +68,14 @@ func streamResponses(w io.Writer, answer any) {
 // refusal, not input parts; tool names match ^[a-zA-Z0-9_-]{1,64}$.
 func checkResponses(f *Fake, req map[string]any) string {
 	for i, tl := range list(req["tools"]) {
-		if n := str(obj(tl)["name"]); str(obj(tl)["type"]) == "function" && !toolName.MatchString(n) {
-			return fmt.Sprintf("Invalid 'tools[%d].name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.", i)
+		switch typ := str(obj(tl)["type"]); typ {
+		case "function":
+			if n := str(obj(tl)["name"]); !toolName.MatchString(n) {
+				return fmt.Sprintf("Invalid 'tools[%d].name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.", i)
+			}
+		case "web_search":
+		default:
+			return fmt.Sprintf("Invalid value: '%s'. (tools[%d].type)", typ, i)
 		}
 	}
 	input := list(req["input"])
@@ -123,15 +129,34 @@ func checkResponses(f *Fake, req map[string]any) string {
 	return ""
 }
 
+// offersWebSearch reports whether req offers OpenAI's web search.
+func offersWebSearch(req map[string]any) bool {
+	for _, tl := range list(req["tools"]) {
+		if str(obj(tl)["type"]) == "web_search" {
+			return true
+		}
+	}
+	return false
+}
+
 func answerResponses(f *Fake, req map[string]any, r Reply) any {
 	var out []any
 	if r.Thought != "" && obj(req["reasoning"]) != nil {
 		out = append(out, map[string]any{"type": "reasoning", "id": f.id("rs_"), "summary": []any{map[string]any{"type": "summary_text", "text": r.Thought}}})
 	}
+	annotations := []any{}
+	if s := r.Search; s != nil && offersWebSearch(req) {
+		var sources []any
+		for _, src := range s.Results {
+			sources = append(sources, map[string]any{"type": "url", "url": src.URL})
+			annotations = append(annotations, map[string]any{"type": "url_citation", "url": src.URL, "title": src.Title, "start_index": 0, "end_index": len([]rune(r.Text))})
+		}
+		out = append(out, map[string]any{"type": "web_search_call", "id": f.id("ws_"), "status": "completed", "action": map[string]any{"type": "search", "query": s.Query, "sources": sources}})
+	}
 	if r.Text != "" {
 		out = append(out, map[string]any{
 			"type": "message", "id": f.id("msg_"), "role": "assistant", "status": "completed",
-			"content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}},
+			"content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": annotations}},
 		})
 	}
 	for _, c := range r.Calls {

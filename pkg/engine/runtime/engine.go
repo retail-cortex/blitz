@@ -641,6 +641,26 @@ func (e *Engine) SetModelSettings(model string, s config.ModelSettings) {
 	}
 }
 
+// providerToolPolicy is what the settings and the organization's policy
+// say about provider tools (spec_056 CA-81): all off with [tools]
+// provider = false, and those the organization's tools.off names
+// (provider:<kind>, provider:*).
+func (e *Engine) providerToolPolicy() ProviderToolPolicy {
+	all, off := ParseProviderToolsOff(e.cfg.Org.Policy.Tools.Off, "")
+	if off == nil {
+		off = map[string]bool{}
+	}
+	// What switches the client tool off switches the provider's off: the
+	// organization naming it, or a deny rule for it.
+	for _, kind := range []string{ptWebSearch, ptWebFetch, ptCodeExecution} {
+		gate := gateTool(kind)
+		if slices.Contains(e.cfg.Org.Policy.Tools.Off, gate) || e.toolReg != nil && e.toolReg.Rules().ToolDenied(gate, nil) != nil {
+			off[kind] = true
+		}
+	}
+	return ProviderToolPolicy{Off: all || !e.cfg.Tools.ProviderToolsOn(), Disabled: off}
+}
+
 func (e *Engine) lookupSettings(name string) (config.ModelSettings, bool) {
 	e.settingsMu.RLock()
 	defer e.settingsMu.RUnlock()
@@ -1310,6 +1330,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	ctx = context.WithValue(ctx, runStateKey{}, st)
 	ctx = audit.WithSession(ctx, sessionID)
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
+	ctx = WithProviderToolPolicy(ctx, e.providerToolPolicy())
 	if n := e.cfg.Tools.MaxParallel; n > 0 {
 		ctx = platform.WithTaskRunner(ctx, boundedRunner(n))
 	}
@@ -1499,7 +1520,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 		return "", fmt.Errorf("failed to create sub-agent runner: %w", err)
 	}
 
-	subCtx := withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings)
+	subCtx := WithProviderToolPolicy(withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings), e.providerToolPolicy())
 	subCtx = e.agentRun(subCtx, spec)
 	// Its shells and tasks count for the session that started it.
 	subCtx = tools.WithOwnerSession(subCtx, e.sessionOf(ctx))

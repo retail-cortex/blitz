@@ -511,6 +511,9 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
     }
     yield ev({ case: "text", value: { text: answer, repeat: true } });
     sess.messages.push(msg("model", answer));
+    // ?citations: the answer cites the provider's search (spec_056 CA-84).
+    if (new URLSearchParams(location.search).has("citations"))
+      yield ev({ case: "citations", value: { items: [{ title: "Blitz docs", url: "https://retail-cortex.github.io/blitz/", text: "" }] } });
   }
   s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 4, input: s.usage.input + 9120n, output: s.usage.output + 812n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0061 });
   sess.messageCount = sess.messages.length;

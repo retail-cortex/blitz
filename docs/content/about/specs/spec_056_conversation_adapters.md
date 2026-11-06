@@ -279,26 +279,35 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
 
 ## 10. Provider tools
 
-- **CA-80** **Provider tools are on wherever they can be** (the owner's decision 2026-11-05).
-  - **Which:** a provider's built-in tools: Google Search grounding, URL context and code execution; Anthropic's web search, web fetch and code execution; OpenAI's web search, file search and code interpreter. Each model's record lists the ones it offers.
-  - **When:** each is sent with every call to a model that calls tools (CA-10) and offers it, in place of Blitz's client tool of the same purpose (`web_search`, `web_fetch`, `run_code`). The two are never offered together, so the model isn't asked to choose between them.
-  - **Otherwise:** a model without the provider's tool gets Blitz's client tool as today.
-- **CA-81** **Provider tools follow Blitz's rules, as the client tool they replace would.** A provider tool isn't sent when its client equivalent wouldn't be allowed:
-  - by the permission mode (plan and read-only modes keep web search and drop code execution);
-  - by an agent's `tools`, which can name one off (`-provider:code_execution`) or all (`-provider:*`);
-  - by `[tools] provider = false` in the settings;
-  - by a guardrail;
-  - by the organization's policy (spec_053), which can turn any of them off.
-  
-  Each provider tool call is written to the audit log as the client tool's would be. Its cost counts toward the turn's limits (CA-83, CA-124).
-- **CA-82** **Stored as Blitz's own tool use.** A provider tool's call and result are stored as a call to Blitz's client tool of the same purpose (`web_search`, `web_fetch`, `run_code`), with Blitz's ID (CA-03) and its result as text, with any files (CA-70) and citations (CA-84). The provider's raw blocks are kept as provider state beside them.
-  - **What any model reads:** an ordinary tool call and its paired result, of a tool it knows. It doesn't read prose about another model's work, and it can't be asked to pair a result it never requested.
-  - **For the model that made them:** they're sent back in the provider's own form (CA-20).
-  - **Declaring the tool:** if the history holds calls to a client tool that isn't being offered (its provider tool is on instead), the adapter still declares it, for APIs that check a history's tool names against what's declared. Its description says the provider's tool is the one to use now.
-  - **A provider tool with no client equivalent:** its call and result are stored as a call to `provider_tool` (name, input, result), declared the same way.
-- **CA-83** **Provider tools are priced** as each provider charges: per query or per container hour, priced from its record (CA-120), recorded with the call that used them, and counted toward cost limits.
-- **CA-84** **Citations** (Gemini's grounding, Anthropic's and OpenAI's citations) are kept neutrally (source title, URL, the text they support) and shown under the answer. Another model gets them as part of the text.
-- **CA-83** **Provider tools are priced** as each provider charges: per query or per container hour, priced from its record (CA-120). They're recorded with the call that used them.
+- **CA-80** **Provider tools are on wherever they can be** (the owner's decision 2026-11-05). *Built 2026-11-05* (`providertools.go`, `providertools_anthropic.go`, `providertools_openai.go`).
+  - **Which:** web search, web fetch and code execution. Gemini 3 (the Gemini API and Vertex AI) has Google Search grounding, URL context and code execution. Claude (on Anthropic and Vertex AI, not Bedrock) has its web search, web fetch and code execution server tools. OpenAI's GPT-5, GPT-4.1, GPT-4o, o3 and o4 (on OpenAI itself) have web search. Earlier Gemini models can't mix built-in tools with function calling, so they get Blitz's tools. Which models offer which is one table read through `providerToolsFor`, for the model record (CA-10) to take over.
+  - **When:** each is sent with every call to a model that offers it, in place of Blitz's client tool of the same purpose (`web_search`, `web_fetch`; code execution has none, CA-82). The two are never offered together, so the model isn't asked to choose between them (`withProviderTools`).
+  - **How:** as genai's built-in tool fields (`GoogleSearch`, `URLContext`, `CodeExecution`), which Gemini takes as they are. Claude's adapter sends them as `web_search_20250305`, `web_fetch_20250910` (beta `web-fetch-2025-09-10`) and `code_execution_20250825` (beta `code-execution-2025-08-25`). ADK's OpenAI adapter takes function tools only: the call carries OpenAI's in its context, and the client's middleware adds `{"type": "web_search"}` to the request (`openAIProviderToolsMiddleware`). A streamed call (the gateway's) isn't offered them.
+  - **Otherwise:** a model without the provider's tool gets Blitz's client tool, as before.
+- **CA-81** **Provider tools follow Blitz's rules, as the client tool they replace would** (`providerToolsToUse`, `Engine.providerToolPolicy`):
+  - **Web search** is on for an agent whose `tools` list `web_search`, or when the client tool is offered. A search provider (`web.search_provider`) isn't needed: the model's provider runs the search.
+  - **Web fetch** is on only when `web_fetch` is offered (`[web] enabled`).
+  - **Code execution** is on only when `run_shell_command` is offered (code runs, even in the provider's sandbox), and never in plan mode or a read-only run (`PlanAllows`).
+  - **Switches:**
+    - `[tools] provider = false` turns all of them off;
+    - an agent's `tools` turns one off (`-provider:code_execution`) or all (`-provider:*`);
+    - the organization's policy turns them off with `provider:<name>` or `provider:*` in `tools.off`, and with the client tool's own name there;
+    - a `deny` rule for the client tool turns the provider's off too.
+  - **No approval:** the provider's search doesn't ask before each query, as Blitz's does. The query goes to the provider that already has the conversation, not to a third party.
+  - **Not yet:** the audit log doesn't record provider tool calls (they run on the provider's side, outside `beforeTool`). Their cost counts toward the turn's limits once the ledger prices them (CA-83, CA-124).
+- **CA-82** **Stored as Blitz's own tool use.** A provider tool's call and result are stored in the model's turn as genai's server-side `ToolCall` and `ToolResponse` parts, which ADK never runs. `PartMetadata["blitz_provider_tool"]` names their purpose. The provider's own block (Claude's `server_tool_use` and `*_tool_result`, as JSON) is kept as provider state in `ThoughtSignature`, tagged with its origin (CA-02).
+  - **Gemini:** its search leaves no parts of its own. Its grounding (the queries, the sources) is stored as a call and result. Its code execution keeps its `ExecutableCode` and `CodeExecutionResult` parts, paired by an ID of Blitz's (`PartMetadata["blitz_call_id"]`).
+  - **OpenAI:** a `web_search_call` item becomes a call and result, taken out of the reply before ADK reads it (`providerToolResult`).
+  - **What any other model reads:** an ordinary call of the client tool of the same purpose (`web_search`, `web_fetch`), with Blitz's ID, and its paired result as text, in a user turn of its own (`asClientCalls`). Code execution has no client tool and is read as a call to `provider_tool` (`{"tool": "code_execution", "language", "code"}`, and its outcome and output). It doesn't read prose about another model's work.
+  - **For the model that made them:** they're sent back in the provider's own form. Claude gets its blocks back; Gemini gets its code execution parts. Gemini's search, which it made as grounding, isn't sent back. OpenAI's calls can't be sent back through ADK, so OpenAI reads them as client calls too.
+  - **Declaring the tool:** a client tool the history calls stays declared when its provider tool is on instead, saying the provider's tool is the one to use now. One that isn't offered at all is declared for reference only (`declareCalled`), for APIs that check a history's calls against the tools declared.
+  - **Shown to the person** as the client tool's call and result (`ProviderToolPart`, pkg/engine events).
+- **CA-83** **Provider tools are priced** as each provider charges: per request (Anthropic $10 per 1,000 searches; Google per grounded query; OpenAI per call) or per container hour (code execution).
+  - **What's recorded:** each answer records its requests by purpose in `CustomMetadata["blitz_provider_tool_requests"]` (`{"web_search": n, "web_fetch": n, "code_execution": n}`), from the usage Anthropic reports (`server_tool_use`), Gemini's grounding queries and code runs, and OpenAI's `web_search_call` items.
+  - **Pricing them:** the ledger (CA-120) reads these counts.
+- **CA-84** **Citations** are kept neutrally in the answer's `CustomMetadata["blitz_citations"]`: a list of `{title, url, text}`. They come from Gemini's grounding supports, Claude's `web_search_result_location` citations and OpenAI's `url_citation` annotations.
+  - **Shown:** they're sent to clients as a `Citations` turn event after the answer (`TurnEvent.citations`). The desktop lists them under the answer as numbered links (`desktop.sources`); the CLI prints them under it (`repl.sources`, `FormatCitations`).
+  - **Another model** reads the answer's text, and the sources as the search's result.
 
 ## 11. Fallbacks
 

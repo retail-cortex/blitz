@@ -44,12 +44,28 @@ func Gemini(t testing.TB) *Fake {
 // first function call carries its thought signature. Tool names match
 // ^[a-zA-Z0-9_-]{1,64}$.
 func checkGemini(f *Fake, req map[string]any) string {
+	functions, builtins := false, false
 	for _, tl := range list(req["tools"]) {
-		for i, d := range list(obj(tl)["functionDeclarations"]) {
+		t := obj(tl)
+		for k := range t {
+			switch k {
+			case "functionDeclarations":
+				functions = true
+			case "googleSearch", "urlContext", "codeExecution":
+				builtins = true
+			default:
+				return fmt.Sprintf("Invalid JSON payload received. Unknown name %q at 'tools[0]'", k)
+			}
+		}
+		for i, d := range list(t["functionDeclarations"]) {
 			if n := str(obj(d)["name"]); !toolName.MatchString(n) {
 				return fmt.Sprintf("Invalid function name %q at tools[0].function_declarations[%d]: must match [a-zA-Z0-9_-]{1,64}", n, i)
 			}
 		}
+	}
+	// Before Gemini 3, built-in tools and function calling don't mix.
+	if functions && builtins && !strings.HasPrefix(ModelOf(req), "gemini-3") {
+		return "Tool use with function calling is unsupported"
 	}
 	contents := list(req["contents"])
 	if len(contents) == 0 {
@@ -77,6 +93,10 @@ func checkGemini(f *Fake, req map[string]any) string {
 		responses, firstCall := 0, true
 		for j, rp := range list(c["parts"]) {
 			p := obj(rp)
+			if p["toolCall"] != nil || p["toolResponse"] != nil {
+				// Gemini's own search leaves no such parts to send back.
+				return fmt.Sprintf("Invalid JSON payload received. Unknown name \"toolCall\" at 'contents[%d].parts[%d]'", i, j)
+			}
 			if sig := str(p["thoughtSignature"]); sig != "" {
 				raw, err := base64.StdEncoding.DecodeString(sig)
 				if err != nil || !(f.signed(string(raw)) || skipSignatures[string(raw)]) {
@@ -124,7 +144,17 @@ func checkGemini(f *Fake, req map[string]any) string {
 // "Thought signatures" page, seen 2026-11-05).
 var skipSignatures = map[string]bool{"skip_thought_signature_validator": true, "context_engineering_is_the_way_to_go": true}
 
-func answerGemini(f *Fake, _ map[string]any, r Reply) any {
+// offersGoogleSearch reports whether req offers Google Search grounding.
+func offersGoogleSearch(req map[string]any) bool {
+	for _, tl := range list(req["tools"]) {
+		if obj(tl)["googleSearch"] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func answerGemini(f *Fake, req map[string]any, r Reply) any {
 	// Gemini 3 thinks on every call and signs the first function call it
 	// makes (or its text, when it makes none).
 	var parts []any
@@ -152,11 +182,26 @@ func answerGemini(f *Fake, _ map[string]any, r Reply) any {
 	}
 	parts = append(parts, calls...)
 	u := r.Usage.orDefault()
+	candidate := map[string]any{
+		"content":      map[string]any{"role": "model", "parts": parts},
+		"finishReason": "STOP", "index": 0,
+	}
+	if s := r.Search; s != nil && offersGoogleSearch(req) {
+		// Its search, as grounding: the queries, the pages, and which part
+		// of the answer each supports.
+		var chunks, indices []any
+		for i, src := range s.Results {
+			chunks = append(chunks, map[string]any{"web": map[string]any{"uri": src.URL, "title": src.Title}})
+			indices = append(indices, i)
+		}
+		candidate["groundingMetadata"] = map[string]any{
+			"webSearchQueries":  []any{s.Query},
+			"groundingChunks":   chunks,
+			"groundingSupports": []any{map[string]any{"segment": map[string]any{"startIndex": 0, "endIndex": len(r.Text), "text": r.Text}, "groundingChunkIndices": indices}},
+		}
+	}
 	return map[string]any{
-		"candidates": []any{map[string]any{
-			"content":      map[string]any{"role": "model", "parts": parts},
-			"finishReason": "STOP", "index": 0,
-		}},
+		"candidates": []any{candidate},
 		"usageMetadata": map[string]any{
 			"promptTokenCount": u.Input, "cachedContentTokenCount": u.Cached,
 			"candidatesTokenCount": u.Output - u.Reasoning, "thoughtsTokenCount": u.Reasoning,

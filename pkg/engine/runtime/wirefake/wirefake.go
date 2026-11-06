@@ -51,6 +51,21 @@ type Reply struct {
 	// Status, when set, refuses the request with this HTTP status (a 503:
 	// the model is overloaded) instead of answering.
 	Status int
+	// Search is a web search the model runs with its provider's own tool,
+	// before its Text, which cites the results; only when the request
+	// offers that tool, as a real model can search only then.
+	Search *Search
+}
+
+// Search is a provider web search: its query and what it found.
+type Search struct {
+	Query   string
+	Results []Source
+}
+
+// Source is one search result.
+type Source struct {
+	Title, URL string
 }
 
 // File is a file a model makes.

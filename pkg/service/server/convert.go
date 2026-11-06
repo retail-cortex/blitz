@@ -197,6 +197,12 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 		out.Kind = &pb.TurnEvent_ModelFile{ModelFile: &pb.ModelFile{Uri: f.URI, Name: f.Name, MimeType: f.MIME, Path: f.Path, Size: f.Size}}
 	case e.Reflect != nil:
 		out.Kind = &pb.TurnEvent_ReflectDue{ReflectDue: &pb.ReflectDue{Patterns: int32(e.Reflect.Patterns), Score: int32(e.Reflect.Score)}}
+	case len(e.Citations) > 0:
+		cites := &pb.Citations{}
+		for _, c := range e.Citations {
+			cites.Items = append(cites.Items, &pb.Citation{Title: c.Title, Url: c.URL, Text: c.Text})
+		}
+		out.Kind = &pb.TurnEvent_Citations{Citations: cites}
 	case e.Notice != nil:
 		out.Kind = &pb.TurnEvent_Notice{Notice: &pb.Notice{Text: e.Notice.Text, Error: e.Notice.Error, Transient: e.Notice.Transient}}
 	case e.Step != nil:
