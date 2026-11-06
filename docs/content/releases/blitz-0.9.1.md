@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.1
-weight: 1
+weight: 2
 ---
 
 **Safer by default, and steadier under load.** We went through every file in Blitz, checked each feature against its spec and its docs, and fixed what we found: the limits and safety checks now hold in the corner cases, settings tell you when they're misspelt or misplaced instead of quietly ignoring them, and a long list of rough edges in the CLI and the desktop app are smoothed out. Language servers now work in monorepos, too.

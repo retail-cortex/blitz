@@ -7,6 +7,14 @@ Spec: [models](../about/specs/spec_015_models.md).
 
 With no model set, Blitz uses Gemini's `gemini-4-argon` (for chat and for Google web searches). Choose another with `/model provider/model` in a session, `--model`, or `model` under `[llm.<provider>]` in the settings; a model you've set is kept across releases. Setting up a provider, its key or sign-in, is in [Providers](providers.md).
 
+## Switching models in a conversation
+
+`/model provider/model` moves the conversation you're in to that model from its next turn; your other conversations, and jobs, keep theirs. Blitz says what the move costs: the new model reads the conversation again from the start, with none of it cached ("From the next turn, anthropic/claude-opus-5-5 reads this conversation again: about 84k tokens, $0.42."). If the conversation is too long for the new model, it's summarised first. `/model provider/model --new` starts a fresh conversation on the model instead, which costs nothing to switch. `/model` on its own shows the conversation's model and the workspace's.
+
+What carries over: everything said, every tool call and its result, and your attachments. What doesn't: the previous model's hidden reasoning, which only the model that wrote it can read (it's kept, so switching back picks it up again). Moving from a stronger model to a weaker one mid-task can cost quality, since the weaker one picks up a long, complex conversation; a new conversation with a short summary of where you are often works better.
+
+An agent with a pinned model keeps it ([Per-agent models](#per-agent-models)). A fallback model that takes over in the middle of a turn goes on from the calls the first model made.
+
 ## Resilience
 
 Model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` turns retries off). A request that sends nothing for `llm.stall_timeout_seconds` (default 600) fails instead of hanging the turn. A connection that stops answering altogether, as when a VPN or a network change drops it, is noticed within a minute and the request is retried on a new one. A stream that fails partway through isn't retried, because its text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once.
