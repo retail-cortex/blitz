@@ -107,3 +107,13 @@ func cut(k string) (string, string, bool) {
 	}
 	return "", k, false
 }
+
+// A store that can't be written says so, and keeps no fact it couldn't
+// save.
+func TestUnwritable(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o644))
+	s := Open(Path(filepath.Join(blocker, "dir"))) // its folder is under a file
+	_, err := s.Learn("openai", "gpt-5", Fact{Kind: NoTools, At: time.Now()})
+	assert.Error(t, err)
+}

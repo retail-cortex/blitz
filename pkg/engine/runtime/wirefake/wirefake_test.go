@@ -54,6 +54,7 @@ func TestAnthropicStrict(t *testing.T) {
 		thinking bool
 	}{
 		{name: "a plain question", req: map[string]any{"messages": []any{user("hi")}}},
+		{name: "thinking disabled on a model that always thinks, in a tool loop", req: map[string]any{"messages": []any{user("hi"), use("toolu_1"), result("toolu_1")}, "thinking": map[string]any{"type": "disabled"}}},
 		{name: "a tool loop", req: map[string]any{"messages": []any{user("hi"), use("toolu_1"), result("toolu_1")}}},
 		{name: "the model first", req: map[string]any{"messages": []any{map[string]any{"role": "assistant", "content": "x"}}}, refusal: "first message"},
 		{name: "an empty tool_use ID", req: map[string]any{"messages": []any{user("hi"), use(""), result("")}}, refusal: "should match pattern"},
@@ -63,6 +64,15 @@ func TestAnthropicStrict(t *testing.T) {
 		{name: "a tool loop with thinking on and no thinking block", req: map[string]any{"messages": []any{user("hi"), use("toolu_1"), result("toolu_1")}}, thinking: true, refusal: "Expected `thinking`"},
 		{name: "an image from the model", req: map[string]any{"messages": []any{user("hi"), map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "image"}}}}}, refusal: "only be in user messages"},
 		{name: "a bad tool name", req: map[string]any{"messages": []any{user("hi")}, "tools": []any{map[string]any{"name": "mcp.github/search"}}}, refusal: "tools.0"},
+		{name: "no messages", req: map[string]any{"messages": []any{}}, refusal: "at least one message"},
+		{name: "a server_tool_use from the user", req: map[string]any{"messages": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search"}}}}}, refusal: "server_tool_use blocks may only be in assistant messages"},
+		{name: "a tool_use from the user", req: map[string]any{"messages": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_use", "id": "toolu_1", "name": "x"}}}}}, refusal: "tool_use blocks may only be in assistant messages"},
+		{name: "a tool_result from the model", req: map[string]any{"messages": []any{user("hi"), map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "toolu_1"}}}}}, refusal: "tool_result blocks may only be in user messages"},
+		{name: "a tool_result after text", req: map[string]any{"messages": []any{user("hi"), use("toolu_1"), map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "x"}, map[string]any{"type": "tool_result", "tool_use_id": "toolu_1"}}}}}, refusal: "must come first"},
+		{name: "thinking from the user", req: map[string]any{"messages": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "thinking", "thinking": "x", "signature": "s"}}}}}, refusal: "thinking blocks may only be in assistant messages"},
+		{name: "foreign redacted thinking", req: map[string]any{"messages": []any{user("hi"), map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "redacted_thinking", "data": "gemini-signature-1"}}}}}, refusal: "Invalid `signature` in `redacted_thinking`"},
+		{name: "a block it doesn't know", req: map[string]any{"messages": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "hologram"}}}}}, refusal: "does not match any of the expected tags"},
+		{name: "a tool_use left last", req: map[string]any{"messages": []any{user("hi"), use("toolu_1")}}, refusal: "without `tool_result` blocks"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +93,14 @@ func TestAnthropicStrict(t *testing.T) {
 			assert.Contains(t, f.Refusals()[0], tt.refusal)
 		})
 	}
+}
+
+// A request names its model.
+func TestAnthropicNeedsAModel(t *testing.T) {
+	f := Anthropic(t)
+	code, _ := post(t, f.URL()+"/v1/messages", map[string]any{"messages": []any{user("hi")}})
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Contains(t, f.Refusals()[0], "model: Field required")
 }
 
 // Its own signed thinking is accepted back, and a tool loop with thinking
@@ -131,6 +149,9 @@ func TestGeminiStrict(t *testing.T) {
 		{name: "a response with no call", contents: []any{text("user", "hi"), response}, refusal: "immediately after a function call"},
 		{name: "a call with no response", contents: []any{text("user", "hi"), call(sig), text("user", "next")}, refusal: "immediately after a function call"},
 		{name: "a bad role", contents: []any{text("assistant", "hi")}, refusal: "valid role"},
+		{name: "no contents", contents: []any{}, refusal: "contents is not specified"},
+		{name: "a call from the user", contents: []any{map[string]any{"role": "user", "parts": []any{map[string]any{"functionCall": map[string]any{"name": "read_file"}}}}}, refusal: "must be in a model turn"},
+		{name: "fewer responses than calls", contents: []any{text("user", "hi"), map[string]any{"role": "model", "parts": []any{map[string]any{"functionCall": map[string]any{"name": "a"}, "thoughtSignature": sig}, map[string]any{"functionCall": map[string]any{"name": "b"}}}}, response}, refusal: "number of function response parts"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -173,6 +194,8 @@ func TestOpenAIStrict(t *testing.T) {
 		{name: "an image from the assistant", input: []any{msg("user", "input_text"), msg("assistant", "input_image")}, refusal: "Supported values are: 'output_text'"},
 		{name: "a foreign reasoning item", input: []any{msg("user", "input_text"), map[string]any{"type": "reasoning", "encrypted_content": "gemini-signature-1"}}, refusal: "could not be verified"},
 		{name: "a part it doesn't know", input: []any{map[string]any{"type": "file_data"}}, refusal: "Invalid value"},
+		{name: "a message without a type", input: []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": "x"}}}}},
+		{name: "output_text from the user", input: []any{msg("user", "output_text")}, refusal: "'input_text', 'input_image', and 'input_file'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -325,4 +348,46 @@ func TestRepliesAsEachAPIGivesThem(t *testing.T) {
 	assert.Equal(t, "incomplete", body["status"])
 	assert.Equal(t, "web_search_call", str(obj(list(body["output"])[1])["type"]))
 	assert.Zero(t, a.Streamed()+g.Streamed()+o.Streamed())
+}
+
+// The OpenAI fake refuses a tool name no API takes, answers with its
+// reasoning when asked for it, and streams an incomplete answer as one.
+func TestOpenAIToolsAndReasoning(t *testing.T) {
+	o := OpenAI(t)
+	code, _ := post(t, o.URL()+"/v1/responses", map[string]any{"model": "m", "input": "hi", "tools": []any{map[string]any{"type": "function", "name": "mcp.github/search"}}})
+	assert.Equal(t, http.StatusBadRequest, code)
+	o.Script(Reply{Thought: "think", Text: "hi"})
+	_, body := post(t, o.URL()+"/v1/responses", map[string]any{"model": "m", "input": "hi", "reasoning": map[string]any{"effort": "low"}})
+	assert.Equal(t, "reasoning", str(obj(list(body["output"])[0])["type"]))
+	o.Script(Reply{Text: "x", Finish: "content_filter"})
+	resp, err := http.Post(o.URL()+"/v1/responses", "application/json", bytes.NewReader([]byte(`{"model":"m","input":"hi","stream":true}`)))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(resp.Body)
+	assert.Contains(t, b.String(), "response.incomplete")
+}
+
+// A Gemini tool name no API takes is refused.
+func TestGeminiToolNames(t *testing.T) {
+	g := Gemini(t)
+	code, _ := post(t, g.URL()+"/v1beta/models/m:generateContent", map[string]any{
+		"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}},
+		"tools":    []any{map[string]any{"functionDeclarations": []any{map[string]any{"name": "mcp.github/search"}}}},
+	})
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Contains(t, g.Refusals()[0], "Invalid function name")
+}
+
+// The fakes answer only their endpoint, and only JSON.
+func TestFakeEndpoints(t *testing.T) {
+	a := Anthropic(t)
+	resp, err := http.Get(a.URL() + "/v1/messages")
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp, err = http.Post(a.URL()+"/v1/messages", "application/json", bytes.NewReader([]byte("not json")))
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

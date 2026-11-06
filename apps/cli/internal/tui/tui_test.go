@@ -269,6 +269,34 @@ func TestModelMovesTheConversation(t *testing.T) {
 	assert.Equal(t, "mock-c", local(app).Engine().ModelName())
 }
 
+// /model's other paths: no conversation open (the workspace's model), a
+// model that can't be built, and each line of the move's notice.
+func TestModelSwitchPaths(t *testing.T) {
+	app := newTestApp(t, func(_ context.Context, _ *config.Config, name string) (model.LLM, error) {
+		if name == "bad-model" {
+			return nil, errors.New("unknown model")
+		}
+		return runtime.NewMockLLM(name), nil
+	})
+	if _, ok := app.Workspace.ActiveSession(); ok {
+		t.Skip("the app opens with a conversation")
+	}
+	assert.Contains(t, runCmd(t, app, "/model mock-d"), "Model set to:")
+	assert.Equal(t, "mock-d", local(app).Engine().ModelName())
+	assert.Contains(t, runCmd(t, app, "/model bad-model --new"), "Could not switch model")
+	_, err := app.Workspace.NewSession()
+	require.NoError(t, err)
+	assert.Contains(t, runCmd(t, app, "/model bad-model"), "Could not switch model")
+}
+
+func TestModelNotice(t *testing.T) {
+	got := modelNotice(api.ModelPreview{Model: "m", Tokens: 12_300, Compacts: true, Unseen: []string{"clip.mp4"}, NoTools: true})
+	for _, want := range []string{"summarised first, to fit m", "about 12.3k tokens.", "can't see clip.mp4", "can't use tools"} {
+		assert.Contains(t, got, want)
+	}
+	assert.Contains(t, modelNotice(api.ModelPreview{Tokens: 5, Priced: true, CostUSD: 0.5}), "the workspace's model reads this conversation again: about 5 tokens, $0.50.")
+}
+
 func TestHandleCommandModel(t *testing.T) {
 	ctx := context.Background()
 	app := newTestApp(t, func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error) {

@@ -39,6 +39,9 @@ func (w *Workspace) SessionModel(id string) string { return w.storage.Model(id) 
 // moving it: what the next turn reads again and costs, whether the
 // conversation is compacted first, and what the model can't do.
 func (w *Workspace) PreviewSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+	if session.ValidateID(id) != nil {
+		return api.ModelPreview{}, fmt.Errorf("%w: %q", api.ErrSessionNotFound, id)
+	}
 	ref = strings.TrimSpace(ref)
 	cfg := w.settings()
 	llm, err := w.newModel(ctx, cfg, cmp.Or(ref, cfg.ModelName()))
@@ -67,9 +70,6 @@ func (w *Workspace) PreviewSessionModel(ctx context.Context, id, ref string) (ap
 // the workspace's model), compacting it first when it wouldn't fit, and
 // returns what the move means (PreviewSessionModel).
 func (w *Workspace) SetSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
-	if session.ValidateID(id) != nil {
-		return api.ModelPreview{}, fmt.Errorf("%w: %q", api.ErrSessionNotFound, id)
-	}
 	p, err := w.PreviewSessionModel(ctx, id, ref)
 	if err != nil {
 		return api.ModelPreview{}, err

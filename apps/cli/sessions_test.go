@@ -75,6 +75,23 @@ func TestSessionsExport(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err))
 }
 
+// `blitz sessions usage <id>` lists a saved session's calls through the
+// service; one it doesn't have is a usage error (spec_056 CA-125).
+func TestSessionsUsageCommand(t *testing.T) {
+	isolate(t)
+	store, err := session.NewStorage(config.DefaultConfig().Session.StorageDir)
+	require.NoError(t, err)
+	rec, err := store.CreateSession("", "Fix the build", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, store.AddMessage("user", "why does it fail?"))
+
+	out, err := runCLI(t, "sessions", "usage", rec.ID)
+	require.NoError(t, err)
+	assert.Contains(t, out, rec.ID)
+	_, err = runCLI(t, "sessions", "usage", "nope")
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+}
+
 func TestForkAndNameFlags(t *testing.T) {
 	isolate(t)
 	for name, args := range map[string][]string{
