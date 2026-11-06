@@ -42,10 +42,17 @@ const eventsSuffix = ".events.jsonl"
 // turn runs in (Pin); the others are dropped and loaded again from their
 // file when next asked for, so a service that runs many sessions (a
 // worker's every run is one) doesn't keep every conversation it ever ran.
+// And a session in memory keeps only the events no summary stands in for
+// (withoutSummarised), so one long conversation doesn't grow without end:
+// once a summary is recorded, the session is trimmed when no turn runs in
+// it.
 type PersistentService struct {
 	inner adksession.Service
 	dir   string
-	mu    sync.Mutex // serialises loads and file appends
+	mu    sync.Mutex // serialises loads, appends and trims
+
+	hidden  map[string]int  // final events in each session's file but not in memory
+	summary map[string]bool // sessions given a summary since they were last trimmed
 
 	resMu  sync.Mutex
 	recent []sessionKey   // the sessions in memory, least recently used first
@@ -64,7 +71,7 @@ func NewPersistentService(dir string) (*PersistentService, error) {
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return nil, err
 	}
-	return &PersistentService{inner: adksession.InMemoryService(), dir: dir, pinned: map[string]int{}}, nil
+	return &PersistentService{inner: adksession.InMemoryService(), dir: dir, pinned: map[string]int{}, hidden: map[string]int{}, summary: map[string]bool{}}, nil
 }
 
 func (p *PersistentService) eventsPath(id string) (string, error) {
@@ -139,6 +146,10 @@ func (p *PersistentService) Delete(ctx context.Context, req *adksession.DeleteRe
 		_ = os.Remove(path)
 	}
 	p.forget(sessionKey{req.AppName, req.UserID, req.SessionID})
+	p.mu.Lock()
+	delete(p.hidden, req.SessionID)
+	delete(p.summary, req.SessionID)
+	p.mu.Unlock()
 	return p.inner.Delete(ctx, req)
 }
 
@@ -146,9 +157,11 @@ func (p *PersistentService) Delete(ctx context.Context, req *adksession.DeleteRe
 // turn's events go to the session the runner loaded, which must still be
 // there. Pins nest (two turns in one session).
 func (p *PersistentService) Pin(id string) (unpin func()) {
+	p.mu.Lock() // not while the session is being trimmed: the runner loads it next
 	p.resMu.Lock()
 	p.pinned[id]++
 	p.resMu.Unlock()
+	p.mu.Unlock()
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -157,9 +170,80 @@ func (p *PersistentService) Pin(id string) (unpin func()) {
 				delete(p.pinned, id)
 			}
 			p.resMu.Unlock()
+			p.trim(context.Background(), id)
 			p.evict(context.Background())
 		})
 	}
+}
+
+// trim drops from memory the events of session id a summary now stands in
+// for, unless a turn runs in it (the runner holds it). The session is
+// rebuilt from what's kept; its file is untouched.
+func (p *PersistentService) trim(ctx context.Context, id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.summary[id] {
+		return
+	}
+	p.resMu.Lock()
+	busy := p.pinned[id] > 0
+	var k sessionKey
+	for _, r := range p.recent {
+		if r.id == id {
+			k = r
+		}
+	}
+	p.resMu.Unlock()
+	if busy || k.id == "" {
+		return
+	}
+	delete(p.summary, id)
+	got, err := p.inner.Get(ctx, &adksession.GetRequest{AppName: k.app, UserID: k.user, SessionID: id})
+	if err != nil {
+		return
+	}
+	var all []*adksession.Event
+	for ev := range got.Session.Events().All() {
+		all = append(all, ev)
+	}
+	kept := withoutSummarised(all)
+	if len(kept) == len(all) {
+		return
+	}
+	_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: k.app, UserID: k.user, SessionID: id})
+	created, err := p.inner.Create(ctx, &adksession.CreateRequest{AppName: k.app, UserID: k.user, SessionID: id})
+	if err == nil {
+		for _, ev := range kept {
+			if err = p.inner.AppendEvent(ctx, created.Session, ev); err != nil {
+				break
+			}
+		}
+	}
+	if err != nil {
+		// Half rebuilt: dropped, so the next Get loads it from its file.
+		_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: k.app, UserID: k.user, SessionID: id})
+		delete(p.hidden, id)
+		p.forget(k)
+		return
+	}
+	p.hidden[id] += len(all) - len(kept)
+}
+
+// Hidden is how many of session id's stored events aren't in memory, a
+// summary standing in for them: what the file holds is the events in
+// memory and these.
+func (p *PersistentService) Hidden(id string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.hidden[id]
+}
+
+// Log is session id's whole stored event log, the events a summary stands
+// in for included (nil when it has none).
+func (p *PersistentService) Log(id string) ([]*adksession.Event, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return ReadEvents(p.dir, id)
 }
 
 // touch marks a session in memory as just used, then drops the least
@@ -221,6 +305,8 @@ func (p *PersistentService) residentIDs() []string {
 
 // AppendEvent records the event in memory, then durably appends final events.
 func (p *PersistentService) AppendEvent(ctx context.Context, s adksession.Session, ev *adksession.Event) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if err := p.inner.AppendEvent(ctx, s, ev); err != nil {
 		return err
 	}
@@ -235,8 +321,9 @@ func (p *PersistentService) AppendEvent(ctx context.Context, s adksession.Sessio
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if ev.Actions.Compaction != nil {
+		p.summary[s.ID()] = true
+	}
 	return jsonl.Append(path, filePerm, line)
 }
 
@@ -298,6 +385,7 @@ func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Sessi
 	if err != nil {
 		return err
 	}
+	var all []*adksession.Event
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 64<<20)
 	for sc.Scan() {
@@ -305,15 +393,24 @@ func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Sessi
 		if len(line) == 0 {
 			continue
 		}
-		var ev adksession.Event
-		if json.Unmarshal(line, &ev) != nil {
+		ev := new(adksession.Event)
+		if json.Unmarshal(line, ev) != nil {
 			continue // a torn final line from a crash
 		}
-		if err := p.inner.AppendEvent(ctx, s, &ev); err != nil {
+		all = append(all, ev)
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	kept := withoutSummarised(all)
+	for _, ev := range kept {
+		if err := p.inner.AppendEvent(ctx, s, ev); err != nil {
 			return fmt.Errorf("replay session %s: %w", s.ID(), err)
 		}
 	}
-	return sc.Err()
+	p.hidden[s.ID()] = len(all) - len(kept)
+	delete(p.summary, s.ID())
+	return nil
 }
 
 // ReadEvents reads session id's stored event log from dir, for exports

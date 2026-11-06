@@ -229,6 +229,7 @@ func (s *Storage) copyLocked(src, rec *SessionRecord) (err error) {
 		}
 	}
 	rec.MessageCount = len(src.Messages)
+	rec.Model = src.Model // the same conversation, on the same model
 	// The copy holds the same conversation, so the same context size; what
 	// was spent getting there is the source's.
 	if src.Usage != nil {

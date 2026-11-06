@@ -45,6 +45,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -81,12 +82,15 @@ type (
 
 // runState is carried in the context of one Execute call.
 type runState struct {
-	sessionID   string
-	maxTurns    int
-	turns       atomic.Int64
-	attachments []*genai.Part
-	planOnly    bool   // refuse tools that could change anything (see WithPlanOnly)
-	mode        string // names a read-only mode other than plan in refusals (see WithReadOnly)
+	// conversationModel is the conversation's own model, if it has one
+	// (WithConversationModel).
+	conversationModel model.LLM
+	sessionID         string
+	maxTurns          int
+	turns             atomic.Int64
+	attachments       []*genai.Part
+	planOnly          bool   // refuse tools that could change anything (see WithPlanOnly)
+	mode              string // names a read-only mode other than plan in refusals (see WithReadOnly)
 	// allowed limits the run to these tools (see WithAllowedTools); nil
 	// means no limit.
 	allowed map[string]bool
@@ -207,7 +211,15 @@ type UsageStore interface {
 	SetUsage(sessionID string, u api.Usage) error
 }
 
-// WithUsageStore keeps sessions' usage in s.
+// LedgerStore is a UsageStore that also keeps each session's ledger: its
+// calls one by one (spec_056_conversation_adapters CA-120).
+type LedgerStore interface {
+	AppendCall(sessionID string, c api.Call) error
+	Calls(sessionID string) ([]api.Call, error)
+}
+
+// WithUsageStore keeps sessions' usage in s (and their ledgers, when s is
+// a LedgerStore too).
 func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore = s } }
 
 // WithProjectTrusted says whether the workspace's project settings are
@@ -285,6 +297,9 @@ type Engine struct {
 
 	cfg   *config.Config
 	tasks *taskManager
+	// compactAt is the active model's compaction point (spec_056 CA-110),
+	// set as the agents are built (under mu).
+	compactAt int
 	// projectTrusted means the project's agents may loosen the mode.
 	projectTrusted bool
 	// reviewModel reviews actions in the auto mode (nil: e.llm).
@@ -348,6 +363,12 @@ func NewEngine(
 	llm model.LLM,
 	opts ...Option,
 ) (*Engine, error) {
+	// The models' records read the settings' prices and what was learned
+	// of them, kept in Blitz's home (spec_056 CA-11, CA-14).
+	setPricing(cfg.Pricing)
+	if learnedStore() == nil {
+		SetLearnedStore(modelfacts.Open(modelfacts.Path(config.Dir())))
+	}
 	e := &Engine{
 		agency:    cfg.Blitz.AgencyLevel,
 		cfg:       cfg,
@@ -362,6 +383,9 @@ func NewEngine(
 		active:    cfg.Blitz.DefaultAgent,
 		settings:  map[string]config.ModelSettings{},
 		tasks:     newTaskManager(),
+	}
+	if cfg.Enterprise.URL != "" {
+		e.usage.SetCatalogPrices(catalogPrices(cfg))
 	}
 	// Sorted, so that when "gpt-5" and "openai/gpt-5" are both written the
 	// bare name wins every time.
@@ -560,7 +584,7 @@ func (e *Engine) restoreUsage(sessionID string) {
 // sessionID's usage, and saves it (BL-WEB-01).
 func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int, costUSD float64) {
 	e.restoreUsage(sessionID)
-	e.usage.RecordSearch(sessionID, queries, costUSD)
+	e.keepCall(ctx, sessionID, e.usage.RecordSearch(sessionID, queries, costUSD))
 	e.saveUsage(ctx, sessionID)
 }
 
@@ -569,8 +593,62 @@ func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int
 // A provider that reports no usage leaves the cost unknown.
 func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usage *genai.GenerateContentResponseUsageMetadata) {
 	e.restoreUsage(sessionID)
-	e.usage.RecordSpeech(ctx, sessionID, settingsName(model), usage)
+	e.keepCall(ctx, sessionID, e.usage.RecordSpeech(ctx, sessionID, settingsName(model), usage))
 	e.saveUsage(ctx, sessionID)
+}
+
+// charge records a model call in its session's totals and ledger, and
+// saves the totals.
+func (e *Engine) charge(ctx context.Context, c Charge) {
+	e.restoreUsage(c.Session)
+	e.keepCall(ctx, c.Session, e.usage.Charge(ctx, c))
+	e.saveUsage(ctx, c.Session)
+}
+
+// keepCall adds c to sessionID's ledger, when the store keeps ledgers.
+func (e *Engine) keepCall(ctx context.Context, sessionID string, c api.Call) {
+	ls, ok := e.usageStore.(LedgerStore)
+	if !ok {
+		return
+	}
+	if err := ls.AppendCall(sessionID, c); err != nil {
+		slog.WarnContext(ctx, "could not keep the call in the session's ledger", "session", sessionID, "error", err)
+	}
+}
+
+// HasPrice reports whether model ("provider/" prefix optional) has a
+// price, so its calls count toward cost limits.
+func (e *Engine) HasPrice(model string) bool {
+	return e.usage.HasPrice(settingsName(model))
+}
+
+// PriceOf is model's price as the ledger charges it: the price table,
+// then the organization's catalog (spec_056 CA-123).
+func (e *Engine) PriceOf(model string) (config.ModelPrice, bool) {
+	return e.usage.priceFor(settingsName(model))
+}
+
+// UnpricedModels are the models sessionID called that have no price.
+func (e *Engine) UnpricedModels(sessionID string) []string {
+	return e.usage.UnpricedModels(sessionID)
+}
+
+// Ledger is sessionID's calls, oldest first, with what was spent before
+// its ledger was kept as one call at the head (spec_056 CA-126), and their
+// totals by model and purpose (CA-121).
+func (e *Engine) Ledger(sessionID string) ([]api.Call, api.Totals, error) {
+	total := e.Usage(sessionID)
+	var calls []api.Call
+	if ls, ok := e.usageStore.(LedgerStore); ok {
+		var err error
+		if calls, err = ls.Calls(sessionID); err != nil {
+			return nil, api.Totals{}, err
+		}
+	}
+	if before, ok := api.Before(total, calls); ok {
+		calls = append([]api.Call{before}, calls...)
+	}
+	return calls, api.Sum(calls), nil
 }
 
 // EstimateCostUSD is what a model call outside a session cost (an eval's
@@ -636,6 +714,26 @@ func (e *Engine) SetModelSettings(model string, s config.ModelSettings) {
 	} else {
 		e.settings[name] = s
 	}
+}
+
+// providerToolPolicy is what the settings and the organization's policy
+// say about provider tools (spec_056 CA-81): all off with [tools]
+// provider = false, and those the organization's tools.off names
+// (provider:<kind>, provider:*).
+func (e *Engine) providerToolPolicy() ProviderToolPolicy {
+	all, off := ParseProviderToolsOff(e.cfg.Org.Policy.Tools.Off, "")
+	if off == nil {
+		off = map[string]bool{}
+	}
+	// What switches the client tool off switches the provider's off: the
+	// organization naming it, or a deny rule for it.
+	for _, kind := range []string{ptWebSearch, ptWebFetch, ptCodeExecution} {
+		gate := gateTool(kind)
+		if slices.Contains(e.cfg.Org.Policy.Tools.Off, gate) || e.toolReg != nil && e.toolReg.Rules().ToolDenied(gate, nil) != nil {
+			off[kind] = true
+		}
+	}
+	return ProviderToolPolicy{Off: all || !e.cfg.Tools.ProviderToolsOn(), Disabled: off}
 }
 
 func (e *Engine) lookupSettings(name string) (config.ModelSettings, bool) {
@@ -820,6 +918,15 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 		return nil, nil
 	}
 	e.noteFallback(ctx, resp)
+	e.noteUnshown(ctx, resp)
+	if lines, _ := resp.CustomMetadata[LearnedKey].([]string); len(lines) > 0 {
+		// What a refusal taught about the model, told once (spec_056 CA-13).
+		if notice := e.noticeTo(ctx); notice != nil {
+			for _, l := range lines {
+				notice(l)
+			}
+		}
+	}
 	if resp.UsageMetadata == nil && resp.Content == nil {
 		return nil, nil // not an answer (nothing to count)
 	}
@@ -832,7 +939,12 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	// Price by the model that actually answered: with server-side fallback
 	// it can differ from the configured one.
 	served := resp.ModelVersion
-	if served == "" || !e.usage.HasPrice(served) {
+	if o, ok := originOf(resp); ok && (served == "" || !e.usage.HasPrice(served)) {
+		// The model that answered, priced or not: a fallback with no price
+		// is unpriced, never charged at the primary's (spec_056 CA-92).
+		served = o.Model
+	}
+	if served == "" || (!e.usage.HasPrice(served) && !isFallback(resp)) {
 		name, _ := e.AgentModel(ctx.AgentName()) // the calling agent's model (it may be pinned)
 		if st := stateFrom(ctx); st != nil && st.models[ctx.AgentName()] != "" {
 			name = st.models[ctx.AgentName()] // a run with its own agent or model
@@ -848,14 +960,18 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	case float64:
 		writes = int64(v)
 	}
-	e.restoreUsage(id)
-	e.usage.RecordCall(ctx, id, served, resp.UsageMetadata, writes)
-	if st := stateFrom(ctx); st != nil && st.taskID != "" {
-		e.usage.RecordWrites(st.taskID, served, resp.UsageMetadata, writes) // counted once in the metrics
+	o, _ := originOf(resp)
+	c := Charge{Session: id, Purpose: api.PurposeTurn, Model: served, Origin: o, Usage: resp.UsageMetadata, CacheWrites: writes}
+	st := stateFrom(ctx)
+	if st != nil && st.taskID != "" {
+		c.Task, c.Purpose = st.taskID, api.PurposeTask // its cost cap counts its own
 	}
-	if st := stateFrom(ctx); st != nil {
-		e.saveUsage(ctx, id)
+	if st == nil {
+		e.restoreUsage(id)
+		e.usage.Charge(ctx, c) // no session to keep it in
+		return nil, nil
 	}
+	e.charge(ctx, c)
 	return nil, nil
 }
 
@@ -1150,11 +1266,11 @@ func (e *Engine) rebuildLocked() error {
 		}
 		e.active = "blitz"
 	}
-	t, err := e.buildTreeLocked(e.active, nil)
+	t, err := e.buildTreeLocked(e.active, runModel{})
 	if err != nil {
 		return err
 	}
-	e.runner, e.rootAgent, e.compactionCfg = t.runner, t.root, t.compaction
+	e.runner, e.rootAgent, e.compactionCfg, e.compactAt = t.runner, t.root, t.compaction, t.point
 	return nil
 }
 
@@ -1164,26 +1280,37 @@ type tree struct {
 	root       agent.Agent
 	compaction *compaction.Config
 	models     map[string]model.LLM
+	point      int // the root model's compaction point, automatic or not
 }
 
 // modelInTreeLocked is the model agent runs on in a tree rooted at active
 // whose configured model is replaced by override (nil: none): the override
 // runs the root agent even when it is pinned, and every unpinned agent.
 // e.mu must be held.
-func (e *Engine) modelInTreeLocked(agentName, active string, override model.LLM) model.LLM {
-	if override != nil {
-		if _, pinned := e.agentModels[agentName]; agentName == active || !pinned {
-			return override
+func (e *Engine) modelInTreeLocked(agentName, active string, o runModel) model.LLM {
+	if o.llm != nil {
+		_, pinned := e.agentModels[agentName]
+		if !pinned || agentName == active && !o.pins {
+			return o.llm
 		}
 	}
 	return e.modelForLocked(agentName)
 }
 
+// runModel is the model a run uses in place of the configured one: a
+// run's own (WithModel), which its root agent runs on even if pinned, or
+// its conversation's (WithConversationModel), which every pinned agent
+// keeps its pin over (spec_056 CA-100). The zero value is none.
+type runModel struct {
+	llm  model.LLM
+	pins bool
+}
+
 // buildTreeLocked builds a runner whose root is active, with every other
-// agent as a sub-agent. override (nil: none) replaces the configured model
-// (see modelInTreeLocked). It changes nothing in e, so e.mu may be held
-// for reading only.
-func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error) {
+// agent as a sub-agent. override (the zero value: none) replaces the
+// configured model (see modelInTreeLocked). It changes nothing in e, so
+// e.mu may be held for reading only.
+func (e *Engine) buildTreeLocked(active string, override runModel) (tree, error) {
 	rootSpec, ok := e.agentReg.Get(active)
 	if !ok {
 		return tree{}, fmt.Errorf("agent '%s' not found", active)
@@ -1231,6 +1358,10 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 		retain = 20
 	}
 	threshold := c.TokenThreshold
+	if info, ok := infoOf(llm); ok {
+		threshold = info.CompactionPoint(threshold) // the model's own (spec_056 CA-110)
+	}
+	point := threshold
 	if !c.Compaction || threshold <= 0 {
 		threshold = math.MaxInt32
 	}
@@ -1239,8 +1370,16 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 	if err != nil {
 		return tree{}, fmt.Errorf("failed to instantiate ADK runner: %w", err)
 	}
-	t.runner, t.root, t.compaction = r, rootAgent, rc.Compaction
+	t.runner, t.root, t.compaction, t.point = r, rootAgent, rc.Compaction, point
 	return t, nil
+}
+
+// CompactionThreshold is where the active model's conversations are
+// compacted (spec_056 CA-110), for the context meter.
+func (e *Engine) CompactionThreshold() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.compactAt
 }
 
 // ExecOption configures one Execute call.
@@ -1258,6 +1397,24 @@ func WithAgent(name string) ExecOption { return func(s *runState) { s.agent = na
 // every unpinned agent (e.g. a worker's model).
 func WithModel(llm model.LLM) ExecOption { return func(s *runState) { s.model = llm } }
 
+// WithConversationModel runs the prompt on its conversation's own model
+// (spec_056 CA-100): every agent without a pin runs on it, a pinned one on
+// its pin. A run's own model (WithModel) wins over it.
+func WithConversationModel(llm model.LLM) ExecOption {
+	return func(s *runState) { s.conversationModel = llm }
+}
+
+// runModelOf is the model st's run uses in place of the configured one.
+func (e *Engine) runModelOf(st *runState) runModel {
+	switch {
+	case st.model != nil:
+		return runModel{llm: withImages(st.model, e.media)}
+	case st.conversationModel != nil:
+		return runModel{llm: withImages(st.conversationModel, e.media), pins: true}
+	}
+	return runModel{}
+}
+
 // Execute runs a prompt within a session and streams ADK events to the handler.
 func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler EventHandler, opts ...ExecOption) error {
 	if sessionID == "" {
@@ -1274,6 +1431,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	ctx = context.WithValue(ctx, runStateKey{}, st)
 	ctx = audit.WithSession(ctx, sessionID)
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
+	ctx = WithProviderToolPolicy(ctx, e.providerToolPolicy())
 	if n := e.cfg.Tools.MaxParallel; n > 0 {
 		ctx = platform.WithTaskRunner(ctx, boundedRunner(n))
 	}
@@ -1295,7 +1453,28 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		defer p.Pin(sessionID)() // its events go to the session the runner loaded
 	}
 	before := e.Usage(sessionID)
-	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
+	answered := false
+	seen := func(ev *session.Event) error {
+		if ev != nil && ev.Author != "user" && ev.Content != nil {
+			answered = true
+		}
+		if handler == nil {
+			return nil
+		}
+		return handler(ev)
+	}
+	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), seen)
+	if errors.Is(err, api.ErrContextLength) && !answered && ctx.Err() == nil {
+		// Longer than the model reads: summarised to fit, without asking
+		// (the owner's decision), and the same model tried once more
+		// (spec_056 CA-111). The turn's prompt is in the session already.
+		if _, cerr := e.Compact(ctx, sessionID, "", 1); cerr == nil {
+			if notice := e.noticeTo(ctx); notice != nil {
+				notice(i18n.T("model.context_summarised", "model", modelName))
+			}
+			err = drain(r.Run(withCompactedRetry(ctx), "user", sessionID, nil, rc), seen)
+		}
+	}
 	after := e.usage.Session(sessionID)
 	span.SetAttributes(
 		attribute.Int64("model_calls", int64(after.Calls-before.Calls)),
@@ -1324,18 +1503,14 @@ type pinner interface {
 func (e *Engine) runnerFor(st *runState) (*runner.Runner, string, string, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if st.agent == "" && st.model == nil {
+	if st.agent == "" && st.model == nil && st.conversationModel == nil {
 		if e.runner == nil {
 			return nil, "", "", fmt.Errorf("runner is not initialized")
 		}
 		return e.runner, e.active, e.modelForLocked(e.active).Name(), nil
 	}
 	active := cmp.Or(st.agent, e.active)
-	var override model.LLM
-	if st.model != nil {
-		override = withImages(st.model, e.media)
-	}
-	t, err := e.buildTreeLocked(active, override)
+	t, err := e.buildTreeLocked(active, e.runModelOf(st))
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -1408,7 +1583,7 @@ func (e *Engine) recordTurn(ctx context.Context, sessionID string, span trace.Sp
 // or the tool call it was writing, was cut off, and without a word the
 // turn would seem to have done nothing.
 func drain(events func(yield func(*session.Event, error) bool), handler EventHandler) error {
-	cut := false
+	var ended error // why the last model reply ended badly (spec_056 CA-31)
 	for ev, err := range events {
 		if err != nil {
 			if errors.Is(err, api.ErrMaxTurns) {
@@ -1419,7 +1594,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 		if ev != nil && !ev.Partial && ev.Author != "user" {
 			// The last model reply decides: a tool's result after a cut-off
 			// one (the call was whole) clears it.
-			cut = ev.FinishReason == genai.FinishReasonMaxTokens
+			ended = finishError(&ev.LLMResponse)
 		}
 		if handler != nil && ev != nil {
 			if hErr := handler(ev); hErr != nil {
@@ -1427,10 +1602,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 			}
 		}
 	}
-	if cut {
-		return api.ErrOutputLimit
-	}
-	return nil
+	return ended
 }
 
 // InvokeSubagent runs a single registered agent on prompt in a fresh, isolated
@@ -1449,8 +1621,8 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 
 	e.mu.RLock()
 	llm := e.modelForLocked(spec.Name)
-	if st := stateFrom(ctx); st != nil && st.model != nil { // a run with its own model
-		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.media))
+	if st := stateFrom(ctx); st != nil && (st.model != nil || st.conversationModel != nil) { // a run with its own model
+		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), e.runModelOf(st))
 	}
 	reg := e.toolReg
 	if r, ok := ctx.Value(isolatedToolsKey{}).(*tools.Registry); ok { // a task in its own worktree
@@ -1467,7 +1639,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 		return "", fmt.Errorf("failed to create sub-agent runner: %w", err)
 	}
 
-	subCtx := withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings)
+	subCtx := WithProviderToolPolicy(withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings), e.providerToolPolicy())
 	subCtx = e.agentRun(subCtx, spec)
 	// Its shells and tasks count for the session that started it.
 	subCtx = tools.WithOwnerSession(subCtx, e.sessionOf(ctx))

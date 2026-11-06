@@ -50,6 +50,14 @@ service SessionService {
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
   // Sets the active session's title.
   rpc RenameSession(RenameSessionRequest) returns (RenameSessionResponse);
+  // Moves a conversation to a model from its next turn ("" back to the
+  // workspace's), compacting it first when it wouldn't fit, and says what
+  // the move means (spec_056_conversation_adapters CA-100, CA-101;
+  // BAD_MODEL_REF, SESSION_NOT_FOUND).
+  rpc SetSessionModel(SetSessionModelRequest) returns (SetSessionModelResponse);
+  // Says what moving a conversation to a model would mean, without moving
+  // it (CA-101).
+  rpc PreviewSessionModel(PreviewSessionModelRequest) returns (PreviewSessionModelResponse);
   // Deletes a saved session or snapshot, by ID (another workspace's too):
   // its transcript and history. The workspace's active session, or one a
   // background run uses, is refused (SESSION_OPEN); an unknown ID is
@@ -142,6 +150,9 @@ message SessionInfo {
   // What started it: "worker" (a worker's run), "background" (a detached
   // run, blitz --bg), or "" for a chat.
   string origin = 13;
+  // The conversation's own model (a model reference), "" when it runs on
+  // the workspace's (spec_056_conversation_adapters CA-100).
+  string model = 14;
 }
 
 // Message is one message in a transcript.
@@ -242,6 +253,51 @@ message RenameSessionResponse {
   SessionInfo session = 1;
 }
 
+// What moving a conversation to a model means (spec_056 CA-101).
+message ModelPreview {
+  // The model reference ("" for the workspace's model).
+  string model = 1;
+  // About how many tokens the next turn reads again, with none cached.
+  int64 tokens = 2;
+  // What reading them costs, when priced.
+  double cost_usd = 3;
+  bool priced = 4;
+  // Whether the conversation is compacted first, to fit the model.
+  bool compacts = 5;
+  // The attachments the model can't see, described to it instead.
+  repeated string unseen = 6;
+  // Whether the model can't call tools (the agent only answers on it).
+  bool no_tools = 7;
+  // The active agent's pinned model, which it keeps.
+  string active_pin = 8;
+}
+
+// Request message for SessionService.SetSessionModel.
+message SetSessionModelRequest {
+  string workspace = 1;
+  string session_id = 2;
+  // A model reference ("provider/model" or a name); "" for the
+  // workspace's model.
+  string model = 3;
+}
+
+// Response message for SessionService.SetSessionModel.
+message SetSessionModelResponse {
+  ModelPreview preview = 1;
+}
+
+// Request message for SessionService.PreviewSessionModel.
+message PreviewSessionModelRequest {
+  string workspace = 1;
+  string session_id = 2;
+  string model = 3;
+}
+
+// Response message for SessionService.PreviewSessionModel.
+message PreviewSessionModelResponse {
+  ModelPreview preview = 1;
+}
+
 // Request message for SessionService.DeleteSession.
 message DeleteSessionRequest {
   string workspace = 1;
@@ -334,6 +390,11 @@ message GetUsageRequest {
   string workspace = 1;
   // Also estimate what the context is made of (parts).
   bool parts = 2;
+  // Also list the session's calls, oldest first (spec_056 CA-125).
+  bool calls = 3;
+  // Another saved session's usage, not the active one's ("": the active
+  // session). Its context and parts aren't given.
+  string session_id = 4;
 }
 
 // Response message for SessionService.GetUsage.
@@ -346,6 +407,45 @@ message GetUsageResponse {
   int32 keep = 4;
   // What the context is made of, estimated by category, when asked for.
   repeated ContextPart parts = 5;
+  // The session's usage by model and by purpose (turn, compaction,
+  // review, task, speech, search, before), costliest first (spec_056
+  // CA-125).
+  repeated UsageGroup by_model = 6;
+  repeated UsageGroup by_purpose = 7;
+  // Its calls, oldest first, when asked for.
+  repeated UsageCall calls = 8;
+}
+
+// UsageGroup is the usage of one model, or one purpose, in a session.
+message UsageGroup {
+  string name = 1;
+  Usage usage = 2;
+}
+
+// UsageCall is one entry of a session's ledger: a model call, a speech
+// call or a search's billed queries (spec_056 CA-120).
+message UsageCall {
+  google.protobuf.Timestamp time = 1;
+  // Who answered: the wire API, the provider as configured and the model.
+  string api = 2;
+  string provider = 3;
+  string model = 4;
+  // What it was for: turn, compaction, review, task, speech, search, or
+  // before (what was spent before the ledger was kept).
+  string purpose = 5;
+  // The background task it ran for, if any.
+  string task = 6;
+  Usage usage = 7;
+  // What it was charged per million tokens; unset with no price.
+  Price price = 8;
+}
+
+// Price is a model's, in dollars per million tokens.
+message Price {
+  double input = 1;
+  double cached_input = 2;
+  double cache_write = 3;
+  double output = 4;
 }
 
 // ContextPart is one category of what a prompt carries.

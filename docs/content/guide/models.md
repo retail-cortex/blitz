@@ -7,6 +7,14 @@ Spec: [models](../about/specs/spec_015_models.md).
 
 With no model set, Blitz uses Gemini's `gemini-4-argon` (for chat and for Google web searches). Choose another with `/model provider/model` in a session, `--model`, or `model` under `[llm.<provider>]` in the settings; a model you've set is kept across releases. Setting up a provider, its key or sign-in, is in [Providers](providers.md).
 
+## Switching models in a conversation
+
+`/model provider/model` moves the conversation you're in to that model from its next turn; your other conversations, and jobs, keep theirs. Blitz says what the move costs: the new model reads the conversation again from the start, with none of it cached ("From the next turn, anthropic/claude-opus-5-5 reads this conversation again: about 84k tokens, $0.42."). If the conversation is too long for the new model, it's summarised first. `/model provider/model --new` starts a fresh conversation on the model instead, which costs nothing to switch. `/model` on its own shows the conversation's model and the workspace's.
+
+What carries over: everything said, every tool call and its result, and your attachments. What doesn't: the previous model's hidden reasoning, which only the model that wrote it can read (it's kept, so switching back picks it up again). Moving from a stronger model to a weaker one mid-task can cost quality, since the weaker one picks up a long, complex conversation; a new conversation with a short summary of where you are often works better.
+
+An agent with a pinned model keeps it ([Per-agent models](#per-agent-models)). A fallback model that takes over in the middle of a turn goes on from the calls the first model made.
+
 ## Resilience
 
 Model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` turns retries off). A request that sends nothing for `llm.stall_timeout_seconds` (default 600) fails instead of hanging the turn. A connection that stops answering altogether, as when a VPN or a network change drops it, is noticed within a minute and the request is retried on a new one. A stream that fails partway through isn't retried, because its text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once.
@@ -58,6 +66,21 @@ The key is the model name. Every model uses its own settings: the main model, pi
 
 `/effort high` (or `--effort high`) sets the reasoning effort for every model call in the session, over each model's own; `/effort auto` goes back to them.
 
+## What Blitz learns about a model
+
+Blitz knows the main families (Claude, Gemini, GPT, o-series): their context windows, maximum output, whether they think and which settings they take. Claude through Bedrock or Vertex AI counts as the Claude model it names. For Ollama, Blitz asks Ollama itself whether a model calls tools or reads images, and how much context it holds. For your organization's models, the organization's catalog says.
+
+Nobody can know every model, though. When a model refuses something with an error that says what (it doesn't call tools, doesn't read images, doesn't stream, doesn't take a setting, holds fewer tokens than sent), Blitz:
+- remembers it;
+- sends the same request again once without it;
+- tells you once, for example "llama3.2 can't use tools: it answers without them from now on".
+
+A model that can't use tools answers without them. If a fallback can use them, it takes calls that offer tools.
+
+What Blitz learned is kept in `~/.blitz/models.learned.toml` and checked again after 30 days. `blitz models forget <model>` (`ollama/llama3.2`, or just `llama3.2` for every provider) clears it.
+
 ## Context and cost
 
-History is compacted automatically once a prompt reaches `context.token_threshold` tokens, or on demand with `/compact [focus]`. List prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). `blitz doctor` warns when the active model has no price. `/cost` shows the session's tokens, including cache reads and writes, and its estimated cost. Web searches through Google are billed per query and shown on their own line, priced by `[search_pricing.google] per_1k_queries` (default $14).
+History is compacted automatically before it fills the model's context window: at the window less the model's maximum output, less a tenth, for a model Blitz knows. Set `context.token_threshold` to choose the point yourself (its default, 120,000, leaves it to the model). `/compact [focus]` compacts on demand. List prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). `blitz doctor` warns when the active model has no price. `/cost` shows the session's tokens, including cache reads and writes, and its estimated cost. Web searches through Google are billed per query and shown on their own line, priced by `[search_pricing.google] per_1k_queries` (default $14).
+
+Blitz keeps a ledger of each session: every model call, with the model that answered, what it was for (the conversation, a summary, a review, a background task, speech, a web search), its tokens and what it cost at the time. So a session that changed model, or whose fallback answered, says what each model cost: `/cost` breaks the total down by model and by purpose, the desktop app's cost in the status bar does too when you hover over it, and `blitz sessions usage <id>` lists every call. A call to a model with no price makes only that call's cost unknown: the total says "$0.42, plus 3 calls with no price". Your organization's models are priced from its catalog. A turn with a cost limit tells you when it can't count a call because its model has no price. Sessions from before 0.9.2 show what they spent until then as one line.

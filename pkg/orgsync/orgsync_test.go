@@ -130,6 +130,34 @@ func TestNothingSharedYet(t *testing.T) {
 	}
 }
 
+// A save that's ahead when its sync takes others' changes, and sent by
+// someone else before the sync sends it (Changes pushing and fetching in
+// the same folder), still leaves the sync a state: in step, not none
+// until the next fetch a minute on (the CI flake in the service's
+// TestShareWithOrganization).
+func TestSentMeanwhile(t *testing.T) {
+	bare, ana, _ := shared(t)
+	require.NoError(t, os.WriteFile(filepath.Join(ana, "plan.md"), []byte("# Plan\n\nShip it.\n"), 0o644))
+	run(t, ana, "commit", "-qam", "Ship it")
+	var counts atomic.Int32
+	git := gitAs("Ana", nil)
+	s := &Syncer{Dir: ana, Who: "Ana", Quiet: time.Hour, Poll: 20 * time.Millisecond, Fetch: time.Hour,
+		Git: func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+			if len(args) > 0 && args[0] == "rev-list" && counts.Add(1) == 2 {
+				// Between the sync's two looks: Changes sends it.
+				run(t, ana, "push", "-q", "origin", "HEAD:main")
+				run(t, ana, "fetch", "-q", "origin")
+			}
+			return git(ctx, dir, args...)
+		}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	eventually(t, func() bool { return s.State().State == Saved }, "in step")
+	assert.Equal(t, "Ship it", strings.TrimSpace(run(t, bare, "log", "-1", "--format=%s", "main")))
+}
+
 // A change is saved a moment after the last one, never mid-turn, and
 // reaches the others when they hear of it (EN-62).
 func TestSync(t *testing.T) {

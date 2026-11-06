@@ -60,6 +60,8 @@ Users and the agent can put pictures and PDFs in front of models. Images are val
 - **IMG-65a** *2026-11-04 (scan N26-engine-runtime#29: one lock for every file, held through the processing poll, so one large video held up every session's uploads for up to 10 minutes).* One upload of a file at a time, by its SHA-256; other files' uploads go on.
 - **IMG-66** `view_media` (spec_006_filetools FS-77) gives the model audio or video from the workspace; `view_image` takes pictures only, `view_document` PDFs only, each pointing at the others. `/context` counts audio (about 2,000 tokens a megabyte) and video (about 300) as "Audio and video", and text files with the prompt's text.
 
+- **IMG-67** *2026-11-05 ([spec_056_conversation_adapters](spec_056_conversation_adapters.md) CA-70–CA-73).* A file a model makes (a picture Gemini draws, audio) is kept in the store like an attachment (`Store.PutMade`) and referred to from the conversation, named for the model and its hash; it's shown in the conversation with **Save** (into the workspace) and the CLI prints where it's kept. Claude and OpenAI, which take files only from the user, get it in the user's next turn after a note naming it. `generate_audio`'s result refers to its stored audio, as `view_media`'s does.
+
 ## 5. Provider handling
 - **IMG-30** Gemini: native inline data. Anthropic: base64 image blocks, or inside the tool result for `view_image` ([spec_015_models](spec_015_models.md) MDL-23). OpenAI/Ollama: marker substitution into `input_image` items (MDL-42). For Ollama a vision model is required.
 - **IMG-31** Agents are told they can see images when support is on ([spec_016_engine](spec_016_engine.md) ENG-03).

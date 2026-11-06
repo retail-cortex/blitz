@@ -15,9 +15,11 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"path"
 	"strings"
@@ -52,6 +54,26 @@ func (w *Workspace) SessionUsage() (api.Usage, error) {
 	return w.engine.Usage(id), nil
 }
 
+// SessionLedger returns the active session's calls, oldest first (what it
+// spent before its ledger was kept as one, at the head), and their totals
+// by model and purpose (spec_056 CA-120, CA-121).
+func (w *Workspace) SessionLedger() ([]api.Call, api.Totals, error) {
+	id, err := w.activeID()
+	if err != nil {
+		return nil, api.Totals{}, err
+	}
+	return w.engine.Ledger(id)
+}
+
+// SessionLedgerOf is SessionLedger for saved session id, active or not;
+// api.ErrSessionNotFound for an ID with no saved session.
+func (w *Workspace) SessionLedgerOf(id string) ([]api.Call, api.Totals, error) {
+	if _, err := w.storage.Load(id); err != nil {
+		return nil, api.Totals{}, fmt.Errorf("%w: %s", api.ErrSessionNotFound, id)
+	}
+	return w.engine.Ledger(id)
+}
+
 // Context returns the active session's context size and compaction
 // setting, with its breakdown by category when parts is set (it reads the
 // session's events).
@@ -61,7 +83,9 @@ func (w *Workspace) Context(parts bool) (api.ContextInfo, error) {
 		return api.ContextInfo{}, err
 	}
 	c := w.cfg.Context
-	info := api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}
+	// The active model's compaction point (spec_056 CA-110), else the setting.
+	threshold := cmp.Or(w.engine.CompactionThreshold(), c.TokenThreshold)
+	info := api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: threshold, Keep: c.RetainEvents}
 	if parts {
 		id, _ := w.activeID()
 		info.Parts = w.engine.ContextParts(context.Background(), id, u.LastPrompt)
@@ -199,6 +223,29 @@ func (w *Workspace) AddImage(name string, data []byte) (*images.Image, error) {
 		return nil, api.ErrImagesDisabled
 	}
 	return w.tools.AddImage(name, data)
+}
+
+// MaxStoredRead is the largest stored file ReadStoredFile reads (a page
+// shows it, or saves it, whole).
+const MaxStoredRead = 32 << 20
+
+// ReadStoredFile reads a file in the attachment store by its reference (a
+// file a model made: spec_056 CA-71): its bytes and type. fs.ErrNotExist
+// when it isn't there; ErrUploadTooLarge over MaxStoredRead.
+func (w *Workspace) ReadStoredFile(uri string) ([]byte, string, error) {
+	s := w.tools.Images()
+	if s == nil {
+		return nil, "", api.ErrImagesDisabled
+	}
+	_, mime, size, err := s.Path(uri)
+	if err != nil {
+		return nil, "", fmt.Errorf("%s: %w", uri, fs.ErrNotExist)
+	}
+	if size > MaxStoredRead {
+		return nil, "", fmt.Errorf("%w: %d bytes (the most is %d)", ErrUploadTooLarge, size, MaxStoredRead)
+	}
+	data, _, err := s.Get(uri)
+	return data, mime, err
 }
 
 // Search limits: how many results go to the agent, how many are asked for

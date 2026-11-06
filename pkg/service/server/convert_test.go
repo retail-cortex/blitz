@@ -46,6 +46,25 @@ func TestReflectDueEvent(t *testing.T) {
 	assert.Equal(t, int32(8), k.ReflectDue.Score)
 }
 
+// A file the model made goes to clients as its own event (spec_056 CA-71).
+func TestModelFileEvent(t *testing.T) {
+	got := eventMsg(api.Event{Author: "blitz", File: &api.File{URI: "blitz-image:abc", Name: "gemini-3-pro-1a2b3c4d.png", MIME: "image/png", Path: "/store/abc.png", Size: 42}})
+	k, ok := got.Kind.(*pb.TurnEvent_ModelFile)
+	require.True(t, ok, "kind %T", got.Kind)
+	assert.Equal(t, &pb.ModelFile{Uri: "blitz-image:abc", Name: "gemini-3-pro-1a2b3c4d.png", MimeType: "image/png", Path: "/store/abc.png", Size: 42}, k.ModelFile)
+}
+
+// An answer's sources go to clients as their own event (spec_056 CA-84).
+func TestCitationsEvent(t *testing.T) {
+	got := eventMsg(api.Event{Citations: []api.Citation{{Title: "Blitz", URL: "https://b", Text: "an agent"}}})
+	k, ok := got.Kind.(*pb.TurnEvent_Citations)
+	require.True(t, ok, "kind %T", got.Kind)
+	require.Len(t, k.Citations.Items, 1)
+	assert.Equal(t, "https://b", k.Citations.Items[0].Url)
+	assert.Equal(t, "Blitz", k.Citations.Items[0].Title)
+	assert.Equal(t, "an agent", k.Citations.Items[0].Text)
+}
+
 // The engine's values become the API's messages field for field; values
 // the engine leaves out stay unset.
 func TestConversions(t *testing.T) {

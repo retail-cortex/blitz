@@ -15,6 +15,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -90,18 +91,15 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 				return HandleCommand(ctx, "/model "+ref, app)
 			}
 			m := app.Workspace.Model()
+			if cur, ok := app.Workspace.ActiveSession(); ok && cur.Model != "" {
+				fmt.Println(i18n.T("model.conversation", "model", Cyan+safe(cur.Model)+Reset))
+				fmt.Println(i18n.T("model.workspace_default", "model", safe(m.Name), "provider", m.Provider))
+				return true, nil
+			}
 			fmt.Println(i18n.T("model.current", "model", Cyan+safe(m.Name)+Reset, "provider", m.Provider))
 			return true, nil
 		}
-		pin, err := app.Workspace.SetModel(ctx, args[0])
-		if err != nil {
-			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("model.switch_failed", "error", safe(err.Error())), Reset)
-			return true, nil
-		}
-		fmt.Printf("%s %s%s\n", Green, i18n.T("model.set", "model", Cyan+safe(args[0])), Reset)
-		if pin != "" {
-			fmt.Printf("%s%s%s\n", Dim, i18n.T("pin.active_pinned", "agent", app.Workspace.ActiveAgent().Name, "model", safe(pin)), Reset)
-		}
+		switchModel(ctx, app, args[0], slices.Contains(args[1:], "--new"))
 
 	case "skills":
 		handleSkillsCommand(ctx, args, app)
@@ -532,4 +530,66 @@ func handleSessionCommand(args []string, app *App) {
 		}
 		fmt.Printf("%s %s%s\n", Green, i18n.T("session.started", "id", s.ID), Reset)
 	}
+}
+
+// switchModel moves the conversation to ref from its next turn (spec_056
+// CA-100, CA-131), saying what the move costs; with fresh, or with no
+// conversation yet, a new one starts on it.
+func switchModel(ctx context.Context, app *App, ref string, fresh bool) {
+	failed := func(err error) {
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("model.switch_failed", "error", safe(err.Error())), Reset)
+	}
+	cur, ok := app.Workspace.ActiveSession()
+	if fresh || !ok {
+		// A new conversation starts on the workspace's model, so set it.
+		pin, err := app.Workspace.SetModel(ctx, ref)
+		if err != nil {
+			failed(err)
+			return
+		}
+		if fresh {
+			if _, err := app.Workspace.NewSession(); err != nil {
+				failed(err)
+				return
+			}
+			fmt.Printf("%s %s%s\n", Green, i18n.T("model.new_conversation", "model", Cyan+safe(ref)), Reset)
+		} else {
+			fmt.Printf("%s %s%s\n", Green, i18n.T("model.set", "model", Cyan+safe(ref)), Reset)
+		}
+		if pin != "" {
+			fmt.Printf("%s%s%s\n", Dim, i18n.T("pin.active_pinned", "agent", app.Workspace.ActiveAgent().Name, "model", safe(pin)), Reset)
+		}
+		return
+	}
+	p, err := app.Workspace.SetSessionModel(ctx, cur.ID, ref)
+	if err != nil {
+		failed(err)
+		return
+	}
+	fmt.Printf("%s %s%s\n", Green, modelNotice(p), Reset)
+	if p.ActivePin != "" {
+		fmt.Printf("%s%s%s\n", Dim, i18n.T("pin.active_pinned", "agent", app.Workspace.ActiveAgent().Name, "model", safe(p.ActivePin)), Reset)
+	}
+}
+
+// modelNotice says what moving the conversation to a model means: what
+// its next turn reads again and costs, and what the model can't do.
+func modelNotice(p api.ModelPreview) string {
+	model := cmp.Or(p.Model, i18n.T("model.workspace_model"))
+	var lines []string
+	if p.Compacts {
+		lines = append(lines, i18n.T("model.compacted", "model", safe(model)))
+	}
+	if p.Priced {
+		lines = append(lines, i18n.T("model.switched_cost", "model", safe(model), "tokens", humanTokens(p.Tokens), "cost", fmt.Sprintf("$%.2f", p.CostUSD)))
+	} else {
+		lines = append(lines, i18n.T("model.switched", "model", safe(model), "tokens", humanTokens(p.Tokens)))
+	}
+	if len(p.Unseen) > 0 {
+		lines = append(lines, i18n.T("model.unseen", "model", safe(model), "files", safe(strings.Join(p.Unseen, ", "))))
+	}
+	if p.NoTools {
+		lines = append(lines, i18n.T("model.no_tools", "model", safe(model)))
+	}
+	return strings.Join(lines, "\n  ")
 }

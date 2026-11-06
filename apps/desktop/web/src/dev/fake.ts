@@ -25,7 +25,7 @@ import { setTransport } from "../api";
 import { parseMessages } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
 import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
-import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
+import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, UsageGroupSchema, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
@@ -511,6 +511,9 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
     }
     yield ev({ case: "text", value: { text: answer, repeat: true } });
     sess.messages.push(msg("model", answer));
+    // ?citations: the answer cites the provider's search (spec_056 CA-84).
+    if (new URLSearchParams(location.search).has("citations"))
+      yield ev({ case: "citations", value: { items: [{ title: "Blitz docs", url: "https://retail-cortex.github.io/blitz/", text: "" }] } });
   }
   s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 4, input: s.usage.input + 9120n, output: s.usage.output + 812n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0061 });
   sess.messageCount = sess.messages.length;
@@ -1693,6 +1696,12 @@ export function installFake() {
           s.sessions = s.sessions.filter((x) => x.id !== sessionId);
           return {};
         },
+        setSessionModel: ({ workspace, model }) => {
+          const sess = active(state(workspace));
+          (sess as { model?: string }).model = model;
+          return { preview: { model, tokens: 12_000n, costUsd: 0.04, priced: true, compacts: false, unseen: [], noTools: false, activePin: "" } };
+        },
+        previewSessionModel: ({ model }) => ({ preview: { model, tokens: 12_000n, costUsd: 0.04, priced: true, compacts: false, unseen: [], noTools: false, activePin: "" } }),
         renameSession: ({ workspace, title }) => {
           const sess = active(state(workspace));
           sess.title = title;
@@ -1716,7 +1725,7 @@ export function installFake() {
           state(workspace).pending.get(requestId)?.(answer);
           return {};
         },
-        getUsage: ({ workspace }) => ({ usage: state(workspace).usage }),
+        getUsage: ({ workspace }) => ({ usage: state(workspace).usage, byModel: [create(UsageGroupSchema, { name: "gemini-4-argon", usage: state(workspace).usage })] }),
         compact: () => ({ eventsCompacted: 12, summaryChars: 1840 }),
         rewind: ({ workspace, index, mode }) => {
           const sess = active(state(workspace));
@@ -2325,6 +2334,8 @@ export function installFake() {
         },
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
+        // A file a model made (spec_056 CA-71): a 1×1 picture.
+        readStoredFile: () => ({ data: Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0)), mimeType: "image/png" }),
         // ?oldservice: a service older than the app (the stale banner).
         getServiceInfo: () => ({ version: new URLSearchParams(location.search).has("oldservice") ? "0.6.1" : "dev", executable: "" }),
         listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),

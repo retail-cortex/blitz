@@ -15,8 +15,14 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"iter"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/images"
@@ -80,7 +86,111 @@ func (m *imageModel) GenerateContent(ctx context.Context, req *model.LLMRequest,
 		cp.Contents = contents
 		req = &cp
 	}
-	return m.inner.GenerateContent(ctx, req, stream)
+	return func(yield func(*model.LLMResponse, error) bool) {
+		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
+			if err == nil {
+				keepMade(m.media.storeOf(), resp)
+			}
+			if !yield(resp, err) {
+				return
+			}
+		}
+	}
+}
+
+// keepMade stores the files in a model's whole answer (an image it drew,
+// audio it spoke) and puts references in their place, so the conversation
+// never holds their bytes (spec_056 CA-70). Each is named for the model
+// that made it and its hash. A file Blitz can't keep, or with no store,
+// becomes a note.
+func keepMade(s *images.Store, resp *model.LLMResponse) {
+	if resp == nil || resp.Partial || resp.Content == nil {
+		return
+	}
+	madeBy := "model"
+	if o, ok := originOf(resp); ok && o.Model != "" {
+		madeBy = o.Model
+	}
+	for i, p := range resp.Content.Parts {
+		if p == nil || p.InlineData == nil || len(p.InlineData.Data) == 0 {
+			continue
+		}
+		blob := p.InlineData
+		sum := sha256.Sum256(blob.Data)
+		name := fmt.Sprintf("%s-%s%s", madeBy, hex.EncodeToString(sum[:4]), extOf(blob.MIMEType))
+		if s == nil {
+			resp.Content.Parts[i] = &genai.Part{Text: fmt.Sprintf("[%s made %s, which wasn't kept]", madeBy, name)}
+			continue
+		}
+		img, err := s.PutMade(name, blob.MIMEType, blob.Data)
+		if err != nil {
+			resp.Content.Parts[i] = &genai.Part{Text: fmt.Sprintf("[%s made a file Blitz couldn't keep: %v]", madeBy, err)}
+			continue
+		}
+		ref := images.Part(img)
+		ref.ThoughtSignature = p.ThoughtSignature // Gemini signs the images it makes
+		resp.Content.Parts[i] = ref
+	}
+}
+
+// extOf is the usual extension of mime ("" for one Blitz doesn't keep).
+func extOf(mime string) string {
+	if m, ok := images.MediaOf(mime); ok && len(m.Exts) > 0 {
+		return m.Exts[0]
+	}
+	return ""
+}
+
+// unseenAttachments names the attachments in contents that the model
+// taking list won't see as they are (CA-63): each one it gets as text or a
+// note instead, for a switch's preview to list.
+func unseenAttachments(contents []*genai.Content, s *images.Store, list []Accept, upload bool) []string {
+	route := mediaPolicy(list)
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range contents {
+		if c == nil {
+			continue
+		}
+		for _, p := range c.Parts {
+			uri, name := attachmentRef(p)
+			if uri == "" || seen[uri] || s == nil {
+				continue
+			}
+			seen[uri] = true
+			_, mime, size, err := s.Path(uri)
+			if err != nil {
+				continue
+			}
+			r := route(mime, size, s.Pages(uri))
+			if r == images.RouteUpload && !upload {
+				r = images.RouteNote
+			}
+			if r == images.RouteText && images.KindOf(mime) == images.KindText {
+				continue // a text file is text either way
+			}
+			if r == images.RouteText || r == images.RouteNote {
+				out = append(out, cmp.Or(name, strings.TrimPrefix(uri, images.URIScheme)[:12]))
+			}
+		}
+	}
+	return out
+}
+
+// attachmentRef is the stored file a part refers to, and its name: an
+// attachment, or a tool result's file.
+func attachmentRef(p *genai.Part) (uri, name string) {
+	switch {
+	case p == nil:
+	case p.FileData != nil && strings.HasPrefix(p.FileData.FileURI, images.URIScheme):
+		return p.FileData.FileURI, p.FileData.DisplayName
+	case p.FunctionResponse != nil:
+		if u, ok := p.FunctionResponse.Response[images.ToolResultKey].(string); ok && strings.HasPrefix(u, images.URIScheme) {
+			n, _ := p.FunctionResponse.Response["path"].(string)
+			return u, filepath.Base(n)
+		}
+	}
+	return "", ""
 }
 
 // WithAttachments adds parts (usually images.Part references) to the

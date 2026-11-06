@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -375,6 +376,23 @@ func TestSessionHandlers(t *testing.T) {
 	renamed, err := s.RenameSession(ctx, connect.NewRequest(&pb.RenameSessionRequest{Workspace: dir, Title: "Renamed"}))
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed", renamed.Msg.Session.Title)
+	// The conversation's own model (spec_056 CA-100, CA-101, CA-130).
+	preview, err := s.PreviewSessionModel(ctx, connect.NewRequest(&pb.PreviewSessionModelRequest{Workspace: dir, SessionId: id, Model: "other-model"}))
+	require.NoError(t, err)
+	assert.Equal(t, "other-model", preview.Msg.Preview.Model)
+	onModel, err := s.SetSessionModel(ctx, connect.NewRequest(&pb.SetSessionModelRequest{Workspace: dir, SessionId: id, Model: "other-model"}))
+	require.NoError(t, err)
+	assert.Equal(t, "other-model", onModel.Msg.Preview.Model)
+	reloaded, err := s.LoadSession(ctx, connect.NewRequest(&pb.LoadSessionRequest{Workspace: dir, Ref: id}))
+	require.NoError(t, err)
+	assert.Equal(t, "other-model", reloaded.Msg.Session.Model)
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.SetSessionModel, &pb.SetSessionModelRequest{Workspace: dir, SessionId: "../nope", Model: "x"})))
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.SetSessionModel, &pb.SetSessionModelRequest{Workspace: dir, SessionId: "session-20200101-000000-00000000", Model: "x"})))
+	_, err = s.SetSessionModel(ctx, connect.NewRequest(&pb.SetSessionModelRequest{Workspace: dir, SessionId: id}))
+	require.NoError(t, err, "back to the workspace's model")
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.PreviewSessionModel, &pb.PreviewSessionModelRequest{Workspace: dir, SessionId: "../nope", Model: "x"})))
+	assert.Equal(t, "INVALID_WORKSPACE", reason(t, unary(s.SetSessionModel, &pb.SetSessionModelRequest{Workspace: "relative", SessionId: id, Model: "x"})))
+	assert.Equal(t, "INVALID_WORKSPACE", reason(t, unary(s.PreviewSessionModel, &pb.PreviewSessionModelRequest{Workspace: "relative", SessionId: id, Model: "x"})))
 	exported, err := s.ExportSession(ctx, connect.NewRequest(&pb.ExportSessionRequest{Workspace: dir, SessionId: id}))
 	require.NoError(t, err)
 	assert.Contains(t, exported.Msg.Markdown, "first answer")
@@ -382,6 +400,19 @@ func TestSessionHandlers(t *testing.T) {
 	usage, err := s.GetUsage(ctx, connect.NewRequest(&pb.GetUsageRequest{Workspace: dir, Parts: true}))
 	require.NoError(t, err)
 	assert.NotEmpty(t, usage.Msg.Parts, "context parts")
+	// The session's cost by model and purpose, and each call when asked
+	// (spec_056 CA-125); another saved session's by its ID.
+	require.NotEmpty(t, usage.Msg.ByModel)
+	require.NotEmpty(t, usage.Msg.ByPurpose)
+	assert.Equal(t, "turn", usage.Msg.ByPurpose[0].Name)
+	assert.Empty(t, usage.Msg.Calls, "calls only when asked")
+	ledger, err := s.GetUsage(ctx, connect.NewRequest(&pb.GetUsageRequest{Workspace: dir, Calls: true, SessionId: id}))
+	require.NoError(t, err)
+	require.Len(t, ledger.Msg.Calls, int(usage.Msg.Usage.Calls))
+	assert.Equal(t, "turn", ledger.Msg.Calls[0].Purpose)
+	assert.NotNil(t, ledger.Msg.Calls[0].Time)
+	assert.Equal(t, usage.Msg.Usage.Calls, ledger.Msg.Usage.Calls)
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.GetUsage, &pb.GetUsageRequest{Workspace: dir, SessionId: "no-such-session"})))
 	found, err := s.SearchSession(ctx, connect.NewRequest(&pb.SearchSessionRequest{Workspace: dir, Terms: "second"}))
 	require.NoError(t, err)
 	assert.Positive(t, found.Msg.Found, "search: %v", found.Msg)
@@ -875,6 +906,13 @@ func TestWorkspaceHandlers(t *testing.T) {
 		assert.Equal(t, loaded.Msg.Image.Id, added.Msg.Image.Id, "the same image")
 		assert.Error(t, unary(w.LoadImage, &pb.LoadImageRequest{Workspace: dir, Path: "missing.png"}))
 		assert.Error(t, unary(w.AddImage, &pb.AddImageRequest{Workspace: dir, Name: "x.png", Data: []byte("not an image")}))
+
+		// A stored file comes back by its reference (spec_056 CA-71).
+		stored, err := w.ReadStoredFile(ctx, connect.NewRequest(&pb.ReadStoredFileRequest{Workspace: dir, Uri: "blitz-image:" + added.Msg.Image.Id}))
+		require.NoError(t, err)
+		assert.Equal(t, "image/png", stored.Msg.MimeType)
+		assert.NotEmpty(t, stored.Msg.Data)
+		assert.Equal(t, "FILE_NOT_FOUND", reason(t, unary(w.ReadStoredFile, &pb.ReadStoredFileRequest{Workspace: dir, Uri: "blitz-image:" + strings.Repeat("0", 64)})))
 	})
 
 	t.Run("web search", func(t *testing.T) {

@@ -15,8 +15,12 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
+	"maps"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -25,22 +29,118 @@ import (
 	"google.golang.org/genai"
 )
 
-// UsageTracker records usage per session.
+// UsageTracker records usage per session: its totals in memory, and each
+// call for its ledger (spec_056_conversation_adapters CA-120).
 type UsageTracker struct {
 	mu       sync.Mutex
 	pricing  map[string]config.ModelPrice
 	sessions map[string]*api.Usage
+	// catalog is the organization's price for a model of its catalog
+	// (spec_053), for models the price table doesn't have; nil for none.
+	catalog func(model string) (config.ModelPrice, bool)
+	now     func() time.Time
+	// unpriced is, per session, the models it called that have no price
+	// (not those of calls that reported no usage, whose model has one).
+	unpriced map[string]map[string]bool
 }
 
 // NewUsageTracker creates a tracker with the given price table.
 func NewUsageTracker(pricing map[string]config.ModelPrice) *UsageTracker {
-	return &UsageTracker{pricing: pricing, sessions: map[string]*api.Usage{}}
+	return &UsageTracker{pricing: pricing, sessions: map[string]*api.Usage{}, now: time.Now, unpriced: map[string]map[string]bool{}}
 }
 
-// price finds the price for model: exact, else the longest configured prefix
-// ("gemini-3.8-flash-001" uses "gemini-3.8-flash").
+// UnpricedModels are the models session called that have no price, so
+// cost limits can't count their calls (spec_056 CA-124).
+func (t *UsageTracker) UnpricedModels(session string) []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Sorted(maps.Keys(t.unpriced[session]))
+}
+
+// price finds the price for model (priceFor).
 func (t *UsageTracker) price(model string) (config.ModelPrice, bool) {
-	return config.PriceFor(t.pricing, model)
+	return t.priceFor(model)
+}
+
+// priceFor is the one place a model's price is read (CA-123): the price
+// table, exact or by the longest prefix ("gemini-3.8-flash-001" uses
+// "gemini-3.8-flash"), with the settings' [pricing] already in it; else
+// the organization's catalog, for its models.
+func (t *UsageTracker) priceFor(model string) (config.ModelPrice, bool) {
+	if p, ok := config.PriceFor(t.pricing, model); ok {
+		return p, true
+	}
+	if t.catalog != nil && model != "" {
+		return t.catalog(model)
+	}
+	return config.ModelPrice{}, false
+}
+
+// SetCatalogPrices has the tracker price the organization's models by f
+// where its price table has no price.
+func (t *UsageTracker) SetCatalogPrices(f func(model string) (config.ModelPrice, bool)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.catalog = f
+}
+
+// Charge is a model call to record: whose session it's charged to, what
+// it was for, who answered and what it used.
+type Charge struct {
+	Session string
+	// Task is the background task it ran for, if any; its own total is
+	// kept too, for its cost cap.
+	Task    string
+	Purpose string
+	// Model is the model the call is priced as (the one that answered).
+	Model       string
+	Origin      Origin
+	Usage       *genai.GenerateContentResponseUsageMetadata
+	CacheWrites int64
+}
+
+// Charge records one model call: in the session's totals (and its task's)
+// and as the ledger entry it returns, for the session's store to keep.
+func (t *UsageTracker) Charge(ctx context.Context, c Charge) api.Call {
+	call := t.bill(ctx, c)
+	t.add(c.Session, call.Usage)
+	if c.Task != "" {
+		t.add(c.Task, call.Usage)
+	}
+	if _, priced := t.priceFor(c.Model); !priced && c.Model != "" {
+		t.mu.Lock()
+		if t.unpriced[c.Session] == nil {
+			t.unpriced[c.Session] = map[string]bool{}
+		}
+		t.unpriced[c.Session][c.Model] = true
+		t.mu.Unlock()
+	}
+	return call
+}
+
+// bill prices c as a ledger entry, without adding it to any total.
+func (t *UsageTracker) bill(ctx context.Context, c Charge) api.Call {
+	u := t.Estimate(c.Model, c.Usage, c.CacheWrites)
+	observability.RecordTokens(ctx, c.Model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
+	call := api.Call{
+		Time: t.now().UTC(), API: c.Origin.API, Provider: c.Origin.Provider,
+		Model: cmp.Or(c.Model, c.Origin.Model), Purpose: cmp.Or(c.Purpose, api.PurposeTurn), Task: c.Task, Usage: u,
+	}
+	if p, ok := t.priceFor(c.Model); ok && c.Usage != nil {
+		call.Price = &api.Price{Input: p.InputPerMTok, CachedInput: p.CachedInputPerMTok, CacheWrite: cmp.Or(p.CacheWritePerMTok, p.InputPerMTok), Output: p.OutputPerMTok}
+	}
+	return call
+}
+
+func (t *UsageTracker) add(session string, u api.Usage) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := t.sessions[session]
+	if s == nil {
+		s = &api.Usage{Priced: true}
+		t.sessions[session] = s
+	}
+	s.Add(u)
 }
 
 // CacheWriteTokensKey is the LLMResponse.CustomMetadata key a model uses to
@@ -58,17 +158,20 @@ func (t *UsageTracker) HasPrice(model string) bool {
 // call that reported no usage is one call of unknown cost (unpriced).
 func (t *UsageTracker) Estimate(model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
 	if m == nil {
-		return api.Usage{Calls: 1}
+		return api.Usage{Calls: 1, Unpriced: 1}
 	}
 	u := api.Usage{Calls: 1, Priced: true}
 	u.Input = int64(m.PromptTokenCount) + int64(m.ToolUsePromptTokenCount)
 	u.Cached = int64(m.CachedContentTokenCount)
 	u.CacheWrite = min(max(cacheWrites, 0), max(u.Input-u.Cached, 0))
+	// Usage is kept as Gemini counts it, thoughts apart from candidates;
+	// the adapters normalise to that (CA-122, stampResponse).
 	u.Output = int64(m.CandidatesTokenCount) + int64(m.ThoughtsTokenCount)
+	u.Reasoning = int64(m.ThoughtsTokenCount)
 	u.LastPrompt = u.Input
 	p, ok := t.price(model)
 	if !ok {
-		u.Priced = false
+		u.Priced, u.Unpriced = false, 1
 		return u
 	}
 	writeRate := p.CacheWritePerMTok
@@ -96,46 +199,27 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 func (t *UsageTracker) RecordCall(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
 	u := t.Estimate(model, m, cacheWrites)
 	observability.RecordTokens(ctx, model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	s := t.sessions[session]
-	if s == nil {
-		s = &api.Usage{Priced: true}
-		t.sessions[session] = s
-	}
-	s.Add(u)
+	t.add(session, u)
 	return u
 }
 
 // RecordSpeech adds a speech model's call (generate_audio) to session:
 // its tokens and cost, but not as a prompt, so the context's size stays
 // the conversation's. Without usage (a provider that reports none) the
-// cost is unknown.
-func (t *UsageTracker) RecordSpeech(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata) {
-	u := t.Estimate(model, m, 0)
-	u.LastPrompt = 0
-	observability.RecordTokens(ctx, model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	s := t.sessions[session]
-	if s == nil {
-		s = &api.Usage{Priced: true}
-		t.sessions[session] = s
-	}
-	s.Add(u)
+// cost is unknown. It returns the call for the session's ledger.
+func (t *UsageTracker) RecordSpeech(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata) api.Call {
+	c := t.bill(ctx, Charge{Session: session, Purpose: api.PurposeSpeech, Model: model, Usage: m})
+	c.Usage.LastPrompt = 0
+	t.add(session, c.Usage)
+	return c
 }
 
-// RecordSearch adds web search queries, and what they cost, to session.
-func (t *UsageTracker) RecordSearch(session string, queries int, costUSD float64) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	s := t.sessions[session]
-	if s == nil {
-		s = &api.Usage{Priced: true}
-		t.sessions[session] = s
-	}
-	s.SearchQueries += queries
-	s.SearchCostUSD += costUSD
+// RecordSearch adds web search queries, and what they cost, to session,
+// and returns them as a call for its ledger.
+func (t *UsageTracker) RecordSearch(session string, queries int, costUSD float64) api.Call {
+	u := api.Usage{Priced: true, SearchQueries: queries, SearchCostUSD: costUSD}
+	t.add(session, u)
+	return api.Call{Time: t.now().UTC(), Purpose: api.PurposeSearch, Usage: u}
 }
 
 // Seed sets session's usage to u when it has none yet (usage saved before

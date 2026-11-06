@@ -365,3 +365,38 @@ func TestAttachMessagesTranslated(t *testing.T) {
 		})
 	}
 }
+
+// A file a model made is kept as it is, once, by its hash
+// (spec_056_conversation_adapters CA-70).
+func TestStorePutMade(t *testing.T) {
+	s, err := OpenStore(t.TempDir())
+	require.NoError(t, err)
+	tests := []struct {
+		name, mime string
+		data       []byte
+		wantErr    string
+	}{
+		{name: "a picture", mime: "image/png", data: []byte("png bytes")},
+		{name: "speech", mime: "audio/wav", data: []byte("RIFF wav")},
+		{name: "a type Blitz doesn't keep", mime: "application/zip", data: []byte("PK"), wantErr: "doesn't keep"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			img, err := s.PutMade("made", tc.mime, tc.data)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, KindOf(tc.mime), img.Kind)
+			assert.Equal(t, len(tc.data), img.Size)
+			data, mime, err := s.Get(img.URI())
+			require.NoError(t, err)
+			assert.Equal(t, tc.mime, mime)
+			assert.Equal(t, tc.data, data)
+			again, err := s.PutMade("again", tc.mime, tc.data)
+			require.NoError(t, err)
+			assert.Equal(t, img.URI(), again.URI(), "stored once")
+		})
+	}
+}

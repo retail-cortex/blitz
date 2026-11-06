@@ -112,7 +112,39 @@ message TurnEvent {
     // At a chat turn's end: the runs since the last reflection hit
     // enough problems to /reflect on (spec_048_harness_learning HE-63).
     ReflectDue reflect_due = 12;
+    // A file the model made: an image it drew, audio
+    // (spec_056_conversation_adapters CA-71).
+    ModelFile model_file = 13;
+    // The sources the answer before it cites, from the provider's own
+    // search or fetch (spec_056_conversation_adapters CA-84).
+    Citations citations = 14;
   }
+}
+
+// A file a model made, kept in the attachment store. Its bytes come from
+// WorkspaceService.ReadStoredFile.
+message ModelFile {
+  // Its reference in the store (blitz-image:<sha256>).
+  string uri = 1;
+  // Named for the model that made it and its hash.
+  string name = 2;
+  string mime_type = 3;
+  // Where it's kept on the service's machine, and its size.
+  string path = 4;
+  int64 size = 5;
+}
+
+// The sources an answer cites.
+message Citations {
+  repeated Citation items = 1;
+}
+
+// One source an answer cites.
+message Citation {
+  string title = 1;
+  string url = 2;
+  // The text of the answer it supports.
+  string text = 3;
 }
 
 // The evidence that suggests /reflect.
@@ -285,6 +317,11 @@ message Usage {
   // estimated price: not part of cost_usd.
   int32 search_queries = 9;
   double search_cost_usd = 10;
+  // Thinking tokens among output, where the provider reports them apart.
+  int64 reasoning = 11;
+  // Calls whose model had no price: cost_usd is the others', and only
+  // these calls' cost is unknown (spec_056 CA-121).
+  int32 unpriced = 12;
 }
 
 // TurnFinished ends a turn's events.

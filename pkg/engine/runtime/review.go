@@ -103,12 +103,11 @@ func (e *Engine) askModel(ctx context.Context, llm model.LLM, instruction, promp
 	if st != nil && st.sessionID != "" {
 		id = st.sessionID
 	}
-	e.restoreUsage(id)
-	e.usage.RecordCall(ctx, id, served, usage, 0)
-	if st != nil && st.taskID != "" {
-		e.usage.RecordWrites(st.taskID, served, usage, 0)
+	c := Charge{Session: id, Purpose: api.PurposeReview, Model: served, Usage: usage}
+	if st != nil {
+		c.Task = st.taskID
 	}
-	e.saveUsage(ctx, id)
+	e.charge(ctx, c)
 	return text, nil
 }
 

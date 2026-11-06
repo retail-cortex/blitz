@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -113,7 +114,7 @@ func TestGenerateAudio(t *testing.T) {
 			if tc.noModel != nil {
 				s = &speech{speechState: speechState{err: tc.noModel, cfg: tc.cfg}}
 			}
-			out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, allowAll(), s, tc.network)), tc.args)
+			out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, allowAll(), s, tc.network, nil)), tc.args)
 			if tc.wantErr != "" {
 				assert.Contains(t, errOf(out), tc.wantErr)
 				if tc.fail != nil {
@@ -140,7 +141,7 @@ func TestGenerateAudioApproval(t *testing.T) {
 	f := &fakeSpeaker{ext: ".wav"}
 
 	h, reqs := approverHooks(false)
-	out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true)),
+	out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true, nil)),
 		map[string]any{"text": "Ana: Hi\nBen: Yo", "path": "a.wav", "speakers": []any{map[string]any{"name": "Ana"}, map[string]any{"name": "Ben"}}})
 	assert.NotEmpty(t, errOf(out))
 	require.Len(t, *reqs, 1)
@@ -153,7 +154,7 @@ func TestGenerateAudioApproval(t *testing.T) {
 
 	cp.Begin("turn")
 	h, _ = approverHooks(true)
-	out = runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true)), map[string]any{"text": "x", "path": "a.wav"})
+	out = runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true, nil)), map[string]any{"text": "x", "path": "a.wav"})
 	require.Empty(t, errOf(out))
 	assert.FileExists(t, filepath.Join(dir, "a.wav"))
 	_, err := cp.Undo("", false)
@@ -177,7 +178,7 @@ func TestGenerateAudioWriteRules(t *testing.T) {
 			f := &fakeSpeaker{ext: ".wav"}
 			h, reqs := approverHooks(true)
 			h.SetRules(rulesOf(t, nil, []string{"write(talks/**)"}, []string{"write(docs/**)"}))
-			out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true)), map[string]any{"text": "x", "path": tc.path})
+			out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, h, &speech{speechState: speechState{speaker: f}}, true, nil)), map[string]any{"text": "x", "path": tc.path})
 			if tc.wantErr != "" {
 				assert.Contains(t, errOf(out), tc.wantErr)
 				assert.Empty(t, *reqs, "refused before anything is asked")
@@ -247,4 +248,27 @@ func TestSpeakable(t *testing.T) {
 			assert.Equal(t, tc.want, Speakable(tc.in))
 		})
 	}
+}
+
+// With the attachment store, the result refers to the audio, so the next
+// model can hear it as view_media's file (spec_056 CA-73).
+func TestGenerateAudioRefersToTheStoredFile(t *testing.T) {
+	ws, _ := newTestWorkspace(t)
+	f := &fakeSpeaker{ext: ".wav"}
+	var loaded string
+	load := func(path string) (*images.Image, error) {
+		loaded = path
+		return &images.Image{SHA256: strings.Repeat("a", 64), MIME: "audio/wav"}, nil
+	}
+	out := runTool(t, toolOf(t)(NewGenerateAudioTool(ws, allowAll(), &speech{speechState: speechState{speaker: f}}, true, load)), map[string]any{"text": "hello", "path": "a.wav"})
+	require.Empty(t, errOf(out))
+	assert.Equal(t, "a.wav", loaded)
+	assert.Equal(t, images.URIScheme+strings.Repeat("a", 64), out["image_uri"])
+	assert.Equal(t, "audio/wav", out["mime_type"])
+
+	out = runTool(t, toolOf(t)(NewGenerateAudioTool(ws, allowAll(), &speech{speechState: speechState{speaker: f}}, true, func(string) (*images.Image, error) {
+		return nil, os.ErrNotExist
+	})), map[string]any{"text": "hello", "path": "b.wav"})
+	require.Empty(t, errOf(out))
+	assert.Nil(t, out["image_uri"], "no reference when the file can't be stored")
 }

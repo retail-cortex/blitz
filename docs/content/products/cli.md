@@ -110,6 +110,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz auth status\|login <provider>\|logout <provider>` | Sign in to or out of Google, Anthropic, AWS or Azure with its own tool ([providers](../guide/providers.md)) |
 | `blitz trust [dir]` | Show a workspace's project settings and trust or decline them |
 | `blitz sessions export <id> [-o file]` | A session as Markdown, or Word for a `.docx` name, without opening the workspace |
+| `blitz sessions usage <id>` | What a session spent: each model call (when, what for, which model, its tokens and cost), then the totals by model and purpose |
 | `blitz jobs move <name> [--anyway]` | Move a job to your organization's service, saying first what can't run there ([organization](../guide/organization.md)) |
 | `blitz enterprise connect\|disconnect\|login [--browser]\|logout\|status\|terms\|about` | Your [organization's service](../guide/organization.md): connect, sign in, its status, accepting its terms, and what it says about itself (about text, support, privacy notice) |
 | `blitz enterprise workspaces\|open <workspace>\|create <name> [--personal] [--handle h]\|share [folder] [--name n] [--handle h] [--personal]`, `blitz enterprise sync [status]` | The organization's workspaces: list, clone, make, share a folder where it is, and save it to the service now |
@@ -146,7 +147,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/undo [--force]` | Revert this session's last turn's file changes, not another chat's (checkpoints are kept between runs) |
 | `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt: its files, the conversation, or both, or summarize from or up to it |
 | `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session, a file at a time (or `git diff`) |
-| `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold and what it's made of |
+| `/cost`, `/context` | Token usage, estimated cost (by model and by purpose when there's more than one), context size against the compaction threshold and what it's made of |
 | `/status` | Version, workspace, session, agent, model, mode, sandbox, MCP servers, settings files |
 | `/config [key=value [--save]]`, `/set` | The session's settings; change one, and keep it with `--save` |
 | `/theme [name [--save]]` | Markdown and diff colours: `auto`, `dark`, `light`, `dracula`, `tokyo-night`, `pink`, `ascii`, `notty` |

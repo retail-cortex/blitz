@@ -34,6 +34,23 @@ const finished = (message = ""): TurnEvent =>
 const run = (events: TurnEvent[]) => events.reduce<Entry[]>(applyEvent, []);
 
 describe("applyEvent", () => {
+  it("puts an answer's sources under it (spec_056 CA-84)", () => {
+    const cites = (url: string): TurnEvent => create(TurnEventSchema, { kind: { case: "citations", value: { items: [{ title: "Blitz", url, text: "" }] } } });
+    const got = run([text("Blitz is an agent."), cites("https://a"), cites("https://b")]);
+    expect(got).toEqual([
+      {
+        kind: "model",
+        text: "Blitz is an agent.",
+        author: "blitz",
+        open: false,
+        citations: [
+          { title: "Blitz", url: "https://a", text: "" },
+          { title: "Blitz", url: "https://b", text: "" },
+        ],
+      },
+    ]);
+    expect(run([cites("https://a")])).toEqual([]);
+  });
   it("shows a notice as one, closing the answer before it", () => {
     const notice = (t: string, error: boolean): TurnEvent => create(TurnEventSchema, { kind: { case: "notice", value: { text: t, error } } });
     const got = run([text("Hel", { partial: true }), notice("Couldn't save this message", true), notice("Using the fallback model", false)]);
@@ -248,5 +265,13 @@ describe("tool runs", () => {
     ["an aside starts one", [user("one"), user("why?", "aside")], 1],
   ])("the latest turn: %s", (_, entries, want) => {
     expect(latestTurn(entries)).toBe(want);
+  });
+});
+
+describe("model files", () => {
+  it("a file the model made is an entry of its own (spec_056 CA-71)", () => {
+    const ev = create(TurnEventSchema, { author: "blitz", kind: { case: "modelFile", value: { uri: "blitz-image:abc", name: "gemini-3-pro-1a2b3c4d.png", mimeType: "image/png", path: "/x", size: 42n } } });
+    const got = applyEvent([], ev);
+    expect(got).toEqual([{ kind: "file", uri: "blitz-image:abc", name: "gemini-3-pro-1a2b3c4d.png", mime: "image/png", size: 42 }]);
   });
 });

@@ -36,6 +36,24 @@ func enterpriseClient(cfg *config.Config) (*enterprise.Client, error) {
 	return enterprise.Shared(u, func() secrets.Store { return secrets.Default(config.ConfigDir("")) }, enterprise.Options{}), nil
 }
 
+// catalogPrices prices the organization's models by its catalog (its
+// last list, never asking the service), for models the price table
+// doesn't price (spec_056 CA-123).
+func catalogPrices(cfg *config.Config) func(model string) (config.ModelPrice, bool) {
+	return func(name string) (config.ModelPrice, bool) {
+		c, err := enterpriseClient(cfg)
+		if err != nil {
+			return config.ModelPrice{}, false
+		}
+		for _, m := range c.CachedModels() {
+			if m.ID == name && m.Price != nil {
+				return config.ModelPrice{InputPerMTok: m.Price.InputPerMTok, OutputPerMTok: m.Price.OutputPerMTok}, true
+			}
+		}
+		return config.ModelPrice{}, false
+	}
+}
+
 // modelsTimeout bounds asking the organization for its models as a
 // workspace opens.
 var modelsTimeout = 8 * time.Second
@@ -71,6 +89,7 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if !ok {
 		return nil, fmt.Errorf("your organization (%s) offers you no models: ask its admins", c.URL())
 	}
+	setCatalog(m) // what the organization says of it (spec_056 CA-11)
 	headers := map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder}
 	if cfg.Tools.OrgWorkspace != "" {
 		// The organization's workspace the call is for, so the service

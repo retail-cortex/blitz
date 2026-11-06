@@ -21,7 +21,9 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"google.golang.org/adk/v2/model"
 )
 
@@ -32,8 +34,12 @@ import (
 // table would go stale; the provider's answer doesn't.
 type outputCapModel struct {
 	inner model.LLM
-	mu    sync.Mutex
-	cap   int32 // the maximum learned from a rejection; 0: none yet
+	// provider is the model's provider as configured, under which the
+	// maximum is kept with what's learned of the model (spec_056 CA-14);
+	// "" keeps it on this wrapper only.
+	provider string
+	mu       sync.Mutex
+	cap      int32 // the maximum learned from a rejection; 0: none yet
 }
 
 // capOutput wraps m with outputCapModel.
@@ -70,6 +76,11 @@ func (m *outputCapModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 		m.mu.Lock()
 		m.cap = retry
 		m.mu.Unlock()
+		if m.provider != "" {
+			_, _ = learnedStore().Learn(m.provider, canonicalModel(m.inner.Name()), modelfacts.Fact{
+				Kind: modelfacts.MaxOutput, Value: strconv.Itoa(int(retry)), Why: "the provider said so when refusing a larger max_tokens", At: time.Now(),
+			})
+		}
 		for resp, err := range m.inner.GenerateContent(ctx, m.clamp(req), stream) {
 			if !yield(resp, err) {
 				return
@@ -85,6 +96,14 @@ func (m *outputCapModel) clamp(req *model.LLMRequest) *model.LLMRequest {
 	m.mu.Lock()
 	limit := m.cap
 	m.mu.Unlock()
+	if limit == 0 && m.provider != "" {
+		// Learned before (another workspace, an earlier run).
+		for _, f := range learnedStore().Facts(m.provider, canonicalModel(m.inner.Name()), time.Now()) {
+			if n, err := strconv.Atoi(f.Value); f.Kind == modelfacts.MaxOutput && err == nil && n > 0 {
+				limit = int32(n)
+			}
+		}
+	}
 	if limit == 0 || req == nil || req.Config == nil || req.Config.MaxOutputTokens <= limit {
 		return req
 	}

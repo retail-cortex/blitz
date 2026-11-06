@@ -324,10 +324,29 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if t.MaxCostUSD > 0 {
 			inner := on
 			spent := w.costSince(sessionID, res.Before.CostUSD)
+			limit := fmt.Sprintf("$%.2f", t.MaxCostUSD)
+			// A call to a model with no price can't be counted toward the
+			// limit: said the first time the session uses such a model, as
+			// the turn starts on it or when a call is made to it (a
+			// fallback's), never again (spec_056 CA-124).
+			told := map[string]bool{}
+			for _, m := range w.engine.UnpricedModels(sessionID) {
+				told[m] = true
+			}
+			if model, _ := w.engine.AgentModel(w.engine.ActiveAgent()); !told[model] && !w.engine.HasPrice(model) {
+				told[model] = true
+				inner(api.Event{Notice: &api.Notice{Text: i18n.T("turn.cost_limit_unpriced", "limit", limit, "model", model)}})
+			}
 			on = func(e api.Event) {
 				inner(e)
 				if spent() > t.MaxCostUSD {
 					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, t.MaxCostUSD))
+				}
+				for _, m := range w.engine.UnpricedModels(sessionID) {
+					if !told[m] {
+						told[m] = true
+						inner(api.Event{Notice: &api.Notice{Text: i18n.T("turn.cost_limit_uncounted", "limit", limit, "model", m)}})
+					}
 				}
 			}
 		}
@@ -335,7 +354,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	ctx = limited
 
 	on = serialized(on)
-	r := &relay{on: on}
+	r := &relay{on: on, store: w.tools.Images()}
 	handler := r.handle
 	ctx = runtime.WithSubagentEvents(ctx, w.subagentEvents(st, sessionID, on))
 	// Notices the engine raises during the turn (a fallback model taking
@@ -381,7 +400,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
-		base := append([]runtime.ExecOption(nil), extra...)
+		// The conversation's own model first: a command's or a job's own
+		// (in extra) wins over it.
+		var base []runtime.ExecOption
+		if base, err = w.conversationModel(ctx, st, sessionID); err != nil {
+			return res, err
+		}
+		base = append(base, extra...)
 		base = append(base, runtime.WithBudget(budget))
 		if t.ReadOnly != "" {
 			base = append(base, runtime.WithReadOnly(t.ReadOnly))
@@ -633,6 +658,8 @@ type relay struct {
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
 	tasks    []api.Task // the agent's own task list, shown again after a sub-agent's
+	// store is where the files the model makes are kept, for their paths.
+	store *images.Store
 }
 
 // paragraph separates the output of a run that follows another in the same
@@ -664,6 +691,11 @@ func (r *relay) handle(ev *adksession.Event) error {
 		}
 		if e.Tasks != nil {
 			r.tasks = e.Tasks
+		}
+		if f := e.File; f != nil && r.store != nil {
+			if path, _, size, err := r.store.Path(f.URI); err == nil {
+				f.Path, f.Size = path, size
+			}
 		}
 		r.on(e)
 		if res := e.ToolResult; res != nil && res.Name == "invoke_agent" && r.tasks != nil {

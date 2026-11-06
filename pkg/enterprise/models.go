@@ -77,6 +77,14 @@ type models struct {
 	list []Model
 }
 
+// CachedModels are the models the last Models call returned, without
+// asking the service: none before the first.
+func (c *Client) CachedModels() []Model {
+	c.models.mu.Lock()
+	defer c.models.mu.Unlock()
+	return append([]Model(nil), c.models.list...)
+}
+
 // Models are the organization's models the person may use: the service
 // filters them by role. The list is kept and asked for again with its
 // ETag, so an unchanged one costs the service nothing.

@@ -379,6 +379,26 @@ func (r *Remote) SetModel(ctx context.Context, ref string) (string, error) {
 	return res.Msg.ActivePin, nil
 }
 
+// SetSessionModel moves conversation id to ref from its next turn
+// (SessionService.SetSessionModel).
+func (r *Remote) SetSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+	res, err := r.sessions.SetSessionModel(ctx, connect.NewRequest(&pb.SetSessionModelRequest{Workspace: r.dir, SessionId: id, Model: ref}))
+	if err != nil {
+		return api.ModelPreview{}, fromAPI(err)
+	}
+	return modelPreview(res.Msg.Preview), nil
+}
+
+// PreviewSessionModel says what moving conversation id to ref would mean
+// (SessionService.PreviewSessionModel).
+func (r *Remote) PreviewSessionModel(ctx context.Context, id, ref string) (api.ModelPreview, error) {
+	res, err := r.sessions.PreviewSessionModel(ctx, connect.NewRequest(&pb.PreviewSessionModelRequest{Workspace: r.dir, SessionId: id, Model: ref}))
+	if err != nil {
+		return api.ModelPreview{}, fromAPI(err)
+	}
+	return modelPreview(res.Msg.Preview), nil
+}
+
 // PinModel runs agent on the model ref from now on, and saves the pin in
 // the configuration (WorkspaceService.PinModel).
 func (r *Remote) PinModel(ctx context.Context, agent, ref string) (api.PinResult, error) {
@@ -644,6 +664,26 @@ func (r *Remote) SessionUsage() (api.Usage, error) {
 		return api.Usage{}, err
 	}
 	return usage(u.Usage), nil
+}
+
+// SessionLedger is the active session's calls and their totals by model
+// and purpose (SessionService.GetUsage with calls).
+func (r *Remote) SessionLedger() ([]api.Call, api.Totals, error) {
+	return r.SessionLedgerOf("")
+}
+
+// SessionLedgerOf is SessionLedger for saved session id ("": the active
+// one).
+func (r *Remote) SessionLedgerOf(id string) ([]api.Call, api.Totals, error) {
+	res, err := r.sessions.GetUsage(context.Background(), connect.NewRequest(&pb.GetUsageRequest{Workspace: r.dir, Calls: true, SessionId: id}))
+	if err != nil {
+		return nil, api.Totals{}, fromAPI(err)
+	}
+	calls := make([]api.Call, len(res.Msg.Calls))
+	for i, c := range res.Msg.Calls {
+		calls[i] = usageCall(c)
+	}
+	return calls, api.Totals{All: usage(res.Msg.Usage), ByModel: usageGroups(res.Msg.ByModel), ByPurpose: usageGroups(res.Msg.ByPurpose)}, nil
 }
 
 // Context describes how full the active session's context is (from

@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.8.10
-weight: 4
+weight: 5
 ---
 
 **See your agents work together.** When Blitz hands a job to another agent (the coder for a code change, or the spec writer during `/setup`), your conversation now shows what that agent is doing as it works: the files it reads, the commands it runs and its own checklist. When it finishes, your checklist comes back, up to date.

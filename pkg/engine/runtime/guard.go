@@ -140,7 +140,9 @@ func (e *Engine) guardOutput(ctx agent.Context, resp *model.LLMResponse) {
 		switch {
 		case p == nil || p.Text == "":
 		case p.Thought:
-			if e.secrets != nil {
+			// Reasoning a provider signed goes back to it unchanged (spec_056
+			// CA-29): it's masked where it's shown (pkg/engine events).
+			if e.secrets != nil && !signedState(p.ThoughtSignature) {
 				p.Text = redact.Mask(p.Text)
 			}
 		case resp.Partial && hold != nil:

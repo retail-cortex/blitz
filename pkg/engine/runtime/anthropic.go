@@ -252,6 +252,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 // models (Opus 5, Sonnet 5, Fable, Opus 4.7+) reject sampling parameters with
 // a 400, so only older families receive them.
 func supportsSampling(model string) bool {
+	model = canonicalModel(model) // Bedrock's and Vertex AI's IDs too (spec_056 CA-10)
 	for _, p := range []string{"claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-6", "claude-sonnet-4-5", "claude-opus-4-5", "claude-opus-4-1", "claude-sonnet-4-", "claude-opus-4-0", "claude-3"} {
 		if strings.HasPrefix(model, p) {
 			return true
@@ -268,6 +269,7 @@ func supportsFallbacks(model string) bool {
 // supportsEffort reports whether a model takes output_config.effort (the
 // Claude 4.5 generation's Opus and later).
 func supportsEffort(model string) bool {
+	model = canonicalModel(model)
 	for _, p := range []string{"claude-opus-4-5", "claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8"} {
 		if strings.HasPrefix(model, p) {
 			return true
@@ -279,6 +281,7 @@ func supportsEffort(model string) bool {
 // supportsThinking reports whether a model has extended thinking (Claude
 // 3.7 Sonnet and later).
 func supportsThinking(model string) bool {
+	model = canonicalModel(model)
 	for _, p := range []string{"claude-3-5", "claude-3-haiku", "claude-3-opus", "claude-3-sonnet"} {
 		if strings.HasPrefix(model, p) {
 			return false
@@ -297,6 +300,7 @@ func adaptiveThinking(model string) bool {
 // alwaysThinks reports whether a model refuses to have thinking turned off
 // (Opus 5.5, Fable).
 func alwaysThinks(model string) bool {
+	model = canonicalModel(model)
 	return strings.HasPrefix(model, "claude-opus-5-5") || strings.HasPrefix(model, "claude-fable")
 }
 
@@ -374,6 +378,14 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anth
 			return p, err
 		}
 		p.Tools = tools
+		for _, kind := range builtinKinds(cfg) {
+			switch kind {
+			case ptWebFetch:
+				p.Betas = append(p.Betas, "web-fetch-2025-09-10")
+			case ptCodeExecution:
+				p.Betas = append(p.Betas, "code-execution-2025-08-25")
+			}
+		}
 	}
 
 	msgs, err := convertContents(req.Contents)
@@ -429,6 +441,13 @@ func convertContents(contents []*genai.Content) ([]anthropic.BetaMessageParam, e
 				continue
 			}
 			switch {
+			case p.ToolCall != nil || p.ToolResponse != nil:
+				// Claude's own server tool blocks, as it sent them (spec_056
+				// CA-82); another model's reach here as client calls.
+				var block anthropic.BetaContentBlockParamUnion
+				if role == anthropic.BetaMessageParamRoleAssistant && len(p.ThoughtSignature) > 0 && json.Unmarshal(p.ThoughtSignature, &block) == nil {
+					blocks = append(blocks, block)
+				}
 			case p.Thought:
 				// Thinking blocks go back unchanged (signature intact) so tool
 				// loops with thinking keep working; unsigned ones are dropped.
@@ -530,6 +549,16 @@ func convertTools(tools []*genai.Tool) ([]anthropic.BetaToolUnionParam, error) {
 	for _, t := range tools {
 		if t == nil {
 			continue
+		}
+		// The provider's own tools (spec_056 CA-80): genai's built-in
+		// fields, as Anthropic's server tools.
+		switch {
+		case t.GoogleSearch != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfWebSearchTool20250305: &anthropic.BetaWebSearchTool20250305Param{}})
+		case t.URLContext != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfWebFetchTool20250910: &anthropic.BetaWebFetchTool20250910Param{}})
+		case t.CodeExecution != nil:
+			out = append(out, anthropic.BetaToolUnionParam{OfCodeExecutionTool20250825: &anthropic.BetaCodeExecutionTool20250825Param{}})
 		}
 		for _, fd := range t.FunctionDeclarations {
 			if fd == nil {
@@ -635,12 +664,17 @@ func genaiSchemaToJSON(s *genai.Schema) map[string]any {
 // messageToResponse converts a Messages API response to an ADK response.
 func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	content := &genai.Content{Role: genai.RoleModel}
+	var cites []Citation
+	var unshown []map[string]any
 	for i, block := range msg.Content {
 		switch b := block.AsAny().(type) {
 		case anthropic.BetaTextBlock:
 			if b.Text != "" {
 				content.Parts = append(content.Parts, &genai.Part{Text: b.Text})
 			}
+			cites = append(cites, anthropicCitations(b)...)
+		case anthropic.BetaServerToolUseBlock:
+			content.Parts = append(content.Parts, anthropicServerToolUse(b))
 		case anthropic.BetaThinkingBlock:
 			content.Parts = append(content.Parts, &genai.Part{Text: b.Thinking, Thought: true, ThoughtSignature: []byte(b.Signature)})
 		case anthropic.BetaRedactedThinkingBlock:
@@ -659,6 +693,16 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 				continue
 			}
 			content.Parts = append(content.Parts, &genai.Part{FunctionCall: &genai.FunctionCall{ID: b.ID, Name: b.Name, Args: args}})
+		default:
+			if p := anthropicServerToolResult(block.Type, block.RawJSON()); p != nil {
+				content.Parts = append(content.Parts, p) // a server tool's call or result (CA-82)
+			} else {
+				// A block Blitz has no form for: kept with the answer and
+				// noted (spec_056 CA-30).
+				var raw map[string]any
+				_ = json.Unmarshal([]byte(block.RawJSON()), &raw)
+				unshown = append(unshown, map[string]any{"type": string(block.Type), "raw": raw})
+			}
 		}
 	}
 
@@ -685,12 +729,23 @@ func messageToResponse(msg *anthropic.BetaMessage) *model.LLMResponse {
 	u := msg.Usage
 	prompt := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
 	resp.CustomMetadata = map[string]any{CacheWriteTokensKey: u.CacheCreationInputTokens}
+	attachUnshown(resp, unshown)
 	resp.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
 		PromptTokenCount:        int32(prompt),
 		CachedContentTokenCount: int32(u.CacheReadInputTokens),
 		CandidatesTokenCount:    int32(u.OutputTokens),
 		TotalTokenCount:         int32(prompt + u.OutputTokens),
 	}
+	addCitations(resp, cites)
+	countRequests(resp, ptWebSearch, int(u.ServerToolUse.WebSearchRequests))
+	countRequests(resp, ptWebFetch, int(u.ServerToolUse.WebFetchRequests))
+	code := 0
+	for _, p := range content.Parts {
+		if p.ToolCall != nil && p.PartMetadata[providerToolKey] == ptCodeExecution {
+			code++
+		}
+	}
+	countRequests(resp, ptCodeExecution, code)
 	return resp
 }
 

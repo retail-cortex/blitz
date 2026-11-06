@@ -88,6 +88,19 @@ func TestEscEscAtAnEmptyPromptRewinds(t *testing.T) {
 	require.NotErrorIs(t, err, ErrRewindKey, "Esc at a question opened /rewind")
 }
 
+// An answer's sources are listed under it, numbered (spec_056 CA-84).
+func TestPrinterShowsCitations(t *testing.T) {
+	var out syncBuffer
+	p := NewPrinter(PrinterOptions{Out: &out})
+	p.Handle(api.Event{Text: &api.Text{Text: "Blitz is an agent."}})
+	p.Handle(api.Event{Citations: []api.Citation{{Title: "Blitz", URL: "https://a"}, {URL: "https://b"}}})
+	p.End()
+	got := ansiPattern.ReplaceAllString(out.b.String(), "")
+	assert.Contains(t, got, "Sources:", "output:\n%s", got)
+	assert.Contains(t, got, "[1] Blitz — https://a", "output:\n%s", got)
+	assert.Contains(t, got, "[2] https://b — https://b", "output:\n%s", got)
+}
+
 // The agent's task list is drawn as a checklist, instead of the todo
 // tool's call and result lines.
 func TestPrinterShowsTasks(t *testing.T) {

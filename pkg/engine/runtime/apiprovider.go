@@ -154,9 +154,6 @@ func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPo
 	if err != nil {
 		return nil, err
 	}
-	if t, ok := inner.(*toolCallParsingModel); ok {
-		t.streams = true // a gateway's models make real function calls
-	}
 	return &apiModel{inner: inner, p: p}, nil
 }
 

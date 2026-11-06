@@ -54,7 +54,7 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 |---|---|
 | `/help` | Command list, grouped (Session, Agents and models, Planning and long work, Workspace and files, Permissions and safety, Extensions, Settings), each sorted by command; then the custom commands by source (built into Blitz, the project's, the user's, plugins', skills, MCP prompts), each sorted |
 | `/agents`, `/agent <name>` | List (active and pinned marked) / switch agent |
-| `/model [<ref>]` | Show / switch model for unpinned agents; warns if the active agent is pinned |
+| `/model [<ref>] [--new]` | Show the conversation's model and the workspace's; with a ref, move the open conversation to it from its next turn, saying what that costs (spec_056 CA-131), or set the workspace's model when no conversation is open; `--new` starts a new conversation on it. Warns if the active agent is pinned |
 | `/pin_model [<agent> <model>]`, `/unpin <agent>` | Show pins / pin / unpin; reports where it was saved |
 | `/model_settings [<model> [k=v…\|reset]]` | Show or change one model's settings; `k=` clears; warns about unsupported keys |
 | `/config [key=value [--save]]`, `/set`, `/show` | Show the session's settings or change one (`model`, `agent`, `mode`, `agency`, `effort`, `style`, `locale`); `--save` keeps it in `.env.toml` (not `effort`) |

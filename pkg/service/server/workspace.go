@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"slices"
@@ -755,6 +756,23 @@ func (h workspaceService) AddImage(ctx context.Context, r req[pb.AddImageRequest
 		return nil, toAPI(err)
 	}
 	return ok(&pb.AddImageResponse{Image: w.keepImage(img)})
+}
+
+func (h workspaceService) ReadStoredFile(ctx context.Context, r req[pb.ReadStoredFileRequest]) (*connect.Response[pb.ReadStoredFileResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	data, mime, err := w.ReadStoredFile(r.Msg.Uri)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, apiError(connect.CodeNotFound, "FILE_NOT_FOUND", err)
+	case errors.Is(err, engine.ErrUploadTooLarge):
+		return nil, apiError(connect.CodeResourceExhausted, "UPLOAD_TOO_LARGE", err)
+	case err != nil:
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ReadStoredFileResponse{Data: data, MimeType: mime})
 }
 
 func (h workspaceService) GetSearchProvider(ctx context.Context, r req[pb.GetSearchProviderRequest]) (*connect.Response[pb.GetSearchProviderResponse], error) {

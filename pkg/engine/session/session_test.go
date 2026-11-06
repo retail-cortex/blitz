@@ -328,6 +328,33 @@ func TestMessageKindsAndTruncate(t *testing.T) {
 
 // A session's usage is kept in its metadata, active or not, and read back
 // by a later process; a session the store doesn't have is left alone.
+// A conversation's own model is kept in its metadata, active or not, read
+// back by a later process, and carried by a snapshot (spec_056 CA-100).
+func TestModelPersists(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStorage(dir)
+	require.NoError(t, err)
+	a, _ := s.CreateSession("a", "A", "blitz")
+	require.NoError(t, s.AddMessage("user", "hi"))
+	require.NoError(t, s.SetModel(a.ID, "anthropic/claude-x")) // while active
+	b, _ := s.CreateSession("b", "B", "blitz")
+	require.NoError(t, s.AddMessage("user", "hi"))
+	assert.Equal(t, "anthropic/claude-x", s.Model(a.ID), "read from its metadata")
+	require.NoError(t, s.SetModel(a.ID, "gemini/gemini-3-pro")) // no longer active
+	assert.Empty(t, s.Model(b.ID))
+
+	s2, _ := NewStorage(dir) // a later process
+	assert.Equal(t, "gemini/gemini-3-pro", s2.Model(a.ID))
+	snap, err := s2.Snapshot(a.ID, "saved", false)
+	require.NoError(t, err)
+	assert.Equal(t, "gemini/gemini-3-pro", s2.Model(snap.ID), "a snapshot is the same conversation, on the same model")
+
+	assert.Empty(t, s2.Model("../bad"))
+	assert.Empty(t, s2.Model("session-20200101-000000-00000000"))
+	assert.Error(t, s2.SetModel("../bad", "x"))
+	assert.ErrorIs(t, s2.SetModel("session-20200101-000000-00000000", "x"), os.ErrNotExist)
+}
+
 func TestUsagePersists(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStorage(dir)

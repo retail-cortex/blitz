@@ -71,6 +71,7 @@ import {
   mdiLoading,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workers, workspaces } from "./api";
+import { ModelFile } from "./ModelFile";
 import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
 import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
@@ -121,7 +122,7 @@ import { effortIcon } from "./options";
 import { useAdvanced, useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Citation, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
 import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
@@ -202,6 +203,7 @@ export function Conversation({
   const [total, setTotal] = useState<Usage>();
   // The status bar shows the session's usage, and the last turn's.
   useEffect(() => publishStatus(dir, { total, turn: turnUsage }), [dir, total, turnUsage]);
+  useEffect(() => publishStatus(dir, { conversationModel: session?.model || undefined }), [dir, session?.model]);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -241,7 +243,7 @@ export function Conversation({
     try {
       const r = await sessions.getUsage({ workspace: dir });
       setTotal(r.usage);
-      publishStatus(dir, { threshold: r.threshold, autoCompact: r.autoCompact });
+      publishStatus(dir, { threshold: r.threshold, autoCompact: r.autoCompact, byModel: r.byModel });
     } catch {
       // the total is a nicety
     }
@@ -408,6 +410,7 @@ export function Conversation({
           if (ev.kind.case === "finished") {
             setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
             setTotal(ev.kind.value.after);
+            void refreshTotal(); // and its cost by model
             leftover = ev.kind.value.leftover;
             const f = ev.kind.value;
             tell("finished", f.error ? t("desktop.notify.failed", { name }) : t("desktop.notify.done", { name }), f.error ? f.error.message : f.output || t("desktop.notify.finished"));
@@ -439,7 +442,7 @@ export function Conversation({
       latestRunning.current = false;
       if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
     },
-    [dir, session, refreshList, fail, onSettingsChanged, tell, name, snack],
+    [dir, session, refreshList, refreshTotal, fail, onSettingsChanged, tell, name, snack],
   );
 
   // Stopping a followed background run stops the run, whose stream then
@@ -988,6 +991,8 @@ export function Conversation({
             ) : (
               g.entry.kind === "reflect" ? (
                 <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
+              ) : g.entry.kind === "file" ? (
+                <ModelFile key={g.at} dir={dir} entry={g.entry} />
               ) : g.entry.kind === "shell" ? (
                 <ShellCard key={g.entry.id} entry={g.entry} onStop={stopShell} />
               ) : (
@@ -1234,7 +1239,8 @@ const EntryView = memo(function EntryView({
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
     case "reflect":
     case "shell":
-      return null; // a ReflectCard or a ShellCard, drawn with the workspace
+    case "file":
+      return null; // a ReflectCard, a ShellCard or a ModelFile, drawn with the workspace
     case "notice":
       return entry.markdown ? (
         <div className={`notice card ${entry.tone}`}>
@@ -1250,6 +1256,12 @@ const EntryView = memo(function EntryView({
  * Model text, with actions to copy it as shown or as its Markdown, and the
  * whole turn's answer when it came in parts. They show once it's complete.
  */
+/** The sources an answer cites, as a numbered list of links (spec_056 CA-84). */
+function sourcesMarkdown(cites: Citation[]): string {
+  const label = (s: string) => s.replace(/[[\]\\]/g, "\\$&");
+  return `${t("desktop.sources")}\n\n${cites.map((c, i) => `${i + 1}. [${label(c.title || c.url)}](<${c.url}>)`).join("\n")}`;
+}
+
 function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
   const advanced = useAdvanced(); // copy as Markdown and the whole turn: advanced
   const snack = useSnackbar();
@@ -1269,6 +1281,11 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
       <div ref={body}>
         <Markdown text={entry.text} />
       </div>
+      {!!entry.citations?.length && (
+        <div className="t-body-sm muted">
+          <Markdown text={sourcesMarkdown(entry.citations)} />
+        </div>
+      )}
       {!entry.open && entry.text.trim() && (
         <div className="bubble-actions answer-actions">
           <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />

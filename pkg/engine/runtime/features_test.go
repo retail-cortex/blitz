@@ -45,12 +45,13 @@ func TestUsageEstimate(t *testing.T) {
 	assert.True(t, u.Priced, "estimate %+v, want cost %v", u, want)
 	assert.LessOrEqual(t, abs(u.CostUSD-want), 1e-9, "estimate %+v, want cost %v", u, want)
 	assert.Equal(t, int64(200_000), u.Output, "estimate %+v, want cost %v", u, want)
+	assert.Equal(t, int64(100_000), u.Reasoning, "thinking among the output")
 	assert.Equal(t, int64(1_000_000), u.LastPrompt, "estimate %+v, want cost %v", u, want)
 	u = tr.Estimate("unknown-model", m, 0)
 	assert.False(t, u.Priced, "unknown model should be unpriced: %+v", u)
 	assert.Equal(t, float64(0), u.CostUSD, "unknown model should be unpriced: %+v", u)
 	u = tr.Estimate("gemini-3.8-flash", nil, 0) // no usage reported: unknown cost
-	assert.Equal(t, api.Usage{Calls: 1}, u, "a call without usage should be one unpriced call")
+	assert.Equal(t, api.Usage{Calls: 1, Unpriced: 1}, u, "a call without usage should be one unpriced call")
 
 	tr.Record("s", "gemini-3.8-flash", m)
 	tr.Record("s", "gemini-3.8-flash", &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10})

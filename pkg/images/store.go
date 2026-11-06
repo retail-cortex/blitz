@@ -154,6 +154,28 @@ func (s *Store) PutFile(name string, f io.ReaderAt, size int64) (*Image, error) 
 	return img, os.Rename(tmp.Name(), final)
 }
 
+// PutMade stores a file a model made (an image, audio, a file a provider
+// tool wrote: spec_056_conversation_adapters CA-70) as it is, named name,
+// and returns it without its data (Size set). Its type must be one Blitz
+// keeps (Media).
+func (s *Store) PutMade(name, mime string, data []byte) (*Image, error) {
+	ext, ok := extByMIME[mime]
+	if !ok {
+		return nil, fmt.Errorf("%s: Blitz doesn't keep %s files", cmp.Or(name, "a file"), mime)
+	}
+	if int64(len(data)) > MaxMediaBytes {
+		return nil, tooLarge(name, len(data), MaxMediaBytes)
+	}
+	sum := sha256.Sum256(data)
+	img := &Image{Name: name, MIME: mime, Kind: KindOf(mime), SHA256: hex.EncodeToString(sum[:]), Size: len(data), OriginalBytes: len(data)}
+	final := filepath.Join(s.dir, img.SHA256+ext)
+	if _, err := os.Stat(final); err == nil {
+		now := time.Now()
+		return img, os.Chtimes(final, now, now)
+	}
+	return img, s.writeFile(final, data)
+}
+
 // Path is a stored file's path, media type and size, by its URI: for
 // sending a large one without reading it all.
 func (s *Store) Path(uri string) (string, string, int64, error) {
@@ -410,6 +432,21 @@ func Expand(ctx context.Context, contents []*genai.Content, s *Store, route Medi
 			part, err := s.load(ctx, uri, name, route, up)
 			if err != nil {
 				return nil, err
+			}
+			if isRef(p) && len(p.ThoughtSignature) > 0 {
+				// A signed file (Gemini signs the images it makes) keeps its
+				// signature on what it becomes.
+				signed := *part
+				signed.ThoughtSignature = p.ThoughtSignature
+				part = &signed
+			}
+			if c.Role == genai.RoleModel && part.InlineData != nil {
+				// A file the model made: its name says which model, for an
+				// adapter that moves it to the user's turn (spec_056 CA-72);
+				// Gemini's adapter clears it.
+				blob := *part.InlineData
+				blob.DisplayName = name
+				part = &genai.Part{InlineData: &blob}
 			}
 			parts = append(parts, part)
 			changed = true

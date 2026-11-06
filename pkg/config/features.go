@@ -183,6 +183,11 @@ type ContextConfig struct {
 	RetainEvents   int  `toml:"retain_events"`
 }
 
+// DefaultTokenThreshold is token_threshold's default. Left at it, a
+// conversation is compacted at its model's own point instead: its context
+// window less its maximum output, less 10% (spec_056 CA-110).
+const DefaultTokenThreshold = 120_000
+
 // PriceFor finds model's price in pricing: exact, else the longest
 // configured prefix ("gemini-3.8-flash-001" uses "gemini-3.8-flash").
 func PriceFor(pricing map[string]ModelPrice, model string) (ModelPrice, bool) {
@@ -775,7 +780,7 @@ func applyFeatureDefaults(c *Config) {
 		GlobalRules: filepath.Join(dir, "rules"),
 		MaxBytes:    32 * 1024,
 	}
-	c.Context = ContextConfig{Compaction: true, TokenThreshold: 120_000, RetainEvents: 20}
+	c.Context = ContextConfig{Compaction: true, TokenThreshold: DefaultTokenThreshold, RetainEvents: 20}
 	c.Tools.ApprovalsFile = filepath.Join(dir, "approvals.json")
 	c.Audit = AuditConfig{Enabled: true, Dir: filepath.Join(dir, "audit")}
 	c.Log = LogConfig{Level: "info", Dir: filepath.Join(dir, "logs"), RetainDays: 14}

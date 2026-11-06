@@ -29,6 +29,8 @@ import { formatInterval, listLoops, parseInterval, startLoop, stopLoop } from ".
 import { efforts, modeOf } from "./options";
 import { reloadSummary } from "./reload";
 import type { GetSettingsResponse, SearchStatus } from "./gen/blitz/v1/workspace_pb";
+import type { ModelPreview } from "./gen/blitz/v1/session_pb";
+import { publishStatus, tokens } from "./status";
 import { searchSources, type SearchSource } from "./search";
 
 /** The groups, in /help's order (titles: help.group.<id>, shared with the terminal). */
@@ -109,6 +111,21 @@ export interface Builtin {
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean);
+
+/**
+ * What moving a conversation to a model means, in words: what its next
+ * turn reads again and costs, and what the model can't do (CA-101).
+ */
+export function modelNotice(p?: ModelPreview): string {
+  if (!p) return "";
+  const model = p.model || t("model.workspace_model");
+  const lines: string[] = [];
+  if (p.compacts) lines.push(t("model.compacted", { model }));
+  lines.push(p.priced ? t("model.switched_cost", { model, tokens: tokens(p.tokens), cost: `$${p.costUsd.toFixed(2)}` }) : t("model.switched", { model, tokens: tokens(p.tokens) }));
+  if (p.unseen.length > 0) lines.push(t("model.unseen", { model, files: p.unseen.join(", ") }));
+  if (p.noTools) lines.push(t("model.no_tools", { model }));
+  return lines.join("\n");
+}
 const k = (n: number | bigint) => Number(n).toLocaleString(language());
 // A titled list; the title is text (a "<name>" in it is shown, not taken for HTML).
 const bullets = (title: string, lines: string[]) => `**${md(title)}**\n\n${lines.map((l) => `- ${l}`).join("\n")}`;
@@ -366,15 +383,29 @@ export const builtinCommands: Builtin[] = [
     args: "[provider/model]",
     group: "agents",
     turn: true,
+    // The conversation's own model (spec_056_conversation_adapters CA-100,
+    // CA-131): /model <ref> moves the conversation from its next turn,
+    // saying what that costs; --new starts a new one on the model.
     async run(c) {
-      if (!c.args) {
+      const [ref, ...rest] = words(c.args);
+      if (!ref) {
         const m = await workspaces.getModel({ workspace: c.dir });
-        const ref = `${m.provider ? m.provider + "/" : ""}${m.name}`;
-        return c.say(m.unavailable ? t("desktop.model.unavailable", { model: ref, reason: m.unavailable }) : t("desktop.model.is", { model: ref }), "info", true);
+        const own = c.sessionId ? (await sessions.getActiveSession({ workspace: c.dir })).session?.model : "";
+        if (own) return c.say(`${t("model.conversation", { model: own })}\n\n${t("model.workspace_default", { model: m.name, provider: m.provider })}`, "info", true);
+        const current = `${m.provider ? m.provider + "/" : ""}${m.name}`;
+        return c.say(m.unavailable ? t("desktop.model.unavailable", { model: current, reason: m.unavailable }) : t("desktop.model.is", { model: current }), "info", true);
       }
-      await workspaces.setModel({ workspace: c.dir, ref: c.args });
-      c.say(t("desktop.model.now", { model: c.args }));
-      c.settingsChanged();
+      const fresh = rest.includes("--new");
+      if (fresh || !c.sessionId) {
+        await workspaces.setModel({ workspace: c.dir, ref });
+        if (fresh) await c.newSession();
+        c.say(fresh ? t("model.new_conversation", { model: ref }) : t("desktop.model.now", { model: ref }));
+        c.settingsChanged();
+        return;
+      }
+      const r = await sessions.setSessionModel({ workspace: c.dir, sessionId: c.sessionId, model: ref });
+      publishStatus(c.dir, { conversationModel: ref });
+      c.say(modelNotice(r.preview));
     },
   },
   {

@@ -23,6 +23,9 @@ import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { t } from "./i18n";
 import { reasonText } from "./errors";
 
+/** A source an answer cites: its title, address, and the text it supports. */
+export type Citation = { title: string; url: string; text: string };
+
 /**
  * A user message: a prompt (index is its place in the transcript, once
  * known: what /rewind takes), or a message of another kind — sent while
@@ -37,12 +40,14 @@ export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "
  */
 export type Entry =
   | UserEntry
-  | { kind: "model"; text: string; author: string; open: boolean }
+  | { kind: "model"; text: string; author: string; open: boolean; citations?: Citation[] }
   | { kind: "thought"; text: string; open: boolean }
   | { kind: "tool"; id: string; name: string; args?: JsonObject; result?: JsonObject }
   | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean }
   // Time to /reflect, said at a chat turn's end (spec_048_harness_learning HE-63).
   | { kind: "reflect"; patterns: number }
+  // A file the model made: an image it drew, audio (spec_056 CA-71).
+  | { kind: "file"; uri: string; name: string; mime: string; size: number }
   // A ! command the user ran from the composer (WorkspaceService.RunShell):
   // its output as it comes, then how it ended. The agent never sees it.
   | { kind: "shell"; id: string; command: string; output: string; running: boolean; code?: number; error?: string; elapsedMs?: number; truncated?: boolean };
@@ -237,6 +242,24 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
       return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
     case "reflectDue":
       return [...close(entries), { kind: "reflect", patterns: k.value.patterns }];
+    case "modelFile": {
+      const f = k.value;
+      return [...close(entries), { kind: "file", uri: f.uri, name: f.name, mime: f.mimeType, size: Number(f.size) }];
+    }
+    case "citations": {
+      // The sources the answer cites (spec_056 CA-84): under that answer.
+      const cites = k.value.items.map((c) => ({ title: c.title, url: c.url, text: c.text }));
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (e.kind === "model") {
+          const next = entries.slice();
+          next[i] = { ...e, citations: [...(e.citations ?? []), ...cites] };
+          return next;
+        }
+        if (e.kind === "user") break;
+      }
+      return entries;
+    }
     case "flowStep": {
       // A workflow's step: a line as it starts, and if it fails.
       const s = k.value;

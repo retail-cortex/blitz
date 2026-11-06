@@ -118,10 +118,22 @@ type Event struct {
 	Notice *Notice
 	// Step is a workflow's step starting or ending (spec_043_workflows).
 	Step *FlowStep
+	// File is a file the model made: an image it drew, audio
+	// (spec_056_conversation_adapters CA-71).
+	File *File
 	// Reflect, at a chat turn's end, says the runs since the last
 	// reflection hit enough problems to /reflect on
 	// (spec_048_harness_learning HE-63).
 	Reflect *ReflectDue
+	// Citations are the sources the answer before it cites, from the
+	// provider's own search or fetch (spec_056 CA-84).
+	Citations []Citation
+}
+
+// Citation is one source an answer cites: its title, its address, and the
+// text of the answer it supports.
+type Citation struct {
+	Title, URL, Text string
 }
 
 // ReflectDue is the evidence that suggests /reflect: its patterns, and
@@ -160,6 +172,18 @@ const (
 	// its time: the run is paused until then.
 	StepWaiting = "waiting"
 )
+
+// File is a file a model made, kept in the attachment store.
+type File struct {
+	// URI is its reference there (blitz-image:<sha256>).
+	URI  string
+	Name string
+	MIME string
+	// Path is where it's kept on this machine, and Size its size ("" and 0
+	// when that isn't known).
+	Path string
+	Size int64
+}
 
 // Notice is a message from Blitz itself about a turn.
 type Notice struct {
@@ -222,6 +246,12 @@ type Usage struct {
 	LastPrompt int64   `json:"last_prompt"` // prompt size of the latest call: the current context size
 	CostUSD    float64 `json:"cost_usd"`
 	Priced     bool    `json:"priced"` // false if any call's model had no price
+	// Reasoning is the thinking tokens among Output, where the provider
+	// reports them apart.
+	Reasoning int64 `json:"reasoning,omitempty"`
+	// Unpriced counts the calls whose model had no price: CostUSD is the
+	// others', and only these calls' cost is unknown (spec_056 CA-121).
+	Unpriced int `json:"unpriced,omitempty"`
 	// SearchQueries are the web searches a search provider billed (Google
 	// grounding's queries), priced apart from the tokens: SearchCostUSD
 	// isn't part of CostUSD.
@@ -238,6 +268,8 @@ func (u *Usage) Add(o Usage) {
 	u.Output += o.Output
 	u.CostUSD += o.CostUSD
 	u.Priced = u.Priced && o.Priced
+	u.Reasoning += o.Reasoning
+	u.Unpriced += o.Unpriced
 	u.SearchQueries += o.SearchQueries
 	u.SearchCostUSD += o.SearchCostUSD
 	if o.LastPrompt > 0 {

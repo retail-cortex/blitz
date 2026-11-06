@@ -32,7 +32,7 @@ import (
 func sessionInfo(r *session.SessionRecord) api.SessionInfo {
 	info := api.SessionInfo{
 		ID: r.ID, Title: r.Title, Agent: r.Agent, Workspace: r.Workspace, Snapshot: r.Name, From: r.From,
-		MovedFrom: r.MovedFrom, MovedAt: r.MovedAt, Origin: origin(r),
+		MovedFrom: r.MovedFrom, MovedAt: r.MovedAt, Origin: origin(r), Model: r.Model,
 		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
 	}
 	for _, m := range r.Messages {

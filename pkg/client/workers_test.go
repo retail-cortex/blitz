@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,10 @@ func TestRemoteClientsWithoutTheService(t *testing.T) {
 func TestRemoteStopWorkerRun(t *testing.T) {
 	asked := make(chan struct{}, 1)
 	sock := runServiceWith(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/responses") {
+			http.NotFound(w, r) // what Blitz asks about the model (Ollama's /api/show) isn't the run asking it
+			return
+		}
 		// Read first: the server notices the client going (the run
 		// stopped) only once the body is read.
 		io.Copy(io.Discard, r.Body)

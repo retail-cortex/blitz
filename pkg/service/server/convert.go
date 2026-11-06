@@ -40,13 +40,20 @@ func timestamp(t time.Time) *timestamppb.Timestamp {
 func sessionMsg(s api.SessionInfo) *pb.SessionInfo {
 	out := &pb.SessionInfo{
 		Id: s.ID, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
-		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt), Origin: s.Origin,
+		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt), Origin: s.Origin, Model: s.Model,
 		MessageCount: int32(s.MessageCount), Created: timestamp(s.Created), Updated: timestamp(s.Updated),
 	}
 	for _, m := range s.Messages {
 		out.Messages = append(out.Messages, &pb.Message{Role: m.Role, Text: m.Text, Time: timestamp(m.Time), Kind: m.Kind})
 	}
 	return out
+}
+
+func modelPreviewMsg(p api.ModelPreview) *pb.ModelPreview {
+	return &pb.ModelPreview{
+		Model: p.Model, Tokens: p.Tokens, CostUsd: p.CostUSD, Priced: p.Priced,
+		Compacts: p.Compacts, Unseen: p.Unseen, NoTools: p.NoTools, ActivePin: p.ActivePin,
+	}
 }
 
 func sessionMsgs(list []api.SessionInfo) []*pb.SessionInfo {
@@ -62,7 +69,27 @@ func usageMsg(u api.Usage) *pb.Usage {
 		Calls: int32(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUsd: u.CostUSD, Priced: u.Priced,
 		SearchQueries: int32(u.SearchQueries), SearchCostUsd: u.SearchCostUSD,
+		Reasoning: u.Reasoning, Unpriced: int32(u.Unpriced),
 	}
+}
+
+func usageGroupsMsg(gs []api.Group) []*pb.UsageGroup {
+	out := make([]*pb.UsageGroup, len(gs))
+	for i, g := range gs {
+		out[i] = &pb.UsageGroup{Name: g.Name, Usage: usageMsg(g.Usage)}
+	}
+	return out
+}
+
+func usageCallMsg(c api.Call) *pb.UsageCall {
+	m := &pb.UsageCall{Api: c.API, Provider: c.Provider, Model: c.Model, Purpose: c.Purpose, Task: c.Task, Usage: usageMsg(c.Usage)}
+	if !c.Time.IsZero() {
+		m.Time = timestamppb.New(c.Time)
+	}
+	if p := c.Price; p != nil {
+		m.Price = &pb.Price{Input: p.Input, CachedInput: p.CachedInput, CacheWrite: p.CacheWrite, Output: p.Output}
+	}
+	return m
 }
 
 func savedMsg(s api.Saved) *pb.Saved {
@@ -185,8 +212,17 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 			tasks.Items = append(tasks.Items, &pb.Task{Content: t.Content, Status: t.Status})
 		}
 		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
+	case e.File != nil:
+		f := e.File
+		out.Kind = &pb.TurnEvent_ModelFile{ModelFile: &pb.ModelFile{Uri: f.URI, Name: f.Name, MimeType: f.MIME, Path: f.Path, Size: f.Size}}
 	case e.Reflect != nil:
 		out.Kind = &pb.TurnEvent_ReflectDue{ReflectDue: &pb.ReflectDue{Patterns: int32(e.Reflect.Patterns), Score: int32(e.Reflect.Score)}}
+	case len(e.Citations) > 0:
+		cites := &pb.Citations{}
+		for _, c := range e.Citations {
+			cites.Items = append(cites.Items, &pb.Citation{Title: c.Title, Url: c.URL, Text: c.Text})
+		}
+		out.Kind = &pb.TurnEvent_Citations{Citations: cites}
 	case e.Notice != nil:
 		out.Kind = &pb.TurnEvent_Notice{Notice: &pb.Notice{Text: e.Notice.Text, Error: e.Notice.Error, Transient: e.Notice.Transient}}
 	case e.Step != nil:

@@ -68,7 +68,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 
 ## 5. Agents, models and settings
 
-- **WS-40** `SetModel(ref)` builds the model (may switch provider), swaps it for all unpinned agents, sets `blitz.default_model`, and returns the active agent's pin if any (it still decides what the active agent runs on). Not persisted to the config file.
+- **WS-40** `SetModel(ref)` builds the model (may switch provider), swaps it for all unpinned agents, sets `blitz.default_model`, and returns the active agent's pin if any (it still decides what the active agent runs on). Not persisted to the config file. *Since 2026-11-05* it's the workspace's default, which a new conversation starts on: a conversation has its own model (`SetSessionModel`, [spec_056_conversation_adapters](spec_056_conversation_adapters.md) CA-100).
 - **WS-41** `PinModel(agent, ref)` requires a known agent (`*UnknownAgentError`), builds the model, pins it, and saves `[agent_models]` in the workspace's own settings file (never the global one), so pins are per workspace and win over global ones. `Unpin` removes the pin, restores the agent's own `default_model` if declared, and removes the workspace's line, or, when the global settings pin the agent, saves `agent = ""` there to mask it. An empty pin means "not pinned". Results carry `Saved{Path, Err}`.
 - **WS-42** `ModelSettings(ref)` rejects refs containing `=` or with no name (`ErrBadModelRef`); returns settings plus global temperature/max_tokens. `UpdateModelSettings(ref, reset, changes)` validates (`*InvalidSettingError`), applies from the next model call, lists keys the provider ignores as `Unsupported`, and saves under the key the file already uses for that model (e.g. a hand-written `openai/gpt-5`) else the bare name.
 - **WS-43** `Set(key, value)` supports only `agency`/`agency_level` (`low|medium|high|extreme`, else `ErrInvalidAgency`; unknown keys `*UnknownSettingError`); agents' instructions embed agency, so the engine rebuilds. Session-only.
@@ -77,7 +77,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 
 ## 6. Context, memory, locale, search
 
-- **WS-50** `Context()` returns the latest prompt size (`Usage.LastPrompt`), whether auto-compaction is active (`compaction && token_threshold > 0`), the threshold and retained events.
+- **WS-50** `Context()` returns the latest prompt size (`Usage.LastPrompt`), whether auto-compaction is active (`compaction && token_threshold > 0`), the threshold (the active model's compaction point, `Engine.CompactionThreshold`: spec_056 CA-110) and retained events.
 - **WS-51** `Compact(focus)` summarises all but the latest user turn (keep = 1) and returns events compacted, summary length and usage before/after; `ErrNothingToCompact` when too short.
 - **WS-52** `ReloadMemory` re-reads memory files and rebuilds instructions; `AddMemory(text)` appends to the last configured memory file (default `BLITZ.md`) in the workspace and reloads.
 - **WS-53** `SetLocale(input)` resolves a tag or language name (`ErrUnknownLocale`), changes the **reply** language for this workspace, rebuilds instructions, and saves `[ui] locale`. The interface language belongs to the client, which switches its own catalog with the returned tag.

@@ -102,6 +102,21 @@ func SummarizeToolResponse(resp map[string]any) (summary string, success bool) {
 	return "", true
 }
 
+// FormatCitations renders the sources an answer cites under it, one a
+// line, numbered (spec_056 CA-84).
+func FormatCitations(cites []api.Citation) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s%s%s\n", Dim, i18n.T("repl.sources"), Reset)
+	for i, c := range cites {
+		title := c.Title
+		if title == "" {
+			title = c.URL
+		}
+		fmt.Fprintf(&sb, "  %s[%d] %s — %s%s\n", Dim, i+1, safe(title), safe(c.URL), Reset)
+	}
+	return sb.String()
+}
+
 // FormatTasks renders the agent's task list as a checklist.
 func FormatTasks(tasks []api.Task) string {
 	var sb strings.Builder

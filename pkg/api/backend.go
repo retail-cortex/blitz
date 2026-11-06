@@ -116,6 +116,11 @@ type Backend interface {
 	SetAgent(ctx context.Context, name string) (AgentInfo, error)
 	Model() ModelInfo
 	SetModel(ctx context.Context, ref string) (string, error)
+	// SetSessionModel moves conversation id to ref from its next turn (""
+	// back to the workspace's model), and PreviewSessionModel says what
+	// that would mean without moving it (spec_056 CA-100, CA-101).
+	SetSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
+	PreviewSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
 	PinModel(ctx context.Context, agent, ref string) (PinResult, error)
 	Unpin(ctx context.Context, agent string) (PinResult, error)
 	AllModelSettings() map[string]config.ModelSettings
@@ -144,6 +149,9 @@ type Backend interface {
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)
+	// SessionLedger is the active session's calls, oldest first, and their
+	// totals by model and purpose (spec_056 CA-120, CA-121).
+	SessionLedger() ([]Call, Totals, error)
 	// Context is how full the context is, with its breakdown by category
 	// when parts is set (which reads the session).
 	Context(parts bool) (ContextInfo, error)

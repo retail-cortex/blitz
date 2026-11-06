@@ -68,7 +68,10 @@ func TestSettingsModelFoldsSignaturesForGemini(t *testing.T) {
 		t.Run(tc.provider, func(t *testing.T) {
 			inner := NewMockLLM("m", genai.NewContentFromText("ok", genai.RoleModel))
 			m := withModelSettings(inner, tc.provider)
-			req := &model.LLMRequest{Contents: []*genai.Content{genai.NewContentFromText("hi", "user"), {Role: "model", Parts: []*genai.Part{{Text: "a"}, sig("s")}}}}
+			// The signature is the model's own (tagged with its origin), so it
+			// reaches the model: folded for Gemini, as it came for the others.
+			own := &genai.Part{ThoughtSignature: tagState(Origin{API: tc.provider, Provider: tc.provider, Model: "m"}, []byte("s"))}
+			req := &model.LLMRequest{Contents: []*genai.Content{genai.NewContentFromText("hi", "user"), {Role: "model", Parts: []*genai.Part{{Text: "a"}, own}}}}
 			for range m.GenerateContent(context.Background(), req, false) {
 			}
 			require.Len(t, inner.Requests, 1)

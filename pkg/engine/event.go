@@ -15,9 +15,15 @@
 package engine
 
 import (
+	"strings"
+
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/redact"
 	adksession "google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 )
 
 // events converts an ADK event: one Event per text part, tool call or tool
@@ -28,9 +34,27 @@ func events(ev *adksession.Event) []api.Event {
 	}
 	var out []api.Event
 	for _, p := range ev.Content.Parts {
+		if name, id, args, call, ok := runtime.ProviderToolPart(p); ok {
+			// The provider's own tool, shown as the client tool it stands
+			// for (spec_056 CA-82).
+			if call {
+				out = append(out, api.Event{Author: ev.Author, ToolCall: &api.ToolCall{ID: id, Name: name, Args: args}})
+			} else {
+				out = append(out, api.Event{Author: ev.Author, ToolResult: &api.ToolResult{ID: id, Name: name, Result: args}})
+			}
+			continue
+		}
 		switch {
 		case p.Text != "":
-			out = append(out, api.Event{Author: ev.Author, Text: &api.Text{Text: p.Text, Partial: ev.Partial, Thought: p.Thought}})
+			text := p.Text
+			if p.Thought {
+				text = redact.Mask(text) // signed reasoning is kept as written (spec_056 CA-29)
+			}
+			out = append(out, api.Event{Author: ev.Author, Text: &api.Text{Text: text, Partial: ev.Partial, Thought: p.Thought}})
+		case p.FileData != nil && ev.Content.Role == genai.RoleModel && strings.HasPrefix(p.FileData.FileURI, images.URIScheme):
+			// A file the model made (spec_056 CA-71); the user's own
+			// attachments are shown with their prompt.
+			out = append(out, api.Event{Author: ev.Author, File: &api.File{URI: p.FileData.FileURI, Name: p.FileData.DisplayName, MIME: p.FileData.MIMEType}})
 		case p.FunctionCall != nil:
 			out = append(out, api.Event{Author: ev.Author, ToolCall: &api.ToolCall{ID: p.FunctionCall.ID, Name: p.FunctionCall.Name, Args: p.FunctionCall.Args, Partial: ev.Partial}})
 		case p.FunctionResponse != nil:
@@ -44,6 +68,15 @@ func events(ev *adksession.Event) []api.Event {
 					out = append(out, api.Event{Author: ev.Author, Tasks: tasks})
 				}
 			}
+		}
+	}
+	if !ev.Partial {
+		if cs := runtime.Citations(&ev.LLMResponse); len(cs) > 0 {
+			cites := make([]api.Citation, len(cs))
+			for i, c := range cs {
+				cites[i] = api.Citation{Title: c.Title, URL: c.URL, Text: c.Text}
+			}
+			out = append(out, api.Event{Author: ev.Author, Citations: cites})
 		}
 	}
 	return out

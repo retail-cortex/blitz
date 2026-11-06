@@ -158,13 +158,23 @@ func timeOf(t *timestamppb.Timestamp) time.Time {
 	return t.AsTime()
 }
 
+func modelPreview(p *pb.ModelPreview) api.ModelPreview {
+	if p == nil {
+		return api.ModelPreview{}
+	}
+	return api.ModelPreview{
+		Model: p.Model, Tokens: p.Tokens, CostUSD: p.CostUsd, Priced: p.Priced,
+		Compacts: p.Compacts, Unseen: p.Unseen, NoTools: p.NoTools, ActivePin: p.ActivePin,
+	}
+}
+
 func session(s *pb.SessionInfo) api.SessionInfo {
 	if s == nil {
 		return api.SessionInfo{}
 	}
 	out := api.SessionInfo{
 		ID: s.Id, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
-		MovedFrom: s.MovedFrom, MovedAt: int(s.MovedAt), Origin: s.Origin,
+		MovedFrom: s.MovedFrom, MovedAt: int(s.MovedAt), Origin: s.Origin, Model: s.Model,
 		MessageCount: int(s.MessageCount), Created: timeOf(s.Created), Updated: timeOf(s.Updated),
 	}
 	for _, m := range s.Messages {
@@ -201,7 +211,27 @@ func usage(u *pb.Usage) api.Usage {
 		Calls: int(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUSD: u.CostUsd, Priced: u.Priced,
 		SearchQueries: int(u.SearchQueries), SearchCostUSD: u.SearchCostUsd,
+		Reasoning: u.Reasoning, Unpriced: int(u.Unpriced),
 	}
+}
+
+func usageGroups(gs []*pb.UsageGroup) []api.Group {
+	out := make([]api.Group, len(gs))
+	for i, g := range gs {
+		out[i] = api.Group{Name: g.Name, Usage: usage(g.Usage)}
+	}
+	return out
+}
+
+func usageCall(c *pb.UsageCall) api.Call {
+	out := api.Call{API: c.Api, Provider: c.Provider, Model: c.Model, Purpose: c.Purpose, Task: c.Task, Usage: usage(c.Usage)}
+	if c.Time != nil {
+		out.Time = c.Time.AsTime()
+	}
+	if p := c.Price; p != nil {
+		out.Price = &api.Price{Input: p.Input, CachedInput: p.CachedInput, CacheWrite: p.CacheWrite, Output: p.Output}
+	}
+	return out
 }
 
 func modelSettings(s *pb.ModelSettings) config.ModelSettings {
@@ -277,6 +307,10 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 		}
 	case *pb.TurnEvent_ReflectDue:
 		out.Reflect = &api.ReflectDue{Patterns: int(k.ReflectDue.Patterns), Score: int(k.ReflectDue.Score)}
+	case *pb.TurnEvent_Citations:
+		for _, c := range k.Citations.Items {
+			out.Citations = append(out.Citations, api.Citation{Title: c.Title, URL: c.Url, Text: c.Text})
+		}
 	case *pb.TurnEvent_Notice:
 		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error, Transient: k.Notice.Transient}
 	case *pb.TurnEvent_FlowStep:

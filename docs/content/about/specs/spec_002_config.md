@@ -63,7 +63,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[pdf]` | `page_size` `auto` (`a4`, `letter`; auto: Letter where the locale's country uses it) | | the `export_pdf` tool: [spec_006_filetools](spec_006_filetools.md) FS-70 |
 | `[audio]` | `model` (none: no speech), `voice`, `speakers` (two `{name, voice}`), `max_chars` 9000 | | `generate_audio`: [spec_015_models](spec_015_models.md) MDL-90; `audio.model` and `audio.voice` can be set with `SetConfigValue` |
 | `[memory]` | `enabled` true, `files` `["AGENTS.md","CLAUDE.md","GEMINI.md","BLITZ.md"]`, `local_files` `["CLAUDE.local.md","BLITZ.local.md"]`, `rule_dirs` `[".blitz/rules",".agents/rules",".claude/rules"]`, `global` `~/.blitz/BLITZ.md`, `global_rules` `~/.blitz/rules`, `max_bytes` 32 KiB, `auto` true (the agent's notes) | | see [spec_012_memory](spec_012_memory.md) |
-| `[context]` | `compaction` true, `token_threshold` 120000, `retain_events` 20 | | |
+| `[context]` | `compaction` true, `token_threshold` 120000 (left at it: the model's own point, spec_056 CA-110), `retain_events` 20 | | |
 | `[audit]` | `enabled` true, `dir` `~/.blitz/audit` | | |
 | `[log]` | `level` `info`, `dir` `~/.blitz/logs`, `retain_days` 14 | | |
 | `[telemetry]` | `enabled` false, `endpoint`, `capture_content` false | | |
