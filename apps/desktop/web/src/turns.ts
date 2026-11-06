@@ -43,6 +43,8 @@ export type Entry =
   | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean }
   // Time to /reflect, said at a chat turn's end (spec_048_harness_learning HE-63).
   | { kind: "reflect"; patterns: number }
+  // A file the model made: an image it drew, audio (spec_056 CA-71).
+  | { kind: "file"; uri: string; name: string; mime: string; size: number }
   // A ! command the user ran from the composer (WorkspaceService.RunShell):
   // its output as it comes, then how it ended. The agent never sees it.
   | { kind: "shell"; id: string; command: string; output: string; running: boolean; code?: number; error?: string; elapsedMs?: number; truncated?: boolean };
@@ -237,6 +239,10 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
       return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
     case "reflectDue":
       return [...close(entries), { kind: "reflect", patterns: k.value.patterns }];
+    case "modelFile": {
+      const f = k.value;
+      return [...close(entries), { kind: "file", uri: f.uri, name: f.name, mime: f.mimeType, size: Number(f.size) }];
+    }
     case "flowStep": {
       // A workflow's step: a line as it starts, and if it fails.
       const s = k.value;

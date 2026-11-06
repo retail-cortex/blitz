@@ -71,6 +71,7 @@ import {
   mdiLoading,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workers, workspaces } from "./api";
+import { ModelFile } from "./ModelFile";
 import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
 import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
@@ -988,6 +989,8 @@ export function Conversation({
             ) : (
               g.entry.kind === "reflect" ? (
                 <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
+              ) : g.entry.kind === "file" ? (
+                <ModelFile key={g.at} dir={dir} entry={g.entry} />
               ) : g.entry.kind === "shell" ? (
                 <ShellCard key={g.entry.id} entry={g.entry} onStop={stopShell} />
               ) : (
@@ -1234,7 +1237,8 @@ const EntryView = memo(function EntryView({
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
     case "reflect":
     case "shell":
-      return null; // a ReflectCard or a ShellCard, drawn with the workspace
+    case "file":
+      return null; // a ReflectCard, a ShellCard or a ModelFile, drawn with the workspace
     case "notice":
       return entry.markdown ? (
         <div className={`notice card ${entry.tone}`}>

@@ -526,6 +526,10 @@ service WorkspaceService {
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
   // Stores image or PDF data (e.g. pasted) for a prompt (IMAGES_DISABLED).
   rpc AddImage(AddImageRequest) returns (AddImageResponse);
+  // Reads a file from the attachment store by its reference: one a model
+  // made, for showing and saving (FILE_NOT_FOUND; at most 32 MB:
+  // UPLOAD_TOO_LARGE).
+  rpc ReadStoredFile(ReadStoredFileRequest) returns (ReadStoredFileResponse);
   // Names the web search provider (NO_FETCH when the agent can't fetch
   // pages, so a search would give it nothing to read).
   rpc GetSearchProvider(GetSearchProviderRequest) returns (GetSearchProviderResponse);
@@ -2215,6 +2219,19 @@ message AddImageRequest {
 // Response message for WorkspaceService.AddImage.
 message AddImageResponse {
   Image image = 1;
+}
+
+// Request message for WorkspaceService.ReadStoredFile.
+message ReadStoredFileRequest {
+  string workspace = 1;
+  // The file's reference (blitz-image:<sha256>).
+  string uri = 2;
+}
+
+// Response message for WorkspaceService.ReadStoredFile.
+message ReadStoredFileResponse {
+  bytes data = 1;
+  string mime_type = 2;
 }
 
 // Link is a search result handed to the agent.

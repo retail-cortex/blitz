@@ -335,7 +335,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	ctx = limited
 
 	on = serialized(on)
-	r := &relay{on: on}
+	r := &relay{on: on, store: w.tools.Images()}
 	handler := r.handle
 	ctx = runtime.WithSubagentEvents(ctx, w.subagentEvents(st, sessionID, on))
 	// Notices the engine raises during the turn (a fallback model taking
@@ -633,6 +633,8 @@ type relay struct {
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
 	tasks    []api.Task // the agent's own task list, shown again after a sub-agent's
+	// store is where the files the model makes are kept, for their paths.
+	store *images.Store
 }
 
 // paragraph separates the output of a run that follows another in the same
@@ -664,6 +666,11 @@ func (r *relay) handle(ev *adksession.Event) error {
 		}
 		if e.Tasks != nil {
 			r.tasks = e.Tasks
+		}
+		if f := e.File; f != nil && r.store != nil {
+			if path, _, size, err := r.store.Path(f.URI); err == nil {
+				f.Path, f.Size = path, size
+			}
 		}
 		r.on(e)
 		if res := e.ToolResult; res != nil && res.Name == "invoke_agent" && r.tasks != nil {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"path"
 	"strings"
@@ -199,6 +200,29 @@ func (w *Workspace) AddImage(name string, data []byte) (*images.Image, error) {
 		return nil, api.ErrImagesDisabled
 	}
 	return w.tools.AddImage(name, data)
+}
+
+// MaxStoredRead is the largest stored file ReadStoredFile reads (a page
+// shows it, or saves it, whole).
+const MaxStoredRead = 32 << 20
+
+// ReadStoredFile reads a file in the attachment store by its reference (a
+// file a model made: spec_056 CA-71): its bytes and type. fs.ErrNotExist
+// when it isn't there; ErrUploadTooLarge over MaxStoredRead.
+func (w *Workspace) ReadStoredFile(uri string) ([]byte, string, error) {
+	s := w.tools.Images()
+	if s == nil {
+		return nil, "", api.ErrImagesDisabled
+	}
+	_, mime, size, err := s.Path(uri)
+	if err != nil {
+		return nil, "", fmt.Errorf("%s: %w", uri, fs.ErrNotExist)
+	}
+	if size > MaxStoredRead {
+		return nil, "", fmt.Errorf("%w: %d bytes (the most is %d)", ErrUploadTooLarge, size, MaxStoredRead)
+	}
+	data, _, err := s.Get(uri)
+	return data, mime, err
 }
 
 // Search limits: how many results go to the agent, how many are asked for

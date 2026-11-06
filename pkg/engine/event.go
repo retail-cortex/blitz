@@ -15,10 +15,14 @@
 package engine
 
 import (
+	"strings"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	adksession "google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 )
 
 // events converts an ADK event: one Event per text part, tool call or tool
@@ -36,6 +40,10 @@ func events(ev *adksession.Event) []api.Event {
 				text = redact.Mask(text) // signed reasoning is kept as written (spec_056 CA-29)
 			}
 			out = append(out, api.Event{Author: ev.Author, Text: &api.Text{Text: text, Partial: ev.Partial, Thought: p.Thought}})
+		case p.FileData != nil && ev.Content.Role == genai.RoleModel && strings.HasPrefix(p.FileData.FileURI, images.URIScheme):
+			// A file the model made (spec_056 CA-71); the user's own
+			// attachments are shown with their prompt.
+			out = append(out, api.Event{Author: ev.Author, File: &api.File{URI: p.FileData.FileURI, Name: p.FileData.DisplayName, MIME: p.FileData.MIMEType}})
 		case p.FunctionCall != nil:
 			out = append(out, api.Event{Author: ev.Author, ToolCall: &api.ToolCall{ID: p.FunctionCall.ID, Name: p.FunctionCall.Name, Args: p.FunctionCall.Args, Partial: ev.Partial}})
 		case p.FunctionResponse != nil:

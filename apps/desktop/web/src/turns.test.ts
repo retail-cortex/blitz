@@ -250,3 +250,11 @@ describe("tool runs", () => {
     expect(latestTurn(entries)).toBe(want);
   });
 });
+
+describe("model files", () => {
+  it("a file the model made is an entry of its own (spec_056 CA-71)", () => {
+    const ev = create(TurnEventSchema, { author: "blitz", kind: { case: "modelFile", value: { uri: "blitz-image:abc", name: "gemini-3-pro-1a2b3c4d.png", mimeType: "image/png", path: "/x", size: 42n } } });
+    const got = applyEvent([], ev);
+    expect(got).toEqual([{ kind: "file", uri: "blitz-image:abc", name: "gemini-3-pro-1a2b3c4d.png", mime: "image/png", size: 42 }]);
+  });
+});

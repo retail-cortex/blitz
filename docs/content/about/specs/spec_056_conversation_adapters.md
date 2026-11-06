@@ -256,26 +256,26 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - **as a note:** "[clip.mp4: this model can't take video]".
   
   A fallback chain gets only what every member takes (today's rule).
-- **CA-62** **Attachments inside tool results** (a screenshot, `view_image`, `view_document`, `view_media`) go where each API takes them:
+- **CA-62** *Built 2026-11-05 (the conformance suite carries a tool's screenshot across every switch).* **Attachments inside tool results** (a screenshot, `view_image`, `view_document`, `view_media`, `generate_audio`) go where each API takes them:
   - Gemini: beside the function response, in the same turn;
   - Anthropic: inside `tool_result.content`;
   - OpenAI: `function_call_output`, then the image as `input_image` in a user item.
   
-  A kind the API can't put there is CA-61's text or note.
-- **CA-63** **Attachments are checked against the model that will read them at its next call**, not only the active agent's model when they're added.
+  A kind the API can't put there is CA-61's text or note. A file reference an API can't fetch (another provider's upload, a stored file left unexpanded) becomes a note, "[talk.mp4: a file this model can't open]": Claude's adapter dropped it and OpenAI's refused the request (`placeMedia`).
+- **CA-63** *Built 2026-11-05: each call routes each file for the model reading it (`imageModel`); `unseenAttachments` names what a model won't see as it is, for the switch's preview (CA-101).* **Attachments are checked against the model that will read them at its next call**, not only the active agent's model when they're added.
   - **On a switch,** the switch says what the new model won't see: "3 videos and 1 audio file will be described, not shown, to <model>".
   - **On adding a file,** one no model of the conversation can take is still refused (IMG-63).
 - **CA-64** **Vision is a capability, not an assumption.** A model whose record doesn't read images gets each image as a note naming it. A local model's vision is read from Ollama where it says so, and taken from `[model_settings]` otherwise.
 
 ## 9. Model output and artifacts
 
-- **CA-70** **What a model makes is kept like an attachment:** an image (a Gemini or OpenAI image model's, an image-generation provider tool's), audio, or a file a provider tool wrote (code execution's output, a chart).
-  - It's stored under its hash in the same store, and the conversation references it (`blitz-image:<sha>`, with its MIME type and `made_by` origin).
+- **CA-70** *Built 2026-11-05 for a model's inline files (Gemini's pictures, audio): `keepMade` in `imageModel`, `images.Store.PutMade`. A provider's file IDs wait for provider tools (§10).* **What a model makes is kept like an attachment:** an image (a Gemini or OpenAI image model's, an image-generation provider tool's), audio, or a file a provider tool wrote (code execution's output, a chart).
+  - It's stored under its hash in the same store, and the conversation references it (`blitz-image:<sha>`, with its MIME type), named for the model that made it and its hash (`gemini-3-pro-1a2b3c4d.png`). A signature on it (Gemini signs the pictures it makes) stays on the reference and goes back with the file to its model.
   - It's never kept as base64 in the event log.
   - A provider's file ID (Anthropic's or OpenAI's Files API) is downloaded when the reply comes and kept as provider state, so the file stays when the provider's copy expires.
-- **CA-71** **Showing it.** What a model makes is shown in the conversation (an image, a player, a file chip with **Save**), and the CLI prints its path. In a job run (spec_053 EN-40), it's written to the run's `out/` folder too, so it becomes one of the run's artifacts (`urn:blitz:artifacts:…`, spec_055).
-- **CA-72** **Another model reads it back as an attachment** of the user's (CA-61). Most APIs don't take images in the model's own turns, so the adapter moves it to the next user turn, after the model's text, with a note saying which model made it.
-- **CA-73** **Spoken output.** `generate_audio` (the `[audio]` model) returns its file's reference in its result as `view_media` does, so the next model can hear it where its record allows.
+- **CA-71** *Built 2026-11-05 for the conversation and the CLI (`TurnEvent.model_file`, `WorkspaceService.ReadStoredFile`, `ModelFile.tsx`; `repl.model_file`; `--output stream-json` has a `file` event). A job run's `out/` copy is still to do.* **Showing it.** What a model makes is shown in the conversation (an image, a player, a file chip with **Save**), and the CLI prints its path. In a job run (spec_053 EN-40), it's written to the run's `out/` folder too, so it becomes one of the run's artifacts (`urn:blitz:artifacts:…`, spec_055).
+- **CA-72** *Built 2026-11-05 (`placeMedia`; Gemini keeps it in its own turn).* **Another model reads it back as an attachment** of the user's (CA-61). Most APIs don't take images in the model's own turns, so the adapter moves it to the next user turn, after the model's text, with a note saying which model made it.
+- **CA-73** *Built 2026-11-05.* **Spoken output.** `generate_audio` (the `[audio]` model) returns its file's reference in its result as `view_media` does, so the next model can hear it where its record allows.
 
 ## 10. Provider tools
 

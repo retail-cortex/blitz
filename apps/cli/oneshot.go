@@ -232,6 +232,9 @@ func streamJSONHandler(enc *json.Encoder) func(api.Event) {
 		case ev.ToolResult != nil:
 			_ = enc.Encode(map[string]any{"type": "tool_result", "name": ev.ToolResult.Name, "result": ev.ToolResult.Result})
 		}
+		if f := ev.File; f != nil {
+			_ = enc.Encode(map[string]any{"type": "file", "name": f.Name, "mime_type": f.MIME, "path": f.Path, "uri": f.URI, "author": ev.Author})
+		}
 		if n := ev.Notice; n != nil {
 			_ = enc.Encode(map[string]any{"type": "notice", "text": n.Text, "error": n.Error, "transient": n.Transient, "author": ev.Author})
 		}

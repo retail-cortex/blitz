@@ -223,6 +223,12 @@ func (p *Printer) Handle(ev api.Event) {
 		p.flushText()
 		fmt.Fprintf(p.out, "%s%s%s\n", Dim, i18n.N("repl.reflect_hint", ev.Reflect.Patterns), Reset)
 		p.spin.Start(i18n.T("spinner.working"))
+	case ev.File != nil:
+		// A file the model made: where it's kept (spec_056 CA-71).
+		p.spin.Stop()
+		p.flushText()
+		fmt.Fprintf(p.out, "%s%s%s\n", Dim, safe(i18n.T("repl.model_file", "name", ev.File.Name, "path", cmp.Or(ev.File.Path, ev.File.URI))), Reset)
+		p.spin.Start(i18n.T("spinner.working"))
 	case ev.Notice != nil:
 		p.spin.Stop()
 		p.flushText()
