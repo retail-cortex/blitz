@@ -357,3 +357,52 @@ func TestSpecsOverTheAPI(t *testing.T) {
 	_, err = c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: dir, Path: "x.md"}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
+
+// Every spec call needs a workspace it can open.
+func TestSpecsNeedAWorkspace(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	ws := "relative"
+	for name, call := range map[string]func() error{
+		"ListSpecs": func() error {
+			_, err := c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: ws}))
+			return err
+		},
+		"ReviewSpec": func() error {
+			_, err := c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: ws}))
+			return err
+		},
+		"TraceSpecs": func() error {
+			_, err := c.workspaces.TraceSpecs(ctx, connect.NewRequest(&pb.TraceSpecsRequest{Workspace: ws}))
+			return err
+		},
+		"ApproveSpec": func() error {
+			_, err := c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: ws}))
+			return err
+		},
+		"VerifySpec": func() error {
+			_, err := c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: ws}))
+			return err
+		},
+		"RecordSpecChange": func() error {
+			_, err := c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: ws}))
+			return err
+		},
+		"ImpactSpec": func() error {
+			_, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: ws}))
+			return err
+		},
+		"PlanSpec": func() error {
+			_, err := c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: ws}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
+	// A path that isn't a spec, in a workspace that is.
+	dir := t.TempDir()
+	_, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}

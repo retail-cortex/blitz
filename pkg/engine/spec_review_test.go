@@ -130,3 +130,19 @@ func TestComposeSpecRecipe(t *testing.T) {
 	assert.Empty(t, r.Check("002-orders", shopSpecs["002-orders.md"]))
 	assert.Equal(t, []string{"OV-01 is also in 001-overview.md (line 5)"}, r.Check("002-orders", "# 002. Orders\nStatus: draft\n- **OV-01** again\nDone when: x\n"))
 }
+
+// A specs "folder" that isn't one is an error, not an empty specification.
+func TestSpecsFolderUnreadable(t *testing.T) {
+	w := openTest(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(w.Dir(), ".agents"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), ".agents", "specs"), []byte("not a folder"), 0o644))
+	_, err := w.ListSpecs()
+	assert.Error(t, err)
+	_, err = w.ReviewSpec(context.Background(), ".agents/specs/001-a.md", "# 001. A", false)
+	assert.Error(t, err)
+	_, err = w.TraceSpecs("")
+	assert.Error(t, err)
+	r, err := w.recipe("spec")
+	require.NoError(t, err)
+	assert.NotEmpty(t, r.Check("001-a", "# 001. A"), "the draft can't be checked")
+}

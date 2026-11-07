@@ -17,8 +17,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -114,4 +116,22 @@ func TestSpecCommand(t *testing.T) {
 	assert.Contains(t, out, "Implement Orders (.agents/specs/002-orders.md).")
 	assert.Contains(t, out, "- ORD-01: Checkout is fast.")
 	assert.Contains(t, out, "It waits for 007", "on stderr, mixed in here")
+}
+
+// The model's findings and report, as printed.
+func TestPrintSpecs(t *testing.T) {
+	var b strings.Builder
+	failed := printSpecReview(&b, "a.md", api.SpecReview{Findings: []api.SpecFinding{{Line: 3, Severity: "warning", Message: "vague", Judged: true}, {Severity: "error", Message: "no title"}}, Problem: "slow"})
+	assert.True(t, failed)
+	assert.Equal(t, "a.md:3: warning (model): vague\na.md: error: no title\na.md: slow\n", b.String())
+
+	b.Reset()
+	printImpact(&b, api.SpecImpact{
+		Changes:   []api.SpecChange{{ID: "A-01", Kind: "removed", Old: "gone"}},
+		Places:    []api.SpecPlace{{Path: "abc123", Kind: "commit", Why: "A-01"}},
+		Summary:   "It goes.",
+		Steps:     []api.SpecStep{{Title: "Drop it", Detail: "Remove the code."}},
+		Conflicts: []api.SpecConflict{{ID: "B-02", Why: "needs it"}},
+	})
+	assert.Equal(t, "A-01\tremoved\tgone\nabc123\tcommit\tA-01\n\nIt goes.\n1. Drop it: Remove the code.\n! B-02: needs it\n", b.String())
 }

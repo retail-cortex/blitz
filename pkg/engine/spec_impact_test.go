@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	specdoc "github.com/retail-cortex/blitz/pkg/engine/specs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -238,4 +240,108 @@ func TestSpecDriftAndPlan(t *testing.T) {
 	assert.Empty(t, plan.Prompt)
 	_, err = w.PlanSpec(".agents/specs/README.md")
 	assert.ErrorIs(t, err, ErrNotASpec)
+}
+
+// Commit messages are evidence; a removed requirement and a commit reach
+// the report; missing specs are errors (SDD-12, SDD-21).
+func TestSpecEvidenceInCommits(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	w, changed := changedShop(t)
+	ctx := context.Background()
+	git := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=T", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+		cmd.Dir = w.Dir()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	git("init", "-q")
+	git("add", "-A")
+	git("commit", "-q", "-m", "Queue online orders\n\nImplements: ORD-02")
+
+	// ORD-02 removed from the spec: its commit is the only evidence.
+	writeSpecs(t, w, map[string]string{"002-orders.md": strings.Replace(changed, "- **ORD-02** Online orders wait in a queue.\n", "", 1)})
+	v, err := w.VerifySpec(ctx, ".agents/specs/001-overview.md", false, false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, v.Requirements)
+
+	l, err := w.readLedger("002-orders.md")
+	require.NoError(t, err)
+	l.Items["ORD-02"].Evidence = nil
+	require.NoError(t, w.writeWorkspaceFile(ctx, ".agents/.ledger/specs/002-orders.json", l.Bytes()))
+	llm := &promptLLM{reply: `{"summary": "Queueing goes.", "steps": [{"title": "Drop the queue", "detail": "Remove it."}], "conflicts": []}`}
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return llm, nil }
+	im, err := w.ImpactSpec(ctx, ".agents/specs/002-orders.md", true, false)
+	require.NoError(t, err)
+	var kinds []string
+	for _, c := range im.Changes {
+		kinds = append(kinds, c.ID+" "+c.Kind)
+	}
+	assert.Contains(t, kinds, "ORD-02 removed")
+	require.NotEmpty(t, im.Places)
+	assert.Contains(t, llm.prompts[0], "- ORD-02 removed (was: Online orders wait in a queue.)")
+	assert.Contains(t, llm.prompts[0], "(ORD-02): Queue online orders", "the commit")
+	report := readWS(t, w, im.Report)
+	assert.Contains(t, report, "- **ORD-02** removed (was: Online orders wait in a queue.)")
+	assert.Contains(t, report, "- commit ")
+
+	for _, call := range []func() error{
+		func() error { _, err := w.ImpactSpec(ctx, ".agents/specs/404.md", false, false); return err },
+		func() error { _, err := w.RecordSpecChange(ctx, ".agents/specs/404.md"); return err },
+		func() error { _, err := w.ApproveSpec(ctx, ".agents/specs/404.md", true); return err },
+		func() error { _, err := w.PlanSpec(".agents/specs/404.md"); return err },
+		func() error { _, err := w.TraceSpecs(".agents/specs/404.md"); return err },
+	} {
+		assert.ErrorIs(t, call(), os.ErrNotExist)
+	}
+}
+
+// A ledger file that doesn't read is an error everywhere it's needed.
+func TestSpecLedgerUnreadable(t *testing.T) {
+	w, _ := changedShop(t)
+	ctx := context.Background()
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), ".agents", ".ledger", "specs", "002-orders.json"), []byte("{"), 0o644))
+	p := ".agents/specs/002-orders.md"
+	for name, call := range map[string]func() error{
+		"trace":   func() error { _, err := w.TraceSpecs(p); return err },
+		"approve": func() error { _, err := w.ApproveSpec(ctx, p, true); return err },
+		"verify":  func() error { _, err := w.VerifySpec(ctx, p, false, false); return err },
+		"impact":  func() error { _, err := w.ImpactSpec(ctx, p, false, false); return err },
+		"plan":    func() error { _, err := w.PlanSpec(p); return err },
+	} {
+		assert.ErrorContains(t, call(), "002-orders.json", name)
+	}
+	specs, err := w.ListSpecs()
+	require.NoError(t, err, "the list stands without its counts")
+	assert.False(t, specs[1].Approved)
+
+	// An approved spec whose baseline is gone: recorded, without a diff.
+	w2, _ := changedShop(t)
+	require.NoError(t, os.Remove(filepath.Join(w2.Dir(), ".agents", ".ledger", "baselines", "002-orders.md")))
+	rec, err := w2.RecordSpecChange(ctx, p)
+	require.NoError(t, err)
+	assert.NotEmpty(t, rec.Changes)
+	assert.Empty(t, rec.Diff)
+}
+
+// The prompts: commits and files gone as evidence, nothing found, and
+// evidence cut to the budget.
+func TestSpecPrompts(t *testing.T) {
+	w := openTest(t)
+	s := specdoc.Parse("002-orders.md", ordersSpec)
+	long := strings.Repeat("x", judgePromptBytes)
+	got := w.judgePrompt(context.Background(), s, map[string][]specdoc.Evidence{
+		"ORD-01": {{Path: "abc123", Kind: "commit", Text: "Pay faster"}, {Path: "gone.go", Line: 3, Kind: "code"}},
+		"ORD-02": {{Path: "def456", Kind: "commit", Text: long}},
+	})
+	assert.Contains(t, got, "Commit abc123: Pay faster\n")
+	assert.Contains(t, got, "gone.go (code), line 3:\n\n")
+	assert.Less(t, len(got), judgePromptBytes, "each requirement's share")
+	assert.Empty(t, w.linesAround("gone.go", 1))
+
+	none := w.impactPrompt("002-orders.md", impactScan{}, []api.SpecChange{{ID: "ORD-01", Kind: "changed", Old: "a", New: "b"}}, nil)
+	assert.Contains(t, none, "None found: nothing in the work names these requirements.")
+	huge := w.impactPrompt("002-orders.md", impactScan{places: []api.SpecPlace{{Path: "a.go", Line: 1, Kind: "code", Why: "ORD-01", Text: long}}}, nil, nil)
+	assert.True(t, strings.HasSuffix(huge, "\n…\n"))
 }
