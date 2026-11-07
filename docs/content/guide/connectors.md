@@ -9,7 +9,7 @@ Spec: [connectors](../about/specs/spec_047_connectors.md).
 
 ## Add a connection
 
-Press **+** beside a category (in the desktop app, also the database button in the composer, or type `/connect`):
+Press **+** beside a category (in the desktop app, also **Connect a database…** in the chat box's database menu, or type `/connect`):
 
 1. **Pick what to connect.** The kinds show as tiles, simplest to set up first: SQLite, PostgreSQL, BigQuery, AlloyDB.
 2. **Fill in where it is.** For a server, paste a connection URL (`postgres://user:password@host:5432/database`) and the fields fill themselves; the URL is cleared from the box, since it holds the password. For a file, press **Choose…**. The name follows the database's (`orders`, `notes`) until you type one.

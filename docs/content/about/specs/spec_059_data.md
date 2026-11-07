@@ -7,7 +7,7 @@ weight: 59
 
 | | |
 |---|---|
-| Status | **Phases 1 and 2 built** (2026-11-07): the table, reading a query's columns, `RunConnectorQuery`, and the workflow **Data** step with Table output. Phases 3–5 planned. The owner's decisions are in §10. |
+| Status | **Phases 1–3 built** (2026-11-07): the table, reading a query's columns, `RunConnectorQuery`, the workflow **Data** step with Table output, and data in a chat (the database menu, chips, `@db:`). Phases 4 and 5 planned. The owner's decisions are in §10. |
 | Source | the table format in `pkg/engine/datatable`; the query on a source's own connection in `third_party/mcp-toolbox/embed/query.go`, run by the databases backend (`pkg/engine/databases`, `connectors.RunQuery`); `RunConnectorQuery` in `pkg/service/server/connectors.go`. The Data step in `pkg/engine/flows` (its settings and checks), `pkg/engine/flowdata.go` (running it) and `apps/desktop/web/src/studio/DataStepFields.tsx` (its form); BigQuery in `third_party/mcp-toolbox/embed/query_bigquery.go`. Planned: streaming in in `pkg/engine/flows` and the workflow runner; the chat's data context in the composer and `pkg/engine` attachments; `WorkspaceService` calls in `proto/blitz/v1/workspace.proto` |
 | Depends on | [spec_043_workflows](spec_043_workflows.md) (steps, WF-13 data, WF-15 `for_each`), [spec_046_databases](spec_046_databases.md) (DB-07 read-only, DB-12 queries), [spec_047_connectors](spec_047_connectors.md) (CON-12 the query builder, CON-17 a connection off in a workspace), [spec_011_images](spec_011_images.md) (what a turn can carry), [spec_039_secrets](spec_039_secrets.md) |
 
@@ -80,10 +80,10 @@ A connection lets the agents query a database when they decide to. Work often st
 
 ## 6. Data in a chat
 
-- **DAT-40** The chat box's database icon (today: Settings › Connectors) opens a menu of the workspace's connections that are on, each with its kind and its saved queries, then **Write SQL…**, **Describe what you need…**, and at the end **Connect a database…** (Settings › Connectors, as now). `/data` opens the same menu, and `@db:shop` (a connection) and `@db:shop/top_customers` (one of its queries) typed in the box do what choosing them does.
-- **DAT-41** Choosing a **connection** adds it as a chip (its icon and name) to the next message: the turn's context gets the connection's tables and columns (its schema, as CON-05 reads it, at most 200 columns, described), and a line saying its tools are the agent's to query (`db__shop_execute_sql`…). Nothing is queried yet; the agent queries it as it needs to, as tools on a read-only connection run without asking (DB-07).
-- **DAT-42** Choosing a **query** (a saved one with its parameters asked for, SQL written, or SQL drafted from a description and shown for review) runs it at once, read-only only, and adds its result as a chip ("shop · top_customers · 40 rows"): the turn's context gets the SQL and the table (DAT-01) as the model reads it best, the columns described, then the rows as Markdown up to 200 rows or 32,000 tokens, the rest said to be cut (and the agent can query for more). A click on the chip shows the table (the CSV viewer's grid, spec_029).
-- **DAT-43** A result added to a chat is kept with the turn (so the conversation can be reopened and re-read), not re-run; a chip says when it was read.
+- **DAT-40** The chat box's database icon opens a menu of the workspace's connections that are on, each with its kind and its saved queries, then **Write SQL…**, **Describe what you need…**, and at the end **Connect a database…** (Settings › Connectors, as now). `/data` opens the same menu, and `@db:shop` (a connection) and `@db:shop/top_customers` (one of its queries) typed in the box do what choosing them does: the service reads them as the message is sent (a saved query with parameters is chosen from the menu instead). Completing `@db:` as it's typed is planned.
+- **DAT-41** Choosing a **connection** adds it as a chip (its icon and name) to the next message: the turn's context (a `database` context block; the service reads it as the turn starts) gets the connection's tables and columns (its schema, as CON-05 reads it, at most 200 columns, described), and a line saying its tools are the agent's to query (`db__shop_execute_sql`…). Nothing is queried yet; the agent queries it as it needs to, as tools on a read-only connection run without asking (DB-07).
+- **DAT-42** Choosing a **query** (a saved one with its parameters asked for, SQL written, or SQL drafted from a description and shown for review) runs it at once, read-only only, and adds its result as a chip ("shop · top_customers · Rows: 40"): a `data_query` context block whose text is the table (DAT-01) as it was read. The turn's context gets the SQL and the table as the model reads it best, the columns described, then the rows as Markdown up to 200 rows or 128 KB (about 32,000 tokens), the rest said to be cut (and the agent can query for more). A click on the chip shows the SQL and the table. A saved query without parameters runs as soon as it's chosen; one with parameters, SQL and a description open a dialog that shows the first rows before **Add to the message**.
+- **DAT-43** A result added to a chat is kept with the turn (so the conversation can be reopened and re-read), not re-run; a chip says when it was read. The transcript notes what was added ("[added: database: shop, shop · top_customers · Rows: 40]").
 - **DAT-44** In an untrusted workspace (CON-09), a workspace connection that isn't trusted isn't offered.
 - **DAT-45** **CLI**: `@db:shop` and `@db:shop/top_customers` in a prompt (the REPL completes them), and `/data` lists the connections and queries; `blitz data query <connection> "<sql>" [--json|--csv]` prints a table (DAT-01) for scripts.
 
@@ -105,7 +105,7 @@ The table from each driver (types, lengths, descriptions, big integers and decim
 
 1. **Built.** The table (DAT-01–DAT-05), reading a query's columns (DAT-10, DAT-11 by source table) and `RunConnectorQuery` (DAT-50, without stream).
 2. **Built.** The Data step with **Table** output, Try it, limits and costs (DAT-20–DAT-25, DAT-30).
-3. The chat: the menu, connection and query chips, `@db:` (DAT-40–DAT-44).
+3. **Built.** The chat: the menu, connection and query chips, `@db:` (DAT-40–DAT-44).
 4. Streaming: **Chunks** and **Rows** (DAT-31–DAT-33), the API's stream.
 5. The CLI (DAT-45).
 

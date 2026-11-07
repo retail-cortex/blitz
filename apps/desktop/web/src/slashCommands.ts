@@ -21,7 +21,7 @@
 // (terminalOnly) are named in /help with the window's way instead.
 import { config, files, sessions, workspaces } from "./api";
 import { copyText } from "./clipboard";
-import { openDocs, showLicense, showView } from "./events";
+import { openDataMenu, openDocs, showLicense, showView } from "./events";
 import { loadAppDocs } from "./docs/load";
 import { searchDocs } from "./docs/index";
 import { language, t, tn } from "./i18n";
@@ -795,6 +795,15 @@ export const builtinCommands: Builtin[] = [
     describe: "help.picture",
     run(c) {
       showView({ dir: c.dir, view: "pictures", picture: { prompt: c.args.trim() || undefined } });
+    },
+  },
+  {
+    // Data in a chat (spec_059_data DAT-40): the chat box's database menu.
+    name: "data",
+    group: "extensions",
+    describe: "help.data",
+    run(c) {
+      openDataMenu(c.dir);
     },
   },
   {

@@ -23,7 +23,8 @@ import type { Connector, DataTable } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
 import { SuggestInput } from "../SecretSuggest";
 import { paramValue, type StepForm } from "./workflowForm";
-import { sampleParams, tableRows, templated } from "./dataStep";
+import { sampleParams, templated } from "./dataStep";
+import { DataTableView } from "../DataTableView";
 
 /** The template a parameter most often holds, and SQL's start: code, not text to translate. */
 const inputTemplate = "{{ input }}";
@@ -214,47 +215,8 @@ export function DataStepFields({ workspace, step, onChange }: { workspace: strin
           </Button>
         </div>
         {tried?.problem && <p className="error-text t-body-sm">{tried.problem}</p>}
-        {tried?.table && <TriedTable table={tried.table} />}
+        {tried?.table && <DataTableView table={tried.table} />}
       </div>
     </>
-  );
-}
-
-/** Try it's result: the columns with their types and descriptions, the first rows, how many. */
-function TriedTable({ table }: { table: DataTable }) {
-  const rows = tableRows(table.rowsJson);
-  return (
-    <div className="preview table-view">
-      <span className="t-body-sm muted">
-        {t("desktop.flows.data.total", { total: table.total.toLocaleString() })}
-        {table.truncated && ` · ${t("desktop.flows.data.cut")}`}
-      </span>
-      <div className="table-scroll">
-        <table className="table-grid">
-          <thead>
-            <tr>
-              {table.columns.map((c, i) => (
-                <th key={i} title={c.description || undefined} className={c.type === "integer" || c.type === "number" ? "num" : ""}>
-                  <span className="ellipsis">{c.name}</span>
-                  <span className="table-kind t-body-sm muted ellipsis">{c.description || (c.length !== undefined ? `${c.type} (${c.length})` : c.type)}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, n) => (
-              <tr key={n}>
-                {table.columns.map((c, i) => (
-                  <td key={i} className={c.type === "integer" || c.type === "number" ? "num mono" : "mono"}>
-                    {r[i] ?? ""}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <p className="t-body-sm muted table-note">{t("desktop.flows.data.no_rows")}</p>}
-      </div>
-    </div>
   );
 }

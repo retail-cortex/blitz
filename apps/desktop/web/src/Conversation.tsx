@@ -46,7 +46,8 @@ import {
   mdiFileVideoOutline,
   mdiImageOutline,
   mdiVolumeHigh,
-  mdiDatabasePlusOutline,
+  mdiDatabaseOutline,
+  mdiTableSearch,
   mdiImagePlusOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
@@ -115,6 +116,7 @@ import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { taskTimes, useNow, type TaskTime } from "./taskTimes";
+import { DataMenu, DataResultDialog } from "./DataContext";
 import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
@@ -838,6 +840,12 @@ export function Conversation({
     return () => window.removeEventListener(addToContextEvent, f);
   }, [dir]);
 
+  // A database, or a query's result, from the chat box's database menu: a
+  // chip, read when it was added (spec_059_data DAT-43).
+  const addData = useCallback((b: WebBlock) => {
+    const detail = b.kind === "database" ? t("desktop.data.chip_database") : t("desktop.data.chip_read", { time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+    setAttachments((list) => (b.kind === "database" && list.some((a) => a.web?.kind === "database" && a.web.connection === b.connection) ? list : [...list, { key: `${Date.now()}-${Math.random()}`, name: b.title, url: "", web: b, detail }]));
+  }, []);
   // A web page in the editor adds its content (a chip of its own, sent as
   // the turn's context) or a screenshot (an image, as a pasted one).
   const addWebRef = useRef<(d: AddWebDetail) => void>(() => {});
@@ -913,6 +921,7 @@ export function Conversation({
         onAddFiles={addFiles}
         onAddImagePath={addImagePath}
         onRemoveAttachment={removeAttachment}
+        onAddData={addData}
         imagesOn={imagesOn}
         accept={acceptAttribute(accepted)}
         draft={draft}
@@ -1387,7 +1396,7 @@ function Thought({ text, open }: { text: string; open: boolean }) {
 }
 
 /** A web content chip's icon: the console's, or a page's. */
-const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : mdiWeb);
+const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : kind === "database" ? mdiDatabaseOutline : kind === "data_query" ? mdiTableSearch : mdiWeb);
 
 /** An attachment's icon by its kind. */
 function kindIcon(kind: string): string {
@@ -1867,6 +1876,7 @@ function Composer({
   onAddFiles,
   onAddImagePath,
   onRemoveAttachment,
+  onAddData,
   imagesOn,
   accept,
   draft,
@@ -1881,6 +1891,8 @@ function Composer({
   onAddFiles: (files: File[]) => void;
   onAddImagePath: (path: string) => void;
   onRemoveAttachment: (key: string) => void;
+  /** Adds a database, or a query's result, to the next message (spec_059_data DAT-41, DAT-42). */
+  onAddData: (b: WebBlock) => void;
   imagesOn: boolean;
   accept: string; // the file picker's: what the model takes
   draft: string;
@@ -1892,6 +1904,7 @@ function Composer({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const [viewing, setViewing] = useState<WebBlock | null>(null);
   const busy = uploading(attachments);
   // An attachment that didn't upload is removed before sending, not left out.
   const failed = failedUpload(attachments);
@@ -2051,7 +2064,12 @@ function Composer({
       {attachments.length > 0 && (
         <div className="attachments">
           {attachments.map((a) => (
-            <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
+            <div
+              key={a.key}
+              className={`attachment ${a.error ? "failed" : ""} ${a.web?.table ? "clickable" : ""}`}
+              title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}
+              onClick={a.web?.table ? () => setViewing(a.web!) : undefined}
+            >
               {a.url ? <img src={a.url} alt="" /> : <Icon path={a.web ? webIcon(a.web.kind) : kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
@@ -2062,6 +2080,7 @@ function Composer({
           ))}
         </div>
       )}
+      {viewing && <DataResultDialog block={viewing} onClose={() => setViewing(null)} />}
       {/* The prompt mark: shown only when pinned (composerDock.ts). */}
       <span className="composer-mark" aria-hidden="true">
         ›
@@ -2166,7 +2185,7 @@ function Composer({
           </>
         )}
         {!running && <IconButton title="" icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
-        {!running && <IconButton title="" icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
+        {!running && <DataMenu dir={dir} onAdd={onAddData} onConnect={() => openSettings({ section: "connectors" })} />}
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />

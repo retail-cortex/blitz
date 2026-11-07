@@ -184,3 +184,10 @@ func TestRunMsgPriced(t *testing.T) {
 	assert.False(t, runMsg(api.Run{Calls: 3}).Usage.Priced)
 	assert.Equal(t, int32(3), runMsg(api.Run{Calls: 3}).Usage.Calls)
 }
+
+// A database's and a query's blocks keep their connection and SQL
+// (spec_059_data DAT-41, DAT-42).
+func TestDataContextBlocks(t *testing.T) {
+	got := contextBlocks([]*pb.ContextBlock{{Kind: "data_query", Title: "shop · top", Text: `{"columns":[]}`, Connection: "shop", Statement: "SELECT 1"}, {Kind: "database", Connection: "shop"}})
+	assert.Equal(t, []api.ContextBlock{{Kind: "data_query", Title: "shop · top", Text: `{"columns":[]}`, Connection: "shop", Statement: "SELECT 1"}, {Kind: "database", Connection: "shop"}}, got)
+}

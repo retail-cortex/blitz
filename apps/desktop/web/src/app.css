@@ -666,6 +666,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .attachment { display: flex; align-items: center; gap: 8px; max-width: 260px; padding: 4px 4px 4px 4px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); }
 .attachment img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--md-shape-sm); flex: none; }
 .attachment.failed img { opacity: 0.4; }
+/* A query's result (spec_059_data DAT-42): a click shows its table. */
+.attachment.clickable { cursor: pointer; }
+.attachment.clickable:hover { background: color-mix(in srgb, var(--accent-a) 8%, var(--md-surface-container-highest)); }
+.data-sql { margin: 0; padding: 8px 10px; border-radius: var(--md-shape-sm); background: var(--md-surface-container-low); white-space: pre-wrap; }
 .attachment-text { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
 .attachment-text small { font-size: 11px; }
 .bubble-images { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }

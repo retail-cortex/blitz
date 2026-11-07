@@ -327,7 +327,7 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 func contextMsgs(list []api.ContextBlock) []*pb.ContextBlock {
 	var out []*pb.ContextBlock
 	for _, c := range list {
-		out = append(out, &pb.ContextBlock{Kind: c.Kind, Url: c.URL, Title: c.Title, Html: c.HTML, Text: c.Text})
+		out = append(out, &pb.ContextBlock{Kind: c.Kind, Url: c.URL, Title: c.Title, Html: c.HTML, Text: c.Text, Connection: c.Connection, Statement: c.Statement})
 	}
 	return out
 }

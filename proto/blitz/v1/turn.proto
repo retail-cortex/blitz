@@ -70,7 +70,10 @@ message Turn {
 
 // ContextBlock is content the user added to a turn from elsewhere.
 message ContextBlock {
-  // What it is: "web_page", "web_selection" or "console".
+  // What it is: "web_page", "web_selection", "console", "database" (one of
+  // the workspace's database connections: the service reads its schema for
+  // the turn) or "data_query" (a query's result: text is the table as JSON,
+  // {columns, rows, total, truncated}; spec_059_data DAT-41, DAT-42).
   string kind = 1;
   // Where it came from.
   string url = 2;
@@ -81,6 +84,10 @@ message ContextBlock {
   string html = 4;
   // The content as text (the console's errors), used when html is empty.
   string text = 5;
+  // A database or data_query block's connection, by name.
+  string connection = 6;
+  // A data_query block's SQL.
+  string statement = 7;
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in

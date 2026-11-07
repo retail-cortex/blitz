@@ -184,3 +184,12 @@ func TestConversions(t *testing.T) {
 		})
 	}
 }
+
+// A database's and a query's blocks go to the service with their
+// connection and SQL (spec_059_data DAT-41, DAT-42).
+func TestDataContextMsgs(t *testing.T) {
+	got := contextMsgs([]api.ContextBlock{{Kind: "data_query", Title: "shop · top", Text: "{}", Connection: "shop", Statement: "SELECT 1"}})
+	require.Len(t, got, 1)
+	assert.Equal(t, "shop", got[0].Connection)
+	assert.Equal(t, "SELECT 1", got[0].Statement)
+}

@@ -303,7 +303,7 @@ func approvalRequestMsg(id string, req api.ApprovalRequest) *pb.ApprovalRequest 
 func contextBlocks(list []*pb.ContextBlock) []api.ContextBlock {
 	var out []api.ContextBlock
 	for _, c := range list {
-		out = append(out, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+		out = append(out, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text, Connection: c.Connection, Statement: c.Statement})
 	}
 	return out
 }
