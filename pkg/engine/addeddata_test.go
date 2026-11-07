@@ -16,8 +16,11 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -108,4 +111,45 @@ func TestTurnWithData(t *testing.T) {
 	i := slices.IndexFunc(msgs, func(m session.Message) bool { return m.Role == "user" })
 	require.GreaterOrEqual(t, i, 0)
 	assert.True(t, strings.HasSuffix(msgs[i].Content, "[added: kitchen · count]"), msgs[i].Content)
+}
+
+// A wide database is cut at 200 columns, saying how many were left out; a
+// connection's description goes with it; a saved query that fails says
+// so; a huge result is cut to what a prompt takes.
+func TestWithDataLimits(t *testing.T) {
+	secrets.SetDefault(&secrets.Memory{})
+	w := openTest(t)
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "wide.db")
+	db, err := sql.Open("sqlite3", path)
+	require.NoError(t, err)
+	cols := make([]string, 205)
+	for i := range cols {
+		cols[i] = fmt.Sprintf("c%d INTEGER", i)
+	}
+	_, err = db.Exec("CREATE TABLE wide(" + strings.Join(cols, ", ") + ")")
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	c := connectors.Connection{Name: "wide", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Description: "Measurements", Settings: map[string]string{"database": path}, ReadOnly: true,
+		Queries: []connectors.Query{{Name: "broken", Description: "Fails", Statement: "SELECT * FROM missing"}}}
+	_, probs, err := w.SaveConnector(ctx, c, nil, "")
+	require.NoError(t, err)
+	require.Empty(t, probs)
+
+	got := w.withData(ctx, "@db:wide @db:wide/broken", nil)
+	require.Len(t, got, 2)
+	assert.Contains(t, got[0].Text, "(sqlite, read-only): Measurements")
+	assert.Contains(t, got[0].Text, "(5 more columns left out")
+	assert.NotContains(t, got[0].Text, "c204")
+	assert.Contains(t, got[1].Text, "The query failed")
+
+	rows := make([][]any, 200)
+	for i := range rows {
+		rows[i] = []any{strings.Repeat("x", 1000)}
+	}
+	table, err := json.Marshal(datatable.New([]datatable.Column{{Name: "long", Type: datatable.String}}, rows, false))
+	require.NoError(t, err)
+	text := queryText(api.ContextBlock{Connection: "wide", Text: string(table)})
+	assert.Contains(t, text, "the rest is cut")
+	assert.Less(t, len(text), addedMaxData)
 }

@@ -48,9 +48,12 @@ go_library(
 
 go_test(
     name = "connectors_test",
-    srcs = ["connectors_test.go"],
+    srcs = [
+        "connectors_test.go",
+        "serve_internal_test.go",
+    ],
+    embed = [":connectors"],
     deps = [
-        ":connectors",
         "//pkg/config",
         "//pkg/engine/databases",
         "//pkg/secrets",

@@ -36,7 +36,7 @@ func TestTypeOf(t *testing.T) {
 		{"timestamptz", Timestamp}, {"timestamp with time zone", Timestamp}, {"DATETIME", Timestamp},
 		{"jsonb", JSON}, {"_int4", JSON}, {"text[]", JSON}, {"STRUCT", JSON},
 		{"bytea", Bytes}, {"BLOB", Bytes}, {"varbinary", Bytes},
-		{"interval", String}, {"tsvector", Other}, {"", Other},
+		{"interval", String}, {"tsvector", Other}, {"", Other}, {"mybool", Boolean}, {"json5", JSON},
 	} {
 		t.Run(tc.db, func(t *testing.T) { assert.Equal(t, tc.want, TypeOf(tc.db)) })
 	}
@@ -87,6 +87,19 @@ func TestValue(t *testing.T) {
 		{"valuer", valuer{"7.25"}, Number, 7.25},
 		{"stringer", stringer{}, Other, "s"},
 		{"struct", struct{ A int }{1}, Other, struct{ A int }{1}},
+		{"int kinds", int(3), Integer, int64(3)},
+		{"int16", int16(3), Integer, int64(3)},
+		{"int8", int8(3), Integer, int64(3)},
+		{"uint32", uint32(3), Integer, int64(3)},
+		{"uint16", uint16(3), Integer, int64(3)},
+		{"uint8", uint8(3), Integer, int64(3)},
+		{"small uint64", uint64(3), Integer, int64(3)},
+		{"float32", float32(1.5), Number, 1.5},
+		{"nil big int", (*big.Int)(nil), Integer, nil},
+		{"nil rational", (*big.Rat)(nil), Number, nil},
+		{"raw JSON", json.RawMessage(`[1]`), JSON, json.RawMessage(`[1]`)},
+		{"an exponent", "1e5", Number, "1e5"},
+		{"trailing zeros", "1.50000000000000000000", Number, 1.5},
 		{"channel", make(chan int), Other, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,7 +144,7 @@ func TestNew(t *testing.T) {
 	for _, tc := range []struct {
 		v    any
 		want string
-	}{{3.5, Number}, {true, Boolean}, {"x", String}, {[]byte{0xff}, Bytes}, {time.Now(), Timestamp}, {struct{}{}, Other}} {
+	}{{3.5, Number}, {true, Boolean}, {"x", String}, {[]byte("text"), String}, {[]byte{0xff}, Bytes}, {time.Now(), Timestamp}, {struct{}{}, Other}} {
 		assert.Equal(t, tc.want, New([]Column{{Name: "e"}}, [][]any{{nil}, {tc.v}}, false).Columns[0].Type)
 	}
 	assert.Equal(t, Other, New([]Column{{Name: "e"}}, [][]any{{nil}}, false).Columns[0].Type)
