@@ -18,6 +18,7 @@ weight: 1
 ### Fixes
 
 - Asked for a picture, a document or an answer, the Blitz agent first listed your workspace's files and read them, as if every task were about code. It now looks at your files only when the task needs them.
+- In the visual Markdown editor, every tab shared one place: switching tabs lost your cursor and scroll, so typing after a switch went nowhere ([#96](https://github.com/retail-cortex/blitz/issues/96)). Each tab now comes back where you left it, ready to type.
 - An organization's image model chosen as a conversation's model failed with "response included no output items". The pictures it draws now show in the conversation (with an updated organization service).
 - Gemini 4 Argon's costs were estimated at a placeholder price. They now use Google's published price ($2 in, $10 out a million tokens, doubling on December 1).
 - The CLI showed each tool call twice with Gemini, and `--output-format stream-json` wrote it twice. Each call shows once now, as in the desktop app.
