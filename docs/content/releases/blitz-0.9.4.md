@@ -37,5 +37,7 @@ weight: 1
 
 ### Fixes
 
+- In auto mode, what you choose in the agent's questions now counts as what you asked for. Before, ticking options and pressing Send could still get the next change blocked, because the reviewer only read the messages you typed. Your answers to a plan review count too.
+
 - Python projects in subfolders get their own language server even when they're known only by a `requirements.txt`, a `Pipfile` or a `venv` folder. Before, their files were served from the workspace's root, and imports of the project's own modules showed as errors.
 - The Python language server now uses the project's virtual environment (`.venv` or `venv`, in the project or a folder above it), so the packages you installed there are found. A `pyrightconfig.json` that names its own environment still wins.
