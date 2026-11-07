@@ -387,8 +387,32 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
                 {can.references && (
                   <div className="stack" style={{ gap: 6 }}>
                     <span className="t-label">{t("desktop.pictures.references", { count: refs.length, max: model?.maxReferences ?? 0 })}</span>
-                    <div className="pictures-drop" onDragOver={(e) => e.preventDefault()} onDrop={drop} onPaste={(e) => void addFiles(Array.from(e.clipboardData.files))} tabIndex={0} aria-label={t("desktop.pictures.drop")}>
-                      {refs.length === 0 && <span className="t-body-sm muted">{t("desktop.pictures.drop")}</span>}
+                    <div
+                      className="pictures-drop"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t("desktop.pictures.drop")}
+                      onClick={(e) => {
+                        // A click on the zone (not a thumbnail's role or ✕) picks files from the computer.
+                        if (!(e.target as HTMLElement).closest(".pictures-ref")) picker.current?.click();
+                      }}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                          e.preventDefault();
+                          picker.current?.click();
+                        }
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={drop}
+                      onPaste={(e) => void addFiles(Array.from(e.clipboardData.files))}
+                    >
+                      {refs.length === 0 ? (
+                        <span className="row t-body-sm muted pictures-drop-hint" style={{ gap: 6 }}>
+                          <Icon path={mdiImagePlusOutline} size="sm" /> {t("desktop.pictures.drop")}
+                        </span>
+                      ) : (
+                        <span className="t-body-sm muted">{t("desktop.pictures.drop_more")}</span>
+                      )}
                       <div className="pictures-refs">
                         {refs.map((r) => (
                           <RefThumb key={r.key} dir={dir} session={session?.id ?? ""} r={r} onRole={(v) => setRefs((rs) => rs.map((x) => (x.key === r.key ? { ...x, role: v } : x)))} onRemove={() => setRefs((rs) => rs.filter((x) => x.key !== r.key))} />
@@ -403,9 +427,6 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
                           </option>
                         ))}
                       </select>
-                      <Button small icon={mdiImagePlusOutline} onClick={() => picker.current?.click()}>
-                        {t("desktop.pictures.from_computer")}
-                      </Button>
                       <Button small icon={mdiFolderOpenOutline} onClick={() => setPicking(true)}>
                         {t("desktop.pictures.from_workspace")}
                       </Button>

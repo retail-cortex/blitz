@@ -36,6 +36,9 @@
 
 /* References (PIC-23). */
 .pictures-drop { min-height: 76px; padding: 8px; border: 1px dashed var(--md-outline); border-radius: var(--field-radius); display: flex; flex-direction: column; gap: 6px; }
+.pictures-drop { cursor: pointer; }
+.pictures-drop:hover { border-color: var(--accent-a); background: color-mix(in srgb, var(--accent-a) 5%, transparent); }
+.pictures-drop-hint { justify-content: center; text-align: center; flex: 1; }
 .pictures-drop:focus-visible { outline: none; border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .pictures-refs { display: flex; flex-wrap: wrap; gap: 8px; }
 .pictures-ref { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
