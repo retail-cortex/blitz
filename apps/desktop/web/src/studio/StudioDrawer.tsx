@@ -225,7 +225,7 @@ export function StudioDrawer({
               }}
             />
           )}
-          {kind === "specs" && <SpecsPane workspace={dir} onDirty={setDirty} />}
+          {kind === "specs" && <SpecsPane workspace={dir} onDirty={setDirty} onLeave={onClose} />}
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
           {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={intentFor("workers")} onLeave={onClose} onDirty={setDirty} />}

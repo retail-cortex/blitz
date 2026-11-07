@@ -1881,6 +1881,46 @@ export function installFake() {
           fakeVerified.set(path, judge ? "judged" : "checked");
           return { requirements: fakeSpecRequirements(path), costUsd: judge ? 0.0031 : 0, estimatedUsd: 0, priced: true, problem: "" };
         },
+        recordSpecChange: ({ path }) => {
+          const changes = fakeSpecRequirements(path).filter((r) => r.change).map((r) => ({ id: r.id, kind: r.change, old: "Checkout is fast.", new: r.text }));
+          if (!changes.length) return { changes: [], diff: "", text: "" };
+          const text = (fakeFiles.get(path) ?? "").replace(/^Status:.*$/m, "Status: changed");
+          fakeFiles.set(path, text);
+          return { changes, diff: ".agents/.ledger/diffs/20261107-120000-002-orders.diff", text };
+        },
+        impactSpec: ({ path, judge, estimate }) => {
+          const changes = fakeSpecRequirements(path).filter((r) => r.change).map((r) => ({ id: r.id, kind: r.change, old: "Checkout is fast.", new: r.text }));
+          const found = {
+            changes,
+            symbols: [{ name: "Pay", path: "internal/cart/checkout.go", line: 42, uses: 3 }],
+            places: [
+              { path: "internal/cart/checkout.go", line: 40, kind: "code", text: "// Pay takes a payment (ORD-01).", why: "ORD-01" },
+              { path: "cmd/shop/main.go", line: 18, kind: "code", text: "cart.Pay(order)", why: "Pay" },
+              { path: "internal/cart/checkout_test.go", line: 12, kind: "test", text: "_ = Pay(order)", why: "Pay" },
+            ],
+            summary: "",
+            steps: [] as { title: string; detail: string; files: string[] }[],
+            conflicts: [] as { id: string; why: string }[],
+            report: "",
+            costUsd: 0,
+            estimatedUsd: judge && estimate ? 0.0052 : 0,
+            priced: true,
+            problem: "",
+          };
+          if (!judge || estimate) return found;
+          return {
+            ...found,
+            summary: "Checkout now has a time limit: Pay must finish under 30 seconds, and nothing checks that today.",
+            steps: [
+              { title: "Test the limit first", detail: "Add a case to TestPay that fails when Pay takes 30 s or more.", files: ["internal/cart/checkout_test.go"] },
+              { title: "Time out the payment", detail: "Give Pay a 30 s context deadline and return a clear error when it passes.", files: ["internal/cart/checkout.go"] },
+              { title: "Say so at the till", detail: "Show the timeout's message where main calls Pay.", files: ["cmd/shop/main.go"] },
+            ],
+            conflicts: [{ id: "OV-01", why: "Three tills paying at once share one card terminal; 30 s each may not hold at peak." }],
+            report: ".agents/.ledger/impact/20261107-120000-002-orders.md",
+            costUsd: 0.0049,
+          };
+        },
         reviewSpec: ({ path, text, judge }) => {
           const findings = fakeSpecChecks(text);
           if (judge) findings.push({ line: 0, id: "", severity: "warning", code: "judged", message: "Nothing says what happens to an order when payment fails: is it kept, and for how long?", judged: true });

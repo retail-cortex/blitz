@@ -20,7 +20,9 @@ import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiAutoFix, mdiCh
 import { Button, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { files, workspaces } from "../api";
 import { message, reason } from "../errors";
-import type { SpecFinding, SpecRequirement, SpecSummary } from "../gen/blitz/v1/workspace_pb";
+import type { ImpactSpecResponse, SpecFinding, SpecRequirement, SpecSummary } from "../gen/blitz/v1/workspace_pb";
+import { copyText } from "../clipboard";
+import { compose, showView } from "../events";
 import { t, tn } from "../i18n";
 import { cost } from "../workflowRuns";
 import { ComposeDialog } from "./ComposeDialog";
@@ -28,7 +30,7 @@ import { DraftButton } from "./Draft";
 import { MarkdownField } from "./MarkdownField";
 import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { applyHunks, lineHunks, newSpecFile, newSpecText, specsDir, specsIndex } from "./specs";
-import { RequirementTable } from "./SpecTrace";
+import { ImpactPanel, RequirementTable, stepsText } from "./SpecTrace";
 
 /** The spec open in the form: its summary, the text read and its version. */
 interface OpenSpec {
@@ -57,7 +59,7 @@ function specLabel(s: SpecSummary): string {
  * rewrites it. Save writes it back, refused when it changed on disk since
  * it was read.
  */
-export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
+export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; onDirty?: (dirty: boolean) => void; onLeave?: () => void }) {
   const snack = useSnackbar();
   const [specs, setSpecs] = useState<SpecSummary[]>([]);
   const [error, setError] = useState("");
@@ -78,6 +80,11 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   const [notReady, setNotReady] = useState("");
   const [tracing, setTracing] = useState<"" | "approve" | "verify" | "judge">("");
   const [estimate, setEstimate] = useState<{ usd: number; priced: boolean } | null>(null);
+  // A saved change to an approved spec, and its impact (SDD-20, SDD-21).
+  const [changedSince, setChangedSince] = useState(0);
+  const [impact, setImpact] = useState<ImpactSpecResponse | null>(null);
+  const [impactBusy, setImpactBusy] = useState(false);
+  const [impactEstimate, setImpactEstimate] = useState<{ usd: number; priced: boolean } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -118,6 +125,8 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
     setChecks([]);
     setJudged(null);
     setReqs([]);
+    setChangedSince(0);
+    setImpact(null);
     if (spec.file !== specsIndex) void trace(spec.path);
   };
   const showMatrix = async () => {
@@ -135,10 +144,15 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
     try {
       const a = await workspaces.approveSpec({ workspace, path: open.spec.path, force });
       const r = await files.readFile({ workspace, path: open.spec.path });
-      setOpen({ ...open, base: r.text, version: r.version });
+      // Its summary again: approved now, so a saved change is recorded.
+      const list = (await workspaces.listSpecs({ workspace })).specs;
+      setSpecs(list);
+      setOpen({ spec: list.find((x) => x.path === open.spec.path) ?? open.spec, base: r.text, version: r.version });
       setText(r.text);
+      setChangedSince(0);
+      setImpact(null);
       snack(a.diff ? t("desktop.specs.approved_diff", { name: open.spec.file, path: a.diff }) : t("desktop.specs.approved", { name: open.spec.file }));
-      await Promise.all([trace(open.spec.path), refresh()]);
+      await trace(open.spec.path);
     } catch (e) {
       if (reason(e) === "SPEC_NOT_READY") setNotReady(message(e));
       else snack(message(e), { error: true });
@@ -191,6 +205,19 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       const r = await files.writeFile({ workspace, path: open.spec.path, text, version: open.version });
       setOpen({ ...open, base: text, version: r.version });
       snack(t("desktop.specs.saved", { name: open.spec.file }));
+      if (open.spec.approved) {
+        // An approved spec changed: recorded (Status: changed, a diff), and its impact offered.
+        const rec = await workspaces.recordSpecChange({ workspace, path: open.spec.path });
+        if (rec.text) {
+          const back = await files.readFile({ workspace, path: open.spec.path });
+          setOpen({ ...open, base: back.text, version: back.version });
+          setText(back.text);
+        }
+        setChangedSince(rec.changes.length);
+        setImpact(null);
+        void trace(open.spec.path);
+        void refresh();
+      }
     } catch (e) {
       setProblem(message(e));
     } finally {
@@ -239,6 +266,36 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
     } finally {
       setJudging(false);
     }
+  };
+
+  // The impact (SDD-20): the scan at once; the model's report after its estimate.
+  const scanImpact = async (judge: boolean, spend: boolean) => {
+    if (!open) return;
+    setImpactEstimate(null);
+    setImpactBusy(true);
+    try {
+      const im = await workspaces.impactSpec({ workspace, path: open.spec.path, judge, estimate: judge && !spend });
+      if (judge && !spend) {
+        if (im.problem) snack(im.problem, { error: true });
+        else setImpactEstimate({ usd: im.estimatedUsd, priced: im.priced });
+        setImpact(im);
+        return;
+      }
+      setImpact(im);
+      setChangedSince(0);
+      if (im.problem) snack(t("desktop.specs.impact_problem", { problem: im.problem }), { error: true });
+      else if (judge) snack(t("desktop.specs.impact_cost", { cost: cost(im.costUsd) }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    } finally {
+      setImpactBusy(false);
+    }
+  };
+  const fixInChat = () => {
+    if (!open || !impact) return;
+    onLeave?.();
+    showView({ dir: workspace, view: "chat" });
+    compose({ dir: workspace, text: t("desktop.specs.fix_prompt", { spec: open.spec.path, report: impact.report ? `@${impact.report}` : stepsText(impact) }) });
   };
 
   const isIndex = open?.spec.file === specsIndex;
@@ -338,6 +395,24 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                   <span className="t-body-sm">{problem}</span>
                 </div>
               )}
+              {changedSince > 0 && !impact && (
+                <div className="card warn row small-card" style={{ gap: 8 }}>
+                  <Icon path={mdiAlertCircleOutline} size="sm" />
+                  <span className="t-body-sm spacer">{tn("desktop.specs.changed_since", changedSince)}</span>
+                  <Button small variant="tonal" disabled={impactBusy} onClick={() => void scanImpact(false, false)}>
+                    {t("desktop.specs.scan_impact")}
+                  </Button>
+                </div>
+              )}
+              {impact && (
+                <ImpactPanel
+                  impact={impact}
+                  busy={impactBusy}
+                  onWrite={() => void scanImpact(true, false)}
+                  onCopy={() => copyText(stepsText(impact)).then(() => snack(t("desktop.specs.copied")), (e: unknown) => snack(message(e), { error: true }))}
+                  onChat={fixInChat}
+                />
+              )}
               <Findings checks={checks} judged={judged} />
               {!isIndex && (
                 <div className="card outlined stack spec-trace" style={{ gap: 8 }}>
@@ -353,6 +428,11 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                     <Button small icon={mdiRobotOutline} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.judge_verify_hint")} onClick={() => void verify(true, false)}>
                       {t("desktop.specs.judge_verify")}
                     </Button>
+                    {reqs.some((r) => r.change) && !impact && (
+                      <Button small icon={mdiAlertCircleOutline} disabled={dirty || impactBusy} onClick={() => void scanImpact(false, false)}>
+                        {t("desktop.specs.scan_impact")}
+                      </Button>
+                    )}
                   </div>
                   <RequirementTable requirements={reqs} />
                 </div>
@@ -416,6 +496,11 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       {notReady && (
         <ConfirmDialog title={t("desktop.specs.not_ready_title")} icon={mdiCheckDecagramOutline} confirm={t("desktop.specs.approve_anyway")} danger={false} onConfirm={() => void approve(true)} onClose={() => setNotReady("")}>
           <p>{notReady}</p>
+        </ConfirmDialog>
+      )}
+      {impactEstimate && (
+        <ConfirmDialog title={t("desktop.specs.write_fix")} icon={mdiRobotOutline} confirm={t("desktop.specs.write")} danger={false} onConfirm={() => void scanImpact(true, true)} onClose={() => setImpactEstimate(null)}>
+          <p>{impactEstimate.priced ? t("desktop.specs.impact_estimate", { cost: cost(impactEstimate.usd) }) : t("desktop.specs.estimate_unpriced")}</p>
         </ConfirmDialog>
       )}
       {estimate && (

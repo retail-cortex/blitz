@@ -230,14 +230,10 @@ func (w *Workspace) ApproveSpec(ctx context.Context, p string, force bool) (api.
 	return out, nil
 }
 
-// findEvidence is SDD-12's pass without a model: every ID of s's in the
+// findEvidence is SDD-12's pass without a model: each of ids in the
 // workspace's files (not the specs or the ledger) and recent commit
 // messages.
-func (w *Workspace) findEvidence(ctx context.Context, s specdoc.Spec) map[string][]specdoc.Evidence {
-	ids := make([]string, len(s.Items))
-	for i, it := range s.Items {
-		ids[i] = it.ID
-	}
+func (w *Workspace) findEvidence(ctx context.Context, ids []string) map[string][]specdoc.Evidence {
 	f := specdoc.NewFinder(ids)
 	if f == nil {
 		return nil
@@ -268,6 +264,15 @@ func (w *Workspace) findEvidence(ctx context.Context, s specdoc.Spec) map[string
 		}
 	}
 	return f.Found
+}
+
+// itemIDs are s's requirements' IDs.
+func itemIDs(s specdoc.Spec) []string {
+	ids := make([]string, len(s.Items))
+	for i, it := range s.Items {
+		ids[i] = it.ID
+	}
+	return ids
 }
 
 // verdict is the model's judgement of one requirement.
@@ -347,7 +352,7 @@ func (w *Workspace) VerifySpec(ctx context.Context, p string, judge, estimate bo
 		return api.SpecVerification{}, err
 	}
 	s := specdoc.Parse(file, text)
-	found := w.findEvidence(ctx, s)
+	found := w.findEvidence(ctx, itemIDs(s))
 	l, err := w.readLedger(file)
 	if err != nil {
 		return api.SpecVerification{}, err

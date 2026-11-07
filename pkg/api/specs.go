@@ -120,3 +120,71 @@ type SpecVerification struct {
 	Priced       bool
 	Problem      string
 }
+
+// SpecChange is a requirement that differs from its spec's approval: its
+// kind (added, changed, removed) and its text then and now.
+type SpecChange struct {
+	ID   string
+	Kind string
+	Old  string
+	New  string
+}
+
+// SpecRecorded is a saved change to an approved spec (SDD-20): what
+// changed, the diff kept in the ledger, and the spec's text now that it
+// says Status: changed ("" when nothing changed, or it said so already).
+type SpecRecorded struct {
+	Changes []SpecChange
+	Diff    string
+	Text    string
+}
+
+// SpecPlace is a place a change reaches: where a requirement was found,
+// a use of a symbol it sits in, or a passage search found; Why says which.
+type SpecPlace struct {
+	Path string
+	Line int
+	Kind string
+	Text string
+	Why  string
+}
+
+// SpecSymbol is a declaration a changed requirement's work sits in, and
+// how many uses of it were found.
+type SpecSymbol struct {
+	Name string
+	Path string
+	Line int
+	Uses int
+}
+
+// SpecStep is one step of an impact report's fix, with the files it touches.
+type SpecStep struct {
+	Title  string
+	Detail string
+	Files  []string
+}
+
+// SpecConflict is another spec's requirement a change contradicts.
+type SpecConflict struct {
+	ID  string
+	Why string
+}
+
+// SpecImpact is a change's impact on the work (SDD-20, SDD-21): the
+// changes, the symbols and places they reach (found without a model), and
+// with the model its summary, the steps to fix it and the conflicts, the
+// report written, and what it cost (or, estimated, would cost).
+type SpecImpact struct {
+	Changes      []SpecChange
+	Symbols      []SpecSymbol
+	Places       []SpecPlace
+	Summary      string
+	Steps        []SpecStep
+	Conflicts    []SpecConflict
+	Report       string
+	CostUSD      float64
+	EstimatedUSD float64
+	Priced       bool
+	Problem      string
+}

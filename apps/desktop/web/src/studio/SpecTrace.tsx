@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiCircleOutline, mdiCircleSlice4, mdiCloseCircleOutline, mdiLinkVariant, mdiLinkVariantOff, mdiSourceCommit } from "@mdi/js";
-import { Icon } from "@blitz/webui";
-import type { SpecEvidence, SpecRequirement } from "../gen/blitz/v1/workspace_pb";
-import { t } from "../i18n";
+import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiCircleOutline, mdiCircleSlice4, mdiCloseCircleOutline, mdiContentCopy, mdiFunctionVariant, mdiLinkVariant, mdiLinkVariantOff, mdiMessageArrowRightOutline, mdiRobotOutline, mdiSourceCommit } from "@mdi/js";
+import { Button, Icon } from "@blitz/webui";
+import type { ImpactSpecResponse, SpecEvidence, SpecPlace, SpecRequirement } from "../gen/blitz/v1/workspace_pb";
+import { t, tn } from "../i18n";
 
 // A requirement's states (spec_057 SDD-12): the check's, then the model's.
 const stateIcons: Record<string, string> = {
@@ -117,4 +117,96 @@ export function RequirementTable({ requirements, matrix, onOpen }: { requirement
       </table>
     </div>
   );
+}
+
+/** A place a change reaches, as a line: where, what kind, and why. */
+function PlaceLine({ p }: { p: SpecPlace }) {
+  return (
+    <span className="row t-body-sm" style={{ gap: 6 }} title={p.text}>
+      <code className="ellipsis">{where({ path: p.path, line: p.line, kind: p.kind, text: p.text } as SpecEvidence)}</code>
+      <span className="muted">
+        · {t(`desktop.specs.kind.${p.kind}`)} · {p.why}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A spec's changes' impact (spec_057 SDD-20, SDD-21): what changed since
+ * approval, the declarations that hold the work and the places it reaches
+ * (found without a model); then the model's summary, the steps to fix it
+ * (tests first) and the conflicts with other specs, once asked for (after
+ * its estimate, onWrite). The steps can be copied, or taken to a chat.
+ */
+export function ImpactPanel({ impact, busy, onWrite, onCopy, onChat }: { impact: ImpactSpecResponse; busy: boolean; onWrite: () => void; onCopy: () => void; onChat: () => void }) {
+  const written = impact.summary !== "" || impact.steps.length > 0;
+  return (
+    <div className="card outlined stack spec-impact" style={{ gap: 8 }}>
+      <span className="t-title-sm">{t("desktop.specs.impact")}</span>
+      <div className="stack" style={{ gap: 2 }}>
+        {impact.changes.map((c) => (
+          <span key={c.id} className="t-body-sm">
+            <strong>{c.id}</strong> <span className="warn-text">{t(`desktop.specs.change.${c.kind}`)}</span> · {c.kind === "removed" ? c.old : c.new}
+          </span>
+        ))}
+      </div>
+      {impact.symbols.length > 0 && (
+        <div className="stack" style={{ gap: 2 }}>
+          <span className="t-label">{t("desktop.specs.impact_symbols")}</span>
+          {impact.symbols.map((y) => (
+            <span key={`${y.path}/${y.name}`} className="row t-body-sm" style={{ gap: 6 }}>
+              <Icon path={mdiFunctionVariant} size="sm" />
+              <code>{y.name}</code>
+              <span className="muted">
+                · {y.path}:{y.line} · {tn("desktop.specs.uses", y.uses)}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="stack" style={{ gap: 2 }}>
+        <span className="t-label">{t("desktop.specs.impact_places")}</span>
+        {impact.places.length === 0 ? <span className="t-body-sm muted">{t("desktop.specs.impact_none")}</span> : impact.places.map((p, i) => <PlaceLine key={i} p={p} />)}
+      </div>
+      {written ? (
+        <div className="stack" style={{ gap: 6 }}>
+          {impact.summary && <p className="t-body-md">{impact.summary}</p>}
+          <ol className="t-body-sm spec-steps">
+            {impact.steps.map((st, i) => (
+              <li key={i}>
+                <strong>{st.title}</strong> {st.detail}
+                {st.files.length > 0 && <span className="muted"> ({st.files.join(", ")})</span>}
+              </li>
+            ))}
+          </ol>
+          {impact.conflicts.map((c) => (
+            <span key={c.id} className="row t-body-sm error-text" style={{ gap: 6 }}>
+              <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.specs.conflict", { id: c.id, why: c.why })}
+            </span>
+          ))}
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="t-body-sm muted spacer">{impact.report && t("desktop.agents.where", { path: impact.report })}</span>
+            <Button small icon={mdiContentCopy} onClick={onCopy}>
+              {t("desktop.specs.copy_steps")}
+            </Button>
+            <Button small variant="tonal" icon={mdiMessageArrowRightOutline} onClick={onChat}>
+              {t("desktop.specs.fix_in_chat")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="row" style={{ gap: 8 }}>
+          <span className="spacer" />
+          <Button small variant="tonal" icon={mdiRobotOutline} disabled={busy} title={t("desktop.specs.write_fix_hint")} onClick={onWrite}>
+            {t("desktop.specs.write_fix")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The steps as text, for the clipboard or a chat. */
+export function stepsText(impact: ImpactSpecResponse): string {
+  return [impact.summary, ...impact.steps.map((st, i) => `${i + 1}. ${st.title}: ${st.detail}${st.files.length ? ` (${st.files.join(", ")})` : ""}`), ...impact.conflicts.map((c) => `! ${c.id}: ${c.why}`)].filter(Boolean).join("\n");
 }

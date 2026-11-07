@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "specs",
     srcs = [
+        "declaration.go",
         "evidence.go",
         "ledger.go",
         "specs.go",
@@ -28,6 +29,7 @@ go_library(
 go_test(
     name = "specs_test",
     srcs = [
+        "declaration_test.go",
         "ledger_test.go",
         "specs_test.go",
     ],

@@ -19,7 +19,9 @@ weight: 1
 
 **Know what's done.** Approve a spec and Blitz remembers each requirement as you approved it, in `.agents/.ledger` beside your work. **Verify** finds every requirement's ID in your code, tests and commit messages, for free, and marks it traced or untraced with the file and line. **Verify with AI** goes further: the model reads that evidence and says whether each requirement is implemented, partial, missing or contradicted, and why, after showing you what it will cost. Change an approved spec and the changed requirements are flagged until you approve and verify again; each change is kept as a diff. **Show every requirement** puts the whole specification in one table.
 
-**Specs in CI.** `blitz spec list` prints the specification in order, and `blitz spec review` checks every spec and fails when one has an error, so a pull request can't merge a spec that contradicts itself. `blitz spec approve` and `blitz spec verify` do the rest from the terminal; `--judge` adds the model, and prints the cost before it spends anything.
+**Change a spec, see what it breaks.** Save a change to an approved spec and Blitz marks it changed, keeps the diff, and offers to scan the impact. The scan is free: it follows each changed requirement from where it was implemented to the function that holds it and every place that uses it, through your language server. **Write the fix with AI** (after showing its cost) turns that into steps, tests first, and points out other specs the change now contradicts. Copy the steps, or take them straight to a chat.
+
+**Specs in CI.** `blitz spec list` prints the specification in order, and `blitz spec review` checks every spec and fails when one has an error, so a pull request can't merge a spec that contradicts itself. `blitz spec approve`, `blitz spec verify` and `blitz spec impact` do the rest from the terminal; `--judge` adds the model, and prints the cost before it spends anything.
 
 ### Fixes
 

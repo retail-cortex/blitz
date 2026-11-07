@@ -90,6 +90,12 @@ type Backend interface {
 	TraceSpecs(path string) ([]SpecRequirement, error)
 	ApproveSpec(ctx context.Context, path string, force bool) (SpecApproved, error)
 	VerifySpec(ctx context.Context, path string, judge, estimate bool) (SpecVerification, error)
+	// RecordSpecChange records a saved change to an approved spec (its
+	// diff, Status: changed); ImpactSpec scans what the change reaches in
+	// the work (judge: and has the model write the fix; estimate: only
+	// says what that would cost).
+	RecordSpecChange(ctx context.Context, path string) (SpecRecorded, error)
+	ImpactSpec(ctx context.Context, path string, judge, estimate bool) (SpecImpact, error)
 
 	// Reflection is what the harness has to learn from the workspace's
 	// runs, for the welcome (/reflect).

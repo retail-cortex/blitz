@@ -157,6 +157,48 @@ func (r *Remote) VerifySpec(ctx context.Context, path string, judge, estimate bo
 	return api.SpecVerification{Requirements: specRequirements(res.Msg.Requirements), CostUSD: res.Msg.CostUsd, EstimatedUSD: res.Msg.EstimatedUsd, Priced: res.Msg.Priced, Problem: res.Msg.Problem}, nil
 }
 
+// fromSpecChanges are changes from the wire.
+func fromSpecChanges(list []*pb.SpecChange) []api.SpecChange {
+	out := make([]api.SpecChange, len(list))
+	for i, c := range list {
+		out[i] = api.SpecChange{ID: c.Id, Kind: c.Kind, Old: c.Old, New: c.New}
+	}
+	return out
+}
+
+// RecordSpecChange records a saved change to an approved spec
+// (WorkspaceService.RecordSpecChange).
+func (r *Remote) RecordSpecChange(ctx context.Context, path string) (api.SpecRecorded, error) {
+	res, err := r.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return api.SpecRecorded{}, fromAPI(err)
+	}
+	return api.SpecRecorded{Changes: fromSpecChanges(res.Msg.Changes), Diff: res.Msg.Diff, Text: res.Msg.Text}, nil
+}
+
+// ImpactSpec scans a spec's changes' impact (WorkspaceService.ImpactSpec).
+func (r *Remote) ImpactSpec(ctx context.Context, path string, judge, estimate bool) (api.SpecImpact, error) {
+	res, err := r.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: r.dir, Path: path, Judge: judge, Estimate: estimate}))
+	if err != nil {
+		return api.SpecImpact{}, fromAPI(err)
+	}
+	m := res.Msg
+	out := api.SpecImpact{Changes: fromSpecChanges(m.Changes), Summary: m.Summary, Report: m.Report, CostUSD: m.CostUsd, EstimatedUSD: m.EstimatedUsd, Priced: m.Priced, Problem: m.Problem}
+	for _, s := range m.Symbols {
+		out.Symbols = append(out.Symbols, api.SpecSymbol{Name: s.Name, Path: s.Path, Line: int(s.Line), Uses: int(s.Uses)})
+	}
+	for _, p := range m.Places {
+		out.Places = append(out.Places, api.SpecPlace{Path: p.Path, Line: int(p.Line), Kind: p.Kind, Text: p.Text, Why: p.Why})
+	}
+	for _, st := range m.Steps {
+		out.Steps = append(out.Steps, api.SpecStep{Title: st.Title, Detail: st.Detail, Files: st.Files})
+	}
+	for _, c := range m.Conflicts {
+		out.Conflicts = append(out.Conflicts, api.SpecConflict{ID: c.Id, Why: c.Why})
+	}
+	return out, nil
+}
+
 // Reflection is what the harness has to learn
 // (WorkspaceService.GetReflection).
 func (r *Remote) Reflection() (api.Reflection, error) {

@@ -371,6 +371,12 @@ service WorkspaceService {
   rpc ApproveSpec(ApproveSpecRequest) returns (ApproveSpecResponse);
   // Verifies a saved spec's requirements against the work (SDD-12).
   rpc VerifySpec(VerifySpecRequest) returns (VerifySpecResponse);
+  // Records a saved change to an approved spec: Status: changed, a diff in
+  // the ledger (SDD-20).
+  rpc RecordSpecChange(RecordSpecChangeRequest) returns (RecordSpecChangeResponse);
+  // Scans what a spec's changes since approval reach in the work, and
+  // with judge has the model write the fix (SDD-20, SDD-21).
+  rpc ImpactSpec(ImpactSpecRequest) returns (ImpactSpecResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -2776,6 +2782,87 @@ message VerifySpecResponse {
   bool priced = 4;
   // Why the model's verdicts didn't come (the check's results are there).
   string problem = 5;
+}
+
+// A requirement that differs from its spec's approval.
+message SpecChange {
+  string id = 1;
+  // "added", "changed" or "removed".
+  string kind = 2;
+  string old = 3;
+  string new = 4;
+}
+
+// Request message for WorkspaceService.RecordSpecChange.
+message RecordSpecChangeRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+// Response message for WorkspaceService.RecordSpecChange.
+message RecordSpecChangeResponse {
+  repeated SpecChange changes = 1;
+  // The diff kept ("" when none was: unchanged, or the same as the last).
+  string diff = 2;
+  // The spec's text now that it says Status: changed ("" when unchanged).
+  string text = 3;
+}
+
+// A place a change reaches.
+message SpecPlace {
+  string path = 1;
+  int32 line = 2;
+  string kind = 3;
+  string text = 4;
+  // The requirement's ID, the symbol it uses, or "search: <ID>".
+  string why = 5;
+}
+
+// A declaration a changed requirement's work sits in.
+message SpecSymbol {
+  string name = 1;
+  string path = 2;
+  int32 line = 3;
+  int32 uses = 4;
+}
+
+// One step of an impact report's fix.
+message SpecStep {
+  string title = 1;
+  string detail = 2;
+  repeated string files = 3;
+}
+
+// Another spec's requirement a change contradicts.
+message SpecConflict {
+  string id = 1;
+  string why = 2;
+}
+
+// Request message for WorkspaceService.ImpactSpec.
+message ImpactSpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Have the model write the report (it costs).
+  bool judge = 3;
+  // With judge: only say what it would cost; nothing is written.
+  bool estimate = 4;
+}
+
+// Response message for WorkspaceService.ImpactSpec.
+message ImpactSpecResponse {
+  repeated SpecChange changes = 1;
+  repeated SpecSymbol symbols = 2;
+  repeated SpecPlace places = 3;
+  string summary = 4;
+  repeated SpecStep steps = 5;
+  repeated SpecConflict conflicts = 6;
+  // The report kept in the ledger ("" without the model).
+  string report = 7;
+  double cost_usd = 8;
+  double estimated_usd = 9;
+  bool priced = 10;
+  string problem = 11;
 }
 
 // Request message for WorkspaceService.ReviewSpec.

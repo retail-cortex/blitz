@@ -154,3 +154,51 @@ func (h workspaceService) VerifySpec(ctx context.Context, r req[pb.VerifySpecReq
 	}
 	return ok(&pb.VerifySpecResponse{Requirements: specRequirements(v.Requirements), CostUsd: v.CostUSD, EstimatedUsd: v.EstimatedUSD, Priced: v.Priced, Problem: v.Problem})
 }
+
+// specChanges are changes on the wire.
+func specChanges(list []api.SpecChange) []*pb.SpecChange {
+	out := make([]*pb.SpecChange, len(list))
+	for i, c := range list {
+		out[i] = &pb.SpecChange{Id: c.ID, Kind: c.Kind, Old: c.Old, New: c.New}
+	}
+	return out
+}
+
+// RecordSpecChange records a saved change to an approved spec (SDD-20).
+func (h workspaceService) RecordSpecChange(ctx context.Context, r req[pb.RecordSpecChangeRequest]) (*connect.Response[pb.RecordSpecChangeResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := w.RecordSpecChange(ctx, r.Msg.Path)
+	if err != nil {
+		return nil, specError(err)
+	}
+	return ok(&pb.RecordSpecChangeResponse{Changes: specChanges(rec.Changes), Diff: rec.Diff, Text: rec.Text})
+}
+
+// ImpactSpec scans a spec's changes' impact on the work (SDD-20, SDD-21).
+func (h workspaceService) ImpactSpec(ctx context.Context, r req[pb.ImpactSpecRequest]) (*connect.Response[pb.ImpactSpecResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	im, err := w.ImpactSpec(ctx, r.Msg.Path, r.Msg.Judge, r.Msg.Estimate)
+	if err != nil {
+		return nil, specError(err)
+	}
+	out := &pb.ImpactSpecResponse{Changes: specChanges(im.Changes), Summary: im.Summary, Report: im.Report, CostUsd: im.CostUSD, EstimatedUsd: im.EstimatedUSD, Priced: im.Priced, Problem: im.Problem}
+	for _, s := range im.Symbols {
+		out.Symbols = append(out.Symbols, &pb.SpecSymbol{Name: s.Name, Path: s.Path, Line: int32(s.Line), Uses: int32(s.Uses)})
+	}
+	for _, p := range im.Places {
+		out.Places = append(out.Places, &pb.SpecPlace{Path: p.Path, Line: int32(p.Line), Kind: p.Kind, Text: p.Text, Why: p.Why})
+	}
+	for _, st := range im.Steps {
+		out.Steps = append(out.Steps, &pb.SpecStep{Title: st.Title, Detail: st.Detail, Files: st.Files})
+	}
+	for _, c := range im.Conflicts {
+		out.Conflicts = append(out.Conflicts, &pb.SpecConflict{Id: c.ID, Why: c.Why})
+	}
+	return ok(out)
+}

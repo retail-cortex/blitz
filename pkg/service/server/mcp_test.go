@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -323,4 +324,22 @@ func TestSpecsOverTheAPI(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	_, err = c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: dir, Path: ".agents/specs/404.md"}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	// A change recorded, and its impact (SDD-20, SDD-21).
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "specs", "001-overview.md"), []byte(strings.Replace(a.Msg.Text, "One store.", "Two stores.", 1)), 0o644))
+	rec, err := c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, rec.Msg.Changes, 1)
+	assert.Equal(t, "changed", rec.Msg.Changes[0].Kind)
+	assert.Contains(t, rec.Msg.Text, "Status: changed")
+	im, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, im.Msg.Changes, 1)
+	require.NotEmpty(t, im.Msg.Places)
+	assert.Equal(t, "main.go", im.Msg.Places[0].Path)
+	im, err = c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: s.Path, Judge: true}))
+	require.NoError(t, err)
+	assert.True(t, im.Msg.Summary != "" || im.Msg.Problem != "", "a report or why not")
+	_, err = c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: dir, Path: "README.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }

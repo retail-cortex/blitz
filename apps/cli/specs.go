@@ -32,12 +32,12 @@ import (
 // CI can gate on the specification (spec_057_spec_driven SDD-06).
 var errSpecErrors = errors.New("the specification has errors")
 
-// newSpecCommand is `blitz spec list|review|approve|verify`: the project's
-// specification (.agents/specs, as /spec writes it), listed in order,
-// reviewed, approved and verified, as Studio › Specs does (SDD-01..03,
-// SDD-06, SDD-11, SDD-12).
+// newSpecCommand is `blitz spec list|review|approve|verify|impact`: the
+// project's specification (.agents/specs, as /spec writes it), listed in
+// order, reviewed, approved, verified and its changes' impact scanned, as
+// Studio › Specs does (SDD-01..03, SDD-06, SDD-11, SDD-12, SDD-20, SDD-21).
 func newSpecCommand(g *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{Use: "spec", Short: "List, review, approve and verify the project's specification (.agents/specs)"}
+	cmd := &cobra.Command{Use: "spec", Short: "List, review, approve and verify the project's specification (.agents/specs), and scan what its changes reach"}
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List the specs in order, with their status and what the checks found",
@@ -183,7 +183,50 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 	}
 	verify.Flags().BoolVar(&weigh, "judge", false, "have the model judge each requirement (it costs; prints the estimate without --yes)")
 	verify.Flags().BoolVar(&yes, "yes", false, "with --judge: spend it")
-	cmd.AddCommand(list, review, approve, verify)
+	var impactYes, impactJudge bool
+	impact := &cobra.Command{
+		Use:   "impact <file>",
+		Short: "What a spec's changes since its approval reach in the work; --judge has the model write the fix",
+		Long:  "Impact records the spec's change (Status: changed, a diff in .agents/.ledger/diffs), then follows each changed requirement from where it was found to the declarations that hold it and their uses (the language server's references, else a text search), and searches for the new requirements. --judge has the model write the report (a summary, the steps to fix it, tests first, and conflicts with other specs) into .agents/.ledger/impact: without --yes it only prints what that would cost.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			p := specArg(args[0])
+			rec, err := r.RecordSpecChange(cmd.Context(), p)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if rec.Diff != "" {
+				fmt.Fprintln(out, i18n.T("spec.cli_diff", "path", rec.Diff))
+			}
+			estimate := impactJudge && !impactYes
+			im, err := r.ImpactSpec(cmd.Context(), p, impactJudge, estimate)
+			if err != nil {
+				return err
+			}
+			if len(im.Changes) == 0 {
+				fmt.Fprintln(out, i18n.T("spec.cli_unchanged"))
+				return nil
+			}
+			printImpact(out, im)
+			switch {
+			case im.Problem != "":
+				fmt.Fprintf(out, "%s: %s\n", p, im.Problem)
+			case estimate:
+				fmt.Fprintln(out, i18n.T("spec.cli_impact_estimate", "cost", fmt.Sprintf("$%.4f", im.EstimatedUSD)))
+			case impactJudge:
+				fmt.Fprintln(out, i18n.T("spec.cli_report", "path", im.Report, "cost", fmt.Sprintf("$%.4f", im.CostUSD)))
+			}
+			return nil
+		},
+	}
+	impact.Flags().BoolVar(&impactJudge, "judge", false, "have the model write the report (it costs; prints the estimate without --yes)")
+	impact.Flags().BoolVar(&impactYes, "yes", false, "with --judge: spend it")
+	cmd.AddCommand(list, review, approve, verify, impact)
 	return cmd
 }
 
@@ -256,4 +299,40 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// printImpact prints an impact scan: the changes, the declarations
+// followed, the places reached, then the model's summary, steps and
+// conflicts when it wrote them.
+func printImpact(out io.Writer, im api.SpecImpact) {
+	for _, c := range im.Changes {
+		fmt.Fprintf(out, "%s\t%s\t%s\n", c.ID, c.Kind, cmpOr(c.New, c.Old))
+	}
+	for _, s := range im.Symbols {
+		fmt.Fprintf(out, "%s:%d\t%s\t%s\n", s.Path, s.Line, s.Name, i18n.N("spec.cli_uses", s.Uses))
+	}
+	for _, p := range im.Places {
+		at := p.Path
+		if p.Line > 0 {
+			at = fmt.Sprintf("%s:%d", p.Path, p.Line)
+		}
+		fmt.Fprintf(out, "%s\t%s\t%s\n", at, p.Kind, p.Why)
+	}
+	if im.Summary != "" {
+		fmt.Fprintf(out, "\n%s\n", im.Summary)
+	}
+	for i, st := range im.Steps {
+		fmt.Fprintf(out, "%d. %s: %s\n", i+1, st.Title, st.Detail)
+	}
+	for _, c := range im.Conflicts {
+		fmt.Fprintf(out, "! %s: %s\n", c.ID, c.Why)
+	}
+}
+
+// cmpOr is a, or b when a is empty.
+func cmpOr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
