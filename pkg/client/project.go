@@ -95,7 +95,8 @@ func (r *Remote) ListSpecs() ([]api.SpecSummary, error) {
 			deps[j] = int(d)
 		}
 		out[i] = api.SpecSummary{File: s.File, Path: s.Path, Number: int(s.Number), Title: s.Title, Status: s.Status, DependsOn: deps,
-			Items: int(s.Items), Errors: int(s.Errors), Warnings: int(s.Warnings), OpenQuestions: int(s.OpenQuestions)}
+			Items: int(s.Items), Errors: int(s.Errors), Warnings: int(s.Warnings), OpenQuestions: int(s.OpenQuestions),
+			Approved: s.Approved, Traced: int(s.Traced), Implemented: int(s.Implemented), Changed: int(s.Changed)}
 	}
 	return out, nil
 }
@@ -111,6 +112,49 @@ func (r *Remote) ReviewSpec(ctx context.Context, path, text string, judge bool) 
 		out.Findings = append(out.Findings, api.SpecFinding{Line: int(f.Line), ID: f.Id, Severity: f.Severity, Code: f.Code, Message: f.Message, Judged: f.Judged})
 	}
 	return out, nil
+}
+
+// specRequirements are requirements from the wire.
+func specRequirements(list []*pb.SpecRequirement) []api.SpecRequirement {
+	out := make([]api.SpecRequirement, len(list))
+	for i, r := range list {
+		out[i] = api.SpecRequirement{Spec: r.Spec, ID: r.Id, Text: r.Text, Line: int(r.Line), Change: r.Change, State: r.State, Judged: r.Judged, Reason: r.Reason, Stale: r.Stale}
+		if r.VerifiedAt != nil {
+			out[i].VerifiedAt = r.VerifiedAt.AsTime()
+		}
+		for _, e := range r.Evidence {
+			out[i].Evidence = append(out[i].Evidence, api.SpecEvidence{Path: e.Path, Line: int(e.Line), Kind: e.Kind, Text: e.Text})
+		}
+	}
+	return out
+}
+
+// TraceSpecs is a spec's requirements as traced
+// (WorkspaceService.TraceSpecs).
+func (r *Remote) TraceSpecs(path string) ([]api.SpecRequirement, error) {
+	res, err := r.workspaces.TraceSpecs(context.Background(), connect.NewRequest(&pb.TraceSpecsRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return specRequirements(res.Msg.Requirements), nil
+}
+
+// ApproveSpec approves a saved spec (WorkspaceService.ApproveSpec).
+func (r *Remote) ApproveSpec(ctx context.Context, path string, force bool) (api.SpecApproved, error) {
+	res, err := r.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: r.dir, Path: path, Force: force}))
+	if err != nil {
+		return api.SpecApproved{}, fromAPI(err)
+	}
+	return api.SpecApproved{Text: res.Msg.Text, Diff: res.Msg.Diff}, nil
+}
+
+// VerifySpec verifies a saved spec (WorkspaceService.VerifySpec).
+func (r *Remote) VerifySpec(ctx context.Context, path string, judge, estimate bool) (api.SpecVerification, error) {
+	res, err := r.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: r.dir, Path: path, Judge: judge, Estimate: estimate}))
+	if err != nil {
+		return api.SpecVerification{}, fromAPI(err)
+	}
+	return api.SpecVerification{Requirements: specRequirements(res.Msg.Requirements), CostUSD: res.Msg.CostUsd, EstimatedUSD: res.Msg.EstimatedUsd, Priced: res.Msg.Priced, Problem: res.Msg.Problem}, nil
 }
 
 // Reflection is what the harness has to learn

@@ -16,11 +16,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiAutoFix, mdiCheckCircleOutline, mdiCompare, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiInformationOutline, mdiLoading, mdiPlus, mdiRobotOutline, mdiShieldSearch, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiAutoFix, mdiCheckDecagramOutline, mdiFormatListBulleted, mdiMagnifyScan, mdiTableLarge, mdiCheckCircleOutline, mdiCompare, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiInformationOutline, mdiLoading, mdiPlus, mdiRobotOutline, mdiShieldSearch, mdiUndoVariant } from "@mdi/js";
 import { Button, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { files, workspaces } from "../api";
-import { message } from "../errors";
-import type { SpecFinding, SpecSummary } from "../gen/blitz/v1/workspace_pb";
+import { message, reason } from "../errors";
+import type { SpecFinding, SpecRequirement, SpecSummary } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { cost } from "../workflowRuns";
 import { ComposeDialog } from "./ComposeDialog";
@@ -28,6 +28,7 @@ import { DraftButton } from "./Draft";
 import { MarkdownField } from "./MarkdownField";
 import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { applyHunks, lineHunks, newSpecFile, newSpecText, specsDir, specsIndex } from "./specs";
+import { RequirementTable } from "./SpecTrace";
 
 /** The spec open in the form: its summary, the text read and its version. */
 interface OpenSpec {
@@ -71,6 +72,12 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   const [judging, setJudging] = useState(false);
   const [refining, setRefining] = useState(false);
   const [proposal, setProposal] = useState<string | null>(null);
+  // The requirements as traced (SDD-10), and every spec's (the matrix).
+  const [reqs, setReqs] = useState<SpecRequirement[]>([]);
+  const [matrix, setMatrix] = useState<SpecRequirement[] | null>(null);
+  const [notReady, setNotReady] = useState("");
+  const [tracing, setTracing] = useState<"" | "approve" | "verify" | "judge">("");
+  const [estimate, setEstimate] = useState<{ usd: number; priced: boolean } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -99,12 +106,67 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
     return () => clearTimeout(timer);
   }, [workspace, path, text]);
 
+  const trace = (p: string) =>
+    workspaces.traceSpecs({ workspace, path: p }).then(
+      (r) => setReqs(r.requirements),
+      (e) => snack(message(e), { error: true }),
+    );
   const begin = (spec: SpecSummary, body: string, version: string) => {
     setOpen({ spec, base: body, version });
     setText(body);
     setProblem("");
     setChecks([]);
     setJudged(null);
+    setReqs([]);
+    if (spec.file !== specsIndex) void trace(spec.path);
+  };
+  const showMatrix = async () => {
+    try {
+      setMatrix((await workspaces.traceSpecs({ workspace, path: "" })).requirements);
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  // Approve (SDD-11): the saved spec; with errors or open questions it asks first.
+  const approve = async (force: boolean) => {
+    if (!open) return;
+    setNotReady("");
+    setTracing("approve");
+    try {
+      const a = await workspaces.approveSpec({ workspace, path: open.spec.path, force });
+      const r = await files.readFile({ workspace, path: open.spec.path });
+      setOpen({ ...open, base: r.text, version: r.version });
+      setText(r.text);
+      snack(a.diff ? t("desktop.specs.approved_diff", { name: open.spec.file, path: a.diff }) : t("desktop.specs.approved", { name: open.spec.file }));
+      await Promise.all([trace(open.spec.path), refresh()]);
+    } catch (e) {
+      if (reason(e) === "SPEC_NOT_READY") setNotReady(message(e));
+      else snack(message(e), { error: true });
+    } finally {
+      setTracing("");
+    }
+  };
+  // Verify (SDD-12): the check at once; the model's after its estimate.
+  const verify = async (judge: boolean, spend: boolean) => {
+    if (!open) return;
+    setEstimate(null);
+    setTracing(judge ? "judge" : "verify");
+    try {
+      const v = await workspaces.verifySpec({ workspace, path: open.spec.path, judge, estimate: judge && !spend });
+      if (judge && !spend) {
+        if (v.problem) snack(v.problem, { error: true });
+        else setEstimate({ usd: v.estimatedUsd, priced: v.priced });
+        return;
+      }
+      setReqs(v.requirements);
+      if (v.problem) snack(t("desktop.specs.verify_problem", { problem: v.problem }), { error: true });
+      else snack(judge ? t("desktop.specs.verified_cost", { cost: cost(v.costUsd) }) : t("desktop.specs.verified"));
+      void refresh();
+    } catch (e) {
+      snack(message(e), { error: true });
+    } finally {
+      setTracing("");
+    }
   };
   const show = (spec: SpecSummary) =>
     leave(async () => {
@@ -185,6 +247,7 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       <aside className="slide-list" inert={open !== null}>
         <div className="row side-head">
           <span className="t-title-sm spacer">{t("desktop.specs.title")}</span>
+          <IconButton icon={matrix ? mdiFormatListBulleted : mdiTableLarge} label={t(matrix ? "desktop.specs.show_list" : "desktop.specs.show_matrix")} small selected={!!matrix} onClick={() => (matrix ? setMatrix(null) : void showMatrix())} />
           <IconButton icon={mdiPlus} label={t("desktop.specs.new")} small onClick={() => setAdding("")} />
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: specsDir })}</p>
@@ -194,14 +257,30 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           </div>
         )}
         {!error && specs.length === 0 && <p className="t-body-sm muted">{t("desktop.specs.none")}</p>}
+        {matrix && (
+          <RequirementTable
+            requirements={matrix}
+            matrix
+            onOpen={(file) => {
+              const s = specs.find((x) => x.file === file);
+              if (s) void show(s);
+            }}
+          />
+        )}
+        {!matrix && (
         <div className="list">
           {specs.map((s) => (
             <button key={s.path} className="list-item" title={s.path} onClick={() => void show(s)}>
               <Icon path={s.file === specsIndex ? mdiFormatListNumbered : mdiFileDocumentOutline} />
               <span className="lines spacer">
                 <span className="ellipsis">{specLabel(s)}</span>
-                <small className="ellipsis">{[s.file, s.status, s.items ? tn("desktop.specs.items", s.items) : ""].filter(Boolean).join(" · ")}</small>
+                <small className="ellipsis">{[s.file, s.status, s.items ? tn("desktop.specs.items", s.items) : "", s.approved && s.items ? t("desktop.specs.traced_of", { traced: s.traced, count: s.items }) : ""].filter(Boolean).join(" · ")}</small>
               </span>
+              {s.changed > 0 && (
+                <span className="row t-body-sm warn-text" style={{ gap: 4 }} title={tn("desktop.specs.changed", s.changed)}>
+                  <Icon path={mdiAlertCircleOutline} size="sm" /> {tn("desktop.specs.changed", s.changed)}
+                </span>
+              )}
               {s.errors > 0 ? (
                 <span className="row t-body-sm error-text" style={{ gap: 4 }} title={tn("desktop.specs.errors", s.errors)}>
                   <Icon path={mdiAlertCircleOutline} size="sm" /> {s.errors}
@@ -214,6 +293,7 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
             </button>
           ))}
         </div>
+        )}
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (
@@ -259,6 +339,24 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                 </div>
               )}
               <Findings checks={checks} judged={judged} />
+              {!isIndex && (
+                <div className="card outlined stack spec-trace" style={{ gap: 8 }}>
+                  <div className="row wrap" style={{ gap: 8 }}>
+                    <span className="t-title-sm spacer">{t("desktop.specs.requirements")}</span>
+                    {tracing === "approve" || tracing === "verify" || tracing === "judge" ? <Icon path={mdiLoading} spin size="sm" /> : null}
+                    <Button small icon={mdiCheckDecagramOutline} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.approve_hint")} onClick={() => void approve(false)}>
+                      {t("desktop.specs.approve")}
+                    </Button>
+                    <Button small icon={mdiMagnifyScan} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.verify_hint")} onClick={() => void verify(false, false)}>
+                      {t("desktop.specs.verify")}
+                    </Button>
+                    <Button small icon={mdiRobotOutline} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.judge_verify_hint")} onClick={() => void verify(true, false)}>
+                      {t("desktop.specs.judge_verify")}
+                    </Button>
+                  </div>
+                  <RequirementTable requirements={reqs} />
+                </div>
+              )}
             </div>
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={open.spec.path}>
@@ -313,6 +411,16 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       {deleting && open && (
         <ConfirmDialog title={t("desktop.specs.delete_title", { name: open.spec.file })} icon={mdiDeleteOutline} confirm={t("desktop.specs.delete")} onConfirm={() => void remove()} onClose={() => setDeleting(false)}>
           <p>{t("desktop.specs.delete_body", { path: open.spec.path })}</p>
+        </ConfirmDialog>
+      )}
+      {notReady && (
+        <ConfirmDialog title={t("desktop.specs.not_ready_title")} icon={mdiCheckDecagramOutline} confirm={t("desktop.specs.approve_anyway")} danger={false} onConfirm={() => void approve(true)} onClose={() => setNotReady("")}>
+          <p>{notReady}</p>
+        </ConfirmDialog>
+      )}
+      {estimate && (
+        <ConfirmDialog title={t("desktop.specs.judge_verify")} icon={mdiRobotOutline} confirm={t("desktop.specs.spend")} danger={false} onConfirm={() => void verify(true, true)} onClose={() => setEstimate(null)}>
+          <p>{estimate.priced ? t("desktop.specs.estimate", { cost: cost(estimate.usd) }) : t("desktop.specs.estimate_unpriced")}</p>
         </ConfirmDialog>
       )}
       {refining && open && (

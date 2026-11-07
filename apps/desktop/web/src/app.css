@@ -1044,6 +1044,18 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-table td { padding: 4px 8px; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant) 50%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-table td:first-child { white-space: normal; }
 .run-table .num { text-align: right; }
+/* A spec's requirements, and the matrix of every spec's (spec_057 SDD-12). */
+.spec-table td { white-space: normal; }
+.spec-table th:first-child { width: auto; }
+.spec-table th:nth-child(2) { width: 30%; }
+.spec-table th:nth-child(3) { width: 30%; }
+.spec-table.is-matrix th:first-child { width: 150px; }
+.spec-table.is-matrix th:nth-child(2) { width: auto; }
+.spec-table.is-matrix th:nth-child(3) { width: 24%; }
+.spec-table.is-matrix th:nth-child(4) { width: 26%; }
+.spec-table tr.clickable { cursor: pointer; }
+.spec-table tr.clickable:hover td { background: var(--md-surface-container-low); }
+.spec-table .strike { text-decoration: line-through; }
 .run-table tfoot td { font-weight: 500; border-bottom: none; border-top: 1px solid var(--md-outline-variant); }
 .run-table tr.is-selected td { background: color-mix(in srgb, var(--md-primary) 8%, transparent); }
 .run-step-name { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }

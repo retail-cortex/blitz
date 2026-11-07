@@ -362,6 +362,15 @@ service WorkspaceService {
   // Reviews a spec as edited: the checks without a model, and the model's
   // review when judge is set (spec_057 SDD-02, SDD-03).
   rpc ReviewSpec(ReviewSpecRequest) returns (ReviewSpecResponse);
+  // Returns a spec's requirements (or every spec's) as the ledger traces
+  // them (spec_057 SDD-10).
+  rpc TraceSpecs(TraceSpecsRequest) returns (TraceSpecsResponse);
+  // Approves a saved spec: Status: approved, the baseline and the ledger
+  // (SDD-11). FAILED_PRECONDITION SPEC_NOT_READY without force when it
+  // has errors or open questions.
+  rpc ApproveSpec(ApproveSpecRequest) returns (ApproveSpecResponse);
+  // Verifies a saved spec's requirements against the work (SDD-12).
+  rpc VerifySpec(VerifySpecRequest) returns (VerifySpecResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -2677,11 +2686,96 @@ message SpecSummary {
   int32 errors = 8;
   int32 warnings = 9;
   int32 open_questions = 10;
+  // The ledger has its approval.
+  bool approved = 11;
+  // Requirements the work names (or the model judged implemented), those
+  // the model judged implemented, and those changed since approval.
+  int32 traced = 12;
+  int32 implemented = 13;
+  int32 changed = 14;
 }
 
 // Response message for WorkspaceService.ListSpecs.
 message ListSpecsResponse {
   repeated SpecSummary specs = 1;
+}
+
+// Request message for WorkspaceService.TraceSpecs.
+message TraceSpecsRequest {
+  string workspace = 1;
+  // The spec's path ("" for every spec).
+  string path = 2;
+}
+
+// Where a requirement was found: a file's line, or a commit (path is its hash).
+message SpecEvidence {
+  string path = 1;
+  int32 line = 2;
+  // "code", "test", "doc" or "commit".
+  string kind = 3;
+  string text = 4;
+}
+
+// One requirement as traced.
+message SpecRequirement {
+  // Its spec's file, and its line there (0 when removed).
+  string spec = 1;
+  string id = 2;
+  string text = 3;
+  int32 line = 4;
+  // "added", "changed" or "removed" since the spec was approved; "" otherwise.
+  string change = 5;
+  // traced, untraced, implemented, partial, missing, contradicted; "" never verified.
+  string state = 6;
+  // The model's verdict, not the check's.
+  bool judged = 7;
+  string reason = 8;
+  // Its text changed since it was verified.
+  bool stale = 9;
+  google.protobuf.Timestamp verified_at = 10;
+  repeated SpecEvidence evidence = 11;
+}
+
+// Response message for WorkspaceService.TraceSpecs.
+message TraceSpecsResponse {
+  repeated SpecRequirement requirements = 1;
+}
+
+// Request message for WorkspaceService.ApproveSpec.
+message ApproveSpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Approve with errors or open questions.
+  bool force = 3;
+}
+
+// Response message for WorkspaceService.ApproveSpec.
+message ApproveSpecResponse {
+  // The spec's text as written (Status: approved).
+  string text = 1;
+  // The diff kept of what changed since its last approval ("" for none).
+  string diff = 2;
+}
+
+// Request message for WorkspaceService.VerifySpec.
+message VerifySpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Have the model judge each requirement (it costs).
+  bool judge = 3;
+  // With judge: only say what it would cost; nothing is written.
+  bool estimate = 4;
+}
+
+// Response message for WorkspaceService.VerifySpec.
+message VerifySpecResponse {
+  repeated SpecRequirement requirements = 1;
+  double cost_usd = 2;
+  double estimated_usd = 3;
+  // The model has a price (the estimate means something).
+  bool priced = 4;
+  // Why the model's verdicts didn't come (the check's results are there).
+  string problem = 5;
 }
 
 // Request message for WorkspaceService.ReviewSpec.

@@ -32,11 +32,12 @@ import (
 // CI can gate on the specification (spec_057_spec_driven SDD-06).
 var errSpecErrors = errors.New("the specification has errors")
 
-// newSpecCommand is `blitz spec list|review`: the project's specification
-// (.agents/specs, as /spec writes it), listed in order and reviewed, as
-// Studio › Specs shows it (SDD-01..03, SDD-06).
+// newSpecCommand is `blitz spec list|review|approve|verify`: the project's
+// specification (.agents/specs, as /spec writes it), listed in order,
+// reviewed, approved and verified, as Studio › Specs does (SDD-01..03,
+// SDD-06, SDD-11, SDD-12).
 func newSpecCommand(g *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{Use: "spec", Short: "List and review the project's specification (.agents/specs)"}
+	cmd := &cobra.Command{Use: "spec", Short: "List, review, approve and verify the project's specification (.agents/specs)"}
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List the specs in order, with their status and what the checks found",
@@ -84,10 +85,7 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 			failed := false
 			cost := 0.0
 			for _, a := range args {
-				p := a
-				if !strings.Contains(p, "/") {
-					p = path.Join(".agents/specs", p)
-				}
+				p := specArg(a)
 				text, err := os.ReadFile(filepath.Join(r.Dir(), filepath.FromSlash(p)))
 				if err != nil {
 					return withCode(exitUsage, err)
@@ -109,8 +107,110 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 	review.Flags().BoolVar(&judge, "judge", false, "ask the model to review too (it costs)")
-	cmd.AddCommand(list, review)
+	var force bool
+	approve := &cobra.Command{
+		Use:   "approve <file>",
+		Short: "Approve a spec: Status: approved, its baseline and its requirements recorded in .agents/.ledger",
+		Long:  "Approve writes Status: approved in the spec, keeps its text as the baseline in .agents/.ledger/baselines and records each requirement's fingerprint, so later changes show; approving a changed spec again keeps a diff in .agents/.ledger/diffs. A spec with errors or open questions needs --force.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			a, err := r.ApproveSpec(cmd.Context(), specArg(args[0]), force)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, i18n.T("spec.cli_approved", "spec", specArg(args[0])))
+			if a.Diff != "" {
+				fmt.Fprintln(out, i18n.T("spec.cli_diff", "path", a.Diff))
+			}
+			return nil
+		},
+	}
+	approve.Flags().BoolVar(&force, "force", false, "approve with errors or open questions")
+	var yes, weigh bool
+	verify := &cobra.Command{
+		Use:   "verify [file...]",
+		Short: "Find each requirement's ID in the work (every spec without arguments); --judge has the model judge it",
+		Long:  "Verify looks for each requirement's ID in the workspace's files and commit messages and records it in .agents/.ledger as traced (code, a test or a commit names it) or untraced. --judge has the model judge each requirement from that evidence (implemented, partial, missing, contradicted): without --yes it only prints what that would cost.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				specs, err := r.ListSpecs()
+				if err != nil {
+					return err
+				}
+				for _, s := range specs {
+					if s.Number > 0 {
+						args = append(args, s.Path)
+					}
+				}
+			}
+			out := cmd.OutOrStdout()
+			estimate := weigh && !yes
+			total := 0.0
+			for _, a := range args {
+				v, err := r.VerifySpec(cmd.Context(), specArg(a), weigh, estimate)
+				if err != nil {
+					return err
+				}
+				if v.Problem != "" {
+					fmt.Fprintf(out, "%s: %s\n", specArg(a), v.Problem)
+				}
+				if estimate {
+					total += v.EstimatedUSD
+					continue
+				}
+				total += v.CostUSD
+				for _, q := range v.Requirements {
+					printRequirement(out, q)
+				}
+			}
+			switch {
+			case estimate:
+				fmt.Fprintln(out, i18n.T("spec.cli_estimate", "cost", fmt.Sprintf("$%.4f", total)))
+			case weigh:
+				fmt.Fprintln(out, i18n.T("spec.cli_cost", "cost", fmt.Sprintf("$%.4f", total)))
+			}
+			return nil
+		},
+	}
+	verify.Flags().BoolVar(&weigh, "judge", false, "have the model judge each requirement (it costs; prints the estimate without --yes)")
+	verify.Flags().BoolVar(&yes, "yes", false, "with --judge: spend it")
+	cmd.AddCommand(list, review, approve, verify)
 	return cmd
+}
+
+// specArg is a spec's path: a bare name is in .agents/specs.
+func specArg(a string) string {
+	if strings.Contains(a, "/") {
+		return a
+	}
+	return path.Join(".agents/specs", a)
+}
+
+// printRequirement prints a requirement's line: its spec and ID, its
+// state (with what changed since approval), and where it was found or why.
+func printRequirement(out io.Writer, q api.SpecRequirement) {
+	state := orDash(q.State)
+	if q.Change != "" {
+		state += " (" + q.Change + ")"
+	}
+	where := q.Reason
+	if where == "" && len(q.Evidence) > 0 {
+		e := q.Evidence[0]
+		where = e.Path
+		if e.Line > 0 {
+			where = fmt.Sprintf("%s:%d", e.Path, e.Line)
+		}
+	}
+	fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", q.Spec, q.ID, state, where)
 }
 
 // printSpecReview prints p's findings as file:line: severity: message;

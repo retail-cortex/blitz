@@ -998,6 +998,28 @@ let fakeUploadSeq = 0;
 
 // The spec the fake composer refines.
 let fakeSpecCurrent = "";
+// The fake ledger: approved texts, and how each spec was last verified.
+const fakeApproved = new Map<string, string>();
+const fakeVerified = new Map<string, "checked" | "judged">();
+
+// A spec's requirements as the fake ledger traces them.
+function fakeSpecRequirements(path: string) {
+  const text = fakeFiles.get(path) ?? "";
+  const base = fakeApproved.get(path);
+  const how = fakeVerified.get(path);
+  const out: { spec: string; id: string; text: string; line: number; change: string; state: string; judged: boolean; reason: string; stale: boolean; evidence: { path: string; line: number; kind: string; text: string }[] }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = /^- \*\*([A-Z]+-\d+)\*\*\s*(.*)$/.exec(l);
+    if (!m) return;
+    const found = m[1] === "OV-02" || m[1] === "ORD-02";
+    const evidence = found ? [{ path: m[1] === "OV-02" ? "internal/auth/signin.go" : "internal/orders/queue.go", line: 14, kind: "code", text: `// ${m[1]}` }, { path: m[1] === "OV-02" ? "internal/auth/signin_test.go" : "internal/orders/queue_test.go", line: 9, kind: "test", text: `// ${m[1]}` }] : [];
+    const judged = how === "judged";
+    const state = !how ? "" : judged ? (found ? "implemented" : m[1] === "ORD-01" ? "partial" : "missing") : found ? "traced" : "untraced";
+    const reason = !judged ? "" : found ? `${evidence[0].path}:14 does it, and its test checks it.` : m[1] === "ORD-01" ? "Checkout is timed in cart.go:88, but nothing keeps it under 30 s." : "Nothing in the work does this yet.";
+    out.push({ spec: path.slice(".agents/specs/".length), id: m[1], text: m[2], line: i + 1, change: base !== undefined && !base.includes(l) ? "changed" : "", state, judged, reason, stale: false, evidence: how ? evidence : [] });
+  });
+  return out;
+}
 
 // A spec's checks, as the service's would find them (fewer).
 function fakeSpecChecks(text: string) {
@@ -1026,6 +1048,10 @@ function fakeSpecSummary(path: string, text: string) {
     errors: 0,
     warnings: file === "README.md" ? 0 : checks.filter((c) => c.severity === "warning").length,
     openQuestions: checks.some((c) => c.code === "open-questions") ? 1 : 0,
+    approved: fakeApproved.has(path),
+    traced: fakeSpecRequirements(path).filter((r) => r.state === "traced" || r.state === "implemented").length,
+    implemented: fakeSpecRequirements(path).filter((r) => r.state === "implemented").length,
+    changed: fakeSpecRequirements(path).filter((r) => r.change).length,
   };
 }
 
@@ -1841,6 +1867,20 @@ export function installFake() {
             .sort((a, b) => (a.endsWith("README.md") ? -1 : b.endsWith("README.md") ? 1 : a.localeCompare(b)))
             .map((path) => fakeSpecSummary(path, fakeFiles.get(path) ?? "")),
         }),
+        traceSpecs: ({ path }) => ({ requirements: [...fakeFiles.keys()].filter((p) => p.startsWith(".agents/specs/0") && (!path || p === path)).sort().flatMap((p) => fakeSpecRequirements(p)) }),
+        approveSpec: ({ path, force }) => {
+          const text = fakeFiles.get(path) ?? "";
+          if (!force && /^#+\s*Open questions\n+- /im.test(text)) throw new ConnectError("the spec isn't ready to approve: 1 open question(s)", Code.FailedPrecondition, undefined, [{ desc: ErrorInfoSchema, value: { reason: "SPEC_NOT_READY", domain: "blitz", metadata: {} } }]);
+          const approved = text.replace(/^Status:.*$/m, "Status: approved");
+          fakeFiles.set(path, approved);
+          fakeApproved.set(path, approved);
+          return { text: approved, diff: "" };
+        },
+        verifySpec: ({ path, judge, estimate }) => {
+          if (judge && estimate) return { requirements: fakeSpecRequirements(path), costUsd: 0, estimatedUsd: 0.0034, priced: true, problem: "" };
+          fakeVerified.set(path, judge ? "judged" : "checked");
+          return { requirements: fakeSpecRequirements(path), costUsd: judge ? 0.0031 : 0, estimatedUsd: 0, priced: true, problem: "" };
+        },
         reviewSpec: ({ path, text, judge }) => {
           const findings = fakeSpecChecks(text);
           if (judge) findings.push({ line: 0, id: "", severity: "warning", code: "judged", message: "Nothing says what happens to an order when payment fails: is it kept, and for how long?", judged: true });

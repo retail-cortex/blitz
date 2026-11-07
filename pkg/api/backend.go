@@ -82,6 +82,14 @@ type Backend interface {
 	// the model too, which costs).
 	ListSpecs() ([]SpecSummary, error)
 	ReviewSpec(ctx context.Context, path, text string, judge bool) (SpecReview, error)
+	// TraceSpecs is the requirements of the spec at path ("" for every
+	// spec) as the ledger traces them; ApproveSpec approves it (force:
+	// with errors or open questions); VerifySpec finds each requirement in
+	// the work (judge: and has the model judge it; estimate: only says
+	// what that would cost).
+	TraceSpecs(path string) ([]SpecRequirement, error)
+	ApproveSpec(ctx context.Context, path string, force bool) (SpecApproved, error)
+	VerifySpec(ctx context.Context, path string, judge, estimate bool) (SpecVerification, error)
 
 	// Reflection is what the harness has to learn from the workspace's
 	// runs, for the welcome (/reflect).

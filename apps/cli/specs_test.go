@@ -60,4 +60,28 @@ func TestSpecCommand(t *testing.T) {
 
 	out, _ = runCLI(t, "spec", "review", "001-overview.md", "--judge", "--dir", ws)
 	assert.Contains(t, out, "The model's review cost $0.0000.", "no model here: its problem, and nothing spent")
+
+	// Approve and verify (SDD-11, SDD-12).
+	_, err = runCLI(t, "spec", "approve", "002-orders.md", "--dir", ws)
+	assert.ErrorContains(t, err, "isn't ready to approve")
+	out, err = runCLI(t, "spec", "approve", "001-overview.md", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Approved .agents/specs/001-overview.md.")
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "internal", "tills.go"), []byte("package internal\n\n// OV-01: three tills.\n"), 0o644))
+	out, err = runCLI(t, "spec", "verify", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "001-overview.md\tOV-01\ttraced\tinternal/tills.go:3\n")
+	assert.Contains(t, out, "002-orders.md\tORD-02\tuntraced\t\n")
+	out, err = runCLI(t, "spec", "verify", "001-overview.md", "--judge", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "--yes", "only the estimate, without --yes")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "001-overview.md"), []byte("# 001. Overview\nStatus: approved\n- **OV-01** One store with 4 tills.\nDone when: it takes orders.\n"), 0o644))
+	out, err = runCLI(t, "spec", "verify", "001-overview.md", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "OV-01\ttraced (changed)\t")
+	out, err = runCLI(t, "spec", "approve", "001-overview.md", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, ".agents/.ledger/diffs/")
 }

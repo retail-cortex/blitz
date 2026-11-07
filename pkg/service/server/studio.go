@@ -22,6 +22,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Studio's editors (spec_040_studio): what they share.
@@ -60,6 +61,7 @@ func (h workspaceService) ListSpecs(ctx context.Context, r req[pb.ListSpecsReque
 		out.Specs = append(out.Specs, &pb.SpecSummary{
 			File: s.File, Path: s.Path, Number: int32(s.Number), Title: s.Title, Status: s.Status, DependsOn: deps,
 			Items: int32(s.Items), Errors: int32(s.Errors), Warnings: int32(s.Warnings), OpenQuestions: int32(s.OpenQuestions),
+			Approved: s.Approved, Traced: int32(s.Traced), Implemented: int32(s.Implemented), Changed: int32(s.Changed),
 		})
 	}
 	return ok(out)
@@ -72,11 +74,8 @@ func (h workspaceService) ReviewSpec(ctx context.Context, r req[pb.ReviewSpecReq
 		return nil, err
 	}
 	rev, err := w.ReviewSpec(ctx, r.Msg.Path, r.Msg.Text, r.Msg.Judge)
-	if errors.Is(err, engine.ErrNotASpec) {
-		return nil, invalid(err)
-	}
 	if err != nil {
-		return nil, fileError(err)
+		return nil, specError(err)
 	}
 	return ok(specReview(rev))
 }
@@ -88,4 +87,70 @@ func specReview(rev api.SpecReview) *pb.ReviewSpecResponse {
 		out.Findings = append(out.Findings, &pb.SpecFinding{Line: int32(f.Line), Id: f.ID, Severity: f.Severity, Code: f.Code, Message: f.Message, Judged: f.Judged})
 	}
 	return out
+}
+
+// specError is a spec call's error on the wire.
+func specError(err error) error {
+	switch {
+	case errors.Is(err, engine.ErrNotASpec):
+		return invalid(err)
+	case errors.Is(err, engine.ErrSpecNotReady):
+		return apiError(connect.CodeFailedPrecondition, "SPEC_NOT_READY", err)
+	}
+	return fileError(err)
+}
+
+// specRequirements are requirements on the wire.
+func specRequirements(list []api.SpecRequirement) []*pb.SpecRequirement {
+	out := make([]*pb.SpecRequirement, len(list))
+	for i, r := range list {
+		m := &pb.SpecRequirement{Spec: r.Spec, Id: r.ID, Text: r.Text, Line: int32(r.Line), Change: r.Change, State: r.State, Judged: r.Judged, Reason: r.Reason, Stale: r.Stale}
+		if !r.VerifiedAt.IsZero() {
+			m.VerifiedAt = timestamppb.New(r.VerifiedAt)
+		}
+		for _, e := range r.Evidence {
+			m.Evidence = append(m.Evidence, &pb.SpecEvidence{Path: e.Path, Line: int32(e.Line), Kind: e.Kind, Text: e.Text})
+		}
+		out[i] = m
+	}
+	return out
+}
+
+// TraceSpecs is a spec's requirements as traced (SDD-10).
+func (h workspaceService) TraceSpecs(ctx context.Context, r req[pb.TraceSpecsRequest]) (*connect.Response[pb.TraceSpecsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	list, err := w.TraceSpecs(r.Msg.Path)
+	if err != nil {
+		return nil, specError(err)
+	}
+	return ok(&pb.TraceSpecsResponse{Requirements: specRequirements(list)})
+}
+
+// ApproveSpec approves a saved spec (SDD-11).
+func (h workspaceService) ApproveSpec(ctx context.Context, r req[pb.ApproveSpecRequest]) (*connect.Response[pb.ApproveSpecResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	a, err := w.ApproveSpec(ctx, r.Msg.Path, r.Msg.Force)
+	if err != nil {
+		return nil, specError(err)
+	}
+	return ok(&pb.ApproveSpecResponse{Text: a.Text, Diff: a.Diff})
+}
+
+// VerifySpec verifies a saved spec against the work (SDD-12).
+func (h workspaceService) VerifySpec(ctx context.Context, r req[pb.VerifySpecRequest]) (*connect.Response[pb.VerifySpecResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	v, err := w.VerifySpec(ctx, r.Msg.Path, r.Msg.Judge, r.Msg.Estimate)
+	if err != nil {
+		return nil, specError(err)
+	}
+	return ok(&pb.VerifySpecResponse{Requirements: specRequirements(v.Requirements), CostUsd: v.CostUSD, EstimatedUsd: v.EstimatedUSD, Priced: v.Priced, Problem: v.Problem})
 }

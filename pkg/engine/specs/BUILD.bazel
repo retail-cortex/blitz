@@ -16,14 +16,21 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "specs",
-    srcs = ["specs.go"],
+    srcs = [
+        "evidence.go",
+        "ledger.go",
+        "specs.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/specs",
     visibility = ["//visibility:public"],
 )
 
 go_test(
     name = "specs_test",
-    srcs = ["specs_test.go"],
+    srcs = [
+        "ledger_test.go",
+        "specs_test.go",
+    ],
     embed = [":specs"],
     deps = [
         "@com_github_stretchr_testify//assert",
