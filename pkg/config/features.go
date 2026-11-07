@@ -62,7 +62,8 @@ type UIConfig struct {
 }
 
 // ImagesConfig controls pictures sent to the model: @file.png mentions,
-// /attach, /paste, --image and the view_image tool.
+// /attach, /paste, --image and the view_image tool; and the image model
+// the generate_image tool draws with.
 type ImagesConfig struct {
 	// Enabled lets images be sent to the model.
 	Enabled      bool   `toml:"enabled"`
@@ -70,6 +71,10 @@ type ImagesConfig struct {
 	MaxDimension int    `toml:"max_dimension"` // longest edge sent to the model, in pixels
 	MaxInputMB   int    `toml:"max_input_mb"`  // largest file accepted
 	RetainDays   int    `toml:"retain_days"`   // unused images are deleted after this (0 = keep)
+	// Model is generate_image's image model as "provider/model", a Gemini
+	// image model ("gemini/gemini-3.1-flash-image"). Empty turns
+	// generate_image off.
+	Model string `toml:"model"`
 }
 
 // PDFConfig shapes the PDFs the export_pdf tool writes.
@@ -694,10 +699,9 @@ var DefaultPricing = map[string]ModelPrice{
 	// Gemini 3.8 Flash at its introductory price, valid through 2026-12-31
 	// (PriceChanges has the price from 2027-01-01).
 	"gemini-3.8-flash": {InputPerMTok: 0.75, OutputPerMTok: 3.75, CachedInputPerMTok: 0.075},
-	// Gemini 4 Argon, the default model since 2026-10-13: a placeholder at
-	// Gemini 3.8 Flash's introductory price until its own is published
-	// (no PriceChanges entry).
-	"gemini-4-argon": {InputPerMTok: 0.75, OutputPerMTok: 3.75, CachedInputPerMTok: 0.075},
+	// Gemini 4 Argon, the default model since 2026-10-13, at its price
+	// through 2026-11-30 (PriceChanges has the price from 2026-12-01).
+	"gemini-4-argon": {InputPerMTok: 2.00, OutputPerMTok: 10.00, CachedInputPerMTok: 0.10},
 	"gemini-2.5-pro": {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
 	"gpt-4o":         {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
 	// Claude list prices; cache reads bill at 10% of input, 5-minute cache
@@ -708,6 +712,11 @@ var DefaultPricing = map[string]ModelPrice{
 	// Gemini's speech models ([audio] model): text in, audio tokens out.
 	"gemini-2.5-flash-preview-tts": {InputPerMTok: 0.50, OutputPerMTok: 10.00},
 	"gemini-2.5-pro-preview-tts":   {InputPerMTok: 1.00, OutputPerMTok: 20.00},
+	// Gemini's image models ([images] model): a picture is output tokens
+	// (about 1,100 for a 1K picture on 3.1 Flash Image).
+	"gemini-3.1-flash-image":      {InputPerMTok: 0.50, OutputPerMTok: 60.00},
+	"gemini-3.1-flash-lite-image": {InputPerMTok: 0.25, OutputPerMTok: 30.00},
+	"gemini-3-pro-image":          {InputPerMTok: 2.00, OutputPerMTok: 120.00},
 }
 
 // PriceChange is a published list price that takes effect on a date.
@@ -723,6 +732,9 @@ var PriceChanges = []PriceChange{
 	// The introductory Gemini 3.8 Flash price ends on 2026-12-31.
 	{Model: "gemini-3.8-flash", From: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
 		Price: ModelPrice{InputPerMTok: 1.50, OutputPerMTok: 7.50, CachedInputPerMTok: 0.15}},
+	// Gemini 4 Argon's price doubles on 2026-12-01.
+	{Model: "gemini-4-argon", From: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+		Price: ModelPrice{InputPerMTok: 4.00, OutputPerMTok: 20.00, CachedInputPerMTok: 0.20}},
 }
 
 // DefaultPricingAt returns DefaultPricing with every price change in

@@ -148,6 +148,12 @@ func TestEmbeddedRegistry(t *testing.T) {
 	assert.Contains(t, puppy.Tools, "recall_session")
 	assert.Contains(t, puppy.SystemPrompt, "read that session's summary with `recall_session`")
 	assert.Contains(t, puppy.SystemPrompt, "When the user just talks (a greeting, small talk, a thank-you), answer in a sentence of plain text, with no tools.")
+	// Not every task is code: a picture isn't a reason to explore the files.
+	assert.Contains(t, puppy.SystemPrompt, "Not every task is code")
+	assert.Contains(t, puppy.SystemPrompt, "Don't explore for a task that doesn't need the workspace's files")
+	assert.Contains(t, puppy.Tools, "generate_image")
+	assert.Contains(t, puppy.SystemPrompt, "draw it with `generate_image`")
+	assert.NotContains(t, puppy.SystemPrompt, "Explore directories with `list_files`", "exploring isn't a rule for every task")
 	for _, tool := range []string{"activate_skill", "list_or_search_skills", "run_shell_command", "edit", "lsp"} {
 		assert.Contains(t, coder.Tools, tool)
 	}
@@ -155,7 +161,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 	assert.Contains(t, coder.SystemPrompt, "Load the stack's skills")
 	for _, rule := range []string{
 		"Be terse. No greetings, filler, jokes or commentary on yourself",
-		"Hold to sound engineering: small, focused changes; DRY, YAGNI and clear names; tests alongside behaviour changes.",
+		"to sound engineering: small, focused changes; DRY, YAGNI and clear names; tests alongside behaviour changes.",
 		"Keep files under about 600 lines",
 		"Read existing files with `read_file` before modifying them",
 		"Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted",

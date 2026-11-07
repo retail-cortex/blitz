@@ -36,11 +36,14 @@ func TestDefaultPricingAtAppliesPriceChanges(t *testing.T) {
 	got := DefaultPricingAt(time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC))["claude-opus-5"]
 	assert.Equal(t, DefaultPricing["claude-opus-5"], got, "claude-opus-5 changed: %+v", got)
 	assert.Equal(t, 0.75, DefaultPricing["gemini-3.8-flash"].InputPerMTok, "DefaultPricingAt modified DefaultPricing")
-	// The default model is priced (a placeholder at 3.8 Flash's price), so
-	// costs show and --max-cost-usd holds.
-	argon, ok := DefaultPricing[DefaultConfig().LLM.Gemini.Model]
+	// The default model is priced, so costs show and --max-cost-usd holds,
+	// and its price doubles on 2026-12-01.
+	_, ok := DefaultPricing[DefaultConfig().LLM.Gemini.Model]
 	assert.True(t, ok, "the default Gemini model has a price")
-	assert.Equal(t, DefaultPricing["gemini-3.8-flash"], argon)
+	argon := DefaultPricingAt(time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC))["gemini-4-argon"]
+	assert.Equal(t, ModelPrice{InputPerMTok: 2, OutputPerMTok: 10, CachedInputPerMTok: 0.10}, argon)
+	argon = DefaultPricingAt(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC))["gemini-4-argon"]
+	assert.Equal(t, ModelPrice{InputPerMTok: 4, OutputPerMTok: 20, CachedInputPerMTok: 0.20}, argon)
 }
 
 func TestDefaultConfigUsesPricesInEffect(t *testing.T) {

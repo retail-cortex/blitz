@@ -467,6 +467,7 @@ func TestStreamJSONHandler(t *testing.T) {
 		{"thought", api.Event{Text: &api.Text{Text: "hmm", Thought: true}}, nil},
 		{"tool call", api.Event{ToolCall: &api.ToolCall{Name: "read_file", Args: map[string]any{"path": "a"}}},
 			[]string{`{"args":{"path":"a"},"name":"read_file","type":"tool_call"}`}},
+		{"a streamed tool call's chunk: its final event says it", api.Event{ToolCall: &api.ToolCall{Name: "read_file", Partial: true}}, nil},
 		{"tool result", api.Event{ToolResult: &api.ToolResult{Name: "read_file", Result: map[string]any{"ok": true}}},
 			[]string{`{"name":"read_file","result":{"ok":true},"type":"tool_result"}`}},
 		{"notice", api.Event{Notice: &api.Notice{Text: "A guardrail stopped the turn. Send continue to go on.", Error: true}},

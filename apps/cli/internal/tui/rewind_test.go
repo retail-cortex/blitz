@@ -16,6 +16,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -99,6 +100,22 @@ func TestPrinterShowsCitations(t *testing.T) {
 	assert.Contains(t, got, "Sources:", "output:\n%s", got)
 	assert.Contains(t, got, "[1] Blitz — https://a", "output:\n%s", got)
 	assert.Contains(t, got, "[2] https://b — https://b", "output:\n%s", got)
+}
+
+// A streamed tool call arrives in a chunk and again in the final event:
+// it's shown once, as the desktop shows it.
+func TestPrinterShowsAStreamedCallOnce(t *testing.T) {
+	var out syncBuffer
+	p := NewPrinter(PrinterOptions{Out: &out})
+	call := api.ToolCall{ID: "c1", Name: "read_file", Args: map[string]any{"path": "main.go"}}
+	partial := call
+	partial.Partial = true
+	p.Handle(api.Event{ToolCall: &partial})
+	p.Handle(api.Event{ToolCall: &call})
+	p.Handle(api.Event{ToolResult: &api.ToolResult{ID: "c1", Name: "read_file", Result: map[string]any{"content": "package main"}}})
+	p.End()
+	got := ansiPattern.ReplaceAllString(out.b.String(), "")
+	assert.Equal(t, 1, strings.Count(got, "main.go"), "output:\n%s", got)
 }
 
 // The agent's task list is drawn as a checklist, instead of the todo

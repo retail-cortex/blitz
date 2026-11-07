@@ -254,6 +254,9 @@ func (p *Printer) Handle(ev api.Event) {
 		p.spin.Start(i18n.T("spinner.working"))
 	case ev.ToolCall != nil && ev.ToolCall.Name == "todo", ev.ToolResult != nil && ev.ToolResult.Name == "todo" && ev.ToolResult.Result["error"] == nil:
 		// Shown as the checklist (Tasks).
+	case ev.ToolCall != nil && ev.ToolCall.Partial:
+		// A streamed call's chunk: the final event repeats it, and that's
+		// the one shown (a Gemini call was shown twice).
 	case ev.ToolCall != nil:
 		p.spin.Stop()
 		p.flushText()

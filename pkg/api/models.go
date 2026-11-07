@@ -138,6 +138,9 @@ type Settings struct {
 	// SpeechModel is generate_audio's speech model ([audio] model; "" for
 	// none), and SpeechError why it can't be used.
 	SpeechModel, SpeechError string
+	// ImageModel is generate_image's image model ([images] model; "" for
+	// none), and ImageError why it can't be used.
+	ImageModel, ImageError string
 }
 
 // StyleInfo is an output style (/style).

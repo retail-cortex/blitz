@@ -285,6 +285,7 @@ const settable = [
   "llm.openai.base_url",
   "audio.model",
   "audio.voice",
+  "images.model",
   "blitz.default_agent",
   "blitz.agency_level",
   "blitz.permission_mode",

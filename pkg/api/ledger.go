@@ -27,6 +27,7 @@ const (
 	PurposeReview     = "review"     // the review model checking a plan or a change
 	PurposeTask       = "task"       // a background task it started
 	PurposeSpeech     = "speech"     // generate_audio's speech model
+	PurposeImage      = "image"      // generate_image's image model
 	PurposeSearch     = "search"     // a search provider's billed queries
 	PurposeBefore     = "before"     // what was spent before the ledger was kept (CA-126)
 )

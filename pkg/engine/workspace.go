@@ -440,6 +440,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		}
 	}
 	w.setupSpeaker(ctx, o.Warn)
+	w.setupPainter(ctx, o.Warn)
 	built := map[string]bool{}
 	for _, h := range cfg.Hooks.All() { // prompt hooks naming their model
 		if h.Kind() != config.HookPrompt || h.Model == "" || built[h.Model] {
@@ -569,6 +570,22 @@ func (w *Workspace) setupSpeaker(ctx context.Context, warn func(string)) {
 	w.tools.SetSpeaker(sp, err, cfg.Audio, func(ctx context.Context, session, model string, usage *genai.GenerateContentResponseUsageMetadata) {
 		if session != "" && w.engine != nil {
 			w.engine.RecordSpeech(ctx, session, model, usage)
+		}
+	})
+}
+
+// setupPainter gives generate_image the [images] model's painter (none
+// without one), warning when it can't be built; its calls go in the
+// session's /cost.
+func (w *Workspace) setupPainter(ctx context.Context, warn func(string)) {
+	cfg := w.cfg
+	p, err := runtime.NewPainter(ctx, cfg)
+	if err != nil {
+		warn(i18n.T("images.model_failed", "model", cfg.Images.Model, "error", ModelErrorSummary(err, cfg)))
+	}
+	w.tools.SetPainter(p, err, func(ctx context.Context, session, model string, usage *genai.GenerateContentResponseUsageMetadata) {
+		if session != "" && w.engine != nil {
+			w.engine.RecordImage(ctx, session, model, usage)
 		}
 	})
 }

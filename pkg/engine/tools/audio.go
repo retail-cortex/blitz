@@ -111,12 +111,16 @@ func (r *Registry) SetSpeaker(s Speaker, err error, cfg config.AudioConfig, bill
 func (r *Registry) SpeakerErr() error { return r.speech.get().err }
 
 // hidden reports whether a registered tool is left out of agents' lists
-// for now: generate_audio, without a speech model.
+// for now: generate_audio without a speech model, generate_image without
+// an image model.
 func (r *Registry) hidden(name string) bool {
-	if name != "generate_audio" {
-		return false
+	switch name {
+	case "generate_audio":
+		return r.speech.get().speaker == nil
+	case "generate_image":
+		return r.paint.get().painter == nil
 	}
-	return r.speech.get().speaker == nil
+	return false
 }
 
 // GenerateAudioInput defines arguments for generate_audio.

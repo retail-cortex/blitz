@@ -1003,6 +1003,11 @@ message GetSettingsResponse {
   // to offer only those (LoadImage and AddImage refuse others,
   // UNSUPPORTED_MEDIA).
   repeated AcceptedMedia accepted_media = 14;
+  // The image model generate_image draws with ([images] model,
+  // "provider/model"; "" for none).
+  string image_model = 15;
+  // Why the image model can't be used ("" when it can, or there's none).
+  string image_error = 16;
 }
 
 // AcceptedMedia is a kind of attachment a model takes.
