@@ -1891,6 +1891,8 @@ export function installFake() {
           const each = m.kind === "imagen" ? m.perPicture : ((m.sizeTokens[r.size] ?? 1120) * m.outputPerMtok) / 1e6;
           const n = m.kind === "imagen" ? Math.max(r.count, 1) : 1;
           if (r.estimate) return { costUsd: each * n + (r.search ? 0.014 : 0), priced: true };
+          // A model the organization's service won't draw with, as its gateway answers.
+          if (r.prompt.includes("unsupported")) throw new ConnectError("your organization's service: fast can't draw pictures: choose one of your organization's Gemini image models", Code.FailedPrecondition);
           let s = fakePictureSessions.find((x) => x.id === r.session);
           if (!s) {
             s = { id: `pic-${String(fakePictureSessions.length + 1).padStart(12, "0")}`, name: r.prompt.slice(0, 48), created: now(), updated: now(), turns: [] };

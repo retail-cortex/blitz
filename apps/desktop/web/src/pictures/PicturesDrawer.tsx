@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  mdiAlertCircleOutline,
   mdiAt,
   mdiBrushVariant,
   mdiChevronDown,
@@ -122,7 +123,11 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
   const [startFrom, setStartFrom] = useState("");
   const [busy, setBusy] = useState(false);
   const [estimate, setEstimate] = useState<{ usd: number; priced: boolean } | null>(null);
+  // Why the turn as set up won't be taken (the estimate's refusal), and why
+  // the last one failed (the model's or the service's answer): the first
+  // follows the settings, the second stays until something changes.
   const [problem, setProblem] = useState("");
+  const [failure, setFailure] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [folded, setFolded] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -133,7 +138,8 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
   const end = useRef<HTMLDivElement>(null);
 
   const model = models?.find((m) => m.ref === settings.model);
-  const can = controls(model);
+  // Built once per model: the request (and its estimate) follows what changes, not every render.
+  const can = useMemo(() => controls(model), [model]);
 
   // The models offered, the settings fitted to the chosen one.
   useEffect(() => {
@@ -214,6 +220,7 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
       setEstimate(null);
       return;
     }
+    setFailure("");
     const timer = setTimeout(() => {
       workspaces.makePicture(request(true)).then(
         (r) => {
@@ -236,18 +243,21 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
       return;
     }
     setBusy(true);
-    setProblem("");
+    setFailure("");
     try {
       const r = await workspaces.makePicture(request(false));
       if (r.session) setSession(r.session);
       const last = r.session?.turns.at(-1);
-      if (last?.problem) snack(last.problem, { error: true });
+      listSessions();
+      if (last?.problem) {
+        setFailure(last.problem); // the prompt stays, to try again
+        return;
+      }
       setPrompt("");
       setStartFrom("");
       if (model.kind === "gemini") setRefs([]);
-      listSessions();
     } catch (e) {
-      setProblem(message(e));
+      setFailure(message(e));
     } finally {
       setBusy(false);
     }
@@ -635,6 +645,13 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
                   {t("desktop.pictures.refining")}
                   <IconButton icon={mdiClose} small label={t("desktop.pictures.stop_refining")} onClick={() => setStartFrom("")} />
                 </span>
+              )}
+              {failure && (
+                <div className="card error row small-card pictures-failure" role="alert" style={{ gap: 8 }}>
+                  <Icon path={mdiAlertCircleOutline} size="sm" />
+                  <span className="t-body-sm spacer">{failure}</span>
+                  <IconButton icon={mdiClose} small label={t("desktop.close")} onClick={() => setFailure("")} />
+                </div>
               )}
               <textarea
                 className="input pictures-prompt"
