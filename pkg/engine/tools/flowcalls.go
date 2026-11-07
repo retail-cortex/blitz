@@ -93,3 +93,11 @@ func (r *Registry) CallMCP(ctx context.Context, server, tool string, args map[st
 	}
 	return cs.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
 }
+
+// ApproveDataWrite has a workflow's Data step's statement that writes
+// approved as the agents' execute_sql on its connection is (spec_059_data
+// DAT-21): the same rules, the same remembered answers (tool is that
+// tool's name, server the connections' server).
+func (r *Registry) ApproveDataWrite(ctx context.Context, server, tool, statement string) error {
+	return r.hooks.Approve(ctx, mcpApproval(server, tool, map[string]any{"sql": statement}))
+}

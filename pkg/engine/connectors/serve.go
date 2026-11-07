@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -221,13 +222,29 @@ func RunQuery(ctx context.Context, cat Catalog, env Env, conn Connection, run Qu
 	return q.Query(ctx, env, k, conn, run)
 }
 
-// paramValue is v (as JSON gave it) as a parameter of type typ: a whole
-// number for an integer, a number for a float.
+// paramValue is v (as JSON or a template gave it) as a parameter of
+// type typ: a whole number for an integer, a number for a float, a
+// boolean for a boolean.
 func paramValue(v any, typ string) any {
 	switch n := v.(type) {
 	case float64:
 		if typ == "integer" && n == math.Trunc(n) {
 			return int64(n)
+		}
+	case string: // a template's text
+		switch typ {
+		case "integer":
+			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
+				return i
+			}
+		case "float":
+			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil {
+				return f
+			}
+		case "boolean":
+			if b, err := strconv.ParseBool(strings.TrimSpace(n)); err == nil {
+				return b
+			}
 		}
 	case json.Number:
 		if typ == "float" {

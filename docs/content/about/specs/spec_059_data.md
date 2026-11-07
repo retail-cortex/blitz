@@ -7,8 +7,8 @@ weight: 59
 
 | | |
 |---|---|
-| Status | **Phase 1 built** (2026-11-07): the table, reading a query's columns and `RunConnectorQuery`. Phases 2–5 planned. The owner's decisions are in §10; one is still open. |
-| Source | the table format in `pkg/engine/datatable`; the query on a source's own connection in `third_party/mcp-toolbox/embed/query.go`, run by the databases backend (`pkg/engine/databases`, `connectors.RunQuery`); `RunConnectorQuery` in `pkg/service/server/connectors.go`. Planned: the Data step in `pkg/engine/flows` and the workflow runner; the chat's data context in the composer and `pkg/engine` attachments; `WorkspaceService` calls in `proto/blitz/v1/workspace.proto` |
+| Status | **Phases 1 and 2 built** (2026-11-07): the table, reading a query's columns, `RunConnectorQuery`, and the workflow **Data** step with Table output. Phases 3–5 planned. The owner's decisions are in §10. |
+| Source | the table format in `pkg/engine/datatable`; the query on a source's own connection in `third_party/mcp-toolbox/embed/query.go`, run by the databases backend (`pkg/engine/databases`, `connectors.RunQuery`); `RunConnectorQuery` in `pkg/service/server/connectors.go`. The Data step in `pkg/engine/flows` (its settings and checks), `pkg/engine/flowdata.go` (running it) and `apps/desktop/web/src/studio/DataStepFields.tsx` (its form); BigQuery in `third_party/mcp-toolbox/embed/query_bigquery.go`. Planned: streaming in in `pkg/engine/flows` and the workflow runner; the chat's data context in the composer and `pkg/engine` attachments; `WorkspaceService` calls in `proto/blitz/v1/workspace.proto` |
 | Depends on | [spec_043_workflows](spec_043_workflows.md) (steps, WF-13 data, WF-15 `for_each`), [spec_046_databases](spec_046_databases.md) (DB-07 read-only, DB-12 queries), [spec_047_connectors](spec_047_connectors.md) (CON-12 the query builder, CON-17 a connection off in a workspace), [spec_011_images](spec_011_images.md) (what a turn can carry), [spec_039_secrets](spec_039_secrets.md) |
 
 ## 1. Purpose
@@ -65,9 +65,9 @@ A connection lets the agents query a database when they decide to. Work often st
   - **Output**: **Table** (the whole result, default), **Chunks** of N rows (default 100), or **Rows** one at a time (DAT-31).
   - **Limit**: the most rows (default 1,000; at most 100,000), and the most bytes (default 8 MB).
 - **DAT-21** A step's SQL is checked as it's saved and before it runs: on a read-only connection (DB-07), a statement that writes is refused (the database refuses it too); on one that isn't, a statement that writes runs only when the step says **Allow writes**, and the run asks the person first, as a tool's write would, unless the job's permissions allow it (spec_023_workers WK-04, WK-05a). `ReadsOnly` (DB-19) decides what writes.
-- **DAT-22** A result past the limit is cut there: `truncated` is set, the step's text says so, and the run's record shows it (not an error; whether it should be one is open, §10).
-- **DAT-23** **Try it** in the step's form runs it as set up, on the templates' sample values (the previous step's last output when the workflow has run, else ones typed), and shows the table: columns with their types and descriptions, the first rows, how many. Nothing after it runs.
-- **DAT-24** Queries that cost money say so: a BigQuery query is dry-run first (bytes it will read, priced at the connection's rate, else BigQuery's on-demand $6.25 a TiB), and a run over the workspace's limit, or over the step's **Most it may cost** (unset: $1), stops with that as its problem. Studio's Try it shows the estimate before it runs.
+- **DAT-22** A result past the limit is cut there: `truncated` is set, the step's text says so, and the run's record shows it. **Fail when the result is over the limit** (`fail_when_cut`) makes it an error instead (§10).
+- **DAT-23** **Try it** in the step's form runs it as set up, read-only, on sample values typed for the parameters that hold templates, and shows the table: columns with their types and descriptions, the first 20 rows, how many. Nothing after it runs. Filling the samples from the previous step's last output is planned.
+- **DAT-24** Queries that cost money say so. A BigQuery query is dry-run first, as Toolbox's `execute_sql` does (with the source's write mode and dataset allow-list held). The bytes it will read are priced at BigQuery's on-demand $6.25 a TiB. A query over the step's **Most it may cost** (unset: $1) stops with that as its problem, and one that runs says its cost in the run. A connection's own rate, the workspace's limit and showing the estimate in Try it are planned.
 - **DAT-25** The step's secrets are the connection's (DB-11): never in the workflow file, never in what's handed on; error messages are masked (DB-05).
 
 ## 5. Handing on: whole, in chunks, or row by row
@@ -104,7 +104,7 @@ The table from each driver (types, lengths, descriptions, big integers and decim
 ## 9. Phases
 
 1. **Built.** The table (DAT-01–DAT-05), reading a query's columns (DAT-10, DAT-11 by source table) and `RunConnectorQuery` (DAT-50, without stream).
-2. The Data step with **Table** output, Try it, limits and costs (DAT-20–DAT-25, DAT-30).
+2. **Built.** The Data step with **Table** output, Try it, limits and costs (DAT-20–DAT-25, DAT-30).
 3. The chat: the menu, connection and query chips, `@db:` (DAT-40–DAT-44).
 4. Streaming: **Chunks** and **Rows** (DAT-31–DAT-33), the API's stream.
 5. The CLI (DAT-45).
@@ -116,6 +116,6 @@ The owner's answers (2026-11-07):
 1. `db_type` and `nullable` beside the four column fields, optional: **yes**.
 2. Rows as arrays in the table and as objects in a row item: **yes**.
 3. **Draft each run** from a description: **not at first**. A reviewed SQL runs every time.
-4. A result past its limit: the answer was "over the limit". It isn't yet clear whether that means the result is cut and the cut is said (`truncated`, as phase 1 does), or the run fails. **Open** until the Data step (phase 2).
+4. A result past its limit: **cut and said** by default, with a per-step **Fail when the result is over the limit** for the runs that must have it all (2026-11-07, the owner's "start then" on that proposal).
 5. The default output: **Table** up to 1,000 rows: **agreed**.
 6. The default most a BigQuery step may cost: **$1**.

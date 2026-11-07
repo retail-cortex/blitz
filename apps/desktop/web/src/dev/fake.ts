@@ -2300,6 +2300,31 @@ export function installFake() {
         tryConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
+        // A query's result as a table (spec_059_data DAT-50): a write refused when read-only.
+        runConnectorQuery: ({ statement, readOnly, maxRows }) => {
+          if (readOnly && /^\s*(insert|update|delete|drop|alter|create)\b/i.test(statement)) return { problem: "the connection is read-only: this statement writes" };
+          const rows = [
+            [1042, "Ada Lovelace", "128.50", "2026-11-06"],
+            [1043, "Grace Hopper", "64.00", "2026-11-06"],
+            [1044, null, "12.25", "2026-11-07"],
+          ];
+          const shown = rows.slice(0, maxRows || rows.length);
+          return {
+            table: {
+              columns: [
+                { name: "id", description: "The order's number", type: "integer", dbType: "int4" },
+                { name: "customer", description: "Who placed it", type: "string", length: 80n, dbType: "varchar", nullable: true },
+                { name: "total", description: "", type: "number", dbType: "numeric" },
+                { name: "placed", description: "", type: "date", dbType: "date" },
+              ],
+              rowsJson: JSON.stringify(shown),
+              total: shown.length,
+              truncated: shown.length < rows.length,
+              markdown: "",
+            },
+            problem: "",
+          };
+        },
         // Studio › Rules: gates before and after the agent, and instruction rules.
         listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
         saveRule: ({ workspace, previousName, rule }) => {

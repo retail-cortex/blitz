@@ -27,6 +27,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace/noop"
+
+	bigqueryds "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/bigquery"
 )
 
 // Column is a query result's column as its database describes it: its
@@ -52,16 +54,25 @@ type Result struct {
 // ErrWrites means a statement that writes, on a read-only source.
 var ErrWrites = errors.New("the connection is read-only: this statement writes")
 
-// ErrNoQuery means a source Query can't run statements on (BigQuery, whose
-// queries are billed: the caller estimates first).
+// ErrNoQuery means a source Query can't run statements on.
 var ErrNoQuery = errors.New("this kind of source can't be queried here")
 
-// Query runs statement (its parameters params) on cfg's source, read-only
-// when the source is, and reads its result with the driver's column
-// metadata (spec_059_data DAT-10): at most maxRows rows and about maxBytes
-// of values (the rest cut: Truncated). The source is opened for the query
-// and closed after it.
-func Query(ctx context.Context, cfg Config, source, statement string, params []any, maxRows, maxBytes int) (Result, error) {
+// QueryOptions are a query's parameters (in order) and limits: at most
+// MaxRows rows and about MaxBytes of values (0: no limit), the rest cut.
+// Billed, when set, is told the bytes a billed query (BigQuery's) will
+// read, from a dry run, before it runs; its error stops it.
+type QueryOptions struct {
+	Params   []any
+	MaxRows  int
+	MaxBytes int
+	Billed   func(bytes int64) error
+}
+
+// Query runs statement on cfg's source, read-only when the source is, and
+// reads its result with the driver's column metadata (spec_059_data
+// DAT-10), within opts' limits (the rest cut: Truncated). The source is
+// opened for the query and closed after it.
+func Query(ctx context.Context, cfg Config, source, statement string, opts QueryOptions) (Result, error) {
 	sc, ok := cfg.Sources[source]
 	if !ok {
 		return Result{}, fmt.Errorf("no source %q", source)
@@ -76,11 +87,14 @@ func Query(ctx context.Context, cfg Config, source, statement string, params []a
 	if c, ok := src.(interface{ Close() error }); ok {
 		defer c.Close()
 	}
+	params, maxRows, maxBytes := opts.Params, opts.MaxRows, opts.MaxBytes
 	switch s := src.(type) {
 	case interface{ PostgresPool() *pgxpool.Pool }:
 		return queryPostgres(ctx, s.PostgresPool(), src.IsReadOnly(), statement, params, maxRows, maxBytes)
 	case interface{ SQLiteDB() *sql.DB }:
 		return querySQL(ctx, s.SQLiteDB(), statement, params, maxRows, maxBytes)
+	case *bigqueryds.Source:
+		return queryBigQuery(ctx, s, statement, opts)
 	}
 	return Result{}, ErrNoQuery
 }
@@ -94,7 +108,7 @@ type budget struct {
 // fits reports whether one more row fits, counting its bytes as JSON, and
 // counts it when it does.
 func (b *budget) fits(row []any) bool {
-	if b.rows >= b.maxRows {
+	if b.maxRows > 0 && b.rows >= b.maxRows {
 		return false
 	}
 	n := 0

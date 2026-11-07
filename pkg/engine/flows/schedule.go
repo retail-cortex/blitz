@@ -58,6 +58,13 @@ func SchedulePermissions(f Flow) []string {
 			}
 		case Browser:
 			add("web:*")
+		case Data:
+			// A write is approved as the agents' execute_sql on its
+			// connection (the built-in databases category's server and
+			// prefix).
+			if n.AllowWrites && n.Connection != "" {
+				add("mcp:databases:db__" + n.Connection + "_execute_sql")
+			}
 		}
 	}
 	return out

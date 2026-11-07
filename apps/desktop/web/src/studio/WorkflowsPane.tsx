@@ -76,6 +76,7 @@ import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRun
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
 import { ComposeDialog } from "./ComposeDialog";
+import { DataStepFields } from "./DataStepFields";
 import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
@@ -157,6 +158,8 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
           ? hostOf(s.url)
           : s.type === "mcp_call"
             ? `${s.server} › ${s.tool}`
+            : s.type === "data"
+              ? `${s.connection} › ${s.dataFrom === "saved" ? s.savedQuery : "SQL"}`
             : s.type === "workflow"
               ? `/${s.workflow}`
               : s.type === "timer"
@@ -961,6 +964,7 @@ export function WorkflowsPane({
                         </Field>
                       </>
                     )}
+                    {step.type === "data" && <DataStepFields workspace={workspace} step={step} onChange={(patch) => setStep(step.id, patch)} />}
                     {step.type === "a2a_call" && (
                       <>
                         <Field label={t("desktop.flows.agent_url")} supporting={t("desktop.flows.agent_url_hint")}>

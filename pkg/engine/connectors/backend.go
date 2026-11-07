@@ -108,7 +108,8 @@ type Tryer interface {
 // Named) or a statement and its parameters in order; at most MaxRows rows
 // (DefaultRows when 0) and about MaxBytes of values (DefaultBytes), the
 // rest cut; ReadOnly refuses a statement that writes, whatever the
-// connection allows.
+// connection allows. Billed, when set, is told the bytes a billed query
+// (BigQuery's) will read before it runs; its error stops it (DAT-24).
 type QueryRun struct {
 	Query     string
 	Named     map[string]any
@@ -117,6 +118,7 @@ type QueryRun struct {
 	MaxRows   int
 	MaxBytes  int
 	ReadOnly  bool
+	Billed    func(bytes int64) error
 }
 
 // The limits of a query's result unless a run sets them.

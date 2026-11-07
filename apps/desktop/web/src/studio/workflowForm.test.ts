@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { flowModes, looser } from "../options";
-import { untakenName, unknownSteps, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { untakenName, unknownSteps, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates, paramValue } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -108,6 +108,23 @@ describe("the workflow canvas", () => {
     expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...each, forEach: "" }] }).nodes[0]).toMatchObject({ concurrency: 0 });
     const back = formFromWorkflow(create(WorkflowFileSchema, { name: "x", nodes: [{ id: "a", type: "api_call", url: "u", jsonBody: "{}", auth: { type: "basic", username: "me", scopes: [] } }] }));
     expect(back.steps[0]).toMatchObject({ method: "GET", bodyKind: "json", body: "{}", auth: { type: "basic", username: "me", in: "header" } });
+  });
+
+  it("keeps a data step's settings (spec_059_data)", () => {
+    const sql = { ...newStep("data", [], 0, 0), connection: "shop", sql: " SELECT * FROM orders WHERE id = ? ", params: ["{{ input }}", "42", "true"], describe: " recent ", maxRows: "50", allowWrites: true, maxCost: "0.5", server: "ignored" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [sql] }).nodes[0]).toMatchObject({ connection: "shop", savedQuery: "", sql: "SELECT * FROM orders WHERE id = ?", paramsJson: '["{{ input }}",42,true]', describe: "recent", maxRows: 50, allowWrites: true, maxCost: 0.5, server: "", argumentsJson: "" });
+    const saved = { ...sql, dataFrom: "saved" as const, savedQuery: "top", dataArgs: { n: "{{ input }}" } };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [saved] }).nodes[0]).toMatchObject({ savedQuery: "top", sql: "", paramsJson: "", describe: "", argumentsJson: '{"n":"{{ input }}"}' });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("agent", [], 0, 0), connection: "shop", maxRows: "9" }] }).nodes[0]).toMatchObject({ connection: "", maxRows: 0 });
+    expect(stepNeeds(newStep("data", [], 0, 0))).toBe("connection");
+    expect(stepNeeds({ ...newStep("data", [], 0, 0), connection: "shop" })).toBe("query");
+    expect(stepNeeds({ ...saved })).toBe("");
+    const back = formFromWorkflow(create(WorkflowFileSchema, { name: "x", nodes: [{ id: "d", type: "data", connection: "shop", savedQuery: "top", argumentsJson: '{"n": 3, "who": "{{ input }}"}' }, { id: "e", type: "data", connection: "shop", sql: "SELECT ?", paramsJson: '[1, "{{ input }}"]', maxRows: 10 }] }));
+    expect(back.steps[0]).toMatchObject({ dataFrom: "saved", dataArgs: { n: "3", who: "{{ input }}" } });
+    expect(back.steps[1]).toMatchObject({ dataFrom: "sql", params: ["1", "{{ input }}"], maxRows: "10" });
+    expect(paramValue(" 7 ")).toBe(7);
+    expect(paramValue("false")).toBe(false);
+    expect(paramValue("Ada")).toBe("Ada");
   });
 
   it("starts from templates", () => {

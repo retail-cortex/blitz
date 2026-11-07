@@ -3631,7 +3631,7 @@ message DraftEvalCasesResponse {
 message FlowNode {
   string id = 1;
   // agent, refine, summarize, accumulate, browser, script, read_file,
-  // save_file; email and data are shown, not run yet.
+  // save_file, data; email is shown, not run yet.
   string type = 2;
   string title = 3;
   // Where it sits on the canvas.
@@ -3684,6 +3684,28 @@ message FlowNode {
   // How long a timer waits (a Go duration), or until when (RFC 3339).
   string wait = 32;
   string until = 33;
+  // A data step's connection (one of the workspace's databases), and
+  // either a saved query of it (its parameters arguments_json, by name)
+  // or SQL (its parameters params_json, a JSON array in order); templates
+  // go into parameters only. describe is what the SQL was drafted from
+  // (spec_059_data DAT-20).
+  string connection = 34;
+  string saved_query = 35;
+  string sql = 36;
+  string params_json = 37;
+  string describe = 38;
+  // table (the default), chunks or rows; the rows in a chunk (0: 100).
+  string output = 39;
+  int32 chunk_rows = 40;
+  // The most rows (0: 1,000) and bytes (0: 8 MB) it hands on; past them
+  // the result is cut and said, or the step fails with fail_when_cut.
+  int32 max_rows = 41;
+  int32 max_bytes = 42;
+  bool fail_when_cut = 43;
+  // Its SQL may write (the run asks first).
+  bool allow_writes = 44;
+  // The most a billed query (BigQuery) may cost, in dollars (0: $1).
+  double max_cost = 45;
 }
 
 // A paused workflow run's task: a human task's form waiting for an

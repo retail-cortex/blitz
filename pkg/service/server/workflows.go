@@ -43,6 +43,12 @@ func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 		pn.ArgumentsJson, pn.JsonBody = jsonText(n.Arguments), jsonText(n.JSON)
 		pn.Workflow, pn.ForEach, pn.Concurrency = n.Workflow, n.ForEach, int32(n.Concurrency)
 		pn.Wait, pn.Until = n.Wait, n.Until
+		pn.Connection, pn.SavedQuery, pn.Sql, pn.Describe, pn.Output = n.Connection, n.SavedQuery, n.SQL, n.Describe, n.Output
+		if len(n.Params) > 0 {
+			pn.ParamsJson = jsonText(n.Params)
+		}
+		pn.ChunkRows, pn.MaxRows, pn.MaxBytes = int32(n.ChunkRows), int32(n.MaxRows), int32(n.MaxBytes)
+		pn.FailWhenCut, pn.AllowWrites, pn.MaxCost = n.FailWhenCut, n.AllowWrites, n.MaxCost
 		if n.Form != nil {
 			data, _ := json.MarshalIndent(n.Form, "", "  ")
 			pn.FormJson = string(data)
@@ -96,6 +102,14 @@ func workflowOf(m *pb.WorkflowFile) (flows.Flow, []string) {
 		fn.Server, fn.Tool, fn.URL, fn.Method, fn.Body = n.GetServer(), n.GetTool(), n.GetUrl(), n.GetMethod(), n.GetBody()
 		fn.Workflow, fn.ForEach, fn.Concurrency = n.GetWorkflow(), n.GetForEach(), int(n.GetConcurrency())
 		fn.Wait, fn.Until = n.GetWait(), n.GetUntil()
+		fn.Connection, fn.SavedQuery, fn.SQL, fn.Describe, fn.Output = n.GetConnection(), n.GetSavedQuery(), n.GetSql(), n.GetDescribe(), n.GetOutput()
+		fn.ChunkRows, fn.MaxRows, fn.MaxBytes = int(n.GetChunkRows()), int(n.GetMaxRows()), int(n.GetMaxBytes())
+		fn.FailWhenCut, fn.AllowWrites, fn.MaxCost = n.GetFailWhenCut(), n.GetAllowWrites(), n.GetMaxCost()
+		if s := strings.TrimSpace(n.GetParamsJson()); s != "" {
+			if err := json.Unmarshal([]byte(s), &fn.Params); err != nil {
+				probs = append(probs, fmt.Sprintf("step %s: the parameters aren't a JSON array: %v", n.GetId(), err))
+			}
+		}
 		if s := strings.TrimSpace(n.GetFormJson()); s != "" {
 			fn.Form = &flows.Form{}
 			if err := json.Unmarshal([]byte(s), fn.Form); err != nil {
