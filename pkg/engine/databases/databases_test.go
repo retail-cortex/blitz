@@ -289,6 +289,37 @@ func TestTestTryAndSchema(t *testing.T) {
 	assert.NotContains(t, err.Error(), "typed-pass")
 }
 
+// A query's result as a table, on the connection's own connection
+// (spec_059_data DAT-10); a write refused; secrets masked in its errors.
+func TestQuery(t *testing.T) {
+	ws := home(t)
+	_, cat, _ := catalog(t)
+	env := connectors.Env{Workspace: ws, Category: cat}
+	k := kindOf(t, "sqlite")
+	c := connectors.Connection{Name: "kitchen", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": recipes(t)}, Tools: []string{"execute_sql"}}
+	ctx := context.Background()
+	tab, err := Backend{}.Query(ctx, env, k, c, connectors.QueryRun{Statement: "SELECT name, minutes FROM recipes WHERE minutes > ? ORDER BY name", Params: []any{int64(0)}, MaxRows: 10})
+	require.NoError(t, err)
+	assert.Equal(t, "string", tab.Columns[0].Type)
+	assert.Equal(t, "INTEGER", strings.ToUpper(tab.Columns[1].DBType))
+	assert.Equal(t, "integer", tab.Columns[1].Type)
+	assert.Equal(t, 2, tab.Total)
+
+	_, err = Backend{}.Query(ctx, env, k, c, connectors.QueryRun{Statement: "DELETE FROM recipes", MaxRows: 10, ReadOnly: true})
+	assert.ErrorIs(t, err, embed.ErrWrites, "the run asks for read-only")
+	c.ReadOnly = true
+	_, err = Backend{}.Query(ctx, env, k, c, connectors.QueryRun{Statement: "DELETE FROM recipes", MaxRows: 10})
+	assert.ErrorIs(t, err, embed.ErrWrites, "the connection is read-only")
+
+	pg := connectors.Connection{Name: "shop", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "postgres", Settings: map[string]string{"host": "127.0.0.1", "port": "1", "database": "d", "user": "u", "password": "${DB_SHOP_PASSWORD}"}, Tools: []string{"execute_sql"}}
+	env.Values = map[string]string{"password": "typed-pass"}
+	_, err = Backend{}.Query(ctx, env, kindOf(t, "postgres"), pg, connectors.QueryRun{Statement: "SELECT 1", MaxRows: 10})
+	require.Error(t, err, "nothing listens on port 1")
+	assert.NotContains(t, err.Error(), "typed-pass")
+	_, err = Backend{}.Query(ctx, env, nil, connectors.Connection{Name: "x"}, connectors.QueryRun{Statement: "SELECT 1"})
+	assert.Error(t, err, "no kind, no file")
+}
+
 // BigQuery's table metadata gives its description and columns.
 func TestTableInfo(t *testing.T) {
 	about, cols := tableInfo(`{"Description": "Orders", "Schema": [{"Name": "day", "Type": "DATE", "Description": "When"}, {"Name": "qty", "Type": "INTEGER"}]}`)

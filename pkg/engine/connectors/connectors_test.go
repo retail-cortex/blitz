@@ -357,6 +357,27 @@ func TestCapabilities(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "recipes", tables[0].Name)
 
+	// A saved query by its name, its parameters by theirs (spec_059_data
+	// DAT-50); a statement; what's missing.
+	c.Queries = append(c.Queries, connectors.Query{Name: "longer", Description: "Longer names", Statement: "SELECT name FROM recipes WHERE length(name) > ? ORDER BY name", Params: []connectors.Param{{Name: "n", Type: "integer", Description: "Letters"}}})
+	tab, err := connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Query: "longer", Named: map[string]any{"n": 4.0}})
+	require.NoError(t, err)
+	assert.Equal(t, [][]any{{"bread"}}, tab.Rows)
+	tab, err = connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Query: "longer", Named: map[string]any{"n": json.Number("3")}})
+	require.NoError(t, err)
+	assert.Len(t, tab.Rows, 2)
+	tab, err = connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Statement: "SELECT name FROM recipes"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, tab.Total, "the default limits")
+	_, err = connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Query: "longer"})
+	assert.ErrorContains(t, err, "longer needs n")
+	_, err = connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Query: "nope"})
+	assert.ErrorContains(t, err, `no query "nope"`)
+	_, err = connectors.RunQuery(ctx, cat, env, c, connectors.QueryRun{Statement: " "})
+	assert.ErrorContains(t, err, "no statement")
+	_, err = connectors.RunQuery(ctx, cat, env, connectors.Connection{Name: "app", Category: "databases", Kind: "nope"}, connectors.QueryRun{Statement: "SELECT 1"})
+	assert.Error(t, err)
+
 	empty := filepath.Join(t.TempDir(), "empty.db")
 	edb, err := sql.Open("sqlite3", empty)
 	require.NoError(t, err)

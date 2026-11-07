@@ -39,6 +39,7 @@ go_library(
     deps = [
         "//pkg/config",
         "//pkg/engine/connectors/builtin",
+        "//pkg/engine/datatable",
         "//pkg/redact",
         "//pkg/secrets",
         "@in_gopkg_yaml_v3//:yaml_v3",

@@ -442,6 +442,11 @@ service WorkspaceService {
   // Reads a connection's tables and their columns, as written (the schema
   // capability); problem says why when it can read none.
   rpc ReadConnectorSchema(ReadConnectorSchemaRequest) returns (ReadConnectorSchemaResponse);
+  // Runs a statement, or one of a connection's saved queries, on the
+  // connection as written and returns its result as a table: its columns
+  // as the database describes them, its rows (spec_059_data DAT-50; the
+  // try capability). problem says why it didn't run.
+  rpc RunConnectorQuery(RunConnectorQueryRequest) returns (RunConnectorQueryResponse);
   // Drafts one of a connection's queries from what the user is looking
   // for: its schema is read (none read is the problem) and the sql-query
   // skill writes the query (the query-builder capability). Nothing is
@@ -4546,6 +4551,59 @@ message ReadConnectorSchemaRequest {
 message ReadConnectorSchemaResponse {
   repeated ConnectorTable tables = 1;
   // Why it read none ("" when it read some).
+  string problem = 2;
+}
+
+// Request message for WorkspaceService.RunConnectorQuery.
+message RunConnectorQueryRequest {
+  string workspace = 1;
+  Connector connection = 2;
+  map<string, string> secret_values = 3;
+  // One of the connection's saved queries, by name; its parameters are
+  // params_json's object, by name.
+  string query = 4;
+  // Or a statement; its parameters are params_json's array, in order.
+  string statement = 5;
+  string params_json = 6;
+  // The most rows the table holds (1,000 when 0); the rest are cut.
+  int32 max_rows = 7;
+  // Refuses a statement that writes, whatever the connection allows.
+  bool read_only = 8;
+}
+
+// A column of a query's result (spec_059_data DAT-02).
+message DataColumn {
+  string name = 1;
+  // Its comment in the schema ("" when none).
+  string description = 2;
+  // string, integer, number, boolean, date, time, timestamp, json, bytes
+  // or other.
+  string type = 3;
+  // Its declared length, when its type has one.
+  optional int64 length = 4;
+  // The database's own type.
+  string db_type = 5;
+  // Whether it may be NULL, when the database says.
+  optional bool nullable = 6;
+}
+
+// A query's result (spec_059_data DAT-01).
+message DataTable {
+  repeated DataColumn columns = 1;
+  // The rows, a JSON array of arrays in the columns' order.
+  string rows_json = 2;
+  // How many rows it holds.
+  int32 total = 3;
+  // A limit cut the query's rows.
+  bool truncated = 4;
+  // The table as Markdown, its first 50 rows.
+  string markdown = 5;
+}
+
+// Response message for WorkspaceService.RunConnectorQuery.
+message RunConnectorQueryResponse {
+  DataTable table = 1;
+  // Why it didn't run ("" when it did).
   string problem = 2;
 }
 

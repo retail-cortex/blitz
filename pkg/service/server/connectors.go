@@ -19,12 +19,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/engine/databases"
+	"github.com/retail-cortex/blitz/pkg/engine/datatable"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -354,6 +356,71 @@ func (h workspaceService) ReadConnectorSchema(ctx context.Context, r req[pb.Read
 	}
 	tables, problem := readIn(ctx, w.ConnectorSet(), r.Msg.Connection, r.Msg.SecretValues)
 	return ok(&pb.ReadConnectorSchemaResponse{Tables: tables, Problem: problem})
+}
+
+func (h workspaceService) RunConnectorQuery(ctx context.Context, r req[pb.RunConnectorQueryRequest]) (*connect.Response[pb.RunConnectorQueryResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Connection == nil {
+		return nil, invalid(errors.New("connection is required"))
+	}
+	run := connectors.QueryRun{Query: r.Msg.Query, Statement: r.Msg.Statement, MaxRows: int(r.Msg.MaxRows), ReadOnly: r.Msg.ReadOnly}
+	if run.Query != "" {
+		run.Named, err = argsOf(r.Msg.ParamsJson)
+	} else {
+		run.Params, err = paramsOf(r.Msg.ParamsJson)
+	}
+	if err != nil {
+		return ok(&pb.RunConnectorQueryResponse{Problem: err.Error()})
+	}
+	t, err := w.RunConnectorQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, run)
+	if err != nil {
+		return ok(&pb.RunConnectorQueryResponse{Problem: redact.Mask(err.Error())})
+	}
+	table, err := dataTableMsg(t)
+	if err != nil {
+		return nil, err
+	}
+	return ok(&pb.RunConnectorQueryResponse{Table: table})
+}
+
+// paramsOf is a statement's parameters, a JSON array ("" for none); whole
+// numbers stay whole.
+func paramsOf(text string) ([]any, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+	d := json.NewDecoder(strings.NewReader(text))
+	d.UseNumber()
+	var params []any
+	if err := d.Decode(&params); err != nil {
+		return nil, fmt.Errorf("the parameters aren't a JSON array: %w", err)
+	}
+	for i, p := range params {
+		if n, ok := p.(json.Number); ok {
+			if v, err := n.Int64(); err == nil {
+				params[i] = v
+			} else if f, err := n.Float64(); err == nil {
+				params[i] = f
+			}
+		}
+	}
+	return params, nil
+}
+
+// dataTableMsg is a query's result for the API, its values masked.
+func dataTableMsg(t datatable.Table) (*pb.DataTable, error) {
+	rows, err := json.Marshal(t.Rows)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.DataTable{RowsJson: redact.Mask(string(rows)), Total: int32(t.Total), Truncated: t.Truncated, Markdown: redact.Mask(t.Markdown(0))}
+	for _, c := range t.Columns {
+		out.Columns = append(out.Columns, &pb.DataColumn{Name: c.Name, Description: c.Description, Type: c.Type, Length: c.Length, DbType: c.DBType, Nullable: c.Nullable})
+	}
+	return out, nil
 }
 
 func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.DraftConnectorQueryRequest]) (*connect.Response[pb.DraftConnectorQueryResponse], error) {

@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "config.go",
         "embed.go",
+        "query.go",
     ],
     importpath = "github.com/retail-cortex/blitz/third_party/mcp-toolbox/embed",
     visibility = ["//visibility:public"],
@@ -72,13 +73,19 @@ go_library(
         "//third_party/mcp-toolbox/internal/util",
         "@com_github_goccy_go_yaml//:go-yaml",
         "@com_github_google_go_cmp//cmp",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
         "@in_gopkg_yaml_v3//:yaml_v3",
+        "@io_opentelemetry_go_otel_trace//noop",
     ],
 )
 
 go_test(
     name = "embed_test",
-    srcs = ["embed_test.go"],
+    srcs = [
+        "embed_test.go",
+        "query_test.go",
+    ],
     data = ["//third_party/mcp-toolbox:VERSION"],
     embed = [":embed"],
     deps = [

@@ -19,13 +19,15 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/datatable"
 )
 
 // Backend serves kinds of connectors: it writes and reads their files and
 // turns a category's files into MCP servers. What else it can do is the
-// optional interfaces below (Tester, Tryer, SchemaReader), which
+// optional interfaces below (Tester, Tryer, Querier, SchemaReader), which
 // Capabilities lists.
 type Backend interface {
 	// ID is the name kinds give it (toolbox).
@@ -99,6 +101,36 @@ type Tester interface {
 // that's the tool's error.
 type Tryer interface {
 	Try(ctx context.Context, env Env, k *Kind, c Connection, tool string, args map[string]any) (string, bool, error)
+}
+
+// QueryRun is a statement to run on a connection (spec_059_data DAT-50):
+// a saved query of the connection by its name (Query, its parameters
+// Named) or a statement and its parameters in order; at most MaxRows rows
+// (DefaultRows when 0) and about MaxBytes of values (DefaultBytes), the
+// rest cut; ReadOnly refuses a statement that writes, whatever the
+// connection allows.
+type QueryRun struct {
+	Query     string
+	Named     map[string]any
+	Statement string
+	Params    []any
+	MaxRows   int
+	MaxBytes  int
+	ReadOnly  bool
+}
+
+// The limits of a query's result unless a run sets them.
+var (
+	DefaultRows  = 1000
+	DefaultBytes = 8 << 20
+	// QueryTimeout bounds connecting and running a query.
+	QueryTimeout = 2 * time.Minute
+)
+
+// Querier runs a statement on a connection, as written, and reads its
+// result as a table, its columns described by the driver (DAT-10).
+type Querier interface {
+	Query(ctx context.Context, env Env, k *Kind, c Connection, run QueryRun) (datatable.Table, error)
 }
 
 // SchemaReader reads a connection's tables and their columns; ErrNoTables

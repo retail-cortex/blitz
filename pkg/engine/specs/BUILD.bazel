@@ -24,7 +24,7 @@ go_library(
         "specs.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/specs",
-    visibility = ["//visibility:public"],
+    visibility = ["//pkg/engine:__subpackages__"],
 )
 
 go_test(

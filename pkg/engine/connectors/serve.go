@@ -18,12 +18,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/datatable"
 )
 
 // ServeOptions is what With serves from: the folders, which workspace
@@ -175,6 +180,67 @@ func TryTool(ctx context.Context, cat Catalog, env Env, conn Connection, tool st
 		return "", false, err
 	}
 	return b.(Tryer).Try(ctx, env, k, conn, tool, args)
+}
+
+// RunQuery runs run on conn as written (a connection that may run its
+// tools may run a query) and reads its result as a table: a saved query's
+// parameters are put in its order, each its declared type.
+func RunQuery(ctx context.Context, cat Catalog, env Env, conn Connection, run QueryRun) (datatable.Table, error) {
+	b, k, conn, err := can(cat, &env, conn, Try)
+	if err != nil {
+		return datatable.Table{}, err
+	}
+	q, ok := b.(Querier)
+	if !ok {
+		return datatable.Table{}, fmt.Errorf("%s can't run a query", conn.Name)
+	}
+	if run.Query != "" {
+		i := slices.IndexFunc(conn.Queries, func(q Query) bool { return q.Name == run.Query })
+		if i < 0 {
+			return datatable.Table{}, fmt.Errorf("%s has no query %q", conn.Name, run.Query)
+		}
+		saved := conn.Queries[i]
+		run.Statement, run.Params = saved.Statement, nil
+		for _, p := range saved.Params {
+			v, ok := run.Named[p.Name]
+			if !ok {
+				return datatable.Table{}, fmt.Errorf("%s needs %s", saved.Name, p.Name)
+			}
+			run.Params = append(run.Params, paramValue(v, p.Type))
+		}
+	}
+	if strings.TrimSpace(run.Statement) == "" {
+		return datatable.Table{}, errors.New("there's no statement to run")
+	}
+	if run.MaxRows <= 0 {
+		run.MaxRows = DefaultRows
+	}
+	if run.MaxBytes <= 0 {
+		run.MaxBytes = DefaultBytes
+	}
+	return q.Query(ctx, env, k, conn, run)
+}
+
+// paramValue is v (as JSON gave it) as a parameter of type typ: a whole
+// number for an integer, a number for a float.
+func paramValue(v any, typ string) any {
+	switch n := v.(type) {
+	case float64:
+		if typ == "integer" && n == math.Trunc(n) {
+			return int64(n)
+		}
+	case json.Number:
+		if typ == "float" {
+			f, _ := n.Float64()
+			return f
+		}
+		if i, err := n.Int64(); err == nil {
+			return i
+		}
+		f, _ := n.Float64()
+		return f
+	}
+	return v
 }
 
 // ReadSchema reads conn's tables and their columns: ErrNoTables, saying

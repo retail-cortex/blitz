@@ -30,7 +30,9 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
+	"github.com/retail-cortex/blitz/pkg/engine/datatable"
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/embed"
 )
 
 // schemaTool is the tool a schema read adds to the connection: a name no
@@ -263,26 +265,52 @@ func maskText(values map[string]string, s string) string {
 
 // startWith is with, unmasked.
 func startWith(ctx context.Context, env connectors.Env, k *connectors.Kind, c connectors.Connection, extra []*yaml.Node, f func(context.Context, *mcp.ClientSession, []string) error) error {
-	text, err := Backend{}.Render(env.Category, k, c)
+	t, done, err := written(env, k, c, extra)
 	if err != nil {
 		return err
+	}
+	defer done()
+	ctx, cancel := context.WithTimeout(ctx, connectors.TestTimeout)
+	defer cancel()
+	client := mcp.NewClient(&mcp.Implementation{Name: "blitz", Version: "studio"}, nil)
+	cs, err := client.Connect(ctx, t, nil)
+	if err != nil {
+		return err
+	}
+	defer cs.Close()
+	var readOnly []string
+	if loaded, err := loadConfig(ctx, t.files, t.vars); err == nil {
+		readOnly = readOnlyTools(loaded)
+	}
+	return f(ctx, cs, readOnly)
+}
+
+// written writes c (with extra tools) to a temporary file and is how
+// Toolbox loads it: its secrets (the ones typed in the form, then the
+// vault's it may reach) and where its paths start (where c belongs);
+// done removes the file.
+func written(env connectors.Env, k *connectors.Kind, c connectors.Connection, extra []*yaml.Node) (*transport, func(), error) {
+	text, err := Backend{}.Render(env.Category, k, c)
+	if err != nil {
+		return nil, nil, err
 	}
 	if len(extra) > 0 {
 		var b bytes.Buffer
 		b.WriteString(strings.TrimRight(text, "\n") + "\n---\n")
 		if err := encode(&b, extra); err != nil {
-			return err
+			return nil, nil, err
 		}
 		text = b.String()
 	}
 	tmp, err := os.MkdirTemp("", "blitz-connector-")
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	defer os.RemoveAll(tmp)
+	done := func() { os.RemoveAll(tmp) }
 	file := filepath.Join(tmp, c.Name+".yaml")
 	if err := os.WriteFile(file, []byte(text), 0o600); err != nil {
-		return err
+		done()
+		return nil, nil, err
 	}
 	scope := env.SecretScope(c.Scope)
 	reach := secrets.AnyScope
@@ -295,24 +323,45 @@ func startWith(ctx context.Context, env connectors.Env, k *connectors.Kind, c co
 			vars[connectors.SecretKey(env.Category, c.Name, key)] = v
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, connectors.TestTimeout)
-	defer cancel()
 	// Written in a temporary folder: its paths start where c belongs.
 	base := scopeBase(c.Scope, env.Workspace)
 	kinds := connectors.Load(env.Prefix, env.Workspace).Kinds
 	if k != nil {
 		kinds = append(kinds, *k)
 	}
-	t := &transport{files: []string{file}, vars: vars, keys: pathKeys(kinds), base: func(string) string { return base }}
-	client := mcp.NewClient(&mcp.Implementation{Name: "blitz", Version: "studio"}, nil)
-	cs, err := client.Connect(ctx, t, nil)
+	return &transport{files: []string{file}, vars: vars, keys: pathKeys(kinds), base: func(string) string { return base }}, done, nil
+}
+
+// Query runs run's statement on c as written, on its own connection
+// (spec_059_data DAT-10): read-only when c is, or when run is, and its
+// result read with the driver's column metadata.
+func (Backend) Query(ctx context.Context, env connectors.Env, k *connectors.Kind, c connectors.Connection, run connectors.QueryRun) (datatable.Table, error) {
+	if run.ReadOnly && !ReadsOnly(run.Statement) {
+		return datatable.Table{}, embed.ErrWrites
+	}
+	t, done, err := written(env, k, c, nil)
 	if err != nil {
-		return err
+		return datatable.Table{}, maskTyped(env.Values, err)
 	}
-	defer cs.Close()
-	var readOnly []string
-	if loaded, err := loadConfig(ctx, []string{file}, vars); err == nil {
-		readOnly = readOnlyTools(loaded)
+	defer done()
+	ctx, cancel := context.WithTimeout(ctx, connectors.QueryTimeout)
+	defer cancel()
+	cfg, err := t.config(ctx)
+	if err != nil {
+		return datatable.Table{}, maskTyped(env.Values, err)
 	}
-	return f(ctx, cs, readOnly)
+	r, err := embed.Query(ctx, cfg, c.Name, run.Statement, run.Params, run.MaxRows, run.MaxBytes)
+	if err != nil {
+		return datatable.Table{}, maskTyped(env.Values, err)
+	}
+	return tableOf(r), nil
+}
+
+// tableOf is a query's result as a table (DAT-01).
+func tableOf(r embed.Result) datatable.Table {
+	cols := make([]datatable.Column, len(r.Columns))
+	for i, c := range r.Columns {
+		cols[i] = datatable.Column{Name: c.Name, Description: c.Description, DBType: c.DBType, Length: c.Length, Nullable: c.Nullable}
+	}
+	return datatable.New(cols, r.Rows, r.Truncated)
 }
