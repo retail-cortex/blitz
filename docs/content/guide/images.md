@@ -1,9 +1,9 @@
 ---
-title: Attachments, PDFs and audio
+title: Attachments, pictures, PDFs and audio
 weight: 80
 ---
 
-Specs: [attachments](../about/specs/spec_011_images.md), [file tools](../about/specs/spec_006_filetools.md) (`export_pdf`, `generate_audio`), [models](../about/specs/spec_015_models.md) (speech).
+Specs: [attachments](../about/specs/spec_011_images.md), [file tools](../about/specs/spec_006_filetools.md) (`export_pdf`, `generate_audio`, `generate_image`), [models](../about/specs/spec_015_models.md) (speech, pictures).
 
 ## What you can attach
 
@@ -79,6 +79,22 @@ In the desktop app it's **Speech model** in a workspace's settings, under **Agen
 - It asks first (it sends the text to the provider), and its cost goes in the session's `/cost`. With `sandbox.allow_network = false` it's refused.
 - The desktop app plays `.wav`, `.mp3`, `.m4a`, `.ogg`, `.opus` and `.flac` files when you open them.
 - The next model in the conversation can hear what it made, if it takes audio (Gemini does).
+
+## Pictures
+
+Ask for a picture ("draw a poster for the study group", "make our logo blue") and the agent draws it with `generate_image`, whatever model you talk to. Set an image model first:
+
+```toml
+[images]
+model = "gemini/gemini-3.1-flash-image"   # or gemini-3.1-flash-lite-image, gemini-3-pro-image
+```
+
+In the desktop app it's **Image model** in a workspace's settings, under **Agent and model**. Until one is set, agents don't have the tool, and the agent tells you to set one.
+
+- The picture goes into the workspace (`images/poster.png`) and shows in the conversation, with **Save**. The agent sees it too, so you can ask for changes.
+- To change a picture or match its style, mention it: "make @logo.png blue". Up to three PNG, JPEG or WebP pictures go with the request.
+- The agent can ask for a shape (`16:9`, `9:16`, `1:1` and others) and a size (1K, 2K or 4K; larger costs more).
+- It asks first (it sends the prompt, and any pictures, to Google), and its cost goes in the session's `/cost`: about $0.07 a 1K picture with 3.1 Flash Image, $0.13 with 3 Pro Image. With `sandbox.allow_network = false` it's refused.
 
 ## What a model makes
 

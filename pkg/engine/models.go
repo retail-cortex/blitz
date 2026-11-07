@@ -229,6 +229,8 @@ func (w *Workspace) Settings() api.Settings {
 		Style:          w.styleName(),
 		SpeechModel:    w.cfg.Audio.Model,
 		SpeechError:    errText(w.tools.SpeakerErr()),
+		ImageModel:     w.cfg.Images.Model,
+		ImageError:     errText(w.tools.PainterErr()),
 	}
 }
 
@@ -297,11 +299,13 @@ func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) err
 		c.LLM = cfg.LLM
 		c.Blitz.DefaultModel = cfg.Blitz.DefaultModel
 		c.Audio = cfg.Audio
+		c.Images.Model = cfg.Images.Model
 		c.Health = cfg.Health         // the dashboard's judge and schedule, set from it
 		c.Harness = cfg.Harness       // and the reflector's
 		c.Enterprise = cfg.Enterprise // the organization whose models these are
 	})
 	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
+	w.setupPainter(ctx, func(string) {}) // and generate_image once there's a painter
 	w.setupUploader(ctx, func(string) {})
 	return w.rebuildModels(ctx)
 }

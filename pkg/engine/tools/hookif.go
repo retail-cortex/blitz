@@ -58,6 +58,15 @@ func CallTargets(tool string, args map[string]any) map[string][]string {
 	case "generate_audio":
 		add(RuleRead, str("text_path"))
 		add(RuleWrite, str("path"))
+	case "generate_image":
+		if refs, ok := args["images"].([]any); ok {
+			for _, ref := range refs {
+				if p, ok := ref.(string); ok {
+					add(RuleRead, p)
+				}
+			}
+		}
+		add(RuleWrite, str("path"))
 	case "export_pdf": // path, or markdown given
 		add(RuleRead, str("path"))
 		add(RuleWrite, ExportPDFOutputPath(str("path"), str("output")))

@@ -985,6 +985,13 @@ export function Conversation({
                     <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} />
                   ) : x.name === "create_job" && typeof x.result?.name === "string" && x.result.paused === true ? (
                     <JobCard key={`job-${x.result.name}`} dir={dir} name={x.result.name} />
+                  ) : x.name === "generate_image" && typeof x.result?.image_uri === "string" && typeof x.result.path === "string" ? (
+                    // The picture it drew, shown where it was made (FS-80).
+                    <ModelFile
+                      key={x.result.image_uri}
+                      dir={dir}
+                      entry={{ kind: "file", uri: x.result.image_uri, name: x.result.path, mime: String(x.result.mime_type ?? "image/png"), size: Number(x.result.bytes ?? 0) }}
+                    />
                   ) : null,
                 )}
               </div>
@@ -1399,6 +1406,7 @@ function toolIcon(name: string): string {
   if (name === "export_pdf") return mdiFilePdfBox;
   if (name === "export_docx") return mdiFileWordBoxOutline;
   if (name === "generate_audio") return mdiVolumeHigh;
+  if (name === "generate_image") return mdiImageOutline;
   if (name === "view_media") return mdiFileVideoOutline;
   if (/^(read_file|list_files|view_image|view_document)$/.test(name)) return mdiFileDocumentOutline;
   if (/^(glob|grep|list_or_search_skills)$/.test(name)) return mdiMagnify;

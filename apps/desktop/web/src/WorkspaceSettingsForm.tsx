@@ -124,6 +124,7 @@ function Section({
 
 /** Speech models to suggest for [audio] model: Gemini's and OpenAI's. */
 const speechModels = ["gemini/gemini-2.5-flash-preview-tts", "gemini/gemini-2.5-pro-preview-tts", "openai/gpt-4o-mini-tts", "openai/tts-1-hd"];
+const imageModels = ["gemini/gemini-3.1-flash-image", "gemini/gemini-3.1-flash-lite-image", "gemini/gemini-3-pro-image"];
 
 /**
  * A workspace's settings as one form of folding cards (Settings ›
@@ -210,6 +211,8 @@ export function WorkspaceSettingsForm({
   // Rules and approvals changed elsewhere (the settings, a terminal, a file).
   useOnConfigChanged(dir, load);
   useEffect(() => setSpeechRef(settings?.speechModel ?? ""), [settings?.speechModel]);
+  const [imageRef, setImageRef] = useState("");
+  useEffect(() => setImageRef(settings?.imageModel ?? ""), [settings?.imageModel]);
   useEffect(() => {
     setModelRef(model);
     if (!settings?.model) return;
@@ -322,6 +325,35 @@ export function WorkspaceSettingsForm({
                 />
                 <datalist id={`${id}-speech`}>
                   {speechModels.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </>
+            )}
+          </Field>
+          <Field label={t("desktop.rs.image_model")} supporting={t("desktop.rs.image_model_help")} error={settings?.imageError || undefined}>
+            {(id) => (
+              <>
+                <input
+                  id={id}
+                  className="input mono"
+                  list={`${id}-image`}
+                  value={imageRef}
+                  placeholder={t("desktop.rs.image_model_none")}
+                  spellCheck={false}
+                  onChange={(e) => setImageRef(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  onBlur={() => {
+                    const ref = imageRef.trim();
+                    if (ref === (settings?.imageModel ?? "")) return;
+                    act(
+                      () => config.setConfigValue({ workspace: dir, key: "images.model", value: ref }),
+                      ref ? t("desktop.rs.image_model_set", { model: ref }) : t("desktop.rs.image_model_off"),
+                    );
+                  }}
+                />
+                <datalist id={`${id}-image`}>
+                  {imageModels.map((m) => (
                     <option key={m} value={m} />
                   ))}
                 </datalist>

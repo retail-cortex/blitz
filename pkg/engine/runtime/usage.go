@@ -208,7 +208,13 @@ func (t *UsageTracker) RecordCall(ctx context.Context, session, model string, m 
 // the conversation's. Without usage (a provider that reports none) the
 // cost is unknown. It returns the call for the session's ledger.
 func (t *UsageTracker) RecordSpeech(ctx context.Context, session, model string, m *genai.GenerateContentResponseUsageMetadata) api.Call {
-	c := t.bill(ctx, Charge{Session: session, Purpose: api.PurposeSpeech, Model: model, Usage: m})
+	return t.RecordMedia(ctx, session, api.PurposeSpeech, model, m)
+}
+
+// RecordMedia adds a call made for purpose by a model that makes media
+// (speech, pictures) to session, as RecordSpeech describes.
+func (t *UsageTracker) RecordMedia(ctx context.Context, session, purpose, model string, m *genai.GenerateContentResponseUsageMetadata) api.Call {
+	c := t.bill(ctx, Charge{Session: session, Purpose: purpose, Model: model, Usage: m})
 	c.Usage.LastPrompt = 0
 	t.add(session, c.Usage)
 	return c
