@@ -21,7 +21,7 @@
 // (terminalOnly) are named in /help with the window's way instead.
 import { config, files, sessions, workspaces } from "./api";
 import { copyText } from "./clipboard";
-import { openDocs, showLicense } from "./events";
+import { openDocs, showLicense, showView } from "./events";
 import { loadAppDocs } from "./docs/load";
 import { searchDocs } from "./docs/index";
 import { language, t, tn } from "./i18n";
@@ -785,6 +785,16 @@ export const builtinCommands: Builtin[] = [
         return c.say(t("envs.removed", { key }));
       }
       c.say(t("envs.usage"), "error");
+    },
+  },
+  {
+    // Pictures (spec_058 PIC-10): the panel, with what to draw as its first prompt.
+    name: "picture",
+    args: "[what to draw]",
+    group: "work",
+    describe: "help.picture",
+    run(c) {
+      showView({ dir: c.dir, view: "pictures", picture: { prompt: c.args.trim() || undefined } });
     },
   },
   {

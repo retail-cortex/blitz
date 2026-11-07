@@ -69,6 +69,7 @@ import {
   mdiArrowCollapse,
   mdiPuzzleOutline,
   mdiLoading,
+  mdiBrushVariant,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workers, workspaces } from "./api";
 import { ModelFile } from "./ModelFile";
@@ -2164,6 +2165,7 @@ function Composer({
             />
           </>
         )}
+        {!running && <IconButton icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
         {!running && <IconButton icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />

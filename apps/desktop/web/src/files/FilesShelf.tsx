@@ -47,9 +47,10 @@ import {
   mdiTrayArrowDown,
   mdiUndoVariant,
   mdiWeb,
+  mdiBrushVariant,
 } from "@mdi/js";
 import { canCall, canDragOut, droppedPaths, dragOut, fileManager, openURL, revealPath, servePage, trashDropped } from "../desktop";
-import { addToContext, openWeb, showHistory } from "../events";
+import { addToContext, openWeb, showHistory, showView } from "../events";
 import { includeAll } from "../includeAll";
 import { files } from "../api";
 import { message } from "../errors";
@@ -462,6 +463,14 @@ export function FilesShelf({
       { label: t("desktop.files.new_file"), icon: mdiFilePlusOutline, onSelect: () => void startNew("file", folder) },
       { label: t("desktop.files.new_folder"), icon: mdiFolderPlusOutline, onSelect: () => void startNew("folder", folder) },
     );
+    // Pictures (spec_058 PIC-10): a picture to start from, or a folder to save in.
+    if (e && e.agentRule !== "blocked" && (isFolder(e) || /\.(png|jpe?g|webp)$/i.test(e.name))) {
+      items.push(
+        isFolder(e)
+          ? { label: t("desktop.files.picture_here"), icon: mdiBrushVariant, onSelect: () => showView({ dir, view: "pictures", picture: { folder: e.path } }) }
+          : { label: t("desktop.files.edit_in_pictures"), icon: mdiBrushVariant, onSelect: () => showView({ dir, view: "pictures", picture: { reference: e.path } }) },
+      );
+    }
     if (e && e.agentRule !== "blocked") {
       const path = isFolder(e) ? `${e.path}/` : e.path;
       items.push(

@@ -1,0 +1,85 @@
+/*
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Pictures (spec_058_pictures): the controls at the left (folding to a
+   strip), the session at the right, its prompt at the foot. */
+.pictures-drawer > .body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pictures { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; grid-template-rows: minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; height: 100%; overflow: hidden; }
+.pictures.is-folded { grid-template-columns: 40px 1fr; }
+.pictures-controls { display: flex; flex-direction: column; min-height: 0; overflow: auto; border-right: 1px solid var(--md-outline-variant); padding-right: 12px; }
+.pictures.is-folded .pictures-controls { padding-right: 0; }
+.pictures-controls-head { gap: 6px; margin-bottom: 6px; }
+.pictures-fields { gap: 14px; }
+.pictures-pills { gap: 6px; flex-wrap: wrap; }
+.pictures-pills .chip { cursor: pointer; }
+.pictures-pills .chip.selected { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+
+/* Shapes, drawn as themselves (PIC-25). */
+.pictures-ratios { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
+.pictures-ratio { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-sm); background: transparent; color: var(--md-on-surface); cursor: pointer; }
+.pictures-ratio:hover { background: var(--md-surface-container-low); }
+.pictures-ratio.selected { border-color: var(--accent-a); background: color-mix(in srgb, var(--accent-a) 10%, transparent); }
+.pictures-ratio-shape { display: block; border: 1.5px solid currentColor; border-radius: 2px; }
+
+/* References (PIC-23). */
+.pictures-drop { min-height: 76px; padding: 8px; border: 1px dashed var(--md-outline); border-radius: var(--field-radius); display: flex; flex-direction: column; gap: 6px; }
+.pictures-drop:focus-visible { outline: none; border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
+.pictures-refs { display: flex; flex-wrap: wrap; gap: 8px; }
+.pictures-ref { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.pictures-ref > .icon-btn { position: absolute; top: -6px; right: -6px; background: var(--md-surface-container-high); }
+.pictures-ref-role { font-size: 11px; padding: 0 2px; max-width: 72px; border: none; background: transparent; color: var(--md-on-surface-variant); }
+.pictures-role { width: auto; min-height: 32px; padding-top: 4px; padding-bottom: 4px; }
+.pictures-thumb { display: block; object-fit: cover; border-radius: var(--md-shape-sm); background: var(--md-surface-container); width: 64px; height: 64px; }
+.pictures-advanced-toggle { gap: 4px; border: none; background: transparent; color: var(--md-on-surface); cursor: pointer; padding: 0; }
+
+/* The session: turns, newest at the bottom, the prompt under them. */
+.pictures-session { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.pictures-turns { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 18px; padding: 4px 4px 12px; }
+.pictures-empty { margin: auto; text-align: center; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pictures-turn { gap: 8px; }
+.pictures-ask { gap: 6px; align-self: flex-end; max-width: 80%; padding: 10px 14px; border-radius: var(--md-shape-lg); background: var(--md-surface-container-high); }
+.pictures-thoughts-toggle { gap: 4px; border: none; background: transparent; padding: 0; cursor: pointer; align-self: flex-start; }
+.pictures-thoughts { white-space: pre-wrap; margin: 0; padding-left: 20px; }
+.pictures-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.pictures-result { margin: 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; background: var(--md-surface); }
+.pictures-result img { display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain; background: var(--md-surface-container-low); }
+.pictures-result-wait { display: block; aspect-ratio: 1; background: var(--md-surface-container-low); }
+.pictures-result figcaption { padding: 4px 6px; border-top: 1px solid var(--md-outline-variant); align-items: center; gap: 2px; }
+.pictures-zoom { display: block; width: 100%; padding: 0; border: none; background: none; cursor: zoom-in; }
+/* The actions, centred; each label shows at once above it (as the composer's key hint). */
+.pictures-actions { justify-content: center; gap: 2px; flex-wrap: wrap; }
+.pictures-action { position: relative; display: inline-flex; }
+.pictures-action::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); z-index: 40; white-space: nowrap; pointer-events: none;
+  padding: 6px 10px; border-radius: var(--md-shape-xs); background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); font: 400 12px/16px var(--md-font);
+  opacity: 0; transform: translate(-50%, 2px); transition: opacity 0.12s, transform 0.12s;
+}
+.pictures-action:hover::after, .pictures-action:focus-within::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.15s; }
+.pictures-saved { border: none; background: transparent; color: var(--accent-a); cursor: pointer; padding: 0 4px; text-align: center; }
+/* Full size, over everything. */
+.pictures-viewer { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 56px 32px 32px; background: rgba(0, 0, 0, 0.88); cursor: zoom-out; }
+.pictures-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--md-shape-sm); box-shadow: var(--md-elevation-3); cursor: default; }
+.pictures-viewer .pictures-viewer-close { position: absolute; top: 12px; right: 16px; color: #fff; background: rgba(255, 255, 255, 0.12); }
+.pictures-composer { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--md-outline-variant); }
+.pictures-prompt { resize: vertical; }
+.pictures-pick { max-height: 50vh; overflow: auto; }
+.pictures-none { max-width: 520px; margin: 24px auto; }
+
+/* Narrow: the controls above the session (PIC-20). */
+@media (max-width: 760px) {
+  .pictures, .pictures.is-folded { grid-template-columns: 1fr; }
+  .pictures-controls { border-right: none; border-bottom: 1px solid var(--md-outline-variant); padding: 0 0 12px; max-height: 45vh; }
+}

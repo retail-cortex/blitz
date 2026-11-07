@@ -16,6 +16,12 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -405,4 +411,168 @@ func TestSpecsNeedAWorkspace(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	_, err = c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: dir, Path: "x.md"}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+// Pictures over the API without a model: nothing offered, a turn refused,
+// what isn't there not found (spec_058_pictures).
+func TestPicturesOverTheAPI(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	models, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, models.Msg.Models)
+	assert.Equal(t, "pictures", models.Msg.Folder)
+	_, err = c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: "gemini/gemini-4-argon", Prompt: "x"}))
+	assert.Error(t, err)
+	list, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Sessions)
+	id := "pic-000000000000"
+	for name, call := range map[string]func() error{
+		"get": func() error {
+			_, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: dir, Id: id}))
+			return err
+		},
+		"rename": func() error {
+			_, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: dir, Id: id, Name: "x"}))
+			return err
+		},
+		"delete": func() error {
+			_, err := c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: dir, Id: id}))
+			return err
+		},
+		"read": func() error {
+			_, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+		"save": func() error {
+			_, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+		"drop": func() error {
+			_, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+	} {
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(call()), name)
+	}
+	ws := "relative"
+	for name, call := range map[string]func() error{
+		"models": func() error {
+			_, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: ws}))
+			return err
+		},
+		"make": func() error {
+			_, err := c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: ws}))
+			return err
+		},
+		"sessions": func() error {
+			_, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: ws}))
+			return err
+		},
+		"get": func() error {
+			_, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"rename": func() error {
+			_, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"delete": func() error {
+			_, err := c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"read": func() error {
+			_, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: ws}))
+			return err
+		},
+		"save": func() error {
+			_, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: ws}))
+			return err
+		},
+		"drop": func() error {
+			_, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: ws}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
+}
+
+// Pictures over the API with a key and a session on disk: the models and
+// what they can do, an estimate, and a session listed, read, saved,
+// renamed and deleted (spec_058_pictures).
+func TestPictureSessionsOverTheAPI(t *testing.T) {
+	store := t.TempDir()
+	c, _ := serve(t, func(cfg *config.Config) {
+		cfg.Session.StorageDir = store
+		cfg.LLM.Gemini.APIKey = "k" // listing and estimates call nothing
+	})
+	ctx := context.Background()
+	dir := t.TempDir()
+	models, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.NotEmpty(t, models.Msg.Models)
+	nano := models.Msg.Models[0]
+	assert.Equal(t, "gemini/gemini-nano-banana-2.1", nano.Ref)
+	assert.EqualValues(t, 3767, nano.SizeTokens["4K"])
+	est, err := c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: nano.Ref, Prompt: "a fox", Size: "4K", Estimate: true,
+		References: []*pb.PictureReference{{Data: []byte("\x89PNG\r\n\x1a\nx"), Mime: "image/png", Role: "style"}}}))
+	require.NoError(t, err)
+	assert.InDelta(t, 0.113, est.Msg.CostUsd, 0.01)
+	assert.Nil(t, est.Msg.Session)
+	_, err = c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: nano.Ref, Prompt: "a fox", Count: 3}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "the catalog refuses it")
+
+	// A session, as the engine keeps it.
+	seed := int32(3)
+	s := engine.PictureSession{ID: "pic-0123456789ab", Name: "A fox", Turns: []engine.PictureTurn{{ID: "t-1", Model: nano.Ref, Kind: "gemini", Prompt: "a fox", Seed: &seed,
+		References: []engine.PictureTurnRef{{File: "r-1.png", MIME: "image/png", Name: "me.png", Role: "character"}},
+		Pictures:   []engine.PictureFile{{ID: "p-0123456789ab", File: "p-0123456789ab.png", MIME: "image/png"}, {ID: "p-gone", Deleted: true}},
+		Sources:    []runtime.PictureSource{{Title: "Foxes", URL: "https://example.com"}}}}}
+	data, err := json.Marshal(s)
+	require.NoError(t, err)
+	for _, d := range []string{dir, evalDir(t, dir)} {
+		sum := sha256.Sum256([]byte(d))
+		sd := filepath.Join(store, "pictures", hex.EncodeToString(sum[:8]), s.ID)
+		require.NoError(t, os.MkdirAll(sd, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(sd, "session.json"), data, 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(sd, "p-0123456789ab.png"), []byte("PNG"), 0o600))
+	}
+	list, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Sessions, 1)
+	turn := list.Msg.Sessions[0].Turns[0]
+	assert.Len(t, turn.Pictures, 1, "not the deleted one")
+	assert.True(t, turn.HasSeed)
+	assert.Equal(t, "character", turn.References[0].Role)
+	assert.Equal(t, "Foxes", turn.Sources[0].Title)
+	got, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: dir, Id: s.ID}))
+	require.NoError(t, err)
+	assert.Equal(t, "A fox", got.Msg.Session.Name)
+	pic, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Equal(t, "PNG", string(pic.Msg.Data))
+	saved, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Equal(t, "pictures/a-fox-1.png", saved.Msg.Path)
+	renamed, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: dir, Id: s.ID, Name: "Fox"}))
+	require.NoError(t, err)
+	assert.Equal(t, "Fox", renamed.Msg.Session.Name)
+	dropped, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Empty(t, dropped.Msg.Session.Turns[0].Pictures)
+	_, err = c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: dir, Id: s.ID}))
+	require.NoError(t, err)
+}
+
+// evalDir is dir with its links resolved (macOS's /var is /private/var).
+func evalDir(t *testing.T, dir string) string {
+	t.Helper()
+	d, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	return d
 }

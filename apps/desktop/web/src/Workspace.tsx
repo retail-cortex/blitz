@@ -34,6 +34,7 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProcessesDrawer } from "./ProcessesDrawer";
+import { PicturesDrawer, type PicturesStart } from "./pictures/PicturesDrawer";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { message } from "./errors";
@@ -83,7 +84,7 @@ export function Workspace({
   // over it (committing). Studio has its own state: a form with unsaved
   // changes asks before another view takes the drawer (the drawer closes
   // the one it replaces). Agents open in Studio.
-  const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | { kind: "processes"; process?: number; processIn?: string } | null>(null);
+  const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | { kind: "processes"; process?: number; processIn?: string } | { kind: "pictures"; start?: PicturesStart; n: number } | null>(null);
   const [studio, setStudio] = useState<StudioOpen | null>(null);
   // The menu's Close Studio closes it as its ✕ does; its kinds, picked
   // while it's open, show in it (the kind shown is ticked).
@@ -108,6 +109,7 @@ export function Workspace({
     // A toggle (the status bar's) closes the view when it's the one shown.
     if (v === "changes") setDrawer((cur) => changesAfter(cur, d?.toggle, source));
     else if (v === "processes") setDrawer((cur) => (d?.toggle && cur?.kind === "processes" ? null : { kind: "processes", process: d?.process, processIn: d?.processIn }));
+    else if (v === "pictures") setDrawer((cur) => (d?.toggle && cur?.kind === "pictures" ? null : { kind: "pictures", start: d?.picture, n: (cur?.kind === "pictures" ? cur.n : 0) + (d?.picture ? 1 : 0) }));
     else if (v === "workers") {
       // Studio closes through its own request, which asks about unsaved edits.
       if (d?.toggle && shownKind.current === "workers") setStudioClose((n) => n + 1);
@@ -369,6 +371,7 @@ export function Workspace({
         <HistoryDrawer key={`${drawer.path}#${drawer.folder}`} dir={dir} path={drawer.path} folder={drawer.folder} onClose={() => setDrawer(null)} onRestored={() => setTouched((n) => n + 1)} />
       )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
+      {visible && drawer?.kind === "pictures" && <PicturesDrawer key={drawer.n} dir={dir} start={drawer.start} onClose={() => setDrawer(null)} />}
       {visible && drawer?.kind === "processes" && <ProcessesDrawer key={`${drawer.processIn ?? ""}#${drawer.process ?? ""}`} dir={dir} expand={drawer.process} expandIn={drawer.processIn} onClose={() => setDrawer(null)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} ask={studioAsk} onKind={setStudioKind} />}

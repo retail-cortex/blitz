@@ -7,8 +7,9 @@ weight: 58
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-07, the owner's request; no code yet). Built in phases (§12). Decisions marked **Owner** are open (§13). |
-| Source (planned) | pkg/images/models (the capability catalog), pkg/engine/pictures (sessions, generation, saving), runtime painters (`pkg/engine/runtime/painter.go`, extended), a `PictureService` in `proto/blitz/v1`, the desktop panel under apps/desktop/web/src/pictures, `blitz picture` in `apps/cli` |
+| Status | **Phase 1 built** (2026-11-07, for v0.9.4), with phase 2's Imagen turns (count, avoid, people, seed, prompt improvement): PIC-01–PIC-53, PIC-60–PIC-63, PIC-70–PIC-73. **Planned:** Try again and Vary (PIC-42's buttons), Open in Pictures from the chat (PIC-54), the organization gateway's other settings (PIC-63), `blitz picture` (PIC-80), `generate_image` on the catalog (PIC-81). The owner took the proposed answers to §13 (2026-11-07): the middle panel, explicit Save, `pictures/`, the `[images] model` first. |
+| Source | `pkg/images/models.go` (the catalog and its checks), `pkg/engine/runtime/pictures.go` (Gemini, Imagen and the organization's models), `pkg/engine/pictures.go` (sessions, turns, history, saving), `pkg/service/server/pictures.go` and `WorkspaceService`'s Pictures calls in `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/pictures/` (the panel) |
+| Tests | `pkg/images/models_test.go`, `pkg/engine/runtime/pictures_test.go`, `pkg/engine/pictures_test.go`, `pkg/service/server/mcp_test.go` (`TestPicturesOverTheAPI`), `apps/desktop/web/src/pictures/pictures.test.ts` |
 | Builds on | [spec_006_filetools](spec_006_filetools.md) FS-80–FS-82 (`generate_image`), [spec_015_models](spec_015_models.md) MDL-95–MDL-97 (`[images] model`, an organization's image models, prices), [spec_029_files](spec_029_files.md) (the file tree), [spec_011_images](spec_011_images.md) (attachments), [spec_053_enterprise](spec_053_enterprise.md) (the gateway's `image_generation`, GW-04b) |
 
 ## 1. Purpose
@@ -27,7 +28,7 @@ The Go SDK Blitz uses (`google.golang.org/genai` v1.74.0) has every field this s
 ## 3. The capability catalog
 
 - **PIC-01** What each model can do is **data**, one entry per model in a catalog (pkg/images/models), never a branch in the panel: its kind (gemini or imagen), display name, references (the most in all, and per role: characters, objects, styles), the most pictures per request, the sizes, the ratios, the thinking levels (and whether thinking is always on), search grounding (none, web, web and image), negative prompt, person filter, seed, output formats, and price (per picture for Imagen; per million tokens, input and output, for Gemini, with what a picture of each size costs in output tokens).
-- **PIC-02** The catalog's first entries, as the owner gave them on 2026-11-07, **each checked against Google's documentation when it's written** (a field the documentation doesn't confirm is left at its conservative value until it is):
+- **PIC-02** The catalog's first entries, as the owner gave them on 2026-11-07 (Nano Banana 2.1's prices too: $1.50 a million input tokens, $0.15 cached, $30 a million image tokens, so 1K $0.0336, 2K $0.0504, 4K $0.113; search grounding $14 a thousand; its text and thinking, $7.50 a million, are counted at the image rate, a little over, as Blitz has one output price per model), **each checked against Google's documentation when it's written** (a field the documentation doesn't confirm is left at its conservative value until it is):
 
 | Model | Kind | References (characters + objects) | Pictures | Sizes | Ratios | Thinking | Grounding |
 |---|---|---|---|---|---|---|---|
@@ -104,7 +105,7 @@ The catalog's entries and family defaults (PIC-01–PIC-03); request validation 
 
 ## 12. Phases
 
-1. The catalog, the `PictureService`, Gemini image models through a personal key: the panel with every Gemini control, references from the computer, clipboard and file tree, multi-turn sessions, saving into the tree, the chat icon and `/picture` (PIC-01–PIC-53 for Gemini, PIC-60, PIC-62, PIC-70–PIC-73).
+1. The catalog, `WorkspaceService`'s Pictures calls, Gemini image models through a personal key: the panel with every Gemini control, references from the computer, clipboard and file tree, multi-turn sessions, saving into the tree, the chat icon and `/picture` (PIC-01–PIC-53 for Gemini, PIC-60, PIC-62, PIC-70–PIC-73).
 2. Imagen: count, negative prompt, people, seed, prompt enhancement, Try again and Vary (PIC-42, PIC-61).
 3. The organization's models, and the gateway items they need (PIC-63); **Open in Pictures** from the chat and the agent's tool on the catalog (PIC-54, PIC-81).
 4. `blitz picture` (PIC-80).

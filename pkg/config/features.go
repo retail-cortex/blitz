@@ -75,6 +75,9 @@ type ImagesConfig struct {
 	// image model ("gemini/gemini-3.1-flash-image"). Empty turns
 	// generate_image off.
 	Model string `toml:"model"`
+	// Folder is where Pictures saves pictures in the workspace ("" for
+	// pictures/; spec_058_pictures PIC-51).
+	Folder string `toml:"folder"`
 }
 
 // PDFConfig shapes the PDFs the export_pdf tool writes.
@@ -717,6 +720,10 @@ var DefaultPricing = map[string]ModelPrice{
 	"gemini-3.1-flash-image":      {InputPerMTok: 0.50, OutputPerMTok: 60.00},
 	"gemini-3.1-flash-lite-image": {InputPerMTok: 0.25, OutputPerMTok: 30.00},
 	"gemini-3-pro-image":          {InputPerMTok: 2.00, OutputPerMTok: 120.00},
+	// Nano Banana 2.1 (the owner's figures, 2026-11-07): $30 a million
+	// image tokens (1K $0.0336, 2K $0.0504, 4K $0.113); its text and
+	// thinking ($7.50) are counted at the image rate, a little over.
+	"gemini-nano-banana-2.1": {InputPerMTok: 1.50, OutputPerMTok: 30.00, CachedInputPerMTok: 0.15},
 }
 
 // PriceChange is a published list price that takes effect on a date.

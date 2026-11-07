@@ -3,15 +3,18 @@ title: Blitz 0.9.4
 weight: 1
 ---
 
-**Edit your agents like documents.** Every long field in Studio (an agent's instructions, a skill's, a rule, a guardrail, a job's prompt, a workflow step's prompt) now opens in the visual editor: headings, lists, tables and code as they'll read, or the plain text with one click. And Studio has a new **Specs** section, where your project's specification is listed in order and edited in place.
+**Make pictures in their own place, and edit your agents like documents.** Every long field in Studio (an agent's instructions, a skill's, a rule, a guardrail, a job's prompt, a workflow step's prompt) now opens in the visual editor: headings, lists, tables and code as they'll read, or the plain text with one click. And Studio has a new **Specs** section, where your project's specification is listed in order and edited in place.
 
 ### Get started
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.4).
 2. Open **Studio › Agents** and pick an agent: its **System instructions** show rendered. Switch to **Source** at the field's top right for the text.
-3. Open **Studio › Specs** to read, check and refine what `/spec` wrote. No specs yet? Run `/spec` in a chat, or press **+** to add one. In CI, run `blitz spec review`.
+3. Click the brush in the chat box to open **Pictures** (a Gemini key, or your organization's image models, makes pictures).
+4. Open **Studio › Specs** to read, check and refine what `/spec` wrote. No specs yet? Run `/spec` in a chat, or press **+** to add one. In CI, run `blitz spec review`.
 
 ### What's new
+
+**Pictures, a place to make them.** The new brush in the chat box opens **Pictures**: choose Nano Banana 2.1, 3.1 Flash Image, 3 Pro Image or Imagen, write what you want, and drop in pictures to start from or match, each marked as a character to keep, an object to keep faithful or a style to borrow. Pick the shape from a grid (panoramic 4:1 and 8:1 too), the size up to 4K, how hard the model thinks, and whether it searches the web first; Imagen makes up to four at once, with what to avoid and a seed. Every control follows what the chosen model can do, and each turn shows its cost before you make it. Then talk to it: "make the sky darker" changes the last picture, **Start from this** picks any other, and **Save** puts the one you like into your workspace's `pictures/` folder, ready to open, mention in a chat or use again. Start from the file tree too: **Edit in Pictures** on any picture.
 
 **Long fields, edited as documents.** Agent instructions, skill instructions, rules, guardrails, job prompts and workflow steps open in the same visual editor as your Markdown files, with its toolbar. **Visual** or **Source** sits beside each field's name, and the choice carries to the next field you open. **Redraft** now sits under the box on the right, where you finish writing, and a workflow's agent steps have it too.
 

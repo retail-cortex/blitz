@@ -996,6 +996,27 @@ const fakeProfileOf = new Map<string, string>();
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
 
+// Pictures (spec_058): the models offered, sessions and the pictures' SVGs.
+const fakeGeminiRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"];
+const fakePictureModels = [
+  { ref: "gemini/gemini-nano-banana-2.1", id: "gemini-nano-banana-2.1", name: "Gemini Nano Banana 2.1", kind: "gemini", default: true, organization: false, assumed: false, maxReferences: 14, maxCharacters: 4, maxObjects: 10, maxPictures: 1, sizes: ["1K", "2K", "4K"], ratios: fakeGeminiRatios, thinking: ["MINIMAL", "MEDIUM", "HIGH"], thinkingAlways: false, search: "image", negativePrompt: false, people: false, seed: false, enhance: false, formats: ["image/png", "image/jpeg", "image/webp"], inputPerMtok: 1.5, outputPerMtok: 30, perPicture: 0, sizeTokens: { "1K": 1120, "2K": 1680, "4K": 3767 } },
+  { ref: "gemini/gemini-3.1-flash-image", id: "gemini-3.1-flash-image", name: "Gemini 3.1 Flash Image", kind: "gemini", default: false, organization: false, assumed: false, maxReferences: 14, maxCharacters: 4, maxObjects: 10, maxPictures: 1, sizes: ["0.5K", "1K", "2K", "4K"], ratios: fakeGeminiRatios, thinking: ["MINIMAL", "MEDIUM", "HIGH"], thinkingAlways: false, search: "image", negativePrompt: false, people: false, seed: false, enhance: false, formats: ["image/png", "image/jpeg", "image/webp"], inputPerMtok: 0.5, outputPerMtok: 60, perPicture: 0, sizeTokens: { "0.5K": 560, "1K": 1120, "2K": 1680, "4K": 2520 } },
+  { ref: "gemini/imagen-4.0-generate-preview", id: "imagen-4.0-generate-preview", name: "Imagen 4 Preview", kind: "imagen", default: false, organization: false, assumed: false, maxReferences: 0, maxCharacters: 0, maxObjects: 0, maxPictures: 4, sizes: ["1K", "2K"], ratios: ["1:1", "3:4", "4:3", "9:16", "16:9"], thinking: [] as string[], thinkingAlways: false, search: "", negativePrompt: true, people: true, seed: true, enhance: true, formats: ["image/png", "image/jpeg"], inputPerMtok: 0, outputPerMtok: 0, perPicture: 0.04, sizeTokens: {} as Record<string, number> },
+];
+type FakePictureTurn = { id: string; at: ReturnType<typeof now>; model: string; kind: string; prompt: string; references: { file: string; mime: string; name: string; path: string; role: string }[]; count: number; aspectRatio: string; size: string; thinking: string; search: string; avoid: string; people: string; format: string; startFrom: string; pictures: { id: string; mime: string; saved: string[] }[]; text: string; thoughts: string; sources: { title: string; url: string }[]; problem: string; costUsd: number; seed: number; hasSeed: boolean };
+const fakePictureSessions: { id: string; name: string; created: ReturnType<typeof now>; updated: ReturnType<typeof now>; turns: FakePictureTurn[] }[] = [];
+const fakePictureData = new Map<string, string>();
+// A picture as SVG: a dusk sky at the ratio's shape, a lighthouse, and the prompt.
+function fakePictureSVG(prompt: string, ratio: string, variant: number): string {
+  const [a, b] = ratio.split(":").map(Number);
+  const w = 640;
+  const h = Math.round((w * (b || 1)) / (a || 1));
+  const skies = [["#1b2a4a", "#f2994a"], ["#0f1c33", "#c0392b"], ["#22313f", "#f5b971"], ["#2c3e50", "#9b59b6"]];
+  const [top, bottom] = skies[variant % skies.length];
+  const words = prompt.replace(/[<&>]/g, "").slice(0, 60);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="${w}" height="${h}" fill="url(#s)"/><circle cx="${w * 0.72}" cy="${h * 0.62}" r="${Math.min(w, h) * 0.08}" fill="#ffd27a" opacity="0.9"/><rect x="0" y="${h * 0.78}" width="${w}" height="${h * 0.22}" fill="#0b1626"/><rect x="${w * 0.28}" y="${h * 0.38}" width="${w * 0.05}" height="${h * 0.4}" fill="#ecf0f1"/><polygon points="${w * 0.27},${h * 0.38} ${w * 0.305},${h * 0.3} ${w * 0.34},${h * 0.38}" fill="#c0392b"/><text x="24" y="40" font-family="sans-serif" font-size="22" fill="#fff" opacity="0.85">${words}</text></svg>`;
+}
+
 // The spec the fake composer refines.
 let fakeSpecCurrent = "";
 // The fake ledger: approved texts, and how each spec was last verified.
@@ -1863,6 +1884,81 @@ export function installFake() {
         watchWorkflowRun: ({ id }, ctx) => watchFakeRun(id, ctx.signal),
         watchWorkflowRuns: ({ workspace }, ctx) => watchFakeRuns(workspace, ctx.signal),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        // Pictures (spec_058): two Gemini models and Imagen, turns drawn as SVG.
+        listPictureModels: () => ({ models: fakePictureModels, folder: "pictures" }),
+        makePicture: (r) => {
+          const m = fakePictureModels.find((x) => x.ref === r.model) ?? fakePictureModels[0];
+          const each = m.kind === "imagen" ? m.perPicture : ((m.sizeTokens[r.size] ?? 1120) * m.outputPerMtok) / 1e6;
+          const n = m.kind === "imagen" ? Math.max(r.count, 1) : 1;
+          if (r.estimate) return { costUsd: each * n + (r.search ? 0.014 : 0), priced: true };
+          let s = fakePictureSessions.find((x) => x.id === r.session);
+          if (!s) {
+            s = { id: `pic-${String(fakePictureSessions.length + 1).padStart(12, "0")}`, name: r.prompt.slice(0, 48), created: now(), updated: now(), turns: [] };
+            fakePictureSessions.unshift(s);
+          }
+          const turnNo = s.turns.length;
+          const pictures = Array.from({ length: n }, (_, i) => {
+            const id = `p-${String(fakePictureData.size + 1).padStart(12, "0")}`;
+            fakePictureData.set(id, fakePictureSVG(r.prompt, r.aspectRatio || "1:1", turnNo + i));
+            return { id, mime: "image/svg+xml", saved: [] as string[] };
+          });
+          const references = r.references.map((ref, i) => {
+            const file = `r-${String(fakePictureData.size + i + 1).padStart(12, "0")}.png`;
+            fakePictureData.set(file, ref.path ? fakePictureSVG(ref.path, "1:1", 9) : fakePictureSVG(ref.name || "reference", "1:1", 7));
+            return { file, mime: "image/svg+xml", name: ref.name || ref.path, path: ref.path, role: ref.role };
+          });
+          s.turns.push({
+            id: `t-${turnNo}`, at: now(), model: m.ref, kind: m.kind, prompt: r.prompt, references, count: n, aspectRatio: r.aspectRatio, size: r.size, thinking: r.thinking,
+            search: r.search ? (r.searchImages ? "image" : "web") : "", avoid: r.avoid, people: r.people, format: r.format, startFrom: r.startFrom, pictures,
+            text: m.kind === "gemini" ? (turnNo ? "Here it is, changed as you asked." : "Here's a first take.") : "", thoughts: r.thinking ? "Composition first: the subject a third in, the light from the left." : "",
+            sources: r.search ? [{ title: "Lighthouses of the Atlantic coast", url: "https://example.com/lighthouses" }] : [], problem: "", costUsd: each * n, seed: r.seed, hasSeed: r.useSeed,
+          });
+          s.updated = now();
+          return { session: s, costUsd: each * n, priced: true };
+        },
+        listPictureSessions: () => ({ sessions: fakePictureSessions }),
+        getPictureSession: ({ id }) => {
+          const s = fakePictureSessions.find((x) => x.id === id);
+          if (!s) notFound(id);
+          return { session: s };
+        },
+        renamePictureSession: ({ id, name }) => {
+          const s = fakePictureSessions.find((x) => x.id === id);
+          if (!s) notFound(id);
+          s.name = name;
+          return { session: s };
+        },
+        deletePictureSession: ({ id }) => {
+          const i = fakePictureSessions.findIndex((x) => x.id === id);
+          if (i >= 0) fakePictureSessions.splice(i, 1);
+          return {};
+        },
+        readPicture: ({ picture }) => {
+          const svg = fakePictureData.get(picture);
+          if (!svg) notFound(picture);
+          return { data: new TextEncoder().encode(svg), mime: "image/svg+xml" };
+        },
+        savePicture: ({ session, picture, path }) => {
+          const s = fakePictureSessions.find((x) => x.id === session);
+          const pic = s?.turns.flatMap((t) => t.pictures).find((p) => p.id === picture);
+          if (!s || !pic) notFound(picture);
+          const turn = s.turns.find((t) => t.pictures.includes(pic));
+          const slug = (turn?.prompt ?? "picture").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 5).join("-") || "picture";
+          let out = path && !path.endsWith("/") ? (/\.[a-z]+$/.test(path) ? path : `${path}.svg`) : "";
+          for (let n = 1; !out; n++) {
+            const p = `${path || "pictures/"}${slug}-${n}.svg`;
+            if (!fakeFiles.has(p)) out = p;
+          }
+          fakeFiles.set(out, fakePictureData.get(picture) ?? "");
+          pic.saved.push(out);
+          return { path: out };
+        },
+        deletePicture: ({ session, picture }) => {
+          const s = fakePictureSessions.find((x) => x.id === session);
+          if (!s) notFound(session);
+          for (const t of s.turns) t.pictures = t.pictures.filter((p) => p.id !== picture);
+          return { session: s };
+        },
         // The specification (spec_057): listed and checked as the service does, roughly.
         listSpecs: () => ({
           specs: [...fakeFiles.keys()]

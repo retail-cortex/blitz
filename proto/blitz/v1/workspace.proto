@@ -380,6 +380,26 @@ service WorkspaceService {
   // Says how a spec would be implemented: what's left, what it waits for,
   // and the prompt for an agent (SDD-30).
   rpc PlanSpec(PlanSpecRequest) returns (PlanSpecResponse);
+  // Returns the image models Pictures offers and what each can do
+  // (spec_058_pictures PIC-01..04).
+  rpc ListPictureModels(ListPictureModelsRequest) returns (ListPictureModelsResponse);
+  // Makes a Pictures turn (or says what it would cost), checked against
+  // the model's catalog entry first (PIC-62).
+  rpc MakePicture(MakePictureRequest) returns (MakePictureResponse);
+  // Returns the workspace's picture sessions, newest first (PIC-44).
+  rpc ListPictureSessions(ListPictureSessionsRequest) returns (ListPictureSessionsResponse);
+  // Returns one picture session.
+  rpc GetPictureSession(GetPictureSessionRequest) returns (GetPictureSessionResponse);
+  // Names a picture session.
+  rpc RenamePictureSession(RenamePictureSessionRequest) returns (RenamePictureSessionResponse);
+  // Deletes a picture session and its pictures (not what was saved).
+  rpc DeletePictureSession(DeletePictureSessionRequest) returns (DeletePictureSessionResponse);
+  // A picture of a session (one made, or a reference kept with it).
+  rpc ReadPicture(ReadPictureRequest) returns (ReadPictureResponse);
+  // Writes a picture into the workspace (PIC-51); returns its path.
+  rpc SavePicture(SavePictureRequest) returns (SavePictureResponse);
+  // Removes a picture from its session (what was saved stays).
+  rpc DeletePicture(DeletePictureRequest) returns (DeletePictureResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -2898,6 +2918,245 @@ message ImpactSpecResponse {
   double estimated_usd = 9;
   bool priced = 10;
   string problem = 11;
+}
+
+// What an image model can do, as Pictures offers it (PIC-01).
+message PictureModel {
+  // provider/model.
+  string ref = 1;
+  string id = 2;
+  string name = 3;
+  // "gemini" or "imagen".
+  string kind = 4;
+  // The [images] model, chosen first.
+  bool default = 5;
+  // Through the organization's service.
+  bool organization = 6;
+  // The catalog doesn't know it: its family's values.
+  bool assumed = 7;
+  int32 max_references = 8;
+  int32 max_characters = 9;
+  int32 max_objects = 10;
+  int32 max_pictures = 11;
+  repeated string sizes = 12;
+  repeated string ratios = 13;
+  repeated string thinking = 14;
+  bool thinking_always = 15;
+  // "", "web" or "image".
+  string search = 16;
+  bool negative_prompt = 17;
+  bool people = 18;
+  bool seed = 19;
+  bool enhance = 20;
+  repeated string formats = 21;
+  double input_per_mtok = 22;
+  double output_per_mtok = 23;
+  // A picture's price (Imagen).
+  double per_picture = 24;
+  // A picture's output tokens by size (Gemini).
+  map<string, int32> size_tokens = 25;
+}
+
+// Request message for WorkspaceService.ListPictureModels.
+message ListPictureModelsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListPictureModels.
+message ListPictureModelsResponse {
+  repeated PictureModel models = 1;
+  // Where pictures are saved ([images] folder, else pictures).
+  string folder = 2;
+}
+
+// A reference for a turn: a workspace file, a picture of the session, or
+// data from the computer; with its role.
+message PictureReference {
+  string path = 1;
+  string picture = 2;
+  bytes data = 3;
+  string mime = 4;
+  string name = 5;
+  // "character", "object", "style" or "".
+  string role = 6;
+}
+
+// Request message for WorkspaceService.MakePicture.
+message MakePictureRequest {
+  string workspace = 1;
+  // The session to add to ("" starts one).
+  string session = 2;
+  string model = 3;
+  string prompt = 4;
+  repeated PictureReference references = 5;
+  int32 count = 6;
+  string aspect_ratio = 7;
+  string size = 8;
+  string thinking = 9;
+  bool search = 10;
+  bool search_images = 11;
+  string avoid = 12;
+  string people = 13;
+  int32 seed = 14;
+  bool use_seed = 15;
+  bool enhance = 16;
+  string format = 17;
+  int32 quality = 18;
+  // The session's picture the turn refines.
+  string start_from = 19;
+  // Only say what it would cost; nothing is sent or kept.
+  bool estimate = 20;
+}
+
+// Response message for WorkspaceService.MakePicture.
+message MakePictureResponse {
+  // The session with the new turn (unset for an estimate).
+  PictureSession session = 1;
+  double cost_usd = 2;
+  bool priced = 3;
+}
+
+// A Pictures session.
+message PictureSession {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created = 3;
+  google.protobuf.Timestamp updated = 4;
+  repeated PictureTurn turns = 5;
+}
+
+// A reference as kept with a turn.
+message PictureTurnRef {
+  // Its copy's name in the session (to read with ReadPicture).
+  string file = 1;
+  string mime = 2;
+  string name = 3;
+  string path = 4;
+  string role = 5;
+}
+
+// A picture made, and where it was saved.
+message PictureFile {
+  string id = 1;
+  string mime = 2;
+  repeated string saved = 3;
+}
+
+// A page a grounded turn used.
+message PictureSource {
+  string title = 1;
+  string url = 2;
+}
+
+// One turn of a session.
+message PictureTurn {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  string model = 3;
+  string kind = 4;
+  string prompt = 5;
+  repeated PictureTurnRef references = 6;
+  int32 count = 7;
+  string aspect_ratio = 8;
+  string size = 9;
+  string thinking = 10;
+  string search = 11;
+  string avoid = 12;
+  string people = 13;
+  string format = 14;
+  string start_from = 15;
+  repeated PictureFile pictures = 16;
+  string text = 17;
+  string thoughts = 18;
+  repeated PictureSource sources = 19;
+  // Why it came without a picture.
+  string problem = 20;
+  double cost_usd = 21;
+  // The seed used (has_seed: one was).
+  int32 seed = 22;
+  bool has_seed = 23;
+}
+
+// Request message for WorkspaceService.ListPictureSessions.
+message ListPictureSessionsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListPictureSessions.
+message ListPictureSessionsResponse {
+  repeated PictureSession sessions = 1;
+}
+
+// Request message for WorkspaceService.GetPictureSession.
+message GetPictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.GetPictureSession.
+message GetPictureSessionResponse {
+  PictureSession session = 1;
+}
+
+// Request message for WorkspaceService.RenamePictureSession.
+message RenamePictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+  string name = 3;
+}
+
+// Response message for WorkspaceService.RenamePictureSession.
+message RenamePictureSessionResponse {
+  PictureSession session = 1;
+}
+
+// Request message for WorkspaceService.DeletePictureSession.
+message DeletePictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.DeletePictureSession.
+message DeletePictureSessionResponse {}
+
+// Request message for WorkspaceService.ReadPicture.
+message ReadPictureRequest {
+  string workspace = 1;
+  string session = 2;
+  // A picture's ID, or a reference's file.
+  string picture = 3;
+}
+
+// Response message for WorkspaceService.ReadPicture.
+message ReadPictureResponse {
+  bytes data = 1;
+  string mime = 2;
+}
+
+// Request message for WorkspaceService.SavePicture.
+message SavePictureRequest {
+  string workspace = 1;
+  string session = 2;
+  string picture = 3;
+  // Where ("" for the folder, named from the prompt; a folder ends in /).
+  string path = 4;
+}
+
+// Response message for WorkspaceService.SavePicture.
+message SavePictureResponse {
+  string path = 1;
+}
+
+// Request message for WorkspaceService.DeletePicture.
+message DeletePictureRequest {
+  string workspace = 1;
+  string session = 2;
+  string picture = 3;
+}
+
+// Response message for WorkspaceService.DeletePicture.
+message DeletePictureResponse {
+  PictureSession session = 1;
 }
 
 // Request message for WorkspaceService.ReviewSpec.

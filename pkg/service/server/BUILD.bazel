@@ -43,6 +43,7 @@ go_library(
         "orgshare.go",
         "orgsync.go",
         "orgworkspaces.go",
+        "pictures.go",
         "rules.go",
         "scheduler.go",
         "secrets.go",
