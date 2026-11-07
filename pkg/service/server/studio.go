@@ -54,14 +54,11 @@ func (h workspaceService) ListSpecs(ctx context.Context, r req[pb.ListSpecsReque
 	}
 	out := &pb.ListSpecsResponse{}
 	for _, s := range list {
-		deps := make([]int32, len(s.DependsOn))
-		for i, d := range s.DependsOn {
-			deps[i] = int32(d)
-		}
 		out.Specs = append(out.Specs, &pb.SpecSummary{
-			File: s.File, Path: s.Path, Number: int32(s.Number), Title: s.Title, Status: s.Status, DependsOn: deps,
+			File: s.File, Path: s.Path, Number: int32(s.Number), Title: s.Title, Status: s.Status, DependsOn: ints32(s.DependsOn),
 			Items: int32(s.Items), Errors: int32(s.Errors), Warnings: int32(s.Warnings), OpenQuestions: int32(s.OpenQuestions),
 			Approved: s.Approved, Traced: int32(s.Traced), Implemented: int32(s.Implemented), Changed: int32(s.Changed),
+			Done: s.Done, Next: s.Next, BlockedBy: ints32(s.BlockedBy),
 		})
 	}
 	return ok(out)
@@ -152,7 +149,11 @@ func (h workspaceService) VerifySpec(ctx context.Context, r req[pb.VerifySpecReq
 	if err != nil {
 		return nil, specError(err)
 	}
-	return ok(&pb.VerifySpecResponse{Requirements: specRequirements(v.Requirements), CostUsd: v.CostUSD, EstimatedUsd: v.EstimatedUSD, Priced: v.Priced, Problem: v.Problem})
+	out := &pb.VerifySpecResponse{Requirements: specRequirements(v.Requirements), CostUsd: v.CostUSD, EstimatedUsd: v.EstimatedUSD, Priced: v.Priced, Problem: v.Problem}
+	for _, d := range v.Drift {
+		out.Drift = append(out.Drift, &pb.SpecDrift{Id: d.ID, Why: d.Why})
+	}
+	return ok(out)
 }
 
 // specChanges are changes on the wire.
@@ -201,4 +202,26 @@ func (h workspaceService) ImpactSpec(ctx context.Context, r req[pb.ImpactSpecReq
 		out.Conflicts = append(out.Conflicts, &pb.SpecConflict{Id: c.ID, Why: c.Why})
 	}
 	return ok(out)
+}
+
+// ints32 are ints on the wire.
+func ints32(list []int) []int32 {
+	out := make([]int32, len(list))
+	for i, n := range list {
+		out[i] = int32(n)
+	}
+	return out
+}
+
+// PlanSpec is how a spec would be implemented (SDD-30).
+func (h workspaceService) PlanSpec(ctx context.Context, r req[pb.PlanSpecRequest]) (*connect.Response[pb.PlanSpecResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	p, err := w.PlanSpec(r.Msg.Path)
+	if err != nil {
+		return nil, specError(err)
+	}
+	return ok(&pb.PlanSpecResponse{Pending: specRequirements(p.Pending), BlockedBy: ints32(p.BlockedBy), Prompt: p.Prompt})
 }

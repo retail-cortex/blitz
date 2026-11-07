@@ -104,4 +104,14 @@ func TestSpecCommand(t *testing.T) {
 	text, err := os.ReadFile(filepath.Join(dir, "001-overview.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(text), "Status: changed")
+
+	// Drift in CI, and the plan (SDD-30, SDD-31, SDD-40).
+	out, err = runCLI(t, "spec", "verify", "001-overview.md", "--ci", "--dir", ws)
+	assert.ErrorIs(t, err, errSpecDrift)
+	assert.Contains(t, out, "OV-01 changed since it was approved")
+	out, err = runCLI(t, "spec", "implement", "002-orders.md", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Implement Orders (.agents/specs/002-orders.md).")
+	assert.Contains(t, out, "- ORD-01: Checkout is fast.")
+	assert.Contains(t, out, "It waits for 007", "on stderr, mixed in here")
 }

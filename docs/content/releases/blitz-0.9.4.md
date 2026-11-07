@@ -21,7 +21,9 @@ weight: 1
 
 **Change a spec, see what it breaks.** Save a change to an approved spec and Blitz marks it changed, keeps the diff, and offers to scan the impact. The scan is free: it follows each changed requirement from where it was implemented to the function that holds it and every place that uses it, through your language server. **Write the fix with AI** (after showing its cost) turns that into steps, tests first, and points out other specs the change now contradicts. Copy the steps, or take them straight to a chat.
 
-**Specs in CI.** `blitz spec list` prints the specification in order, and `blitz spec review` checks every spec and fails when one has an error, so a pull request can't merge a spec that contradicts itself. `blitz spec approve`, `blitz spec verify` and `blitz spec impact` do the rest from the terminal; `--judge` adds the model, and prints the cost before it spends anything.
+**From spec to done.** **Implement** turns what's left of a spec into a prompt for the agent: in order, tests first, and every requirement's ID cited in the code, the tests and the commit, so Verify finds the work. The list shows which spec is next up and which wait for others. And if a chat changes code that an approved requirement depends on, Blitz says so at the end of the turn.
+
+**Specs in CI.** `blitz spec list` prints the specification in order, and `blitz spec review` checks every spec and fails when one has an error, so a pull request can't merge a spec that contradicts itself. `blitz spec approve`, `verify`, `impact` and `implement` do the rest from the terminal, and `blitz spec verify --ci` fails a pull request when approved requirements drift; `--judge` adds the model, and prints the cost before it spends anything.
 
 ### Fixes
 

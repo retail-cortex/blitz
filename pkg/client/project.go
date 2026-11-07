@@ -90,13 +90,10 @@ func (r *Remote) ListSpecs() ([]api.SpecSummary, error) {
 	}
 	out := make([]api.SpecSummary, len(res.Msg.Specs))
 	for i, s := range res.Msg.Specs {
-		deps := make([]int, len(s.DependsOn))
-		for j, d := range s.DependsOn {
-			deps[j] = int(d)
-		}
-		out[i] = api.SpecSummary{File: s.File, Path: s.Path, Number: int(s.Number), Title: s.Title, Status: s.Status, DependsOn: deps,
+		out[i] = api.SpecSummary{File: s.File, Path: s.Path, Number: int(s.Number), Title: s.Title, Status: s.Status, DependsOn: ints(s.DependsOn),
 			Items: int(s.Items), Errors: int(s.Errors), Warnings: int(s.Warnings), OpenQuestions: int(s.OpenQuestions),
-			Approved: s.Approved, Traced: int(s.Traced), Implemented: int(s.Implemented), Changed: int(s.Changed)}
+			Approved: s.Approved, Traced: int(s.Traced), Implemented: int(s.Implemented), Changed: int(s.Changed),
+			Done: s.Done, Next: s.Next, BlockedBy: ints(s.BlockedBy)}
 	}
 	return out, nil
 }
@@ -154,7 +151,29 @@ func (r *Remote) VerifySpec(ctx context.Context, path string, judge, estimate bo
 	if err != nil {
 		return api.SpecVerification{}, fromAPI(err)
 	}
-	return api.SpecVerification{Requirements: specRequirements(res.Msg.Requirements), CostUSD: res.Msg.CostUsd, EstimatedUSD: res.Msg.EstimatedUsd, Priced: res.Msg.Priced, Problem: res.Msg.Problem}, nil
+	out := api.SpecVerification{Requirements: specRequirements(res.Msg.Requirements), CostUSD: res.Msg.CostUsd, EstimatedUSD: res.Msg.EstimatedUsd, Priced: res.Msg.Priced, Problem: res.Msg.Problem}
+	for _, d := range res.Msg.Drift {
+		out.Drift = append(out.Drift, api.SpecDrift{ID: d.Id, Why: d.Why})
+	}
+	return out, nil
+}
+
+// ints are ints from the wire.
+func ints(list []int32) []int {
+	out := make([]int, len(list))
+	for i, n := range list {
+		out[i] = int(n)
+	}
+	return out
+}
+
+// PlanSpec is how a spec would be implemented (WorkspaceService.PlanSpec).
+func (r *Remote) PlanSpec(path string) (api.SpecPlan, error) {
+	res, err := r.workspaces.PlanSpec(context.Background(), connect.NewRequest(&pb.PlanSpecRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return api.SpecPlan{}, fromAPI(err)
+	}
+	return api.SpecPlan{Pending: specRequirements(res.Msg.Pending), BlockedBy: ints(res.Msg.BlockedBy), Prompt: res.Msg.Prompt}, nil
 }
 
 // fromSpecChanges are changes from the wire.

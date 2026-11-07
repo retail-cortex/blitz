@@ -155,6 +155,7 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"VerifySpec":           func() error { _, err := r.VerifySpec(ctx, ".agents/specs/001-a.md", false, false); return err },
 		"RecordSpecChange":     func() error { _, err := r.RecordSpecChange(ctx, ".agents/specs/001-a.md"); return err },
 		"ImpactSpec":           func() error { _, err := r.ImpactSpec(ctx, ".agents/specs/001-a.md", false, false); return err },
+		"PlanSpec":             func() error { _, err := r.PlanSpec(".agents/specs/001-a.md"); return err },
 		"ForgetNote":           func() error { return r.ForgetNote("x") },
 		"Task":                 func() error { _, _, err := r.Task("task-1"); return err },
 		"StopTask":             func() error { _, err := r.StopTask("task-1"); return err },

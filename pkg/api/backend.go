@@ -96,6 +96,9 @@ type Backend interface {
 	// says what that would cost).
 	RecordSpecChange(ctx context.Context, path string) (SpecRecorded, error)
 	ImpactSpec(ctx context.Context, path string, judge, estimate bool) (SpecImpact, error)
+	// PlanSpec is how the spec at path would be implemented: what's left,
+	// what it waits for, and the prompt for an agent.
+	PlanSpec(path string) (SpecPlan, error)
 
 	// Reflection is what the harness has to learn from the workspace's
 	// runs, for the welcome (/reflect).

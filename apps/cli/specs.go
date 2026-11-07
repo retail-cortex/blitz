@@ -32,6 +32,10 @@ import (
 // CI can gate on the specification (spec_057_spec_driven SDD-06).
 var errSpecErrors = errors.New("the specification has errors")
 
+// errSpecDrift fails `blitz spec verify --ci` when an approved requirement
+// drifted (SDD-31, SDD-40).
+var errSpecDrift = errors.New("approved requirements drifted")
+
 // newSpecCommand is `blitz spec list|review|approve|verify|impact`: the
 // project's specification (.agents/specs, as /spec writes it), listed in
 // order, reviewed, approved, verified and its changes' impact scanned, as
@@ -131,7 +135,7 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 	approve.Flags().BoolVar(&force, "force", false, "approve with errors or open questions")
-	var yes, weigh bool
+	var yes, weigh, ci bool
 	verify := &cobra.Command{
 		Use:   "verify [file...]",
 		Short: "Find each requirement's ID in the work (every spec without arguments); --judge has the model judge it",
@@ -155,6 +159,7 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 			out := cmd.OutOrStdout()
 			estimate := weigh && !yes
 			total := 0.0
+			drifted := 0
 			for _, a := range args {
 				v, err := r.VerifySpec(cmd.Context(), specArg(a), weigh, estimate)
 				if err != nil {
@@ -171,6 +176,10 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 				for _, q := range v.Requirements {
 					printRequirement(out, q)
 				}
+				for _, d := range v.Drift {
+					fmt.Fprintln(out, i18n.T("spec.cli_drift."+d.Why, "spec", specArg(a), "id", d.ID))
+					drifted++
+				}
 			}
 			switch {
 			case estimate:
@@ -178,11 +187,44 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 			case weigh:
 				fmt.Fprintln(out, i18n.T("spec.cli_cost", "cost", fmt.Sprintf("$%.4f", total)))
 			}
+			if ci && drifted > 0 {
+				return withCode(exitFailure, errSpecDrift)
+			}
 			return nil
 		},
 	}
 	verify.Flags().BoolVar(&weigh, "judge", false, "have the model judge each requirement (it costs; prints the estimate without --yes)")
 	verify.Flags().BoolVar(&yes, "yes", false, "with --judge: spend it")
+	verify.Flags().BoolVar(&ci, "ci", false, "exit 1 when an approved requirement drifted: changed since approval, no longer found in the work, or judged missing or contradicted")
+	implement := &cobra.Command{
+		Use:   "implement <file>",
+		Short: "Print the prompt that has an agent implement a spec's remaining requirements, tests first",
+		Long:  "Implement prints the prompt for the spec's requirements not implemented yet (by its last verification), in order, tests first from its Done when, with each requirement's ID to cite in the code, the tests and the commit message, so verify traces them. Run it with: blitz \"$(blitz spec implement <file>)\". What the spec waits for is said on stderr.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			plan, err := r.PlanSpec(specArg(args[0]))
+			if err != nil {
+				return err
+			}
+			if len(plan.BlockedBy) > 0 {
+				nums := make([]string, len(plan.BlockedBy))
+				for i, d := range plan.BlockedBy {
+					nums[i] = fmt.Sprintf("%03d", d)
+				}
+				fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("spec.cli_waits", "specs", strings.Join(nums, ", ")))
+			}
+			if plan.Prompt == "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("spec.cli_nothing_left"))
+				return nil
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), plan.Prompt)
+			return nil
+		},
+	}
 	var impactYes, impactJudge bool
 	impact := &cobra.Command{
 		Use:   "impact <file>",
@@ -226,7 +268,7 @@ func newSpecCommand(g *globalFlags) *cobra.Command {
 	}
 	impact.Flags().BoolVar(&impactJudge, "judge", false, "have the model write the report (it costs; prints the estimate without --yes)")
 	impact.Flags().BoolVar(&impactYes, "yes", false, "with --judge: spend it")
-	cmd.AddCommand(list, review, approve, verify, impact)
+	cmd.AddCommand(list, review, approve, verify, impact, implement)
 	return cmd
 }
 

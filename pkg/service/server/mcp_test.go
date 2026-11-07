@@ -342,4 +342,18 @@ func TestSpecsOverTheAPI(t *testing.T) {
 	assert.True(t, im.Msg.Summary != "" || im.Msg.Problem != "", "a report or why not")
 	_, err = c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: dir, Path: "README.md"}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	// The plan, progress and drift (SDD-30..32).
+	plan, err := c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	assert.Contains(t, plan.Msg.Prompt, "OV-01")
+	v, err = c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, v.Msg.Drift, 1)
+	assert.Equal(t, "changed", v.Msg.Drift[0].Why)
+	list, err = c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, list.Msg.Specs[0].Next, "not done: it changed")
+	_, err = c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }

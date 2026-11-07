@@ -28,6 +28,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	specdoc "github.com/retail-cortex/blitz/pkg/engine/specs"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/genai"
 )
 
@@ -451,4 +452,41 @@ func impactReport(file string, im api.SpecImpact) string {
 	}
 	b.WriteString("\nWhen it's done: verify the spec (Studio › Specs, or `blitz spec verify`) and approve it again.\n")
 	return b.String()
+}
+
+// noteSpecDrift says, at a turn's end, which approved requirements the
+// turn's file changes may have broken: those whose evidence is in a file
+// it changed (SDD-31). Nothing when there's no ledger.
+func (w *Workspace) noteSpecDrift(sessionID string, on func(api.Event)) {
+	files := w.tools.Checkpoints().LatestTurnFiles(sessionID)
+	if len(files) == 0 {
+		return
+	}
+	entries, err := w.files().UserReadDir(filepath.FromSlash(path.Join(specdoc.LedgerDir, "specs")))
+	if err != nil {
+		return
+	}
+	changed := map[string]bool{}
+	for _, abs := range files {
+		if rel, err := filepath.Rel(w.Dir(), abs); err == nil && !strings.HasPrefix(rel, "..") {
+			changed[filepath.ToSlash(rel)] = true
+		}
+	}
+	var hits []string
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), ".json")
+		if !ok {
+			continue
+		}
+		l, err := w.readLedger(name + ".md")
+		if err != nil {
+			continue
+		}
+		if ids := specdoc.Touched(l, changed); len(ids) > 0 {
+			hits = append(hits, fmt.Sprintf("%s (%s)", strings.Join(ids, ", "), name+".md"))
+		}
+	}
+	if len(hits) > 0 {
+		on(api.Event{Notice: &api.Notice{Text: i18n.T("spec.drift", "requirements", strings.Join(hits, "; "))}})
+	}
 }

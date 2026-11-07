@@ -43,6 +43,12 @@ type SpecSummary struct {
 	Traced      int
 	Implemented int
 	Changed     int
+	// Done: approved, unchanged, every requirement found in the work.
+	// Next: the first in order not done whose dependencies are; BlockedBy:
+	// the dependencies not done it waits for (SDD-32).
+	Done      bool
+	Next      bool
+	BlockedBy []int
 }
 
 // SpecFinding is something a review found in a spec.
@@ -110,11 +116,20 @@ type SpecApproved struct {
 	Diff string
 }
 
-// SpecVerification is a spec's verification: its requirements as found;
-// with the model, what it cost, or (estimate) what it would cost and
-// whether the model has a price.
+// SpecDrift is an approved requirement that no longer holds (SDD-31):
+// Why is "changed" (since approval), "lost" (no longer found in the work)
+// or "judged" (the model said missing or contradicted).
+type SpecDrift struct {
+	ID  string
+	Why string
+}
+
+// SpecVerification is a spec's verification: its requirements as found,
+// and (an approved spec's) those that drifted; with the model, what it
+// cost, or (estimate) what it would cost and whether the model has a price.
 type SpecVerification struct {
 	Requirements []SpecRequirement
+	Drift        []SpecDrift
 	CostUSD      float64
 	EstimatedUSD float64
 	Priced       bool
@@ -187,4 +202,13 @@ type SpecImpact struct {
 	EstimatedUSD float64
 	Priced       bool
 	Problem      string
+}
+
+// SpecPlan is how a spec is implemented (SDD-30): its requirements not
+// implemented yet, in order, the dependencies not done that it waits for,
+// and the prompt that has an agent do it.
+type SpecPlan struct {
+	Pending   []SpecRequirement
+	BlockedBy []int
+	Prompt    string
 }

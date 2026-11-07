@@ -501,6 +501,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
 		w.stageCreated(ctx, sessionID, untracked, on)
+		// Approved requirements whose work it changed: verify them again (SDD-31).
+		w.noteSpecDrift(sessionID, on)
 	}
 	if t.OnFinished != nil {
 		t.OnFinished()

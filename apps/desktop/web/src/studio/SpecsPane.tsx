@@ -16,11 +16,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiAutoFix, mdiCheckDecagramOutline, mdiFormatListBulleted, mdiMagnifyScan, mdiTableLarge, mdiCheckCircleOutline, mdiCompare, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiInformationOutline, mdiLoading, mdiPlus, mdiRobotOutline, mdiShieldSearch, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiArrowRightBoldCircleOutline, mdiAutoFix, mdiCheckDecagramOutline, mdiHammerWrench, mdiTimerSandEmpty, mdiFormatListBulleted, mdiMagnifyScan, mdiTableLarge, mdiCheckCircleOutline, mdiCompare, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiInformationOutline, mdiLoading, mdiPlus, mdiRobotOutline, mdiShieldSearch, mdiUndoVariant } from "@mdi/js";
 import { Button, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { files, workspaces } from "../api";
 import { message, reason } from "../errors";
-import type { ImpactSpecResponse, SpecFinding, SpecRequirement, SpecSummary } from "../gen/blitz/v1/workspace_pb";
+import type { ImpactSpecResponse, PlanSpecResponse, SpecFinding, SpecRequirement, SpecSummary } from "../gen/blitz/v1/workspace_pb";
 import { copyText } from "../clipboard";
 import { compose, showView } from "../events";
 import { t, tn } from "../i18n";
@@ -85,6 +85,8 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
   const [impact, setImpact] = useState<ImpactSpecResponse | null>(null);
   const [impactBusy, setImpactBusy] = useState(false);
   const [impactEstimate, setImpactEstimate] = useState<{ usd: number; priced: boolean } | null>(null);
+  // How the open spec would be implemented (SDD-30).
+  const [plan, setPlan] = useState<PlanSpecResponse | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -174,6 +176,7 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
       }
       setReqs(v.requirements);
       if (v.problem) snack(t("desktop.specs.verify_problem", { problem: v.problem }), { error: true });
+      else if (v.drift.length) snack(tn("desktop.specs.drifted", v.drift.length, { ids: v.drift.map((d) => d.id).join(", ") }), { error: true });
       else snack(judge ? t("desktop.specs.verified_cost", { cost: cost(v.costUsd) }) : t("desktop.specs.verified"));
       void refresh();
     } catch (e) {
@@ -291,6 +294,21 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
       setImpactBusy(false);
     }
   };
+  const showPlan = async () => {
+    if (!open) return;
+    try {
+      setPlan(await workspaces.planSpec({ workspace, path: open.spec.path }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  const startPlan = () => {
+    if (!plan?.prompt) return;
+    setPlan(null);
+    onLeave?.();
+    showView({ dir: workspace, view: "chat" });
+    compose({ dir: workspace, text: plan.prompt });
+  };
   const fixInChat = () => {
     if (!open || !impact) return;
     onLeave?.();
@@ -333,6 +351,19 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
                 <span className="ellipsis">{specLabel(s)}</span>
                 <small className="ellipsis">{[s.file, s.status, s.items ? tn("desktop.specs.items", s.items) : "", s.approved && s.items ? t("desktop.specs.traced_of", { traced: s.traced, count: s.items }) : ""].filter(Boolean).join(" · ")}</small>
               </span>
+              {s.next ? (
+                <span className="row t-body-sm ok-text" style={{ gap: 4 }} title={t("desktop.specs.next_up_hint")}>
+                  <Icon path={mdiArrowRightBoldCircleOutline} size="sm" /> {t("desktop.specs.next_up")}
+                </span>
+              ) : s.blockedBy.length > 0 ? (
+                <span className="row t-body-sm muted" style={{ gap: 4 }}>
+                  <Icon path={mdiTimerSandEmpty} size="sm" /> {t("desktop.specs.waits_for", { specs: s.blockedBy.map((d) => String(d).padStart(3, "0")).join(", ") })}
+                </span>
+              ) : s.done ? (
+                <span className="row t-body-sm ok-text" style={{ gap: 4 }}>
+                  <Icon path={mdiCheckDecagramOutline} size="sm" /> {t("desktop.specs.done")}
+                </span>
+              ) : null}
               {s.changed > 0 && (
                 <span className="row t-body-sm warn-text" style={{ gap: 4 }} title={tn("desktop.specs.changed", s.changed)}>
                   <Icon path={mdiAlertCircleOutline} size="sm" /> {tn("desktop.specs.changed", s.changed)}
@@ -428,6 +459,9 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
                     <Button small icon={mdiRobotOutline} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.judge_verify_hint")} onClick={() => void verify(true, false)}>
                       {t("desktop.specs.judge_verify")}
                     </Button>
+                    <Button small icon={mdiHammerWrench} disabled={dirty || !!tracing} title={dirty ? t("desktop.specs.save_first") : t("desktop.specs.implement_hint")} onClick={() => void showPlan()}>
+                      {t("desktop.specs.implement")}
+                    </Button>
                     {reqs.some((r) => r.change) && !impact && (
                       <Button small icon={mdiAlertCircleOutline} disabled={dirty || impactBusy} onClick={() => void scanImpact(false, false)}>
                         {t("desktop.specs.scan_impact")}
@@ -497,6 +531,38 @@ export function SpecsPane({ workspace, onDirty, onLeave }: { workspace: string; 
         <ConfirmDialog title={t("desktop.specs.not_ready_title")} icon={mdiCheckDecagramOutline} confirm={t("desktop.specs.approve_anyway")} danger={false} onConfirm={() => void approve(true)} onClose={() => setNotReady("")}>
           <p>{notReady}</p>
         </ConfirmDialog>
+      )}
+      {plan && open && (
+        <Dialog
+          title={t("desktop.specs.plan_title", { name: open.spec.file })}
+          icon={mdiHammerWrench}
+          onClose={() => setPlan(null)}
+          footer={
+            <>
+              <Button onClick={() => setPlan(null)}>{t("desktop.cancel")}</Button>
+              <Button variant="filled" disabled={!plan.prompt} onClick={startPlan}>
+                {t("desktop.specs.start_chat")}
+              </Button>
+            </>
+          }
+        >
+          {plan.prompt ? (
+            <div className="stack" style={{ gap: 8 }}>
+              <p className="t-body-md">{tn("desktop.specs.plan_pending", plan.pending.length)}</p>
+              <ul className="t-body-sm">
+                {plan.pending.map((r) => (
+                  <li key={r.id}>
+                    <strong>{r.id}</strong> {r.text}
+                  </li>
+                ))}
+              </ul>
+              {plan.blockedBy.length > 0 && <p className="t-body-sm warn-text">{t("desktop.specs.plan_waits", { specs: plan.blockedBy.map((d) => String(d).padStart(3, "0")).join(", ") })}</p>}
+              <p className="t-body-sm muted">{t("desktop.specs.plan_how")}</p>
+            </div>
+          ) : (
+            <p className="t-body-md">{t("desktop.specs.nothing_left")}</p>
+          )}
+        </Dialog>
       )}
       {impactEstimate && (
         <ConfirmDialog title={t("desktop.specs.write_fix")} icon={mdiRobotOutline} confirm={t("desktop.specs.write")} danger={false} onConfirm={() => void scanImpact(true, true)} onClose={() => setImpactEstimate(null)}>

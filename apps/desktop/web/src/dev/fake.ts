@@ -1052,6 +1052,9 @@ function fakeSpecSummary(path: string, text: string) {
     traced: fakeSpecRequirements(path).filter((r) => r.state === "traced" || r.state === "implemented").length,
     implemented: fakeSpecRequirements(path).filter((r) => r.state === "implemented").length,
     changed: fakeSpecRequirements(path).filter((r) => r.change).length,
+    done: false,
+    next: file === "001-overview.md",
+    blockedBy: file === "002-orders.md" ? [1] : [],
   };
 }
 
@@ -1879,7 +1882,18 @@ export function installFake() {
         verifySpec: ({ path, judge, estimate }) => {
           if (judge && estimate) return { requirements: fakeSpecRequirements(path), costUsd: 0, estimatedUsd: 0.0034, priced: true, problem: "" };
           fakeVerified.set(path, judge ? "judged" : "checked");
-          return { requirements: fakeSpecRequirements(path), costUsd: judge ? 0.0031 : 0, estimatedUsd: 0, priced: true, problem: "" };
+          const reqs = fakeSpecRequirements(path);
+          const drift = fakeApproved.has(path) ? reqs.filter((r) => r.change || (r.judged && (r.state === "missing" || r.state === "contradicted"))).map((r) => ({ id: r.id, why: r.change ? "changed" : "judged" })) : [];
+          return { requirements: reqs, drift, costUsd: judge ? 0.0031 : 0, estimatedUsd: 0, priced: true, problem: "" };
+        },
+        planSpec: ({ path }) => {
+          const pending = fakeSpecRequirements(path).filter((r) => r.state !== "implemented");
+          const text = fakeFiles.get(path) ?? "";
+          return {
+            pending,
+            blockedBy: /Depends on: 001/.test(text) && !fakeApproved.has(".agents/specs/001-overview.md") ? [1] : [],
+            prompt: pending.length ? `Implement ${path}.\n\nThe requirements to do, in order:\n${pending.map((r) => `- ${r.id}: ${r.text}`).join("\n")}\n\nWork tests first, and cite each requirement's ID where it's done.` : "",
+          };
         },
         recordSpecChange: ({ path }) => {
           const changes = fakeSpecRequirements(path).filter((r) => r.change).map((r) => ({ id: r.id, kind: r.change, old: "Checkout is fast.", new: r.text }));

@@ -387,25 +387,110 @@ func (w *Workspace) VerifySpec(ctx context.Context, p string, judge, estimate bo
 		}
 	}
 	at := specNow()
+	was := map[string]string{}
+	for id, tr := range l.Items {
+		was[id] = tr.State
+	}
 	for _, it := range s.Items {
 		tr := l.Items[it.ID]
 		if tr == nil {
 			tr = &specdoc.Trace{Text: it.Text, Fingerprint: specdoc.Fingerprint(it.Text)}
 			l.Items[it.ID] = tr
 		}
-		ev := found[it.ID]
-		tr.Evidence, tr.VerifiedAt, tr.VerifiedFingerprint = ev, &at, specdoc.Fingerprint(it.Text)
-		if v, ok := verdicts[it.ID]; ok {
+		ev, fp := found[it.ID], specdoc.Fingerprint(it.Text)
+		state := specdoc.StateOf(ev)
+		switch v, ok := verdicts[it.ID]; {
+		case ok:
 			tr.State, tr.Judged, tr.Reason = v.State, true, v.Reason
-		} else {
-			tr.State, tr.Judged, tr.Reason = specdoc.StateOf(ev), false, ""
+		case tr.Judged && tr.VerifiedFingerprint == fp && state == specdoc.Traced && !judge:
+			// The model's verdict stands while the requirement is unchanged and still found.
+		default:
+			tr.State, tr.Judged, tr.Reason = state, false, ""
 		}
+		tr.Evidence, tr.VerifiedAt, tr.VerifiedFingerprint = ev, &at, fp
 	}
 	if err := w.writeWorkspaceFile(ctx, specdoc.LedgerPath(file), l.Bytes()); err != nil {
 		return api.SpecVerification{}, err
 	}
 	out.Requirements = requirements(s, l)
+	if l.Approved != nil {
+		for _, r := range out.Requirements {
+			if why := specdoc.Drift(r.Change, was[r.ID], r.State, r.Judged); why != "" {
+				out.Drift = append(out.Drift, api.SpecDrift{ID: r.ID, Why: why})
+			}
+		}
+	}
 	return out, nil
+}
+
+// PlanSpec is how the saved spec at p would be implemented (SDD-30): its
+// requirements not implemented yet (by the ledger's last verification),
+// the dependencies not done it waits for, and the prompt for an agent:
+// tests first from Done when, each requirement's ID cited where it's done.
+func (w *Workspace) PlanSpec(p string) (api.SpecPlan, error) {
+	file, text, err := w.readSpecFile(p)
+	if err != nil {
+		return api.SpecPlan{}, err
+	}
+	all, _, err := w.readSpecs(nil)
+	if err != nil {
+		return api.SpecPlan{}, err
+	}
+	s := specdoc.Parse(file, text)
+	l, err := w.readLedger(file)
+	if err != nil {
+		return api.SpecPlan{}, err
+	}
+	var out api.SpecPlan
+	done := w.doneSpecs(all)
+	for _, d := range s.DependsOn {
+		if d != s.Number && !done[d] {
+			out.BlockedBy = append(out.BlockedBy, d)
+		}
+	}
+	pending := specdoc.Pending(s, l)
+	byID := map[string]api.SpecRequirement{}
+	for _, r := range requirements(s, l) {
+		byID[r.ID] = r
+	}
+	for _, it := range pending {
+		out.Pending = append(out.Pending, byID[it.ID])
+	}
+	if len(pending) == 0 {
+		return out, nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Implement %s (.agents/specs/%s). Read it first, with the specs it depends on and .agents/AGENTS.md (how to build and test here).\n\nThe requirements to do, in order:\n", s.Title, file)
+	for _, it := range pending {
+		fmt.Fprintf(&b, "- %s: %s\n", it.ID, it.Text)
+	}
+	if dw := specdoc.DoneWhen(text); dw != "" {
+		fmt.Fprintf(&b, "\nDone when:\n%s\n", dw)
+	}
+	b.WriteString("\nWork tests first: for each requirement, write or update the test that proves it, see it fail, then make it pass. Cite each requirement's ID where it's done: in a comment at the code that does it, in the test that proves it, and in the commit message (Implements: ID). Run the project's tests before you say it's done.")
+	if len(out.BlockedBy) > 0 {
+		nums := make([]string, len(out.BlockedBy))
+		for i, d := range out.BlockedBy {
+			nums[i] = fmt.Sprintf("%03d", d)
+		}
+		fmt.Fprintf(&b, " It depends on %s, which isn't done yet: check what it needs is there, and say so if it isn't.", strings.Join(nums, ", "))
+	}
+	out.Prompt = b.String()
+	return out, nil
+}
+
+// doneSpecs are the numbers of the specs that are done (specdoc.Done).
+func (w *Workspace) doneSpecs(all []specdoc.Spec) map[int]bool {
+	done := map[int]bool{}
+	for _, s := range all {
+		if s.Number == 0 {
+			continue
+		}
+		if l, err := w.readLedger(s.File); err == nil && specdoc.Done(s, l) {
+			done[s.Number] = true
+		}
+	}
+	return done
 }
 
 // parseVerdicts reads the model's verdicts by ID; ok is false for a reply

@@ -53,6 +53,8 @@ Fit the work to the request. Not every task is code: a picture, a document, an a
 
 You know this workspace: its instructions, specs and notes are in this prompt, and your tools reach the rest. Asked about the project (where the work stands, what's left, how it compares to the spec), find out before answering: read `.agents/specs/` and the instructions above, check `git log` and `git status`, look at the code. Asked to pick up where you left off, or about earlier work, read that session's summary with `recall_session` (the first prompt lists the earlier sessions), then check what has changed since. Never answer that you have no access, no history or no context: look.
 
+When you implement requirements from `.agents/specs/` (IDs like `AUTH-01`), cite each ID where it's done: in a comment at the code that does it, in the test that proves it, and in the commit message (`Implements: AUTH-01`). That's how the specification is traced to the work (`blitz spec verify`); work without its ID looks unimplemented.
+
 When given a task:
 1. Analyze the requirements carefully
 2. Execute the plan by using appropriate tools

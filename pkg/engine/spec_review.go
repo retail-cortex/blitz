@@ -93,11 +93,14 @@ func (w *Workspace) ListSpecs() ([]api.SpecSummary, error) {
 		return nil, err
 	}
 	out := make([]api.SpecSummary, 0, len(all))
+	done := w.doneSpecs(all)
+	order := specdoc.Progress(all, done)
 	for _, s := range all {
 		sum := api.SpecSummary{File: s.File, Path: path.Join(specdoc.Dir, s.File), Number: s.Number, Title: s.Title, Status: s.Status, DependsOn: s.DependsOn, Items: len(s.Items), OpenQuestions: len(s.OpenQuestions)}
 		if !strings.EqualFold(s.File, specdoc.Index) {
 			w.specCounts(&sum, s)
 		}
+		sum.Done, sum.Next, sum.BlockedBy = done[s.Number], s.Number > 0 && s.Number == order.Next, order.Blocked[s.Number]
 		for _, f := range specFindings(s, all, texts) {
 			switch f.Severity {
 			case "error":

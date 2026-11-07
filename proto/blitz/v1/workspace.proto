@@ -377,6 +377,9 @@ service WorkspaceService {
   // Scans what a spec's changes since approval reach in the work, and
   // with judge has the model write the fix (SDD-20, SDD-21).
   rpc ImpactSpec(ImpactSpecRequest) returns (ImpactSpecResponse);
+  // Says how a spec would be implemented: what's left, what it waits for,
+  // and the prompt for an agent (SDD-30).
+  rpc PlanSpec(PlanSpecRequest) returns (PlanSpecResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -2699,6 +2702,12 @@ message SpecSummary {
   int32 traced = 12;
   int32 implemented = 13;
   int32 changed = 14;
+  // Approved, unchanged and every requirement found in the work (SDD-32).
+  bool done = 15;
+  // The first in order not done whose dependencies are.
+  bool next = 16;
+  // The dependencies not done it waits for.
+  repeated int32 blocked_by = 17;
 }
 
 // Response message for WorkspaceService.ListSpecs.
@@ -2773,9 +2782,35 @@ message VerifySpecRequest {
   bool estimate = 4;
 }
 
+// An approved requirement that no longer holds.
+message SpecDrift {
+  string id = 1;
+  // "changed" (since approval), "lost" (no longer found in the work) or
+  // "judged" (the model said missing or contradicted).
+  string why = 2;
+}
+
+// Request message for WorkspaceService.PlanSpec.
+message PlanSpecRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+// Response message for WorkspaceService.PlanSpec.
+message PlanSpecResponse {
+  // Its requirements not implemented yet, in order.
+  repeated SpecRequirement pending = 1;
+  // The dependencies not done that it waits for.
+  repeated int32 blocked_by = 2;
+  // The prompt that has an agent implement it ("" when nothing's left).
+  string prompt = 3;
+}
+
 // Response message for WorkspaceService.VerifySpec.
 message VerifySpecResponse {
   repeated SpecRequirement requirements = 1;
+  // An approved spec's requirements that drifted (SDD-31).
+  repeated SpecDrift drift = 6;
   double cost_usd = 2;
   double estimated_usd = 3;
   // The model has a price (the estimate means something).

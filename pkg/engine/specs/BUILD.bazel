@@ -20,6 +20,7 @@ go_library(
         "declaration.go",
         "evidence.go",
         "ledger.go",
+        "progress.go",
         "specs.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/specs",
@@ -31,6 +32,7 @@ go_test(
     srcs = [
         "declaration_test.go",
         "ledger_test.go",
+        "progress_test.go",
         "specs_test.go",
     ],
     embed = [":specs"],
