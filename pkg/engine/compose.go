@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	specdoc "github.com/retail-cortex/blitz/pkg/engine/specs"
 	"slices"
 	"strings"
 
@@ -45,6 +46,8 @@ func (w *Workspace) recipe(kind string) (compose.Recipe, error) {
 		return compose.Recipe{Kind: "workflow", Brief: workflowBrief, Check: checkWorkflowDraft}, nil
 	case "job":
 		return compose.Recipe{Kind: "job", Brief: jobBrief, Check: w.checkJobDraft}, nil
+	case "spec":
+		return compose.Recipe{Kind: "spec", Brief: specBrief + "\nThe draft's name is the spec's file name without .md (004-authentication).", Check: w.checkSpecDraft}, nil
 	}
 	return compose.Recipe{}, fmt.Errorf("%w: %q", ErrNoRecipe, kind)
 }
@@ -72,6 +75,41 @@ func (w *Workspace) checkJobDraft(name, file string) []string {
 		return []string{err.Error()}
 	}
 	return problems
+}
+
+// specBrief is one spec's format, as the project-spec agent writes it
+// (/spec, step 5): the Redraft's and the composer's (spec_057 SDD-04).
+const specBrief = `A spec is one part of a project's specification (.agents/specs/NNN-<name>.md, numbered in the order the work happens; README.md is the index): what that part is for and what it must achieve, before anyone decides how. The project may be software, research, data analysis or writing: never assume it's code. The file:
+# NNN. <Title>
+Status: draft|approved|in progress|implemented|changed|retired
+Depends on: the earlier specs it needs, by file name (none for 001)
+(001-overview.md only: Kind: software|research|analysis|writing|other)
+## Context: why it exists, in a few sentences.
+## Goals and ## Non-goals.
+## Requirements (Objectives for research and analysis, Content for writing): numbered items, each with an ID made of a short prefix of the spec's name and a number (- **AUTH-01** …), each one checkable, with the numbers the user gave in them.
+## Done when: how anyone can tell it's finished.
+## Open questions: what's undecided or assumed.
+Keep existing IDs; a new item takes the next free number in its prefix. Plain words, short lists.`
+
+// checkSpecDraft is what doesn't hold in a drafted spec: the checks'
+// errors, against the rest of the specification.
+func (w *Workspace) checkSpecDraft(name, file string) []string {
+	all, _, err := w.readSpecs(map[string]string{name + ".md": file})
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var out []string
+	for _, s := range all {
+		if s.File != name+".md" {
+			continue
+		}
+		for _, f := range specdoc.Lint(s, all) {
+			if f.Severity == "error" {
+				out = append(out, f.Message)
+			}
+		}
+	}
+	return out
 }
 
 // jobBrief tells the model what a job is and its file.

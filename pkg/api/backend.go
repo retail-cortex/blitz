@@ -77,6 +77,12 @@ type Backend interface {
 	ListNotes() ([]Note, error)
 	ForgetNote(name string) error
 
+	// The project's specification (spec_057_spec_driven): its files in
+	// order, and a review of one (path, its text as edited; judge asks
+	// the model too, which costs).
+	ListSpecs() ([]SpecSummary, error)
+	ReviewSpec(ctx context.Context, path, text string, judge bool) (SpecReview, error)
+
 	// Reflection is what the harness has to learn from the workspace's
 	// runs, for the welcome (/reflect).
 	Reflection() (Reflection, error)

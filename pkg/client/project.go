@@ -81,6 +81,38 @@ func (r *Remote) ListNotes() ([]api.Note, error) {
 	return out, nil
 }
 
+// ListSpecs is the project's specification, in order
+// (WorkspaceService.ListSpecs).
+func (r *Remote) ListSpecs() ([]api.SpecSummary, error) {
+	res, err := r.workspaces.ListSpecs(context.Background(), connect.NewRequest(&pb.ListSpecsRequest{Workspace: r.dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	out := make([]api.SpecSummary, len(res.Msg.Specs))
+	for i, s := range res.Msg.Specs {
+		deps := make([]int, len(s.DependsOn))
+		for j, d := range s.DependsOn {
+			deps[j] = int(d)
+		}
+		out[i] = api.SpecSummary{File: s.File, Path: s.Path, Number: int(s.Number), Title: s.Title, Status: s.Status, DependsOn: deps,
+			Items: int(s.Items), Errors: int(s.Errors), Warnings: int(s.Warnings), OpenQuestions: int(s.OpenQuestions)}
+	}
+	return out, nil
+}
+
+// ReviewSpec reviews a spec as edited (WorkspaceService.ReviewSpec).
+func (r *Remote) ReviewSpec(ctx context.Context, path, text string, judge bool) (api.SpecReview, error) {
+	res, err := r.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: r.dir, Path: path, Text: text, Judge: judge}))
+	if err != nil {
+		return api.SpecReview{}, fromAPI(err)
+	}
+	out := api.SpecReview{CostUSD: res.Msg.CostUsd, Problem: res.Msg.Problem}
+	for _, f := range res.Msg.Findings {
+		out.Findings = append(out.Findings, api.SpecFinding{Line: int(f.Line), ID: f.Id, Severity: f.Severity, Code: f.Code, Message: f.Message, Judged: f.Judged})
+	}
+	return out, nil
+}
+
 // Reflection is what the harness has to learn
 // (WorkspaceService.GetReflection).
 func (r *Remote) Reflection() (api.Reflection, error) {

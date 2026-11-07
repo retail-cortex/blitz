@@ -280,3 +280,26 @@ func TestDraftManifestOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.Msg.Text != "" || res.Msg.Problem != "", "a draft or why not")
 }
+
+// The specification over the API: listed, and a spec reviewed as edited
+// (spec_057_spec_driven SDD-01, SDD-02).
+func TestSpecsOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "specs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "specs", "001-overview.md"), []byte("# 001. Overview\nStatus: approved\nDepends on: 001\n- **OV-01** One store.\nDone when: open.\n"), 0o644))
+	list, err := c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Specs, 1)
+	s := list.Msg.Specs[0]
+	assert.Equal(t, ".agents/specs/001-overview.md", s.Path)
+	assert.Equal(t, []int32{1}, s.DependsOn)
+	assert.EqualValues(t, 1, s.Errors, "it depends on itself")
+
+	res, err := c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: dir, Path: s.Path, Text: "# 001. Overview\nStatus: approved\n- **OV-01** One store.\nDone when: open.\n"}))
+	require.NoError(t, err)
+	assert.Empty(t, res.Msg.Findings, "the edited text, not the file")
+	_, err = c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: dir, Path: "README.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}

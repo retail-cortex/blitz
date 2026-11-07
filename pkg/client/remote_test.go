@@ -148,6 +148,8 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"SearchWeb":            func() error { _, err := r.SearchWeb(ctx, "x"); return err },
 		"TrustProject":         func() error { return r.TrustProject("h", true) },
 		"ListNotes":            func() error { _, err := r.ListNotes(); return err },
+		"ListSpecs":            func() error { _, err := r.ListSpecs(); return err },
+		"ReviewSpec":           func() error { _, err := r.ReviewSpec(ctx, ".agents/specs/001-a.md", "", false); return err },
 		"ForgetNote":           func() error { return r.ForgetNote("x") },
 		"Task":                 func() error { _, _, err := r.Task("task-1"); return err },
 		"StopTask":             func() error { _, err := r.StopTask("task-1"); return err },

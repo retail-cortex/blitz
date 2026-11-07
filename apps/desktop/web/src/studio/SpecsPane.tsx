@@ -14,36 +14,51 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { Code, ConnectError } from "@connectrpc/connect";
-import { mdiAlertCircleOutline, mdiArrowLeft, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiPlus, mdiUndoVariant } from "@mdi/js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { mdiAlertCircleOutline, mdiAlertOutline, mdiArrowLeft, mdiAutoFix, mdiCheckCircleOutline, mdiCompare, mdiContentSaveOutline, mdiDeleteOutline, mdiFileDocumentOutline, mdiFormatListNumbered, mdiInformationOutline, mdiLoading, mdiPlus, mdiRobotOutline, mdiShieldSearch, mdiUndoVariant } from "@mdi/js";
 import { Button, Dialog, Field, Icon, IconButton, useSnackbar } from "@blitz/webui";
-import { files } from "../api";
-import { FileKind } from "../gen/blitz/v1/file_pb";
+import { files, workspaces } from "../api";
 import { message } from "../errors";
-import { t } from "../i18n";
+import type { SpecFinding, SpecSummary } from "../gen/blitz/v1/workspace_pb";
+import { t, tn } from "../i18n";
+import { cost } from "../workflowRuns";
+import { ComposeDialog } from "./ComposeDialog";
 import { DraftButton } from "./Draft";
 import { MarkdownField } from "./MarkdownField";
 import { ConfirmDialog, useDiscardGuard } from "./paneParts";
-import { newSpecFile, newSpecText, specFiles, specsDir, specsIndex, type SpecFile } from "./specs";
+import { applyHunks, lineHunks, newSpecFile, newSpecText, specsDir, specsIndex } from "./specs";
 
-/** The spec open in the form: its file, the text read and its version. */
+/** The spec open in the form: its summary, the text read and its version. */
 interface OpenSpec {
-  spec: SpecFile;
+  spec: SpecSummary;
   base: string;
   version: string;
 }
 
+/** How long typing pauses before the checks run again. */
+const reviewDelay = 500;
+
+/** A spec as the list names it: "Index", "001 · Overview", or its title. */
+function specLabel(s: SpecSummary): string {
+  if (s.file === specsIndex) return t("desktop.specs.index");
+  const title = s.title || s.file.replace(/\.md$/i, "");
+  return s.number ? `${String(s.number).padStart(3, "0")} · ${title}` : title;
+}
+
 /**
- * The project's specification (spec_040_studio STU-90): the specs /spec
- * writes in .agents/specs, the index first, then in order of execution.
- * A spec opens over the list in the Markdown field (Visual or Source),
- * with Redraft under it; Save writes it back, refused when it changed on
- * disk since it was read. New adds the next number's spec.
+ * The project's specification (spec_040_studio STU-11, spec_057_spec_driven):
+ * the specs /spec writes in .agents/specs, the index first, then in order,
+ * each with its status and what the checks found (ListSpecs). A spec opens
+ * over the list in a Markdown field; the checks run as it's edited
+ * (ReviewSpec), **Review with AI** adds the model's, **Refine with AI** is
+ * a conversation whose changes are kept or dropped one by one, and Redraft
+ * rewrites it. Save writes it back, refused when it changed on disk since
+ * it was read.
  */
 export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
   const snack = useSnackbar();
-  const [specs, setSpecs] = useState<SpecFile[]>([]);
+  const [specs, setSpecs] = useState<SpecSummary[]>([]);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<OpenSpec | null>(null);
   const [text, setText] = useState("");
@@ -51,16 +66,18 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   const [problem, setProblem] = useState("");
   const [adding, setAdding] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [checks, setChecks] = useState<SpecFinding[]>([]);
+  const [judged, setJudged] = useState<{ findings: SpecFinding[]; cost: number; problem: string } | null>(null);
+  const [judging, setJudging] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [proposal, setProposal] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const r = await files.listDir({ workspace, path: specsDir, showHidden: true });
-      setSpecs(specFiles(r.entries.filter((e) => e.kind === FileKind.FILE).map((e) => e.name)));
+      setSpecs((await workspaces.listSpecs({ workspace })).specs);
       setError("");
     } catch (e) {
-      // No folder yet: no specs.
-      if (e instanceof ConnectError && e.code === Code.NotFound) setSpecs([]);
-      else setError(message(e));
+      setError(message(e));
     }
   }, [workspace]);
   useEffect(() => void refresh(), [refresh]);
@@ -69,13 +86,31 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
   const { leave, discard } = useDiscardGuard(dirty);
 
-  const show = (spec: SpecFile) =>
+  // The checks, as the spec is edited (SDD-02).
+  const path = open?.spec.path ?? "";
+  useEffect(() => {
+    if (!path) return;
+    const timer = setTimeout(() => {
+      workspaces.reviewSpec({ workspace, path, text, judge: false }).then(
+        (r) => setChecks(r.findings),
+        () => setChecks([]),
+      );
+    }, reviewDelay);
+    return () => clearTimeout(timer);
+  }, [workspace, path, text]);
+
+  const begin = (spec: SpecSummary, body: string, version: string) => {
+    setOpen({ spec, base: body, version });
+    setText(body);
+    setProblem("");
+    setChecks([]);
+    setJudged(null);
+  };
+  const show = (spec: SpecSummary) =>
     leave(async () => {
       try {
         const r = await files.readFile({ workspace, path: spec.path });
-        setOpen({ spec, base: r.text, version: r.version });
-        setText(r.text);
-        setProblem("");
+        begin(spec, r.text, r.version);
       } catch (e) {
         snack(message(e), { error: true });
       }
@@ -100,18 +135,19 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       setBusy(false);
     }
   };
+  const numbers = specs.map((s) => s.number);
   const add = async (title: string) => {
-    const file = newSpecFile(title, specs);
+    const file = newSpecFile(title, numbers);
     if (!file) return;
     setAdding(null);
-    const spec = specFiles([file])[0];
+    const p = `${specsDir}/${file}`;
     try {
-      const body = newSpecText(title);
-      const r = await files.writeFile({ workspace, path: spec.path, text: body, version: "" });
-      await refresh();
-      setOpen({ spec, base: body, version: r.version });
-      setText(body);
-      setProblem("");
+      const body = newSpecText(title, file);
+      const r = await files.writeFile({ workspace, path: p, text: body, version: "" });
+      const list = (await workspaces.listSpecs({ workspace })).specs;
+      setSpecs(list);
+      const spec = list.find((s) => s.path === p);
+      if (spec) begin(spec, body, r.version);
     } catch (e) {
       snack(message(e), { error: true });
     }
@@ -128,8 +164,22 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       snack(message(e), { error: true });
     }
   };
+  // The model's review (SDD-03): it costs, so only when asked.
+  const judge = async () => {
+    if (!open) return;
+    setJudging(true);
+    try {
+      const r = await workspaces.reviewSpec({ workspace, path: open.spec.path, text, judge: true });
+      setChecks(r.findings.filter((f) => !f.judged));
+      setJudged({ findings: r.findings.filter((f) => f.judged), cost: r.costUsd, problem: r.problem });
+    } catch (e) {
+      snack(message(e), { error: true });
+    } finally {
+      setJudging(false);
+    }
+  };
 
-  const label = (s: SpecFile) => (s.file === specsIndex ? t("desktop.specs.index") : s.number ? `${String(s.number).padStart(3, "0")} · ${s.title}` : s.title);
+  const isIndex = open?.spec.file === specsIndex;
   return (
     <div className={`slide-pane specs-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
@@ -148,10 +198,19 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           {specs.map((s) => (
             <button key={s.path} className="list-item" title={s.path} onClick={() => void show(s)}>
               <Icon path={s.file === specsIndex ? mdiFormatListNumbered : mdiFileDocumentOutline} />
-              <span className="lines">
-                <span className="ellipsis">{label(s)}</span>
-                <small className="ellipsis">{s.file}</small>
+              <span className="lines spacer">
+                <span className="ellipsis">{specLabel(s)}</span>
+                <small className="ellipsis">{[s.file, s.status, s.items ? tn("desktop.specs.items", s.items) : ""].filter(Boolean).join(" · ")}</small>
               </span>
+              {s.errors > 0 ? (
+                <span className="row t-body-sm error-text" style={{ gap: 4 }} title={tn("desktop.specs.errors", s.errors)}>
+                  <Icon path={mdiAlertCircleOutline} size="sm" /> {s.errors}
+                </span>
+              ) : s.warnings > 0 ? (
+                <span className="row t-body-sm muted" style={{ gap: 4 }} title={tn("desktop.specs.warnings", s.warnings)}>
+                  <Icon path={mdiAlertOutline} size="sm" /> {s.warnings}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -161,7 +220,7 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           <>
             <div className="row slide-back">
               <IconButton icon={mdiArrowLeft} label={t("desktop.specs.back")} onClick={close} />
-              <h2 className="t-headline spacer ellipsis">{label(open.spec)}</h2>
+              <h2 className="t-headline spacer ellipsis">{specLabel(open.spec)}</h2>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
             </div>
             <div className="worker agent-form">
@@ -177,7 +236,21 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                 rows={18}
                 height={440}
                 onSave={() => void save()}
-                tools={<DraftButton workspace={workspace} kind="spec" name={open.spec.title} description="" current={text} onUse={setText} />}
+                tools={
+                  <>
+                    {!isIndex && (
+                      <Button small icon={judging ? mdiLoading : mdiShieldSearch} iconSpin={judging} disabled={judging} title={t("desktop.specs.judge_hint")} onClick={() => void judge()}>
+                        {judging ? t("desktop.specs.judging") : t("desktop.specs.judge")}
+                      </Button>
+                    )}
+                    {!isIndex && (
+                      <Button small icon={mdiAutoFix} title={t("desktop.specs.refine_hint")} onClick={() => setRefining(true)}>
+                        {t("desktop.specs.refine")}
+                      </Button>
+                    )}
+                    <DraftButton workspace={workspace} kind="spec" name={open.spec.file.replace(/\.md$/i, "")} description={open.spec.title} current={text} onUse={setText} />
+                  </>
+                }
               />
               {problem && (
                 <div className="card error row small-card" style={{ gap: 8 }}>
@@ -185,6 +258,7 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                   <span className="t-body-sm">{problem}</span>
                 </div>
               )}
+              <Findings checks={checks} judged={judged} />
             </div>
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={open.spec.path}>
@@ -214,13 +288,13 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           footer={
             <>
               <Button onClick={() => setAdding(null)}>{t("desktop.cancel")}</Button>
-              <Button variant="filled" disabled={!newSpecFile(adding, specs)} onClick={() => void add(adding)}>
+              <Button variant="filled" disabled={!newSpecFile(adding, numbers)} onClick={() => void add(adding)}>
                 {t("desktop.specs.create")}
               </Button>
             </>
           }
         >
-          <Field label={t("desktop.specs.new_title")} supporting={newSpecFile(adding, specs) ? t("desktop.workers.in", { path: `${specsDir}/${newSpecFile(adding, specs)}` }) : t("desktop.specs.new_hint")}>
+          <Field label={t("desktop.specs.new_title")} supporting={newSpecFile(adding, numbers) ? t("desktop.workers.in", { path: `${specsDir}/${newSpecFile(adding, numbers)}` }) : t("desktop.specs.new_hint")}>
             {(id) => (
               <input
                 id={id}
@@ -229,7 +303,7 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                 value={adding}
                 onChange={(e) => setAdding(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newSpecFile(adding, specs)) void add(adding);
+                  if (e.key === "Enter" && newSpecFile(adding, numbers)) void add(adding);
                 }}
               />
             )}
@@ -241,7 +315,112 @@ export function SpecsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           <p>{t("desktop.specs.delete_body", { path: open.spec.path })}</p>
         </ConfirmDialog>
       )}
+      {refining && open && (
+        <ComposeDialog
+          workspace={workspace}
+          kind="spec"
+          current={text}
+          onClose={() => setRefining(false)}
+          onDraft={(d) => {
+            setRefining(false);
+            setProposal(d.file);
+          }}
+        />
+      )}
+      {proposal !== null &&
+        createPortal(
+          <SpecChanges
+            before={text}
+            after={proposal}
+            onUse={(merged) => {
+              setText(merged);
+              setProposal(null);
+            }}
+            onClose={() => setProposal(null)}
+          />,
+          document.body,
+        )}
       {discard(open?.spec.file ?? "")}
     </div>
+  );
+}
+
+/** What the checks found, then the model's review when it was asked for. */
+function Findings({ checks, judged }: { checks: SpecFinding[]; judged: { findings: SpecFinding[]; cost: number; problem: string } | null }) {
+  const icon = (f: SpecFinding) => (f.judged ? mdiRobotOutline : f.severity === "error" ? mdiAlertCircleOutline : f.severity === "warning" ? mdiAlertOutline : mdiInformationOutline);
+  const rows = [...checks, ...(judged?.findings ?? [])];
+  return (
+    <div className="card outlined stack spec-findings" style={{ gap: 6 }}>
+      <span className="row t-title-sm" style={{ gap: 6 }}>
+        {rows.length === 0 && <Icon path={mdiCheckCircleOutline} size="sm" />}
+        {rows.length === 0 ? t("desktop.specs.sound") : tn("desktop.specs.found", rows.length)}
+      </span>
+      {rows.map((f, i) => (
+        <span key={i} className={`row t-body-sm spec-finding ${f.severity === "error" ? "error-text" : ""}`} style={{ gap: 6, alignItems: "flex-start" }}>
+          <Icon path={icon(f)} size="sm" />
+          <span>
+            {f.line > 0 && <span className="muted">{t("desktop.specs.line", { line: f.line })} · </span>}
+            {f.message}
+          </span>
+        </span>
+      ))}
+      {judged && <span className="t-body-sm muted">{judged.problem ? t("desktop.specs.judge_problem", { problem: judged.problem }) : t("desktop.specs.judged", { cost: cost(judged.cost) })}</span>}
+    </div>
+  );
+}
+
+/**
+ * A refined spec's changes (SDD-04), each kept or dropped: the removed
+ * lines and the ones that take their place, every change kept at first;
+ * Use puts the result in the form, unsaved.
+ */
+function SpecChanges({ before, after, onUse, onClose }: { before: string; after: string; onUse: (text: string) => void; onClose: () => void }) {
+  const hunks = useMemo(() => lineHunks(before, after), [before, after]);
+  const [keep, setKeep] = useState(() => hunks.map(() => true));
+  return (
+    <Dialog
+      title={t("desktop.specs.changes")}
+      icon={mdiCompare}
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <span className="t-body-sm muted spacer">{t("desktop.specs.changes_kept", { kept: keep.filter(Boolean).length, count: hunks.length })}</span>
+          <Button onClick={onClose}>{t("desktop.cancel")}</Button>
+          <Button variant="filled" disabled={!keep.some(Boolean)} onClick={() => onUse(applyHunks(before, hunks, keep))}>
+            {t("desktop.specs.use_changes")}
+          </Button>
+        </>
+      }
+    >
+      {hunks.length === 0 ? (
+        <p className="t-body-md">{t("desktop.specs.no_changes")}</p>
+      ) : (
+        <div className="diff">
+          {hunks.map((h, k) => (
+            <div key={k} className="diff-file">
+              <label className="diff-file-head">
+                <input type="checkbox" checked={keep[k]} onChange={(e) => setKeep((v) => v.map((x, j) => (j === k ? e.target.checked : x)))} />
+                <span className="spacer">{t("desktop.specs.line", { line: h.at + 1 })}</span>
+              </label>
+              <pre className="diff-lines">
+                {h.removed.map((l, i) => (
+                  <div key={`r${i}`} className="dl del">
+                    <span className="dl-sign">-</span>
+                    {l || " "}
+                  </div>
+                ))}
+                {h.added.map((l, i) => (
+                  <div key={`a${i}`} className="dl add">
+                    <span className="dl-sign">+</span>
+                    {l || " "}
+                  </div>
+                ))}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </Dialog>
   );
 }

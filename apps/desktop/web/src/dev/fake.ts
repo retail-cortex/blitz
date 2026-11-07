@@ -996,14 +996,47 @@ const fakeProfileOf = new Map<string, string>();
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
 
+// The spec the fake composer refines.
+let fakeSpecCurrent = "";
+
+// A spec's checks, as the service's would find them (fewer).
+function fakeSpecChecks(text: string) {
+  const out: { line: number; id: string; severity: string; code: string; message: string; judged: boolean }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = /\*\*([A-Z]+-\d+)\*\*.*\bfast\b/.exec(l);
+    if (m) out.push({ line: i + 1, id: m[1], severity: "warning", code: "vague", message: `${m[1]}: "fast" is a judgement, not a check: say how much, or how it's measured`, judged: false });
+  });
+  if (!/^#+\s*Done when|^Done when/im.test(text)) out.push({ line: 0, id: "", severity: "warning", code: "no-done-when", message: 'no "Done when": say how anyone can tell it\'s finished', judged: false });
+  if (/^#+\s*Open questions\n+- /im.test(text)) out.push({ line: 0, id: "", severity: "info", code: "open-questions", message: "1 open question(s) to answer before it's approved", judged: false });
+  return out;
+}
+
+// A spec file as ListSpecs sums it up.
+function fakeSpecSummary(path: string, text: string) {
+  const file = path.slice(".agents/specs/".length);
+  const checks = fakeSpecChecks(text);
+  return {
+    file,
+    path,
+    number: Number(/^(\d{3})-/.exec(file)?.[1] ?? 0),
+    title: (/^#\s+(?:\d+\.\s+)?(.+)$/m.exec(text)?.[1] ?? "").trim(),
+    status: (/^Status:\s*(.+)$/m.exec(text)?.[1] ?? "").trim().toLowerCase(),
+    dependsOn: [...(/^Depends on:(.*)$/m.exec(text)?.[1] ?? "").matchAll(/\b(\d{3})\b/g)].map((m) => Number(m[1])),
+    items: (text.match(/\*\*[A-Z]+-\d+\*\*/g) ?? []).length,
+    errors: 0,
+    warnings: file === "README.md" ? 0 : checks.filter((c) => c.severity === "warning").length,
+    openQuestions: checks.some((c) => c.code === "open-questions") ? 1 : 0,
+  };
+}
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
   ["docs/pricing.md", fakePricing],
   // The project's specification, as /spec writes it (Studio › Specs).
-  [".agents/specs/README.md", "# Specification\n\n1. [Overview](001-overview.md): what the shop is for.\n2. [Orders](002-orders.md): taking and filling orders.\n"],
-  [".agents/specs/001-overview.md", "# Overview\n\nKind: software\n\nA small shop server for **one store**: its staff take orders at the counter and online.\n\n## Success\n\n- An order takes under a minute at the counter.\n- Nothing is sold that isn't in stock.\n"],
-  [".agents/specs/002-orders.md", "# Orders\n\n1. Staff add items, see the total and take payment.\n2. Online orders wait in a queue until someone fills them.\n"],
+  [".agents/specs/README.md", "# Specification\n\nA small shop server for one store. Kind: software.\n\n1. [Overview](001-overview.md): what the shop is for.\n2. [Orders](002-orders.md): taking and filling orders.\n"],
+  [".agents/specs/001-overview.md", "# 001. Overview\n\nStatus: approved\nKind: software\n\n## Context\n\nA small shop server for **one store**: its staff take orders at the counter and online.\n\n## Requirements\n\n- **OV-01** One store, with up to 3 tills open at once.\n- **OV-02** Staff sign in before they take an order.\n\n## Done when\n\nA till takes an order from start to payment.\n"],
+  [".agents/specs/002-orders.md", "# 002. Orders\n\nStatus: draft\nDepends on: 001-overview\n\n## Requirements\n\n- **ORD-01** Checkout is fast.\n- **ORD-02** Online orders wait in a queue until someone fills them.\n\n## Done when\n\nAn order is paid and filled.\n\n## Open questions\n\n- Do we take cash?\n"],
   // A page with its own stylesheet and script, previewed in a sandboxed frame.
   ["site/index.html", '<!doctype html>\n<html>\n<head>\n  <title>Shop</title>\n  <link rel="stylesheet" href="site.css">\n</head>\n<body>\n  <h1>The shop</h1>\n  <p id="when">Loading…</p>\n  <script src="app.js"></script>\n</body>\n</html>\n'],
   ["site/site.css", "body { font-family: Georgia, serif; margin: 40px; color: #234; }\nh1 { color: #b04a1a; border-bottom: 2px solid #b04a1a; }\n"],
@@ -1801,12 +1834,31 @@ export function installFake() {
         watchWorkflowRun: ({ id }, ctx) => watchFakeRun(id, ctx.signal),
         watchWorkflowRuns: ({ workspace }, ctx) => watchFakeRuns(workspace, ctx.signal),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        // The specification (spec_057): listed and checked as the service does, roughly.
+        listSpecs: () => ({
+          specs: [...fakeFiles.keys()]
+            .filter((p) => p.startsWith(".agents/specs/") && p.endsWith(".md"))
+            .sort((a, b) => (a.endsWith("README.md") ? -1 : b.endsWith("README.md") ? 1 : a.localeCompare(b)))
+            .map((path) => fakeSpecSummary(path, fakeFiles.get(path) ?? "")),
+        }),
+        reviewSpec: ({ path, text, judge }) => {
+          const findings = fakeSpecChecks(text);
+          if (judge) findings.push({ line: 0, id: "", severity: "warning", code: "judged", message: "Nothing says what happens to an order when payment fails: is it kept, and for how long?", judged: true });
+          if (!path.startsWith(".agents/specs/")) throw new ConnectError("not a spec", Code.InvalidArgument);
+          return { findings, costUsd: judge ? 0.0021 : 0, problem: "" };
+        },
         // The composer: one question, then a three-step draft.
-        startCompose: ({ request, kind }) =>
-          kind === "job"
+        startCompose: ({ request, kind, current }) =>
+          kind === "spec"
+            ? ((fakeSpecCurrent = current), { session: { id: "compose-fake-spec", kind, asking: true, costUsd: 0.0009, turns: [{ role: "user", text: request }, { role: "composer", text: "How long may a refund be asked for?", options: ["30 days", "14 days", "Any time"] }] } })
+            : kind === "job"
             ? { session: { id: "compose-fake-job", kind, asking: true, costUsd: 0.0011, turns: [{ role: "user", text: request }, { role: "composer", text: "Which time zone should 8 am be in?", options: ["America/Chicago", "Europe/Paris", "The service machine's"] }] } }
             : { session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] } },
         answerCompose: ({ answer, id }) => {
+          if (id === "compose-fake-spec") {
+            const file = fakeSpecCurrent.replace("- **ORD-01** Checkout is fast.", "- **ORD-01** Checkout takes under 30 seconds at a till.").replace("\n## Done when", `- **ORD-03** Staff refund a card payment within ${answer}; the till prints a receipt.\n\n## Done when`);
+            return { session: { id, kind: "spec", asking: false, costUsd: 0.0026, turns: [{ role: "user", text: "Add refunds" }, { role: "composer", text: "How long may a refund be asked for?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Made checkout measurable and added refunds as ORD-03." }], draft: { name: "002-orders", summary: "Made checkout measurable and added refunds as ORD-03.", file, problems: [] } } };
+          }
           if (id === "compose-fake-job") {
             const worker = { name: "ai-news", description: "A summary of the day's AI news", schedule: "0 8 * * *", timezone: answer.includes("/") ? answer : "", agent: "", model: "", permissions: ["web:news.google.com", "write:reports/ai-news/**"], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "Fetch the latest AI news from news.google.com.\nWrite a one-page summary to reports/ai-news/MM-DD-YYYY.html, glass morphic with a dark theme.", workflow: "" };
             return {

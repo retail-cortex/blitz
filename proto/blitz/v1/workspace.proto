@@ -356,6 +356,12 @@ service WorkspaceService {
   // Has the model write or improve a manifest field (an agent's or a
   // skill's instructions, a script, a rule): nothing is saved.
   rpc DraftManifest(DraftManifestRequest) returns (DraftManifestResponse);
+  // Returns the project's specification (.agents/specs), in order, each
+  // with its status and what the checks found (spec_057 SDD-01).
+  rpc ListSpecs(ListSpecsRequest) returns (ListSpecsResponse);
+  // Reviews a spec as edited: the checks without a model, and the model's
+  // review when judge is set (spec_057 SDD-02, SDD-03).
+  rpc ReviewSpec(ReviewSpecRequest) returns (ReviewSpecResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -2647,6 +2653,70 @@ message MergeBranchResponse {
   int32 commits = 2;
   // The git status after the merge.
   GetGitStatusResponse status = 3;
+}
+
+// Request message for WorkspaceService.ListSpecs.
+message ListSpecsRequest {
+  string workspace = 1;
+}
+
+// One file of the specification.
+message SpecSummary {
+  // Its name (001-overview.md), and its path in the workspace.
+  string file = 1;
+  string path = 2;
+  // Its place in the order (0 for the index or an unnumbered file).
+  int32 number = 3;
+  string title = 4;
+  // Its Status: line ("" when there's none).
+  string status = 5;
+  repeated int32 depends_on = 6;
+  // How many requirements with IDs it has.
+  int32 items = 7;
+  // What the checks without a model found.
+  int32 errors = 8;
+  int32 warnings = 9;
+  int32 open_questions = 10;
+}
+
+// Response message for WorkspaceService.ListSpecs.
+message ListSpecsResponse {
+  repeated SpecSummary specs = 1;
+}
+
+// Request message for WorkspaceService.ReviewSpec.
+message ReviewSpecRequest {
+  string workspace = 1;
+  // The spec's path in the workspace (.agents/specs/NNN-name.md).
+  string path = 2;
+  // Its text as edited (reviewed in place of the file's).
+  string text = 3;
+  // Ask the model too (it costs).
+  bool judge = 4;
+}
+
+// Something a review found in a spec.
+message SpecFinding {
+  // Where (1-based; 0 for the whole spec).
+  int32 line = 1;
+  // The requirement it's about, if one.
+  string id = 2;
+  // "error", "warning" or "info".
+  string severity = 3;
+  // The check (no-title, vague, …; "judged" for the model's).
+  string code = 4;
+  string message = 5;
+  // The model's finding, not a check's.
+  bool judged = 6;
+}
+
+// Response message for WorkspaceService.ReviewSpec.
+message ReviewSpecResponse {
+  repeated SpecFinding findings = 1;
+  // What the model's review cost.
+  double cost_usd = 2;
+  // Why the model's review didn't come (the checks' findings are there).
+  string problem = 3;
 }
 
 // Request message for WorkspaceService.DraftManifest.

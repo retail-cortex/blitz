@@ -15,22 +15,48 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { newSpecFile, newSpecText, specFiles } from "./specs";
+import { applyHunks, lineHunks, newSpecFile, newSpecText } from "./specs";
 
 describe("the specs", () => {
-  it("lists the index first, then the specs in order, and only Markdown", () => {
-    const specs = specFiles(["010-data_model.md", "notes.txt", "002-users.md", "README.md", "001-overview.md", "ideas.md"]);
-    expect(specs.map((s) => s.file)).toEqual(["README.md", "001-overview.md", "002-users.md", "010-data_model.md", "ideas.md"]);
-    expect(specs[3]).toEqual({ file: "010-data_model.md", path: ".agents/specs/010-data_model.md", number: 10, title: "Data model" });
-    expect(specs[4]).toMatchObject({ number: 0, title: "Ideas" });
+  it("names a new spec after the last one, from its title", () => {
+    expect(newSpecFile("Café orders & Payments!", [0, 1, 7])).toBe("008-cafe-orders-payments.md");
+    expect(newSpecFile("Overview", [])).toBe("001-overview.md");
+    expect(newSpecFile(" ?! ", [1])).toBe("");
+    expect(newSpecFile("last", [999])).toBe("999-last.md");
   });
 
-  it("names a new spec after the last one, from its title", () => {
-    const specs = specFiles(["001-overview.md", "007-api.md", "README.md"]);
-    expect(newSpecFile("Café orders & Payments!", specs)).toBe("008-cafe-orders-payments.md");
-    expect(newSpecFile("Overview", [])).toBe("001-overview.md");
-    expect(newSpecFile(" ?! ", specs)).toBe("");
-    expect(newSpecFile("last", specFiles(["999-end.md"]))).toBe("999-last.md");
-    expect(newSpecText(" Payments ")).toBe("# Payments\n\n");
+  it("starts a new spec in /spec's format", () => {
+    const text = newSpecText(" Payments ", "008-payments.md");
+    expect(text.startsWith("# 008. Payments\n\nStatus: draft\n")).toBe(true);
+    for (const h of ["## Requirements", "## Done when", "## Open questions"]) expect(text).toContain(h);
+    expect(newSpecText("Notes", "notes.md").startsWith("# Notes\n")).toBe(true);
+  });
+});
+
+// Refine's changes, kept or dropped one by one (spec_057 SDD-04).
+describe("a refined spec's changes", () => {
+  const before = "# 002. Orders\nStatus: draft\n- **ORD-01** Checkout is fast.\n- **ORD-02** Card and cash.\n## Done when\nPaid.";
+  const after = "# 002. Orders\nStatus: draft\n- **ORD-01** Checkout takes under 30 s at the till.\n- **ORD-02** Card and cash.\n- **ORD-03** Refunds go back to the card.\n## Done when\nPaid.";
+
+  it("finds each change, with where it is", () => {
+    const hunks = lineHunks(before, after);
+    expect(hunks).toEqual([
+      { at: 2, removed: ["- **ORD-01** Checkout is fast."], added: ["- **ORD-01** Checkout takes under 30 s at the till."] },
+      { at: 4, removed: [], added: ["- **ORD-03** Refunds go back to the card."] },
+    ]);
+    expect(lineHunks(before, before)).toEqual([]);
+    expect(lineHunks("a", "")).toEqual([{ at: 0, removed: ["a"], added: [""] }]);
+  });
+
+  it("applies the changes kept, and only those", () => {
+    const hunks = lineHunks(before, after);
+    expect(applyHunks(before, hunks, [true, true])).toBe(after);
+    expect(applyHunks(before, hunks, [false, false])).toBe(before);
+    const one = applyHunks(before, hunks, [false, true]);
+    expect(one).toContain("Checkout is fast.");
+    expect(one).toContain("ORD-03");
+    // Lines removed at the end, and added at the start.
+    const h = lineHunks("x\ny\nz", "w\nx\ny");
+    expect(applyHunks("x\ny\nz", h, h.map(() => true))).toBe("w\nx\ny");
   });
 });

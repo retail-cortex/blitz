@@ -1,0 +1,49 @@
+---
+title: "057 · Spec-driven development"
+weight: 57
+---
+
+*A project's specification is the work's contract: written and refined with the model, checked before it's approved, implemented in its order, verified requirement by requirement, and kept true as the specs and the work change. The specs are the files `/spec` writes; Blitz reads them, checks them, and traces each requirement's ID to the work that implements it.*
+
+| | |
+|---|---|
+| Status | **Phase 1 built** (2026-11-07, for v0.9.4): SDD-01–SDD-06. Phases 2–4 (SDD-10–SDD-40) are the plan the owner agreed on 2026-11-07; decided: the ledger lives in `.agents/.ledger/`, with a diff for each change to an approved spec; the impact scan asks first, with its estimated cost. |
+| Source | `pkg/engine/specs` (reading and the checks), `pkg/engine/spec_review.go` (`ListSpecs`, `ReviewSpec`, the model's review), `pkg/engine/compose.go` (the `spec` recipe), `pkg/engine/draft.go` (the `spec` brief), `apps/cli/specs.go` (`blitz spec`), `apps/desktop/web/src/studio/SpecsPane.tsx`, `apps/desktop/web/src/studio/specs.ts` |
+| Tests | `pkg/engine/specs/specs_test.go`, `pkg/engine/spec_review_test.go`, `pkg/service/server/mcp_test.go` (`TestSpecsOverTheAPI`), `apps/cli/specs_test.go`, `apps/desktop/web/src/studio/specs.test.ts` |
+| Depends on | [spec_014_agents](spec_014_agents.md) (the project-spec agent, `/spec`), [spec_040_studio](spec_040_studio.md) (STU-05, STU-05a, STU-11), [spec_045_composer](spec_045_composer.md), [spec_044_health](spec_044_health.md) (grades, for phase 2) |
+
+## 1. Purpose
+
+Spec-driven work fails in two quiet ways: a spec that can't be checked (so "done" is an opinion), and a spec that changes after the work was done (so the work no longer does what the spec says, and nobody notices). Blitz already writes specs (`/spec`) and fits a workspace to them (`/setup`, `/skills update`, `/agents update`). This spec closes the loop: write → review → approve → implement → verify → change → impact → fix → verify, traced by the requirements' IDs (`AUTH-01`), not by whole files.
+
+## 2. The format read
+
+The project-spec agent's (spec_014): `.agents/specs/NNN-<name>.md`, numbered in the order the work happens, and `README.md`, the index. A spec starts `# NNN. <Title>`, then `Status:` (draft, approved, in progress, implemented, changed, retired), `Depends on:` (earlier specs, by file name or number) and, in `001-overview.md`, `Kind:`; then Context, Goals and Non-goals, the numbered items each with an ID (`- **AUTH-01** …`), **Done when** and **Open questions**, as headings or bold labels.
+
+## 3. Phase 1: write and review (built)
+
+- **SDD-01** `WorkspaceService.ListSpecs` (`Workspace.ListSpecs`): the Markdown files in `.agents/specs`, the index first, then by number, then the unnumbered by name; each with its title (the heading without its number), status, what it depends on, how many requirements with IDs, and the checks' errors and warnings and its open questions. No folder is no specs. Studio › Specs (STU-11) lists them so ("002 · Orders", its file, status and requirement count, an error or warning count at the right); `blitz spec list` prints them a line each.
+- **SDD-02** The checks without a model (`specs.Lint`): no `# ` title; no number in the file name; no or an unknown `Status:`; a `Depends on:` naming itself, a spec that isn't there (errors), or one later in the order (a warning); a dependency loop (an error, with its path); no requirements with IDs; an ID twice in the spec or in another (errors); an empty item; a vague word in an item ("fast", "secure", "easy", "scalable", "as needed", …: say how much or how it's measured; English only, the model's review covers other languages); no **Done when**; open questions (info). The index's check: the numbered specs it doesn't name. IDs are read from list items, bold or plain, two to four digits with an optional letter (`FS-61a`), never inside code blocks, and not names that only look like IDs (`UTF-16`, `ISO-8601`, `RFC-9110`).
+- **SDD-03** `WorkspaceService.ReviewSpec` (path, the text as edited, judge): the checks on the text in place of the file, against the rest of the specification; with judge, the suggestions model's review too (`specJudgeBrief`): requirements that can't be checked, wording read two ways, contradictions with another spec (by ID), cases it doesn't settle, how instead of what, goals no requirement serves; at most 12, by line, marked as the model's, with what it cost. A model that fails or a reply that isn't findings is a `problem`; the checks' findings come all the same. A path outside `.agents/specs`, or not Markdown, is `INVALID_ARGUMENT`. Secrets are masked in what's sent. Studio runs the checks as the spec is edited (half a second after typing stops) and the model's on **Review with AI**, its cost shown after; the index gets only its own check.
+- **SDD-04** **Refine with AI**: the composer (spec_045) with the `spec` recipe: the user says what should change, the composer asks only what it can't work out (up to its question limit), then drafts the whole spec again in the format above, keeping its IDs; the draft is checked (SDD-02's errors, against the rest of the specification) and sent back to fix. **Compare the changes** shows each change (`lineHunks`, a line diff) with a box to keep it, all kept at first; **Use the changes kept** puts the result in the form, unsaved. **Redraft** (STU-05) stays the one-shot rewrite, with the same format brief.
+- **SDD-05** A new spec (**+**, a title) is the next number's file, in the format: its heading, `Status: draft`, and the empty sections.
+- **SDD-06** `blitz spec review [file…] [--judge]`: every spec without files (a bare name is in `.agents/specs`); a finding a line, `path:line: severity: message`, the model's marked; with `--judge`, what the model's review cost; exit 1 when a check found an error, so CI can gate on the specification.
+
+## 4. Phase 2: trace and verify (planned)
+
+- **SDD-10** The ledger, `.agents/.ledger/`, committed with the work: for each approved spec, each requirement's fingerprint (its text, normalized) when it was approved and when it was verified, the evidence found (files and lines, tests, commits), and its state (implemented, partial, missing, contradicted). `diffs/` keeps a diff for each change to an approved spec (when, by whom, which IDs it added, changed or removed), the history phase 3 reads.
+- **SDD-11** Approve: `Status: approved` written by Studio's **Approve** (and `blitz spec approve`), recording the baseline; a spec with errors or open questions asks first.
+- **SDD-12** Verify, in two passes: without a model, the IDs found in the code, tests and commit messages, and the tests that name an ID run; with a model, only for what the first pass leaves unsettled, a judgement per requirement from the evidence (search index, language servers' references, the files), with file:line evidence, into the ledger. Badges on the list, as the Overview's grades (spec_044), and a matrix: requirement × state × evidence × tests.
+- **SDD-13** Projects that aren't code (research, analysis, writing) verify against their documents, notebooks and data, with Evals' rubrics (spec_042) in place of unit tests.
+
+## 5. Phase 3: change and impact (planned)
+
+- **SDD-20** When an approved or implemented spec is saved changed, its requirements are compared with the ledger's fingerprints: added, changed, removed. For changed and removed ones that were implemented, Blitz **asks first, with the estimated cost** (the owner's decision), then scans: from the ledger's evidence and the ID references, outwards through the language servers' references (callers, tests, types) and the search index.
+- **SDD-21** The impact report: the files and symbols touched, the tests that will fail or no longer prove anything, conflicts with other specs, and ordered steps to fix it (tests first, then code, then docs). **Apply** runs the steps with an agent; **Copy** puts them in a chat. The spec's status becomes `changed` until verified again.
+
+## 6. Phase 4: implement and keep true (planned)
+
+- **SDD-30** **Implement** turns a spec into a plan, a task per requirement, in `Depends on` order, tests first from **Done when**, run as a job or workflow; the agent cites the IDs it implements in code comments, tests and commit messages (`Implements: AUTH-01`).
+- **SDD-31** Drift: a turn or commit that touches code the ledger ties to a requirement is checked against it, and a weakened requirement is shown in Changes and the commit dialog.
+- **SDD-32** Next up: the next spec whose dependencies are implemented, and what's blocked; open questions as tasks.
+- **SDD-40** CLI and CI parity: `blitz spec approve`, `verify`, `impact`; `blitz spec verify --ci` fails a pull request when a requirement drifts; an organization's reviews can require approved specs.

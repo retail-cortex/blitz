@@ -29,6 +29,7 @@ go_library(
         "permissions.go",
         "search.go",
         "sessions.go",
+        "specs.go",
         "suggestions.go",
         "tasks.go",
         "turn.go",
