@@ -78,6 +78,32 @@ func TestProjectRoot(t *testing.T) {
 		})
 	}
 
+	// Folders by language, several projects in each: every project its
+	// own root.
+	langs := filepath.Join(outer, "langs")
+	tree(t, langs,
+		"go/api/go.mod", "go/api/cmd/api/main.go", "go/worker/go.mod", "go/worker/jobs/run.go",
+		"python/etl/pyproject.toml", "python/etl/etl/load.py", "python/ml/requirements.txt", "python/ml/train.py",
+		"python/notebooks/Pipfile", "python/notebooks/plot.py", "python/scripts/venv/", "python/scripts/tool/clean.py",
+		"typescript/web/package.json", "typescript/web/src/app.tsx", "typescript/cli/tsconfig.json", "typescript/cli/index.ts",
+	)
+	lm := NewManager(langs, nil, nil)
+	t.Cleanup(lm.Close)
+	for _, tc := range []struct{ language, path, want string }{
+		{"go", "go/api/cmd/api/main.go", "go/api"},
+		{"go", "go/worker/jobs/run.go", "go/worker"},
+		{"python", "python/etl/etl/load.py", "python/etl"},
+		{"python", "python/ml/train.py", "python/ml"},
+		{"python", "python/notebooks/plot.py", "python/notebooks"},
+		{"python", "python/scripts/tool/clean.py", "python/scripts"},
+		{"typescript", "typescript/web/src/app.tsx", "typescript/web"},
+		{"typescript", "typescript/cli/index.ts", "typescript/cli"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			assert.Equal(t, filepath.Join(langs, filepath.FromSlash(tc.want)), lm.projectRoot(tc.language, filepath.Join(langs, filepath.FromSlash(tc.path))))
+		})
+	}
+
 	// Without go.work, each module is its own root.
 	require.NoError(t, os.Remove(filepath.Join(root, "go.work")))
 	assert.Equal(t, filepath.Join(root, "svc"), m.projectRoot("go", filepath.Join(root, "svc", "cmd", "main.go")))
@@ -176,6 +202,47 @@ func TestStartFailsPerRoot(t *testing.T) {
 	require.NoError(t, err, "another project isn't held back")
 	state, _ := m.stateOf("typescript")
 	assert.Equal(t, StateReady, state, "one runs")
+}
+
+// The python server is given a virtual environment's interpreter: the
+// project's, else one shared in a folder above it in the workspace; and
+// asked for its settings, says so (FS-61b).
+func TestPythonPath(t *testing.T) {
+	outer := t.TempDir()
+	tree(t, outer, ".venv/bin/python") // above the workspace: never used
+	root := filepath.Join(outer, "ws")
+	tree(t, root,
+		"python/etl/pyproject.toml", "python/etl/.venv/bin/python",
+		"python/ml/requirements.txt", "python/ml/venv/Scripts/python.exe",
+		"python/shared/a/pyproject.toml", "python/shared/.venv/bin/python",
+		"python/bare/setup.py", "python/bare/.venv/", // a venv without its interpreter
+	)
+	m := NewManager(root, nil, nil)
+	t.Cleanup(m.Close)
+	for _, tc := range []struct{ name, root, want string }{
+		{"the project's .venv", "python/etl", "python/etl/.venv/bin/python"},
+		{"a venv on Windows", "python/ml", "python/ml/venv/Scripts/python.exe"},
+		{"one shared above it", "python/shared/a", "python/shared/.venv/bin/python"},
+		{"none", "python/bare", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := tc.want
+			if want != "" {
+				want = filepath.Join(root, filepath.FromSlash(want))
+			}
+			assert.Equal(t, want, m.pythonPath(filepath.Join(root, filepath.FromSlash(tc.root))))
+		})
+	}
+
+	rec := &recording{}
+	pm := NewManager(root, []Server{{Language: "python", Command: []string{"pyright-langserver", "--stdio"}, Extensions: []string{".py"}}}, rec.launcher())
+	t.Cleanup(pm.Close)
+	s, err := pm.For(context.Background(), filepath.Join(root, "python", "etl", "load.py"))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"python": map[string]any{"pythonPath": filepath.Join(root, "python", "etl", ".venv", "bin", "python")}}, s.c.settings)
+	s, err = pm.For(context.Background(), filepath.Join(root, "python", "bare", "x.py"))
+	require.NoError(t, err)
+	assert.Nil(t, s.c.settings, "pyright's own choice")
 }
 
 // TypeScript for the typescript server: the project's, a folder's above

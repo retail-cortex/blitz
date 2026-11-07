@@ -215,7 +215,13 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 		return nil, err
 	}
 	s := &server{lang: cfg.Language, root: root, text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}), onDiags: m.diagnosed}
-	s.c = newConn(proc, s.notified)
+	var settings map[string]any
+	if cfg.Language == "python" {
+		if py := m.pythonPath(root); py != "" {
+			settings = map[string]any{"python": map[string]any{"pythonPath": py}}
+		}
+	}
+	s.c = newConn(proc, s.notified, settings)
 	ictx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	uri := fileURI(root)

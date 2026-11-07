@@ -51,8 +51,10 @@ type conn struct {
 	next    int64
 	pending map[int64]chan response
 	notify  func(method string, params json.RawMessage)
-	closed  error
-	done    chan struct{}
+	// settings answer the server's configuration requests, by section.
+	settings map[string]any
+	closed   error
+	done     chan struct{}
 	// replies holds answers to the server's requests, written in order
 	// off the reader: a server blocked writing to us while its stdin is
 	// full would otherwise never be read again.
@@ -83,8 +85,8 @@ type rpcMessage struct {
 // errClosed means the server went away.
 var errClosed = errors.New("the language server stopped")
 
-func newConn(p Process, notify func(string, json.RawMessage)) *conn {
-	c := &conn{proc: p, pending: map[int64]chan response{}, notify: notify, done: make(chan struct{}), replies: make(chan any, maxReplies)}
+func newConn(p Process, notify func(string, json.RawMessage), settings map[string]any) *conn {
+	c := &conn{proc: p, pending: map[int64]chan response{}, notify: notify, settings: settings, done: make(chan struct{}), replies: make(chan any, maxReplies)}
 	go c.read()
 	go c.answer()
 	return c
@@ -147,17 +149,23 @@ func (c *conn) read() {
 }
 
 // reply answers requests servers make of their client: configuration
-// (null, the server's defaults, for each item asked about), and the rest
-// with null. It queues the answer for answer to write, never blocking the
+// (the connection's settings for each section asked about, else null, the
+// server's defaults), and the rest with null. It queues the answer for answer to write, never blocking the
 // reader.
 func (c *conn) reply(id json.RawMessage, method string, params json.RawMessage) {
 	var result any
 	if method == "workspace/configuration" {
 		var p struct {
-			Items []json.RawMessage `json:"items"`
+			Items []struct {
+				Section string `json:"section"`
+			} `json:"items"`
 		}
 		_ = json.Unmarshal(params, &p)
-		result = make([]any, len(p.Items))
+		items := make([]any, len(p.Items))
+		for i, it := range p.Items {
+			items[i] = c.settings[it.Section]
+		}
+		result = items
 	}
 	select {
 	case c.replies <- map[string]any{"jsonrpc": "2.0", "id": id, "result": result}:

@@ -31,7 +31,7 @@ import (
 var rootMarkers = map[string][][]string{
 	"go":         {{"go.work"}, {"go.mod"}},
 	"typescript": {{"tsconfig.json", "jsconfig.json", "package.json"}},
-	"python":     {{"pyrightconfig.json", "pyproject.toml", "setup.py", "setup.cfg", ".venv"}},
+	"python":     {{"pyrightconfig.json", "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", ".venv", "venv"}},
 	"rust":       {{"Cargo.toml"}},
 }
 
@@ -115,8 +115,37 @@ func (m *Manager) tsserverLib(root, command string) string {
 	return ""
 }
 
+// venvDirs are the virtual environments' folders pythonPath looks for.
+var venvDirs = []string{".venv", "venv"}
+
+// pythonPath is the interpreter the python server is given for root (its
+// python.pythonPath setting): a virtual environment's, in .venv or venv
+// at root or a folder above it in the workspace (one shared by several
+// projects). "" for none: pyright uses the python on PATH, and a
+// project's pyrightconfig.json venv settings win over it either way.
+func (m *Manager) pythonPath(root string) string {
+	for d := root; within(m.root, d); d = filepath.Dir(d) {
+		for _, v := range venvDirs {
+			for _, bin := range []string{filepath.Join("bin", "python"), filepath.Join("Scripts", "python.exe")} {
+				if py := filepath.Join(d, v, bin); isFile(py) {
+					return py
+				}
+			}
+		}
+		if d == m.root || filepath.Dir(d) == d {
+			break
+		}
+	}
+	return ""
+}
+
+// isFile reports whether path is a file (or a link to one).
+func isFile(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
+}
+
 // isTSLib reports whether lib is a TypeScript install's lib folder.
 func isTSLib(lib string) bool {
-	st, err := os.Stat(filepath.Join(lib, "tsserver.js"))
-	return err == nil && !st.IsDir()
+	return isFile(filepath.Join(lib, "tsserver.js"))
 }

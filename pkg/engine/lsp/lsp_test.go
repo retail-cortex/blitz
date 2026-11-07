@@ -71,7 +71,7 @@ func TestConnErrors(t *testing.T) {
 	serverIn, clientOut := io.Pipe()
 	clientIn, serverOut := io.Pipe()
 	p := &pipeProcess{toServer: clientOut, fromServer: clientIn}
-	c := newConn(p, nil)
+	c := newConn(p, nil, nil)
 	go func() { // the server: an error for the first request, then gone
 		r := bufio.NewReader(serverIn)
 		body, err := readMessage(r)
