@@ -91,10 +91,12 @@ model = "gemini/gemini-3.1-flash-image"   # or gemini-3.1-flash-lite-image, gemi
 
 In the desktop app it's **Image model** in a workspace's settings, under **Agent and model**. Until one is set, agents don't have the tool, and the agent tells you to set one.
 
+**With your organization's service**, choose one of its image models instead (`model = "enterprise/gemini-3.1-flash-image"`, or the name your admins gave it). Pictures then go through the service, with your organization's sign-in, checks, budgets and logs, and you don't need a Gemini key of your own. You can also pick an organization's image model as a conversation's model: the pictures it draws show in the conversation.
+
 - The picture goes into the workspace (`images/poster.png`) and shows in the conversation, with **Save**. The agent sees it too, so you can ask for changes.
 - To change a picture or match its style, mention it: "make @logo.png blue". Up to three PNG, JPEG or WebP pictures go with the request.
 - The agent can ask for a shape (`16:9`, `9:16`, `1:1` and others) and a size (1K, 2K or 4K; larger costs more).
-- It asks first (it sends the prompt, and any pictures, to Google), and its cost goes in the session's `/cost`: about $0.07 a 1K picture with 3.1 Flash Image, $0.13 with 3 Pro Image. With `sandbox.allow_network = false` it's refused.
+- It asks first (it sends the prompt, and any pictures, to Google or your organization's service), and its cost goes in the session's `/cost`: about $0.07 a 1K picture with 3.1 Flash Image, $0.13 with 3 Pro Image. With `sandbox.allow_network = false` it's refused.
 
 ## What a model makes
 

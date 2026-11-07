@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "agentrun.go",
         "anthropic.go",
+        "apipictures.go",
         "apiprovider.go",
         "apiresponse.go",
         "apitoken.go",
@@ -142,6 +143,7 @@ go_test(
     size = "small",
     srcs = [
         "anthropic_test.go",
+        "apipictures_test.go",
         "apiprovider_test.go",
         "apitoken_test.go",
         "aside_test.go",

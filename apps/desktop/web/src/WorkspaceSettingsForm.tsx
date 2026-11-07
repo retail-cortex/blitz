@@ -353,7 +353,8 @@ export function WorkspaceSettingsForm({
                   }}
                 />
                 <datalist id={`${id}-image`}>
-                  {imageModels.map((m) => (
+                  {/* The image models the providers list (the organization's too), then Gemini's. */}
+                  {[...new Set([...catalog.all.filter((m) => /image/i.test(m)), ...imageModels])].map((m) => (
                     <option key={m} value={m} />
                   ))}
                 </datalist>
