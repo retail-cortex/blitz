@@ -77,6 +77,7 @@ type Registry struct {
 	browser *browserTool // nil: no browser tool
 	page    pageTool     // open_page (spec_050_agent_browser AB-10)
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
+	paint   *paint       // generate_image's image model (SetPainter)
 
 	mediaMu    sync.RWMutex
 	mediaCheck MediaCheck   // nil: every supported type
@@ -404,6 +405,15 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			load = r.LoadImage
 		}
 		return NewGenerateAudioTool(ws, r.hooks, r.speech, sb.AllowNetwork, load)
+	}})
+	// The same for an image model.
+	r.paint = &paint{}
+	entries = append(entries, entry{[]string{"generate_image"}, func() (tool.Tool, error) {
+		var load func(string) (*images.Image, error)
+		if r.images != nil {
+			load = r.LoadImage
+		}
+		return NewGenerateImageTool(ws, r.hooks, r.paint, sb.AllowNetwork, load)
 	}})
 	if cfg.Web.Enabled && cfg.Web.SearchProvider != "" {
 		sc := WebSearchConfig{

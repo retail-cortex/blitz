@@ -177,7 +177,7 @@ The discount code lives in [\`internal/cart/discount.go\`](https://github.com/ex
 interface State {
   sessions: SessionInfo[];
   active: string;
-  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string; style: string; speechModel?: string };
+  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string; style: string; speechModel?: string; imageModel?: string };
   pending: Map<string, (answer: string) => void>;
   usage: Usage;
   // The project settings' trust state: the "shop" workspace has some.
@@ -2155,7 +2155,7 @@ export function installFake() {
         runSkillScript: async ({ script, args }) => (await new Promise((r) => setTimeout(r, 900)),  ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" })),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
-          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
+          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", imageModel: s.imageModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
         },
         // ?nomodel: the model can't be reached (the chat's warning card).
         getModel: ({ workspace }) => ({
@@ -2941,6 +2941,7 @@ export function installFake() {
           if (key === "blitz.default_model") c.model = value;
           if (key === "ui.task_alerts") fakeAlerts = value;
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
+          if (key === "images.model" && workspace) state(workspace).settings.imageModel = value;
           if (key.startsWith("search.") && workspace) {
             const s = searchSettingsOf(workspace);
             if (key === "search.enabled") s.enabled = value !== "false";

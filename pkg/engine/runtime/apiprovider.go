@@ -243,6 +243,10 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 				err = fixResponse(res)
 			}
 		}
+		if mp := madePicturesOf(ctx); mp != nil && err == nil {
+			// Pictures the model drew, which the adapter refuses (MDL-95a).
+			err = mp.rewrite(res)
+		}
 	}
 	keepErrorBody(ctx, res, err)
 	return res, err
@@ -464,10 +468,12 @@ func (m *apiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, s
 		}
 		var reply atomic.Pointer[errorReply]
 		ctx = context.WithValue(withAgent(withSession(ctx, session), adkAgentName(ctx)), errorBodyKey{}, &reply)
+		ctx, pictures := withMadePictures(ctx)
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			if err != nil {
 				err = apiError(err, reply.Load(), m.p.source != nil)
 			}
+			pictures.restore(resp)
 			if !yield(resp, err) {
 				return
 			}

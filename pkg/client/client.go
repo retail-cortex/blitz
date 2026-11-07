@@ -475,6 +475,7 @@ func (r *Remote) getSettings() settings {
 		Model:  api.ModelInfo{Name: m.Model, Provider: m.Provider}, Agent: m.Agent, Locale: m.Locale,
 		PermissionMode: m.PermissionMode, Effort: m.Effort, Style: m.Style,
 		SpeechModel: m.SpeechModel, SpeechError: m.SpeechError,
+		ImageModel: m.ImageModel, ImageError: m.ImageError,
 	}, ImagesEnabled: m.ImagesEnabled}
 }
 

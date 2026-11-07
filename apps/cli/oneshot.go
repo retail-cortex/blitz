@@ -227,7 +227,7 @@ func streamJSONHandler(enc *json.Encoder) func(api.Event) {
 		switch {
 		case ev.Text != nil && !ev.Text.Thought:
 			_ = enc.Encode(map[string]any{"type": "text", "text": ev.Text.Text, "partial": ev.Text.Partial, "author": ev.Author})
-		case ev.ToolCall != nil:
+		case ev.ToolCall != nil && !ev.ToolCall.Partial: // a streamed call's final event repeats its chunk
 			_ = enc.Encode(map[string]any{"type": "tool_call", "name": ev.ToolCall.Name, "args": ev.ToolCall.Args})
 		case ev.ToolResult != nil:
 			_ = enc.Encode(map[string]any{"type": "tool_result", "name": ev.ToolResult.Name, "result": ev.ToolResult.Result})

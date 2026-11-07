@@ -63,19 +63,30 @@ var modelsTimeout = 8 * time.Second
 // (spec_053_enterprise EN-20). A model the settings name that the
 // organization doesn't offer gives way to its default.
 func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, pol retryPolicy) (model.LLM, error) {
-	c, err := enterpriseClient(cfg)
+	p, m, err := enterpriseProvider(ctx, cfg, name)
 	if err != nil {
 		return nil, err
+	}
+	return buildAPIModel(ctx, p, m.ID, pol)
+}
+
+// enterpriseProvider signs requests for one of the organization's models
+// (name, else its default), and is that model as the organization lists
+// it.
+func enterpriseProvider(ctx context.Context, cfg *config.Config, name string) (*apiProvider, enterprise.Model, error) {
+	c, err := enterpriseClient(cfg)
+	if err != nil {
+		return nil, enterprise.Model{}, err
 	}
 	st := c.Status()
 	switch {
 	case cfg.Org.Problem != "" && st.SignedIn:
 		// Never without the organization's rules (EN-33).
-		return nil, fmt.Errorf("your organization's policy can't be read (%s): its models wait until Blitz fetches it from %s again", cfg.Org.Problem, c.URL())
+		return nil, enterprise.Model{}, fmt.Errorf("your organization's policy can't be read (%s): its models wait until Blitz fetches it from %s again", cfg.Org.Problem, c.URL())
 	case cfg.Org.Problem == "" && cfg.Org.Expired(time.Now()):
-		return nil, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
+		return nil, enterprise.Model{}, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
 	case !st.SignedIn:
-		return nil, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Organization, or blitz enterprise login", c.URL())
+		return nil, enterprise.Model{}, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Organization, or blitz enterprise login", c.URL())
 	}
 	// The workspace opens on this: a service that doesn't answer leaves
 	// it without the organization's models (EN-37), never waiting long.
@@ -83,11 +94,11 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	defer cancel()
 	list, err := c.Models(mctx)
 	if err != nil {
-		return nil, fmt.Errorf("your organization's models: %w", err)
+		return nil, enterprise.Model{}, fmt.Errorf("your organization's models: %w", err)
 	}
 	m, ok := enterprise.Find(list, name)
 	if !ok {
-		return nil, fmt.Errorf("your organization (%s) offers you no models: ask its admins", c.URL())
+		return nil, enterprise.Model{}, fmt.Errorf("your organization (%s) offers you no models: ask its admins", c.URL())
 	}
 	setCatalog(m) // what the organization says of it (spec_056 CA-11)
 	headers := map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder}
@@ -105,5 +116,5 @@ func newEnterpriseModel(ctx context.Context, cfg *config.Config, name string, po
 	if m.API == enterprise.APIMessages {
 		p.format = formatMessages
 	}
-	return buildAPIModel(ctx, p, m.ID, pol)
+	return p, m, nil
 }

@@ -597,6 +597,14 @@ func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usag
 	e.saveUsage(ctx, sessionID)
 }
 
+// RecordImage adds an image model's usage (generate_image) to
+// sessionID's usage, as RecordSpeech does a speech model's.
+func (e *Engine) RecordImage(ctx context.Context, sessionID, model string, usage *genai.GenerateContentResponseUsageMetadata) {
+	e.restoreUsage(sessionID)
+	e.keepCall(ctx, sessionID, e.usage.RecordMedia(ctx, sessionID, api.PurposeImage, settingsName(model), usage))
+	e.saveUsage(ctx, sessionID)
+}
+
 // charge records a model call in its session's totals and ledger, and
 // saves the totals.
 func (e *Engine) charge(ctx context.Context, c Charge) {

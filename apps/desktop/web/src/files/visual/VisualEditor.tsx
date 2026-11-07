@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { getSchema, type Editor, type JSONContent, type NodeViewRendererProps } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as PMNode, Slice } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import {
   mdiCheckboxMarkedOutline,
   mdiCodeBraces,
@@ -151,9 +151,20 @@ export function sliceMarkdown(slice: Slice): string {
 // or inline syntax around words.
 const looksLikeMarkdown = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|~~~|\|)|\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)/;
 
+/** Where a tab's document was left: its cursor and its scroll (VE-06b). */
+export interface VisualSpot {
+  anchor: number;
+  head: number;
+  scroll: number;
+}
+
 interface Props {
   dir: string;
   path: string;
+  /** Where this tab's document was left, to put it back there. */
+  spot?: VisualSpot;
+  /** Where the document is now, as the cursor moves and it scrolls. */
+  onSpot?: (spot: VisualSpot) => void;
   /** The tab's text. */
   text: string;
   /** Markdown written back, as the document changes. */
@@ -164,7 +175,7 @@ interface Props {
 }
 
 /** A Markdown file, edited in its rendered form. */
-export function VisualEditor({ dir, path, text, onChange, onSave, language }: Props) {
+export function VisualEditor({ dir, path, spot, onChange, onSave, language, text, onSpot }: Props) {
   const snack = useSnackbar();
   const parsed = useRef<Parsed | null>(null);
   const prints = useRef(new Map<string, string>());
@@ -174,6 +185,12 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
   change.current = onChange;
   const save = useRef(onSave);
   save.current = onSave;
+  const spotTo = useRef(onSpot);
+  spotTo.current = onSpot;
+  const scroller = useRef<HTMLDivElement>(null);
+  // Where the tab was left: put back once, when its text first loads.
+  const leftAt = useRef(spot);
+  const placedIn = useRef<Editor | null>(null);
   // The editor is made once: a block's hooks are read when they're called.
   const hooks = useRef(language);
   hooks.current = language;
@@ -276,7 +293,15 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
     },
     onBlur: ({ editor }) => write(editor),
     onTransaction: ({ editor }) => setSlash(slashAt(editor)),
+    onSelectionUpdate: ({ editor }) => report(editor),
   });
+
+  // Where the document is, for its tab (VE-06b).
+  const report = (e: Editor | null) => {
+    if (!e || e.isDestroyed || placedIn.current !== e) return;
+    const { anchor, head } = e.state.selection;
+    spotTo.current?.({ anchor, head, scroll: scroller.current?.scrollTop ?? 0 });
+  };
 
   // The tab's text in: the first time, and when it changes other than by
   // this editor (a reload from disk, Source's edits).
@@ -294,6 +319,26 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
     parsed.current = p;
     prints.current = fingerprints(editor.state.doc);
     written.current = text;
+    if (placedIn.current !== editor) {
+      // Each tab has its own cursor and scroll: back where it was left,
+      // and focused, as Source is when its tab is shown (VE-06b).
+      const at = leftAt.current;
+      const box = scroller.current;
+      if (box) {
+        box.scrollTop = at?.scroll ?? 0;
+        // Code blocks and diagrams take their height as they draw.
+        requestAnimationFrame(() => {
+          if (at && Math.abs(box.scrollTop - at.scroll) > 1) box.scrollTop = at.scroll;
+        });
+      }
+      if (at) {
+        const size = editor.state.doc.content.size;
+        const pos = (n: number) => editor.state.doc.resolve(Math.max(0, Math.min(n, size)));
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(pos(at.anchor), pos(at.head))).setMeta("addToHistory", false));
+      }
+      placedIn.current = editor;
+      editor.commands.focus(at ? undefined : "start", { scrollIntoView: false });
+    }
   }, [editor, text]);
 
   // Written before it goes (a switch to Source, another tab, the window).
@@ -371,7 +416,7 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
         setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="visual-scroll">
+      <div className="visual-scroll" ref={scroller} onScroll={() => report(editor)}>
         <EditorContent editor={editor} />
       </div>
       <Toolbar editor={editor} open={open} />

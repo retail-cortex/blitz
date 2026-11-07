@@ -31,6 +31,7 @@ import { WebPreview } from "./WebPreview";
 import { isWebPath } from "./webTabs";
 // The visual editor (TipTap) loads with the first Markdown file shown in it.
 const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
+import type { VisualSpot } from "./visual/VisualEditor";
 import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
 import type { Cursor } from "../status";
 import { ServerState } from "../gen/blitz/v1/language_pb";
@@ -98,6 +99,11 @@ export function EditorPane({
   useEffect(() => {
     if ([...views.keys()].some((p) => !model.tabs.some((x) => x.path === p))) setViews((m) => new Map([...m].filter(([p]) => model.tabs.some((x) => x.path === p))));
   }, [model.tabs, views]);
+  // Each Markdown tab's place in Visual: its cursor and scroll (VE-06b).
+  const spots = useRef(new Map<string, VisualSpot>());
+  useEffect(() => {
+    for (const p of spots.current.keys()) if (!model.tabs.some((x) => x.path === p)) spots.current.delete(p);
+  }, [model.tabs]);
 
   // ⌘⇧V / Ctrl+Shift+V: switch between the source and the preview, while
   // the pane is shown and has the focus (or nothing has: a click in the
@@ -516,7 +522,17 @@ export function EditorPane({
         {showVisual && tab && previewText !== undefined && (
           <div className="preview preview-markdown visual-host">
             <Suspense fallback={null}>
-              <VisualEditor key={tab.path} dir={model.dir} path={tab.path} text={previewText} onChange={(md) => model.setText(tab.path, md)} onSave={() => void model.save(tab.path)} language={model.language} />
+              <VisualEditor
+                key={tab.path}
+                dir={model.dir}
+                path={tab.path}
+                spot={spots.current.get(tab.path)}
+                onSpot={(at) => spots.current.set(tab.path, at)}
+                text={previewText}
+                onChange={(md) => model.setText(tab.path, md)}
+                onSave={() => void model.save(tab.path)}
+                language={model.language}
+              />
             </Suspense>
           </div>
         )}

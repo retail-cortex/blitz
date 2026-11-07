@@ -278,6 +278,7 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 		Model:  st.Model.Name, Provider: st.Model.Provider, Agent: st.Agent, Locale: st.Locale,
 		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, Effort: st.Effort, Style: st.Style,
 		SpeechModel: st.SpeechModel, SpeechError: st.SpeechError,
+		ImageModel: st.ImageModel, ImageError: st.ImageError,
 		AcceptedMedia: acceptedMediaMsg(w.AcceptedMedia()),
 	})
 }
