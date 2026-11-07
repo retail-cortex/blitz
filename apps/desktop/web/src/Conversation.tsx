@@ -116,7 +116,8 @@ import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { taskTimes, useNow, type TaskTime } from "./taskTimes";
-import { DataMenu, DataResultDialog } from "./DataContext";
+import { chatConnections, DataMenu, DataResultDialog } from "./DataContext";
+import { dbOptions, wantsDb, type DbConnection } from "./dbMentions";
 import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
@@ -1940,7 +1941,25 @@ function Composer({
       clearTimeout(timer);
     };
   }, [mention?.query, dir]); // eslint-disable-line react-hooks/exhaustive-deps
-  const mentionOpen = !!mention && found.query === mention.query && found.paths.length > 0 && dismissed !== draft;
+  // @db: completes the workspace's databases and their saved queries
+  // (spec_059_data DAT-40), above the files.
+  const dbWanted = !!mention && wantsDb(mention.query);
+  const [dbConns, setDbConns] = useState<DbConnection[]>([]);
+  useEffect(() => {
+    if (!dbWanted) return;
+    let live = true;
+    workspaces.listConnectors({ workspace: dir }).then(
+      (r) => live && setDbConns(chatConnections(r.connections)),
+      () => live && setDbConns([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dbWanted, dir]);
+  const dbFound = mention && dbWanted ? dbOptions(mention.query, dbConns) : [];
+  const paths = mention && found.query === mention.query ? found.paths : [];
+  const mentionCount = dbFound.length + paths.length;
+  const mentionOpen = !!mention && mentionCount > 0 && dismissed !== draft;
   const choosePath = (path: string) => {
     if (!mention) return;
     const r = insertMention(draft, mention, path);
@@ -1949,6 +1968,14 @@ function Composer({
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
     if (isAttachablePath(path)) onAddImagePath(path);
   };
+  const chooseDb = (m: string) => {
+    if (!mention) return;
+    const r = insertMention(draft, mention, m);
+    setDraft(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
+  };
+  const chooseMention = (i: number) => (i < dbFound.length ? chooseDb(dbFound[i].mention) : choosePath(paths[i - dbFound.length]));
   // Completing \skill-name: the skills the workspace sees.
   const skillToken = menuOpen || mention ? null : skillAt(draft, caret);
   const [skillList, setSkillList] = useState<{ name: string; description: string }[]>([]);
@@ -2040,7 +2067,25 @@ function Composer({
       )}
       {mentionOpen && (
         <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
-          {found.paths.map((p, i) => (
+          {dbFound.map((o, i) => (
+            <button
+              key={o.mention}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                chooseDb(o.mention);
+              }}
+            >
+              <Icon path={o.query ? mdiTableSearch : mdiDatabaseOutline} size="sm" />
+              <code>@{o.mention}</code>
+              <span className="spacer ellipsis muted t-body-sm">{o.detail}</span>
+            </button>
+          ))}
+          {paths.map((p, j) => {
+            const i = j + dbFound.length;
+            return (
             <button
               key={p}
               role="option"
@@ -2054,7 +2099,8 @@ function Composer({
               <Icon path={p.endsWith("/") ? mdiFolderOutline : fileIcon(p.slice(p.lastIndexOf("/", p.length - 2) + 1))} size="sm" />
               <span className="mono ellipsis">{p}</span>
             </button>
-          ))}
+            );
+          })}
           <div className="command-hint t-body-sm muted">
             <kbd>↑</kbd>
             <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.mention.add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
@@ -2123,7 +2169,7 @@ function Composer({
             }
           }
           if (mentionOpen && !e.nativeEvent.isComposing) {
-            const n = found.paths.length;
+            const n = mentionCount;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
               setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
@@ -2136,7 +2182,7 @@ function Composer({
             }
             if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
               e.preventDefault();
-              choosePath(found.paths[Math.min(pick, n - 1)]);
+              chooseMention(Math.min(pick, n - 1));
               return;
             }
           }

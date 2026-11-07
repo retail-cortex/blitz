@@ -53,7 +53,7 @@ The database icon in the chat box (or `/data`) lists the workspace's databases t
 
 The agent gets a query's SQL, its columns with their types and descriptions, and up to 200 rows as a table, with a note when there were more. The result is read when you add it, says when, and isn't run again. As with a web page you add, it's data for the agent to read, never instructions.
 
-You can also type it: `@db:shop` adds the database, and `@db:shop/top_customers` runs that saved query (one without parameters) as the message is sent. A workspace connection you haven't trusted (a clone's file that changed since you saved it) isn't offered, and `@db:` on it says so.
+You can also type it: `@db:shop` adds the database, and `@db:shop/top_customers` runs that saved query (one without parameters) as the message is sent. Start typing `@d` and the chat box offers your databases above the files; after `@db:shop/` it offers that database's queries. A workspace connection you haven't trusted (a clone's file that changed since you saved it) isn't offered, and `@db:` on it says so.
 
 To query a database in a workflow, use a [Data step](workflows.md#querying-a-database).
 
