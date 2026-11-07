@@ -229,6 +229,10 @@ func (e *Engine) recentConversationN(ctx context.Context, n int) string {
 			continue
 		}
 		for _, p := range ev.Content.Parts {
+			if line := answeredLine(p); line != "" {
+				lines = append(lines, textutil.Ellipsize(line, 600))
+				continue
+			}
 			if p.Text == "" || p.Thought {
 				continue
 			}
@@ -243,6 +247,63 @@ func (e *Engine) recentConversationN(ctx context.Context, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// answeredLine is a question the agent asked the user, or the user's
+// answer to it or to a plan, as the conversation's line ("" for any other
+// part): the user's choices are what they asked for, as much as their
+// messages (an answer ticked in a form said "apply these").
+func answeredLine(p *genai.Part) string {
+	switch {
+	case p.FunctionCall != nil && p.FunctionCall.Name == "ask_user_question":
+		var qs []string
+		if q, _ := p.FunctionCall.Args["question"].(string); q != "" {
+			qs = append(qs, q)
+		}
+		if items, ok := p.FunctionCall.Args["questions"].([]any); ok {
+			for _, it := range items {
+				if m, ok := it.(map[string]any); ok {
+					if q, _ := m["question"].(string); q != "" {
+						qs = append(qs, q)
+					}
+				}
+			}
+		}
+		if len(qs) == 0 {
+			return ""
+		}
+		return "agent asked the user: " + strings.Join(qs, " / ")
+	case p.FunctionResponse != nil && p.FunctionResponse.Name == "ask_user_question":
+		r := p.FunctionResponse.Response
+		var parts []string
+		if a, _ := r["answer"].(string); a != "" {
+			parts = append(parts, a)
+		}
+		if items, ok := r["answers"].([]any); ok {
+			for _, it := range items {
+				if m, ok := it.(map[string]any); ok {
+					q, _ := m["question"].(string)
+					a, _ := m["answer"].(string)
+					if a != "" {
+						parts = append(parts, q+" → "+a)
+					}
+				}
+			}
+		}
+		if len(parts) == 0 {
+			return ""
+		}
+		return "user answered: " + strings.Join(parts, "; ")
+	case p.FunctionResponse != nil && p.FunctionResponse.Name == "exit_plan_mode":
+		r := p.FunctionResponse.Response
+		if ok, _ := r["approved"].(bool); ok {
+			return "user approved the agent's plan"
+		}
+		if f, _ := r["feedback"].(string); f != "" {
+			return "user, on the agent's plan: " + f
+		}
+	}
+	return ""
 }
 
 func orNothing(s string) string {

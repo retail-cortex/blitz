@@ -764,7 +764,8 @@ Trying a key lists models (no model call, no cost). Use a throwaway `HOME` for t
   **Expected:** stopped: the footer says "Couldn't connect: …" with **Save anyway**; running: it saves, stays open with "now choose its tools", and shows Ready-made tools, Your queries and Test the connection.
 - [ ] SQLite: **Choose…**.
   **Expected:** the system's file dialog; the chosen file's path fills Database and the name follows its file name.
-- [ ] In a workspace's chat, `/connect ~/data/notes.sqlite`, then `/connect mysql://h/db`, then the database button beside the attach button.
+- [ ] In a workspace's chat, `/connect ~/data/notes.sqlite`, then `/connect mysql://h/db`, then **Connect a database…** in the database menu beside the attach button.
+- [ ] Data in a chat (spec_059_data): the database menu (and `/data`) lists the databases that are on; **Add** one, send, and the agent knows its tables; a saved query runs at once (one with parameters asks), its chip opens the table; **Write SQL…** shows rows before **Add to the message**; `@db:shop/<query>` in a message adds its result.
   **Expected:** Settings › Connectors opens on a new SQLite connection named `notes` with that path; for MySQL, "Blitz can't tell what kind of connection … is"; the button opens Connectors.
 - [ ] Studio in a window 1200 px wide or more, then narrower, then on a workflow's canvas.
   **Expected:** the kinds named beside their icons; icons only below that; icons only on the canvas.

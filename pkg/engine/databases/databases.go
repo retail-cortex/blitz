@@ -214,9 +214,15 @@ type transport struct {
 	only map[string]bool
 }
 
+// config loads the files as Toolbox reads them: secrets in, paths
+// resolved.
+func (t *transport) config(ctx context.Context) (embed.Config, error) {
+	return embed.LoadWith(ctx, t.files, t.vars, rewriter(t.keys, t.base, t.only))
+}
+
 // Connect starts Toolbox and connects to it.
 func (t *transport) Connect(ctx context.Context) (mcp.Connection, error) {
-	cfg, err := embed.LoadWith(ctx, t.files, t.vars, rewriter(t.keys, t.base, t.only))
+	cfg, err := t.config(ctx)
 	if err != nil {
 		return nil, err
 	}

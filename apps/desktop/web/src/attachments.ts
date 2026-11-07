@@ -19,6 +19,7 @@
 // can be is the active agent's model's to say (GetSettings
 // accepted_media): the picker offers only those, and paste and drop
 // refuse the others, saying why (rejectReason).
+import type { DataTable } from "./gen/blitz/v1/workspace_pb";
 import { formatBytes } from "./bytes";
 import { t, tn } from "./i18n";
 
@@ -57,11 +58,16 @@ export interface Attachment {
  * the turn's context (the service gives it to the agent as data).
  */
 export interface WebBlock {
-  kind: "web_page" | "web_selection" | "console";
+  kind: "web_page" | "web_selection" | "console" | "database" | "data_query";
   url: string;
   title: string;
   html: string;
   text: string;
+  /** A database's or a query's connection, and the query's SQL (spec_059_data DAT-41, DAT-42). */
+  connection?: string;
+  statement?: string;
+  /** A query's result as read, for its chip's viewer (not sent: text holds it). */
+  table?: DataTable;
 }
 
 const extOf = (name: string) => {
@@ -119,4 +125,29 @@ export const uploading = (list: Attachment[]) => list.some((a) => !a.id && !a.er
 export const failedUpload = (list: Attachment[]) => list.some((a) => !!a.error);
 
 /** The web content among the attachments, for the turn's context. */
-export const webBlocks = (list: Attachment[]) => list.filter((a) => a.web).map((a) => a.web!);
+export const webBlocks = (list: Attachment[]) =>
+  list
+    .filter((a) => a.web)
+    .map(({ web: b }) => ({ kind: b!.kind, url: b!.url, title: b!.title, html: b!.html, text: b!.text, connection: b!.connection ?? "", statement: b!.statement ?? "" }));
+
+/** A database connection as a turn's block: the service reads its schema (DAT-41). */
+export function databaseBlock(connection: string): WebBlock {
+  return { kind: "database", url: "", title: connection, html: "", text: "", connection };
+}
+
+/**
+ * A query's result as a turn's block (DAT-42): its text the table as JSON
+ * ({columns, rows, total, truncated}), its title the connection, the query
+ * (or SQL) and how many rows.
+ */
+export function queryBlock(connection: string, query: string, statement: string, table: DataTable): WebBlock {
+  let rows: unknown = [];
+  try {
+    rows = JSON.parse(table.rowsJson || "[]");
+  } catch {
+    // shown as none
+  }
+  const columns = table.columns.map((c) => ({ name: c.name, description: c.description, type: c.type, length: c.length === undefined ? null : Number(c.length), db_type: c.dbType || undefined, nullable: c.nullable }));
+  const text = JSON.stringify({ columns, rows, total: table.total, truncated: table.truncated });
+  return { kind: "data_query", url: "", title: `${connection} · ${query || "SQL"} · ${t("desktop.flows.data.total", { total: table.total.toLocaleString() })}`, html: "", text, connection, statement, table };
+}

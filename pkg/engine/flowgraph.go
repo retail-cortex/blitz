@@ -584,6 +584,13 @@ func fillStep(n flows.Node, vars flows.Vars) (flows.Node, error) {
 			return n, err
 		}
 	}
+	if n.Params != nil {
+		v, err := flows.FillValue(n.Params, vars)
+		if err != nil {
+			return n, err
+		}
+		n.Params, _ = v.([]any)
+	}
 	if n.Auth != nil {
 		a := *n.Auth
 		for _, f := range []*string{&a.Token, &a.Username, &a.Password, &a.Value, &a.TokenURL, &a.ClientID, &a.ClientSecret, &a.Audience} {
@@ -606,6 +613,8 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 		return w.extractStep(ctx, n, input)
 	case n.Type == flows.MCPCall:
 		return w.guardCallResult(ctx, r, n.Type)(w.mcpStep(ctx, n))
+	case n.Type == flows.Data:
+		return w.guardCallResult(ctx, r, n.Type)(w.dataStep(ctx, r, n))
 	case n.Type == flows.APICall:
 		return w.guardCallResult(ctx, r, n.Type)(w.apiStep(ctx, n, input))
 	case n.Type == flows.A2ACall:

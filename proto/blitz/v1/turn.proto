@@ -70,7 +70,10 @@ message Turn {
 
 // ContextBlock is content the user added to a turn from elsewhere.
 message ContextBlock {
-  // What it is: "web_page", "web_selection" or "console".
+  // What it is: "web_page", "web_selection", "console", "database" (one of
+  // the workspace's database connections: the service reads its schema for
+  // the turn) or "data_query" (a query's result: text is the table as JSON,
+  // {columns, rows, total, truncated}; spec_059_data DAT-41, DAT-42).
   string kind = 1;
   // Where it came from.
   string url = 2;
@@ -81,6 +84,10 @@ message ContextBlock {
   string html = 4;
   // The content as text (the console's errors), used when html is empty.
   string text = 5;
+  // A database or data_query block's connection, by name.
+  string connection = 6;
+  // A data_query block's SQL.
+  string statement = 7;
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in
@@ -296,6 +303,24 @@ message Question {
   string task_id = 5;
   // Several options may be chosen: the answer is them, one per line.
   bool multi_select = 6;
+  // The options explained, in recommended order (their labels are
+  // options), for someone who doesn't know the tools they name
+  // (spec_005_approvals APR-40b); none when the options are plain.
+  repeated QuestionChoice choices = 7;
+  // What the choices' order rests on.
+  string order = 8;
+}
+
+// QuestionChoice is a question's option explained.
+message QuestionChoice {
+  // What the button says.
+  string label = 1;
+  // One sentence: its tooltip.
+  string summary = 2;
+  // What choosing it means, for someone non-technical.
+  string details = 3;
+  // Why it's ranked where it is.
+  string why = 4;
 }
 
 // Usage is the token usage and estimated cost of a session.

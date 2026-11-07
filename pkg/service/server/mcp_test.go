@@ -16,10 +16,17 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -279,4 +286,293 @@ func TestDraftManifestOverTheAPI(t *testing.T) {
 	res, err := c.workspaces.DraftManifest(ctx, connect.NewRequest(&pb.DraftManifestRequest{Workspace: dir, Kind: "agent", Description: "a reviewer"}))
 	require.NoError(t, err)
 	assert.True(t, res.Msg.Text != "" || res.Msg.Problem != "", "a draft or why not")
+}
+
+// The specification over the API: listed, and a spec reviewed as edited
+// (spec_057_spec_driven SDD-01, SDD-02).
+func TestSpecsOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "specs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "specs", "001-overview.md"), []byte("# 001. Overview\nStatus: approved\nDepends on: 001\n- **OV-01** One store.\nDone when: open.\n"), 0o644))
+	list, err := c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Specs, 1)
+	s := list.Msg.Specs[0]
+	assert.Equal(t, ".agents/specs/001-overview.md", s.Path)
+	assert.Equal(t, []int32{1}, s.DependsOn)
+	assert.EqualValues(t, 1, s.Errors, "it depends on itself")
+
+	res, err := c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: dir, Path: s.Path, Text: "# 001. Overview\nStatus: approved\n- **OV-01** One store.\nDone when: open.\n"}))
+	require.NoError(t, err)
+	assert.Empty(t, res.Msg.Findings, "the edited text, not the file")
+	_, err = c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: dir, Path: "README.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	// Approve, trace and verify (SDD-10..12).
+	_, err = c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: dir, Path: s.Path}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "it depends on itself")
+	a, err := c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: dir, Path: s.Path, Force: true}))
+	require.NoError(t, err)
+	assert.Contains(t, a.Msg.Text, "Status: approved")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main // OV-01\n"), 0o644))
+	v, err := c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, v.Msg.Requirements, 1)
+	assert.Equal(t, "traced", v.Msg.Requirements[0].State)
+	assert.Equal(t, "main.go", v.Msg.Requirements[0].Evidence[0].Path)
+	assert.NotNil(t, v.Msg.Requirements[0].VerifiedAt)
+	tr, err := c.workspaces.TraceSpecs(ctx, connect.NewRequest(&pb.TraceSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, tr.Msg.Requirements, 1)
+	_, err = c.workspaces.TraceSpecs(ctx, connect.NewRequest(&pb.TraceSpecsRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: dir, Path: ".agents/specs/404.md"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	// A change recorded, and its impact (SDD-20, SDD-21).
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "specs", "001-overview.md"), []byte(strings.Replace(a.Msg.Text, "One store.", "Two stores.", 1)), 0o644))
+	rec, err := c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, rec.Msg.Changes, 1)
+	assert.Equal(t, "changed", rec.Msg.Changes[0].Kind)
+	assert.Contains(t, rec.Msg.Text, "Status: changed")
+	im, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, im.Msg.Changes, 1)
+	require.NotEmpty(t, im.Msg.Places)
+	assert.Equal(t, "main.go", im.Msg.Places[0].Path)
+	im, err = c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: s.Path, Judge: true}))
+	require.NoError(t, err)
+	assert.True(t, im.Msg.Summary != "" || im.Msg.Problem != "", "a report or why not")
+	_, err = c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: dir, Path: "README.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	// The plan, progress and drift (SDD-30..32).
+	plan, err := c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	assert.Contains(t, plan.Msg.Prompt, "OV-01")
+	v, err = c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: dir, Path: s.Path}))
+	require.NoError(t, err)
+	require.Len(t, v.Msg.Drift, 1)
+	assert.Equal(t, "changed", v.Msg.Drift[0].Why)
+	list, err = c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, list.Msg.Specs[0].Next, "not done: it changed")
+	_, err = c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+// Every spec call needs a workspace it can open.
+func TestSpecsNeedAWorkspace(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	ws := "relative"
+	for name, call := range map[string]func() error{
+		"ListSpecs": func() error {
+			_, err := c.workspaces.ListSpecs(ctx, connect.NewRequest(&pb.ListSpecsRequest{Workspace: ws}))
+			return err
+		},
+		"ReviewSpec": func() error {
+			_, err := c.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: ws}))
+			return err
+		},
+		"TraceSpecs": func() error {
+			_, err := c.workspaces.TraceSpecs(ctx, connect.NewRequest(&pb.TraceSpecsRequest{Workspace: ws}))
+			return err
+		},
+		"ApproveSpec": func() error {
+			_, err := c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: ws}))
+			return err
+		},
+		"VerifySpec": func() error {
+			_, err := c.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: ws}))
+			return err
+		},
+		"RecordSpecChange": func() error {
+			_, err := c.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: ws}))
+			return err
+		},
+		"ImpactSpec": func() error {
+			_, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: ws}))
+			return err
+		},
+		"PlanSpec": func() error {
+			_, err := c.workspaces.PlanSpec(ctx, connect.NewRequest(&pb.PlanSpecRequest{Workspace: ws}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
+	// A path that isn't a spec, in a workspace that is.
+	dir := t.TempDir()
+	_, err := c.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = c.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: dir, Path: "x.md"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+// Pictures over the API without a model: nothing offered, a turn refused,
+// what isn't there not found (spec_058_pictures).
+func TestPicturesOverTheAPI(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	models, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, models.Msg.Models)
+	assert.Equal(t, "pictures", models.Msg.Folder)
+	_, err = c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: "gemini/gemini-4-argon", Prompt: "x"}))
+	assert.Error(t, err)
+	list, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Sessions)
+	id := "pic-000000000000"
+	for name, call := range map[string]func() error{
+		"get": func() error {
+			_, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: dir, Id: id}))
+			return err
+		},
+		"rename": func() error {
+			_, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: dir, Id: id, Name: "x"}))
+			return err
+		},
+		"delete": func() error {
+			_, err := c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: dir, Id: id}))
+			return err
+		},
+		"read": func() error {
+			_, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+		"save": func() error {
+			_, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+		"drop": func() error {
+			_, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: dir, Session: id, Picture: "p"}))
+			return err
+		},
+	} {
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(call()), name)
+	}
+	ws := "relative"
+	for name, call := range map[string]func() error{
+		"models": func() error {
+			_, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: ws}))
+			return err
+		},
+		"make": func() error {
+			_, err := c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: ws}))
+			return err
+		},
+		"sessions": func() error {
+			_, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: ws}))
+			return err
+		},
+		"get": func() error {
+			_, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"rename": func() error {
+			_, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"delete": func() error {
+			_, err := c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: ws}))
+			return err
+		},
+		"read": func() error {
+			_, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: ws}))
+			return err
+		},
+		"save": func() error {
+			_, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: ws}))
+			return err
+		},
+		"drop": func() error {
+			_, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: ws}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
+}
+
+// Pictures over the API with a key and a session on disk: the models and
+// what they can do, an estimate, and a session listed, read, saved,
+// renamed and deleted (spec_058_pictures).
+func TestPictureSessionsOverTheAPI(t *testing.T) {
+	store := t.TempDir()
+	c, _ := serve(t, func(cfg *config.Config) {
+		cfg.Session.StorageDir = store
+		cfg.LLM.Gemini.APIKey = "k" // listing and estimates call nothing
+	})
+	ctx := context.Background()
+	dir := t.TempDir()
+	models, err := c.workspaces.ListPictureModels(ctx, connect.NewRequest(&pb.ListPictureModelsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.NotEmpty(t, models.Msg.Models)
+	nano := models.Msg.Models[0]
+	assert.Equal(t, "gemini/gemini-nano-banana-2.1", nano.Ref)
+	assert.EqualValues(t, 3767, nano.SizeTokens["4K"])
+	est, err := c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: nano.Ref, Prompt: "a fox", Size: "4K", Estimate: true,
+		References: []*pb.PictureReference{{Data: []byte("\x89PNG\r\n\x1a\nx"), Mime: "image/png", Role: "style"}}}))
+	require.NoError(t, err)
+	assert.InDelta(t, 0.113, est.Msg.CostUsd, 0.01)
+	assert.Nil(t, est.Msg.Session)
+	_, err = c.workspaces.MakePicture(ctx, connect.NewRequest(&pb.MakePictureRequest{Workspace: dir, Model: nano.Ref, Prompt: "a fox", Count: 3}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "the catalog refuses it")
+
+	// A session, as the engine keeps it.
+	seed := int32(3)
+	s := engine.PictureSession{ID: "pic-0123456789ab", Name: "A fox", Turns: []engine.PictureTurn{{ID: "t-1", Model: nano.Ref, Kind: "gemini", Prompt: "a fox", Seed: &seed,
+		References: []engine.PictureTurnRef{{File: "r-1.png", MIME: "image/png", Name: "me.png", Role: "character"}},
+		Pictures:   []engine.PictureFile{{ID: "p-0123456789ab", File: "p-0123456789ab.png", MIME: "image/png"}, {ID: "p-gone", Deleted: true}},
+		Sources:    []runtime.PictureSource{{Title: "Foxes", URL: "https://example.com"}}}}}
+	data, err := json.Marshal(s)
+	require.NoError(t, err)
+	for _, d := range []string{dir, evalDir(t, dir)} {
+		sum := sha256.Sum256([]byte(d))
+		sd := filepath.Join(store, "pictures", hex.EncodeToString(sum[:8]), s.ID)
+		require.NoError(t, os.MkdirAll(sd, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(sd, "session.json"), data, 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(sd, "p-0123456789ab.png"), []byte("PNG"), 0o600))
+	}
+	list, err := c.workspaces.ListPictureSessions(ctx, connect.NewRequest(&pb.ListPictureSessionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Sessions, 1)
+	turn := list.Msg.Sessions[0].Turns[0]
+	assert.Len(t, turn.Pictures, 1, "not the deleted one")
+	assert.True(t, turn.HasSeed)
+	assert.Equal(t, "character", turn.References[0].Role)
+	assert.Equal(t, "Foxes", turn.Sources[0].Title)
+	got, err := c.workspaces.GetPictureSession(ctx, connect.NewRequest(&pb.GetPictureSessionRequest{Workspace: dir, Id: s.ID}))
+	require.NoError(t, err)
+	assert.Equal(t, "A fox", got.Msg.Session.Name)
+	pic, err := c.workspaces.ReadPicture(ctx, connect.NewRequest(&pb.ReadPictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Equal(t, "PNG", string(pic.Msg.Data))
+	saved, err := c.workspaces.SavePicture(ctx, connect.NewRequest(&pb.SavePictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Equal(t, "pictures/a-fox-1.png", saved.Msg.Path)
+	renamed, err := c.workspaces.RenamePictureSession(ctx, connect.NewRequest(&pb.RenamePictureSessionRequest{Workspace: dir, Id: s.ID, Name: "Fox"}))
+	require.NoError(t, err)
+	assert.Equal(t, "Fox", renamed.Msg.Session.Name)
+	dropped, err := c.workspaces.DeletePicture(ctx, connect.NewRequest(&pb.DeletePictureRequest{Workspace: dir, Session: s.ID, Picture: "p-0123456789ab"}))
+	require.NoError(t, err)
+	assert.Empty(t, dropped.Msg.Session.Turns[0].Pictures)
+	_, err = c.workspaces.DeletePictureSession(ctx, connect.NewRequest(&pb.DeletePictureSessionRequest{Workspace: dir, Id: s.ID}))
+	require.NoError(t, err)
+}
+
+// evalDir is dir with its links resolved (macOS's /var is /private/var).
+func evalDir(t *testing.T, dir string) string {
+	t.Helper()
+	d, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	return d
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
+	"github.com/retail-cortex/blitz/pkg/engine/datatable"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
@@ -271,6 +272,13 @@ func (w *Workspace) TryConnectorTool(ctx context.Context, c connectors.Connectio
 // written: connectors.ErrNoTables when it can read none.
 func (w *Workspace) ReadConnectorSchema(ctx context.Context, c connectors.Connection, values map[string]string) ([]connectors.Table, error) {
 	return connectors.ReadSchema(ctx, w.ConnectorCatalog(), w.connectorEnv(c, values), c)
+}
+
+// RunConnectorQuery runs a statement, or one of a connection's saved
+// queries, on the connection as written, and reads its result as a table
+// (spec_059_data DAT-50).
+func (w *Workspace) RunConnectorQuery(ctx context.Context, c connectors.Connection, values map[string]string, run connectors.QueryRun) (datatable.Table, error) {
+	return connectors.RunQuery(ctx, w.ConnectorCatalog(), w.connectorEnv(c, values), c, run)
 }
 
 // ReloadConnectors serves the connection files as they are now: each

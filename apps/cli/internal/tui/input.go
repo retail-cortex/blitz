@@ -291,8 +291,20 @@ func NewUserPrompter(in Input) api.UserPromptFunc {
 		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "\n[%s]: %s\n", i18n.T("question.title"), textutil.SanitizeTerminal(question))
+		choices, order := api.ChoicesOf(ctx)
+		if order != "" {
+			fmt.Fprintf(&sb, "   %s\n", textutil.SanitizeTerminal(i18n.T("question.order", "why", order)))
+		}
 		for i, opt := range options {
 			fmt.Fprintf(&sb, "   [%d] %s\n", i+1, textutil.SanitizeTerminal(opt))
+			// An explained choice (APR-40b): what it is, then why it's here.
+			if i < len(choices) && choices[i].Label == opt {
+				for _, line := range []string{choices[i].Summary, choices[i].Why} {
+					if line != "" {
+						fmt.Fprintf(&sb, "       %s\n", textutil.SanitizeTerminal(line))
+					}
+				}
+			}
 		}
 		if api.IsMultiSelect(ctx) && len(options) > 0 {
 			sb.WriteString(i18n.T("question.choose_several") + " ")

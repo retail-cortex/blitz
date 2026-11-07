@@ -98,6 +98,17 @@ In the desktop app it's **Image model** in a workspace's settings, under **Agent
 - The agent can ask for a shape (`16:9`, `9:16`, `1:1` and others) and a size (1K, 2K or 4K; larger costs more).
 - It asks first (it sends the prompt, and any pictures, to Google or your organization's service), and its cost goes in the session's `/cost`: about $0.07 a 1K picture with 3.1 Flash Image, $0.13 with 3 Pro Image. With `sandbox.allow_network = false` it's refused.
 
+### The Pictures panel
+
+For more than one picture in passing, open **Pictures**: the brush icon in the chat box, `/picture` (with what to draw, to start there), or in the file tree **Edit in Pictures** on a picture or **Make a picture here** on a folder. It's a place to work on pictures, with everything the model can do:
+
+- **Model**: Gemini's image models (Nano Banana 2.1, 3.1 Flash Image, 3 Pro Image, the Lite and 2.5 ones) and Imagen, with what a picture costs. The settings below follow the model: what it doesn't take is hidden or locked, and a model change says what it put back.
+- **Start from or match**: drop pictures from the computer or the file tree, paste one, or pick one from the workspace, and say what each is for: a **Character** to keep the same, an **Object** to keep faithful, a **Style** to take the look of (up to 14 with the larger Gemini models).
+- **Pictures** (1 to 4 with Imagen), **Shape** (drawn as itself, panoramic 4:1 and 8:1 included where the model has them), **Size** (0.5K to 4K), **Thinking**, and **Search the web** (and image search) to ground a picture in real places and things.
+- **Advanced**: what to avoid, people, the format and quality, a seed, and prompt improvement (Imagen).
+
+Each turn shows what it will cost before you make it. With a Gemini model a session is a conversation: say what to change ("make the sky darker") and the next picture changes the last, or **Start from this** on any picture. Every picture can be **Saved** into the workspace (`pictures/`, or `[images] folder`), saved somewhere else, opened, used as a reference, copied or added to the chat. Sessions are kept: **Sessions** at the top reopens them.
+
 ## What a model makes
 
 A model that makes pictures or audio (Gemini's image models, for one) puts them in the conversation: a picture shows as one, audio with a player, anything else as a chip. **Save** writes it into the workspace under its name, which says the model that made it (`gemini-3-pro-image-1a2b3c4d.png`). In the terminal, Blitz prints where it's kept. It stays part of the conversation: switch to another model and that model sees it too, if it takes pictures.

@@ -27,18 +27,18 @@ export type StepType = (typeof stepTypes)[number];
 /** The palette's groups, in order. */
 export const stepGroups: { group: string; types: StepType[] }[] = [
   { group: "agents", types: ["agent", "refine", "summarize", "browser"] },
-  { group: "data", types: ["extract", "accumulate", "script", "read_file", "save_file"] },
+  { group: "data", types: ["data", "extract", "accumulate", "script", "read_file", "save_file"] },
   { group: "calls", types: ["api_call", "mcp_call", "a2a_call", "workflow"] },
   { group: "people", types: ["human_task", "timer"] },
   { group: "flow", types: ["exclusive", "inclusive", "parallel"] },
-  { group: "soon", types: ["email", "data"] },
+  { group: "soon", types: ["email"] },
 ];
 /** The gateways: they route rather than work. */
 export const gatewayTypes: StepType[] = ["exclusive", "inclusive", "parallel"];
 /** The steps that pause a run (a person, a time): they don't repeat or retry (WF-16). */
 export const pauseTypes: StepType[] = ["human_task", "timer"];
 /** The types shown, not run yet. */
-export const comingSoon: StepType[] = ["email", "data"];
+export const comingSoon: StepType[] = ["email"];
 /** The types an agent runs. */
 export const agentTypes: StepType[] = ["agent", "refine", "summarize", "browser"];
 
@@ -77,6 +77,23 @@ export interface StepForm {
   formJson: string;
   wait: string;
   until: string;
+  /** A data step's (spec_059_data DAT-20): its connection, a saved query or SQL. */
+  connection: string;
+  dataFrom: "saved" | "sql";
+  savedQuery: string;
+  /** The saved query's parameters, by name (they take templates). */
+  dataArgs: Record<string, string>;
+  sql: string;
+  /** The SQL's parameters, in order (they take templates). */
+  params: string[];
+  describe: string;
+  output: string;
+  maxRows: string;
+  maxBytes: number;
+  chunkRows: number;
+  failWhenCut: boolean;
+  allowWrites: boolean;
+  maxCost: string;
 }
 
 /** A header or a query parameter. */
@@ -214,6 +231,20 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
       formJson: n.formJson,
       wait: n.wait,
       until: n.until,
+      connection: n.connection,
+      dataFrom: (n.savedQuery ? "saved" : "sql") as StepForm["dataFrom"],
+      savedQuery: n.savedQuery,
+      dataArgs: n.type === "data" ? textValues(parsed(n.argumentsJson, {})) : {},
+      sql: n.sql,
+      params: (parsed(n.paramsJson, []) as unknown[]).map((v) => (typeof v === "string" ? v : JSON.stringify(v))),
+      describe: n.describe,
+      output: n.output,
+      maxRows: n.maxRows ? String(n.maxRows) : "",
+      maxBytes: n.maxBytes,
+      chunkRows: n.chunkRows,
+      failWhenCut: n.failWhenCut,
+      allowWrites: n.allowWrites,
+      maxCost: n.maxCost ? String(n.maxCost) : "",
       forEach: n.forEach,
       concurrency: n.concurrency ? String(n.concurrency) : "",
     })),
@@ -250,7 +281,7 @@ export function specFromForm(f: WorkflowForm) {
         timeout: gatewayTypes.includes(s.type) ? "" : s.timeout.trim(),
         server: s.type === "mcp_call" ? s.server : "",
         tool: s.type === "mcp_call" ? s.tool.trim() : "",
-        argumentsJson: s.type === "mcp_call" ? s.argumentsJson.trim() : "",
+        argumentsJson: s.type === "mcp_call" ? s.argumentsJson.trim() : s.type === "data" && s.dataFrom === "saved" && Object.keys(s.dataArgs).length ? JSON.stringify(s.dataArgs) : "",
         url: s.type === "api_call" || s.type === "a2a_call" ? s.url.trim() : "",
         method: s.type === "api_call" && s.method !== "GET" ? s.method : "",
         query: s.type === "api_call" ? s.query.filter((p) => p.name.trim()) : [],
@@ -262,6 +293,7 @@ export function specFromForm(f: WorkflowForm) {
         formJson: s.type === "human_task" ? s.formJson.trim() : "",
         wait: s.type === "timer" ? s.wait.trim() : "",
         until: s.type === "timer" ? s.until.trim() : "",
+        ...dataSpec(s),
         forEach: gatewayTypes.includes(s.type) ? "" : s.forEach.trim(),
         concurrency: gatewayTypes.includes(s.type) || !s.forEach.trim() ? 0 : Math.max(0, Math.floor(Number(s.concurrency)) || 0),
       };
@@ -270,6 +302,50 @@ export function specFromForm(f: WorkflowForm) {
       .filter((l) => f.steps.some((s) => s.id === l.from) && f.steps.some((s) => s.id === l.to))
       .map((l) => ({ from: l.from, to: l.to, when: l.kind === "when" ? l.condition.trim() : "", if: l.kind === "if" ? l.condition.trim() : "", default: l.kind === "default", error: l.kind === "error", label: l.label.trim() })),
   };
+}
+
+/** A data step's settings as SaveWorkflow takes them (none for another step). */
+function dataSpec(s: StepForm) {
+  const data = s.type === "data";
+  const saved = data && s.dataFrom === "saved";
+  return {
+    connection: data ? s.connection : "",
+    savedQuery: saved ? s.savedQuery : "",
+    sql: data && !saved ? s.sql.trim() : "",
+    paramsJson: data && !saved && s.params.length ? JSON.stringify(s.params.map(paramValue)) : "",
+    describe: data && !saved ? s.describe.trim() : "",
+    output: data && s.output !== "table" ? s.output : "",
+    chunkRows: data ? s.chunkRows : 0,
+    maxRows: data ? Math.max(0, Math.floor(Number(s.maxRows)) || 0) : 0,
+    maxBytes: data ? s.maxBytes : 0,
+    failWhenCut: data && s.failWhenCut,
+    allowWrites: data && s.allowWrites,
+    maxCost: data ? Math.max(0, Number(s.maxCost) || 0) : 0,
+  };
+}
+
+/** A parameter as typed: a number or true/false as itself, else its text (a template too). */
+export function paramValue(text: string): string | number | boolean {
+  const v = text.trim();
+  if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (v === "true" || v === "false") return v === "true";
+  return text;
+}
+
+/** JSON text as a value, or fallback when it isn't JSON. */
+function parsed(text: string, fallback: unknown): unknown {
+  if (!text.trim()) return fallback;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
+/** An object's values as text (a number or boolean as JSON gives it). */
+function textValues(v: unknown): Record<string, string> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "string" ? x : JSON.stringify(x)]));
 }
 
 /** Whether two canvases hold the same workflow. */
@@ -316,6 +392,20 @@ export function newStep(type: StepType, steps: StepForm[], x: number, y: number)
     formJson: "",
     wait: "",
     until: "",
+    connection: "",
+    dataFrom: "sql",
+    savedQuery: "",
+    dataArgs: {},
+    sql: "",
+    params: [],
+    describe: "",
+    output: "",
+    maxRows: "",
+    maxBytes: 0,
+    chunkRows: 0,
+    failWhenCut: false,
+    allowWrites: false,
+    maxCost: "",
   };
 }
 
@@ -366,6 +456,8 @@ export function stepNeeds(s: StepForm): string {
   if ((s.type === "read_file" || s.type === "save_file") && !s.path.trim()) return "path";
   if (s.type === "extract" && !s.fields.some((x) => x.name.trim())) return "fields";
   if (s.type === "mcp_call" && (!s.server || !s.tool.trim())) return "mcp";
+  if (s.type === "data" && !s.connection) return "connection";
+  if (s.type === "data" && (s.dataFrom === "saved" ? !s.savedQuery : !s.sql.trim())) return "query";
   if ((s.type === "api_call" || s.type === "a2a_call") && !s.url.trim()) return "url";
   if (s.type === "workflow" && !s.workflow) return "workflow";
   if (s.type === "human_task" && !s.formJson.trim()) return "form";

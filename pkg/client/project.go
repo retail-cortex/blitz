@@ -81,6 +81,143 @@ func (r *Remote) ListNotes() ([]api.Note, error) {
 	return out, nil
 }
 
+// ListSpecs is the project's specification, in order
+// (WorkspaceService.ListSpecs).
+func (r *Remote) ListSpecs() ([]api.SpecSummary, error) {
+	res, err := r.workspaces.ListSpecs(context.Background(), connect.NewRequest(&pb.ListSpecsRequest{Workspace: r.dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	out := make([]api.SpecSummary, len(res.Msg.Specs))
+	for i, s := range res.Msg.Specs {
+		out[i] = api.SpecSummary{File: s.File, Path: s.Path, Number: int(s.Number), Title: s.Title, Status: s.Status, DependsOn: ints(s.DependsOn),
+			Items: int(s.Items), Errors: int(s.Errors), Warnings: int(s.Warnings), OpenQuestions: int(s.OpenQuestions),
+			Approved: s.Approved, Traced: int(s.Traced), Implemented: int(s.Implemented), Changed: int(s.Changed),
+			Done: s.Done, Next: s.Next, BlockedBy: ints(s.BlockedBy)}
+	}
+	return out, nil
+}
+
+// ReviewSpec reviews a spec as edited (WorkspaceService.ReviewSpec).
+func (r *Remote) ReviewSpec(ctx context.Context, path, text string, judge bool) (api.SpecReview, error) {
+	res, err := r.workspaces.ReviewSpec(ctx, connect.NewRequest(&pb.ReviewSpecRequest{Workspace: r.dir, Path: path, Text: text, Judge: judge}))
+	if err != nil {
+		return api.SpecReview{}, fromAPI(err)
+	}
+	out := api.SpecReview{CostUSD: res.Msg.CostUsd, Problem: res.Msg.Problem}
+	for _, f := range res.Msg.Findings {
+		out.Findings = append(out.Findings, api.SpecFinding{Line: int(f.Line), ID: f.Id, Severity: f.Severity, Code: f.Code, Message: f.Message, Judged: f.Judged})
+	}
+	return out, nil
+}
+
+// specRequirements are requirements from the wire.
+func specRequirements(list []*pb.SpecRequirement) []api.SpecRequirement {
+	out := make([]api.SpecRequirement, len(list))
+	for i, r := range list {
+		out[i] = api.SpecRequirement{Spec: r.Spec, ID: r.Id, Text: r.Text, Line: int(r.Line), Change: r.Change, State: r.State, Judged: r.Judged, Reason: r.Reason, Stale: r.Stale}
+		if r.VerifiedAt != nil {
+			out[i].VerifiedAt = r.VerifiedAt.AsTime()
+		}
+		for _, e := range r.Evidence {
+			out[i].Evidence = append(out[i].Evidence, api.SpecEvidence{Path: e.Path, Line: int(e.Line), Kind: e.Kind, Text: e.Text})
+		}
+	}
+	return out
+}
+
+// TraceSpecs is a spec's requirements as traced
+// (WorkspaceService.TraceSpecs).
+func (r *Remote) TraceSpecs(path string) ([]api.SpecRequirement, error) {
+	res, err := r.workspaces.TraceSpecs(context.Background(), connect.NewRequest(&pb.TraceSpecsRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return specRequirements(res.Msg.Requirements), nil
+}
+
+// ApproveSpec approves a saved spec (WorkspaceService.ApproveSpec).
+func (r *Remote) ApproveSpec(ctx context.Context, path string, force bool) (api.SpecApproved, error) {
+	res, err := r.workspaces.ApproveSpec(ctx, connect.NewRequest(&pb.ApproveSpecRequest{Workspace: r.dir, Path: path, Force: force}))
+	if err != nil {
+		return api.SpecApproved{}, fromAPI(err)
+	}
+	return api.SpecApproved{Text: res.Msg.Text, Diff: res.Msg.Diff}, nil
+}
+
+// VerifySpec verifies a saved spec (WorkspaceService.VerifySpec).
+func (r *Remote) VerifySpec(ctx context.Context, path string, judge, estimate bool) (api.SpecVerification, error) {
+	res, err := r.workspaces.VerifySpec(ctx, connect.NewRequest(&pb.VerifySpecRequest{Workspace: r.dir, Path: path, Judge: judge, Estimate: estimate}))
+	if err != nil {
+		return api.SpecVerification{}, fromAPI(err)
+	}
+	out := api.SpecVerification{Requirements: specRequirements(res.Msg.Requirements), CostUSD: res.Msg.CostUsd, EstimatedUSD: res.Msg.EstimatedUsd, Priced: res.Msg.Priced, Problem: res.Msg.Problem}
+	for _, d := range res.Msg.Drift {
+		out.Drift = append(out.Drift, api.SpecDrift{ID: d.Id, Why: d.Why})
+	}
+	return out, nil
+}
+
+// ints are ints from the wire.
+func ints(list []int32) []int {
+	out := make([]int, len(list))
+	for i, n := range list {
+		out[i] = int(n)
+	}
+	return out
+}
+
+// PlanSpec is how a spec would be implemented (WorkspaceService.PlanSpec).
+func (r *Remote) PlanSpec(path string) (api.SpecPlan, error) {
+	res, err := r.workspaces.PlanSpec(context.Background(), connect.NewRequest(&pb.PlanSpecRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return api.SpecPlan{}, fromAPI(err)
+	}
+	return api.SpecPlan{Pending: specRequirements(res.Msg.Pending), BlockedBy: ints(res.Msg.BlockedBy), Prompt: res.Msg.Prompt}, nil
+}
+
+// fromSpecChanges are changes from the wire.
+func fromSpecChanges(list []*pb.SpecChange) []api.SpecChange {
+	out := make([]api.SpecChange, len(list))
+	for i, c := range list {
+		out[i] = api.SpecChange{ID: c.Id, Kind: c.Kind, Old: c.Old, New: c.New}
+	}
+	return out
+}
+
+// RecordSpecChange records a saved change to an approved spec
+// (WorkspaceService.RecordSpecChange).
+func (r *Remote) RecordSpecChange(ctx context.Context, path string) (api.SpecRecorded, error) {
+	res, err := r.workspaces.RecordSpecChange(ctx, connect.NewRequest(&pb.RecordSpecChangeRequest{Workspace: r.dir, Path: path}))
+	if err != nil {
+		return api.SpecRecorded{}, fromAPI(err)
+	}
+	return api.SpecRecorded{Changes: fromSpecChanges(res.Msg.Changes), Diff: res.Msg.Diff, Text: res.Msg.Text}, nil
+}
+
+// ImpactSpec scans a spec's changes' impact (WorkspaceService.ImpactSpec).
+func (r *Remote) ImpactSpec(ctx context.Context, path string, judge, estimate bool) (api.SpecImpact, error) {
+	res, err := r.workspaces.ImpactSpec(ctx, connect.NewRequest(&pb.ImpactSpecRequest{Workspace: r.dir, Path: path, Judge: judge, Estimate: estimate}))
+	if err != nil {
+		return api.SpecImpact{}, fromAPI(err)
+	}
+	m := res.Msg
+	out := api.SpecImpact{Changes: fromSpecChanges(m.Changes), Summary: m.Summary, Report: m.Report, CostUSD: m.CostUsd, EstimatedUSD: m.EstimatedUsd, Priced: m.Priced, Problem: m.Problem}
+	for _, s := range m.Symbols {
+		out.Symbols = append(out.Symbols, api.SpecSymbol{Name: s.Name, Path: s.Path, Line: int(s.Line), Uses: int(s.Uses)})
+	}
+	for _, p := range m.Places {
+		out.Places = append(out.Places, api.SpecPlace{Path: p.Path, Line: int(p.Line), Kind: p.Kind, Text: p.Text, Why: p.Why})
+	}
+	for _, st := range m.Steps {
+		out.Steps = append(out.Steps, api.SpecStep{Title: st.Title, Detail: st.Detail, Files: st.Files})
+	}
+	for _, c := range m.Conflicts {
+		out.Conflicts = append(out.Conflicts, api.SpecConflict{ID: c.Id, Why: c.Why})
+	}
+	return out, nil
+}
+
 // Reflection is what the harness has to learn
 // (WorkspaceService.GetReflection).
 func (r *Remote) Reflection() (api.Reflection, error) {

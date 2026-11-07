@@ -73,3 +73,17 @@ func TestDraftManifestRefuses(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, got.Problem, "no key")
 }
+
+// A spec is drafted with its own brief: a spec of the project's
+// specification, not an agent's instructions (spec_040_studio STU-90).
+func TestDraftManifestSpec(t *testing.T) {
+	w := openTest(t)
+	llm := &promptLLM{reply: `{"text": "# Payments\n\n1. Take cards.", "changes": ["Listed the requirements"]}`}
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return llm, nil }
+	got, err := w.DraftManifest(context.Background(), DraftRequest{Kind: "spec", Name: "Payments", Current: "# Payments\n\n"})
+	require.NoError(t, err)
+	assert.Equal(t, "# Payments\n\n1. Take cards.", got.Text)
+	require.Len(t, llm.prompts, 1)
+	assert.Contains(t, llm.prompts[0], "Payments", "the model sees the spec")
+	assert.Contains(t, draftBriefs["spec"], "project's specification")
+}

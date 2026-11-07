@@ -38,9 +38,9 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t } from "../i18n";
 import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
-import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
+import { MarkdownField } from "./MarkdownField";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, knownAction, knownWhen, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
 import { OrgItems } from "./OrgItems";
@@ -353,13 +353,18 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                   {(id) => <input id={id} className="input mono" value={form.paths} placeholder={t("desktop.rules.paths_placeholder")} onChange={(e) => set("paths", e.target.value)} />}
                 </Field>
               )}
-              <div className="row field-tools">
-                <span className="spacer" />
-                <DraftButton workspace={workspace} kind="rule" name={form.name} description={form.description} current={form.text} onUse={(v) => set("text", v)} disabled={!editable} />
-              </div>
-              <Field label={t("desktop.rules.text")} supporting={t(gate ? "desktop.rules.text_hint" : "desktop.rules.text_hint_instruction")}>
-                {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.text} rows={6} placeholder={t(gate ? "desktop.rules.text_placeholder" : "desktop.rules.text_placeholder_instruction")} onValue={(v) => set("text", v)} workspace={workspace} />}
-              </Field>
+              <MarkdownField
+                label={t("desktop.rules.text")}
+                supporting={t(gate ? "desktop.rules.text_hint" : "desktop.rules.text_hint_instruction")}
+                value={form.text}
+                rows={6}
+                placeholder={t(gate ? "desktop.rules.text_placeholder" : "desktop.rules.text_placeholder_instruction")}
+                onValue={(v) => set("text", v)}
+                disabled={!editable}
+                dir={workspace}
+                workspace={workspace}
+                tools={<DraftButton workspace={workspace} kind="rule" name={form.name} description={form.description} current={form.text} onUse={(v) => set("text", v)} disabled={!editable} />}
+              />
             </fieldset>
             {gate && knownWhen(form.when) && (
               <div className="card outlined stack rule-try" style={{ gap: 8 }}>

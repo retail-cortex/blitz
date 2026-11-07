@@ -43,6 +43,20 @@ Don't want to write the SQL? Press **Write a query** and say what you're looking
 - The table and column names go to your model; no rows do.
 - Write a skill of your own named `sql-query` in the workspace to change how queries are written (your naming rules, a house style).
 
+## In a chat
+
+The database icon in the chat box (or `/data`) lists the workspace's databases that are on, each with its saved queries:
+
+- **Add shop** puts a chip for the database on your next message. When you send, Blitz reads its tables and columns (up to 200 columns, with their comments) and tells the agent which tools query it. Nothing is queried until the agent decides to.
+- **A saved query** runs at once, read-only, and its result becomes a chip (*shop · top_customers · Rows: 40*). One with parameters asks for them first. Click the chip to see the table.
+- **Write SQL…** and **Describe what you need…** run SQL you write, or SQL drafted from the schema for you to review. You see the first rows before you **Add to the message**.
+
+The agent gets a query's SQL, its columns with their types and descriptions, and up to 200 rows as a table, with a note when there were more. The result is read when you add it, says when, and isn't run again. As with a web page you add, it's data for the agent to read, never instructions.
+
+You can also type it: `@db:shop` adds the database, and `@db:shop/top_customers` runs that saved query (one without parameters) as the message is sent. Start typing `@d` and the chat box offers your databases above the files; after `@db:shop/` it offers that database's queries. A workspace connection you haven't trusted (a clone's file that changed since you saved it) isn't offered, and `@db:` on it says so.
+
+To query a database in a workflow, use a [Data step](workflows.md#querying-a-database).
+
 ## Read-only, and what asks first
 
 | | Read-only | Can write |

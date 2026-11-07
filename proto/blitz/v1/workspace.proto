@@ -356,6 +356,50 @@ service WorkspaceService {
   // Has the model write or improve a manifest field (an agent's or a
   // skill's instructions, a script, a rule): nothing is saved.
   rpc DraftManifest(DraftManifestRequest) returns (DraftManifestResponse);
+  // Returns the project's specification (.agents/specs), in order, each
+  // with its status and what the checks found (spec_057 SDD-01).
+  rpc ListSpecs(ListSpecsRequest) returns (ListSpecsResponse);
+  // Reviews a spec as edited: the checks without a model, and the model's
+  // review when judge is set (spec_057 SDD-02, SDD-03).
+  rpc ReviewSpec(ReviewSpecRequest) returns (ReviewSpecResponse);
+  // Returns a spec's requirements (or every spec's) as the ledger traces
+  // them (spec_057 SDD-10).
+  rpc TraceSpecs(TraceSpecsRequest) returns (TraceSpecsResponse);
+  // Approves a saved spec: Status: approved, the baseline and the ledger
+  // (SDD-11). FAILED_PRECONDITION SPEC_NOT_READY without force when it
+  // has errors or open questions.
+  rpc ApproveSpec(ApproveSpecRequest) returns (ApproveSpecResponse);
+  // Verifies a saved spec's requirements against the work (SDD-12).
+  rpc VerifySpec(VerifySpecRequest) returns (VerifySpecResponse);
+  // Records a saved change to an approved spec: Status: changed, a diff in
+  // the ledger (SDD-20).
+  rpc RecordSpecChange(RecordSpecChangeRequest) returns (RecordSpecChangeResponse);
+  // Scans what a spec's changes since approval reach in the work, and
+  // with judge has the model write the fix (SDD-20, SDD-21).
+  rpc ImpactSpec(ImpactSpecRequest) returns (ImpactSpecResponse);
+  // Says how a spec would be implemented: what's left, what it waits for,
+  // and the prompt for an agent (SDD-30).
+  rpc PlanSpec(PlanSpecRequest) returns (PlanSpecResponse);
+  // Returns the image models Pictures offers and what each can do
+  // (spec_058_pictures PIC-01..04).
+  rpc ListPictureModels(ListPictureModelsRequest) returns (ListPictureModelsResponse);
+  // Makes a Pictures turn (or says what it would cost), checked against
+  // the model's catalog entry first (PIC-62).
+  rpc MakePicture(MakePictureRequest) returns (MakePictureResponse);
+  // Returns the workspace's picture sessions, newest first (PIC-44).
+  rpc ListPictureSessions(ListPictureSessionsRequest) returns (ListPictureSessionsResponse);
+  // Returns one picture session.
+  rpc GetPictureSession(GetPictureSessionRequest) returns (GetPictureSessionResponse);
+  // Names a picture session.
+  rpc RenamePictureSession(RenamePictureSessionRequest) returns (RenamePictureSessionResponse);
+  // Deletes a picture session and its pictures (not what was saved).
+  rpc DeletePictureSession(DeletePictureSessionRequest) returns (DeletePictureSessionResponse);
+  // A picture of a session (one made, or a reference kept with it).
+  rpc ReadPicture(ReadPictureRequest) returns (ReadPictureResponse);
+  // Writes a picture into the workspace (PIC-51); returns its path.
+  rpc SavePicture(SavePictureRequest) returns (SavePictureResponse);
+  // Removes a picture from its session (what was saved stays).
+  rpc DeletePicture(DeletePictureRequest) returns (DeletePictureResponse);
   // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
   // Stops an MCP server and starts it afresh when the next turn lists its
@@ -398,6 +442,11 @@ service WorkspaceService {
   // Reads a connection's tables and their columns, as written (the schema
   // capability); problem says why when it can read none.
   rpc ReadConnectorSchema(ReadConnectorSchemaRequest) returns (ReadConnectorSchemaResponse);
+  // Runs a statement, or one of a connection's saved queries, on the
+  // connection as written and returns its result as a table: its columns
+  // as the database describes them, its rows (spec_059_data DAT-50; the
+  // try capability). problem says why it didn't run.
+  rpc RunConnectorQuery(RunConnectorQueryRequest) returns (RunConnectorQueryResponse);
   // Drafts one of a connection's queries from what the user is looking
   // for: its schema is read (none read is the problem) and the sql-query
   // skill writes the query (the query-builder capability). Nothing is
@@ -2649,6 +2698,507 @@ message MergeBranchResponse {
   GetGitStatusResponse status = 3;
 }
 
+// Request message for WorkspaceService.ListSpecs.
+message ListSpecsRequest {
+  string workspace = 1;
+}
+
+// One file of the specification.
+message SpecSummary {
+  // Its name (001-overview.md), and its path in the workspace.
+  string file = 1;
+  string path = 2;
+  // Its place in the order (0 for the index or an unnumbered file).
+  int32 number = 3;
+  string title = 4;
+  // Its Status: line ("" when there's none).
+  string status = 5;
+  repeated int32 depends_on = 6;
+  // How many requirements with IDs it has.
+  int32 items = 7;
+  // What the checks without a model found.
+  int32 errors = 8;
+  int32 warnings = 9;
+  int32 open_questions = 10;
+  // The ledger has its approval.
+  bool approved = 11;
+  // Requirements the work names (or the model judged implemented), those
+  // the model judged implemented, and those changed since approval.
+  int32 traced = 12;
+  int32 implemented = 13;
+  int32 changed = 14;
+  // Approved, unchanged and every requirement found in the work (SDD-32).
+  bool done = 15;
+  // The first in order not done whose dependencies are.
+  bool next = 16;
+  // The dependencies not done it waits for.
+  repeated int32 blocked_by = 17;
+}
+
+// Response message for WorkspaceService.ListSpecs.
+message ListSpecsResponse {
+  repeated SpecSummary specs = 1;
+}
+
+// Request message for WorkspaceService.TraceSpecs.
+message TraceSpecsRequest {
+  string workspace = 1;
+  // The spec's path ("" for every spec).
+  string path = 2;
+}
+
+// Where a requirement was found: a file's line, or a commit (path is its hash).
+message SpecEvidence {
+  string path = 1;
+  int32 line = 2;
+  // "code", "test", "doc" or "commit".
+  string kind = 3;
+  string text = 4;
+}
+
+// One requirement as traced.
+message SpecRequirement {
+  // Its spec's file, and its line there (0 when removed).
+  string spec = 1;
+  string id = 2;
+  string text = 3;
+  int32 line = 4;
+  // "added", "changed" or "removed" since the spec was approved; "" otherwise.
+  string change = 5;
+  // traced, untraced, implemented, partial, missing, contradicted; "" never verified.
+  string state = 6;
+  // The model's verdict, not the check's.
+  bool judged = 7;
+  string reason = 8;
+  // Its text changed since it was verified.
+  bool stale = 9;
+  google.protobuf.Timestamp verified_at = 10;
+  repeated SpecEvidence evidence = 11;
+}
+
+// Response message for WorkspaceService.TraceSpecs.
+message TraceSpecsResponse {
+  repeated SpecRequirement requirements = 1;
+}
+
+// Request message for WorkspaceService.ApproveSpec.
+message ApproveSpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Approve with errors or open questions.
+  bool force = 3;
+}
+
+// Response message for WorkspaceService.ApproveSpec.
+message ApproveSpecResponse {
+  // The spec's text as written (Status: approved).
+  string text = 1;
+  // The diff kept of what changed since its last approval ("" for none).
+  string diff = 2;
+}
+
+// Request message for WorkspaceService.VerifySpec.
+message VerifySpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Have the model judge each requirement (it costs).
+  bool judge = 3;
+  // With judge: only say what it would cost; nothing is written.
+  bool estimate = 4;
+}
+
+// An approved requirement that no longer holds.
+message SpecDrift {
+  string id = 1;
+  // "changed" (since approval), "lost" (no longer found in the work) or
+  // "judged" (the model said missing or contradicted).
+  string why = 2;
+}
+
+// Request message for WorkspaceService.PlanSpec.
+message PlanSpecRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+// Response message for WorkspaceService.PlanSpec.
+message PlanSpecResponse {
+  // Its requirements not implemented yet, in order.
+  repeated SpecRequirement pending = 1;
+  // The dependencies not done that it waits for.
+  repeated int32 blocked_by = 2;
+  // The prompt that has an agent implement it ("" when nothing's left).
+  string prompt = 3;
+}
+
+// Response message for WorkspaceService.VerifySpec.
+message VerifySpecResponse {
+  repeated SpecRequirement requirements = 1;
+  // An approved spec's requirements that drifted (SDD-31).
+  repeated SpecDrift drift = 6;
+  double cost_usd = 2;
+  double estimated_usd = 3;
+  // The model has a price (the estimate means something).
+  bool priced = 4;
+  // Why the model's verdicts didn't come (the check's results are there).
+  string problem = 5;
+}
+
+// A requirement that differs from its spec's approval.
+message SpecChange {
+  string id = 1;
+  // "added", "changed" or "removed".
+  string kind = 2;
+  string old = 3;
+  string new = 4;
+}
+
+// Request message for WorkspaceService.RecordSpecChange.
+message RecordSpecChangeRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+// Response message for WorkspaceService.RecordSpecChange.
+message RecordSpecChangeResponse {
+  repeated SpecChange changes = 1;
+  // The diff kept ("" when none was: unchanged, or the same as the last).
+  string diff = 2;
+  // The spec's text now that it says Status: changed ("" when unchanged).
+  string text = 3;
+}
+
+// A place a change reaches.
+message SpecPlace {
+  string path = 1;
+  int32 line = 2;
+  string kind = 3;
+  string text = 4;
+  // The requirement's ID, the symbol it uses, or "search: <ID>".
+  string why = 5;
+}
+
+// A declaration a changed requirement's work sits in.
+message SpecSymbol {
+  string name = 1;
+  string path = 2;
+  int32 line = 3;
+  int32 uses = 4;
+}
+
+// One step of an impact report's fix.
+message SpecStep {
+  string title = 1;
+  string detail = 2;
+  repeated string files = 3;
+}
+
+// Another spec's requirement a change contradicts.
+message SpecConflict {
+  string id = 1;
+  string why = 2;
+}
+
+// Request message for WorkspaceService.ImpactSpec.
+message ImpactSpecRequest {
+  string workspace = 1;
+  string path = 2;
+  // Have the model write the report (it costs).
+  bool judge = 3;
+  // With judge: only say what it would cost; nothing is written.
+  bool estimate = 4;
+}
+
+// Response message for WorkspaceService.ImpactSpec.
+message ImpactSpecResponse {
+  repeated SpecChange changes = 1;
+  repeated SpecSymbol symbols = 2;
+  repeated SpecPlace places = 3;
+  string summary = 4;
+  repeated SpecStep steps = 5;
+  repeated SpecConflict conflicts = 6;
+  // The report kept in the ledger ("" without the model).
+  string report = 7;
+  double cost_usd = 8;
+  double estimated_usd = 9;
+  bool priced = 10;
+  string problem = 11;
+}
+
+// What an image model can do, as Pictures offers it (PIC-01).
+message PictureModel {
+  // provider/model.
+  string ref = 1;
+  string id = 2;
+  string name = 3;
+  // "gemini" or "imagen".
+  string kind = 4;
+  // The [images] model, chosen first.
+  bool default = 5;
+  // Through the organization's service.
+  bool organization = 6;
+  // The catalog doesn't know it: its family's values.
+  bool assumed = 7;
+  int32 max_references = 8;
+  int32 max_characters = 9;
+  int32 max_objects = 10;
+  int32 max_pictures = 11;
+  repeated string sizes = 12;
+  repeated string ratios = 13;
+  repeated string thinking = 14;
+  bool thinking_always = 15;
+  // "", "web" or "image".
+  string search = 16;
+  bool negative_prompt = 17;
+  bool people = 18;
+  bool seed = 19;
+  bool enhance = 20;
+  repeated string formats = 21;
+  double input_per_mtok = 22;
+  double output_per_mtok = 23;
+  // A picture's price (Imagen).
+  double per_picture = 24;
+  // A picture's output tokens by size (Gemini).
+  map<string, int32> size_tokens = 25;
+}
+
+// Request message for WorkspaceService.ListPictureModels.
+message ListPictureModelsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListPictureModels.
+message ListPictureModelsResponse {
+  repeated PictureModel models = 1;
+  // Where pictures are saved ([images] folder, else pictures).
+  string folder = 2;
+}
+
+// A reference for a turn: a workspace file, a picture of the session, or
+// data from the computer; with its role.
+message PictureReference {
+  string path = 1;
+  string picture = 2;
+  bytes data = 3;
+  string mime = 4;
+  string name = 5;
+  // "character", "object", "style" or "".
+  string role = 6;
+}
+
+// Request message for WorkspaceService.MakePicture.
+message MakePictureRequest {
+  string workspace = 1;
+  // The session to add to ("" starts one).
+  string session = 2;
+  string model = 3;
+  string prompt = 4;
+  repeated PictureReference references = 5;
+  int32 count = 6;
+  string aspect_ratio = 7;
+  string size = 8;
+  string thinking = 9;
+  bool search = 10;
+  bool search_images = 11;
+  string avoid = 12;
+  string people = 13;
+  int32 seed = 14;
+  bool use_seed = 15;
+  bool enhance = 16;
+  string format = 17;
+  int32 quality = 18;
+  // The session's picture the turn refines.
+  string start_from = 19;
+  // Only say what it would cost; nothing is sent or kept.
+  bool estimate = 20;
+}
+
+// Response message for WorkspaceService.MakePicture.
+message MakePictureResponse {
+  // The session with the new turn (unset for an estimate).
+  PictureSession session = 1;
+  double cost_usd = 2;
+  bool priced = 3;
+}
+
+// A Pictures session.
+message PictureSession {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created = 3;
+  google.protobuf.Timestamp updated = 4;
+  repeated PictureTurn turns = 5;
+}
+
+// A reference as kept with a turn.
+message PictureTurnRef {
+  // Its copy's name in the session (to read with ReadPicture).
+  string file = 1;
+  string mime = 2;
+  string name = 3;
+  string path = 4;
+  string role = 5;
+}
+
+// A picture made, and where it was saved.
+message PictureFile {
+  string id = 1;
+  string mime = 2;
+  repeated string saved = 3;
+}
+
+// A page a grounded turn used.
+message PictureSource {
+  string title = 1;
+  string url = 2;
+}
+
+// One turn of a session.
+message PictureTurn {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  string model = 3;
+  string kind = 4;
+  string prompt = 5;
+  repeated PictureTurnRef references = 6;
+  int32 count = 7;
+  string aspect_ratio = 8;
+  string size = 9;
+  string thinking = 10;
+  string search = 11;
+  string avoid = 12;
+  string people = 13;
+  string format = 14;
+  string start_from = 15;
+  repeated PictureFile pictures = 16;
+  string text = 17;
+  string thoughts = 18;
+  repeated PictureSource sources = 19;
+  // Why it came without a picture.
+  string problem = 20;
+  double cost_usd = 21;
+  // The seed used (has_seed: one was).
+  int32 seed = 22;
+  bool has_seed = 23;
+}
+
+// Request message for WorkspaceService.ListPictureSessions.
+message ListPictureSessionsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListPictureSessions.
+message ListPictureSessionsResponse {
+  repeated PictureSession sessions = 1;
+}
+
+// Request message for WorkspaceService.GetPictureSession.
+message GetPictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.GetPictureSession.
+message GetPictureSessionResponse {
+  PictureSession session = 1;
+}
+
+// Request message for WorkspaceService.RenamePictureSession.
+message RenamePictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+  string name = 3;
+}
+
+// Response message for WorkspaceService.RenamePictureSession.
+message RenamePictureSessionResponse {
+  PictureSession session = 1;
+}
+
+// Request message for WorkspaceService.DeletePictureSession.
+message DeletePictureSessionRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.DeletePictureSession.
+message DeletePictureSessionResponse {}
+
+// Request message for WorkspaceService.ReadPicture.
+message ReadPictureRequest {
+  string workspace = 1;
+  string session = 2;
+  // A picture's ID, or a reference's file.
+  string picture = 3;
+}
+
+// Response message for WorkspaceService.ReadPicture.
+message ReadPictureResponse {
+  bytes data = 1;
+  string mime = 2;
+}
+
+// Request message for WorkspaceService.SavePicture.
+message SavePictureRequest {
+  string workspace = 1;
+  string session = 2;
+  string picture = 3;
+  // Where ("" for the folder, named from the prompt; a folder ends in /).
+  string path = 4;
+}
+
+// Response message for WorkspaceService.SavePicture.
+message SavePictureResponse {
+  string path = 1;
+}
+
+// Request message for WorkspaceService.DeletePicture.
+message DeletePictureRequest {
+  string workspace = 1;
+  string session = 2;
+  string picture = 3;
+}
+
+// Response message for WorkspaceService.DeletePicture.
+message DeletePictureResponse {
+  PictureSession session = 1;
+}
+
+// Request message for WorkspaceService.ReviewSpec.
+message ReviewSpecRequest {
+  string workspace = 1;
+  // The spec's path in the workspace (.agents/specs/NNN-name.md).
+  string path = 2;
+  // Its text as edited (reviewed in place of the file's).
+  string text = 3;
+  // Ask the model too (it costs).
+  bool judge = 4;
+}
+
+// Something a review found in a spec.
+message SpecFinding {
+  // Where (1-based; 0 for the whole spec).
+  int32 line = 1;
+  // The requirement it's about, if one.
+  string id = 2;
+  // "error", "warning" or "info".
+  string severity = 3;
+  // The check (no-title, vague, …; "judged" for the model's).
+  string code = 4;
+  string message = 5;
+  // The model's finding, not a check's.
+  bool judged = 6;
+}
+
+// Response message for WorkspaceService.ReviewSpec.
+message ReviewSpecResponse {
+  repeated SpecFinding findings = 1;
+  // What the model's review cost.
+  double cost_usd = 2;
+  // Why the model's review didn't come (the checks' findings are there).
+  string problem = 3;
+}
+
 // Request message for WorkspaceService.DraftManifest.
 message DraftManifestRequest {
   string workspace = 1;
@@ -3081,7 +3631,7 @@ message DraftEvalCasesResponse {
 message FlowNode {
   string id = 1;
   // agent, refine, summarize, accumulate, browser, script, read_file,
-  // save_file; email and data are shown, not run yet.
+  // save_file, data; email is shown, not run yet.
   string type = 2;
   string title = 3;
   // Where it sits on the canvas.
@@ -3134,6 +3684,28 @@ message FlowNode {
   // How long a timer waits (a Go duration), or until when (RFC 3339).
   string wait = 32;
   string until = 33;
+  // A data step's connection (one of the workspace's databases), and
+  // either a saved query of it (its parameters arguments_json, by name)
+  // or SQL (its parameters params_json, a JSON array in order); templates
+  // go into parameters only. describe is what the SQL was drafted from
+  // (spec_059_data DAT-20).
+  string connection = 34;
+  string saved_query = 35;
+  string sql = 36;
+  string params_json = 37;
+  string describe = 38;
+  // table (the default), chunks or rows; the rows in a chunk (0: 100).
+  string output = 39;
+  int32 chunk_rows = 40;
+  // The most rows (0: 1,000) and bytes (0: 8 MB) it hands on; past them
+  // the result is cut and said, or the step fails with fail_when_cut.
+  int32 max_rows = 41;
+  int32 max_bytes = 42;
+  bool fail_when_cut = 43;
+  // Its SQL may write (the run asks first).
+  bool allow_writes = 44;
+  // The most a billed query (BigQuery) may cost, in dollars (0: $1).
+  double max_cost = 45;
 }
 
 // A paused workflow run's task: a human task's form waiting for an
@@ -4001,6 +4573,59 @@ message ReadConnectorSchemaRequest {
 message ReadConnectorSchemaResponse {
   repeated ConnectorTable tables = 1;
   // Why it read none ("" when it read some).
+  string problem = 2;
+}
+
+// Request message for WorkspaceService.RunConnectorQuery.
+message RunConnectorQueryRequest {
+  string workspace = 1;
+  Connector connection = 2;
+  map<string, string> secret_values = 3;
+  // One of the connection's saved queries, by name; its parameters are
+  // params_json's object, by name.
+  string query = 4;
+  // Or a statement; its parameters are params_json's array, in order.
+  string statement = 5;
+  string params_json = 6;
+  // The most rows the table holds (1,000 when 0); the rest are cut.
+  int32 max_rows = 7;
+  // Refuses a statement that writes, whatever the connection allows.
+  bool read_only = 8;
+}
+
+// A column of a query's result (spec_059_data DAT-02).
+message DataColumn {
+  string name = 1;
+  // Its comment in the schema ("" when none).
+  string description = 2;
+  // string, integer, number, boolean, date, time, timestamp, json, bytes
+  // or other.
+  string type = 3;
+  // Its declared length, when its type has one.
+  optional int64 length = 4;
+  // The database's own type.
+  string db_type = 5;
+  // Whether it may be NULL, when the database says.
+  optional bool nullable = 6;
+}
+
+// A query's result (spec_059_data DAT-01).
+message DataTable {
+  repeated DataColumn columns = 1;
+  // The rows, a JSON array of arrays in the columns' order.
+  string rows_json = 2;
+  // How many rows it holds.
+  int32 total = 3;
+  // A limit cut the query's rows.
+  bool truncated = 4;
+  // The table as Markdown, its first 50 rows.
+  string markdown = 5;
+}
+
+// Response message for WorkspaceService.RunConnectorQuery.
+message RunConnectorQueryResponse {
+  DataTable table = 1;
+  // Why it didn't run ("" when it did).
   string problem = 2;
 }
 

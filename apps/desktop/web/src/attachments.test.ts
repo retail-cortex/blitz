@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment } from "./attachments";
+import { DataTableSchema } from "./gen/blitz/v1/workspace_pb";
+import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, webBlocks, databaseBlock, queryBlock, type Accepted, type Attachment } from "./attachments";
 
 // What the service reports for a Claude model, and for Gemini.
 const claude: Accepted[] = [
@@ -68,7 +70,7 @@ describe("attachments", () => {
     ];
     expect(uploading(list)).toBe(false);
     expect(readyIds(list)).toEqual(["x"]);
-    expect(webBlocks(list)).toEqual([page]);
+    expect(webBlocks(list)).toEqual([{ ...page, connection: "", statement: "" }]);
   });
   it("describes an uploaded file", () => {
     expect(describeImage({ width: 1280, height: 720, size: 2n * 1024n * 1024n, resized: true })).toBe("1280×720 · 2.0 MB · scaled down");
@@ -81,5 +83,43 @@ describe("attachments", () => {
   });
   it("formats a length", () => {
     expect([clock(5), clock(192), clock(3725)]).toEqual(["0:05", "3:12", "1:02:05"]);
+  });
+});
+
+describe("data in a chat (spec_059_data)", () => {
+  const table = create(DataTableSchema, {
+    columns: [
+      { name: "id", type: "integer", dbType: "int4", description: "The order" },
+      { name: "customer", type: "string", length: 80n, nullable: true },
+    ],
+    rowsJson: '[[1042, "Ada"], [1043, null]]',
+    total: 2,
+    truncated: true,
+  });
+
+  it("adds a connection, read as the message goes", () => {
+    expect(databaseBlock("shop")).toEqual({ kind: "database", url: "", title: "shop", html: "", text: "", connection: "shop" });
+  });
+
+  it("adds a query's result as its table", () => {
+    const b = queryBlock("shop", "recent", "SELECT id, customer FROM orders", table);
+    expect(b.kind).toBe("data_query");
+    expect(b.title).toBe("shop · recent · Rows: 2");
+    expect(JSON.parse(b.text)).toEqual({
+      columns: [
+        { name: "id", description: "The order", type: "integer", length: null, db_type: "int4" },
+        { name: "customer", description: "", type: "string", length: 80, nullable: true },
+      ],
+      rows: [
+        [1042, "Ada"],
+        [1043, null],
+      ],
+      total: 2,
+      truncated: true,
+    });
+    expect(queryBlock("shop", "", "SELECT 1", create(DataTableSchema, { rowsJson: "{" })).title).toBe("shop · SQL · Rows: 0");
+    // What's sent: the block's fields, not the table kept for its chip.
+    const sent = webBlocks([{ key: "k", name: b.title, url: "", web: b }]);
+    expect(sent).toEqual([{ kind: "data_query", url: "", title: b.title, html: "", text: b.text, connection: "shop", statement: "SELECT id, customer FROM orders" }]);
   });
 });

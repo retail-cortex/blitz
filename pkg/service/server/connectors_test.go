@@ -97,6 +97,43 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 	assert.Equal(t, "recipes", schema.Msg.Tables[0].Name)
 	assert.Equal(t, "name", schema.Msg.Tables[0].Columns[0].Name)
 
+	// A statement's result as a table (spec_059_data DAT-50).
+	run, err := w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: kitchen, Statement: "SELECT name, length(name) AS n FROM recipes WHERE name <> ? ORDER BY name", ParamsJson: `["x"]`}))
+	require.NoError(t, err)
+	require.Empty(t, run.Msg.Problem)
+	tab := run.Msg.Table
+	require.Len(t, tab.Columns, 2)
+	assert.Equal(t, "string", tab.Columns[0].Type)
+	assert.Equal(t, "integer", tab.Columns[1].Type, "an expression's type from its values")
+	assert.JSONEq(t, `[["bread",5],["soup",4]]`, tab.RowsJson)
+	assert.EqualValues(t, 2, tab.Total)
+	assert.Contains(t, tab.Markdown, "| bread | 5 |")
+	run, err = w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: kitchen, Query: "count"}))
+	require.NoError(t, err)
+	require.Empty(t, run.Msg.Problem)
+	assert.JSONEq(t, `[[2]]`, run.Msg.Table.RowsJson, "a saved query by its name")
+	run, err = w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: kitchen, Statement: "SELECT name FROM recipes", MaxRows: 1}))
+	require.NoError(t, err)
+	assert.True(t, run.Msg.Table.Truncated)
+	for _, bad := range []struct {
+		req  *pb.RunConnectorQueryRequest
+		want string
+	}{
+		{&pb.RunConnectorQueryRequest{Statement: "DELETE FROM recipes"}, "read-only"},
+		{&pb.RunConnectorQueryRequest{Query: "missing"}, `no query "missing"`},
+		{&pb.RunConnectorQueryRequest{}, "no statement"},
+		{&pb.RunConnectorQueryRequest{Statement: "SELECT ?", ParamsJson: "{"}, "JSON array"},
+		{&pb.RunConnectorQueryRequest{Query: "count", ParamsJson: "["}, "JSON object"},
+	} {
+		bad.req.Workspace, bad.req.Connection = dir, kitchen
+		run, err = w.RunConnectorQuery(ctx, connect.NewRequest(bad.req))
+		require.NoError(t, err)
+		assert.Contains(t, run.Msg.Problem, bad.want)
+		assert.Nil(t, run.Msg.Table)
+	}
+	_, err = w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
 	saved, err := w.SaveConnector(ctx, connect.NewRequest(&pb.SaveConnectorRequest{Workspace: dir, Connection: kitchen}))
 	require.NoError(t, err)
 	require.Empty(t, saved.Msg.Problems)

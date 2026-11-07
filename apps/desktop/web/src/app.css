@@ -368,6 +368,19 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* The composer's icon buttons say what they do as soon as they're hovered:
+   their accessible name, in the key hint's tooltip (::before: the kit's
+   ::after is the hover layer); those right of the spacer (stop, send)
+   open leftwards to stay in the window. */
+.composer-bar .icon-btn { position: relative; }
+.composer-bar .icon-btn::before {
+  content: attr(aria-label); position: absolute; left: 50%; bottom: calc(100% + 8px); z-index: 40; white-space: nowrap; pointer-events: none;
+  padding: 6px 10px; border-radius: var(--md-shape-xs); background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); font: 400 12px/16px var(--md-font);
+  opacity: 0; transform: translate(-50%, 2px); transition: opacity 0.12s, transform 0.12s;
+}
+.composer-bar .icon-btn:hover::before, .composer-bar .icon-btn:focus-visible::before { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.15s; }
+.composer-bar .spacer ~ .icon-btn::before { left: auto; right: 0; transform: translateY(2px); }
+.composer-bar .spacer ~ .icon-btn:hover::before, .composer-bar .spacer ~ .icon-btn:focus-visible::before { transform: none; }
 /* The composer's keys: an icon, its tooltip listing them (KeyHint). */
 .key-hint { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--md-shape-full, 999px); color: var(--md-on-surface-variant); cursor: help; outline: none; }
 .key-hint:hover, .key-hint:focus-visible { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
@@ -378,6 +391,20 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
   opacity: 0; transform: translateY(2px); transition: opacity 0.12s, transform 0.12s;
 }
 .key-hint:hover::after, .key-hint:focus-visible::after { opacity: 1; transform: none; transition-delay: 0.15s; }
+
+/* A question's explained choices (spec_005_approvals APR-40b): each a
+   button whose summary shows at once on hover, and its details below. */
+.question-choices { gap: 8px; }
+.question-choice { display: flex; flex-direction: column; gap: 6px; }
+.question-choice-details { display: flex; flex-direction: column; gap: 4px; margin-left: 4px; padding: 8px 12px; border-left: 2px solid var(--md-outline-variant); }
+.question-choice-details .markdown p { margin: 0.3em 0; }
+.choice-tip { position: relative; display: inline-flex; }
+.choice-tip[data-tip]::after {
+  content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 40; width: max-content; max-width: 360px; white-space: normal; pointer-events: none;
+  padding: 6px 10px; border-radius: var(--md-shape-xs); background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); font: 400 12px/16px var(--md-font);
+  opacity: 0; transform: translateY(2px); transition: opacity 0.12s, transform 0.12s;
+}
+.choice-tip[data-tip]:hover::after, .choice-tip[data-tip]:focus-within::after { opacity: 1; transform: none; transition-delay: 0.15s; }
 
 /* Markdown */
 .markdown { overflow-wrap: anywhere; line-height: 1.6; }
@@ -653,6 +680,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .attachment { display: flex; align-items: center; gap: 8px; max-width: 260px; padding: 4px 4px 4px 4px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); }
 .attachment img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--md-shape-sm); flex: none; }
 .attachment.failed img { opacity: 0.4; }
+/* A query's result (spec_059_data DAT-42): a click shows its table. */
+.attachment.clickable { cursor: pointer; }
+.attachment.clickable:hover { background: color-mix(in srgb, var(--accent-a) 8%, var(--md-surface-container-highest)); }
+.data-sql { margin: 0; padding: 8px 10px; border-radius: var(--md-shape-sm); background: var(--md-surface-container-low); white-space: pre-wrap; }
 .attachment-text { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
 .attachment-text small { font-size: 11px; }
 .bubble-images { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
@@ -667,6 +698,17 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .draft-text { width: 100%; min-height: 240px; }
 /* A field's own tools (Redraft) above it, at the right. */
 .field-tools { margin-bottom: -4px; }
+/* A Markdown field (STU-05a): its label and Visual or Source on a line,
+   the box, then its tools (Redraft) under it on the right. */
+.markdown-field-head { gap: 8px; align-items: center; }
+.markdown-field .markdown-field-visual { flex: none; border: 1px solid var(--md-outline); border-radius: var(--field-radius); background: var(--md-surface-container-lowest); resize: vertical; min-height: 160px; }
+.markdown-field .markdown-field-visual:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
+.markdown-field-tools { justify-content: flex-end; gap: 8px; }
+/* In a field the document takes the box's width and height, not a page's
+   reading column, and an empty one shows the field's placeholder. */
+.markdown-field .preview-markdown .markdown { max-width: none; margin: 0; padding: 12px 16px; }
+.markdown-field .visual-editor .visual-doc { min-height: 100%; }
+.markdown-field .visual-editor .visual-doc > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before { content: var(--placeholder, ""); float: left; height: 0; color: var(--md-on-surface-variant); opacity: 0.8; pointer-events: none; }
 /* A text box completing {secrets:…}: its menu opens below it. */
 .suggest-field { position: relative; display: flex; flex-direction: column; gap: 4px; }
 .suggest-field > .command-menu { top: calc(100% + 4px); bottom: auto; }
@@ -1033,6 +1075,18 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-table td { padding: 4px 8px; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant) 50%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-table td:first-child { white-space: normal; }
 .run-table .num { text-align: right; }
+/* A spec's requirements, and the matrix of every spec's (spec_057 SDD-12). */
+.spec-table td { white-space: normal; }
+.spec-table th:first-child { width: auto; }
+.spec-table th:nth-child(2) { width: 30%; }
+.spec-table th:nth-child(3) { width: 30%; }
+.spec-table.is-matrix th:first-child { width: 150px; }
+.spec-table.is-matrix th:nth-child(2) { width: auto; }
+.spec-table.is-matrix th:nth-child(3) { width: 24%; }
+.spec-table.is-matrix th:nth-child(4) { width: 26%; }
+.spec-table tr.clickable { cursor: pointer; }
+.spec-table tr.clickable:hover td { background: var(--md-surface-container-low); }
+.spec-table .strike { text-decoration: line-through; }
 .run-table tfoot td { font-weight: 500; border-bottom: none; border-top: 1px solid var(--md-outline-variant); }
 .run-table tr.is-selected td { background: color-mix(in srgb, var(--md-primary) 8%, transparent); }
 .run-step-name { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }

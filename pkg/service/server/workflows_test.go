@@ -85,21 +85,34 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 		{Id: "a", Type: "api_call", Method: "POST", Url: "https://api.example.com/x", Query: []*pb.FlowPair{{Name: "q", Value: "1"}}, Headers: []*pb.FlowPair{{Name: "X-A", Value: "b"}},
 			JsonBody: `{"n": 1}`, Auth: &pb.FlowAuth{Type: "oauth2", TokenUrl: "https://auth.example.com/token", ClientId: "id", ClientSecret: "{secrets:s}", Scopes: []string{"read"}}},
 		{Id: "r", Type: "a2a_call", Url: "https://agents.example.com", ForEach: "[1, 2]", Concurrency: 2},
+		{Id: "d", Type: "data", Connection: "shop", Sql: "UPDATE orders SET seen = true WHERE id = ?", ParamsJson: `["{{ input }}"]`, Describe: "mark it seen",
+			Output: "table", MaxRows: 50, MaxBytes: 1024, FailWhenCut: true, AllowWrites: true, MaxCost: 0.5},
 	}}
 	got2, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: calls}))
 	require.NoError(t, err)
 	require.Empty(t, got2.Msg.Problems)
-	assert.Empty(t, got2.Msg.Workflow.Problem)
+	assert.Equal(t, `step d: there's no connection "shop"`, got2.Msg.Workflow.Problem, "checked against the workspace's connections")
 	assert.JSONEq(t, `{"order": "{{ input }}"}`, got2.Msg.Workflow.Nodes[0].ArgumentsJson)
 	assert.Equal(t, "oauth2", got2.Msg.Workflow.Nodes[1].Auth.Type)
 	assert.Equal(t, []string{"read"}, got2.Msg.Workflow.Nodes[1].Auth.Scopes)
 	assert.JSONEq(t, `{"n": 1}`, got2.Msg.Workflow.Nodes[1].JsonBody)
 	assert.Equal(t, "[1, 2]", got2.Msg.Workflow.Nodes[2].ForEach)
 	assert.Equal(t, int32(2), got2.Msg.Workflow.Nodes[2].Concurrency)
-	assert.Equal(t, []string{"mcp:shop:lookup", "web:api.example.com", "web:agents.example.com"}, got2.Msg.Workflow.SchedulePermissions)
+	assert.Equal(t, []string{"mcp:shop:lookup", "web:api.example.com", "web:agents.example.com", "mcp:databases:db__shop_execute_sql"}, got2.Msg.Workflow.SchedulePermissions)
+	d := got2.Msg.Workflow.Nodes[3]
+	assert.Equal(t, "shop", d.Connection)
+	assert.JSONEq(t, `["{{ input }}"]`, d.ParamsJson)
+	assert.Equal(t, "mark it seen", d.Describe)
+	assert.True(t, d.FailWhenCut && d.AllowWrites)
+	assert.EqualValues(t, 50, d.MaxRows)
+	assert.EqualValues(t, 1024, d.MaxBytes)
+	assert.InDelta(t, 0.5, d.MaxCost, 0)
 	badJSON, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "bad", Nodes: []*pb.FlowNode{{Id: "m", Type: "mcp_call", ArgumentsJson: "{nope"}}}}))
 	require.NoError(t, err)
 	assert.Contains(t, badJSON.Msg.Problems[0], "aren't a JSON object")
+	badParams, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "bad", Nodes: []*pb.FlowNode{{Id: "d", Type: "data", ParamsJson: "{"}}}}))
+	require.NoError(t, err)
+	assert.Contains(t, badParams.Msg.Problems[0], "aren't a JSON array")
 	require.NoError(t, unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: dir, Name: "calls"}))
 	_, err = w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))

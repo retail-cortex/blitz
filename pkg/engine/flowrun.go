@@ -54,9 +54,9 @@ func (w *Workspace) ProjectWorkflowsDir() string {
 
 // Workflows are the workspace's workflows, read afresh, by name; one in
 // a loop of workflows calling each other, or calling one that isn't there,
-// has that as its problem.
+// or with a Data step that can't run here, has that as its problem.
 func (w *Workspace) Workflows() []flows.Flow {
-	return withCallProblems(flows.Load(w.ProjectWorkflowsDir()))
+	return w.withDataProblems(withCallProblems(flows.Load(w.ProjectWorkflowsDir())))
 }
 
 // withCallProblems is all with each workflow's calls checked against the
@@ -97,7 +97,7 @@ func (w *Workspace) jobWorkflow(wk *workers.Worker) (flows.Flow, bool) {
 	} else {
 		all = append(all, f)
 	}
-	all = withCallProblems(all)
+	all = w.withDataProblems(withCallProblems(all))
 	return all[slices.IndexFunc(all, func(o flows.Flow) bool { return o.Name == f.Name })], true
 }
 

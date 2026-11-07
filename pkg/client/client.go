@@ -205,6 +205,7 @@ func (r *Remote) answerQuestion(ctx context.Context, ask api.UserPromptFunc, q *
 		if q.MultiSelect {
 			ctx = api.WithMultiSelect(ctx)
 		}
+		ctx = api.WithChoices(ctx, choicesOf(q.Choices), q.Order)
 		answer, _ = ask(ctx, q.Question, q.Options)
 	}
 	if _, err := r.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: r.dir, RequestId: q.RequestId, Answer: answer})); err != nil {

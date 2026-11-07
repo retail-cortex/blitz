@@ -141,6 +141,38 @@ func IsMultiSelect(ctx context.Context) bool {
 	return v
 }
 
+// Choice is a question's option explained for someone who doesn't know
+// the tools it names (spec_005_approvals APR-40b): its Label (plain, short:
+// what the button says), a one-line Summary (its tooltip), Details (what it
+// is and what it means for them) and Why it's ranked where it is.
+type Choice struct {
+	Label, Summary, Details, Why string
+}
+
+type choicesKey struct{}
+
+type choicesValue struct {
+	choices []Choice
+	order   string
+}
+
+// WithChoices marks a question asked with ctx as offering choices (its
+// options, in recommended order, explained), and says what the order
+// rests on.
+func WithChoices(ctx context.Context, choices []Choice, order string) context.Context {
+	if len(choices) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, choicesKey{}, choicesValue{choices, order})
+}
+
+// ChoicesOf are the choices a question asked with ctx explains, and what
+// their order rests on (none when its options are plain).
+func ChoicesOf(ctx context.Context) ([]Choice, string) {
+	v, _ := ctx.Value(choicesKey{}).(choicesValue)
+	return v.choices, v.order
+}
+
 // PermissionMode decides which actions run without asking.
 type PermissionMode string
 

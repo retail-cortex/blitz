@@ -271,6 +271,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	// \skill-name in the prompt: those skills' instructions go with it.
 	prompt += w.skillMentionNote(t.Text, w.turnAgent(ctx))
+	// The databases and query results the user added, and @db: mentions,
+	// as the turn reads them (spec_059_data DAT-41, DAT-42).
+	t.Context = w.withData(ctx, t.Text, t.Context)
 	// A conversation's first prompt says where the workspace stands and
 	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
 	first := false
@@ -501,6 +504,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
 		w.stageCreated(ctx, sessionID, untracked, on)
+		// Approved requirements whose work it changed: verify them again (SDD-31).
+		w.noteSpecDrift(sessionID, on)
 	}
 	if t.OnFinished != nil {
 		t.OnFinished()

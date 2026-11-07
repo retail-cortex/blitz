@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiAutoFix, mdiCalendarClock, mdiLoading, mdiRestart, mdiSend, mdiSitemapOutline } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAutoFix, mdiCalendarClock, mdiCompare, mdiLoading, mdiRestart, mdiSend, mdiSitemapOutline } from "@mdi/js";
 import { workspaces } from "../api";
 import { message } from "../errors";
 import type { ComposeDraft, ComposeSession } from "../gen/blitz/v1/workspace_pb";
@@ -28,9 +28,10 @@ import { draftSteps, question } from "./compose";
 /**
  * The composer (spec_045_composer): what the user wants, a short guided
  * conversation, then the drafted component, checked, to open in its
- * editor (onDraft). Closing ends the session.
+ * editor (onDraft); for a spec (current: its text as edited), the refined
+ * spec to compare (spec_057 SDD-04). Closing ends the session.
  */
-export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace: string; kind: "workflow" | "job"; onDraft: (d: ComposeDraft) => void; onClose: () => void }) {
+export function ComposeDialog({ workspace, kind, current = "", onDraft, onClose }: { workspace: string; kind: "workflow" | "job" | "spec"; current?: string; onDraft: (d: ComposeDraft) => void; onClose: () => void }) {
   const snack = useSnackbar();
   const [session, setSession] = useState<ComposeSession>();
   const [request, setRequest] = useState("");
@@ -61,7 +62,7 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
       setBusy(false);
     }
   };
-  const start = () => request.trim() && void run(async () => (await workspaces.startCompose({ workspace, kind, request: request.trim() })).session);
+  const start = () => request.trim() && void run(async () => (await workspaces.startCompose({ workspace, kind, request: request.trim(), current })).session);
   const reply = (text: string) => {
     if (!text.trim() || !session) return;
     setAnswer("");
@@ -96,13 +97,13 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
           {draft ? (
             <Button
               variant="filled"
-              icon={kind === "job" ? mdiCalendarClock : mdiSitemapOutline}
+              icon={kind === "job" ? mdiCalendarClock : kind === "spec" ? mdiCompare : mdiSitemapOutline}
               onClick={() => {
                 onDraft(draft);
-                snack(t(kind === "job" ? "desktop.compose.opened_job" : "desktop.compose.opened"));
+                if (kind !== "spec") snack(t(kind === "job" ? "desktop.compose.opened_job" : "desktop.compose.opened"));
               }}
             >
-              {t(kind === "job" ? "desktop.compose.open_job" : "desktop.compose.open")}
+              {t(kind === "job" ? "desktop.compose.open_job" : kind === "spec" ? "desktop.compose.compare" : "desktop.compose.open")}
             </Button>
           ) : (
             !session && (
@@ -124,7 +125,7 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
               autoFocus
               value={request}
               placeholder={t(`desktop.compose.placeholder.${kind}`)}
-              aria-label={t(kind === "job" ? "desktop.compose.request_job" : "desktop.compose.request")}
+              aria-label={t(kind === "job" ? "desktop.compose.request_job" : kind === "spec" ? "desktop.compose.request_spec" : "desktop.compose.request")}
               onChange={(e) => setRequest(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && start()}
             />
@@ -152,7 +153,13 @@ export function ComposeDialog({ workspace, kind, onDraft, onClose }: { workspace
             )}
             {draft && (
               <div className="card compose-draft stack" style={{ gap: 8 }}>
-                {draft.worker ? (
+                {kind === "spec" ? (
+                  // A spec's draft (spec_057 SDD-04): what changed; Compare shows each change to keep or drop.
+                  <>
+                    <span className="t-title-sm">{draft.name}</span>
+                    {draft.summary && <span className="t-body-sm">{draft.summary}</span>}
+                  </>
+                ) : draft.worker ? (
                   // A job's draft (WK-74): what it does, when, and what it may do.
                   <>
                     <span className="t-title-sm">

@@ -365,6 +365,31 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   const before = create(UsageSchema, s.usage);
   yield ev({ case: "accepted", value: {} }, "");
   await sleep(300);
+  if (/framework/i.test(text)) {
+    // A technical choice, explained (spec_005_approvals APR-40b).
+    const id = `q${++nextRequest}`;
+    const answer = new Promise<string>((r) => s.pending.set(id, r));
+    yield ev({
+      case: "question",
+      value: {
+        requestId: id,
+        question: "Which front end should the shop's admin pages use?",
+        options: ["Vite + React + Tailwind", "Vite + React + MUI", "Angular + Material 3"],
+        order: "What's easiest to keep up with AI's help first, then the size of each one's community, then the project's ADR-004 (one design system)",
+        choices: [
+          { label: "Vite + React + Tailwind", summary: "The most popular way to build web pages today, styled with small ready-made classes", details: "**React** builds the pages, **Vite** runs them while you work, and **Tailwind** styles them with short class names. AI tools know this combination best, so changes come out right more often. You'd pick colours and spacing yourself, so pages can drift apart without care.", why: "Easiest to maintain with AI, and the largest community" },
+          { label: "Vite + React + MUI", summary: "React with Google's Material design components ready to use", details: "Same React and Vite, with **MUI**: buttons, tables and forms that already look finished and consistent. Less freedom in how things look, a little heavier pages.", why: "Meets ADR-004's one design system, with nearly as much AI help" },
+          { label: "Angular + Material 3", summary: "Google's all-in-one framework with its own Material components", details: "**Angular** comes with everything built in (routing, forms, testing), which suits large teams with strict rules. It's more to learn, fewer people know it, and AI tools help less with it.", why: "Solid, but harder to learn and maintain" },
+        ],
+      },
+    });
+    const a = await answer;
+    const text = `Going with ${a}.`;
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   if (/choose/i.test(text)) {
     // A multi-select question (ask_user_question with multi_select).
     const id = `q${++nextRequest}`;
@@ -784,7 +809,7 @@ const fakeConnectorKinds = [
     fields: [field("project", "Project", "The Google Cloud project", { required: true }), field("region", "Region", "us-central1, for example", { required: true }), field("cluster", "Cluster", "The AlloyDB cluster", { required: true }), field("instance", "Instance", "The instance in it", { required: true }), field("ipType", "IP type", "public or private", { defaultValue: "public" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest"), field("password", "Password", "", { type: "secret" })], tools: pgTools },
 ];
 const fakeConnectors: FakeConnector[] = [
-  { name: "shop", category: "databases", scope: "workspace", kind: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }], custom: false, text: "", trusted: true },
+  { name: "shop", category: "databases", scope: "workspace", kind: "postgres", description: "The shop's orders and customers", settings: { host: "db.internal", port: "5432", database: "shop", user: "reader", password: "${DB_SHOP_PASSWORD}" }, secretsSet: ["password"], readOnly: true, tools: ["execute_sql", "list_tables"], queries: [{ name: "top_customers", description: "The customers who spent the most", statement: "SELECT name, sum(total) AS spent\nFROM orders JOIN customers USING (customer_id)\nGROUP BY name ORDER BY spent DESC LIMIT $1", params: [{ name: "limit", type: "integer", description: "How many" }] }, { name: "today", description: "Today's orders", statement: "SELECT id, customer, total FROM orders WHERE placed = current_date", params: [] }], custom: false, text: "", trusted: true },
   { name: "notes", category: "databases", scope: "workspace", kind: "sqlite", description: "Meeting notes, with embeddings", settings: { database: "data/notes.db" }, secretsSet: [], readOnly: false, tools: ["execute_sql", "list_tables"], queries: [], custom: false, text: "", trusted: false },
   { name: "sales", category: "databases", scope: "global", kind: "bigquery", description: "Sales across every store", settings: { project: "acme-analytics", location: "US", maximumBytesBilled: "1000000000" }, secretsSet: [], readOnly: true, tools: ["execute_sql", "list_datasets", "list_tables", "table_info"], queries: [], custom: false, text: "", trusted: true, enabled: false },
 ];
@@ -996,10 +1021,97 @@ const fakeProfileOf = new Map<string, string>();
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
 
+// Pictures (spec_058): the models offered, sessions and the pictures' SVGs.
+const fakeGeminiRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"];
+const fakePictureModels = [
+  { ref: "gemini/gemini-nano-banana-2.1", id: "gemini-nano-banana-2.1", name: "Gemini Nano Banana 2.1", kind: "gemini", default: true, organization: false, assumed: false, maxReferences: 14, maxCharacters: 4, maxObjects: 10, maxPictures: 1, sizes: ["1K", "2K", "4K"], ratios: fakeGeminiRatios, thinking: ["MINIMAL", "MEDIUM", "HIGH"], thinkingAlways: false, search: "image", negativePrompt: false, people: false, seed: false, enhance: false, formats: ["image/png", "image/jpeg", "image/webp"], inputPerMtok: 1.5, outputPerMtok: 30, perPicture: 0, sizeTokens: { "1K": 1120, "2K": 1680, "4K": 3767 } },
+  { ref: "gemini/gemini-3.1-flash-image", id: "gemini-3.1-flash-image", name: "Gemini 3.1 Flash Image", kind: "gemini", default: false, organization: false, assumed: false, maxReferences: 14, maxCharacters: 4, maxObjects: 10, maxPictures: 1, sizes: ["0.5K", "1K", "2K", "4K"], ratios: fakeGeminiRatios, thinking: ["MINIMAL", "MEDIUM", "HIGH"], thinkingAlways: false, search: "image", negativePrompt: false, people: false, seed: false, enhance: false, formats: ["image/png", "image/jpeg", "image/webp"], inputPerMtok: 0.5, outputPerMtok: 60, perPicture: 0, sizeTokens: { "0.5K": 560, "1K": 1120, "2K": 1680, "4K": 2520 } },
+  { ref: "gemini/imagen-4.0-generate-preview", id: "imagen-4.0-generate-preview", name: "Imagen 4 Preview", kind: "imagen", default: false, organization: false, assumed: false, maxReferences: 0, maxCharacters: 0, maxObjects: 0, maxPictures: 4, sizes: ["1K", "2K"], ratios: ["1:1", "3:4", "4:3", "9:16", "16:9"], thinking: [] as string[], thinkingAlways: false, search: "", negativePrompt: true, people: true, seed: true, enhance: true, formats: ["image/png", "image/jpeg"], inputPerMtok: 0, outputPerMtok: 0, perPicture: 0.04, sizeTokens: {} as Record<string, number> },
+];
+type FakePictureTurn = { id: string; at: ReturnType<typeof now>; model: string; kind: string; prompt: string; references: { file: string; mime: string; name: string; path: string; role: string }[]; count: number; aspectRatio: string; size: string; thinking: string; search: string; avoid: string; people: string; format: string; startFrom: string; pictures: { id: string; mime: string; saved: string[] }[]; text: string; thoughts: string; sources: { title: string; url: string }[]; problem: string; costUsd: number; seed: number; hasSeed: boolean };
+const fakePictureSessions: { id: string; name: string; created: ReturnType<typeof now>; updated: ReturnType<typeof now>; turns: FakePictureTurn[] }[] = [];
+const fakePictureData = new Map<string, string>();
+// A picture as SVG: a dusk sky at the ratio's shape, a lighthouse, and the prompt.
+function fakePictureSVG(prompt: string, ratio: string, variant: number): string {
+  const [a, b] = ratio.split(":").map(Number);
+  const w = 640;
+  const h = Math.round((w * (b || 1)) / (a || 1));
+  const skies = [["#1b2a4a", "#f2994a"], ["#0f1c33", "#c0392b"], ["#22313f", "#f5b971"], ["#2c3e50", "#9b59b6"]];
+  const [top, bottom] = skies[variant % skies.length];
+  const words = prompt.replace(/[<&>]/g, "").slice(0, 60);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="${w}" height="${h}" fill="url(#s)"/><circle cx="${w * 0.72}" cy="${h * 0.62}" r="${Math.min(w, h) * 0.08}" fill="#ffd27a" opacity="0.9"/><rect x="0" y="${h * 0.78}" width="${w}" height="${h * 0.22}" fill="#0b1626"/><rect x="${w * 0.28}" y="${h * 0.38}" width="${w * 0.05}" height="${h * 0.4}" fill="#ecf0f1"/><polygon points="${w * 0.27},${h * 0.38} ${w * 0.305},${h * 0.3} ${w * 0.34},${h * 0.38}" fill="#c0392b"/><text x="24" y="40" font-family="sans-serif" font-size="22" fill="#fff" opacity="0.85">${words}</text></svg>`;
+}
+
+// The spec the fake composer refines.
+let fakeSpecCurrent = "";
+// The fake ledger: approved texts, and how each spec was last verified.
+const fakeApproved = new Map<string, string>();
+const fakeVerified = new Map<string, "checked" | "judged">();
+
+// A spec's requirements as the fake ledger traces them.
+function fakeSpecRequirements(path: string) {
+  const text = fakeFiles.get(path) ?? "";
+  const base = fakeApproved.get(path);
+  const how = fakeVerified.get(path);
+  const out: { spec: string; id: string; text: string; line: number; change: string; state: string; judged: boolean; reason: string; stale: boolean; evidence: { path: string; line: number; kind: string; text: string }[] }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = /^- \*\*([A-Z]+-\d+)\*\*\s*(.*)$/.exec(l);
+    if (!m) return;
+    const found = m[1] === "OV-02" || m[1] === "ORD-02";
+    const evidence = found ? [{ path: m[1] === "OV-02" ? "internal/auth/signin.go" : "internal/orders/queue.go", line: 14, kind: "code", text: `// ${m[1]}` }, { path: m[1] === "OV-02" ? "internal/auth/signin_test.go" : "internal/orders/queue_test.go", line: 9, kind: "test", text: `// ${m[1]}` }] : [];
+    const judged = how === "judged";
+    const state = !how ? "" : judged ? (found ? "implemented" : m[1] === "ORD-01" ? "partial" : "missing") : found ? "traced" : "untraced";
+    const reason = !judged ? "" : found ? `${evidence[0].path}:14 does it, and its test checks it.` : m[1] === "ORD-01" ? "Checkout is timed in cart.go:88, but nothing keeps it under 30 s." : "Nothing in the work does this yet.";
+    out.push({ spec: path.slice(".agents/specs/".length), id: m[1], text: m[2], line: i + 1, change: base !== undefined && !base.includes(l) ? "changed" : "", state, judged, reason, stale: false, evidence: how ? evidence : [] });
+  });
+  return out;
+}
+
+// A spec's checks, as the service's would find them (fewer).
+function fakeSpecChecks(text: string) {
+  const out: { line: number; id: string; severity: string; code: string; message: string; judged: boolean }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = /\*\*([A-Z]+-\d+)\*\*.*\bfast\b/.exec(l);
+    if (m) out.push({ line: i + 1, id: m[1], severity: "warning", code: "vague", message: `${m[1]}: "fast" is a judgement, not a check: say how much, or how it's measured`, judged: false });
+  });
+  if (!/^#+\s*Done when|^Done when/im.test(text)) out.push({ line: 0, id: "", severity: "warning", code: "no-done-when", message: 'no "Done when": say how anyone can tell it\'s finished', judged: false });
+  if (/^#+\s*Open questions\n+- /im.test(text)) out.push({ line: 0, id: "", severity: "info", code: "open-questions", message: "1 open question(s) to answer before it's approved", judged: false });
+  return out;
+}
+
+// A spec file as ListSpecs sums it up.
+function fakeSpecSummary(path: string, text: string) {
+  const file = path.slice(".agents/specs/".length);
+  const checks = fakeSpecChecks(text);
+  return {
+    file,
+    path,
+    number: Number(/^(\d{3})-/.exec(file)?.[1] ?? 0),
+    title: (/^#\s+(?:\d+\.\s+)?(.+)$/m.exec(text)?.[1] ?? "").trim(),
+    status: (/^Status:\s*(.+)$/m.exec(text)?.[1] ?? "").trim().toLowerCase(),
+    dependsOn: [...(/^Depends on:(.*)$/m.exec(text)?.[1] ?? "").matchAll(/\b(\d{3})\b/g)].map((m) => Number(m[1])),
+    items: (text.match(/\*\*[A-Z]+-\d+\*\*/g) ?? []).length,
+    errors: 0,
+    warnings: file === "README.md" ? 0 : checks.filter((c) => c.severity === "warning").length,
+    openQuestions: checks.some((c) => c.code === "open-questions") ? 1 : 0,
+    approved: fakeApproved.has(path),
+    traced: fakeSpecRequirements(path).filter((r) => r.state === "traced" || r.state === "implemented").length,
+    implemented: fakeSpecRequirements(path).filter((r) => r.state === "implemented").length,
+    changed: fakeSpecRequirements(path).filter((r) => r.change).length,
+    done: false,
+    next: file === "001-overview.md",
+    blockedBy: file === "002-orders.md" ? [1] : [],
+  };
+}
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
   ["docs/pricing.md", fakePricing],
+  // The project's specification, as /spec writes it (Studio › Specs).
+  [".agents/specs/README.md", "# Specification\n\nA small shop server for one store. Kind: software.\n\n1. [Overview](001-overview.md): what the shop is for.\n2. [Orders](002-orders.md): taking and filling orders.\n"],
+  [".agents/specs/001-overview.md", "# 001. Overview\n\nStatus: approved\nKind: software\n\n## Context\n\nA small shop server for **one store**: its staff take orders at the counter and online.\n\n## Requirements\n\n- **OV-01** One store, with up to 3 tills open at once.\n- **OV-02** Staff sign in before they take an order.\n\n## Done when\n\nA till takes an order from start to payment.\n"],
+  [".agents/specs/002-orders.md", "# 002. Orders\n\nStatus: draft\nDepends on: 001-overview\n\n## Requirements\n\n- **ORD-01** Checkout is fast.\n- **ORD-02** Online orders wait in a queue until someone fills them.\n\n## Done when\n\nAn order is paid and filled.\n\n## Open questions\n\n- Do we take cash?\n"],
   // A page with its own stylesheet and script, previewed in a sandboxed frame.
   ["site/index.html", '<!doctype html>\n<html>\n<head>\n  <title>Shop</title>\n  <link rel="stylesheet" href="site.css">\n</head>\n<body>\n  <h1>The shop</h1>\n  <p id="when">Loading…</p>\n  <script src="app.js"></script>\n</body>\n</html>\n'],
   ["site/site.css", "body { font-family: Georgia, serif; margin: 40px; color: #234; }\nh1 { color: #b04a1a; border-bottom: 2px solid #b04a1a; }\n"],
@@ -1797,12 +1909,173 @@ export function installFake() {
         watchWorkflowRun: ({ id }, ctx) => watchFakeRun(id, ctx.signal),
         watchWorkflowRuns: ({ workspace }, ctx) => watchFakeRuns(workspace, ctx.signal),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        // Pictures (spec_058): two Gemini models and Imagen, turns drawn as SVG.
+        listPictureModels: () => ({ models: fakePictureModels, folder: "pictures" }),
+        makePicture: (r) => {
+          const m = fakePictureModels.find((x) => x.ref === r.model) ?? fakePictureModels[0];
+          const each = m.kind === "imagen" ? m.perPicture : ((m.sizeTokens[r.size] ?? 1120) * m.outputPerMtok) / 1e6;
+          const n = m.kind === "imagen" ? Math.max(r.count, 1) : 1;
+          if (r.estimate) return { costUsd: each * n + (r.search ? 0.014 : 0), priced: true };
+          // A model the organization's service won't draw with, as its gateway answers.
+          if (r.prompt.includes("unsupported")) throw new ConnectError("your organization's service: fast can't draw pictures: choose one of your organization's Gemini image models", Code.FailedPrecondition);
+          let s = fakePictureSessions.find((x) => x.id === r.session);
+          if (!s) {
+            s = { id: `pic-${String(fakePictureSessions.length + 1).padStart(12, "0")}`, name: r.prompt.slice(0, 48), created: now(), updated: now(), turns: [] };
+            fakePictureSessions.unshift(s);
+          }
+          const turnNo = s.turns.length;
+          const pictures = Array.from({ length: n }, (_, i) => {
+            const id = `p-${String(fakePictureData.size + 1).padStart(12, "0")}`;
+            fakePictureData.set(id, fakePictureSVG(r.prompt, r.aspectRatio || "1:1", turnNo + i));
+            return { id, mime: "image/svg+xml", saved: [] as string[] };
+          });
+          const references = r.references.map((ref, i) => {
+            const file = `r-${String(fakePictureData.size + i + 1).padStart(12, "0")}.png`;
+            fakePictureData.set(file, ref.path ? fakePictureSVG(ref.path, "1:1", 9) : fakePictureSVG(ref.name || "reference", "1:1", 7));
+            return { file, mime: "image/svg+xml", name: ref.name || ref.path, path: ref.path, role: ref.role };
+          });
+          s.turns.push({
+            id: `t-${turnNo}`, at: now(), model: m.ref, kind: m.kind, prompt: r.prompt, references, count: n, aspectRatio: r.aspectRatio, size: r.size, thinking: r.thinking,
+            search: r.search ? (r.searchImages ? "image" : "web") : "", avoid: r.avoid, people: r.people, format: r.format, startFrom: r.startFrom, pictures,
+            text: m.kind === "gemini" ? (turnNo ? "Here it is, changed as you asked." : "Here's a first take.") : "", thoughts: r.thinking ? "Composition first: the subject a third in, the light from the left." : "",
+            sources: r.search ? [{ title: "Lighthouses of the Atlantic coast", url: "https://example.com/lighthouses" }] : [], problem: "", costUsd: each * n, seed: r.seed, hasSeed: r.useSeed,
+          });
+          s.updated = now();
+          return { session: s, costUsd: each * n, priced: true };
+        },
+        listPictureSessions: () => ({ sessions: fakePictureSessions }),
+        getPictureSession: ({ id }) => {
+          const s = fakePictureSessions.find((x) => x.id === id);
+          if (!s) notFound(id);
+          return { session: s };
+        },
+        renamePictureSession: ({ id, name }) => {
+          const s = fakePictureSessions.find((x) => x.id === id);
+          if (!s) notFound(id);
+          s.name = name;
+          return { session: s };
+        },
+        deletePictureSession: ({ id }) => {
+          const i = fakePictureSessions.findIndex((x) => x.id === id);
+          if (i >= 0) fakePictureSessions.splice(i, 1);
+          return {};
+        },
+        readPicture: ({ picture }) => {
+          const svg = fakePictureData.get(picture);
+          if (!svg) notFound(picture);
+          return { data: new TextEncoder().encode(svg), mime: "image/svg+xml" };
+        },
+        savePicture: ({ session, picture, path }) => {
+          const s = fakePictureSessions.find((x) => x.id === session);
+          const pic = s?.turns.flatMap((t) => t.pictures).find((p) => p.id === picture);
+          if (!s || !pic) notFound(picture);
+          const turn = s.turns.find((t) => t.pictures.includes(pic));
+          const slug = (turn?.prompt ?? "picture").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 5).join("-") || "picture";
+          let out = path && !path.endsWith("/") ? (/\.[a-z]+$/.test(path) ? path : `${path}.svg`) : "";
+          for (let n = 1; !out; n++) {
+            const p = `${path || "pictures/"}${slug}-${n}.svg`;
+            if (!fakeFiles.has(p)) out = p;
+          }
+          fakeFiles.set(out, fakePictureData.get(picture) ?? "");
+          pic.saved.push(out);
+          return { path: out };
+        },
+        deletePicture: ({ session, picture }) => {
+          const s = fakePictureSessions.find((x) => x.id === session);
+          if (!s) notFound(session);
+          for (const t of s.turns) t.pictures = t.pictures.filter((p) => p.id !== picture);
+          return { session: s };
+        },
+        // The specification (spec_057): listed and checked as the service does, roughly.
+        listSpecs: () => ({
+          specs: [...fakeFiles.keys()]
+            .filter((p) => p.startsWith(".agents/specs/") && p.endsWith(".md"))
+            .sort((a, b) => (a.endsWith("README.md") ? -1 : b.endsWith("README.md") ? 1 : a.localeCompare(b)))
+            .map((path) => fakeSpecSummary(path, fakeFiles.get(path) ?? "")),
+        }),
+        traceSpecs: ({ path }) => ({ requirements: [...fakeFiles.keys()].filter((p) => p.startsWith(".agents/specs/0") && (!path || p === path)).sort().flatMap((p) => fakeSpecRequirements(p)) }),
+        approveSpec: ({ path, force }) => {
+          const text = fakeFiles.get(path) ?? "";
+          if (!force && /^#+\s*Open questions\n+- /im.test(text)) throw new ConnectError("the spec isn't ready to approve: 1 open question(s)", Code.FailedPrecondition, undefined, [{ desc: ErrorInfoSchema, value: { reason: "SPEC_NOT_READY", domain: "blitz", metadata: {} } }]);
+          const approved = text.replace(/^Status:.*$/m, "Status: approved");
+          fakeFiles.set(path, approved);
+          fakeApproved.set(path, approved);
+          return { text: approved, diff: "" };
+        },
+        verifySpec: ({ path, judge, estimate }) => {
+          if (judge && estimate) return { requirements: fakeSpecRequirements(path), costUsd: 0, estimatedUsd: 0.0034, priced: true, problem: "" };
+          fakeVerified.set(path, judge ? "judged" : "checked");
+          const reqs = fakeSpecRequirements(path);
+          const drift = fakeApproved.has(path) ? reqs.filter((r) => r.change || (r.judged && (r.state === "missing" || r.state === "contradicted"))).map((r) => ({ id: r.id, why: r.change ? "changed" : "judged" })) : [];
+          return { requirements: reqs, drift, costUsd: judge ? 0.0031 : 0, estimatedUsd: 0, priced: true, problem: "" };
+        },
+        planSpec: ({ path }) => {
+          const pending = fakeSpecRequirements(path).filter((r) => r.state !== "implemented");
+          const text = fakeFiles.get(path) ?? "";
+          return {
+            pending,
+            blockedBy: /Depends on: 001/.test(text) && !fakeApproved.has(".agents/specs/001-overview.md") ? [1] : [],
+            prompt: pending.length ? `Implement ${path}.\n\nThe requirements to do, in order:\n${pending.map((r) => `- ${r.id}: ${r.text}`).join("\n")}\n\nWork tests first, and cite each requirement's ID where it's done.` : "",
+          };
+        },
+        recordSpecChange: ({ path }) => {
+          const changes = fakeSpecRequirements(path).filter((r) => r.change).map((r) => ({ id: r.id, kind: r.change, old: "Checkout is fast.", new: r.text }));
+          if (!changes.length) return { changes: [], diff: "", text: "" };
+          const text = (fakeFiles.get(path) ?? "").replace(/^Status:.*$/m, "Status: changed");
+          fakeFiles.set(path, text);
+          return { changes, diff: ".agents/.ledger/diffs/20261107-120000-002-orders.diff", text };
+        },
+        impactSpec: ({ path, judge, estimate }) => {
+          const changes = fakeSpecRequirements(path).filter((r) => r.change).map((r) => ({ id: r.id, kind: r.change, old: "Checkout is fast.", new: r.text }));
+          const found = {
+            changes,
+            symbols: [{ name: "Pay", path: "internal/cart/checkout.go", line: 42, uses: 3 }],
+            places: [
+              { path: "internal/cart/checkout.go", line: 40, kind: "code", text: "// Pay takes a payment (ORD-01).", why: "ORD-01" },
+              { path: "cmd/shop/main.go", line: 18, kind: "code", text: "cart.Pay(order)", why: "Pay" },
+              { path: "internal/cart/checkout_test.go", line: 12, kind: "test", text: "_ = Pay(order)", why: "Pay" },
+            ],
+            summary: "",
+            steps: [] as { title: string; detail: string; files: string[] }[],
+            conflicts: [] as { id: string; why: string }[],
+            report: "",
+            costUsd: 0,
+            estimatedUsd: judge && estimate ? 0.0052 : 0,
+            priced: true,
+            problem: "",
+          };
+          if (!judge || estimate) return found;
+          return {
+            ...found,
+            summary: "Checkout now has a time limit: Pay must finish under 30 seconds, and nothing checks that today.",
+            steps: [
+              { title: "Test the limit first", detail: "Add a case to TestPay that fails when Pay takes 30 s or more.", files: ["internal/cart/checkout_test.go"] },
+              { title: "Time out the payment", detail: "Give Pay a 30 s context deadline and return a clear error when it passes.", files: ["internal/cart/checkout.go"] },
+              { title: "Say so at the till", detail: "Show the timeout's message where main calls Pay.", files: ["cmd/shop/main.go"] },
+            ],
+            conflicts: [{ id: "OV-01", why: "Three tills paying at once share one card terminal; 30 s each may not hold at peak." }],
+            report: ".agents/.ledger/impact/20261107-120000-002-orders.md",
+            costUsd: 0.0049,
+          };
+        },
+        reviewSpec: ({ path, text, judge }) => {
+          const findings = fakeSpecChecks(text);
+          if (judge) findings.push({ line: 0, id: "", severity: "warning", code: "judged", message: "Nothing says what happens to an order when payment fails: is it kept, and for how long?", judged: true });
+          if (!path.startsWith(".agents/specs/")) throw new ConnectError("not a spec", Code.InvalidArgument);
+          return { findings, costUsd: judge ? 0.0021 : 0, problem: "" };
+        },
         // The composer: one question, then a three-step draft.
-        startCompose: ({ request, kind }) =>
-          kind === "job"
+        startCompose: ({ request, kind, current }) =>
+          kind === "spec"
+            ? ((fakeSpecCurrent = current), { session: { id: "compose-fake-spec", kind, asking: true, costUsd: 0.0009, turns: [{ role: "user", text: request }, { role: "composer", text: "How long may a refund be asked for?", options: ["30 days", "14 days", "Any time"] }] } })
+            : kind === "job"
             ? { session: { id: "compose-fake-job", kind, asking: true, costUsd: 0.0011, turns: [{ role: "user", text: request }, { role: "composer", text: "Which time zone should 8 am be in?", options: ["America/Chicago", "Europe/Paris", "The service machine's"] }] } }
             : { session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] } },
         answerCompose: ({ answer, id }) => {
+          if (id === "compose-fake-spec") {
+            const file = fakeSpecCurrent.replace("- **ORD-01** Checkout is fast.", "- **ORD-01** Checkout takes under 30 seconds at a till.").replace("\n## Done when", `- **ORD-03** Staff refund a card payment within ${answer}; the till prints a receipt.\n\n## Done when`);
+            return { session: { id, kind: "spec", asking: false, costUsd: 0.0026, turns: [{ role: "user", text: "Add refunds" }, { role: "composer", text: "How long may a refund be asked for?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Made checkout measurable and added refunds as ORD-03." }], draft: { name: "002-orders", summary: "Made checkout measurable and added refunds as ORD-03.", file, problems: [] } } };
+          }
           if (id === "compose-fake-job") {
             const worker = { name: "ai-news", description: "A summary of the day's AI news", schedule: "0 8 * * *", timezone: answer.includes("/") ? answer : "", agent: "", model: "", permissions: ["web:news.google.com", "write:reports/ai-news/**"], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "Fetch the latest AI news from news.google.com.\nWrite a one-page summary to reports/ai-news/MM-DD-YYYY.html, glass morphic with a dark theme.", workflow: "" };
             return {
@@ -2052,6 +2325,31 @@ export function installFake() {
         tryConnectorTool: ({ connection, tool }) => fakeConnectorCalls.tryTool(connection!, tool),
         readConnectorSchema: ({ connection }) => fakeConnectorCalls.readSchema(connection!),
         draftConnectorQuery: ({ request }) => fakeConnectorCalls.draft(request),
+        // A query's result as a table (spec_059_data DAT-50): a write refused when read-only.
+        runConnectorQuery: ({ statement, readOnly, maxRows }) => {
+          if (readOnly && /^\s*(insert|update|delete|drop|alter|create)\b/i.test(statement)) return { problem: "the connection is read-only: this statement writes" };
+          const rows = [
+            [1042, "Ada Lovelace", "128.50", "2026-11-06"],
+            [1043, "Grace Hopper", "64.00", "2026-11-06"],
+            [1044, null, "12.25", "2026-11-07"],
+          ];
+          const shown = rows.slice(0, maxRows || rows.length);
+          return {
+            table: {
+              columns: [
+                { name: "id", description: "The order's number", type: "integer", dbType: "int4" },
+                { name: "customer", description: "Who placed it", type: "string", length: 80n, dbType: "varchar", nullable: true },
+                { name: "total", description: "", type: "number", dbType: "numeric" },
+                { name: "placed", description: "", type: "date", dbType: "date" },
+              ],
+              rowsJson: JSON.stringify(shown),
+              total: shown.length,
+              truncated: shown.length < rows.length,
+              markdown: "",
+            },
+            problem: "",
+          };
+        },
         // Studio › Rules: gates before and after the agent, and instruction rules.
         listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
         saveRule: ({ workspace, previousName, rule }) => {

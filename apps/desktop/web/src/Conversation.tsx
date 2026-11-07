@@ -15,7 +15,7 @@
  */
 
 import { useSecretSuggest } from "./SecretSuggest";
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
@@ -28,6 +28,8 @@ import {
   mdiDeleteOutline,
   mdiChevronDown,
   mdiChevronRight,
+  mdiChevronUp,
+  mdiInformationOutline,
   mdiClipboardCheckOutline,
   mdiClose,
   mdiConsole,
@@ -46,7 +48,8 @@ import {
   mdiFileVideoOutline,
   mdiImageOutline,
   mdiVolumeHigh,
-  mdiDatabasePlusOutline,
+  mdiDatabaseOutline,
+  mdiTableSearch,
   mdiImagePlusOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
@@ -69,6 +72,7 @@ import {
   mdiArrowCollapse,
   mdiPuzzleOutline,
   mdiLoading,
+  mdiBrushVariant,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workers, workspaces } from "./api";
 import { ModelFile } from "./ModelFile";
@@ -78,7 +82,7 @@ import { DiffView } from "./Changes";
 import { chatTitle, HistoryMenu } from "./HistoryMenu";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
-import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
+import { Decision, type ApprovalRequest, type Question, type QuestionChoice, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
 import { withTools } from "./turns";
@@ -114,6 +118,8 @@ import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { taskTimes, useNow, type TaskTime } from "./taskTimes";
+import { chatConnections, DataMenu, DataResultDialog } from "./DataContext";
+import { dbOptions, wantsDb, type DbConnection } from "./dbMentions";
 import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
@@ -837,6 +843,12 @@ export function Conversation({
     return () => window.removeEventListener(addToContextEvent, f);
   }, [dir]);
 
+  // A database, or a query's result, from the chat box's database menu: a
+  // chip, read when it was added (spec_059_data DAT-43).
+  const addData = useCallback((b: WebBlock) => {
+    const detail = b.kind === "database" ? t("desktop.data.chip_database") : t("desktop.data.chip_read", { time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+    setAttachments((list) => (b.kind === "database" && list.some((a) => a.web?.kind === "database" && a.web.connection === b.connection) ? list : [...list, { key: `${Date.now()}-${Math.random()}`, name: b.title, url: "", web: b, detail }]));
+  }, []);
   // A web page in the editor adds its content (a chip of its own, sent as
   // the turn's context) or a screenshot (an image, as a pasted one).
   const addWebRef = useRef<(d: AddWebDetail) => void>(() => {});
@@ -912,6 +924,7 @@ export function Conversation({
         onAddFiles={addFiles}
         onAddImagePath={addImagePath}
         onRemoveAttachment={removeAttachment}
+        onAddData={addData}
         imagesOn={imagesOn}
         accept={acceptAttribute(accepted)}
         draft={draft}
@@ -1386,7 +1399,7 @@ function Thought({ text, open }: { text: string; open: boolean }) {
 }
 
 /** A web content chip's icon: the console's, or a page's. */
-const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : mdiWeb);
+const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : kind === "database" ? mdiDatabaseOutline : kind === "data_query" ? mdiTableSearch : mdiWeb);
 
 /** An attachment's icon by its kind. */
 function kindIcon(kind: string): string {
@@ -1764,14 +1777,17 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
       <div className="question-text">
         <Markdown text={q.question} />
       </div>
+      {q.order && <span className="t-body-sm muted question-order">{t("desktop.question.order", { why: q.order })}</span>}
       {q.options.length > 0 && q.multiSelect && (
         <div className="stack" role="group" aria-label={t("desktop.question.choose_several")}>
           <span className="t-label muted">{t("desktop.question.choose_several")}</span>
-          {q.options.map((o) => (
-            <label key={o} className="row check">
-              <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
-              <span>{o}</span>
-            </label>
+          {q.options.map((o, i) => (
+            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0 && q.choices.length > 0}>
+              <label className="row check choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
+                <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
+                <span>{o}</span>
+              </label>
+            </ChoiceRow>
           ))}
           <div className="row">
             <Button variant="filled" disabled={chosen.length === 0} onClick={() => onAnswer(q.options.filter((o) => chosen.includes(o)).join("\n"))}>
@@ -1780,12 +1796,25 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
           </div>
         </div>
       )}
-      {q.options.length > 0 && !q.multiSelect && (
+      {q.options.length > 0 && !q.multiSelect && q.choices.length === 0 && (
         <div className="row wrap answer-options">
           {q.options.map((o, i) => (
             <Button key={o} variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
               {o}
             </Button>
+          ))}
+        </div>
+      )}
+      {q.options.length > 0 && !q.multiSelect && q.choices.length > 0 && (
+        <div className="stack question-choices">
+          {q.options.map((o, i) => (
+            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0}>
+              <span className="choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
+                <Button variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
+                  {o}
+                </Button>
+              </span>
+            </ChoiceRow>
           ))}
         </div>
       )}
@@ -1801,6 +1830,35 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
           {t("desktop.send")}
         </Button>
       </form>
+    </div>
+  );
+}
+
+/** The explanation of a question's option, when the agent gave one (APR-40b). */
+const choiceOf = (q: Question, label: string) => q.choices.find((c) => c.label === label);
+
+/**
+ * One of a question's options, explained (spec_005_approvals APR-40b): the
+ * button (its summary its tooltip), Recommended on the first, and a toggle
+ * that opens what choosing it means and why it's ranked there.
+ */
+function ChoiceRow({ choice, recommended, children }: { choice?: QuestionChoice; recommended: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const more = !!choice && (!!choice.details || !!choice.why);
+  return (
+    <div className="question-choice">
+      <div className="row" style={{ gap: 8 }}>
+        {children}
+        {recommended && <span className="chip static">{t("desktop.question.recommended")}</span>}
+        {more && <IconButton icon={open ? mdiChevronUp : mdiInformationOutline} label={t("desktop.question.details", { label: choice!.label })} small aria-expanded={open} onClick={() => setOpen((o) => !o)} />}
+      </div>
+      {open && choice && (
+        <div className="question-choice-details t-body-sm">
+          {choice.summary && <strong>{choice.summary}</strong>}
+          {choice.details && <Markdown text={choice.details} />}
+          {choice.why && <span className="muted">{t("desktop.question.why", { why: choice.why })}</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -1866,6 +1924,7 @@ function Composer({
   onAddFiles,
   onAddImagePath,
   onRemoveAttachment,
+  onAddData,
   imagesOn,
   accept,
   draft,
@@ -1880,6 +1939,8 @@ function Composer({
   onAddFiles: (files: File[]) => void;
   onAddImagePath: (path: string) => void;
   onRemoveAttachment: (key: string) => void;
+  /** Adds a database, or a query's result, to the next message (spec_059_data DAT-41, DAT-42). */
+  onAddData: (b: WebBlock) => void;
   imagesOn: boolean;
   accept: string; // the file picker's: what the model takes
   draft: string;
@@ -1891,6 +1952,7 @@ function Composer({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const [viewing, setViewing] = useState<WebBlock | null>(null);
   const busy = uploading(attachments);
   // An attachment that didn't upload is removed before sending, not left out.
   const failed = failedUpload(attachments);
@@ -1926,7 +1988,25 @@ function Composer({
       clearTimeout(timer);
     };
   }, [mention?.query, dir]); // eslint-disable-line react-hooks/exhaustive-deps
-  const mentionOpen = !!mention && found.query === mention.query && found.paths.length > 0 && dismissed !== draft;
+  // @db: completes the workspace's databases and their saved queries
+  // (spec_059_data DAT-40), above the files.
+  const dbWanted = !!mention && wantsDb(mention.query);
+  const [dbConns, setDbConns] = useState<DbConnection[]>([]);
+  useEffect(() => {
+    if (!dbWanted) return;
+    let live = true;
+    workspaces.listConnectors({ workspace: dir }).then(
+      (r) => live && setDbConns(chatConnections(r.connections)),
+      () => live && setDbConns([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dbWanted, dir]);
+  const dbFound = mention && dbWanted ? dbOptions(mention.query, dbConns) : [];
+  const paths = mention && found.query === mention.query ? found.paths : [];
+  const mentionCount = dbFound.length + paths.length;
+  const mentionOpen = !!mention && mentionCount > 0 && dismissed !== draft;
   const choosePath = (path: string) => {
     if (!mention) return;
     const r = insertMention(draft, mention, path);
@@ -1935,6 +2015,14 @@ function Composer({
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
     if (isAttachablePath(path)) onAddImagePath(path);
   };
+  const chooseDb = (m: string) => {
+    if (!mention) return;
+    const r = insertMention(draft, mention, m);
+    setDraft(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
+  };
+  const chooseMention = (i: number) => (i < dbFound.length ? chooseDb(dbFound[i].mention) : choosePath(paths[i - dbFound.length]));
   // Completing \skill-name: the skills the workspace sees.
   const skillToken = menuOpen || mention ? null : skillAt(draft, caret);
   const [skillList, setSkillList] = useState<{ name: string; description: string }[]>([]);
@@ -2026,7 +2114,25 @@ function Composer({
       )}
       {mentionOpen && (
         <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
-          {found.paths.map((p, i) => (
+          {dbFound.map((o, i) => (
+            <button
+              key={o.mention}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                chooseDb(o.mention);
+              }}
+            >
+              <Icon path={o.query ? mdiTableSearch : mdiDatabaseOutline} size="sm" />
+              <code>@{o.mention}</code>
+              <span className="spacer ellipsis muted t-body-sm">{o.detail}</span>
+            </button>
+          ))}
+          {paths.map((p, j) => {
+            const i = j + dbFound.length;
+            return (
             <button
               key={p}
               role="option"
@@ -2040,7 +2146,8 @@ function Composer({
               <Icon path={p.endsWith("/") ? mdiFolderOutline : fileIcon(p.slice(p.lastIndexOf("/", p.length - 2) + 1))} size="sm" />
               <span className="mono ellipsis">{p}</span>
             </button>
-          ))}
+            );
+          })}
           <div className="command-hint t-body-sm muted">
             <kbd>↑</kbd>
             <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.mention.add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
@@ -2050,7 +2157,12 @@ function Composer({
       {attachments.length > 0 && (
         <div className="attachments">
           {attachments.map((a) => (
-            <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
+            <div
+              key={a.key}
+              className={`attachment ${a.error ? "failed" : ""} ${a.web?.table ? "clickable" : ""}`}
+              title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}
+              onClick={a.web?.table ? () => setViewing(a.web!) : undefined}
+            >
               {a.url ? <img src={a.url} alt="" /> : <Icon path={a.web ? webIcon(a.web.kind) : kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
@@ -2061,6 +2173,7 @@ function Composer({
           ))}
         </div>
       )}
+      {viewing && <DataResultDialog block={viewing} onClose={() => setViewing(null)} />}
       {/* The prompt mark: shown only when pinned (composerDock.ts). */}
       <span className="composer-mark" aria-hidden="true">
         ›
@@ -2103,7 +2216,7 @@ function Composer({
             }
           }
           if (mentionOpen && !e.nativeEvent.isComposing) {
-            const n = found.paths.length;
+            const n = mentionCount;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
               setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
@@ -2116,7 +2229,7 @@ function Composer({
             }
             if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
               e.preventDefault();
-              choosePath(found.paths[Math.min(pick, n - 1)]);
+              chooseMention(Math.min(pick, n - 1));
               return;
             }
           }
@@ -2150,7 +2263,7 @@ function Composer({
       <div className="composer-bar">
         {!running && imagesOn && (
           <>
-            <IconButton icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
+            <IconButton title="" icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
             <input
               ref={picker}
               type="file"
@@ -2164,12 +2277,13 @@ function Composer({
             />
           </>
         )}
-        {!running && <IconButton icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
+        {!running && <IconButton title="" icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
+        {!running && <DataMenu dir={dir} onAdd={onAddData} onConnect={() => openSettings({ section: "connectors" })} />}
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />
-        {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
-        <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
+        {running && <IconButton title="" icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
+        <IconButton title="" icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
       </div>
     </div>
   );

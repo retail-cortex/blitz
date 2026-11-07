@@ -303,7 +303,7 @@ func approvalRequestMsg(id string, req api.ApprovalRequest) *pb.ApprovalRequest 
 func contextBlocks(list []*pb.ContextBlock) []api.ContextBlock {
 	var out []api.ContextBlock
 	for _, c := range list {
-		out = append(out, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+		out = append(out, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text, Connection: c.Connection, Statement: c.Statement})
 	}
 	return out
 }
@@ -316,7 +316,7 @@ func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
 		m.Agent, m.TaskId = r.Agent, r.TaskID
 		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: m}}
 	}
-	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect}}}
+	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect, Choices: choiceMsgs(r.Choices), Order: r.Order}}}
 }
 
 func taskEventMsg(ev api.SessionEvent) *pb.TaskEvent {
@@ -327,4 +327,13 @@ func taskEventMsg(ev api.SessionEvent) *pb.TaskEvent {
 		return taskRequestMsg(*ev.Request)
 	}
 	return &pb.TaskEvent{Kind: &pb.TaskEvent_Resolved{Resolved: ev.Resolved}}
+}
+
+// choiceMsgs are a question's explained options for the API (APR-40b).
+func choiceMsgs(list []api.Choice) []*pb.QuestionChoice {
+	var out []*pb.QuestionChoice
+	for _, c := range list {
+		out = append(out, &pb.QuestionChoice{Label: c.Label, Summary: c.Summary, Details: c.Details, Why: c.Why})
+	}
+	return out
 }

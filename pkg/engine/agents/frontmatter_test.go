@@ -166,6 +166,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 		"Read existing files with `read_file` before modifying them",
 		"Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted",
 		"never with `find`",
+		"cite each ID where it's done", // traced to the specification (spec_057 SDD-30)
 	} {
 		assert.Contains(t, puppy.SystemPrompt, rule)
 		assert.Contains(t, coder.SystemPrompt, rule)

@@ -502,6 +502,7 @@ var settableValues = map[string]bool{
 	"audio.model":              true,
 	"audio.voice":              true,
 	"images.model":             true,
+	"images.folder":            true,
 	// What /config --save keeps.
 	"blitz.default_agent":   true,
 	"blitz.agency_level":    true,

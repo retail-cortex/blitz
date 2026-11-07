@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -225,5 +226,62 @@ func (stalledModel) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ 
 	return func(yield func(*model.LLMResponse, error) bool) {
 		<-ctx.Done()
 		yield(nil, ctx.Err())
+	}
+}
+
+// The user's answer to the agent's question is what they asked for, as
+// much as their messages: ticking options in a form and approving them
+// said "apply these" (2026-11-07: an edit the user chose was denied as
+// "they asked to see options, not changes"). A plan's approval too.
+func TestReviewSeesAnswers(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{}, textContent("Here are the fixes."))
+	_, err := collect(t, f.eng, "s", "Can you display these as options?")
+	require.NoError(t, err)
+	got, err := f.eng.sessions.Get(context.Background(), &session.GetRequest{AppName: appName, UserID: "user", SessionID: "s"})
+	require.NoError(t, err)
+	add := func(id, author string, part *genai.Part) {
+		e := &session.Event{ID: id, InvocationID: "inv-" + id, Author: author, Timestamp: time.Now()}
+		e.LLMResponse.Content = &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{part}}
+		require.NoError(t, f.eng.sessions.AppendEvent(context.Background(), got.Session, e))
+	}
+	add("q", "blitz", &genai.Part{FunctionCall: &genai.FunctionCall{Name: "ask_user_question", Args: map[string]any{"question": "Which fixes should I apply?", "multi_select": true, "options": []any{"Add .agents/scratch/ to .gitignore", "chmod +x the scripts"}}}})
+	add("a", "user", &genai.Part{FunctionResponse: &genai.FunctionResponse{Name: "ask_user_question", Response: map[string]any{"answer": "Add .agents/scratch/ to .gitignore, chmod +x the scripts", "selected": []any{"Add .agents/scratch/ to .gitignore", "chmod +x the scripts"}}}})
+	add("p", "user", &genai.Part{FunctionResponse: &genai.FunctionResponse{Name: "exit_plan_mode", Response: map[string]any{"approved": true}}})
+	add("x", "user", &genai.Part{FunctionResponse: &genai.FunctionResponse{Name: "read_file", Response: map[string]any{"content": "secret stuff"}}})
+
+	reviewer := NewMockLLM("reviewer", textContent(`{"decision":"allow","reason":"the user chose it"}`))
+	f.eng.reviewModel = reviewer
+	ctx := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	_, _, err = f.eng.review(ctx, api.ApprovalRequest{Tool: "replace_in_file", Kind: api.ActionWrite, Detail: "Edit .gitignore"})
+	require.NoError(t, err)
+	sent := reviewer.Requests[0].Contents[0].Parts[0].Text
+	assert.Contains(t, sent, "user: Can you display these as options?")
+	assert.Contains(t, sent, "agent asked the user: Which fixes should I apply?")
+	assert.Contains(t, sent, "user answered: Add .agents/scratch/ to .gitignore, chmod +x the scripts")
+	assert.Contains(t, sent, "user approved the agent's plan")
+	assert.NotContains(t, sent, "secret stuff", "other tools' results aren't the user's words")
+}
+
+func TestAnsweredLine(t *testing.T) {
+	call := func(args map[string]any) *genai.Part {
+		return &genai.Part{FunctionCall: &genai.FunctionCall{Name: "ask_user_question", Args: args}}
+	}
+	resp := func(name string, r map[string]any) *genai.Part {
+		return &genai.Part{FunctionResponse: &genai.FunctionResponse{Name: name, Response: r}}
+	}
+	for _, tc := range []struct {
+		name string
+		part *genai.Part
+		want string
+	}{
+		{"several questions", call(map[string]any{"questions": []any{map[string]any{"question": "DB?"}, map[string]any{"question": "UI?"}}}), "agent asked the user: DB? / UI?"},
+		{"no question", call(map[string]any{}), ""},
+		{"several answers", resp("ask_user_question", map[string]any{"answers": []any{map[string]any{"question": "DB?", "answer": "PostgreSQL"}, map[string]any{"question": "UI?", "answer": ""}}}), "user answered: DB? → PostgreSQL"},
+		{"no answer", resp("ask_user_question", map[string]any{"error": "no one can answer"}), ""},
+		{"plan feedback", resp("exit_plan_mode", map[string]any{"approved": false, "feedback": "skip step 2"}), "user, on the agent's plan: skip step 2"},
+		{"kept planning", resp("exit_plan_mode", map[string]any{"approved": false}), ""},
+		{"text", &genai.Part{Text: "hi"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) { assert.Equal(t, tc.want, answeredLine(tc.part)) })
 	}
 }

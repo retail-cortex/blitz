@@ -172,10 +172,12 @@ interface Props {
   onSave: () => void;
   /** The language servers' hooks, for code blocks (none: no servers). */
   language?: LanguageHooks;
+  /** Focus the document when it loads (a tab); a form's field waits for a click. */
+  autoFocus?: boolean;
 }
 
 /** A Markdown file, edited in its rendered form. */
-export function VisualEditor({ dir, path, spot, onChange, onSave, language, text, onSpot }: Props) {
+export function VisualEditor({ dir, path, spot, onChange, onSave, language, text, onSpot, autoFocus = true }: Props) {
   const snack = useSnackbar();
   const parsed = useRef<Parsed | null>(null);
   const prints = useRef(new Map<string, string>());
@@ -337,9 +339,9 @@ export function VisualEditor({ dir, path, spot, onChange, onSave, language, text
         editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(pos(at.anchor), pos(at.head))).setMeta("addToHistory", false));
       }
       placedIn.current = editor;
-      editor.commands.focus(at ? undefined : "start", { scrollIntoView: false });
+      if (autoFocus) editor.commands.focus(at ? undefined : "start", { scrollIntoView: false });
     }
-  }, [editor, text]);
+  }, [editor, text, autoFocus]);
 
   // Written before it goes (a switch to Source, another tab, the window).
   useEffect(() => () => {

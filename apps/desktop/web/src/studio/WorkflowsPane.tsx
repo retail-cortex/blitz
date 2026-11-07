@@ -63,6 +63,7 @@ import { answerTask, useTasks } from "../humanTasks";
 import { parseForm, problemText, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
+import { MarkdownField } from "./MarkdownField";
 import { ApprovalCard } from "../Conversation";
 import { message, reasonText } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
@@ -75,6 +76,7 @@ import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRun
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
 import { ComposeDialog } from "./ComposeDialog";
+import { DataStepFields } from "./DataStepFields";
 import { ConfirmDialog, useDiscardGuard } from "./paneParts";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
@@ -156,6 +158,8 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
           ? hostOf(s.url)
           : s.type === "mcp_call"
             ? `${s.server} › ${s.tool}`
+            : s.type === "data"
+              ? `${s.connection} › ${s.dataFrom === "saved" ? s.savedQuery : "SQL"}`
             : s.type === "workflow"
               ? `/${s.workflow}`
               : s.type === "timer"
@@ -846,9 +850,18 @@ export function WorkflowsPane({
                             </select>
                           )}
                         </Field>
-                        <Field label={t(`desktop.flows.instructions.${step.type}`)} supporting={t("desktop.flows.template_hint")}>
-                          {(id) => <textarea id={id} className="input" rows={5} value={step.instructions} placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)} onChange={(e) => setStep(step.id, { instructions: e.target.value })} />}
-                        </Field>
+                        <MarkdownField
+                          key={step.id}
+                          label={t(`desktop.flows.instructions.${step.type}`)}
+                          supporting={t("desktop.flows.template_hint")}
+                          value={step.instructions}
+                          rows={5}
+                          placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)}
+                          onValue={(v) => setStep(step.id, { instructions: v })}
+                          dir={workspace}
+                          workspace={workspace}
+                          tools={<DraftButton workspace={workspace} kind="workflow_step" name={step.title || step.id} description={step.title} current={step.instructions} onUse={(v) => setStep(step.id, { instructions: v })} />}
+                        />
                         <Field label={t("desktop.flows.skills")} supporting={t("desktop.flows.skills_hint")}>
                           {(id) => <MultiSelect id={id} label={t("desktop.flows.skills")} none={t("desktop.flows.none_chosen")} options={skills.map((s) => ({ value: s.name, detail: s.description }))} chosen={step.skills} onChange={(v) => setStep(step.id, { skills: v })} />}
                         </Field>
@@ -951,6 +964,7 @@ export function WorkflowsPane({
                         </Field>
                       </>
                     )}
+                    {step.type === "data" && <DataStepFields workspace={workspace} step={step} onChange={(patch) => setStep(step.id, patch)} />}
                     {step.type === "a2a_call" && (
                       <>
                         <Field label={t("desktop.flows.agent_url")} supporting={t("desktop.flows.agent_url_hint")}>

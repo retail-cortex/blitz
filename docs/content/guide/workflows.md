@@ -23,6 +23,7 @@ A workflow runs as one turn in the chat. Each agent step is a turn of its own, s
 | Refine | An agent improves its input and gives back the better version |
 | Summarize | An agent sums up its input (the instructions are the focus) |
 | Browse | An agent reaches a goal with its browser tool |
+| Data | Runs a query on one of the workspace's [databases](databases.md) (a saved query or SQL) and hands on its result as a table |
 | Extract | Pulls named values out of its input (fields you list, each a type) for later steps and conditions |
 | Gather | Joins its inputs, each under its step's title |
 | Call an API | An HTTP request: method, URL, query, headers, a text or JSON body, and auth |
@@ -35,7 +36,7 @@ A workflow runs as one turn in the chat. Each agent step is a turn of its own, s
 | Ask a person | Waits until someone fills in its form; their answer is the output |
 | Wait | Waits for a time (`wait: 2h`) or until one (`until: "{{ steps.pull.data.due }}"`) |
 
-Email and data steps are shown on the canvas, and come later.
+Email steps are shown on the canvas, and come later.
 
 ## Repeating a step
 
@@ -56,6 +57,30 @@ A **Call an API** step's values (URL, query, headers, body) take `{{ templates }
 A **Call an MCP tool** step names one of the workspace's [MCP servers](mcp.md), a tool and its arguments; it's approved as the agent's MCP calls are. An **Ask a remote agent** step sends a message over [A2A](https://a2a-protocol.org) to the agent whose card is at a URL.
 
 Calls reach the network as `web_fetch` does: only when the web is on, public addresses only (unless `web.allow_private`), and you're asked before a new host, unless it's in `web.allow_domains` or a permission rule allows it.
+
+## Querying a database
+
+A **Data** step runs a query on one of the workspace's database connections ([Studio › Connectors](databases.md)): one of the connection's saved queries, or SQL written in the step. **Describe it** and **Draft the SQL** write the SQL from the connection's schema for you to review; the step then runs that SQL every time, not a new draft. Values that change go into the **parameters** (`?`, `$1` or `@name`, as the database takes them), which take templates such as `{{ input }}`. The SQL itself never takes templates, so another step's answer can't change the query.
+
+Its output is a **table**. Its text is the table in Markdown (the first 50 rows), so an agent step after it reads the data. Its data is `{columns, rows, total, truncated}`, so a condition or a template can read it too, for example `output.data.rows[0][1]` or `steps.orders.data.total`. Each column says its name, its type, its length when it has one, and its description from the schema:
+
+- **Types** are the same for every database: `string`, `integer`, `number`, `boolean`, `date`, `time`, `timestamp`, `json`, `bytes` or `other`. The database's own type is kept as `db_type`.
+- **Values that JSON can't hold exactly** come as strings, so nothing is rounded: integers past 2^53 and decimals with too many digits. Dates and times are ISO 8601, and bytes are base64.
+
+```yaml
+- id: orders
+  type: data
+  connection: shop
+  sql: "SELECT id, customer, total FROM orders WHERE placed > ? ORDER BY placed DESC"
+  params: ["{{ input }}"]
+  max_rows: 500
+```
+
+- **Limits:** a step hands on at most 1,000 rows unless it says (`max_rows`, up to 100,000) and about 8 MB of values. Past the limit, the result is cut there, `truncated` is set and the text says so. **Fail when the result is over the limit** (`fail_when_cut`) makes it an error instead.
+- **Writes:** a statement that writes is refused on a read-only connection. On one that isn't, the step must say **Allow writes** (`allow_writes`), and the run asks you first, as an agent's `execute_sql` on that connection would, unless a permission rule allows it.
+- **Cost:** a BigQuery query is dry-run first. Its bytes are priced at BigQuery's on-demand rate ($6.25 a TiB), and the step stops when the query would cost more than **Most it may cost** (`max_cost`, $1 unless set).
+- **Try it** in the step's settings runs the query now, read-only, on sample values for its templates, and shows the first rows with their columns' types and descriptions.
+- **Checks:** a step whose connection is gone, broken or off in the workspace, or whose SQL writes without being allowed to, is the workflow's problem before it runs.
 
 ## Choices, branches and failures
 
@@ -109,7 +134,7 @@ The workspace's mode is the limit. If you restrict a workspace to *Ask*, its wor
 
 ## Running on a schedule
 
-A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. A scheduled run may do what the workflow's steps do, as they are when it runs, without asking: write the files its save steps save (a path with `{{…}}` in it: its folder, never the whole workspace, your home folder or anything outside the workspace), reach the hosts its calls call, use its MCP steps' tools and browse for its browser steps; the schedule lists them. Anything else it may do, and its limits, are the job's, in **Studio › Jobs**.
+A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. A scheduled run may do what the workflow's steps do, as they are when it runs, without asking: write the files its save steps save (a path with `{{…}}` in it: its folder, never the whole workspace, your home folder or anything outside the workspace), reach the hosts its calls call, use its MCP steps' tools, run its Data steps' writes and browse for its browser steps; the schedule lists them. Anything else it may do, and its limits, are the job's, in **Studio › Jobs**.
 
 ## The file
 

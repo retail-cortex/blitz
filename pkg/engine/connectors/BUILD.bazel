@@ -39,6 +39,7 @@ go_library(
     deps = [
         "//pkg/config",
         "//pkg/engine/connectors/builtin",
+        "//pkg/engine/datatable",
         "//pkg/redact",
         "//pkg/secrets",
         "@in_gopkg_yaml_v3//:yaml_v3",
@@ -47,9 +48,12 @@ go_library(
 
 go_test(
     name = "connectors_test",
-    srcs = ["connectors_test.go"],
+    srcs = [
+        "connectors_test.go",
+        "serve_internal_test.go",
+    ],
+    embed = [":connectors"],
     deps = [
-        ":connectors",
         "//pkg/config",
         "//pkg/engine/databases",
         "//pkg/secrets",

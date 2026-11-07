@@ -24,6 +24,24 @@ export async function copyText(text: string): Promise<void> {
 }
 
 /**
+ * Puts a picture on the clipboard (Pictures' Copy, spec_058 PIC-53). The
+ * clipboard takes PNG, so a JPEG or WebP is redrawn as one first.
+ */
+export async function copyPicture(data: Uint8Array, mime: string): Promise<void> {
+  if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) throw new Error("no clipboard");
+  let png = new Blob([data as BlobPart], { type: mime });
+  if (mime !== "image/png") {
+    const bitmap = await createImageBitmap(png);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+    png = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error("no picture"))), "image/png"));
+  }
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+
+/**
  * Copies what el shows, without its controls (code blocks' language and
  * copy button): as HTML, so a rich editor keeps the formatting, and as the
  * text the user sees, for everywhere else. Where the clipboard only takes

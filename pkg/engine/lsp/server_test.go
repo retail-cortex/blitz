@@ -136,7 +136,7 @@ func TestConnFailures(t *testing.T) {
 	clientIn, serverOut := io.Pipe()
 	p := &pipeProcess{toServer: clientOut, fromServer: clientIn}
 	notes := make(chan string, 1)
-	c := newConn(p, func(method string, _ json.RawMessage) { notes <- method })
+	c := newConn(p, func(method string, _ json.RawMessage) { notes <- method }, nil)
 	defer p.Stop()
 
 	go func() {
@@ -178,7 +178,7 @@ func TestConnRepliesOffReader(t *testing.T) {
 	clientIn, serverOut := io.Pipe()
 	p := &pipeProcess{toServer: clientOut, fromServer: clientIn}
 	notes := make(chan string, 1)
-	newConn(p, func(method string, _ json.RawMessage) { notes <- method })
+	newConn(p, func(method string, _ json.RawMessage) { notes <- method }, map[string]any{"python": map[string]any{"pythonPath": "/w/.venv/bin/python"}})
 	defer p.Stop()
 
 	go func() {
@@ -197,7 +197,7 @@ func TestConnRepliesOffReader(t *testing.T) {
 	}
 	body, err := readMessage(bufio.NewReader(serverIn))
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":[null,null]}`, string(body), "the defaults, one for each item")
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":[{"pythonPath":"/w/.venv/bin/python"},null]}`, string(body), "its settings, else the defaults, one for each item")
 }
 
 // A server that can't start is reported, and not started again for a

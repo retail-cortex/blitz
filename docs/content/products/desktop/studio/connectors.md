@@ -9,7 +9,7 @@ This page walks through connecting a PostgreSQL database called `shop`, then giv
 
 ## Open it
 
-Choose **Studio › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar. Without it, add connections for every workspace in **Settings › Connectors**, the same way; the composer's database button and `/connect` open it too.
+Choose **Studio › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar. Without it, add connections for every workspace in **Settings › Connectors**, the same way; **Connect a database…** in the chat box's database menu and `/connect` open it too.
 
 ![Studio › Connectors: two of this workspace's databases, and a global one switched off here](../../../../images/desktop/connectors-list.png)
 

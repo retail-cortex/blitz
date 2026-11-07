@@ -76,10 +76,26 @@ const (
 	Exclusive = "exclusive"
 	Inclusive = "inclusive"
 	Parallel  = "parallel"
-	// Email and Data are shown, not run yet.
+	// Data runs a query on one of the workspace's connections and hands
+	// on its result as a table (spec_059_data). Email is shown, not run
+	// yet.
 	Email = "email"
 	Data  = "data"
 )
+
+// A Data step's outputs (DAT-20): the whole table, or (not run yet) its
+// rows in chunks or one at a time.
+const (
+	OutputTable  = "table"
+	OutputChunks = "chunks"
+	OutputRows   = "rows"
+)
+
+// DataOutputs are a Data step's outputs, the default first.
+var DataOutputs = []string{OutputTable, OutputChunks, OutputRows}
+
+// MaxDataRows is the most rows a Data step may ask for (DAT-20).
+const MaxDataRows = 100_000
 
 // Types are the step types, in the order the palette shows them.
 var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Call, HumanTask, Timer, Exclusive, Inclusive, Parallel, Email, Data}
@@ -143,7 +159,7 @@ type Retry struct {
 }
 
 // comingSoon are the types shown but not run yet.
-var comingSoon = []string{Email, Data}
+var comingSoon = []string{Email}
 
 // Position is where a step sits on the canvas.
 type Position struct {
@@ -191,6 +207,30 @@ type Node struct {
 	Body    string `yaml:"body,omitempty"`
 	JSON    any    `yaml:"json,omitempty"`
 	Auth    *Auth  `yaml:"auth,omitempty"`
+	// Connection is the connection a data step queries (one of the
+	// workspace's databases); SavedQuery one of its queries, its
+	// parameters Arguments (by name), or SQL a statement, its parameters
+	// Params (in order). Templates go into parameters only, never into
+	// the SQL. Describe is what the SQL was drafted from (DAT-20).
+	Connection string `yaml:"connection,omitempty"`
+	SavedQuery string `yaml:"saved_query,omitempty"`
+	SQL        string `yaml:"sql,omitempty"`
+	Params     []any  `yaml:"params,omitempty"`
+	Describe   string `yaml:"describe,omitempty"`
+	// Output is table (the default), chunks or rows; ChunkRows the rows in
+	// a chunk (100 when unset).
+	Output    string `yaml:"output,omitempty"`
+	ChunkRows int    `yaml:"chunk_rows,omitempty"`
+	// MaxRows (1,000 when unset) and MaxBytes (8 MB) are the most of the
+	// result it hands on: the rest is cut and said, unless FailWhenCut
+	// (DAT-22). AllowWrites lets its SQL write (the run asks first,
+	// DAT-21); MaxCost is the most a billed query may cost, in dollars ($1
+	// when unset, DAT-24).
+	MaxRows     int     `yaml:"max_rows,omitempty"`
+	MaxBytes    int     `yaml:"max_bytes,omitempty"`
+	FailWhenCut bool    `yaml:"fail_when_cut,omitempty"`
+	AllowWrites bool    `yaml:"allow_writes,omitempty"`
+	MaxCost     float64 `yaml:"max_cost,omitempty"`
 	// Workflow is the workflow a call step runs.
 	Workflow string `yaml:"workflow,omitempty"`
 	// Form is a human task's form: A2UI v0.9 (components, and data, its
@@ -378,6 +418,14 @@ func check(f Flow) []problem {
 			draft(where + ": name the skill and its script")
 		case (n.Type == ReadFile || n.Type == SaveFile) && strings.TrimSpace(n.Path) == "":
 			draft(where + ": name the file")
+		case n.Type == Data && n.Connection == "":
+			draft(where + ": choose the connection it queries")
+		case n.Type == Data && n.SavedQuery == "" && strings.TrimSpace(n.SQL) == "":
+			draft(where + ": choose a saved query or write the SQL")
+		case n.Type == Data && n.SavedQuery != "" && strings.TrimSpace(n.SQL) != "":
+			add(where + ": a saved query or SQL, not both")
+		case n.Type == Data && (n.Output == OutputChunks || n.Output == OutputRows):
+			draft(fmt.Sprintf("%s: %s output doesn't run yet: choose table", where, n.Output))
 		}
 	}
 	for i, n := range f.Nodes {
@@ -511,6 +559,20 @@ func checkSettings(n Node, i int) []string {
 		if err := checkValue(v); err != nil {
 			probs = append(probs, fmt.Sprintf("%s: %s: %v", where, name, err))
 		}
+	}
+	for i, p := range n.Params {
+		if err := checkValue(p); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: parameter %d: %v", where, i+1, err))
+		}
+	}
+	if n.Output != "" && !slices.Contains(DataOutputs, n.Output) {
+		probs = append(probs, fmt.Sprintf("%s: output %q: %s", where, n.Output, strings.Join(DataOutputs, ", ")))
+	}
+	if n.MaxRows < 0 || n.MaxRows > MaxDataRows {
+		probs = append(probs, fmt.Sprintf("%s: max_rows: from 1 to %d", where, MaxDataRows))
+	}
+	if n.MaxBytes < 0 || n.ChunkRows < 0 || n.MaxCost < 0 {
+		probs = append(probs, where+": max_bytes, chunk_rows and max_cost can't be negative")
 	}
 	if n.Method != "" && !slices.Contains(Methods, strings.ToUpper(n.Method)) {
 		probs = append(probs, fmt.Sprintf("%s: method %q: %s", where, n.Method, strings.Join(Methods, ", ")))

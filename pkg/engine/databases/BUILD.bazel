@@ -37,6 +37,7 @@ go_library(
     deps = [
         "//pkg/config",
         "//pkg/engine/connectors",
+        "//pkg/engine/datatable",
         "//pkg/engine/tools",
         "//pkg/redact",
         "//pkg/secrets",

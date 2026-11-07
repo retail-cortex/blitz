@@ -327,7 +327,7 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 func contextMsgs(list []api.ContextBlock) []*pb.ContextBlock {
 	var out []*pb.ContextBlock
 	for _, c := range list {
-		out = append(out, &pb.ContextBlock{Kind: c.Kind, Url: c.URL, Title: c.Title, Html: c.HTML, Text: c.Text})
+		out = append(out, &pb.ContextBlock{Kind: c.Kind, Url: c.URL, Title: c.Title, Html: c.HTML, Text: c.Text, Connection: c.Connection, Statement: c.Statement})
 	}
 	return out
 }
@@ -374,4 +374,13 @@ func evalRunOf(m *pb.EvalRun, dir string) api.EvalRun {
 		run.Results = append(run.Results, evalResultOf(x))
 	}
 	return run
+}
+
+// choicesOf are a question's explained options from the API (APR-40b).
+func choicesOf(list []*pb.QuestionChoice) []api.Choice {
+	var out []api.Choice
+	for _, c := range list {
+		out = append(out, api.Choice{Label: c.Label, Summary: c.Summary, Details: c.Details, Why: c.Why})
+	}
+	return out
 }

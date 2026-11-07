@@ -70,6 +70,7 @@ func TestStudioHandlersRefuseARelativeWorkspace(t *testing.T) {
 		"TestConnector":       func() error { return unary(w.TestConnector, &pb.TestConnectorRequest{Workspace: ws}) },
 		"TryConnectorTool":    func() error { return unary(w.TryConnectorTool, &pb.TryConnectorToolRequest{Workspace: ws}) },
 		"ReadConnectorSchema": func() error { return unary(w.ReadConnectorSchema, &pb.ReadConnectorSchemaRequest{Workspace: ws}) },
+		"RunConnectorQuery":   func() error { return unary(w.RunConnectorQuery, &pb.RunConnectorQueryRequest{Workspace: ws}) },
 		"DraftConnectorQuery": func() error { return unary(w.DraftConnectorQuery, &pb.DraftConnectorQueryRequest{Workspace: ws}) },
 		"RunEval": func() error {
 			return streamErr(w.RunEval(ctx, connect.NewRequest(&pb.RunEvalRequest{Workspace: ws, Name: "x"})))

@@ -291,13 +291,19 @@ var ErrUnsupportedMedia = errors.New("the model can't take this file")
 var ErrSteerTooLate = errors.New("the turn has ended: send it as the next prompt")
 
 // ContextBlock is content the user added to a turn from elsewhere: the
-// desktop app's web preview.
+// desktop app's web preview, or one of the workspace's databases.
 type ContextBlock struct {
-	// Kind is what it is: "web_page", "web_selection" or "console".
+	// Kind is what it is: "web_page", "web_selection", "console",
+	// "database" (a connection: its schema is read for the turn) or
+	// "data_query" (a query's result, Text the table as JSON:
+	// spec_059_data DAT-41, DAT-42).
 	Kind string
 	// URL is where it came from, and Title the page's title.
 	URL, Title string
 	// HTML is the content as HTML, made into text for the agent; Text is
 	// used when it's empty.
 	HTML, Text string
+	// Connection is a database or data_query block's connection (one of
+	// the workspace's databases); Statement the query's SQL.
+	Connection, Statement string
 }
