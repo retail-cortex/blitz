@@ -368,6 +368,19 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* The composer's icon buttons say what they do as soon as they're hovered:
+   their accessible name, in the key hint's tooltip (::before: the kit's
+   ::after is the hover layer); those right of the spacer (stop, send)
+   open leftwards to stay in the window. */
+.composer-bar .icon-btn { position: relative; }
+.composer-bar .icon-btn::before {
+  content: attr(aria-label); position: absolute; left: 50%; bottom: calc(100% + 8px); z-index: 40; white-space: nowrap; pointer-events: none;
+  padding: 6px 10px; border-radius: var(--md-shape-xs); background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); font: 400 12px/16px var(--md-font);
+  opacity: 0; transform: translate(-50%, 2px); transition: opacity 0.12s, transform 0.12s;
+}
+.composer-bar .icon-btn:hover::before, .composer-bar .icon-btn:focus-visible::before { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.15s; }
+.composer-bar .spacer ~ .icon-btn::before { left: auto; right: 0; transform: translateY(2px); }
+.composer-bar .spacer ~ .icon-btn:hover::before, .composer-bar .spacer ~ .icon-btn:focus-visible::before { transform: none; }
 /* The composer's keys: an icon, its tooltip listing them (KeyHint). */
 .key-hint { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--md-shape-full, 999px); color: var(--md-on-surface-variant); cursor: help; outline: none; }
 .key-hint:hover, .key-hint:focus-visible { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }

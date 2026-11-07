@@ -2151,7 +2151,7 @@ function Composer({
       <div className="composer-bar">
         {!running && imagesOn && (
           <>
-            <IconButton icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
+            <IconButton title="" icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
             <input
               ref={picker}
               type="file"
@@ -2165,13 +2165,13 @@ function Composer({
             />
           </>
         )}
-        {!running && <IconButton icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
-        {!running && <IconButton icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
+        {!running && <IconButton title="" icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
+        {!running && <IconButton title="" icon={mdiDatabasePlusOutline} label={t("desktop.composer.connect_data")} small onClick={() => openSettings({ section: "connectors" })} />}
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />
-        {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
-        <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
+        {running && <IconButton title="" icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
+        <IconButton title="" icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
       </div>
     </div>
   );
