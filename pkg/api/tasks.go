@@ -85,6 +85,10 @@ type TaskRequest struct {
 	Options  []string
 	// MultiSelect means several options may be chosen (one per line).
 	MultiSelect bool
+	// Choices explain the options, in recommended order, and Order says
+	// what that order rests on (spec_005_approvals APR-40b).
+	Choices []Choice
+	Order   string
 }
 
 // Label names who asks: "qa · task-3".

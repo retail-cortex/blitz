@@ -191,3 +191,14 @@ func TestDataContextBlocks(t *testing.T) {
 	got := contextBlocks([]*pb.ContextBlock{{Kind: "data_query", Title: "shop · top", Text: `{"columns":[]}`, Connection: "shop", Statement: "SELECT 1"}, {Kind: "database", Connection: "shop"}})
 	assert.Equal(t, []api.ContextBlock{{Kind: "data_query", Title: "shop · top", Text: `{"columns":[]}`, Connection: "shop", Statement: "SELECT 1"}, {Kind: "database", Connection: "shop"}}, got)
 }
+
+// A question's explained choices go to the API (APR-40b).
+func TestChoiceMsgs(t *testing.T) {
+	got := choiceMsgs([]api.Choice{{Label: "Vite", Summary: "s", Details: "d", Why: "w"}})
+	require.Len(t, got, 1)
+	assert.Equal(t, "Vite", got[0].Label)
+	assert.Equal(t, "w", got[0].Why)
+	assert.Nil(t, choiceMsgs(nil))
+	ev := taskRequestMsg(api.TaskRequest{ID: "r", Question: "q", Options: []string{"Vite"}, Choices: []api.Choice{{Label: "Vite"}}, Order: "o"})
+	assert.Equal(t, "o", ev.GetQuestion().GetOrder())
+}

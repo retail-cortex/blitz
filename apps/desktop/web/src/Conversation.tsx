@@ -15,7 +15,7 @@
  */
 
 import { useSecretSuggest } from "./SecretSuggest";
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
@@ -28,6 +28,8 @@ import {
   mdiDeleteOutline,
   mdiChevronDown,
   mdiChevronRight,
+  mdiChevronUp,
+  mdiInformationOutline,
   mdiClipboardCheckOutline,
   mdiClose,
   mdiConsole,
@@ -80,7 +82,7 @@ import { DiffView } from "./Changes";
 import { chatTitle, HistoryMenu } from "./HistoryMenu";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
-import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
+import { Decision, type ApprovalRequest, type Question, type QuestionChoice, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
 import { withTools } from "./turns";
@@ -1775,14 +1777,17 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
       <div className="question-text">
         <Markdown text={q.question} />
       </div>
+      {q.order && <span className="t-body-sm muted question-order">{t("desktop.question.order", { why: q.order })}</span>}
       {q.options.length > 0 && q.multiSelect && (
         <div className="stack" role="group" aria-label={t("desktop.question.choose_several")}>
           <span className="t-label muted">{t("desktop.question.choose_several")}</span>
-          {q.options.map((o) => (
-            <label key={o} className="row check">
-              <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
-              <span>{o}</span>
-            </label>
+          {q.options.map((o, i) => (
+            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0 && q.choices.length > 0}>
+              <label className="row check choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
+                <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
+                <span>{o}</span>
+              </label>
+            </ChoiceRow>
           ))}
           <div className="row">
             <Button variant="filled" disabled={chosen.length === 0} onClick={() => onAnswer(q.options.filter((o) => chosen.includes(o)).join("\n"))}>
@@ -1791,12 +1796,25 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
           </div>
         </div>
       )}
-      {q.options.length > 0 && !q.multiSelect && (
+      {q.options.length > 0 && !q.multiSelect && q.choices.length === 0 && (
         <div className="row wrap answer-options">
           {q.options.map((o, i) => (
             <Button key={o} variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
               {o}
             </Button>
+          ))}
+        </div>
+      )}
+      {q.options.length > 0 && !q.multiSelect && q.choices.length > 0 && (
+        <div className="stack question-choices">
+          {q.options.map((o, i) => (
+            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0}>
+              <span className="choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
+                <Button variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
+                  {o}
+                </Button>
+              </span>
+            </ChoiceRow>
           ))}
         </div>
       )}
@@ -1812,6 +1830,35 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
           {t("desktop.send")}
         </Button>
       </form>
+    </div>
+  );
+}
+
+/** The explanation of a question's option, when the agent gave one (APR-40b). */
+const choiceOf = (q: Question, label: string) => q.choices.find((c) => c.label === label);
+
+/**
+ * One of a question's options, explained (spec_005_approvals APR-40b): the
+ * button (its summary its tooltip), Recommended on the first, and a toggle
+ * that opens what choosing it means and why it's ranked there.
+ */
+function ChoiceRow({ choice, recommended, children }: { choice?: QuestionChoice; recommended: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const more = !!choice && (!!choice.details || !!choice.why);
+  return (
+    <div className="question-choice">
+      <div className="row" style={{ gap: 8 }}>
+        {children}
+        {recommended && <span className="chip static">{t("desktop.question.recommended")}</span>}
+        {more && <IconButton icon={open ? mdiChevronUp : mdiInformationOutline} label={t("desktop.question.details", { label: choice!.label })} small aria-expanded={open} onClick={() => setOpen((o) => !o)} />}
+      </div>
+      {open && choice && (
+        <div className="question-choice-details t-body-sm">
+          {choice.summary && <strong>{choice.summary}</strong>}
+          {choice.details && <Markdown text={choice.details} />}
+          {choice.why && <span className="muted">{t("desktop.question.why", { why: choice.why })}</span>}
+        </div>
+      )}
     </div>
   );
 }

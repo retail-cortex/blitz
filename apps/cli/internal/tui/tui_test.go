@@ -157,6 +157,18 @@ func TestUserPrompter(t *testing.T) {
 	assert.Error(t, err, "expected EOF error")
 }
 
+// Explained choices (APR-40b): the order's reason, then each option with
+// its summary and why it's ranked there.
+func TestUserPrompterChoices(t *testing.T) {
+	var out bytes.Buffer
+	ask := NewUserPrompter(NewLineReader(strings.NewReader("1\n"), &out))
+	ctx := api.WithChoices(context.Background(), []api.Choice{{Label: "Vite + React", Summary: "Fast and popular", Why: "Easiest with AI"}, {Label: "Angular"}}, "Ease with AI first")
+	got, err := ask(ctx, "Which front end?", []string{"Vite + React", "Angular"})
+	require.NoError(t, err)
+	assert.Equal(t, "Vite + React", got)
+	assert.Contains(t, out.String(), "In recommended order: Ease with AI first\n   [1] Vite + React\n       Fast and popular\n       Easiest with AI\n   [2] Angular\n")
+}
+
 func TestFormatToolCallSanitizesAndTruncates(t *testing.T) {
 	evil := "\x1b[2J\x1b]0;pwned\x07ls"
 	s := FormatToolCall("run_shell_command", map[string]any{"command": evil})

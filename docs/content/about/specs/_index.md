@@ -14,7 +14,7 @@ Files are named `spec_NNN_<name>.md`, where `NNN` is the order of execution (fir
 | 002 | [config](spec_002_config.md) | `.env.toml` location and trust, schema and defaults, in-place editing |
 | 003 | [observability](spec_003_observability.md) | Redaction, audit log, diagnostic log, OpenTelemetry |
 | 004 | [i18n](spec_004_i18n.md) | Catalogs, locale resolution, interface vs reply language |
-| 005 | [approvals](spec_005_approvals.md) | Approval gate, remembered/saved rules, unattended runs, `ask_user_question` |
+| 005 | [approvals](spec_005_approvals.md) | Approval gate, remembered/saved rules, unattended runs, `ask_user_question` (with technical choices explained, in recommended order) |
 | 006 | [filetools](spec_006_filetools.md) | File sandbox, blocked paths, file tools, `apply_patch`, checkpoints and `/undo` |
 | 007 | [shell](spec_007_shell.md) | `run_shell_command`, command policy, OS sandbox, process guard, background processes |
 | 008 | [web](spec_008_web.md) | `web_fetch` (SSRF-safe), `web_search` providers, `/search` |

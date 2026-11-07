@@ -365,6 +365,31 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   const before = create(UsageSchema, s.usage);
   yield ev({ case: "accepted", value: {} }, "");
   await sleep(300);
+  if (/framework/i.test(text)) {
+    // A technical choice, explained (spec_005_approvals APR-40b).
+    const id = `q${++nextRequest}`;
+    const answer = new Promise<string>((r) => s.pending.set(id, r));
+    yield ev({
+      case: "question",
+      value: {
+        requestId: id,
+        question: "Which front end should the shop's admin pages use?",
+        options: ["Vite + React + Tailwind", "Vite + React + MUI", "Angular + Material 3"],
+        order: "What's easiest to keep up with AI's help first, then the size of each one's community, then the project's ADR-004 (one design system)",
+        choices: [
+          { label: "Vite + React + Tailwind", summary: "The most popular way to build web pages today, styled with small ready-made classes", details: "**React** builds the pages, **Vite** runs them while you work, and **Tailwind** styles them with short class names. AI tools know this combination best, so changes come out right more often. You'd pick colours and spacing yourself, so pages can drift apart without care.", why: "Easiest to maintain with AI, and the largest community" },
+          { label: "Vite + React + MUI", summary: "React with Google's Material design components ready to use", details: "Same React and Vite, with **MUI**: buttons, tables and forms that already look finished and consistent. Less freedom in how things look, a little heavier pages.", why: "Meets ADR-004's one design system, with nearly as much AI help" },
+          { label: "Angular + Material 3", summary: "Google's all-in-one framework with its own Material components", details: "**Angular** comes with everything built in (routing, forms, testing), which suits large teams with strict rules. It's more to learn, fewer people know it, and AI tools help less with it.", why: "Solid, but harder to learn and maintain" },
+        ],
+      },
+    });
+    const a = await answer;
+    const text = `Going with ${a}.`;
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   if (/choose/i.test(text)) {
     // A multi-select question (ask_user_question with multi_select).
     const id = `q${++nextRequest}`;

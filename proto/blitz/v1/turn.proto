@@ -303,6 +303,24 @@ message Question {
   string task_id = 5;
   // Several options may be chosen: the answer is them, one per line.
   bool multi_select = 6;
+  // The options explained, in recommended order (their labels are
+  // options), for someone who doesn't know the tools they name
+  // (spec_005_approvals APR-40b); none when the options are plain.
+  repeated QuestionChoice choices = 7;
+  // What the choices' order rests on.
+  string order = 8;
+}
+
+// QuestionChoice is a question's option explained.
+message QuestionChoice {
+  // What the button says.
+  string label = 1;
+  // One sentence: its tooltip.
+  string summary = 2;
+  // What choosing it means, for someone non-technical.
+  string details = 3;
+  // Why it's ranked where it is.
+  string why = 4;
 }
 
 // Usage is the token usage and estimated cost of a session.

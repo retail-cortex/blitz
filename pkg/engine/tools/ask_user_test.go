@@ -86,3 +86,44 @@ func TestAskSeveralQuestions(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a", "b"}, splitSelected("a\n\n b \n"))
 }
+
+// Technical options come as choices (APR-40b): their labels are the
+// options, and the prompter gets each explained, in recommended order.
+func TestAskChoices(t *testing.T) {
+	hooks := NewHooks(Policy{})
+	rt := toolOf(t)(NewAskUserQuestionTool(hooks))
+	var got []api.Choice
+	var order string
+	var options []string
+	hooks.SetUserPrompter(func(ctx context.Context, q string, opts []string) (string, error) {
+		got, order = api.ChoicesOf(ctx)
+		options = opts
+		return opts[0], nil
+	})
+	out := runTool(t, rt, map[string]any{
+		"question": "Which front end?",
+		"options":  []string{"ignored"},
+		"choices": []map[string]any{
+			{"label": " Vite + React + Tailwind ", "summary": "Fast to build, styled with utility classes", "details": "React is the most used.", "why": "Easiest to maintain with AI"},
+			{"label": "Angular + Material 3", "summary": "One framework with everything"},
+		},
+		"order": "What's easiest for AI to maintain, then the community's size",
+	})
+	assert.Equal(t, "Vite + React + Tailwind", out["answer"])
+	assert.Equal(t, []string{"Vite + React + Tailwind", "Angular + Material 3"}, options, "choices win over options")
+	require.Len(t, got, 2)
+	assert.Equal(t, api.Choice{Label: "Vite + React + Tailwind", Summary: "Fast to build, styled with utility classes", Details: "React is the most used.", Why: "Easiest to maintain with AI"}, got[0])
+	assert.Equal(t, "What's easiest for AI to maintain, then the community's size", order)
+
+	out = runTool(t, rt, map[string]any{"questions": []map[string]any{{"question": "Database?", "choices": []map[string]any{{"label": "PostgreSQL"}}}}})
+	assert.Equal(t, "PostgreSQL", out["answers"].([]any)[0].(map[string]any)["answer"])
+	assert.Equal(t, "every choice needs a label", errOf(runTool(t, rt, map[string]any{"question": "?", "choices": []map[string]any{{"label": " ", "summary": "x"}}})), "the schema requires a label: a blank one is refused too")
+
+	// Plain options carry no choices.
+	runTool(t, rt, map[string]any{"question": "?", "options": []string{"a"}})
+	assert.Nil(t, got)
+	ask, err := NewAskUserQuestionTool(hooks)
+	require.NoError(t, err)
+	assert.Contains(t, ask.Description(), "not every user is technical")
+	assert.Equal(t, context.Background(), api.WithChoices(context.Background(), nil, "x"), "no choices: ctx as it is")
+}

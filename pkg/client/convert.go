@@ -375,3 +375,12 @@ func evalRunOf(m *pb.EvalRun, dir string) api.EvalRun {
 	}
 	return run
 }
+
+// choicesOf are a question's explained options from the API (APR-40b).
+func choicesOf(list []*pb.QuestionChoice) []api.Choice {
+	var out []api.Choice
+	for _, c := range list {
+		out = append(out, api.Choice{Label: c.Label, Summary: c.Summary, Details: c.Details, Why: c.Why})
+	}
+	return out
+}

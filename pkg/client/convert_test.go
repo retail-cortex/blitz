@@ -193,3 +193,9 @@ func TestDataContextMsgs(t *testing.T) {
 	assert.Equal(t, "shop", got[0].Connection)
 	assert.Equal(t, "SELECT 1", got[0].Statement)
 }
+
+// A question's explained choices come from the API (APR-40b).
+func TestChoicesOf(t *testing.T) {
+	assert.Equal(t, []api.Choice{{Label: "Vite", Summary: "s", Details: "d", Why: "w"}}, choicesOf([]*pb.QuestionChoice{{Label: "Vite", Summary: "s", Details: "d", Why: "w"}}))
+	assert.Nil(t, choicesOf(nil))
+}
