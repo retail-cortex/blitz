@@ -142,7 +142,7 @@ Choose **Something else** and describe it in your own words: the specification a
 
 Plans change. Keep the specs ahead of the work:
 
-1. **Change the spec first.** Edit a file in `.agents/specs/`, or tell `/spec` what changed (`/spec we're adding a second dataset from the 2025 survey`): it asks what it can't work out and updates the specs it touches, keeping their IDs. A new stage takes the next free number; it renumbers only after asking.
+1. **Change the spec first.** Edit a file in `.agents/specs/` (in the desktop app, **Studio › Specs** lists them in order and edits each one, rendered or as text, with **Redraft**), or tell `/spec` what changed (`/spec we're adding a second dataset from the 2025 survey`): it asks what it can't work out and updates the specs it touches, keeping their IDs. A new stage takes the next free number; it renumbers only after asking.
 2. **Bring the helpers in line.** `/skills update` and `/agents update` compare the skills and agents with the specs and offer what to add, change or retire; nothing changes until you pick. In the desktop app, the welcome screen shows **The specification changed: update the skills and agents** when a spec is newer than them.
 3. **Then the work.** Ask the agent to work on a numbered item ("EXP-02 from `005-experiments.md`"), so the request, the result and any review name the same thing.
 

@@ -38,9 +38,9 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t } from "../i18n";
 import type { BuiltinGuardrail, GuardrailFile } from "../gen/blitz/v1/workspace_pb";
-import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
+import { MarkdownField } from "./MarkdownField";
 import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, guardStages, limitsProblems, noLimit, sameGuardrailForm, defaultLimits, specFromForm, stageHasTools, type BuiltinId, type GuardrailForm, type GuardStage } from "./guardrailForm";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { ConfirmDialog, ProblemList, useDiscardGuard } from "./paneParts";
@@ -330,13 +330,18 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               </div>
               {!b && (
                 <>
-                  <div className="row field-tools">
-                    <span className="spacer" />
-                    <DraftButton workspace={workspace} kind="guardrail" name={form.name} description={form.description} current={form.text} onUse={(v) => set("text", v)} disabled={!editable} />
-                  </div>
-                  <Field label={t("desktop.guardrails.text")} supporting={t("desktop.guardrails.text_hint")}>
-                    {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.text} rows={5} placeholder={t("desktop.guardrails.text_placeholder")} onValue={(v) => set("text", v)} workspace={workspace} />}
-                  </Field>
+                  <MarkdownField
+                    label={t("desktop.guardrails.text")}
+                    supporting={t("desktop.guardrails.text_hint")}
+                    value={form.text}
+                    rows={5}
+                    placeholder={t("desktop.guardrails.text_placeholder")}
+                    onValue={(v) => set("text", v)}
+                    disabled={!editable}
+                    dir={workspace}
+                    workspace={workspace}
+                    tools={<DraftButton workspace={workspace} kind="guardrail" name={form.name} description={form.description} current={form.text} onUse={(v) => set("text", v)} disabled={!editable} />}
+                  />
                 </>
               )}
             </fieldset>

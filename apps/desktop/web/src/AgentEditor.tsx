@@ -26,8 +26,8 @@ import { ModelInput, useModelCatalog } from "./ModelInput";
 import { AgentScope, type AgentFile, type EvalFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, newAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
-import { SuggestTextarea } from "./SecretSuggest";
 import { DraftButton } from "./studio/Draft";
+import { MarkdownField } from "./studio/MarkdownField";
 import { evalsForAgent, runInBackground } from "./studio/evalCoverage";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "@blitz/webui";
 import { workerName } from "./workerForm";
@@ -392,13 +392,17 @@ export function AgentEditor({
                 {(id) => <input id={id} className="input" value={form.description} onChange={(e) => set("description", e.target.value)} />}
               </Field>
             </div>
-            <div className="row field-tools">
-              <span className="spacer" />
-              <DraftButton workspace={workspace || context} kind="agent" name={form.displayName || form.name} description={form.description} current={form.prompt} onUse={(text) => set("prompt", text)} disabled={!(workspace || context)} />
-            </div>
-            <Field label={t("desktop.agents.prompt")} supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}>
-              {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onValue={(v) => set("prompt", v)} workspace={scope === AgentScope.WORKSPACE ? workspace : ""} />}
-            </Field>
+            <MarkdownField
+              label={t("desktop.agents.prompt")}
+              supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}
+              value={form.prompt}
+              rows={8}
+              placeholder={t("desktop.agents.prompt_placeholder")}
+              onValue={(v) => set("prompt", v)}
+              dir={workspace || context}
+              workspace={scope === AgentScope.WORKSPACE ? workspace : ""}
+              tools={<DraftButton workspace={workspace || context} kind="agent" name={form.displayName || form.name} description={form.description} current={form.prompt} onUse={(text) => set("prompt", text)} disabled={!(workspace || context)} />}
+            />
             <label className="row agent-switch">
               <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />
               <span className="t-label">{t("desktop.agents.background")}</span>

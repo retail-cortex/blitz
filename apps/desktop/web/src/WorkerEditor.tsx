@@ -23,6 +23,7 @@ import { message, reason } from "./errors";
 import { t } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { PermissionRules } from "./PermissionRules";
+import { MarkdownField } from "./studio/MarkdownField";
 import { SchedulePicker } from "./SchedulePicker";
 import { ComposeDialog } from "./studio/ComposeDialog";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "@blitz/webui";
@@ -209,6 +210,12 @@ export function WorkerEditor({
       </Button>
     </>
   );
+  // Under the prompt, on the right (STU-05a).
+  const rewriteButton = (
+    <Button small icon={mdiCreationOutline} disabled={rewriting || !f.prompt.trim()} title={t("desktop.worker.rewrite_hint")} onClick={() => void rewrite()}>
+      {rewriting ? t("desktop.worker.rewriting") : t("desktop.worker.rewrite")}
+    </Button>
+  );
   return (
     <>
       {composing && (
@@ -303,25 +310,27 @@ export function WorkerEditor({
           </select>
           <span className="supporting">{t(f.workflow ? "desktop.newworker.workflow_hint" : "desktop.newworker.workflow_none_hint")}</span>
         </label>
-        <div className="field">
-          <label className="t-label" htmlFor="worker-prompt">
-            {t(f.workflow ? "desktop.newworker.input" : "desktop.newworker.prompt")}
-          </label>
-          {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
-          <textarea
-            id="worker-prompt"
-            className="input new-worker-prompt"
+        {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
+        {f.workflow ? (
+          <div className="field">
+            <label className="t-label" htmlFor="worker-prompt">
+              {t("desktop.newworker.input")}
+            </label>
+            <textarea id="worker-prompt" className="input new-worker-prompt" value={f.prompt} placeholder={t("desktop.newworker.input_placeholder")} rows={3} onChange={(e) => set("prompt", e.target.value)} />
+            <div className="row markdown-field-tools">{rewriteButton}</div>
+          </div>
+        ) : (
+          <MarkdownField
+            label={t("desktop.newworker.prompt")}
             value={f.prompt}
-            placeholder={t(f.workflow ? "desktop.newworker.input_placeholder" : "desktop.newworker.prompt_placeholder")}
-            rows={f.workflow ? 3 : 8}
-            onChange={(e) => set("prompt", e.target.value)}
+            rows={8}
+            placeholder={t("desktop.newworker.prompt_placeholder")}
+            onValue={(v) => set("prompt", v)}
+            dir={dir}
+            workspace={dir}
+            tools={rewriteButton}
           />
-          <span>
-            <Button small icon={mdiCreationOutline} disabled={rewriting || !f.prompt.trim()} title={t("desktop.worker.rewrite_hint")} onClick={() => void rewrite()}>
-              {rewriting ? t("desktop.worker.rewriting") : t("desktop.worker.rewrite")}
-            </Button>
-          </span>
-        </div>
+        )}
         <div className="field">
           <span className="t-label">{t("desktop.newworker.permissions")}</span>
           <PermissionRules value={f.permissions} onChange={(v) => set("permissions", v)} allow={policy?.allow} />

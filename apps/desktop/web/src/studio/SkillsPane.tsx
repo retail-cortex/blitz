@@ -40,11 +40,11 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
 import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";
-import { SuggestTextarea } from "../SecretSuggest";
 import { SkillReviewDialog } from "../SkillReview";
 import { forgetSkills } from "../skillMention";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
+import { MarkdownField } from "./MarkdownField";
 import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";
 import { SkillScenarios } from "./SkillScenarios";
@@ -342,13 +342,17 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                     />
                   </div>
                 </div>
-                <div className="row field-tools">
-                  <span className="spacer" />
-                  <DraftButton workspace={workspace} kind="skill" name={form.name} description={form.description} current={form.instructions} onUse={(v) => set("instructions", v)} />
-                </div>
-                <Field label={t("desktop.skills.instructions")} supporting={t("desktop.skills.instructions_hint", { name: form.name || "name" })}>
-                  {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.instructions} rows={10} spellCheck={false} placeholder={t("desktop.skills.instructions_placeholder")} onValue={(v) => set("instructions", v)} workspace={workspace} />}
-                </Field>
+                <MarkdownField
+                  label={t("desktop.skills.instructions")}
+                  supporting={t("desktop.skills.instructions_hint", { name: form.name || "name" })}
+                  value={form.instructions}
+                  rows={10}
+                  placeholder={t("desktop.skills.instructions_placeholder")}
+                  onValue={(v) => set("instructions", v)}
+                  dir={workspace}
+                  workspace={workspace}
+                  tools={<DraftButton workspace={workspace} kind="skill" name={form.name} description={form.description} current={form.instructions} onUse={(v) => set("instructions", v)} />}
+                />
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.skills.members")}</span>
                   <span className="t-body-sm muted">{t("desktop.skills.members_hint")}</span>

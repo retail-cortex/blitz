@@ -1000,6 +1000,10 @@ const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
   ["docs/pricing.md", fakePricing],
+  // The project's specification, as /spec writes it (Studio › Specs).
+  [".agents/specs/README.md", "# Specification\n\n1. [Overview](001-overview.md): what the shop is for.\n2. [Orders](002-orders.md): taking and filling orders.\n"],
+  [".agents/specs/001-overview.md", "# Overview\n\nKind: software\n\nA small shop server for **one store**: its staff take orders at the counter and online.\n\n## Success\n\n- An order takes under a minute at the counter.\n- Nothing is sold that isn't in stock.\n"],
+  [".agents/specs/002-orders.md", "# Orders\n\n1. Staff add items, see the total and take payment.\n2. Online orders wait in a queue until someone fills them.\n"],
   // A page with its own stylesheet and script, previewed in a sandboxed frame.
   ["site/index.html", '<!doctype html>\n<html>\n<head>\n  <title>Shop</title>\n  <link rel="stylesheet" href="site.css">\n</head>\n<body>\n  <h1>The shop</h1>\n  <p id="when">Loading…</p>\n  <script src="app.js"></script>\n</body>\n</html>\n'],
   ["site/site.css", "body { font-family: Georgia, serif; margin: 40px; color: #234; }\nh1 { color: #b04a1a; border-bottom: 2px solid #b04a1a; }\n"],

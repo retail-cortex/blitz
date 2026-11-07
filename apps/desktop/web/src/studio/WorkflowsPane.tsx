@@ -63,6 +63,7 @@ import { answerTask, useTasks } from "../humanTasks";
 import { parseForm, problemText, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
+import { MarkdownField } from "./MarkdownField";
 import { ApprovalCard } from "../Conversation";
 import { message, reasonText } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
@@ -846,9 +847,18 @@ export function WorkflowsPane({
                             </select>
                           )}
                         </Field>
-                        <Field label={t(`desktop.flows.instructions.${step.type}`)} supporting={t("desktop.flows.template_hint")}>
-                          {(id) => <textarea id={id} className="input" rows={5} value={step.instructions} placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)} onChange={(e) => setStep(step.id, { instructions: e.target.value })} />}
-                        </Field>
+                        <MarkdownField
+                          key={step.id}
+                          label={t(`desktop.flows.instructions.${step.type}`)}
+                          supporting={t("desktop.flows.template_hint")}
+                          value={step.instructions}
+                          rows={5}
+                          placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)}
+                          onValue={(v) => setStep(step.id, { instructions: v })}
+                          dir={workspace}
+                          workspace={workspace}
+                          tools={<DraftButton workspace={workspace} kind="workflow_step" name={step.title || step.id} description={step.title} current={step.instructions} onUse={(v) => setStep(step.id, { instructions: v })} />}
+                        />
                         <Field label={t("desktop.flows.skills")} supporting={t("desktop.flows.skills_hint")}>
                           {(id) => <MultiSelect id={id} label={t("desktop.flows.skills")} none={t("desktop.flows.none_chosen")} options={skills.map((s) => ({ value: s.name, detail: s.description }))} chosen={step.skills} onChange={(v) => setStep(step.id, { skills: v })} />}
                         </Field>
