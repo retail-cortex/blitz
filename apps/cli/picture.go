@@ -15,6 +15,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -23,11 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // pictureFlags are `blitz picture`'s settings, as the Pictures panel's
@@ -120,7 +123,7 @@ func newPictureCommand(g *globalFlags) *cobra.Command {
 	fl.BoolVar(&f.enhance, "enhance", false, "Let the model improve the prompt (Imagen)")
 	fl.StringVarP(&f.out, "out", "o", "", "Where to save the picture in the workspace (several are numbered: poster.png, poster-2.png)")
 	fl.StringVar(&f.session, "continue", "", "Add the turn to this Pictures session (blitz picture list)")
-	cmd.AddCommand(newPictureModelsCommand(g), newPictureListCommand(g), newPictureDeleteCommand(g))
+	cmd.AddCommand(newPictureModelsCommand(g), newPictureListCommand(g), newPictureShowCommand(g), newPictureDeleteCommand(g))
 	return cmd
 }
 
@@ -291,6 +294,103 @@ func newPictureListCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// newPictureShowCommand is `blitz picture show <session>`: the session's
+// turns, each with its model, prompt, settings, references, pictures and
+// where they were saved, the model's text, cost and any problem; --json
+// prints the session as the service gives it (PIC-80).
+func newPictureShowCommand(g *globalFlags) *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "show <session>",
+		Short: "Show a Pictures session's turns: prompts, settings, pictures and where they were saved",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			s, err := r.PictureSession(cmd.Context(), args[0])
+			if err != nil {
+				return withCode(exitFailure, err)
+			}
+			out := cmd.OutOrStdout()
+			if asJSON {
+				b, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(s)
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Fprintln(out, string(b))
+				return err
+			}
+			showPictureSession(out, s)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the session as JSON")
+	return cmd
+}
+
+// showPictureSession writes s's turns for a person to read.
+func showPictureSession(out io.Writer, s *pb.PictureSession) {
+	fmt.Fprintf(out, "%s\t%s\t%s\n", s.Id, s.Name, i18n.T("picture.cli_turns", "count", len(s.Turns)))
+	for i, t := range s.Turns {
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, i18n.T("picture.cli_show_turn", "n", i+1, "at", t.At.AsTime().Local().Format(time.DateTime), "model", t.Model))
+		fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_prompt", "prompt", t.Prompt))
+		if set := turnSettings(t); set != "" {
+			fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_settings", "settings", set))
+		}
+		if len(t.References) > 0 {
+			var refs []string
+			for _, ref := range t.References {
+				name := cmp.Or(ref.Path, ref.Name, ref.File)
+				if ref.Role != "" {
+					name += " (" + ref.Role + ")"
+				}
+				refs = append(refs, name)
+			}
+			fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_refs", "refs", strings.Join(refs, ", ")))
+		}
+		if t.Text != "" {
+			fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_text", "text", strings.TrimSpace(t.Text)))
+		}
+		for _, p := range t.Pictures {
+			where := i18n.T("picture.cli_show_unsaved")
+			if len(p.Saved) > 0 {
+				where = strings.Join(p.Saved, ", ")
+			}
+			fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_picture", "id", p.Id, "where", where))
+		}
+		fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_cost", "cost", fmt.Sprintf("$%.3f", t.CostUsd)))
+		if t.Problem != "" {
+			fmt.Fprintln(out, "  "+i18n.T("picture.cli_show_problem", "problem", t.Problem))
+		}
+	}
+}
+
+// turnSettings are t's settings as one line: shape, size, count, thinking,
+// search, avoid, people, format and seed, those it has.
+func turnSettings(t *pb.PictureTurn) string {
+	var set []string
+	for _, v := range []string{t.AspectRatio, t.Size} {
+		if v != "" {
+			set = append(set, v)
+		}
+	}
+	if t.Count > 1 {
+		set = append(set, fmt.Sprintf("×%d", t.Count))
+	}
+	for _, kv := range [][2]string{{"thinking", t.Thinking}, {"search", t.Search}, {"avoid", t.Avoid}, {"people", t.People}, {"format", t.Format}} {
+		if kv[1] != "" {
+			set = append(set, kv[0]+" "+kv[1])
+		}
+	}
+	if t.HasSeed {
+		set = append(set, fmt.Sprintf("seed %d", t.Seed))
+	}
+	return strings.Join(set, " · ")
 }
 
 // newPictureDeleteCommand is `blitz picture delete <session>`: the session
