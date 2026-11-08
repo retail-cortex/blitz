@@ -84,6 +84,13 @@ service FileService {
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
   rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
+  // Watches folders (the Files shelf's open ones) until the call ends,
+  // streaming which changed so they're listed again (FIL-33b). The first
+  // message has no folders: the watch is on. polling says some folders
+  // can't be watched (the system's limit) and should be listed on a timer.
+  // The shelf calls again when its open folders change or the service
+  // restarts.
+  rpc WatchFiles(WatchFilesRequest) returns (stream WatchFilesResponse);
   // A page of a CSV or TSV file's rows, searched, filtered by column and
   // sorted, streamed so a file of any size can be read (NOT_A_TABLE,
   // BAD_FILTER, BAD_PATH, FILE_NOT_FOUND).
@@ -463,6 +470,22 @@ message StatFilesRequest {
 message StatFilesResponse {
   // Path to version; "" for a file that's gone.
   map<string, string> versions = 1;
+}
+
+// Request message for FileService.WatchFiles.
+message WatchFilesRequest {
+  string workspace = 1;
+  // The folders to watch, relative to the workspace ("" for its root).
+  repeated string folders = 2;
+}
+
+// Response message for FileService.WatchFiles: one per settled burst of
+// changes.
+message WatchFilesResponse {
+  // The folders whose entries changed (added, removed, renamed, written).
+  repeated string folders = 1;
+  // Some folders can't be watched: list them on a timer.
+  bool polling = 2;
 }
 
 // Request message for FileService.ReadTable.

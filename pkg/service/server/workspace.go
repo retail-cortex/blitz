@@ -813,7 +813,7 @@ func (h workspaceService) SearchWorkspace(ctx context.Context, r req[pb.SearchWo
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.Search(ctx, api.SearchQuery{Text: r.Msg.Query, Sources: r.Msg.Sources, Limit: int(r.Msg.Limit), Mode: r.Msg.Mode, Hidden: r.Msg.Hidden})
+	res, err := w.Search(ctx, api.SearchQuery{Text: r.Msg.Query, Sources: r.Msg.Sources, Limit: int(r.Msg.Limit), Mode: r.Msg.Mode, Hidden: r.Msg.Hidden, Folder: r.Msg.Folder})
 	if err != nil {
 		return nil, toAPI(err)
 	}

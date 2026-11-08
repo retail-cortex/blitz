@@ -26,7 +26,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -150,6 +152,53 @@ func TestFileService(t *testing.T) {
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(dir, "lib"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "not deleted")
+}
+
+// WatchFiles says the watch is on, then streams the open folders that
+// change, until the client goes (FIL-33b).
+func TestWatchFilesOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := files.WatchFiles(ctx, connect.NewRequest(&pb.WatchFilesRequest{Workspace: dir, Folders: []string{"", "src"}}))
+	require.NoError(t, err)
+	defer stream.Close()
+	got := make(chan *pb.WatchFilesResponse, 16)
+	go func() {
+		for stream.Receive() {
+			got <- stream.Msg()
+		}
+		close(got)
+	}()
+	next := func() *pb.WatchFilesResponse {
+		t.Helper()
+		select {
+		case m, ok := <-got:
+			require.True(t, ok, "the stream ended: %v", stream.Err())
+			return m
+		case <-time.After(5 * time.Second):
+			t.Fatal("nothing streamed")
+			return nil
+		}
+	}
+	first := next()
+	assert.Empty(t, first.Folders, "the watch is on")
+	assert.False(t, first.Polling)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("package a\n"), 0o644))
+	var changed []string
+	for !slices.Contains(changed, "src") {
+		changed = append(changed, next().Folders...)
+	}
+	cancel()
+	for range got { // the client went away: the stream ends
+	}
 }
 
 // Previews of images over the API, NO_PREVIEW for other files, and the

@@ -175,6 +175,9 @@ export function Workspace({
   });
   const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [touched, setTouched] = useState(0);
+  // Every 5 seconds while files are shown: open tabs are checked, and the
+  // tree lists again only while the service can't watch it (FIL-33b).
+  const [tick, setTick] = useState(0);
   const editorRef = useRef(editor);
   editorRef.current = editor;
   const showsFiles = prefs.files || editor.tabs.length > 0;
@@ -231,12 +234,12 @@ export function Workspace({
   // While files are shown, look for changes made elsewhere every 5 seconds.
   useEffect(() => {
     if (!visible || !showsFiles) return;
-    const timer = setInterval(() => setTouched((n) => n + 1), 5000);
+    const timer = setInterval(() => setTick((n) => n + 1), 5000);
     return () => clearInterval(timer);
   }, [visible, showsFiles]);
   useEffect(() => {
-    if (touched) void editorRef.current.check();
-  }, [touched]);
+    if (touched || tick) void editorRef.current.check();
+  }, [touched, tick]);
 
 
   useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
@@ -321,10 +324,12 @@ export function Workspace({
             onCommit={() => setModal({ kind: "commit" })}
             active={editor.active}
             refresh={touched}
+            poll={tick}
             reveal={reveal}
             onOpen={open}
             onMoved={editor.moved}
             onChanged={() => setTouched((n) => n + 1)}
+            onDiskChange={() => void editorRef.current.check()}
             onClose={() => update((p) => ({ ...p, files: false }))}
           />
         ) : (
@@ -352,7 +357,7 @@ export function Workspace({
               onResize={(w) => update((p) => ({ ...p, chat_width: w }))}
             />
           )}
-          <FileLinksProvider dir={dir} refresh={touched}>
+          <FileLinksProvider dir={dir} refresh={touched + tick}>
             <Conversation
               dir={dir}
               name={name}

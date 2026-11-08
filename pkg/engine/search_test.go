@@ -136,6 +136,12 @@ func TestSearchSources(t *testing.T) {
 		{"identifier", api.SearchQuery{Text: "turnEnded"}, []string{"files:engine/rewind.go"}, ""},
 		{"pdf page", api.SearchQuery{Text: "quarterly revenue", Sources: []string{api.SearchDocuments}}, []string{"documents:report.pdf"}, "page 2"},
 		{"notebook cell", api.SearchQuery{Text: "fit_regression", Sources: []string{api.SearchDocuments}}, []string{"documents:model.ipynb"}, "cell 1"},
+		// Find in folder (SRCH-18): only what's under it; chats and notes aren't in one.
+		{"in a folder", api.SearchQuery{Text: "zeppelin", Folder: "docs"}, []string{"files:docs/airships.md"}, ""},
+		{"in a folder, slashes and dots cleaned", api.SearchQuery{Text: "zeppelin", Folder: "./docs/"}, []string{"files:docs/airships.md"}, ""},
+		{"in another folder", api.SearchQuery{Text: "zeppelin", Folder: "engine"}, []string{}, ""},
+		{"notes aren't in a folder", api.SearchQuery{Text: "zeppelin", Folder: "docs", Sources: []string{api.SearchNotes}}, []string{}, ""},
+		{"the workspace's root is the whole workspace", api.SearchQuery{Text: "zeppelin", Folder: "/"}, []string{"files:docs/airships.md", "documents:report.pdf"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := w.Search(ctx, tc.q)
@@ -217,6 +223,23 @@ func TestSearchWorkspaceTool(t *testing.T) {
 	b, err := json.Marshal(result)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"where":"engine/rewind.go:3"`)
+
+	// A folder the hit isn't under finds nothing (SRCH-18).
+	scoped := toolCall("search_workspace", map[string]any{"query": "turnEnded", "folder": "docs"})
+	w = searchWorkspace(t, scoped, text("not there"))
+	sess, err = w.NewSession()
+	require.NoError(t, err)
+	result = nil
+	_, err = w.Run(context.Background(), sess.ID, api.Turn{Text: "anything in docs?"}, func(ev api.Event) {
+		if ev.ToolResult != nil && ev.ToolResult.Name == "search_workspace" {
+			result = ev.ToolResult.Result
+		}
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	b, err = json.Marshal(result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "rewind.go")
 }
 
 // A workspace whose index can't be made opens with search off; the agent's

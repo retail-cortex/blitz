@@ -48,6 +48,7 @@ type SearchWorkspaceInput struct {
 	Sources []string `json:"sources,omitempty" jsonschema:"Where to look: files, documents (PDFs and notebooks), chats, notes; default files and documents"`
 	Limit   int      `json:"limit,omitempty" jsonschema:"Most results (default 20)"`
 	Mode    string   `json:"mode,omitempty" jsonschema:"keyword, semantic (by meaning, when an embedding model is set) or hybrid; default hybrid with an embedding model, else keyword"`
+	Folder  string   `json:"folder,omitempty" jsonschema:"Only the files and documents under this folder (relative to the workspace); default the whole workspace"`
 }
 
 // SearchWorkspaceHit is one item found: where (path:line for files), what
@@ -78,7 +79,7 @@ func NewSearchWorkspaceTool(r *Registry) (tool.Tool, error) {
 			if search == nil {
 				return SearchWorkspaceOutput{Error: api.ErrSearchDisabled.Error()}, nil
 			}
-			res, err := search(ctx, api.SearchQuery{Text: in.Query, Sources: in.Sources, Limit: in.Limit, Mode: in.Mode, Hidden: true})
+			res, err := search(ctx, api.SearchQuery{Text: in.Query, Sources: in.Sources, Limit: in.Limit, Mode: in.Mode, Hidden: true, Folder: in.Folder})
 			if err != nil {
 				return SearchWorkspaceOutput{Error: err.Error()}, nil
 			}

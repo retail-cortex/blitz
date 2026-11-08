@@ -206,6 +206,48 @@ func TestAllowed(t *testing.T) {
 	assert.Empty(t, x.Status().Items["files"], "and dropped by it")
 }
 
+// A folder scope keeps the items under the folder, whose name's LIKE
+// wildcards are taken literally (Find in folder, SRCH-18).
+func TestSearchInFolder(t *testing.T) {
+	ctx := context.Background()
+	files := newSource("files")
+	files.set("src/main.go", "token handling", t0)
+	files.set("src/api/auth.go", "token checks", t0)
+	files.set("srcx/other.go", "token elsewhere", t0)
+	files.set("docs/a_b/notes.md", "token notes", t0)
+	files.set("docs/axb/notes.md", "token notes too", t0)
+	files.set("src", "token in a file named like the folder", t0)
+	x := openTest(t, nil, files)
+	require.NoError(t, x.Scan(ctx))
+
+	for _, tc := range []struct {
+		folder string
+		want   []string
+	}{
+		{"", []string{"docs/a_b/notes.md", "docs/axb/notes.md", "src", "src/api/auth.go", "src/main.go", "srcx/other.go"}},
+		{"src", []string{"src", "src/api/auth.go", "src/main.go"}},
+		{"/src/", []string{"src", "src/api/auth.go", "src/main.go"}},
+		{"src/api", []string{"src/api/auth.go"}},
+		{"docs/a_b", []string{"docs/a_b/notes.md"}},
+		{".", []string{"docs/a_b/notes.md", "docs/axb/notes.md", "src", "src/api/auth.go", "src/main.go", "srcx/other.go"}},
+		{"missing", nil},
+	} {
+		t.Run(tc.folder, func(t *testing.T) {
+			hits, err := x.Search(ctx, Query{Text: "token", Folder: tc.folder})
+			require.NoError(t, err)
+			got := refs(hits)
+			sort.Strings(got)
+			if tc.want == nil {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+	assert.True(t, inFolder("a/b", ""))
+	assert.False(t, inFolder("ab", "a"))
+}
+
 // Words rank by BM25 (an item about the words beats a passing mention);
 // identifiers and substrings match through the trigram table; the
 // sources asked for are the ones searched.

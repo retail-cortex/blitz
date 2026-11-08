@@ -1017,7 +1017,7 @@ func (r *Remote) SearchWeb(ctx context.Context, terms string) (api.WebSearch, er
 
 // Search searches the workspace's index (WorkspaceService.SearchWorkspace).
 func (r *Remote) Search(ctx context.Context, q api.SearchQuery) (api.SearchResult, error) {
-	res, err := r.workspaces.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: r.dir, Query: q.Text, Sources: q.Sources, Limit: int32(q.Limit), Mode: q.Mode, Hidden: q.Hidden}))
+	res, err := r.workspaces.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: r.dir, Query: q.Text, Sources: q.Sources, Limit: int32(q.Limit), Mode: q.Mode, Hidden: q.Hidden, Folder: q.Folder}))
 	if err != nil {
 		return api.SearchResult{}, fromAPI(err)
 	}
