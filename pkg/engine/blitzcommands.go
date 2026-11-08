@@ -992,11 +992,15 @@ func (w *Workspace) cmdCommandSave(ctx context.Context, c api.BlitzCommand, args
 	}
 	rel := filepath.ToSlash(filepath.Join(".blitz", "commands", name+".md"))
 	text := "---\ndescription: " + strconv.Quote(str(args, "description")) + "\n---\n" + str(args, "prompt") + "\n"
-	old, _ := os.ReadFile(filepath.Join(w.Dir(), rel))
-	if err := w.askChange(ctx, c, "Save the command /"+name, fileDiff(rel, string(old), text)); err != nil {
+	// An existing command is replaced: written over the version read here.
+	var old, version string
+	if cur, err := w.ReadFile(rel); err == nil {
+		old, version = cur.Text, cur.Version
+	}
+	if err := w.askChange(ctx, c, "Save the command /"+name, fileDiff(rel, old, text)); err != nil {
 		return nil, err
 	}
-	if _, err := w.WriteFile(ctx, rel, text, ""); err != nil {
+	if _, err := w.WriteFile(ctx, rel, text, version); err != nil {
 		return nil, err
 	}
 	return map[string]any{"saved": rel, "use": "/" + name}, nil

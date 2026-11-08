@@ -135,3 +135,15 @@ func TestPrintSpecs(t *testing.T) {
 	})
 	assert.Equal(t, "A-01\tremoved\tgone\nabc123\tcommit\tA-01\n\nIt goes.\n1. Drop it: Remove the code.\n! B-02: needs it\n", b.String())
 }
+
+// A workspace that can't be opened is each command's error.
+func TestSpecCommandNoWorkspace(t *testing.T) {
+	isolate(t)
+	gone := filepath.Join(t.TempDir(), "gone")
+	for _, args := range [][]string{{"spec", "list"}, {"spec", "review"}, {"spec", "approve", "a.md"}, {"spec", "verify"}, {"spec", "implement", "a.md"}, {"spec", "impact", "a.md"}, {"do", "doctor"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			_, err := runCLI(t, append(args, "--dir", gone)...)
+			assert.Error(t, err)
+		})
+	}
+}

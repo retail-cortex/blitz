@@ -378,3 +378,19 @@ func TestLeanInstruction(t *testing.T) {
 	assert.Equal(t, text, si.Parts[0].Text, "the request's own isn't changed")
 	assert.Nil(t, leanInstruction(nil, nil))
 }
+
+// A section is cut to the next heading of its level or above, or to the
+// end; text without it is as it was.
+func TestWithoutSection(t *testing.T) {
+	cases := []struct{ name, text, want string }{
+		{"absent", "# A\nx\n", "# A\nx\n"},
+		{"to the next ##", "a\n## Skills\ns\n## Next\nn\n", "a\n## Next\nn\n"},
+		{"to the next #", "a\n## Skills\ns\n# Top\nt\n", "a\n# Top\nt\n"},
+		{"to the end", "a\n## Skills\ns\n", "a\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, withoutSection(c.text, "## Skills"))
+		})
+	}
+}

@@ -353,3 +353,19 @@ func TestRemoteCommands(t *testing.T) {
 	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "/nope", Command: true}, func(api.Event) {})
 	assert.ErrorIs(t, err, api.ErrUnknownCommand, "unknown command over the API: %v", err)
 }
+
+// The model menu's list comes from the service: every provider's chat
+// models, and the providers not set up (spec_061_models MOD-01).
+func TestListModels(t *testing.T) {
+	r := attach(t, nil)
+	home, _ := os.UserHomeDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm.api]\nbase_url = \"http://127.0.0.1:1\"\nmodel = \"gpt-5\"\n"), 0o600))
+	list, err := r.ListModels(context.Background(), false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, list.DefaultProvider)
+	i := slices.IndexFunc(list.Providers, func(p api.ProviderModels) bool { return p.Provider == "api" })
+	require.GreaterOrEqual(t, i, 0, "%+v", list.Providers)
+	require.NotEmpty(t, list.Providers[i].Models)
+	assert.Equal(t, "gpt-5", list.Providers[i].Models[0].ID)
+}

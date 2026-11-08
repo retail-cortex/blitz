@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/sandboxsetup"
@@ -61,6 +62,15 @@ func TestSecurityCommand(t *testing.T) {
 	cmd.SetArgs(nil)
 	assert.NoError(t, cmd.Execute())
 	assert.NotEmpty(t, out.String())
+
+	// Where AppArmor doesn't restrict bubblewrap, fix-apparmor says how
+	// things stand and changes nothing.
+	if runtime.GOOS != "linux" {
+		out.Reset()
+		cmd.SetArgs([]string{"fix-apparmor"})
+		_ = cmd.Execute()
+		assert.NotEmpty(t, out.String())
+	}
 }
 
 // blitz security scan-secrets names each file and line with the value

@@ -238,3 +238,18 @@ func TestLoadResolvesEveryCredential(t *testing.T) {
 	_, err = Load("")
 	assert.Error(t, err, "an xor: value that doesn't decode")
 }
+
+// An xor: value in a list is decoded too; one that doesn't decode there
+// is an error.
+func TestLoadDecodesLists(t *testing.T) {
+	keysEnv(t)
+	writeSettings(t, "[[mcp.servers]]\nname = \"db\"\ncommand = \"db\"\nargs = [\"--token\", \""+modenv.EncryptSecret("tok")+"\"]\n")
+	cfg, err := Load("")
+	require.NoError(t, err)
+	require.Len(t, cfg.MCP.Servers, 1)
+	assert.Equal(t, []string{"--token", "tok"}, cfg.MCP.Servers[0].Args)
+
+	writeSettings(t, "[[mcp.servers]]\nname = \"db\"\ncommand = \"db\"\nargs = [\"xor:zz\"]\n")
+	_, err = Load("")
+	assert.Error(t, err)
+}

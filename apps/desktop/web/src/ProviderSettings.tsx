@@ -458,7 +458,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   );
 }
 
-type Act = (f: () => Promise<{ change?: ConfigChange }>, done?: string) => Promise<boolean>;
+type Act = (f: () => Promise<{ change?: ConfigChange }>, done?: string, fresh?: boolean) => Promise<boolean>;
 
 // What can be done about the chosen provider's key, when anything can:
 // secure one written in the file, or remove one kept here (the list says

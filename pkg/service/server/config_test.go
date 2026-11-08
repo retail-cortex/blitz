@@ -604,3 +604,37 @@ func TestConfigServiceAPIProvider(t *testing.T) {
 	_, err = cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "api", Api: &pb.ApiProviderSettings{BaseUrl: "https://g.example.com"}}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "settings with no header: %v", err)
 }
+
+// A provider set up while others are active joins them, the default
+// unchanged; each provider's menu models come back with the description
+// (spec_061_models MOD-40, MOD-42).
+func TestActivateProviderOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil, text("hi"))
+	for _, v := range []string{"GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"} {
+		t.Setenv(v, "")
+	}
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	for _, kv := range [][2]string{{"llm.providers", "gemini"}, {"llm.gemini.models", "gemini-3.8-flash,gemini-4-carbon"}} {
+		_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: kv[0], Value: kv[1]}))
+		require.NoError(t, err, kv[0])
+	}
+	_, err := cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "openai", Key: "sk-test", KeepDefault: true}))
+	require.NoError(t, err)
+	desc, err := cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gemini", "openai"}, desc.Msg.ActiveProviders)
+	require.Len(t, desc.Msg.MenuModels, 1)
+	assert.Equal(t, []string{"gemini-3.8-flash", "gemini-4-carbon"}, desc.Msg.MenuModels[0].Models)
+	_, err = cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{KeepDefault: true}))
+	assert.Error(t, err, "a sign-in needs its provider")
+}
+
+// No error is no error; any other is the request's (INVALID_ARGUMENT).
+func TestInvalid(t *testing.T) {
+	assert.NoError(t, invalid(nil))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(invalid(errors.New("bad"))))
+}

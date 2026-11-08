@@ -20,6 +20,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -251,4 +252,23 @@ func TestUninstallOnlyAnInstall(t *testing.T) {
 			assert.Empty(t, f.ran, "nothing stopped or started")
 		})
 	}
+}
+
+// Off Windows, the system answers that the setup program runs there only.
+func TestOtherSystem(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the Windows system")
+	}
+	s := newSystem()
+	_, err := s.Self()
+	for _, err := range []error{err, s.StopApp("x"), s.Shortcut("a", "b"), s.WriteEntry(wininstall.Entry{}), s.DeleteEntry(),
+		s.RemoveRunValue(), s.RemoveFromPath("x"), s.Start("x")} {
+		assert.ErrorIs(t, err, errWindowsOnly)
+	}
+	for _, v := range []string{s.LocalAppData(), s.TempDir(), s.StartMenu(), s.Desktop(), s.InstalledRoot()} {
+		assert.Empty(t, v)
+	}
+	assert.False(t, s.Ask("?"))
+	s.Tell("x", false)
+	s.DeleteLater("x")
 }

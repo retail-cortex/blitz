@@ -40,10 +40,11 @@ type memSource struct {
 }
 
 type memItem struct {
-	doc  Doc
-	mod  time.Time
-	err  error
-	size int64
+	doc    Doc
+	mod    time.Time
+	err    error
+	size   int64
+	hidden bool
 }
 
 func newSource(name string) *memSource {
@@ -57,7 +58,7 @@ func (m *memSource) List(context.Context) ([]Item, error) {
 	defer m.mu.Unlock()
 	var out []Item
 	for ref, it := range m.items {
-		out = append(out, Item{Ref: ref, Size: it.size, Modified: it.mod})
+		out = append(out, Item{Ref: ref, Size: it.size, Modified: it.mod, Hidden: it.hidden})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Ref < out[j].Ref })
 	return out, nil
@@ -527,4 +528,19 @@ func TestScanStoppedMidReadReadsAgain(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
 	assert.Equal(t, "slow.pdf", hits[0].Ref)
+}
+
+// A file a .gitignore now hides (or shows again) isn't read again: only
+// its hidden mark changes.
+func TestScanHiddenChange(t *testing.T) {
+	ctx := context.Background()
+	files := newSource("files")
+	files.set("a.go", "func turnEnded() {}", t0)
+	x := openTest(t, nil, files)
+	require.NoError(t, x.Scan(ctx))
+	for _, hidden := range []bool{true, false} {
+		files.put("a.go", memItem{doc: Doc{Title: "a.go", Text: "func turnEnded() {}"}, mod: t0, size: int64(len("func turnEnded() {}")), hidden: hidden})
+		require.NoError(t, x.Scan(ctx))
+	}
+	assert.Equal(t, 1, files.readsOf("a.go"), "not read again")
 }

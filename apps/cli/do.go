@@ -15,7 +15,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -145,7 +144,7 @@ func doArgs(words []string, argsJSON string) (string, map[string]any, error) {
 // confirmed asks y/N on out, reading the answer from in.
 func confirmed(in io.Reader, out io.Writer) bool {
 	fmt.Fprint(out, i18n.T("do.confirm"))
-	line, _ := bufio.NewReader(in).ReadString('\n')
+	line, _ := readLine(in)
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes", "s", "si", "sí", "o", "oui": // the prompt's languages
 		return true
@@ -162,9 +161,29 @@ func readHidden(in io.Reader, out io.Writer, what string) (string, error) {
 		fmt.Fprintln(out)
 		return strings.TrimSpace(string(b)), err
 	}
-	line, err := bufio.NewReader(in).ReadString('\n')
+	line, err := readLine(in)
 	if err != nil && line == "" {
 		return "", fmt.Errorf("%s: %w", what, err)
 	}
 	return strings.TrimSpace(line), nil
+}
+
+// readLine reads one line from in, a byte at a time, so nothing after it
+// is read ahead: the confirmation and the secrets after it come from the
+// same input (a pipe, in scripts).
+func readLine(in io.Reader) (string, error) {
+	var b strings.Builder
+	c := make([]byte, 1)
+	for {
+		n, err := in.Read(c)
+		if n == 1 {
+			if c[0] == '\n' {
+				return b.String(), nil
+			}
+			b.WriteByte(c[0])
+		}
+		if err != nil {
+			return b.String(), err
+		}
+	}
 }

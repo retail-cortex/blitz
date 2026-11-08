@@ -16,12 +16,16 @@ package tools
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/tool"
 )
 
 // The tool's description names every group and gives an example; help
@@ -82,6 +86,11 @@ func TestRunBlitz(t *testing.T) {
 	})
 	out = r.runBlitz(ctx, BlitzInput{Command: " Doctor "})
 	assert.Empty(t, out.Error)
+	failing := &Registry{hooks: hooks}
+	failing.SetBlitzRunner(func(context.Context, api.BlitzCommand, map[string]any) (any, error) {
+		return nil, errors.New("no window")
+	})
+	assert.Equal(t, "no window", failing.runBlitz(ctx, BlitzInput{Command: "doctor"}).Error)
 	assert.Equal(t, map[string]any{"ok": true}, out.Result)
 	out = r.runBlitz(ctx, BlitzInput{Command: "connector frobnicate"})
 	assert.Contains(t, out.Error, `no command "connector frobnicate"`)
@@ -106,4 +115,93 @@ func TestRunBlitz(t *testing.T) {
 	out = r.runBlitz(permits("doctor"), BlitzInput{Command: "doctor"})
 	assert.Empty(t, out.Error)
 	assert.Equal(t, []string{"doctor", "doctor"}, ran)
+}
+
+// jobTool answers a job command as create_job and list_jobs do.
+type jobTool struct {
+	plainTool
+	out map[string]any
+	err error
+}
+
+func (j jobTool) Run(agent.Context, any) (map[string]any, error) { return j.out, j.err }
+
+// job create and job list run as the tools they are (DRV-42): their
+// answer, their error, or that jobs aren't here.
+func TestBlitzJobCommands(t *testing.T) {
+	ctx := createTestToolContext()
+	cases := []struct {
+		name  string
+		tool  tool.Tool
+		args  map[string]any
+		want  map[string]any
+		error string
+	}{
+		{name: "not here", args: map[string]any{}, error: "aren't available here"},
+		{name: "listed", tool: jobTool{plainTool: plainTool{name: "list_jobs"}, out: map[string]any{"jobs": 1}}, want: map[string]any{"jobs": 1}},
+		{name: "its error", tool: jobTool{plainTool: plainTool{name: "list_jobs"}, err: errors.New("boom")}, error: "boom"},
+		{name: "an error answered", tool: jobTool{plainTool: plainTool{name: "list_jobs"}, out: map[string]any{"error": "no service"}}, error: "no service"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &Registry{tools: map[string]tool.Tool{}}
+			if c.tool != nil {
+				r.tools["list_jobs"] = c.tool
+			}
+			out := r.runJobCommand(ctx, "job list", c.args)
+			if c.error != "" {
+				assert.Contains(t, out.Error, c.error)
+				return
+			}
+			assert.Empty(t, out.Error)
+			assert.Equal(t, c.want, out.Result)
+		})
+	}
+	out := (&Registry{}).runJobCommand(ctx, "job create", map[string]any{"name": 3})
+	assert.NotEmpty(t, out.Error, "arguments checked")
+	assert.NotEmpty(t, out.Help)
+	bt, err := NewBlitzTool(&Registry{tools: map[string]tool.Tool{"list_jobs": jobTool{plainTool: plainTool{name: "list_jobs"}, out: map[string]any{"jobs": 2}}}})
+	require.NoError(t, err)
+	run := bt.(interface {
+		Run(agent.Context, any) (map[string]any, error)
+	})
+	got, err := run.Run(ctx, map[string]any{"command": "job list"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"jobs": float64(2)}, got["result"])
+	got, err = run.Run(ctx, map[string]any{"command": "doctor"})
+	require.NoError(t, err)
+	assert.Contains(t, got["error"], "aren't available here")
+}
+
+// Each argument type is checked: text (and its values), numbers, true or
+// false, objects and lists.
+func TestBlitzArgTypes(t *testing.T) {
+	cases := []struct {
+		typ    string
+		values []string
+		v      any
+		want   any
+		err    string
+	}{
+		{typ: "string", v: 3, err: "must be text"},
+		{typ: "string", values: []string{"a", "b"}, v: "c", err: "must be one of a, b"},
+		{typ: "string", values: []string{"a"}, v: "a", want: "a"},
+		{typ: "integer", v: 4, want: 4},
+		{typ: "integer", v: "4", err: "must be a number"},
+		{typ: "boolean", v: true, want: true},
+		{typ: "object", v: map[string]any{}, want: map[string]any{}},
+		{typ: "list", v: []any{"x"}, want: []any{"x"}},
+		{typ: "other", v: "x", want: "x"},
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%s %v", c.typ, c.v), func(t *testing.T) {
+			got, err := argOf(api.CommandArg{Name: "a", Type: c.typ, Values: c.values}, c.v)
+			if c.err != "" {
+				assert.ErrorContains(t, err, c.err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
 }

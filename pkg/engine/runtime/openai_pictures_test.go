@@ -37,6 +37,7 @@ type fakeOpenAIImages struct {
 	edit  *openai.ImageEditParams
 	refs  int
 	empty bool
+	bad   bool // an empty picture, then one that isn't base64
 	err   error
 }
 
@@ -45,6 +46,10 @@ func (f *fakeOpenAIImages) answer(n int64) (*openai.ImagesResponse, error) {
 		return nil, f.err
 	}
 	res := &openai.ImagesResponse{Usage: openai.ImagesResponseUsage{InputTokens: 50, OutputTokens: 1000, TotalTokens: 1050}}
+	if f.bad {
+		res.Data = []openai.Image{{}, {B64JSON: "!!"}}
+		return res, nil
+	}
 	if !f.empty {
 		for range n {
 			res.Data = append(res.Data, openai.Image{B64JSON: base64.StdEncoding.EncodeToString([]byte("PNG"))})
@@ -105,7 +110,12 @@ func TestOpenAIPictures(t *testing.T) {
 	fake.empty = true
 	_, err = painter.Paint(context.Background(), tools.PaintRequest{Prompt: "nothing"})
 	assert.ErrorContains(t, err, "didn't draw it")
-	fake.empty, fake.err = false, errors.New("400 content policy")
+	fake.empty, fake.bad = false, true
+	_, err = pictures.Make(context.Background(), PictureCall{Prompt: "x"})
+	assert.ErrorContains(t, err, "didn't decode")
+	assert.Equal(t, info, pictures.Info())
+	assert.Equal(t, "openai/gpt-image-2", painter.Model())
+	fake.bad, fake.err = false, errors.New("400 content policy")
 	_, err = pictures.Make(context.Background(), PictureCall{Prompt: "x"})
 	assert.ErrorContains(t, err, "content policy")
 }
@@ -138,4 +148,17 @@ func TestOpenAIImageModels(t *testing.T) {
 	p, err := NewPainter(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.Equal(t, "openai/gpt-image-1", p.Model())
+}
+
+// Ollama's own address replaces OpenAI's for Ollama's models; each
+// provider's chosen menu models are its own (MOD-42).
+func TestOllamaEndpointAndChosenModels(t *testing.T) {
+	_, base, _, err := openAIKey(context.Background(), config.LLMConfig{Ollama: config.OllamaConfig{BaseURL: "http://gpu:11434/v1"}}, "ollama", retryPolicy{})
+	require.NoError(t, err)
+	assert.Equal(t, "http://gpu:11434/v1", base)
+	cfg := config.DefaultConfig()
+	cfg.LLM.Gemini.Models, cfg.LLM.Anthropic.Models, cfg.LLM.OpenAI.Models, cfg.LLM.Ollama.Models = []string{"g"}, []string{"a"}, []string{"o"}, []string{"l"}
+	for p, want := range map[string][]string{"gemini": {"g"}, "anthropic": {"a"}, "openai": {"o"}, "ollama": {"l"}, "azure": nil} {
+		assert.Equal(t, want, chosenModels(cfg, p), p)
+	}
 }
