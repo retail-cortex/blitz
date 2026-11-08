@@ -100,6 +100,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([providers](../guide/providers.md)) |
 | `blitz eval <name>` | [Runs an eval](../guide/evals.md): each case on its agents, scored; exits 1 when it fails, for CI (`--case`, `--json`) |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
+| `blitz data list`, `blitz data query <connection> ["<sql>"]` | [The workspace's databases](../guide/databases.md#in-the-terminal): lists them and their saved queries; runs SQL or a saved query (`--query`) read-only and prints the table (`--params`, `--max-rows`, `--json`, `--csv`) |
 | `blitz jobs …` | Lists, enables, runs, undoes and shows the history of [jobs](../guide/workers.md) |
 | `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
 | `blitz service install\|uninstall\|restart\|status` | Starts the service at login, or stops doing so; `restart` restarts it so it reads changed settings, MCP servers and plugins |
@@ -189,6 +190,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |
 | `/search <terms>`, `/search files\|documents\|chats\|notes\|all <terms>`, `/search status\|reindex` | [Search the workspace](../guide/search.md#workspace-search) |
 | `/search web <terms>`, `/search session <terms>` | [Search](../guide/search.md) the web or this session |
+| `/data` | The workspace's [databases](../guide/databases.md#in-the-terminal) and their saved queries; `@db:shop` or `@db:shop/top_customers` in a prompt adds one (Tab completes them) |
 | `!<command>` | Run a command yourself, outside the agent's sandbox; the audit log records it |
 | `/attach [path\|clear]`, `/paste` | Queue an [attachment](../guide/images.md) (an image, a PDF, a text file, audio or video, as the model takes them) for the next message |
 | `/sandbox`, `/mcp`, `/tools`, `/skills …`, `/envs …` | The active policy, MCP servers, the agent's tools, skills and their Python environments |

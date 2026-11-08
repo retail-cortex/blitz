@@ -141,6 +141,31 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 	assert.True(t, saved.Msg.Connection.Queries[0].ReadsOnly)
 	assert.True(t, saved.Msg.Connection.Trusted)
 
+	// The CLI's: the workspace's databases, and a query on one by name,
+	// read-only (spec_059_data DAT-45).
+	data, err := w.ListDataConnections(ctx, connect.NewRequest(&pb.ListDataConnectionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, data.Msg.Connections, 1)
+	dc := data.Msg.Connections[0]
+	assert.Equal(t, "kitchen", dc.Name)
+	assert.Equal(t, "sqlite", dc.Kind)
+	assert.True(t, dc.On && dc.Trusted && dc.ReadOnly)
+	require.Len(t, dc.Queries, 1)
+	assert.Equal(t, "count", dc.Queries[0].Name)
+	byName, err := w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, ConnectionName: "kitchen", Statement: "SELECT name FROM recipes WHERE name <> ? ORDER BY name", ParamsJson: `["x"]`}))
+	require.NoError(t, err)
+	require.Empty(t, byName.Msg.Problem)
+	assert.JSONEq(t, `[["bread"],["soup"]]`, byName.Msg.Table.RowsJson)
+	assert.Equal(t, "string", byName.Msg.Table.Columns[0].Type)
+	assert.Contains(t, byName.Msg.Table.Markdown, "| bread |")
+	byName, err = w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, ConnectionName: "kitchen", Query: "count"}))
+	require.NoError(t, err)
+	assert.JSONEq(t, `[[2]]`, byName.Msg.Table.RowsJson)
+	byName, err = w.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, ConnectionName: "gone", Statement: "SELECT 1"}))
+	require.NoError(t, err)
+	assert.Contains(t, byName.Msg.Problem, `no database connection "gone"`)
+	assert.Nil(t, byName.Msg.Table)
+
 	shop := &pb.Connector{Name: "shop", Category: "databases", Scope: "workspace", Kind: "postgres", Settings: map[string]string{"host": "127.0.0.1", "port": "1", "database": "shop", "user": "reader"}, ReadOnly: true, Tools: []string{"execute_sql"}}
 	bad, err := w.SaveConnector(ctx, connect.NewRequest(&pb.SaveConnectorRequest{Workspace: dir, Connection: shop}))
 	require.NoError(t, err)

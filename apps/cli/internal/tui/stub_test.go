@@ -55,6 +55,7 @@ type stubBackend struct {
 	listStyles       func() []api.StyleInfo
 	listHooks        func() []api.HookInfo
 	listMCPServers   func() []api.MCPServer
+	dataConnections  func() ([]api.DataConnection, error)
 	listAgents       func() []api.AgentInfo
 	pinModel         func(agent, ref string) (api.PinResult, error)
 	unpin            func(agent string) (api.PinResult, error)
@@ -274,6 +275,13 @@ func (s *stubBackend) ListMCPServers() []api.MCPServer {
 		return s.listMCPServers()
 	}
 	return s.Backend.ListMCPServers()
+}
+
+func (s *stubBackend) DataConnections(ctx context.Context) ([]api.DataConnection, error) {
+	if s.dataConnections != nil {
+		return s.dataConnections()
+	}
+	return s.Backend.DataConnections(ctx)
 }
 
 func (s *stubBackend) ListAgents() []api.AgentInfo {

@@ -7,7 +7,7 @@ weight: 59
 
 | | |
 |---|---|
-| Status | **Phases 1–3 built** (2026-11-07): the table, reading a query's columns, `RunConnectorQuery`, the workflow **Data** step with Table output, and data in a chat (the database menu, chips, `@db:`). Phases 4 and 5 planned. The owner's decisions are in §10. |
+| Status | **Phases 1–3 built** (2026-11-07): the table, reading a query's columns, `RunConnectorQuery`, the workflow **Data** step with Table output, and data in a chat (the database menu, chips, `@db:`). **Phase 5 built** (2026-11-08, for v0.9.7): the CLI (DAT-45). Phase 4 (streaming) planned. The owner's decisions are in §10. |
 | Source | the table format in `pkg/engine/datatable`; the query on a source's own connection in `third_party/mcp-toolbox/embed/query.go`, run by the databases backend (`pkg/engine/databases`, `connectors.RunQuery`); `RunConnectorQuery` in `pkg/service/server/connectors.go`. The Data step in `pkg/engine/flows` (its settings and checks), `pkg/engine/flowdata.go` (running it) and `apps/desktop/web/src/studio/DataStepFields.tsx` (its form); BigQuery in `third_party/mcp-toolbox/embed/query_bigquery.go`. Planned: streaming in in `pkg/engine/flows` and the workflow runner; the chat's data context in the composer and `pkg/engine` attachments; `WorkspaceService` calls in `proto/blitz/v1/workspace.proto` |
 | Depends on | [spec_043_workflows](spec_043_workflows.md) (steps, WF-13 data, WF-15 `for_each`), [spec_046_databases](spec_046_databases.md) (DB-07 read-only, DB-12 queries), [spec_047_connectors](spec_047_connectors.md) (CON-12 the query builder, CON-17 a connection off in a workspace), [spec_011_images](spec_011_images.md) (what a turn can carry), [spec_039_secrets](spec_039_secrets.md) |
 
@@ -85,7 +85,11 @@ A connection lets the agents query a database when they decide to. Work often st
 - **DAT-42** Choosing a **query** (a saved one with its parameters asked for, SQL written, or SQL drafted from a description and shown for review) runs it at once, read-only only, and adds its result as a chip ("shop · top_customers · Rows: 40"): a `data_query` context block whose text is the table (DAT-01) as it was read. The turn's context gets the SQL and the table as the model reads it best, the columns described, then the rows as Markdown up to 200 rows or 128 KB (about 32,000 tokens), the rest said to be cut (and the agent can query for more). A click on the chip shows the SQL and the table. A saved query without parameters runs as soon as it's chosen; one with parameters, SQL and a description open a dialog that shows the first rows before **Add to the message**.
 - **DAT-43** A result added to a chat is kept with the turn (so the conversation can be reopened and re-read), not re-run; a chip says when it was read. The transcript notes what was added ("[added: database: shop, shop · top_customers · Rows: 40]").
 - **DAT-44** In an untrusted workspace (CON-09), a workspace connection that isn't trusted isn't offered.
-- **DAT-45** **CLI**: `@db:shop` and `@db:shop/top_customers` in a prompt (the REPL completes them), and `/data` lists the connections and queries; `blitz data query <connection> "<sql>" [--json|--csv]` prints a table (DAT-01) for scripts.
+- **DAT-45** **CLI**: `@db:shop` and `@db:shop/top_customers` in a prompt (the REPL completes them), and `/data` lists the connections and queries; `blitz data query <connection> "<sql>" [--json|--csv]` prints a table (DAT-01) for scripts. *Built 2026-11-08* (`apps/cli/data.go`, `apps/cli/internal/tui/data.go`, `pkg/engine/dataquery.go`):
+  - **Which connections:** the CLI uses a connection as a chat finds it (DAT-44): by name, the workspace's over a global one of the same name, and only when it's on, trusted and readable. Every query runs **read-only**, whatever the connection allows; the CLI has no **Allow writes** (a write goes through the agent's tools, which ask).
+  - **`/data`** lists every database connection with its kind, read-only, and what keeps it from a chat (off, not trusted, its problem), then its saved queries with their parameters. Tab after `@`, `@d` or `@db:` offers the usable connections and their queries that take no parameters, beside the workspace's paths.
+  - **`blitz data list [--json]`** prints the same. **`blitz data query <connection> ["<sql>"]`** runs SQL, or `--query <name>` a saved query (not both), with `--params` as JSON (an array in order for SQL, an object by name for a saved query; whole numbers stay whole) and `--max-rows` (1,000 by default). It prints the table as aligned columns under their names and types (values on one line, at most 40 characters), then `Rows: N` and whether the limit cut them; `--json` the table (DAT-01: its columns described, its rows); `--csv` a header row and the rows (NULL empty, JSON values as JSON). A query that can't run exits 1 with why (masked), a bad flag with the usage code.
+  - **The API:** `RunConnectorQuery` takes `connection_name` in place of `connection` (DAT-50), and `ListDataConnections` lists the connections; the CLI works the same in its own process (`--local`) and through the service.
 
 ## 7. API
 
@@ -94,6 +98,8 @@ A connection lets the agents query a database when they decide to. Work often st
   - a saved query's name with its parameters as a JSON object by name, or a statement with its parameters as a JSON array in order;
   - `max_rows` (1,000 when 0; about 8 MB of values at most);
   - `read_only`.
+
+  Or, in place of the connection, `connection_name`: one of the workspace's connections, found and run as DAT-45 says (on, trusted, readable; read-only).
 
   It answers with the table (`DataTable`: the columns typed, the rows as JSON, `total`, `truncated` and the Markdown, DAT-05), or a `problem` saying why it didn't run. Error messages and values are masked. Phase 4 adds the stream (row items or chunks), and phase 2 adds the cost estimate first for a kind that bills. A connection may run a query when its kind has the try capability. `TryConnectorTool`'s text answer stays for the agents' tools.
 
@@ -107,7 +113,7 @@ The table from each driver (types, lengths, descriptions, big integers and decim
 2. **Built.** The Data step with **Table** output, Try it, limits and costs (DAT-20–DAT-25, DAT-30).
 3. **Built.** The chat: the menu, connection and query chips, `@db:` (DAT-40–DAT-44).
 4. Streaming: **Chunks** and **Rows** (DAT-31–DAT-33), the API's stream.
-5. The CLI (DAT-45).
+5. **Built** (2026-11-08). The CLI (DAT-45): `/data`, `@db:` completion, `blitz data list` and `blitz data query`.
 
 ## 10. Decisions
 
