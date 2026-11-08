@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.5](blitz-0.9.5.md): SQLite databases work again on the Mac: opening one no longer stops the Blitz service.
 - [Blitz 0.9.4](blitz-0.9.4.md): a Pictures panel for making pictures (every Gemini and Imagen control, references, conversations, saving into the workspace), and edit your agents like documents: every long field in Studio opens in the visual editor, with Redraft under it, and Studio's new Specs section lists, checks, reviews and refines your project's specification (with `blitz spec review` for CI); Python projects in subfolders get their own language server and their own virtual environment.
 - [Blitz 0.9.3](blitz-0.9.3.md): ask for a picture, and get one: an image model draws into your workspace, organizations' image models work in conversations, the Blitz agent reads your files only when a task needs them, and each Markdown tab keeps its place in the visual editor.
 - [Blitz 0.9.2](blitz-0.9.2.md): change models mid-conversation and keep going: each conversation has its own model and says what a switch costs, Gemini, Claude and OpenAI pick up each other's conversations, fallbacks really fall back, models search with their own tools and list their sources, pictures they make show in the chat, costs come by model, and Blitz learns what each model can do.

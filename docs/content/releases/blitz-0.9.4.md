@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.4
-weight: 1
+weight: 2
 ---
 
 **Make pictures in their own place, and edit your agents like documents.** Every long field in Studio (an agent's instructions, a skill's, a rule, a guardrail, a job's prompt, a workflow step's prompt) now opens in the visual editor: headings, lists, tables and code as they'll read, or the plain text with one click. And Studio has a new **Specs** section, where your project's specification is listed in order and edited in place.

@@ -30,6 +30,7 @@ src="${1:?usage: $0 <Blitz.app> <version> <out.dmg>}"
 version="${2:?usage: $0 <Blitz.app> <version> <out.dmg>}"
 dmg="${3:?usage: $0 <Blitz.app> <version> <out.dmg>}"
 entitlements="$(cd "$(dirname "$0")" && pwd)/entitlements.plist"
+go_entitlements="$(cd "$(dirname "$0")" && pwd)/entitlements_go.plist"
 
 # Bazel's outputs are read-only: sign a copy.
 stage="$(mktemp -d)"
@@ -50,7 +51,8 @@ sign() { # [codesign options] <path>: hardened runtime, and a timestamp with a r
 
 # Inside out: Electron's libraries and helpers, its frameworks, its helper
 # apps, the Go programs (with their own identifiers: Bazel's links are all
-# "a.out"), then the bundle; the entitlements on what runs Electron.
+# "a.out"), then the bundle; the entitlements on what runs Electron, and
+# on the programs that open SQLite (entitlements_go.plist).
 fw="$app/Contents/Frameworks"
 # ShipIt (Squirrel's updater) is under Resources, so signing its framework
 # would seal it as a file, not sign it as code; notarisation refuses that.
@@ -58,8 +60,8 @@ find "$fw" -type f \( -name '*.dylib' -o -name '*.so' -o -name chrome_crashpad_h
 for f in "$fw"/*.framework; do sign "$f"; done
 for f in "$fw"/*Helper*.app; do sign --entitlements "$entitlements" "$f"; done
 bin="$app/Contents/Resources/app/bin"
-sign --identifier dev.blitz.cli "$bin/blitz"
-sign --identifier dev.blitz.service "$bin/blitzd"
+sign --identifier dev.blitz.cli --entitlements "$go_entitlements" "$bin/blitz"
+sign --identifier dev.blitz.service --entitlements "$go_entitlements" "$bin/blitzd"
 sign --identifier dev.blitz.tray "$bin/blitz-tray"
 sign --entitlements "$entitlements" "$app"
 codesign --verify --strict --deep --verbose=2 "$app"
