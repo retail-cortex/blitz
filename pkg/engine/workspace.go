@@ -51,6 +51,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/retail-cortex/blitz/pkg/terminal"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -80,6 +81,11 @@ type Options struct {
 
 // Workspace is a folder opened in Blitz: everything a session needs.
 type Workspace struct {
+	// terms are the workspace's terminals (spec_062_terminal), made on
+	// first use.
+	termsMu sync.Mutex
+	terms   *terminal.Manager
+
 	// settingsWatch keeps the permission rules in step with their files;
 	// settingsListeners hear of a change.
 	settingsWatch     *settingsWatch
@@ -554,6 +560,7 @@ func (w *Workspace) Close() error {
 		}
 	}
 	w.settingsWatch.close()
+	w.closeTerminals()
 	if w.bgStop != nil {
 		w.bgStop()
 		w.bg.Wait()

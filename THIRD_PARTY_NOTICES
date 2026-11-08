@@ -79,6 +79,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf MIT
   github.com/charmbracelet/x/term v0.2.1                         MIT
   github.com/coder/websocket v1.8.15                             ISC
+  github.com/creack/pty v1.1.24                                  MIT
   github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 Apache-2.0
   github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352  MIT
   github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 BSD-2-Clause
@@ -1220,6 +1221,33 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+github.com/creack/pty v1.1.24
+-----------------------------
+
+Copyright (c) 2011 Keith Rarick
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall
+be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 ------------------------------------------------------------------------------
