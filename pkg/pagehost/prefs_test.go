@@ -44,6 +44,22 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "blitz", p.LightTheme, "defaults %+v %v", p, err)
 	require.Equal(t, "blitz", p.DarkTheme, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
+	// The Files tree's own (FIL-47, FIL-48, FIL-75).
+	require.Equal(t, "folders", p.FilesSort, "defaults %+v", p)
+	require.Equal(t, "on", p.FilesCompact, "defaults %+v", p)
+	require.Equal(t, "on", p.FilesFollow, "defaults %+v", p)
+	require.False(t, p.FilesNest, "defaults %+v", p)
+	for name, tc := range map[string]struct{ sort, compact, follow, wantSort, wantCompact, wantFollow string }{
+		"chosen":  {"type", "off", "off", "type", "off", "off"},
+		"mixed":   {"mixed", "on", "on", "mixed", "on", "on"},
+		"unknown": {"size", "maybe", "", "folders", "on", "on"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			q := Prefs{FilesSort: tc.sort, FilesCompact: tc.compact, FilesFollow: tc.follow}
+			q.normalize()
+			require.Equal(t, []string{tc.wantSort, tc.wantCompact, tc.wantFollow}, []string{q.FilesSort, q.FilesCompact, q.FilesFollow})
+		})
+	}
 	a, b := t.TempDir(), t.TempDir()
 	p.Theme, p.Composer, p.Advanced = "dark", "panel", true
 	p.Workspaces = []WorkspacePrefs{
