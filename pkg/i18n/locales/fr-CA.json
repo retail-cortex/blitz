@@ -762,6 +762,7 @@
     "picture.cli_show_unsaved": "non enregistrée",
     "picture.cli_show_cost": "Coût {cost}",
     "picture.cli_show_problem": "Problème : {problem}",
+    "picture.cli_show_seed": "graine {seed}",
     "model.cli_default": "celui par défaut",
     "model.cli_tools": "outils",
     "model.cli_images": "images",

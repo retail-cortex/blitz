@@ -388,7 +388,7 @@ func turnSettings(t *pb.PictureTurn) string {
 		}
 	}
 	if t.HasSeed {
-		set = append(set, fmt.Sprintf("seed %d", t.Seed))
+		set = append(set, i18n.T("picture.cli_show_seed", "seed", t.Seed))
 	}
 	return strings.Join(set, " · ")
 }
