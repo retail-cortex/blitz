@@ -95,6 +95,7 @@ import {
 } from "./tree";
 import { languageSession } from "./language";
 import { isWebPath } from "./webTabs";
+import { isTermPath } from "../terminal/terminals";
 import { useAdvanced, useApp } from "../state";
 import { useOrgBranding } from "../orgBranding";
 
@@ -324,7 +325,7 @@ export function FilesShelf({
   // The tree follows the open tab (FIL-75).
   const follow = prefs.files_follow === "on";
   useEffect(() => {
-    if (follow && active && opened && !isWebPath(active)) void show(active);
+    if (follow && active && opened && !isWebPath(active) && !isTermPath(active)) void show(active);
   }, [active, follow, opened, show]);
 
   // The folder new files go in: the selected folder, or the selected file's.

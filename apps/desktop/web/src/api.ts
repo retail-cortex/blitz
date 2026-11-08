@@ -24,6 +24,7 @@ import { ConfigService } from "./gen/blitz/v1/config_pb";
 import { FileService } from "./gen/blitz/v1/file_pb";
 import { LanguageService } from "./gen/blitz/v1/language_pb";
 import { SessionService } from "./gen/blitz/v1/session_pb";
+import { TerminalService } from "./gen/blitz/v1/terminal_pb";
 import { WorkerService } from "./gen/blitz/v1/worker_pb";
 import { WorkspaceService } from "./gen/blitz/v1/workspace_pb";
 import { isUnavailable } from "./errors";
@@ -75,6 +76,7 @@ const make = () => ({
   config: createClient(ConfigService, transport),
   files: createClient(FileService, transport),
   language: createClient(LanguageService, transport),
+  terminals: createClient(TerminalService, transport),
 });
 let clients = make();
 
@@ -90,3 +92,5 @@ export const config = new Proxy({} as ReturnType<typeof make>["config"], { get: 
 export const files = new Proxy({} as ReturnType<typeof make>["files"], { get: (_, k) => Reflect.get(clients.files, k) });
 /** LanguageService: the workspace's language servers, for the editor. */
 export const language = new Proxy({} as ReturnType<typeof make>["language"], { get: (_, k) => Reflect.get(clients.language, k) });
+/** TerminalService: the workspace's terminals (spec_062_terminal). */
+export const terminals = new Proxy({} as ReturnType<typeof make>["terminals"], { get: (_, k) => Reflect.get(clients.terminals, k) });

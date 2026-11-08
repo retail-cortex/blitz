@@ -74,8 +74,12 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - ⌘C copies the selection on macOS. Ctrl+Shift+C does elsewhere, since Ctrl+C is the shell's interrupt.
   - ⌘V and Ctrl+Shift+V paste, bracketed when the shell asks.
   - Right-click offers Copy, Paste, Clear and Find.
-- **TRM-25** **Settings.** **Settings › Appearance** sets the terminal's font (`[ui.terminal] font`, MesloLGS NF by default; any font installed, by name) and size (`[ui.terminal] font_size`, 13). They apply to open terminals at once.
-- **TRM-26** **Coming back.** A tab watches from where it had read (TRM-12), so a window that reloads shows the terminal as it was. When the shell exits, the tab says so with the code and offers **Restart**, which opens a new terminal in the same folder.
+- **TRM-25** **Settings.** **Settings › Appearance** sets the terminal's font and size. They're the window's own settings, kept with its other preferences (`terminal_font`, `terminal_font_size`):
+  - the font is any font installed, by name, with the bundled MesloLGS Nerd Font Mono by default and as the fallback;
+  - the size is 8 to 32 pixels, 13 by default.
+
+  They apply to open terminals at once.
+- **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown, so switching tabs loses nothing. A window that reloads lists the workspace's terminals and opens a tab for each (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. When the shell exits, the tab says so with the code and offers **Restart**, which opens a new terminal in the same folder.
 
 ## 5. Opening one
 

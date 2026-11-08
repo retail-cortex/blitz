@@ -32,6 +32,8 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
+import { TerminalService } from "../gen/blitz/v1/terminal_pb";
+import { fakeTerminals } from "./fakeTerminal";
 import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, WorkspaceProcessSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
@@ -3394,6 +3396,7 @@ export function installFake() {
           return { ...change(workspace), warnings: text.includes("sk-") ? ["[llm.anthropic] api_key is written as plain text: set it in Providers & keys to keep it in the keychain"] : [] };
         },
       });
+      service(TerminalService, fakeTerminals());
       service(FileService, {
         listDir: ({ path, showHidden }) => {
           const prefix = path ? path + "/" : "";

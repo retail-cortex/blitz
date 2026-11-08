@@ -1,0 +1,53 @@
+/*
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* The terminal's font (spec_062_terminal TRM-22): MesloLGS Nerd Font Mono,
+   loaded only when a terminal opens. */
+@font-face {
+  font-family: "MesloLGS Nerd Font Mono";
+  src: url("./fonts/MesloLGSNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "MesloLGS Nerd Font Mono";
+  src: url("./fonts/MesloLGSNerdFontMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "MesloLGS Nerd Font Mono";
+  src: url("./fonts/MesloLGSNerdFontMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "MesloLGS Nerd Font Mono";
+  src: url("./fonts/MesloLGSNerdFontMono-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+
+/* The tab's terminal fills the editor area, as a file's text does. */
+.terminal-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--md-surface-container-lowest); }
+.terminal-view[hidden] { display: none; }
+.terminal-host { flex: 1; min-height: 0; padding: 8px 4px 4px 12px; }
+.terminal-host .xterm { height: 100%; }
+.terminal-host .xterm-viewport { background: transparent !important; }

@@ -110,7 +110,15 @@ type Prefs struct {
 	// bytes each).
 	MarkdownCSSLight string `json:"markdown_css_light,omitempty"`
 	MarkdownCSSDark  string `json:"markdown_css_dark,omitempty"`
+	// TerminalFont is the terminal's font family ("" for the bundled
+	// MesloLGS Nerd Font Mono), and TerminalFontSize its size in pixels
+	// (8–32; 13 by default) (spec_062_terminal TRM-25).
+	TerminalFont     string `json:"terminal_font,omitempty"`
+	TerminalFontSize int    `json:"terminal_font_size"`
 }
+
+// maxFontName caps the terminal font's name.
+const maxFontName = 200
 
 // maxMarkdownCSS caps each theme's Markdown CSS: a stylesheet, not a
 // place to keep files.
@@ -164,6 +172,12 @@ func (p *Prefs) normalize() {
 	}
 	if p.EditorZoom < 50 || p.EditorZoom > 200 {
 		p.EditorZoom = 100
+	}
+	if p.TerminalFontSize < 8 || p.TerminalFontSize > 32 {
+		p.TerminalFontSize = 13
+	}
+	if p.TerminalFont = strings.TrimSpace(p.TerminalFont); len(p.TerminalFont) > maxFontName {
+		p.TerminalFont = ""
 	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"
