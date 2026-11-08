@@ -174,6 +174,76 @@ func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
 	return r.Rename(from, to)
 }
 
+// UserCopy copies from (a file, or a folder with everything in it) to to,
+// which must not exist; a symbolic link is copied as a link. Folders are
+// made as the copy goes, and a copy that fails partway is taken back.
+func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
+	if from == "." || to == "." {
+		return errors.New("can't copy the workspace")
+	}
+	if to == from || strings.HasPrefix(to, from+string(filepath.Separator)) {
+		return fmt.Errorf("%s: can't copy a folder into itself", filepath.ToSlash(to))
+	}
+	unlock, err := w.lockPaths(ctx, from, to)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	r := w.userRoot()
+	if _, err := r.Lstat(from); err != nil {
+		return err
+	}
+	if _, err := r.Lstat(to); err == nil {
+		return fmt.Errorf("%s: %w", filepath.ToSlash(to), fs.ErrExist)
+	}
+	if err := mkdirParent(r, to); err != nil {
+		return err
+	}
+	err = fs.WalkDir(r.FS(), filepath.ToSlash(from), func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		dst := filepath.Join(to, strings.TrimPrefix(filepath.FromSlash(p), from))
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		switch {
+		case d.IsDir():
+			return r.Mkdir(dst, info.Mode().Perm()|0o700)
+		case d.Type()&fs.ModeSymlink != 0:
+			target, err := r.Readlink(filepath.FromSlash(p))
+			if err != nil {
+				return err
+			}
+			return r.Symlink(target, dst)
+		case !d.Type().IsRegular():
+			return nil // devices, sockets and pipes aren't copied
+		}
+		in, err := r.Open(filepath.FromSlash(p))
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := r.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			return err
+		}
+		return out.Close()
+	})
+	if err != nil {
+		_ = r.RemoveAll(to)
+	}
+	return err
+}
+
 // UserCreateUpload starts a file the user uploads to rel: an empty hidden
 // file beside it (its folders made), which UserAppend fills and
 // UserFinishUpload puts in place. It returns the hidden file's path.

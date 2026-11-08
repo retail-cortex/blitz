@@ -54,6 +54,14 @@ export interface Prefs {
   chat_width: number;
   /** The Files shelf's width in pixels (0: its default). */
   files_width: number;
+  /** How the tree orders a folder (FIL-48). */
+  files_sort: "folders" | "mixed" | "type";
+  /** Related files (tests, lock files) nested under their file (FIL-48). */
+  files_nest: boolean;
+  /** Single-child folder chains on one row (FIL-47). */
+  files_compact: "on" | "off";
+  /** The tree shows the open tab's file (FIL-75). */
+  files_follow: "on" | "off";
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
   /** How wide a document (Markdown in Preview and Visual) runs: the whole editor, or a readable column. */
@@ -94,6 +102,10 @@ export const defaultPrefs: Prefs = {
   show_hidden: false,
   chat_width: 0,
   files_width: 0,
+  files_sort: "folders",
+  files_nest: false,
+  files_compact: "on",
+  files_follow: "on",
   task_continue: false,
   advanced: false,
   width: "full",
@@ -157,6 +169,10 @@ export function normalizePrefs(raw: unknown): Prefs {
     updates: pick(r.updates, ["auto", "off"] as const, "auto"),
     chat_width: pixels(r.chat_width),
     files_width: pixels(r.files_width),
+    files_sort: pick(r.files_sort, ["folders", "mixed", "type"] as const, "folders"),
+    files_nest: r.files_nest === true,
+    files_compact: pick(r.files_compact, ["on", "off"] as const, "on"),
+    files_follow: pick(r.files_follow, ["on", "off"] as const, "on"),
     markdown_css_light: css(r.markdown_css_light),
     markdown_css_dark: css(r.markdown_css_dark),
   };

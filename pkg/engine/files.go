@@ -149,9 +149,18 @@ func (w *Workspace) agentFile(name string) bool {
 	return slices.Contains(w.cfg.Memory.Files, name) || slices.Contains(w.cfg.Memory.LocalFiles, name)
 }
 
-// ListDir lists the folder p (the workspace for ""), folders first.
-// Hidden entries are left out unless showHidden.
+// ListDir lists the folder p (the workspace for ""), folders first, at
+// most maxListed of them. Hidden entries are left out unless showHidden.
 func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (DirListing, error) {
+	return w.ListDirUpTo(ctx, p, showHidden, 0)
+}
+
+// ListDirUpTo is ListDir listing at most limit entries (maxListed for 0):
+// the tree's "Show more" lists a big folder further (FIL-39).
+func (w *Workspace) ListDirUpTo(ctx context.Context, p string, showHidden bool, limit int) (DirListing, error) {
+	if limit <= 0 {
+		limit = maxListed
+	}
 	rel, slash, err := userPath(p)
 	if err != nil {
 		return DirListing{}, err
@@ -219,8 +228,8 @@ func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (Dir
 		}
 		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	})
-	if len(out.Entries) > maxListed {
-		out.Entries, out.Truncated = out.Entries[:maxListed], true
+	if len(out.Entries) > limit {
+		out.Entries, out.Truncated = out.Entries[:limit], true
 	}
 	return out, nil
 }
@@ -394,6 +403,24 @@ func (w *Workspace) DeleteFile(ctx context.Context, p string) error {
 		return err
 	}
 	w.userEdited(slash, "deleted")
+	return nil
+}
+
+// CopyFile copies from (a file, or a folder with everything in it) to to;
+// to must not exist (FIL-38).
+func (w *Workspace) CopyFile(ctx context.Context, from, to string) error {
+	fromRel, fromSlash, err := userPath(from)
+	if err != nil {
+		return err
+	}
+	toRel, toSlash, err := userPath(to)
+	if err != nil {
+		return err
+	}
+	if err := w.files().UserCopy(ctx, fromRel, toRel); err != nil {
+		return err
+	}
+	w.userEdited(toSlash, "copied from "+fromSlash)
 	return nil
 }
 

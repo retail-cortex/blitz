@@ -16,7 +16,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileTreeOutline,mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
 import { files } from "../api";
 import { canCall, canPreview, printPDF } from "../desktop";
 import { message } from "../errors";
@@ -389,8 +389,14 @@ export function EditorPane({
       "divider",
       item("saved", "desktop.files.tab.close_saved"),
       item("all", "desktop.files.tab.close_all"),
-      // A web page has no revisions.
-      ...(isWebPath(path) ? [] : ["divider" as const, { label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir: model.dir, path, folder: false }) }]),
+      // A web page has no revisions, and isn't in the tree.
+      ...(isWebPath(path)
+        ? []
+        : [
+            "divider" as const,
+            { label: t("desktop.files.reveal_in_files"), icon: mdiFileTreeOutline, onSelect: () => onReveal(path) },
+            { label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir: model.dir, path, folder: false }) },
+          ]),
     ];
   };
 

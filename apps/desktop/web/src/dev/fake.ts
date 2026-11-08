@@ -1041,6 +1041,9 @@ const fakeProfileOf = new Map<string, string>();
 // Files being uploaded (dropped from the computer), by upload id.
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
+// What an undoable delete moved to the workspace's trash, by restore ID.
+const fakeTrash = new Map<string, Map<string, string>>();
+let fakeTrashSeq = 0;
 
 // Pictures (spec_058): the models offered, sessions and the pictures' SVGs.
 const fakeGeminiRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"];
@@ -3538,8 +3541,30 @@ export function installFake() {
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
         },
-        deleteFile: ({ path }) => {
-          for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
+        deleteFile: ({ path, undoable }) => {
+          const held = new Map<string, string>();
+          for (const [p, v] of [...fakeFiles]) {
+            if (p === path || p.startsWith(path + "/")) {
+              held.set(p, v);
+              fakeFiles.delete(p);
+            }
+          }
+          if (!undoable) return {};
+          const restoreId = `trash-${++fakeTrashSeq}`;
+          fakeTrash.set(restoreId, held);
+          return { restoreId };
+        },
+        restoreFile: ({ restoreId, path }) => {
+          const held = fakeTrash.get(restoreId);
+          if (!held) throw new ConnectError("it's no longer in the workspace's trash", Code.NotFound);
+          if ([...fakeFiles.keys()].some((p) => p === path || p.startsWith(path + "/"))) throw new ConnectError(`${path}: file already exists`, Code.AlreadyExists);
+          for (const [p, v] of held) fakeFiles.set(p, v);
+          fakeTrash.delete(restoreId);
+          return {};
+        },
+        copyFile: ({ from, to }) => {
+          if ([...fakeFiles.keys()].some((p) => p === to || p.startsWith(to + "/"))) throw new ConnectError(`${to}: file already exists`, Code.AlreadyExists);
+          for (const [p, v] of [...fakeFiles]) if (p === from || p.startsWith(from + "/")) fakeFiles.set(to + p.slice(from.length), v);
           return {};
         },
         findFiles: ({ query, folders, limit, extensions }) => {

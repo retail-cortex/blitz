@@ -827,6 +827,21 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .git-letter.staged-all, .git-letter.staged-some { border-radius: 4px; box-shadow: inset 0 0 0 1px currentColor; }
 .git-letter.staged-all { background: color-mix(in srgb, currentColor 18%, transparent); }
 .git-dot { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--hl-number); }
+/* A language server's problems in the file or under the folder (FIL-46), over git's colour. */
+.tree-row.problem-warning .tree-name { color: var(--md-warning, #b8860b); }
+.tree-row.problem-error .tree-name { color: var(--md-error); }
+.tree-problem { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--md-warning, #b8860b); }
+.tree-row.problem-error .tree-problem { background: var(--md-error); }
+/* The rows of a selection of several (FIL-74), as the selected row. */
+.tree-row.picked { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+/* A row cut, waiting to be pasted (FIL-38). */
+.tree-row.cut .tree-name, .tree-row.cut .tree-icon { opacity: 0.5; }
+.tree-chain-sep { color: var(--md-on-surface-variant); }
+/* Show more of a big folder (FIL-39), and the filter's rows (FIL-73). */
+.tree-row.tree-more { color: var(--md-primary); }
+.files-filter { display: flex; align-items: center; gap: 4px; padding: 0 6px 6px 12px; }
+.files-filter .input { flex: 1; min-width: 0; height: 30px; padding: 0 8px; font: 400 13px/20px var(--md-font); }
+.tree-row .tree-where { flex: none; max-width: 45%; color: var(--md-on-surface-variant); font-size: 12px; }
 .tree-row.naming { cursor: default; }
 .tree-row.naming:hover { background: none; }
 .tree-input { flex: 1; min-width: 0; height: 24px; padding: 0 6px; font: 400 13px/20px var(--md-font); }
