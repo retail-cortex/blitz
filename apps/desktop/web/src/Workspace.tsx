@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openTerminalEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenTerminalDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -202,6 +202,14 @@ export function Workspace({
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
     };
+    // A terminal opens in a tab of its own (TRM-30).
+    const onTerminal = (e: Event) => {
+      const d = (e as CustomEvent<OpenTerminalDetail>).detail;
+      if (d.dir !== dir) return;
+      void editorRef.current.openTerminal(d.folder).catch((err: unknown) => snack(message(err), { error: true }));
+      setWide((w) => (w === "chat" ? "" : w));
+      setModal(null);
+    };
     const onHistory = (e: Event) => {
       const d = (e as CustomEvent<HistoryDetail>).detail;
       if (d.dir === dir) setDrawer({ kind: "history", path: d.path, folder: d.folder });
@@ -215,6 +223,7 @@ export function Workspace({
     };
     window.addEventListener(openFileEvent, onOpen);
     window.addEventListener(openWebEvent, onWeb);
+    window.addEventListener(openTerminalEvent, onTerminal);
     window.addEventListener(revealInTreeEvent, onReveal);
     window.addEventListener(historyEvent, onHistory);
     window.addEventListener(filesTouchedEvent, onTouched);
@@ -222,6 +231,7 @@ export function Workspace({
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
       window.removeEventListener(openWebEvent, onWeb);
+      window.removeEventListener(openTerminalEvent, onTerminal);
       window.removeEventListener(revealInTreeEvent, onReveal);
       window.removeEventListener(historyEvent, onHistory);
       window.removeEventListener(filesTouchedEvent, onTouched);
@@ -319,6 +329,7 @@ export function Workspace({
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
             onCommit={() => setModal({ kind: "commit" })}
+            onTerminal={(folder) => void editor.openTerminal(folder).catch((e: unknown) => snack(message(e), { error: true }))}
             active={editor.active}
             refresh={touched}
             reveal={reveal}

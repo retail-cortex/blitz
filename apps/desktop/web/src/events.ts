@@ -80,6 +80,18 @@ export function openWeb(detail: OpenWebDetail) {
   window.dispatchEvent(new CustomEvent(openWebEvent, { detail }));
 }
 
+/** The event that opens a terminal in a workspace's editor (spec_062_terminal TRM-30). */
+export const openTerminalEvent = "blitz:open-terminal";
+/** A terminal to open: its workspace, and a folder in it ("" for it). */
+export interface OpenTerminalDetail {
+  dir: string;
+  folder: string;
+}
+/** Opens a terminal in a workspace's editor, in a tab of its own. */
+export function openTerminal(detail: OpenTerminalDetail) {
+  window.dispatchEvent(new CustomEvent(openTerminalEvent, { detail }));
+}
+
 /** The event that adds a web page's content to a workspace's next prompt (EL-104). */
 export const addWebEvent = "blitz:add-web";
 /** What Add to chat adds: a page's content (block), or a screenshot of it (image, a PNG). */

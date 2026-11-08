@@ -15,7 +15,7 @@
  */
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { changesAfter, compose, composeEvent, showView, startSetup, takePendingCompose, takePendingView, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
+import { changesAfter, compose, composeEvent, openTerminal, openTerminalEvent, showView, startSetup, takePendingCompose, takePendingView, viewEvent, type ComposeDetail, type OpenTerminalDetail, type ViewDetail } from "./events";
 
 // Tests run without a DOM: the window is an event target.
 beforeAll(() => {
@@ -38,6 +38,17 @@ describe("startSetup", () => {
     window.removeEventListener(composeEvent, run);
     expect(seen).toEqual(["view chat", "/setup run=true fresh=true"]);
     expect(takePendingCompose("/s")).toBeUndefined();
+  });
+});
+
+describe("openTerminal", () => {
+  it("asks the workspace for a terminal in a folder (spec_062 TRM-30)", () => {
+    const seen: OpenTerminalDetail[] = [];
+    const on = (e: Event) => seen.push((e as CustomEvent<OpenTerminalDetail>).detail);
+    window.addEventListener(openTerminalEvent, on);
+    openTerminal({ dir: "/w/shop", folder: "src" });
+    window.removeEventListener(openTerminalEvent, on);
+    expect(seen).toEqual([{ dir: "/w/shop", folder: "src" }]);
   });
 });
 

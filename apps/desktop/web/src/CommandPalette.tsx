@@ -34,10 +34,11 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
   mdiWeb,
+  mdiConsole,
 } from "@mdi/js";
 import { files, sessions, workspaces } from "./api";
 import { allCommands, listedCommands, paletteResults, shortcutLabel, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, findInFile, loadSession, openDocs, openFile, openWeb, searchWorkspace, showView, startSetup } from "./events";
+import { compose, findInFile, loadSession, openDocs, openFile, openTerminal, openWeb, searchWorkspace, showView, startSetup } from "./events";
 import { loadAppDocs } from "./docs/load";
 import { findTerms, hitTarget, queryTerms } from "./search";
 import { fileIcon } from "./files/icons";
@@ -203,6 +204,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
         // Web pages open in the editor where the window can show them (EL-100).
+        { group: t("desktop.palette.group.view"), label: t("desktop.terminal.new"), icon: mdiConsole, run: done(() => openTerminal({ dir, folder: "" })) },
         ...(canPreview() ? [{ group: t("desktop.palette.group.view"), label: t("desktop.web.open"), icon: mdiWeb, run: done(() => openWeb({ dir, url: "" })) }] : []),
         ...(prefs.advanced ? [{ group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) }] : []),
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.fullscreen"), detail: "F11", icon: mdiFullscreen, run: done(() => void toggleFullscreen().catch(() => {})) },

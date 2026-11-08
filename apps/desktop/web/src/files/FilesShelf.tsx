@@ -55,6 +55,7 @@ import {
   mdiFilterVariant,
   mdiFormTextbox,
   mdiArrowCollapseUp,
+  mdiConsole,
 } from "@mdi/js";
 import { canCall, canDragOut, droppedPaths, dragOut, fileManager, openURL, revealPath, servePage, trashDropped } from "../desktop";
 import { addToContext, openWeb, showHistory, showView } from "../events";
@@ -159,6 +160,7 @@ export function FilesShelf({
   onMoved,
   onChanged,
   onCommit,
+  onTerminal,
   onClose,
   width,
   onResize,
@@ -181,6 +183,8 @@ export function FilesShelf({
   onChanged: () => void;
   /** Opens the commit dialog (the git menu's Commit…). */
   onCommit?: () => void;
+  /** Opens a terminal in a folder of the workspace ("" for it), spec_062 TRM-31. */
+  onTerminal?: (folder: string) => void;
   onClose: () => void;
 }) {  // Simple mode: no refresh, collapse, hidden files, git actions or relative paths.
   const advanced = useAdvanced();
@@ -723,6 +727,8 @@ export function FilesShelf({
         { label: t(isFolder(e) ? "desktop.files.new_chat_about_folder" : "desktop.files.new_chat_about"), icon: mdiMessagePlusOutline, onSelect: () => addToContext({ dir, path, fresh: true }) },
       );
     }
+    // A terminal in the folder, or the file's folder (TRM-31).
+    if (onTerminal) items.push({ label: t("desktop.terminal.open_here"), icon: mdiConsole, onSelect: () => onTerminal(folder) });
     items.push("divider", ...clipItems(e ? [e.path] : [], folder));
     if (e && isFolder(e) && [...tree.expanded].some((p) => p.startsWith(e.path + "/"))) {
       items.push({ label: t("desktop.files.collapse_inside"), icon: mdiArrowCollapseUp, onSelect: () => setTree((tr) => ({ ...tr, expanded: new Set([...tr.expanded].filter((p) => !p.startsWith(e.path + "/"))) })) });
