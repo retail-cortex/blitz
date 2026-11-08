@@ -4664,7 +4664,8 @@ message AgentBrowserCommand {
   // The view's ID, the same in every command and reply.
   string browser_id = 1;
   // open, message or close; or page (a web tab) or external (the system's
-  // browser), for a page the user asked to see, with url.
+  // browser), for a page the user asked to see, with url; or file, a
+  // workspace file to open in the editor, with path and line.
   string kind = 2;
   // A DevTools Protocol command, as JSON (message).
   string message = 3;
@@ -4678,6 +4679,10 @@ message AgentBrowserCommand {
   repeated string deny_domains = 7;
   // The page to show, for page and external.
   string url = 8;
+  // The workspace file to open (relative to the workspace), and the line
+  // to put the cursor on (0: the top), for file.
+  string path = 9;
+  int32 line = 10;
 }
 
 // Response message for WorkspaceService.WatchAgentBrowser.

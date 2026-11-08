@@ -47,6 +47,7 @@ var planReadOnlyTools = map[string]bool{
 	"read_mcp_resource":     true,
 	"list_tasks":            true,
 	"list_jobs":             true,
+	"open_file":             true, // shows the user a file, changes nothing
 	"task_output":           true,
 	"activate_skill":        true,
 	"ask_user_question":     true,

@@ -215,6 +215,25 @@ func (w *Workspace) openPage(ctx context.Context, u, where string) error {
 	}
 }
 
+// openFile has the newest window open a workspace file in its editor
+// (tools.FileOpener, spec_060_blitz_tools DRV-31).
+func (w *Workspace) openFile(ctx context.Context, path string, line int) error {
+	h := &w.browsers
+	h.mu.Lock()
+	if len(h.windows) == 0 {
+		h.mu.Unlock()
+		return ErrNoBrowserWindow
+	}
+	win := h.windows[len(h.windows)-1]
+	h.mu.Unlock()
+	select {
+	case win.send <- api.AgentBrowserCommand{Kind: "file", Path: path, Line: line}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // push hands cmd to the window, unless the view or ctx ends first.
 func (r *browserRelay) push(ctx context.Context, cmd api.AgentBrowserCommand) error {
 	// Closed wins: a select of ready cases picks at random.

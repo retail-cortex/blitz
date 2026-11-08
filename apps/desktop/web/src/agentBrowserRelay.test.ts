@@ -56,6 +56,7 @@ function fakeEnds(failOpen = false) {
     },
     showTab: (id) => void log.push(`tab ${id}`),
     openPage: (url, external) => void log.push(`${external ? "external" : "page"} ${url}`),
+    openFile: (path, line) => void log.push(`file ${path}:${line}`),
   };
   return { ends, log, push, emit: (event: string, arg: unknown) => listeners[event]?.(arg), listening: () => Object.keys(listeners).length };
 }
@@ -132,6 +133,19 @@ describe("the agent's browser relay", () => {
     f.push(null);
     await done;
     expect(f.log).toEqual(["page https://github.com/", "external https://example.com/"]);
+  });
+
+  it("opens a workspace file the user asked to see, in the editor (spec_060 DRV-31)", async () => {
+    const f = fakeEnds();
+    const ctl = new AbortController();
+    const done = runRelay(f.ends, ctl.signal, 1);
+    f.push(cmd({ kind: "file", path: "notes/plan.md", line: 12 }));
+    f.push(cmd({ kind: "file", path: "db-info.md" }));
+    await settle();
+    ctl.abort();
+    f.push(null);
+    await done;
+    expect(f.log).toEqual(["file notes/plan.md:12", "file db-info.md:0"]);
   });
 
   it("watches again when the stream ends (a service restart)", async () => {

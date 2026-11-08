@@ -22,7 +22,7 @@
 // browser (AB-10).
 import { workspaces } from "./api";
 import { agentBrowser, canPreview, openURL } from "./desktop";
-import { openWeb } from "./events";
+import { openFile, openWeb } from "./events";
 import type { AgentBrowserCommand } from "./gen/blitz/v1/workspace_pb";
 
 /** What the relay needs of the window and the service (replaced in tests). */
@@ -37,6 +37,8 @@ export interface RelayEnds {
   showTab: (id: string) => void;
   /** Opens a page the user asked to see (AB-10): in a web tab, or the system's browser when external. */
   openPage: (url: string, external: boolean) => unknown;
+  /** Opens a workspace file in the editor, at a line (spec_060 DRV-31). */
+  openFile: (path: string, line: number) => unknown;
 }
 
 /** The ends for workspace dir: the service's stream and the Electron window. */
@@ -50,6 +52,7 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     on: agentBrowser.on,
     showTab,
     openPage: (url, external) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url })),
+    openFile: (path, line) => openFile({ dir, path, line: line || undefined }),
   };
 }
 
@@ -101,6 +104,8 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
             });
           } else if (c.kind === "page" || c.kind === "external") {
             ends.openPage(c.url, c.kind === "external");
+          } else if (c.kind === "file") {
+            ends.openFile(c.path, c.line);
           } else if (c.kind === "close") {
             mine.delete(c.browserId);
             void ends.close(c.browserId).catch(() => undefined);

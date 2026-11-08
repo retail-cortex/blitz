@@ -17,6 +17,8 @@ weight: 1
 
 **Auto mode waits for a proper reviewer.** Without a reviewer model of its own, auto mode used the chat's model to review the agent's actions. A small model on your computer would judge its own, and get it wrong. Blitz now uses **Ask** while an Ollama model does the work, and says why. Set a reviewer model (`[permissions.auto] model`, such as `gemini/gemini-3.8-flash`) to use auto mode with a local model, or switch to a cloud model and auto comes back. [How auto mode works](../guide/safety.md).
 
+**"Open it" opens it.** Ask the agent to show a file it wrote, or any file in your workspace, and it opens in Blitz's editor (Markdown rendered, at the line it names), instead of a browser. [Opening a file for you](../guide/search.md).
+
 ### Fixes
 
 - Auto mode's reviewer denied a new file in `.agents/scratch/` as "outside the workspace". Blitz now tells the reviewer each file's full path and that it's inside the workspace, and a denial that says otherwise goes to you instead.
