@@ -21,11 +21,12 @@ import { config } from "./api";
 import { openURL } from "./desktop";
 import { message } from "./errors";
 import { configChanged, configChangedEvent } from "./events";
-import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ListedModel, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
+import { KeySource, type ConfigChange, type DescribeConfigResponse, type EnterpriseState, type ListedModel, type ListModelsResponse, type ProviderConfig, type SignInStatus } from "./gen/blitz/v1/config_pb";
+import { modelDetail, providerName } from "./ModelMenu";
 import { language, t, tn } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
-import { Button, Chip, Icon, Segmented, useSnackbar } from "@blitz/webui";
+import { Button, Chip, Icon, MultiSelect, Segmented, useSnackbar } from "@blitz/webui";
 import { keyPages, listedProviders, noProviderReady, providerState, type OllamaProbe, type ProviderFacts, type ProviderState } from "./providerStatus";
 import { useAdvanced } from "./state";
 import { showsSignIn } from "./simpleMode";
@@ -36,6 +37,8 @@ import { ApiProviderForm } from "./ApiProviderForm";
 
 /** The providers that take API keys. */
 const keyed3 = ["gemini", "anthropic", "openai"];
+/** The providers that list their models, activated rather than used (spec_061 MOD-40, MOD-42). */
+const menuProviders = ["gemini", "anthropic", "openai", "ollama"];
 const providerNames: Record<string, string> = { gemini: "Gemini", anthropic: "Anthropic", openai: "OpenAI", ollama: "Ollama" };
 /** A provider's name in the list (the api provider's is a description: a custom gateway). */
 const nameOf = (p: string) => (p === "api" ? t("desktop.keys.provider.api") : (providerNames[p] ?? p));
@@ -263,6 +266,10 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   // The gateway's problems show once its form is changed, not on opening it.
   const apiTouched = isAPI && !sameApiForm(choice.api, saved.api);
   const blocked = !!modelCheck.error || apiProblems.length > 0;
+  // A provider that lists its models is saved alone and made active; the
+  // default model is the top's (spec_061 MOD-40, MOD-41). The others (a
+  // gateway, a cloud's deployment) are saved with their model, and used.
+  const listsModels = menuProviders.includes(choice.provider);
   const save = () =>
     dirty &&
     !busy &&
@@ -272,7 +279,8 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
         config.setProvider({
           workspace,
           provider: choice.provider,
-          defaultModel: modelCheck.value,
+          keepDefault: listsModels,
+          defaultModel: listsModels ? "" : modelCheck.value,
           key: choice.method === "api_key" ? choice.key.trim() : "",
           auth: others.length ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
           api: isAPI ? fromApiForm(choice.api) : undefined,
@@ -286,6 +294,21 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   // for it (each provider keeps its own), else its default.
   const use = (p: string) =>
     act(() => config.setProvider({ workspace, provider: p, defaultModel: desc.models[p] ?? "" }), p ? t("desktop.keys.now_using", { provider: nameOf(p) }) : t("desktop.keys.now_global"), true);
+  // Activate makes a provider available; Deactivate takes it back, unless
+  // the default model is its (spec_061 MOD-40). With no list, every one
+  // set up is active, so the first change lists them.
+  const ready = (p: string) => !!facts && providerState(p, facts).ready;
+  const isActive = (p: string) => (desc.activeProviders.length ? desc.activeProviders.includes(p) : ready(p));
+  const defaultProvider = effectiveProvider(desc.provider, workspace);
+  const setActive = (p: string, on: boolean) => {
+    if (!on && p === defaultProvider) {
+      snack(t("desktop.keys.default_is_theirs", { provider: nameOf(p) }), { error: true });
+      return;
+    }
+    const base = desc.activeProviders.length ? desc.activeProviders : listedProviders.filter((x) => ready(x) && menuProviders.includes(x));
+    const next = on ? [...new Set([...base, p])] : base.filter((x) => x !== p);
+    void act(() => config.setConfigValue({ workspace, key: "llm.providers", value: next.join(",") }), t(on ? "desktop.keys.activated" : "desktop.keys.deactivated", { provider: nameOf(p) }));
+  };
   const onEnter = (e: KeyboardEvent) => e.key === "Enter" && save();
   const set = (field: keyof Choice) => (e: { target: { value: string } }) => setChoice({ ...choice, [field]: e.target.value });
   const text = (field: "projectId" | "location" | "profile", label: string, placeholder: string) => (
@@ -303,6 +326,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <p className="t-body-sm muted">
         <Icon path={mdiLockOutline} size="sm" /> {t(workspace ? "desktop.keys.intro_workspace" : "desktop.keys.intro", { store: desc.secretStore })}
       </p>
+      <DefaultModel workspace={workspace} desc={desc} busy={busy} act={act} />
       <div className="list provider-list" role="radiogroup" aria-label={t("desktop.keys.provider")}>
         {workspace && (
           <ProviderRow
@@ -321,10 +345,12 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             name={nameOf(p)}
             state={facts ? providerState(p, facts) : { key: "checking", tone: "checking", ready: false }}
             selected={choice.provider === p}
-            inUse={saved.provider === p}
+            inUse={menuProviders.includes(p) ? isActive(p) : saved.provider === p}
+            active={menuProviders.includes(p)}
             busy={busy}
             onSelect={() => pick(p)}
-            onUse={() => use(p)}
+            onUse={() => (menuProviders.includes(p) ? setActive(p, true) : use(p))}
+            onDeactivate={menuProviders.includes(p) ? () => setActive(p, false) : undefined}
             onSetUp={(method) => pick(p, method)}
           />
         ))}
@@ -338,18 +364,22 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             </Button>
           )}
         </div>
-        <label className="field single">
-          <span className="t-label">{t("desktop.keys.default_model")}</span>
-          <ModelInput
-            value={choice.model}
-            onChange={(model) => setChoice((c) => ({ ...c, model }))}
-            catalog={catalog}
-            provider={choice.provider || desc.provider}
-            placeholder={t(workspace && !choice.provider ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
-            disabled={busy}
-            onKeyDown={onEnter}
-          />
-        </label>
+        {listsModels ? (
+          <MenuModels key={choice.provider} workspace={workspace} provider={choice.provider} desc={desc} busy={busy} act={act} />
+        ) : (
+          <label className="field single">
+            <span className="t-label">{t("desktop.keys.default_model")}</span>
+            <ModelInput
+              value={choice.model}
+              onChange={(model) => setChoice((c) => ({ ...c, model }))}
+              catalog={catalog}
+              provider={choice.provider || desc.provider}
+              placeholder={t(workspace && !choice.provider ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
+              disabled={busy}
+              onKeyDown={onEnter}
+            />
+          </label>
+        )}
         {keyed && others.length > 0 && signIn && (
           <div className="field">
             <span className="t-label">{t("desktop.keys.sign_in")}</span>
@@ -413,7 +443,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             {t("desktop.file.revert")}
           </Button>
           <Button small variant="filled" disabled={!dirty || busy || blocked} onClick={save}>
-            {t(choice.provider !== saved.provider ? "desktop.keys.save_use" : "desktop.keys.save")}
+            {t(choice.provider !== saved.provider && !listsModels ? "desktop.keys.save_use" : "desktop.keys.save")}
           </Button>
         </div>
       </section>
@@ -470,18 +500,24 @@ function ProviderRow({
   state,
   selected,
   inUse,
+  active,
   busy,
   onSelect,
   onUse,
+  onDeactivate,
   onSetUp,
 }: {
   name: string;
   state: ProviderState;
   selected: boolean;
+  /** In use, or for a provider that lists its models (active), active. */
   inUse: boolean;
+  /** Its buttons say Activate and Active, not Use and In use (spec_061 MOD-40). */
+  active?: boolean;
   busy: boolean;
   onSelect: () => void;
   onUse: () => void;
+  onDeactivate?: () => void;
   onSetUp?: (method: string) => void;
 }) {
   // The one in use but not set up is what to fix first.
@@ -497,12 +533,19 @@ function ProviderRow({
       </button>
       <span className="trailing">
         {inUse ? (
-          <Chip className="static" selected icon={mdiCheckCircleOutline}>
-            {t("desktop.keys.in_use")}
-          </Chip>
+          <>
+            <Chip className="static" selected icon={mdiCheckCircleOutline}>
+              {t(active ? "desktop.keys.active" : "desktop.keys.in_use")}
+            </Chip>
+            {onDeactivate && (
+              <Button small variant="text" disabled={busy} onClick={onDeactivate}>
+                {t("desktop.keys.deactivate")}
+              </Button>
+            )}
+          </>
         ) : state.ready ? (
           <Button small variant="tonal" disabled={busy} onClick={onUse}>
-            {t("desktop.keys.use")}
+            {t(active ? "desktop.keys.activate" : "desktop.keys.use")}
           </Button>
         ) : state.found && onSetUp ? (
           <Button small disabled={busy} onClick={() => onSetUp(state.found!)}>
@@ -687,4 +730,78 @@ function modelFacts(m: ListedModel): string {
   if (c?.context) parts.push(t("desktop.org.can.context", { k: Math.round(c.context / 1000).toLocaleString(language()) }));
   if (m.hasPrice) parts.push(t("desktop.org.model_price", { input: m.inputPerMtok.toFixed(2), output: m.outputPerMtok.toFixed(2) }));
   return parts.join(" · ");
+}
+
+/**
+ * The default model (spec_061 MOD-41): one choice of every active
+ * provider's models, by provider, which sets the provider and the model
+ * together. A model chosen elsewhere that isn't listed stays shown.
+ */
+function DefaultModel({ workspace, desc, busy, act }: { workspace: string; desc: DescribeConfigResponse; busy: boolean; act: Act }) {
+  const [list, setList] = useState<ListModelsResponse | null>(null);
+  useEffect(() => {
+    config.listModels({ workspace, chatOnly: true, menu: true }).then(setList, () => setList(null));
+  }, [workspace, desc]);
+  const provider = effectiveProvider(desc.provider, workspace);
+  // The model as provider/name; "" when the provider's own default is used.
+  const name = desc.defaultModel || desc.models[provider] || "";
+  const current = name.includes("/") || !name ? name : `${provider}/${name}`;
+  const refs = list?.providers.flatMap((p) => p.models.map((m) => `${p.provider}/${m.id}`)) ?? [];
+  return (
+    <label className="field single default-model">
+      <span className="t-label">{t("desktop.keys.default_model")}</span>
+      <select
+        className="select"
+        value={current}
+        disabled={busy || !list}
+        onChange={(e) => {
+          const [p, ...rest] = e.target.value.split("/");
+          void act(() => config.setProvider({ workspace, provider: p, defaultModel: rest.join("/") }), t("desktop.keys.default_set", { model: e.target.value }), true);
+        }}
+      >
+        {!refs.includes(current) && (
+          <option value={current}>{current || (provider ? `${providerName(provider)}: ${t("desktop.keys.model_placeholder")}` : t("desktop.keys.use_global"))}</option>
+        )}
+        {list?.providers.map((p) => (
+          <optgroup key={p.provider} label={providerName(p.provider)}>
+            {p.models.map((m) => (
+              <option key={m.id} value={`${p.provider}/${m.id}`}>
+                {m.displayName || m.id}
+                {modelDetail(m) ? ` · ${modelDetail(m)}` : ""}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <small className="muted">{t("desktop.keys.default_model_hint")}</small>
+    </label>
+  );
+}
+
+/**
+ * A provider's models in the menus (spec_061 MOD-42): several of all its
+ * chat models; none chosen, its latest.
+ */
+function MenuModels({ workspace, provider, desc, busy, act }: { workspace: string; provider: string; desc: DescribeConfigResponse; busy: boolean; act: Act }) {
+  const [models, setModels] = useState<ListedModel[]>([]);
+  useEffect(() => {
+    config.listModels({ workspace, providers: [provider], chatOnly: true }).then(
+      (r) => setModels(r.providers.find((p) => p.provider === provider)?.models ?? []),
+      () => setModels([]),
+    );
+  }, [workspace, provider]);
+  const chosen = desc.menuModels.find((m) => m.provider === provider)?.models ?? [];
+  return (
+    <div className="field single">
+      <span className="t-label">{t("desktop.keys.menu_models")}</span>
+      <MultiSelect
+        label={t("desktop.keys.menu_models")}
+        options={models.map((m) => ({ value: m.id, detail: modelDetail(m) || undefined }))}
+        chosen={chosen}
+        none={t("desktop.keys.menu_models_latest")}
+        onChange={(v) => !busy && void act(() => config.setConfigValue({ workspace, key: `llm.${provider}.models`, value: v.join(",") }))}
+      />
+      <small className="muted">{t("desktop.keys.menu_models_hint")}</small>
+    </div>
+  );
 }

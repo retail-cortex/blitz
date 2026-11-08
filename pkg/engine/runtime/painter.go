@@ -28,6 +28,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"google.golang.org/genai"
 )
 
@@ -45,8 +46,18 @@ func NewPainter(ctx context.Context, cfg *config.Config) (tools.Painter, error) 
 	if provider == "enterprise" {
 		return newOrgPainter(ctx, cfg, name)
 	}
+	if provider == "openai" { // spec_058_pictures PIC-04
+		if m, ok := images.Lookup(name); !ok || m.Kind != images.KindOpenAI {
+			return nil, fmt.Errorf("%s isn't one of OpenAI's image models: set [images] model to one, like openai/gpt-image-2", ref)
+		}
+		d, err := newOpenAIDrawer(ctx, cfg, name)
+		if err != nil {
+			return nil, err
+		}
+		return &openAIPainter{d}, nil
+	}
 	if provider != "gemini" {
-		return nil, fmt.Errorf("%s can't draw pictures: set [images] model to a Gemini image model, like gemini/gemini-3.1-flash-image, or one of your organization's", ref)
+		return nil, fmt.Errorf("%s can't draw pictures: set [images] model to a Gemini or OpenAI image model, like gemini/gemini-3.1-flash-image or openai/gpt-image-2, or one of your organization's", ref)
 	}
 	cc, err := geminiClientConfig(ctx, cfg.LLM.Gemini, policyFrom(cfg.LLM))
 	if err != nil {

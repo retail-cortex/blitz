@@ -384,6 +384,7 @@ func (w *Workspace) ListModels(ctx context.Context, refresh bool) (api.ModelList
 	cfg := w.settings()
 	listed := runtime.ChatModels(listModels(ctx, cfg))
 	out := api.ModelList{DefaultProvider: strings.ToLower(cfg.LLM.Provider), NotSetUp: runtime.NotSetUp(cfg, listed)}
+	listed = runtime.MenuModels(cfg, listed, cfg.ModelName()) // what the menus list (MOD-44)
 	if cfg.Enterprise.URL != "" {
 		out.DefaultProvider = "enterprise"
 	}

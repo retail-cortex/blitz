@@ -81,6 +81,11 @@ func TestParseTrailingTextToolCalls(t *testing.T) {
 		{"beside quoted code", "The config:\n```toml\nname = \"x\"\n```\n```json\n{\"name\":\"read_file\",\"arguments\":{}}\n```", "", nil},
 		{"not offered", "Running it.\n```json\n{\"name\":\"run_shell_command\",\"arguments\":{\"command\":\"rm -rf /\"}}\n```", "", nil},
 		{"a fence that isn't a call", "Here:\n```go\nfunc main() {}\n```", "", nil},
+		// A plan of calls, one a line, written before any result: the first
+		// runs, and the model is asked again with its result.
+		{"one a line", "{\"name\": \"read_file\", \"arguments\": {\"path\": \"recipes.db\"}}\n{\"name\": \"recall_session\", \"arguments\": {}}\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"b\"}}", "", []string{"read_file"}},
+		{"one a line after prose", "Let me look.\n{\"name\": \"recall_session\", \"arguments\": {}}\nIt said: done.", "Let me look.", []string{"recall_session"}},
+		{"a line that isn't offered", "{\"name\": \"run_shell_command\", \"arguments\": {\"command\": \"x\"}}\nok", "", nil},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c := textContent(tt.text)
@@ -325,4 +330,28 @@ func TestSubagentDepthLimitPropagatesThroughTools(t *testing.T) {
 		}
 	}
 	assert.True(t, sawDepthErr, "expected a depth-limit error to be reported to the model")
+}
+
+// A local model is offered the core tools, the connections' and Blitz's
+// own; the request it was given isn't changed (spec_061_models MOD-50).
+func TestWithCoreTools(t *testing.T) {
+	decl := func(names ...string) *genai.Tool {
+		t := &genai.Tool{}
+		for _, n := range names {
+			t.FunctionDeclarations = append(t.FunctionDeclarations, &genai.FunctionDeclaration{Name: n})
+		}
+		return t
+	}
+	search := &genai.Tool{GoogleSearch: &genai.GoogleSearch{}}
+	req := &model.LLMRequest{
+		Config: &genai.GenerateContentConfig{Tools: []*genai.Tool{decl("read_file", "export_docx", "db__recipes_list_tables", "blitz"), decl("invoke_agent"), search}},
+		Tools:  map[string]any{"read_file": 1, "export_docx": 2, "db__recipes_list_tables": 3, "blitz": 4, "invoke_agent": 5},
+	}
+	got := withCoreTools(req)
+	assert.Equal(t, map[string]bool{"read_file": true, "db__recipes_list_tables": true, "blitz": true}, offeredTools(got))
+	require.Len(t, got.Config.Tools, 2, "the provider's own search is kept; a tool left with nothing goes")
+	assert.Same(t, search, got.Config.Tools[1])
+	assert.Len(t, req.Config.Tools[0].FunctionDeclarations, 4, "the request isn't changed")
+	assert.Len(t, req.Tools, 5)
+	assert.Nil(t, withCoreTools(nil))
 }

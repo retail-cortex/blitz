@@ -399,7 +399,7 @@ func TestListModelsOverTheAPI(t *testing.T) {
 
 	// A failed provider's listing is kept for less; a settings change drops it.
 	s.models.mu.Lock()
-	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID["\x00\x00false"].expires, 5*time.Second)
+	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID["\x00\x00falsefalse"].expires, 5*time.Second)
 	s.models.mu.Unlock()
 	failing = false
 	_, err = cc.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-x"}))

@@ -148,7 +148,7 @@ func TestNewPictureMaker(t *testing.T) {
 	cfg := &config.Config{}
 	_, err := NewPictureMaker(context.Background(), cfg, "gemini/gemini-4-argon")
 	assert.ErrorContains(t, err, "isn't an image model")
-	_, err = NewPictureMaker(context.Background(), cfg, "openai/gpt-image-1")
+	_, err = NewPictureMaker(context.Background(), cfg, "anthropic/claude-opus-5-5")
 	assert.ErrorContains(t, err, "can't make pictures")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")

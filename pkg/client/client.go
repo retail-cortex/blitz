@@ -1097,7 +1097,7 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 // ListModels is every chat model of every provider the workspace sets up,
 // as the service lists them (spec_061_models MOD-01).
 func (r *Remote) ListModels(ctx context.Context, refresh bool) (api.ModelList, error) {
-	res, err := r.config.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: r.dir, Refresh: refresh, ChatOnly: true}))
+	res, err := r.config.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: r.dir, Refresh: refresh, ChatOnly: true, Menu: true}))
 	if err != nil {
 		return api.ModelList{}, fromAPI(err)
 	}

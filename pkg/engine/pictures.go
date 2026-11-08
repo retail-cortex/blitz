@@ -223,7 +223,7 @@ func (w *Workspace) PictureModels(ctx context.Context) []PictureModel {
 		add(ref, true)
 	}
 	for _, m := range images.Models() {
-		add("gemini/"+m.ID, len(out) == 0)
+		add(m.ProviderOf()+"/"+m.ID, len(out) == 0)
 	}
 	return out
 }
@@ -449,7 +449,7 @@ func (w *Workspace) MakePicture(ctx context.Context, r PictureRequest, estimate 
 		}
 		turn.Answer = withoutPictureData(ans.Content)
 		switch {
-		case info.Kind == images.KindImagen:
+		case info.PricedPerPicture():
 			turn.CostUSD = info.PerPicture * float64(len(ans.Pictures))
 		case ans.Usage != nil:
 			turn.CostUSD = w.engine.EstimateUsage(maker.Model(), ans.Usage).CostUSD
@@ -627,8 +627,8 @@ func withoutPictureData(c *genai.Content) *genai.Content {
 // pictures' output tokens at the model's prices.
 func (w *Workspace) estimatePicture(m runtime.PictureMaker, call runtime.PictureCall) PictureEstimate {
 	info := m.Info()
-	if info.Kind == images.KindImagen {
-		return PictureEstimate{CostUSD: info.PerPicture * float64(call.Count), Priced: info.PerPicture > 0}
+	if info.PricedPerPicture() {
+		return PictureEstimate{CostUSD: info.PerPicture * float64(max(call.Count, 1)), Priced: info.PerPicture > 0}
 	}
 	in := images.EstimateTokens(call.Prompt) + referenceTokens*len(call.References)
 	for _, c := range call.History {

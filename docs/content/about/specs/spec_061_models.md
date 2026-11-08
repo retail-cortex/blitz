@@ -7,8 +7,8 @@ weight: 61
 
 | | |
 |---|---|
-| Status | **Built** (2026-11-08, the owner's request: "This type of control is missing and is fundamental. The UI should support many providers and providers have many models."). Decisions in §6 taken as recommended. |
-| Source | The list in `pkg/engine/runtime/listmodels.go` (`ListModels`, `ConfiguredProviders`, `ChatModel`, `ChatModels`, `NotSetUp`, `ollamaAnswers`); `ConfigService.ListModels` with `chat_only` and `refresh` (`proto/blitz/v1/config.proto`, `pkg/service/server/models.go`, its 10-minute cache); the backend's `ListModels` (`pkg/engine/models.go`, its own cache; `pkg/client/client.go`); the status bar's agent and model buttons in `apps/desktop/web/src/StatusBar.tsx` and `apps/desktop/web/src/ModelMenu.tsx`, the menu's filter in `pkg/webui/src/controls.tsx` (`Menu` `searchAt`, `filterMenu`); the CLI's picker in `apps/cli/internal/tui/pickers.go` |
+| Status | **Built** §1–§4 (2026-11-08); §4a–§4b added 2026-11-08 (the owner's request: "This type of control is missing and is fundamental. The UI should support many providers and providers have many models."). Decisions in §6 taken as recommended. |
+| Source | The list in `pkg/engine/runtime/listmodels.go` (`ListModels`, `ConfiguredProviders`, `ChatModel`, `ChatModels`, `NotSetUp`, `ollamaAnswers`); `ConfigService.ListModels` with `chat_only` and `refresh` (`proto/blitz/v1/config.proto`, `pkg/service/server/models.go`, its 10-minute cache); the backend's `ListModels` (`pkg/engine/models.go`, its own cache; `pkg/client/client.go`); the status bar's agent and model buttons in `apps/desktop/web/src/StatusBar.tsx` and `apps/desktop/web/src/ModelMenu.tsx`, the menu's filter in `pkg/webui/src/controls.tsx` (`Menu` `searchAt`, `filterMenu`); the CLI's picker in `apps/cli/internal/tui/pickers.go`. §4a: `LatestModels`, `MenuModels` and the `menu` flag; `[llm] providers` and `[llm.<provider>] models` (`pkg/config/config.go`, settable through `SetValue`), `ProviderChoice.KeepDefault`, `DescribeConfigResponse.active_providers` and `menu_models`; the page's **Activate**, **Default model** and **Models in the menu** in `apps/desktop/web/src/ProviderSettings.tsx`. §4b: `withCoreTools` and `firstLineCall` in `pkg/engine/runtime/model_factory.go` |
 | Depends on | [spec_056_conversation_adapters](spec_056_conversation_adapters.md) (CA-100 a conversation's own model, what a switch costs), [spec_053_enterprise](spec_053_enterprise.md) (EN-20 the organization's models, EN-35 own providers), [spec_005_approvals](spec_005_approvals.md) (APR-14c auto mode with a local model) |
 
 ## 1. Purpose
@@ -36,6 +36,21 @@ Blitz can run on many providers, and each provider has many models, but picking 
 
 - **MOD-20** `/model` typed with a name switches as today. `/model` alone on a terminal opens the picker with MOD-01's models, grouped by provider (the provider as a dim heading), the current one first and marked, the detail as in MOD-12; typing filters. `/model --refresh` asks the providers again. Without a terminal, `/model` prints the current model and the list (`blitz models` prints the same list).
 - **MOD-21** `blitz models [provider…]` lists the same models, chat models only, with `--all` for everything the provider lists.
+
+## 4a. Providers and the models they show (2026-11-08)
+
+The owner, testing several providers at once: "the major providers that are configured should only list their latest models. The providers page doesn't support multiple models yet (and it should). More than one provider can be active, it should have a default model selection. Activate should simply make the provider available."
+
+- **MOD-40** **Activate makes a provider available.** Settings › Providers' rows say **Activate** for a provider that's set up but not in use, and **Active** (with **Deactivate**) for one that is: `[llm] providers` lists the active ones, and only their models are listed (MOD-01) and chosen. With no list, every provider set up is active, as before. Activating a provider never changes the default model.
+- **MOD-41** **One default model.** The top of Settings › Providers has **Default model**: a choice of every active provider's models (MOD-44's list, by provider), which sets `[llm] provider` and `blitz.default_model` together. It's the model new chats start on; a conversation's own model (CA-100) still wins.
+- **MOD-42** **A provider's models.** Each provider's form has **Models in the menu**: a choice of several from all of its chat models (MOD-02), kept as `[llm.<provider>] models`. Those are what the status bar's model menu and `/model` list for it. None chosen: its latest models (MOD-43).
+- **MOD-43** **The latest models.** For Gemini, Anthropic and OpenAI, a provider's latest models are, of each family (the name without its version: gemini-#-flash, claude-opus-#, gpt-#-sol-mini), its newest version, of the families whose newest version is within one major version of the provider's newest; a preview, experimental or dated snapshot of a family that has a stable version is left out. Ollama's (what you pulled), the organization's and the gateways' are all listed.
+- **MOD-44** **What the menus list.** The model menu and `/model` list each active provider's chosen models (MOD-42), else its latest (MOD-43), and always the model in use. Settings' choices (MOD-41, MOD-42) list every chat model.
+
+## 4b. Local models (2026-11-08)
+
+- **MOD-50** **A local model gets the core tools.** Given all of the blitz agent's ninety or so tools (13,400 prompt tokens), qwen2.5-coder 7B on Ollama wrote its calls as text, one a line, or answered without them, and Ollama aborted a reply that repeated itself ("token repeat limit reached"). An Ollama model is offered only the core tools (files, the shell, search, the web, asking, opening, the connections' `db__` tools and `blitz`) unless `[llm.ollama] all_tools = true` (`withCoreTools` in `pkg/engine/runtime/model_factory.go`).
+- **MOD-51** **Calls written one a line run.** A reply that is calls written one a line, a plan written before any result, runs its first call (with the words before it), and the model is asked again with its result (`firstLineCall`); a reply that quotes code is left as it is.
 
 ## 5. Tests
 

@@ -418,6 +418,11 @@ message DescribeConfigResponse {
   // is anthropic's) as this scope sets it, by provider: what the form shows
   // for a provider, and what Use keeps.
   map<string, string> models = 7;
+  // The active providers as this scope lists them (none: every one set
+  // up), and each provider's models for the menus (spec_061_models
+  // MOD-40, MOD-42).
+  repeated string active_providers = 8;
+  repeated ProviderModelList menu_models = 9;
 }
 
 // After a change: the file written, and why the scope's workspace (for a
@@ -496,6 +501,9 @@ message SetProviderRequest {
   // The api provider's settings, with provider api only (unset leaves them
   // as they are); its headers become the ones given.
   ApiProviderSettings api = 6;
+  // Save the provider's sign-in alone, and make it active: the provider
+  // and default model in use stay as they are (spec_061_models MOD-40).
+  bool keep_default = 7;
 }
 
 // Response message for ConfigService.SetProvider.
@@ -582,6 +590,9 @@ message ListModelsRequest {
   // Only the models that hold a conversation, each provider's newest
   // family first (MOD-01, MOD-02); else everything the providers list.
   bool chat_only = 4;
+  // With chat_only, what the model menus list: each provider's chosen
+  // models, else its latest, and the model in use (MOD-44).
+  bool menu = 5;
 }
 
 // Request message for ConfigService.CheckApiKey.
@@ -1997,4 +2008,10 @@ message SetOrgNoticesRequest {
 // Response message for ConfigService.SetOrgNotices.
 message SetOrgNoticesResponse {
   OrgNotices notices = 1;
+}
+
+// A provider's models for the menus (spec_061_models MOD-42).
+message ProviderModelList {
+  string provider = 1;
+  repeated string models = 2;
 }

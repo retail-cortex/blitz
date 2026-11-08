@@ -136,3 +136,74 @@ func TestListModelsFindsOllama(t *testing.T) {
 func countOf(list []string, v string) int {
 	return len(slices.DeleteFunc(slices.Clone(list), func(s string) bool { return s != v }))
 }
+
+// A major provider's latest models: each family's newest, stable over a
+// preview or snapshot, of the families within one major version of the
+// newest (spec_061_models MOD-43).
+func TestLatestModels(t *testing.T) {
+	ids := func(ms []ListedModel) []string {
+		var out []string
+		for _, m := range ms {
+			out = append(out, m.ID)
+		}
+		return out
+	}
+	listed := func(ids ...string) []ListedModel {
+		var out []ListedModel
+		for _, id := range ids {
+			out = append(out, ListedModel{ID: id})
+		}
+		return out
+	}
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{name: "gemini", in: []string{"gemini-4-carbon", "gemini-4-argon", "gemini-3.8-pro", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash-preview-05-20", "gemini-2.0-flash"},
+			want: []string{"gemini-4-carbon", "gemini-4-argon", "gemini-3.8-pro", "gemini-3.8-flash", "gemini-3.5-flash-lite"}},
+		{name: "a preview and its stable model", in: []string{"gemini-4-carbon-preview-09-2026", "gemini-4-carbon", "gemini-4-argon-exp"}, want: []string{"gemini-4-carbon", "gemini-4-argon-exp"}},
+		{name: "claude", in: []string{"claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022", "claude-opus-4-8"},
+			want: []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"}},
+		{name: "openai", in: []string{"gpt-6.1-sol", "gpt-6.1-sol-mini", "gpt-6-sol", "gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-2024-08-06", "o3", "chatgpt-4o-latest"},
+			want: []string{"gpt-6.1-sol", "gpt-6.1-sol-mini", "gpt-5", "gpt-5-mini"}},
+		{name: "names without versions", in: []string{"auto", "gemini-4-carbon"}, want: []string{"auto", "gemini-4-carbon"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) { assert.Equal(t, c.want, ids(LatestModels(listed(c.in...)))) })
+	}
+}
+
+// The menus list each provider's chosen models, else the latest for the
+// major ones and all for the rest, and the model in use (MOD-44).
+func TestMenuModels(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Provider = "gemini"
+	cfg.LLM.OpenAI.Models = []string{"gpt-5-mini", "gpt-retired"}
+	pms := []ProviderModels{
+		{Provider: "gemini", Models: []ListedModel{{ID: "gemini-4-carbon"}, {ID: "gemini-3.8-flash"}, {ID: "gemini-2.0-flash"}}},
+		{Provider: "openai", Models: []ListedModel{{ID: "gpt-6.1-sol"}, {ID: "gpt-5-mini", Price: &config.ModelPrice{InputPerMTok: 1}}}},
+		{Provider: "ollama", Models: []ListedModel{{ID: "qwen3:1.7b"}, {ID: "llama2:7b"}}},
+	}
+	got := MenuModels(cfg, pms, "gemini-2.0-flash")
+	ids := func(pm ProviderModels) (out []string) {
+		for _, m := range pm.Models {
+			out = append(out, m.ID)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"gemini-4-carbon", "gemini-3.8-flash", "gemini-2.0-flash"}, ids(got[0]), "the latest, and the one in use")
+	assert.Equal(t, []string{"gpt-5-mini", "gpt-retired"}, ids(got[1]), "the chosen ones, in their order")
+	assert.NotNil(t, got[1].Models[0].Price, "a chosen model keeps what the provider says of it")
+	assert.Equal(t, []string{"qwen3:1.7b", "llama2:7b"}, ids(got[2]), "Ollama's, all")
+}
+
+// Only the active providers are listed; with no list, every one set up
+// (MOD-40).
+func TestActiveProviders(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey = "g", "o", "a"
+	assert.Equal(t, []string{"gemini", "anthropic", "openai"}, ConfiguredProviders(cfg))
+	cfg.LLM.Providers = []string{"openai", "ollama"}
+	assert.Equal(t, []string{"openai"}, ConfiguredProviders(cfg), "active and set up")
+}

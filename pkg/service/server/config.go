@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,7 +80,10 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 	if err != nil {
 		return nil, invalid(err)
 	}
-	res := &pb.DescribeConfigResponse{Path: info.Path, Provider: info.Provider, DefaultModel: info.DefaultModel, SecretStore: info.SecretStore, Models: info.Models}
+	res := &pb.DescribeConfigResponse{Path: info.Path, Provider: info.Provider, DefaultModel: info.DefaultModel, SecretStore: info.SecretStore, Models: info.Models, ActiveProviders: info.Active}
+	for _, p := range slices.Sorted(maps.Keys(info.MenuModels)) {
+		res.MenuModels = append(res.MenuModels, &pb.ProviderModelList{Provider: p, Models: info.MenuModels[p]})
+	}
 	for _, p := range info.Providers {
 		res.Providers = append(res.Providers, &pb.ProviderConfig{
 			Name: p.Name, KeySource: keySources[p.KeySource], KeyMissing: p.KeyMissing, BaseUrl: p.BaseURL, Model: p.Model,
@@ -204,7 +208,7 @@ func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequ
 	if err != nil {
 		return nil, err
 	}
-	choice := config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key}
+	choice := config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key, KeepDefault: r.Msg.KeepDefault}
 	if a := r.Msg.Auth; a != nil {
 		choice.Auth = &config.ProviderAuth{Method: a.Method, ProjectID: a.ProjectId, Location: a.Location, Profile: a.Profile}
 	}
@@ -214,6 +218,13 @@ func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequ
 	path, err := config.SetProvider(h.s.configDir, dir, choice)
 	if err != nil {
 		return nil, invalid(err)
+	}
+	if choice.KeepDefault { // set up is active, where the scope lists the active ones (MOD-40)
+		if info, err := config.Describe(h.s.configDir, dir); err == nil && len(info.Active) > 0 && !slices.Contains(info.Active, choice.Provider) {
+			if path, err = config.SetValue(h.s.configDir, dir, "llm.providers", strings.Join(append(info.Active, choice.Provider), ",")); err != nil {
+				return nil, invalid(err)
+			}
+		}
 	}
 	return ok(&pb.SetProviderResponse{Change: h.changed(ctx, dir, path)})
 }

@@ -378,7 +378,7 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
                 <Field label={t("desktop.pictures.model")} supporting={model?.assumed ? t("desktop.pictures.assumed") : model ? modelPrice(model, settings.size) : undefined}>
                   {(id) => (
                     <select id={id} className="select" value={settings.model} onChange={(e) => chooseModel(e.target.value)}>
-                      {(["gemini", "imagen"] as const).map((kind) => {
+                      {(["gemini", "imagen", "openai"] as const).map((kind) => {
                         const of = models.filter((m) => m.kind === kind);
                         return of.length ? (
                           <optgroup key={kind} label={t(`desktop.pictures.kind.${kind}`)}>
@@ -740,7 +740,7 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
 
 /** A model's price, as the model field says it (PIC-21). */
 function modelPrice(m: PictureModel, size: string): string {
-  if (m.kind === "imagen") return m.perPicture > 0 ? t("desktop.pictures.price_each", { cost: cost(m.perPicture) }) : "";
+  if (m.kind === "imagen" || m.kind === "openai") return m.perPicture > 0 ? t("desktop.pictures.price_each", { cost: cost(m.perPicture) }) : "";
   const tokens = m.sizeTokens[size] ?? m.sizeTokens["1K"] ?? m.sizeTokens[""] ?? 0;
   return m.outputPerMtok > 0 && tokens > 0 ? t("desktop.pictures.price_about", { cost: cost((tokens * m.outputPerMtok) / 1e6) }) : "";
 }

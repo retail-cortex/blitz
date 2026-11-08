@@ -112,7 +112,8 @@ func TestNewPainter(t *testing.T) {
 			c.Images.Model = "gemini/gemini-3.1-flash-image"
 			c.LLM.Gemini.APIKey = "k"
 		}, "gemini/gemini-3.1-flash-image", ""},
-		{"a provider that can't draw", func(c *config.Config) { c.Images.Model = "openai/gpt-image-1" }, "", "can't draw pictures"},
+		{"a provider that can't draw", func(c *config.Config) { c.Images.Model = "anthropic/claude-opus-5-5" }, "", "can't draw pictures"},
+		{"OpenAI without its key", func(c *config.Config) { c.Images.Model = "openai/gpt-image-1" }, "", "need an OpenAI API key"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

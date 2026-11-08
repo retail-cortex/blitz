@@ -99,7 +99,7 @@ export function ModelMenu({ dir, model, provider, sessionId }: { dir: string; mo
   const current = model.includes("/") || !provider ? model : `${provider}/${model}`;
   const load = (refresh = false) => {
     if (refresh) setList(null);
-    config.listModels({ workspace: dir, chatOnly: true, refresh }).then(setList, (e) => snack(message(e), { error: true }));
+    config.listModels({ workspace: dir, chatOnly: true, menu: true, refresh }).then(setList, (e) => snack(message(e), { error: true }));
     workspaces.listAgents({ workspace: dir }).then(
       (r) => setAgents(r.agents),
       () => {},

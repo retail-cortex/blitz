@@ -63,7 +63,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if err != nil {
 		return nil, err
 	}
-	key := dir + "\x00" + strings.Join(r.Msg.Providers, ",") + "\x00" + strconv.FormatBool(r.Msg.ChatOnly)
+	key := dir + "\x00" + strings.Join(r.Msg.Providers, ",") + "\x00" + strconv.FormatBool(r.Msg.ChatOnly) + strconv.FormatBool(r.Msg.Menu)
 	c := &h.s.models
 	c.mu.Lock()
 	if l, kept := c.byID[key]; kept && !r.Msg.Refresh && time.Now().Before(l.expires) {
@@ -91,6 +91,9 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if r.Msg.ChatOnly {
 		listed = runtime.ChatModels(listed)
 		res.NotSetUp = runtime.NotSetUp(cfg, listed)
+		if r.Msg.Menu {
+			listed = runtime.MenuModels(cfg, listed, cfg.ModelName())
+		}
 	}
 	for _, pm := range listed {
 		p := &pb.ProviderModels{Provider: pm.Provider, Note: pm.Note}

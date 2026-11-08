@@ -27,7 +27,14 @@ const (
 	KindGemini = "gemini"
 	// KindImagen makes 1 to 4 pictures from text alone (generateImages).
 	KindImagen = "imagen"
+	// KindOpenAI is an OpenAI image model: 1 to 4 pictures a request,
+	// from text (images/generations) or starting from references
+	// (images/edits), priced per picture (spec_058_pictures PIC-04).
+	KindOpenAI = "openai"
 )
+
+// OpenAIRatios are the shapes an OpenAI image model makes, and their sizes.
+var OpenAIRatios = []string{"1:1", "3:2", "2:3"}
 
 // Reference roles (PIC-23).
 const (
@@ -60,6 +67,8 @@ type Model struct {
 	ID   string
 	Name string
 	Kind string
+	// Provider is whose credentials make it ("": gemini).
+	Provider string
 	// MaxReferences is the most references in all; MaxCharacters and
 	// MaxObjects the most of each role (0: no cap of their own).
 	MaxReferences int
@@ -115,6 +124,33 @@ var catalog = []Model{
 		NegativePrompt: true, People: true, Seed: true, Enhance: true, Formats: []string{"image/png", "image/jpeg"}, PerPicture: 0.03},
 	{ID: "imagen-3.0-fast-generate-001", Name: "Imagen 3 Fast", Kind: KindImagen, MaxPictures: 4, Ratios: ImagenRatios,
 		NegativePrompt: true, People: true, Seed: true, Formats: []string{"image/png", "image/jpeg"}, PerPicture: 0.02},
+	// OpenAI's (2026-11-08, the owner: "image generation should be supported
+	// from Open AI"): their names from the SDK; their prices aren't in its
+	// catalog yet, so each is the medium-quality square's, marked Assumed.
+	openAIModel("gpt-image-2.5-sunburst", "GPT Image 2.5 Sunburst"),
+	openAIModel("gpt-image-2.5-flare", "GPT Image 2.5 Flare"),
+	openAIModel("gpt-image-2", "GPT Image 2"),
+	openAIModel("gpt-image-1.5", "GPT Image 1.5"),
+	openAIModel("gpt-image-1", "GPT Image 1"),
+}
+
+// openAIModel is an OpenAI image model's entry: its own references (up to
+// 16, for an edit), up to 4 pictures, three shapes, priced per picture.
+func openAIModel(id, name string) Model {
+	return Model{ID: id, Name: name, Kind: KindOpenAI, Provider: "openai", MaxReferences: 16, MaxPictures: 4, Ratios: OpenAIRatios,
+		Formats: []string{"image/png", "image/jpeg", "image/webp"}, PerPicture: 0.04, Assumed: true}
+}
+
+// PricedPerPicture reports whether m's price is per picture (Imagen's and
+// OpenAI's), not by tokens (Gemini's).
+func (m Model) PricedPerPicture() bool { return m.Kind == KindImagen || m.Kind == KindOpenAI }
+
+// ProviderOf is the provider whose credentials m's calls use.
+func (m Model) ProviderOf() string {
+	if m.Provider != "" {
+		return m.Provider
+	}
+	return "gemini"
 }
 
 // Models are the catalog's models, in its order (the default first).
@@ -134,6 +170,9 @@ func Lookup(id string) (Model, bool) {
 		}
 	}
 	switch {
+	case strings.HasPrefix(name, "gpt-image-") || strings.HasPrefix(name, "dall-e"):
+		m := openAIModel(name, name)
+		return m, true
 	case strings.HasPrefix(name, "imagen-"):
 		return Model{ID: name, Name: name, Kind: KindImagen, MaxPictures: 4, Ratios: ImagenRatios, NegativePrompt: true, People: true, Seed: true,
 			Formats: []string{"image/png", "image/jpeg"}, PerPicture: 0.04, Assumed: true}, true
