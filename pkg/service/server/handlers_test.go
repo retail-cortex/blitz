@@ -235,6 +235,8 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"CreateFolder": func() error { return unary(f.CreateFolder, &pb.CreateFolderRequest{Workspace: ws}) },
 		"RenameFile":   func() error { return unary(f.RenameFile, &pb.RenameFileRequest{Workspace: ws}) },
 		"DeleteFile":   func() error { return unary(f.DeleteFile, &pb.DeleteFileRequest{Workspace: ws}) },
+		"RestoreFile":  func() error { return unary(f.RestoreFile, &pb.RestoreFileRequest{Workspace: ws}) },
+		"CopyFile":     func() error { return unary(f.CopyFile, &pb.CopyFileRequest{Workspace: ws}) },
 		"GitFileAction": func() error {
 			return unary(f.GitFileAction, &pb.GitFileActionRequest{Workspace: ws, Path: "x", Action: pb.GitAction_GIT_ACTION_STAGE})
 		},

@@ -142,6 +142,9 @@ func TestFileService(t *testing.T) {
 	_, err = files.RestoreFile(ctx, connect.NewRequest(&pb.RestoreFileRequest{Workspace: dir, RestoreId: del.Msg.RestoreId, Path: "lib2"}))
 	_, info = errorReason(t, err)
 	assert.Equal(t, "NOT_IN_TRASH", info.Reason)
+	_, err = files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "missing", Undoable: true}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FILE_NOT_FOUND", info.Reason, "nothing to put in the trash")
 
 	_, err = files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "lib"}))
 	require.NoError(t, err)

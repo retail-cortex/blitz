@@ -94,3 +94,18 @@ func TestRemoteDataWithoutTheService(t *testing.T) {
 	_, err = r.RunDataQuery(ctx, api.DataQuery{Connection: "kitchen", Statement: "SELECT 1"})
 	assert.Error(t, err)
 }
+
+func TestRemotePicturesWithoutTheService(t *testing.T) {
+	r, _ := gone(t)
+	ctx := context.Background()
+	_, err := r.PictureModels(ctx)
+	assert.Error(t, err)
+	_, err = r.MakePicture(ctx, &pb.MakePictureRequest{Prompt: "a lighthouse"})
+	assert.Error(t, err)
+	_, err = r.SavePicture(ctx, "s1", "p1", "")
+	assert.Error(t, err)
+	_, err = r.PictureSessions(ctx)
+	assert.Error(t, err)
+	_, err = r.PictureSession(ctx, "s1")
+	assert.Error(t, err)
+}

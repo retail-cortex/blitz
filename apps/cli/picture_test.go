@@ -165,6 +165,25 @@ func TestPictureCommandWithoutModels(t *testing.T) {
 	assert.Contains(t, out, "No Pictures sessions yet")
 }
 
+// A settings file that doesn't read stops each picture and data command
+// before it reaches the service.
+func TestPictureAndDataBrokenSettings(t *testing.T) {
+	home := isolate(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm\nprovider = \n"), 0o600))
+	for _, args := range [][]string{
+		{"picture", "a fox"},
+		{"picture", "models"},
+		{"picture", "list"},
+		{"picture", "delete", "pic-000000000000"},
+		{"data", "list"},
+		{"data", "query", "kitchen", "SELECT 1"},
+	} {
+		_, err := runCLI(t, args...)
+		assert.Error(t, err, strings.Join(args, " "))
+	}
+}
+
 // The helpers: where a numbered picture goes, and the default model.
 func TestPictureHelpers(t *testing.T) {
 	for _, tc := range []struct {
