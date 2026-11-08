@@ -357,3 +357,41 @@ func TestPictureHistoryWithThoughtDrafts(t *testing.T) {
 	}
 	assert.Equal(t, 1, n)
 }
+
+// What generate_image drew is kept as a Pictures session of one turn, its
+// pictures saved where the tool wrote them, so the panel opens it (PIC-81,
+// PIC-54).
+func TestKeepToolPictures(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	id := w.keepToolPictures(ctx, tools.KeptPictures{Model: "gemini/imagen-4.0-generate-preview", Prompt: "a fox at dawn", AspectRatio: "16:9", Size: "2K",
+		References: []tools.Reference{{MIME: "image/png", Data: []byte("REF")}}, RefPaths: []string{"refs/a.png"},
+		Pictures: []tools.Picture{{Data: []byte("ONE"), MIME: "image/png"}, {Data: []byte("TWO"), MIME: "image/jpeg"}}, Paths: []string{"fox.png", "fox-2.jpg"}})
+	require.NotEmpty(t, id)
+	s, err := w.PictureSession(id)
+	require.NoError(t, err)
+	assert.Equal(t, "a fox at dawn", s.Name)
+	require.Len(t, s.Turns, 1)
+	turn := s.Turns[0]
+	assert.Equal(t, images.KindImagen, turn.Kind)
+	assert.Equal(t, 2, turn.Count)
+	assert.Equal(t, "16:9", turn.AspectRatio)
+	assert.Nil(t, turn.Answer, "no conversation to continue")
+	require.Len(t, turn.Pictures, 2)
+	assert.Equal(t, []string{"fox-2.jpg"}, turn.Pictures[1].Saved)
+	data, mime, err := w.ReadPicture(id, turn.Pictures[1].ID)
+	require.NoError(t, err)
+	assert.Equal(t, "TWO", string(data))
+	assert.Equal(t, "image/jpeg", mime)
+	require.Len(t, turn.References, 1)
+	assert.Equal(t, "a.png", turn.References[0].Name)
+	ref, _, err := w.ReadPicture(id, turn.References[0].File)
+	require.NoError(t, err)
+	assert.Equal(t, "REF", string(ref))
+
+	assert.Empty(t, w.keepToolPictures(ctx, tools.KeptPictures{Model: "gemini/x", Prompt: "nothing"}), "no pictures, no session")
+	other := w.keepToolPictures(ctx, tools.KeptPictures{Model: "enterprise/house-style", Prompt: "p", Pictures: []tools.Picture{{Data: []byte("P"), MIME: "image/png"}}})
+	s, err = w.PictureSession(other)
+	require.NoError(t, err)
+	assert.Equal(t, images.KindGemini, s.Turns[0].Kind, "a model the catalog doesn't know is taken as Gemini's")
+}

@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { mdiContentSaveOutline, mdiFileDocumentOutline, mdiFileMusicOutline, mdiFileVideoOutline, mdiImageOutline } from "@mdi/js";
+import { mdiBrushVariant, mdiContentSaveOutline, mdiFileDocumentOutline, mdiFileMusicOutline, mdiFileVideoOutline, mdiImageOutline } from "@mdi/js";
 import { files, workspaces } from "./api";
 import { message } from "./errors";
 import { t } from "./i18n";
@@ -35,9 +35,11 @@ function fileIcon(mime: string): string {
 /**
  * A file a model made: a picture shown as one, audio with a player,
  * anything else as a chip; each with Save, which writes it into the
- * workspace under its name. Its bytes come from the attachment store.
+ * workspace under its name. Its bytes come from the attachment store. A
+ * picture generate_image kept as a Pictures session also has Open in
+ * Pictures (onPictures; spec_058 PIC-54).
  */
-export function ModelFile({ dir, entry }: { dir: string; entry: ModelFileEntry }) {
+export function ModelFile({ dir, entry, onPictures }: { dir: string; entry: ModelFileEntry; onPictures?: () => void }) {
   const snack = useSnackbar();
   const [url, setUrl] = useState("");
   const [data, setData] = useState<Uint8Array | null>(null);
@@ -86,6 +88,7 @@ export function ModelFile({ dir, entry }: { dir: string; entry: ModelFileEntry }
         </span>
       )}
       <IconButton icon={mdiContentSaveOutline} label={t("desktop.model_file.save", { name: entry.name })} small disabled={!data} onClick={() => void save()} />
+      {onPictures && <IconButton icon={mdiBrushVariant} label={t("desktop.model_file.open_in_pictures")} small onClick={onPictures} />}
     </div>
   );
 }

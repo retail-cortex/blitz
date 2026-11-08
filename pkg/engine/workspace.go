@@ -606,6 +606,7 @@ func (w *Workspace) setupPainter(ctx context.Context, warn func(string)) {
 			w.engine.RecordImage(ctx, session, model, usage)
 		}
 	})
+	w.tools.SetPictureKeeper(w.keepToolPictures) // spec_058 PIC-81
 }
 
 // LoadAttachments loads image and PDF files (failures are errors naming

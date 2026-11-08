@@ -31,7 +31,7 @@ var commandGroups = []struct {
 	commands  []string
 }{
 	{"run", "Runs and sessions:", []string{"agents", "attach", "exec", "logs", "sessions", "stop"}},
-	{"workspace", "The workspace:", []string{"data", "do", "eval", "init", "jobs", "memory", "search", "spec", "trust", "worktrees"}},
+	{"workspace", "The workspace:", []string{"data", "do", "eval", "init", "jobs", "memory", "picture", "search", "spec", "trust", "worktrees"}},
 	{"models", "Models and extensions:", []string{"auth", "enterprise", "mcp", "models", "plugin", "skills"}},
 	{"setup", "Setup and maintenance:", []string{"completion", "config", "doctor", "git-credential", "help", "license", "security", "service", "update"}},
 }

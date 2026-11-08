@@ -107,6 +107,13 @@ func TestOpenAIPictures(t *testing.T) {
 	assert.NotNil(t, pic.Usage)
 	assert.Equal(t, openai.ImageGenerateParamsSize1024x1024, fake.gen.Size)
 
+	// generate_image on the catalog (PIC-81): its model's entry, and several at once.
+	assert.Equal(t, info, painter.Info())
+	pic, err = painter.Paint(context.Background(), tools.PaintRequest{Prompt: "logos", Count: 3})
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, fake.gen.N.Value)
+	assert.Len(t, pic.More, 2, "the request's other pictures")
+
 	fake.empty = true
 	_, err = painter.Paint(context.Background(), tools.PaintRequest{Prompt: "nothing"})
 	assert.ErrorContains(t, err, "didn't draw it")

@@ -33,6 +33,7 @@ import {
   mdiLoading,
   mdiPlus,
   mdiRefresh,
+  mdiShuffleVariant,
   mdiSourceBranch,
 } from "@mdi/js";
 import { Button, Dialog, Drawer, Field, Icon, IconButton, Menu, Switch, useSnackbar, type MenuEntry } from "@blitz/webui";
@@ -44,14 +45,15 @@ import { readDocDrop } from "../files/docDrop";
 import type { PictureFile, PictureModel, PictureSession, PictureTurn } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { cost } from "../workflowRuns";
-import { controls, fitSettings, keepSettings, loadSettings, maxReferenceBytes, panoramic, ratioShape, refProblem, referenceTypes, roles, type Ref, type Role, type Settings } from "./pictures";
+import { againRequest, controls, fitSettings, newSeed, standsAlone, keepSettings, loadSettings, maxReferenceBytes, panoramic, ratioShape, refProblem, referenceTypes, roles, type Ref, type Role, type Settings } from "./pictures";
 import "./pictures.css";
 
-/** How Pictures was opened: a first prompt, a picture to start from, a folder to save in (PIC-10). */
+/** How Pictures was opened: a first prompt, a picture to start from, a folder to save in (PIC-10), or a session to open (an agent's picture: PIC-54). */
 export interface PicturesStart {
   prompt?: string;
   reference?: string;
   folder?: string;
+  session?: string;
 }
 
 // Pictures fetched once per session and picture, shown from object URLs.
@@ -170,6 +172,20 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
   useEffect(() => {
     if (start?.reference) setRefs([{ key: nextKey(), role: "object", name: start.reference.split("/").pop() ?? start.reference, mime: mimeOf(start.reference), path: start.reference, url: "" }]);
   }, [start?.reference]);
+  // An agent's picture opened from the chat (PIC-54): its session, with a
+  // Gemini model's next turn starting from it.
+  useEffect(() => {
+    if (!start?.session) return;
+    workspaces.getPictureSession({ workspace: dir, id: start.session }).then(
+      (r) => {
+        const s = r.session ?? null;
+        setSession(s);
+        const first = s?.turns[0];
+        setStartFrom(first?.kind === "gemini" ? (first.pictures[0]?.id ?? "") : "");
+      },
+      (e: unknown) => snack(message(e), { error: true }),
+    );
+  }, [dir, start?.session, snack]);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [session?.turns.length, busy]);
@@ -256,6 +272,25 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
       setPrompt("");
       setStartFrom("");
       if (model.kind === "gemini") setRefs([]);
+    } catch (e) {
+      setFailure(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Try again and Vary (PIC-42): a turn that stands alone made again, as it
+  // was or with a new seed, as the session's next turn.
+  const again = async (turn: PictureTurn, vary: boolean) => {
+    if (!session || busy) return;
+    setBusy(true);
+    setFailure("");
+    try {
+      const r = await workspaces.makePicture(againRequest(dir, session.id, turn, settings, vary ? newSeed() : undefined));
+      if (r.session) setSession(r.session);
+      listSessions();
+      const last = r.session?.turns.at(-1);
+      if (last?.problem) setFailure(last.problem);
     } catch (e) {
       setFailure(message(e));
     } finally {
@@ -603,6 +638,9 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
                     dir={dir}
                     session={session.id}
                     turn={turn}
+                    busy={busy}
+                    canVary={!!models.find((m) => m.ref === turn.model)?.seed}
+                    onAgain={(vary) => void again(turn, vary)}
                     onZoom={setZoom}
                     onSave={(id) => void save(id)}
                     onSaveAs={(id) => setSavingAs({ picture: id, path: `${folder}/` })}
@@ -785,6 +823,9 @@ function Turn({
   dir,
   session,
   turn,
+  busy,
+  canVary,
+  onAgain,
   onSave,
   onSaveAs,
   onReference,
@@ -797,6 +838,10 @@ function Turn({
   dir: string;
   session: string;
   turn: PictureTurn;
+  busy: boolean;
+  /** Whether the turn's model takes a seed, so Vary has one to change. */
+  canVary: boolean;
+  onAgain: (vary: boolean) => void;
   onZoom: (url: string) => void;
   onSave: (id: string) => void;
   onSaveAs: (id: string) => void;
@@ -846,7 +891,21 @@ function Turn({
           ))}
         </div>
       )}
-      {turn.costUsd > 0 && <span className="t-body-sm muted">{t("desktop.pictures.cost", { cost: cost(turn.costUsd) })}</span>}
+      <div className="row pictures-turn-foot" style={{ gap: 8 }}>
+        {turn.costUsd > 0 && <span className="t-body-sm muted spacer">{t("desktop.pictures.cost", { cost: cost(turn.costUsd) })}</span>}
+        {standsAlone(turn.kind) && (
+          <>
+            <Button small variant="text" icon={mdiRefresh} disabled={busy} title={t("desktop.pictures.try_again_hint")} onClick={() => onAgain(false)}>
+              {t("desktop.pictures.try_again")}
+            </Button>
+            {canVary && (
+              <Button small variant="text" icon={mdiShuffleVariant} disabled={busy} title={t("desktop.pictures.vary_hint")} onClick={() => onAgain(true)}>
+                {t("desktop.pictures.vary")}
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

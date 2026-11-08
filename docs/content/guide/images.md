@@ -97,8 +97,9 @@ In the desktop app it's **Image model** in a workspace's settings, under **Agent
 **With your organization's service**, choose one of its image models instead (`model = "enterprise/gemini-3.1-flash-image"`, or the name your admins gave it). Pictures then go through the service, with your organization's sign-in, checks, budgets and logs, and you don't need a Gemini key of your own. You can also pick an organization's image model as a conversation's model: the pictures it draws show in the conversation.
 
 - The picture goes into the workspace (`images/poster.png`) and shows in the conversation, with **Save**. The agent sees it too, so you can ask for changes.
-- To change a picture or match its style, mention it: "make @logo.png blue". Up to three PNG, JPEG or WebP pictures go with the request.
-- The agent can ask for a shape (`16:9`, `9:16`, `1:1` and others) and a size (1K, 2K or 4K; larger costs more).
+- To change a picture or match its style, mention it: "make @logo.png blue". PNG, JPEG or WebP pictures go with the request, as many as the model takes (14 with Gemini's larger models, 16 with OpenAI's; Imagen takes none).
+- The agent can ask for any shape and size the model makes (panoramic 4:1 and 8:1 too, 0.5K to 4K; larger costs more), and with Imagen or OpenAI's models for up to four pictures at once, written beside each other (`poster.png`, `poster-2.png`). Imagen works here too (`model = "gemini/imagen-4.0-generate-preview"`).
+- What it draws is kept as a Pictures session as well: **Open in Pictures** beside the picture in the conversation opens it in the panel, where you can refine it.
 - It asks first (it sends the prompt, and any pictures, to Google or your organization's service), and its cost goes in the session's `/cost`: about $0.07 a 1K picture with 3.1 Flash Image, $0.13 with 3 Pro Image. With `sandbox.allow_network = false` it's refused.
 
 ### The Pictures panel
@@ -110,7 +111,20 @@ For more than one picture in passing, open **Pictures**: the brush icon in the c
 - **Pictures** (1 to 4 with Imagen), **Shape** (drawn as itself, panoramic 4:1 and 8:1 included where the model has them), **Size** (0.5K to 4K), **Thinking**, and **Search the web** (and image search) to ground a picture in real places and things.
 - **Advanced**: what to avoid, people, the format and quality, a seed, and prompt improvement (Imagen).
 
-Each turn shows what it will cost before you make it. With a Gemini model a session is a conversation: say what to change ("make the sky darker") and the next picture changes the last, or **Start from this** on any picture. Every picture can be **Saved** into the workspace (`pictures/`, or `[images] folder`), saved somewhere else, opened, used as a reference, copied or added to the chat. Sessions are kept: **Sessions** at the top reopens them.
+Each turn shows what it will cost before you make it. With a Gemini model a session is a conversation: say what to change ("make the sky darker") and the next picture changes the last, or **Start from this** on any picture. With Imagen or OpenAI's models each turn stands on its own: **Try again** under a turn makes it again as it was, and **Vary** (Imagen) makes it again with a new seed. Every picture can be **Saved** into the workspace (`pictures/`, or `[images] folder`), saved somewhere else, opened, used as a reference, copied or added to the chat. Sessions are kept: **Sessions** at the top reopens them.
+
+### Pictures from the terminal
+
+`blitz picture` makes a turn as the panel does, with the same checks: what the model doesn't take is refused before anything is sent.
+
+```bash
+blitz picture "a lighthouse at dusk, bold title at the top" --ratio 3:2 -o posters/lighthouse.png
+blitz picture -n 4 -m gemini/imagen-4.0-generate-preview "a red fox in the snow"
+echo "make it a watercolour" | blitz picture --ref posters/lighthouse.png:style
+blitz picture --continue pic-1a2b3c4d5e6f "now at night"
+```
+
+It prints where each picture was saved (`-o`, numbered when there are several, or the pictures folder), what it cost, and its Pictures session, which the desktop's **Pictures** reopens. `blitz picture models` lists the image models with their shapes and sizes (the default marked `*`), `blitz picture list` the sessions, and `blitz picture delete <session>` removes one (not what was saved).
 
 ## What a model makes
 

@@ -22,6 +22,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -133,6 +134,47 @@ func TestNewPainter(t *testing.T) {
 			assert.Equal(t, "generativelanguage.googleapis.com", p.Host())
 		})
 	}
+}
+
+// A painter says its model's catalog entry where the catalog knows it, and
+// Imagen draws through generateImages, several at once (spec_058 PIC-81).
+func TestPainterCatalog(t *testing.T) {
+	newPainter := func(model string) tools.Painter {
+		cfg := config.DefaultConfig()
+		cfg.Images.Model, cfg.LLM.Gemini.APIKey = model, "k"
+		p, err := NewPainter(context.Background(), cfg)
+		require.NoError(t, err)
+		return p
+	}
+	for model, want := range map[string]string{
+		"gemini/gemini-nano-banana-2.1":      "gemini-nano-banana-2.1",
+		"gemini/imagen-4.0-generate-preview": "imagen-4.0-generate-preview",
+	} {
+		c, ok := newPainter(model).(interface{ Info() images.Model })
+		require.True(t, ok, model)
+		assert.Equal(t, want, c.Info().ID)
+	}
+	_, ok := newPainter("gemini/house-painter").(interface{ Info() images.Model })
+	assert.False(t, ok, "a name the catalog doesn't know keeps generate_image's own rules")
+
+	info, _ := images.Lookup("imagen-4.0-generate-preview")
+	fake := &fakeImagen{resp: &genai.GenerateImagesResponse{GeneratedImages: []*genai.GeneratedImage{
+		{Image: &genai.Image{ImageBytes: []byte("A"), MIMEType: "image/png"}}, {Image: &genai.Image{ImageBytes: []byte("B")}},
+	}}}
+	p := &imagenPainter{pictures: &geminiPictures{img: fake, name: info.ID, info: info, host: "h"}}
+	assert.Equal(t, "gemini/imagen-4.0-generate-preview", p.Model())
+	assert.Equal(t, "h", p.Host())
+	assert.Equal(t, info, p.Info())
+	pic, err := p.Paint(context.Background(), tools.PaintRequest{Prompt: "a fox", Count: 2, AspectRatio: "16:9", Size: "2K"})
+	require.NoError(t, err)
+	assert.Equal(t, "A", string(pic.Data))
+	require.Len(t, pic.More, 1)
+	assert.Equal(t, "image/png", pic.More[0].MIME, "PNG when the model doesn't say")
+	assert.EqualValues(t, 2, fake.cfg.NumberOfImages)
+	assert.Equal(t, "16:9", fake.cfg.AspectRatio)
+	fake.resp, fake.err = nil, errors.New("quota")
+	_, err = p.Paint(context.Background(), tools.PaintRequest{Prompt: "x"})
+	assert.ErrorContains(t, err, "quota")
 }
 
 func TestRecordImage(t *testing.T) {
