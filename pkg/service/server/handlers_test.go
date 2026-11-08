@@ -227,6 +227,36 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"ListDataConnections": func() error {
 			return unary(w.ListDataConnections, &pb.ListDataConnectionsRequest{Workspace: ws})
 		},
+		"AnswerCompose":      func() error { return unary(w.AnswerCompose, &pb.AnswerComposeRequest{Workspace: ws}) },
+		"DropCompose":        func() error { return unary(w.DropCompose, &pb.DropComposeRequest{Workspace: ws}) },
+		"RunBlitzCommand":    func() error { return unary(w.RunBlitzCommand, &pb.RunBlitzCommandRequest{Workspace: ws}) },
+		"StopEvalRun":        func() error { return unary(w.StopEvalRun, &pb.StopEvalRunRequest{Workspace: ws}) },
+		"StartHealthCheck":   func() error { return unary(w.StartHealthCheck, &pb.StartHealthCheckRequest{Workspace: ws}) },
+		"RestartMCPServer":   func() error { return unary(w.RestartMCPServer, &pb.RestartMCPServerRequest{Workspace: ws}) },
+		"DraftManifest":      func() error { return unary(w.DraftManifest, &pb.DraftManifestRequest{Workspace: ws}) },
+		"ListSkillScenarios": func() error { return unary(w.ListSkillScenarios, &pb.ListSkillScenariosRequest{Workspace: ws}) },
+		"SaveSkillScenario":  func() error { return unary(w.SaveSkillScenario, &pb.SaveSkillScenarioRequest{Workspace: ws}) },
+		"DeleteSkillScenario": func() error {
+			return unary(w.DeleteSkillScenario, &pb.DeleteSkillScenarioRequest{Workspace: ws})
+		},
+		"TrySkill":           func() error { return unary(w.TrySkill, &pb.TrySkillRequest{Workspace: ws}) },
+		"ReadStoredFile":     func() error { return unary(w.ReadStoredFile, &pb.ReadStoredFileRequest{Workspace: ws}) },
+		"ForgetProjectTrust": func() error { return unary(w.ForgetProjectTrust, &pb.ForgetProjectTrustRequest{Workspace: ws}) },
+		"SwitchBranch":       func() error { return unary(w.SwitchBranch, &pb.SwitchBranchRequest{Workspace: ws}) },
+		"CreateBranch":       func() error { return unary(w.CreateBranch, &pb.CreateBranchRequest{Workspace: ws}) },
+		"MergeBranch":        func() error { return unary(w.MergeBranch, &pb.MergeBranchRequest{Workspace: ws}) },
+		"MoveWorkerToService": func() error {
+			return unary(wk.MoveWorkerToService, &pb.MoveWorkerToServiceRequest{Workspace: ws})
+		},
+		"WatchEvalRun": func() error {
+			return streamErr(w.WatchEvalRun(ctx, connect.NewRequest(&pb.WatchEvalRunRequest{Workspace: ws})))
+		},
+		"WatchWorkspaceHealth": func() error {
+			return streamErr(w.WatchWorkspaceHealth(ctx, connect.NewRequest(&pb.WatchWorkspaceHealthRequest{Workspace: ws})))
+		},
+		"CheckWorkspaceHealth": func() error {
+			return streamErr(w.CheckWorkspaceHealth(ctx, connect.NewRequest(&pb.CheckWorkspaceHealthRequest{Workspace: ws})))
+		},
 
 		"ListDir":     func() error { return unary(f.ListDir, &pb.ListDirRequest{Workspace: ws}) },
 		"ReadFile":    func() error { return unary(f.ReadFile, &pb.ReadFileRequest{Workspace: ws}) },

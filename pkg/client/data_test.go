@@ -111,4 +111,6 @@ func TestRemotePicturesWithoutTheService(t *testing.T) {
 	assert.Error(t, err)
 	_, err = r.PictureSession(ctx, "s1")
 	assert.Error(t, err)
+	_, err = r.SearchWeb(ctx, "focaccia")
+	assert.Error(t, err)
 }
