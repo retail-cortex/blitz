@@ -3,13 +3,47 @@ title: Blitz 0.9.7
 weight: 1
 ---
 
-**Gemini searches the web for you again.** Google now asks for one more setting when a Gemini model uses its own tools (Google Search, reading a page, running code) beside Blitz's. Without it, a conversation on Gemini 3.8 Flash could stop with "Error 400 … Please enable tool_config.include_server_side_tool_invocations". Blitz 0.9.7 sends that setting, so those conversations work again.
+A file tree that works like the one you're used to, pictures from the terminal, your data from the terminal, and Gemini searching the web for you again.
 
 ### Get started
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.7).
-2. Ask a Gemini model something it needs to look up, such as "what's the latest Go release?", or add a database query to the conversation. It searches, answers and lists its sources.
+2. In **Files**, select a few files with ⌘-click, press ⌘C, pick a folder and press ⌘V. Delete one by mistake? Press **Undo**.
+3. In a terminal, try `blitz picture "a lighthouse at dusk" -n 2` or `blitz data query recipes "select title from recipes"`.
+
+### What's new
+
+**A file tree that works the way you expect.**
+
+- Select several files with ⌘-click, Shift-click or Shift+arrows, then copy, cut, paste, duplicate, drag or delete them together.
+- Deleted files go to a trash for a day, with **Undo** right there.
+- **Filter files** finds a file anywhere in the workspace, and typing in the tree jumps to a match.
+- Files with errors or warnings show it, and so do their folders.
+- The tree follows the tab you're on, and **Reveal in Files** finds the file from its tab.
+- `a/b/c.md` creates its folders, and long single-folder chains fit on one row.
+- Sort folders first, mixed or by type, and nest tests under their code and lock files under their manifest.
+- Drag files onto the chat to add them to your message, and big folders end with **Show more** instead of stopping silently.
+
+**Pictures, everywhere.**
+
+- **Try again** and **Vary** redo a picture, the same or with a fresh seed.
+- **Open in Pictures** takes a picture the agent drew in the chat into the Pictures panel, to keep working on it.
+- The agent's picture tool now uses each model's full set of shapes, sizes and reference pictures, and can make up to four pictures at once.
+- `blitz picture` makes pictures from the terminal, with the model, shape, size, count, reference pictures and output folder you choose.
+
+**Your data from the terminal.**
+
+- `blitz data list` shows your database connections and their saved queries.
+- `blitz data query` runs SQL or a saved query (always read-only) and prints a table, JSON or CSV.
+- In the terminal's chat, `/data` lists them, and Tab completes `@db:` mentions.
 
 ### Fixes
 
-- **Gemini's own tools work beside Blitz's.** On the Gemini API (a Gemini key), a conversation that offered Gemini's search, page reading or code running together with Blitz's tools failed with a 400. Blitz now asks Gemini to include its tool steps in the answer, and keeps them for the next turn. Switch the conversation to Claude or GPT and they read Gemini's searches as ordinary web searches. Gemini on Vertex AI wasn't affected and works as before.
+- **Gemini searches the web for you again.** On the Gemini API (a Gemini key), a conversation that used Gemini's own search, page reading or code running alongside Blitz's tools could stop with "Error 400 … Please enable tool_config.include_server_side_tool_invocations". Blitz now sends the setting Google asks for, and keeps Gemini's search steps for the next turn. Gemini on Vertex AI wasn't affected.
+- An open file that you delete and then restore with **Undo** no longer says "Deleted on disk".
+
+### Good to know
+
+- The tree still checks for changes every few seconds; instant updates come later.
+- Copy and paste in the tree use Blitz's own clipboard, not your computer's.
+- Streaming query results to workflows is still on the way.
