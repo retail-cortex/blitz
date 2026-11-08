@@ -69,6 +69,19 @@ describe("Drawer kept while closed", () => {
   });
 });
 
+describe("Drawer with its header below", () => {
+  it("puts the header under the body, the title's place holding what it's given, named by its label", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={<span role="tablist">tabs</span>} label="Terminal" headBelow onClose={() => {}}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).toContain('aria-label="Terminal"');
+    expect(html).toMatch(/<p>body<\/p><\/div><header class="drawer-head below"><div class="drawer-title spacer"><span role="tablist">tabs<\/span><\/div>/);
+    expect(html).not.toContain("<h2");
+  });
+});
+
 describe("Dialog", () => {
   it("keeps the title bar dragging the window over its scrim", () => {
     const html = renderToStaticMarkup(

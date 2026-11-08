@@ -58,5 +58,9 @@
 .drawer.terminal-drawer { bottom: auto; height: 50%; min-height: 160px; border-bottom: 1px solid var(--md-outline-variant); }
 :root[data-glass="on"] .drawer.terminal-drawer { bottom: auto; }
 .drawer.terminal-drawer > .body { position: relative; padding: 0; gap: 0; overflow: hidden; }
+/* Its tabs sit in the header under the terminal, hanging from its edge, beside the terminal icon. */
+.terminal-drawer .terminal-tabs { align-items: flex-start; min-height: 0; padding: 0 4px; border-bottom: none; background: none; }
+.terminal-drawer .terminal-tabs .editor-tab { border-radius: 0 0 var(--md-shape-xs) var(--md-shape-xs); }
+.terminal-drawer .terminal-tabs .editor-tab.active { background: var(--accent-grad) bottom / 100% 2px no-repeat, var(--md-surface); }
 .terminal-drawer-resize { position: absolute; left: 0; right: 0; bottom: -4px; height: 8px; cursor: row-resize; z-index: 5; border-radius: 4px; }
 .terminal-drawer-resize:hover, body.resizing .terminal-drawer-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }

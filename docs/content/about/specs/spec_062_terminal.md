@@ -55,7 +55,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
 ## 4. The page
 
 - **TRM-20** **A drawer that drops down.** *2026-11-08 (the owner: "can the terminal be a dropdown drawer from the top like the yakuake terminal instead of a tabbed editor").* A workspace's terminals live in a drawer that slides down from under the top menu over the middle of the window, as the other views do (the shared `Drawer`), Yakuake-style. Inside it:
-  - a tab for each terminal, titled with its folder's name (`shop`, `src`), with a close button (middle-click closes too), and **+** for a new one;
+  - a bar along its bottom edge, under the terminal *(2026-11-08, the owner: "can the Terminal title and window controls be moved the bottom of the panel and the tabs in-line with the Terminal Icon, no need for Terminal to be displayed")*: the terminal icon, then a tab for each terminal, titled with its folder's name (`shop`, `src`), with a close button (middle-click closes too), then **+** for a new one and ✕ to put it up. No title: the icon says what it is, and the shell's first lines start at the top, under the menu;
   - its height is yours: drag its bottom edge (double-click for the default, half the middle), and the window remembers it.
 
   It follows the drawer rules: clicking outside doesn't close it, the title bar still drags the window, and Escape is the shell's, so it doesn't close it either. Closing it only hides it: the shells keep running and their views stay drawn, so it comes back as it was. One drawer is down at a time; opening another view hides the terminal's.

@@ -119,9 +119,12 @@ export function Drawer({
   closeRequest = 0,
   open = true,
   escapeCloses = true,
+  headBelow = false,
+  label,
   style,
   children,
 }: {
+  /** Its title, or what stands in the header in its place (a terminal's tabs). */
   title: ReactNode;
   icon?: string;
   onClose: () => void;
@@ -138,6 +141,10 @@ export function Drawer({
   open?: boolean;
   /** Whether Escape closes it (not where Escape is the content's, as in a terminal). */
   escapeCloses?: boolean;
+  /** The header under the body, not over it (a terminal's: the shell's lines start at the top). */
+  headBelow?: boolean;
+  /** Its name for the accessibility tree, when the title isn't text. */
+  label?: string;
   /** Its own size (a height the user dragged it to). */
   style?: CSSProperties;
   children: ReactNode;
@@ -145,14 +152,15 @@ export function Drawer({
   const host = useContext(DrawerContext);
   const ref = useRef<HTMLElement>(null);
   const [id] = useState(() => ++nextId);
-  const live = useRef({ onClose, dirty, title });
-  live.current = { onClose, dirty, title };
+  const name = label ?? (typeof title === "string" ? title : undefined);
+  const live = useRef({ onClose, dirty, name });
+  live.current = { onClose, dirty, name };
   const me = useMemo<Claim>(
     () => ({
       id,
       close: () => live.current.onClose(),
       dirty: () => live.current.dirty,
-      name: () => (typeof live.current.title === "string" ? live.current.title : ""),
+      name: () => live.current.name ?? "",
     }),
     [id],
   );
@@ -199,6 +207,14 @@ export function Drawer({
   // One waiting behind a question (keep its changes, or not) stays mounted,
   // hidden, so keeping them finds them as they were.
   if (host && !host.slot) return null;
+  const head = (
+    <header className={headBelow ? "drawer-head below" : "drawer-head"}>
+      {icon && <Icon path={icon} className="muted" />}
+      {typeof title === "string" ? <h2 className="t-title spacer">{title}</h2> : <div className="drawer-title spacer">{title}</div>}
+      {headerActions}
+      <IconButton icon={mdiClose} label={t("desktop.close")} onClick={close} />
+    </header>
+  );
   const drawer = (
     <aside
       ref={ref}
@@ -206,16 +222,12 @@ export function Drawer({
       hidden={!shown}
       style={style}
       role="complementary"
-      aria-label={typeof title === "string" ? title : undefined}
+      aria-label={name}
       tabIndex={-1}
     >
-      <header className="drawer-head">
-        {icon && <Icon path={icon} className="muted" />}
-        <h2 className="t-title spacer">{title}</h2>
-        {headerActions}
-        <IconButton icon={mdiClose} label={t("desktop.close")} onClick={close} />
-      </header>
+      {!headBelow && head}
       <div className="body">{children}</div>
+      {headBelow && head}
       {footer && <footer>{footer}</footer>}
     </aside>
   );

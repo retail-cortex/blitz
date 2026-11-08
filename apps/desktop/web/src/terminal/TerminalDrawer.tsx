@@ -29,7 +29,7 @@ const heightKey = "blitz.terminal.height";
 /**
  * A workspace's terminals in a drop-down drawer (spec_062_terminal
  * TRM-20, TRM-30), Yakuake-style: it slides down from under the top menu
- * over the middle of the window, a tab for each terminal. Putting it up
+ * over the middle of the window, a tab for each terminal in the bar under it. Putting it up
  * only hides it: the terminals go on, drawn, until they're closed. Escape
  * stays the shell's (vim's, less's), so ✕, its button or ⌃` put it up.
  */
@@ -79,8 +79,39 @@ export function TerminalDrawer({ dir, visible, onOpenFile }: { dir: string; visi
   const h = drawerHeight(height, room);
   return (
     <Drawer
-      title={t("desktop.terminal.title")}
+      title={
+        <div className="editor-tabs terminal-tabs" role="tablist">
+          {st.list.map((x) => {
+            const name = termName(x.dir, dir);
+            return (
+              <div
+                key={x.id}
+                role="tab"
+                aria-selected={x.id === st.active}
+                className={`editor-tab ${x.id === st.active ? "active" : ""}`}
+                title={x.dir || name}
+                onClick={() => showTerminals(dir, x.id)}
+                onAuxClick={(e) => e.button === 1 && void closeTerminal(dir, x.id)}
+              >
+                <Icon path={mdiConsoleLine} size="sm" />
+                <span className="ellipsis">{name}</span>
+                <IconButton
+                  icon={mdiClose}
+                  label={t("desktop.terminal.close", { name })}
+                  small
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void closeTerminal(dir, x.id);
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      }
+      label={t("desktop.terminal.title")}
       icon={mdiConsole}
+      headBelow
       open={open}
       escapeCloses={false}
       onClose={() => hideTerminals(dir)}
@@ -88,34 +119,6 @@ export function TerminalDrawer({ dir, visible, onOpenFile }: { dir: string; visi
       style={h ? { height: h } : undefined}
       headerActions={<IconButton icon={mdiPlus} label={t("desktop.terminal.new")} onClick={() => void newTerminal(dir, "").catch(fail)} />}
     >
-      <div className="editor-tabs terminal-tabs" role="tablist">
-        {st.list.map((x) => {
-          const name = termName(x.dir, dir);
-          return (
-            <div
-              key={x.id}
-              role="tab"
-              aria-selected={x.id === st.active}
-              className={`editor-tab ${x.id === st.active ? "active" : ""}`}
-              title={x.dir || name}
-              onClick={() => showTerminals(dir, x.id)}
-              onAuxClick={(e) => e.button === 1 && void closeTerminal(dir, x.id)}
-            >
-              <Icon path={mdiConsoleLine} size="sm" />
-              <span className="ellipsis">{name}</span>
-              <IconButton
-                icon={mdiClose}
-                label={t("desktop.terminal.close", { name })}
-                small
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void closeTerminal(dir, x.id);
-                }}
-              />
-            </div>
-          );
-        })}
-      </div>
       {st.list.map((x) => (
         <TerminalView
           key={x.id}

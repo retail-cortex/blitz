@@ -210,6 +210,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* While it's up, the pinned input under it gives it the room. */
 .shell:has(.drawer:not([hidden]):not(.terminal-drawer)) .composer-dock { display: none; }
 .drawer-head { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 12px 0 24px; flex: none; border-bottom: 1px solid var(--md-outline-variant); }
+.drawer-head.below { height: 44px; padding-left: 16px; border-bottom: none; border-top: 1px solid var(--md-outline-variant); }
+.drawer-title { display: flex; min-width: 0; align-self: stretch; }
 .drawer-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer > .body { padding: 20px 24px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; }
 .drawer > footer { padding: 12px 24px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; border-top: 1px solid var(--md-outline-variant); }
