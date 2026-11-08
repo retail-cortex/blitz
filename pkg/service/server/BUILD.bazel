@@ -168,6 +168,7 @@ go_test(
         "//pkg/config/configtest",
         "//pkg/engine",
         "//pkg/engine/compose",
+        "//pkg/engine/health",
         "//pkg/engine/lsp/lsptest",
         "//pkg/engine/memory",
         "//pkg/engine/runtime",
