@@ -57,6 +57,21 @@ You can also type it: `@db:shop` adds the database, and `@db:shop/top_customers`
 
 To query a database in a workflow, use a [Data step](workflows.md#querying-a-database).
 
+## In the terminal
+
+In the REPL, `/data` lists the workspace's databases and their saved queries, saying which are off or not trusted, and `@db:shop` or `@db:shop/top_customers` in a prompt works as in the chat box (Tab completes them after `@d`).
+
+From the shell, `blitz data` runs queries for scripts. Like the chat box, it uses only connections that are on and trusted, and runs them read-only:
+
+```sh
+blitz data list                                      # the databases and their saved queries (--json)
+blitz data query shop "SELECT id, total FROM orders ORDER BY total DESC" --max-rows 20
+blitz data query shop "SELECT * FROM orders WHERE customer = ?" --params '["Ada"]' --csv > ada.csv
+blitz data query shop --query top_customers --params '{"since": "2026-01-01"}' --json
+```
+
+It prints the table with each column's type, then how many rows (and whether `--max-rows`, 1,000 by default, cut them). `--json` prints the columns described and the rows, `--csv` a header row and the rows. `--params` is a JSON array in order for SQL, or an object by name for a saved query. A statement that writes is refused, and so is a connection that's off, not trusted or can't be read; the command exits 1 and says why.
+
 ## Read-only, and what asks first
 
 | | Read-only | Can write |

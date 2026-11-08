@@ -139,6 +139,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 	case "processes", "ps":
 		cmdProcesses(args, app)
 
+	case "data":
+		cmdData(ctx, app)
+
 	case "cd":
 		cmdCd(ctx, args, app)
 
@@ -222,6 +225,7 @@ var helpGroups = []struct {
 		{"/search [files|documents|chats|notes|all|web|session] <terms>, /search status|reindex", "help.search"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
 		{"/processes [all|log <id>|stop <id>…|stop flagged|stop all]", "help.processes"},
+		{"/data", "help.data_cli"},
 	}},
 	{"help.group.workspace", [][2]string{
 		{"!<command>", "help.shell"},
