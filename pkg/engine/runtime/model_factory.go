@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -801,7 +803,73 @@ func withCoreTools(req *model.LLMRequest) *model.LLMRequest {
 				cfg.Tools = append(cfg.Tools, &kept)
 			}
 		}
+		cfg.SystemInstruction = leanInstruction(req.Config.SystemInstruction, offeredTools(&model.LLMRequest{Config: &cfg}))
 		cp.Config = &cfg
 	}
 	return &cp
+}
+
+// leanInstruction is a local model's instructions for its core tools
+// (MOD-50): without the skills list (it has no activate_skill) and the
+// agent kit's handoff section (no transfer_to_agent), which name tools it
+// isn't offered; and with what its tools are and that a file is written
+// with them. A copy; si isn't changed.
+func leanInstruction(si *genai.Content, tools map[string]bool) *genai.Content {
+	if si == nil {
+		return nil
+	}
+	out := &genai.Content{Role: si.Role}
+	for _, p := range si.Parts {
+		if p == nil || p.Text == "" {
+			out.Parts = append(out.Parts, p)
+			continue
+		}
+		cp := *p
+		cp.Text = withoutSection(withoutHandoff(p.Text), "## Available Agent Skills")
+		out.Parts = append(out.Parts, &cp)
+	}
+	names := slices.Sorted(maps.Keys(tools))
+	out.Parts = append(out.Parts, &genai.Part{Text: "Your tools are " + strings.Join(names, ", ") + ". Use them to do the work: " +
+		"to write or change a file, call create_file (or edit, replace_in_file) with its whole content, never paste the content in your answer instead, " +
+		"and never say a file is written until the tool said so. Make one call at a time and read its result before the next."})
+	return out
+}
+
+// withoutSection is text without the Markdown section headed heading (to
+// the next heading of its level or above, or the end).
+func withoutSection(text, heading string) string {
+	i := strings.Index(text, heading)
+	if i < 0 {
+		return text
+	}
+	rest := text[i+len(heading):]
+	end := len(text)
+	if j := strings.Index(rest, "\n## "); j >= 0 {
+		end = i + len(heading) + j + 1
+	} else if j := strings.Index(rest, "\n# "); j >= 0 {
+		end = i + len(heading) + j + 1
+	}
+	return text[:i] + text[end:]
+}
+
+// handoffStart and handoffNote begin and end the agent kit's section
+// about handing a question to another agent with transfer_to_agent.
+const (
+	handoffStart = "You have a list of other agents to transfer to"
+	handoffNote  = "**NOTE**: the only available agents for `transfer_to_agent`"
+)
+
+// withoutHandoff is text without the handoff section.
+func withoutHandoff(text string) string {
+	i := strings.Index(text, handoffStart)
+	if i < 0 {
+		return text
+	}
+	end := len(text)
+	if n := strings.Index(text[i:], handoffNote); n >= 0 {
+		if j := strings.Index(text[i+n:], "\n\n"); j >= 0 {
+			end = i + n + j
+		}
+	}
+	return strings.TrimRight(text[:i], "\n ") + text[end:]
 }

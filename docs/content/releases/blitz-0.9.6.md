@@ -31,6 +31,6 @@ weight: 1
 
 ### Fixes
 
-- Local models on Ollama wrote their tool calls as text, a whole plan at once, and Blitz ran none of them: `db-info.md` never got written. Blitz now runs the first, and offers a local model only its core tools, which made qwen3 call them reliably in our tests. Ollama itself stopped some long replies ("token repeat limit reached") when the model repeated itself: that's the model, and a stronger one (`qwen3:8b` or larger) avoids it.
+- Local models on Ollama wrote their tool calls as text, a whole plan at once, and Blitz ran none of them: `db-info.md` never got written. Blitz now runs the first, and offers a local model only its core tools, with instructions that name only those tools (half the prompt it had). `read_file` no longer hands a model a database's raw bytes: it says to use the database's tools. qwen3 called its tools reliably in our tests; qwen2.5-coder:7b still often doesn't. Ollama itself stopped some long replies ("token repeat limit reached") when the model repeated itself: that's the model, and a stronger one (`qwen3:8b` or larger) avoids it.
 
 - Auto mode's reviewer denied a new file in `.agents/scratch/` as "outside the workspace". Blitz now tells the reviewer each file's full path and that it's inside the workspace, and a denial that says otherwise goes to you instead.

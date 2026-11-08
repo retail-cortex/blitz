@@ -355,3 +355,26 @@ func TestWithCoreTools(t *testing.T) {
 	assert.Len(t, req.Tools, 5)
 	assert.Nil(t, withCoreTools(nil))
 }
+
+// A local model's instructions name only its tools: no skills list (no
+// activate_skill) and no handoff section (no transfer_to_agent), and they
+// say how its files are written (MOD-50).
+func TestLeanInstruction(t *testing.T) {
+	text := "You are Blitz.\n\n## Available Agent Skills:\n- go: Go\n- react: React\n\n## Project Instructions\nUse uv.\n\n" +
+		"You are an agent.\n\nYou have a list of other agents to transfer to:\n\nAgent name: coder\n\n" +
+		"**NOTE**: the only available agents for `transfer_to_agent` function are `coder`.\n\nKeep files short."
+	si := &genai.Content{Role: "user", Parts: []*genai.Part{{Text: text}}}
+	got := leanInstruction(si, map[string]bool{"read_file": true, "create_file": true})
+	all := ""
+	for _, p := range got.Parts {
+		all += p.Text + "\n"
+	}
+	assert.NotContains(t, all, "Available Agent Skills")
+	assert.NotContains(t, all, "transfer_to_agent")
+	assert.NotContains(t, all, "Agent name: coder")
+	assert.Contains(t, all, "## Project Instructions\nUse uv.")
+	assert.Contains(t, all, "Keep files short.")
+	assert.Contains(t, all, "Your tools are create_file, read_file.")
+	assert.Equal(t, text, si.Parts[0].Text, "the request's own isn't changed")
+	assert.Nil(t, leanInstruction(nil, nil))
+}
