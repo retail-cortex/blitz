@@ -100,6 +100,11 @@ type Workspace struct {
 	// ([permissions.auto] model, built as the workspace opened), not the
 	// session's.
 	ownReviewer bool
+	// models is the last model list and modelsUntil when it's stale
+	// (ListModels); modelsMu guards both.
+	modelsMu    sync.Mutex
+	models      *api.ModelList
+	modelsUntil time.Time
 	plugins     []plugins.Loaded
 	noticeMu    sync.Mutex
 	notices     map[string][]string // background processes' notices waiting, by session

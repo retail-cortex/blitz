@@ -168,6 +168,7 @@ go_test(
         "leak_test.go",
         "learn_test.go",
         "ledger_test.go",
+        "listmodels_test.go",
         "live_test.go",
         "longconversation_test.go",
         "mcp_agents_test.go",

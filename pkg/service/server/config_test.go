@@ -399,7 +399,7 @@ func TestListModelsOverTheAPI(t *testing.T) {
 
 	// A failed provider's listing is kept for less; a settings change drops it.
 	s.models.mu.Lock()
-	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID["\x00"].expires, 5*time.Second)
+	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID["\x00\x00false"].expires, 5*time.Second)
 	s.models.mu.Unlock()
 	failing = false
 	_, err = cc.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-x"}))
@@ -424,6 +424,42 @@ func TestListModelsOverTheAPI(t *testing.T) {
 	s.models.mu.Lock()
 	assert.Empty(t, s.models.byID, "the old settings' listing isn't kept")
 	s.models.mu.Unlock()
+}
+
+// The model menu's list: chat models only, newest first, the providers not
+// set up, and Refresh asks again (spec_061_models MOD-01, MOD-04, MOD-06).
+func TestListChatModelsOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	cc := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	calls := 0
+	was := listModels
+	t.Cleanup(func() { listModels = was })
+	listModels = func(_ context.Context, _ *config.Config, _ ...string) []runtime.ProviderModels {
+		calls++
+		return []runtime.ProviderModels{{Provider: "gemini", Models: []runtime.ListedModel{
+			{ID: "gemini-3.8-flash"}, {ID: "text-embedding-004"}, {ID: "gemini-4-carbon"}, {ID: "gemini-3.1-flash-image"},
+		}}}
+	}
+	res, err := cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{ChatOnly: true}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Providers, 1)
+	assert.Equal(t, []string{"gemini-4-carbon", "gemini-3.8-flash"}, res.Msg.Providers[0].Ids)
+	assert.Equal(t, []string{"anthropic", "openai", "ollama"}, res.Msg.NotSetUp)
+
+	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{ChatOnly: true}))
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "kept")
+	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{ChatOnly: true, Refresh: true}))
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "Refresh asks again")
+	all, err := cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, all.Msg.Providers[0].Ids, 4, "without chat_only, everything the provider lists")
+	assert.Empty(t, all.Msg.NotSetUp)
 }
 
 // CheckApiKey tries a key in place of the provider's own, saving nothing:

@@ -17,9 +17,13 @@ package runtime
 import (
 	"cmp"
 	"context"
+	"net/http"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -47,8 +51,9 @@ type ListedModel struct {
 	// DisplayName and Default are the organization's, for its models.
 	DisplayName string
 	Default     bool
-	// Caps are what the organization says its model can do (EN-21); nil
-	// when it says nothing, and for every other provider's.
+	// Caps are what the model can do: what the organization says of its
+	// model (EN-21), else Blitz's facts for the name (spec_061_models
+	// MOD-01); nil when the organization says nothing.
 	Caps *enterprise.Capabilities
 }
 
@@ -77,7 +82,7 @@ func ConfiguredProviders(cfg *config.Config) []string {
 	if cfg.LLM.OpenAI.APIKey != "" || cfg.LLM.OpenAI.APIKeyCommand != "" {
 		out = append(out, "openai")
 	}
-	if strings.EqualFold(cfg.LLM.Provider, "ollama") {
+	if strings.EqualFold(cfg.LLM.Provider, "ollama") || cfg.LLM.Ollama.BaseURL != "" {
 		out = append(out, "ollama")
 	}
 	if cfg.LLM.Bedrock.Model != "" || strings.EqualFold(cfg.LLM.Provider, "bedrock") {
@@ -97,6 +102,10 @@ func ConfiguredProviders(cfg *config.Config) []string {
 func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []ProviderModels {
 	if len(providers) == 0 {
 		providers = ConfiguredProviders(cfg)
+		// Ollama on this machine, when it answers (MOD-03).
+		if ownProviders(cfg) && !slices.Contains(providers, "ollama") && ollamaAnswers(ctx) {
+			providers = append(providers, "ollama")
+		}
 	}
 	prices := NewUsageTracker(cfg.Pricing)
 	out := make([]ProviderModels, len(providers))
@@ -124,6 +133,8 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 				if price, ok := prices.price(id); ok {
 					m.Price = &price
 				}
+				info := Info("", p, id)
+				m.Caps = &enterprise.Capabilities{Tools: info.Tools != ToolsNone, Images: info.Vision, Thinking: info.Thinking != ThinkingNone, Context: info.ContextWindow}
 				pm.Models = append(pm.Models, m)
 			}
 			out[i] = pm
@@ -242,4 +253,110 @@ func listEnterprise(ctx context.Context, cfg *config.Config) ProviderModels {
 	}
 	sort.Slice(pm.Models, func(i, j int) bool { return pm.Models[i].ID < pm.Models[j].ID })
 	return pm
+}
+
+// ownProviders reports whether the person's own providers may be used:
+// no organization, or one whose policy allows them (EN-35).
+func ownProviders(cfg *config.Config) bool {
+	return cfg.Enterprise.URL == "" || cfg.Org.Policy.Models.OwnProviders
+}
+
+// ollamaAddress is where Ollama answers on this machine by default.
+const ollamaAddress = "http://localhost:11434/api/tags"
+
+// ollamaAnswers reports whether Ollama answers on this machine within a
+// moment (spec_061_models MOD-03); a variable so tests decide. In a test
+// binary it never does: an Ollama running where tests run isn't theirs.
+var ollamaAnswers = func(ctx context.Context) bool {
+	if testing.Testing() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ollamaAddress, nil)
+	if err != nil {
+		return false
+	}
+	req.Close = true // one question: no connection kept open
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = res.Body.Close()
+	return res.StatusCode == http.StatusOK
+}
+
+// notChat matches the models that can't hold a conversation: embeddings,
+// image, video, music and speech models, and retired families providers
+// still list (spec_061_models MOD-02).
+var notChat = regexp.MustCompile(`(?i)embed|imagen|(^|[-_/])image([-_]|$)|gpt-image|dall-e|veo|lyria|(^|[-_])tts([-_]|$)|whisper|transcribe|moderation|(^|[-_/])aqa($|[-_])|learnlm|native-audio|realtime`)
+
+// ChatModel reports whether id is a model that holds a conversation; a
+// name Blitz doesn't know is kept, since it may be new.
+func ChatModel(id string) bool { return !notChat.MatchString(id) }
+
+// ChatModels is pms with only their chat models (ChatModel), each
+// provider's newest family first, then by name (spec_061_models MOD-01,
+// MOD-02).
+func ChatModels(pms []ProviderModels) []ProviderModels {
+	out := make([]ProviderModels, len(pms))
+	for i, pm := range pms {
+		pm.Models = slices.DeleteFunc(slices.Clone(pm.Models), func(m ListedModel) bool { return !ChatModel(m.ID) })
+		slices.SortStableFunc(pm.Models, func(a, b ListedModel) int {
+			if c := compareVersions(modelVersion(b.ID), modelVersion(a.ID)); c != 0 {
+				return c
+			}
+			return strings.Compare(a.ID, b.ID)
+		})
+		out[i] = pm
+	}
+	return out
+}
+
+// versionIn finds a model name's version: the first run of numbers
+// joined by dots or hyphens (gemini-3.8-flash: 3.8; claude-opus-5-5: 5-5).
+var versionIn = regexp.MustCompile(`\d+(?:[.-]\d+)*`)
+
+// modelVersion is the numbers of id's version (none when it has none).
+func modelVersion(id string) []int {
+	var v []int
+	for _, part := range regexp.MustCompile(`[.-]`).Split(versionIn.FindString(id), -1) {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			break
+		}
+		v = append(v, n)
+	}
+	return v
+}
+
+// compareVersions orders versions number by number; more numbers after
+// an equal start is newer (3.8 after 3).
+func compareVersions(a, b []int) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if c := cmp.Compare(a[i], b[i]); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(a), len(b))
+}
+
+// setUpProviders are the providers a person sets up themselves, in the
+// order Settings lists them.
+var setUpProviders = []string{"gemini", "anthropic", "openai", "ollama"}
+
+// NotSetUp are the providers the person could set up and hasn't, given
+// those listed (spec_061_models MOD-06); none under an organization that
+// doesn't allow their own.
+func NotSetUp(cfg *config.Config, listed []ProviderModels) []string {
+	if !ownProviders(cfg) {
+		return nil
+	}
+	var out []string
+	for _, p := range setUpProviders {
+		if !slices.ContainsFunc(listed, func(pm ProviderModels) bool { return pm.Provider == p }) {
+			out = append(out, p)
+		}
+	}
+	return out
 }

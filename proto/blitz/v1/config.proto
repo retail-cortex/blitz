@@ -576,6 +576,12 @@ message ListModelsRequest {
   // Only these providers (gemini, anthropic, openai, …), configured or
   // not; none for every configured one.
   repeated string providers = 2;
+  // Ask the providers again instead of answering from the last listing
+  // (spec_061_models MOD-04).
+  bool refresh = 3;
+  // Only the models that hold a conversation, each provider's newest
+  // family first (MOD-01, MOD-02); else everything the providers list.
+  bool chat_only = 4;
 }
 
 // Request message for ConfigService.CheckApiKey.
@@ -702,6 +708,10 @@ message ListModelsResponse {
   repeated ProviderModels providers = 1;
   // The provider a name without "provider/" belongs to.
   string default_provider = 2;
+  // The providers the person could set up and hasn't (gemini, anthropic,
+  // openai, ollama), for Set up (MOD-06); none under an organization that
+  // doesn't allow their own.
+  repeated string not_set_up = 3;
 }
 
 // Response message for ConfigService.GetSettingsReference.

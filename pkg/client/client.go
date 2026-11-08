@@ -41,6 +41,7 @@ type Remote struct {
 	dir        string
 	sessions   pb.SessionServiceClient
 	workspaces pb.WorkspaceServiceClient
+	config     pb.ConfigServiceClient
 	// warn reports calls that failed where Backend has no error to return
 	// (a listing comes back empty instead).
 	warn     func(string)
@@ -74,6 +75,7 @@ func AttachHTTP(ctx context.Context, hc connect.HTTPClient, baseURL, dir string,
 		dir:        abs,
 		sessions:   pb.NewSessionServiceClient(hc, baseURL),
 		workspaces: pb.NewWorkspaceServiceClient(hc, baseURL),
+		config:     pb.NewConfigServiceClient(hc, baseURL),
 		warn:       warn,
 	}
 	// Opens the workspace in the service, and says whether its model works.
@@ -1087,4 +1089,26 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 		return api.EvalRun{}, fromAPI(err)
 	}
 	return api.EvalRun{}, errors.New(i18n.T("attached.eval_unfinished"))
+}
+
+// ListModels is every chat model of every provider the workspace sets up,
+// as the service lists them (spec_061_models MOD-01).
+func (r *Remote) ListModels(ctx context.Context, refresh bool) (api.ModelList, error) {
+	res, err := r.config.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: r.dir, Refresh: refresh, ChatOnly: true}))
+	if err != nil {
+		return api.ModelList{}, fromAPI(err)
+	}
+	out := api.ModelList{DefaultProvider: res.Msg.DefaultProvider, NotSetUp: res.Msg.NotSetUp}
+	for _, p := range res.Msg.Providers {
+		pm := api.ProviderModels{Provider: p.Provider, Error: p.Error, Note: p.Note}
+		for _, m := range p.Models {
+			lm := api.ListedModel{ID: m.Id, DisplayName: m.DisplayName, Default: m.IsDefault, HasPrice: m.HasPrice, InputPerMTok: m.InputPerMtok, OutputPerMTok: m.OutputPerMtok}
+			if c := m.Capabilities; c != nil {
+				lm.Tools, lm.Images, lm.Thinking, lm.Context = c.Tools, c.Images, c.Thinking, int(c.Context)
+			}
+			pm.Models = append(pm.Models, lm)
+		}
+		out.Providers = append(out.Providers, pm)
+	}
+	return out, nil
 }

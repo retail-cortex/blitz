@@ -3191,8 +3191,34 @@ export function installFake() {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };
         },
-        listModels: ({ providers }) =>
-          // Connected to an organization, its models are the models.
+        listModels: ({ providers, chatOnly }) =>
+          // The model menu's list (spec_061 MOD-01): every provider set up, chat models, newest first.
+          chatOnly && !fakeOrg.url
+            ? {
+                defaultProvider: "gemini",
+                providers: [
+                  {
+                    provider: "gemini",
+                    models: [
+                      { id: "gemini-4-carbon", hasPrice: true, inputPerMtok: 4, outputPerMtok: 20, capabilities: { tools: true, images: true, thinking: true, context: 2_000_000 } },
+                      { id: "gemini-4-argon", hasPrice: true, inputPerMtok: 2, outputPerMtok: 10, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.8-pro", hasPrice: true, inputPerMtok: 1.25, outputPerMtok: 10, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.8-flash", hasPrice: true, inputPerMtok: 0.75, outputPerMtok: 3.75, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.5-flash-lite", hasPrice: true, inputPerMtok: 0.1, outputPerMtok: 0.4, capabilities: { tools: true, images: true, thinking: false, context: 1_000_000 } },
+                    ],
+                  },
+                  {
+                    provider: "ollama",
+                    models: [
+                      { id: "qwen3:14b", capabilities: { tools: true, images: false, thinking: true, context: 40_000 } },
+                      { id: "qwen2.5-coder:7b", capabilities: { tools: true, images: false, thinking: false, context: 32_768 } },
+                      { id: "gemma3:12b", capabilities: { tools: false, images: true, thinking: false, context: 128_000 } },
+                    ],
+                  },
+                ],
+                notSetUp: ["anthropic", "openai"],
+              }
+            : // Connected to an organization, its models are the models.
           fakeOrg.url && (providers.length === 0 || providers.includes("enterprise"))
             ? {
                 defaultProvider: "enterprise",

@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
@@ -44,21 +47,35 @@ func pickAgent(ctx context.Context, app *App) (string, bool) {
 	return agents[i].Name, true
 }
 
-// pickModel offers the models Blitz knows of: the current one, pinned
-// ones and those with settings (/model on a terminal).
-func pickModel(ctx context.Context, app *App) (string, bool) {
+// pickModel offers every chat model of every provider set up, grouped by
+// provider (spec_061_models MOD-20), the current one first; and the pinned
+// models and those with settings that the providers don't list (/model on
+// a terminal). refresh asks the providers again.
+func pickModel(ctx context.Context, app *App, refresh bool) (string, bool) {
 	p, ok := terminalPicker(app)
 	if !ok {
 		return "", false
 	}
-	current := app.Workspace.Model()
-	currentRef := current.Name
-	if current.Provider != "" {
-		currentRef = current.Provider + "/" + current.Name
+	current := currentModelRef(app)
+	refs := []string{current}
+	detail := map[string]string{current: i18n.T("picker.model_current")}
+	seen := map[string]bool{current: true}
+	if list, err := app.Workspace.ListModels(ctx, refresh); err == nil {
+		for _, pm := range list.Providers {
+			for _, m := range pm.Models {
+				r := m.Ref(pm.Provider)
+				if seen[r] {
+					detail[r] = i18n.T("picker.model_current") + " · " + modelDetail(pm.Provider, m)
+					continue
+				}
+				seen[r] = true
+				refs = append(refs, r)
+				detail[r] = modelDetail(pm.Provider, m)
+			}
+		}
+	} else {
+		fmt.Printf("%s%s%s\n", Dim, i18n.T("model.list_failed", "error", safe(err.Error())), Reset)
 	}
-	refs := []string{currentRef}
-	detail := map[string]string{currentRef: i18n.T("picker.model_current")}
-	seen := map[string]bool{currentRef: true, current.Name: true}
 	var more []string
 	for _, a := range app.Workspace.ListAgents() {
 		if r := a.PinnedModel; r != "" && !seen[r] {
@@ -85,6 +102,52 @@ func pickModel(ctx context.Context, app *App) (string, bool) {
 		return "", false
 	}
 	return refs[i], true
+}
+
+// currentModelRef is the model the next turn runs on, as provider/name:
+// the conversation's own, else the workspace's.
+func currentModelRef(app *App) string {
+	if cur, ok := app.Workspace.ActiveSession(); ok && cur.Model != "" {
+		return cur.Model
+	}
+	m := app.Workspace.Model()
+	if m.Provider != "" && !strings.HasPrefix(m.Name, m.Provider+"/") {
+		return m.Provider + "/" + m.Name
+	}
+	return m.Name
+}
+
+// modelDetail is a listed model's line: its provider, price per million
+// tokens in and out, context window, and "no tools" when it can't call
+// them (spec_061_models MOD-12).
+func modelDetail(provider string, m api.ListedModel) string {
+	parts := []string{provider}
+	if m.DisplayName != "" && m.DisplayName != m.ID {
+		parts = append(parts, m.DisplayName)
+	}
+	if m.HasPrice {
+		parts = append(parts, i18n.T("picker.model_price", "in", priceText(m.InputPerMTok), "out", priceText(m.OutputPerMTok)))
+	}
+	if m.Context > 0 {
+		parts = append(parts, i18n.T("picker.model_context", "tokens", contextText(m.Context)))
+	}
+	if m.Context > 0 && !m.Tools {
+		parts = append(parts, i18n.T("picker.model_no_tools"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// contextText is a context window as people say it: 128K, 1M, 2.5M.
+func contextText(n int) string {
+	if n >= 1_000_000 {
+		return strconv.FormatFloat(float64(n)/1_000_000, 'f', -1, 64) + "M"
+	}
+	return strconv.Itoa((n+500)/1000) + "K"
+}
+
+// priceText is dollars per million tokens, as short as it reads.
+func priceText(usd float64) string {
+	return "$" + strconv.FormatFloat(usd, 'f', -1, 64)
 }
 
 // resumeWithPicker picks a session to resume when there's a terminal; ok
@@ -139,4 +202,26 @@ func pickSession(ctx context.Context, app *App) (string, bool) {
 		return "", false
 	}
 	return refs[i], true
+}
+
+// printModels lists every chat model of every provider set up, by
+// provider, where there's no picker (spec_061_models MOD-20).
+func printModels(ctx context.Context, app *App, refresh bool) {
+	list, err := app.Workspace.ListModels(ctx, refresh)
+	if err != nil {
+		fmt.Printf("%s%s%s\n", Dim, i18n.T("model.list_failed", "error", safe(err.Error())), Reset)
+		return
+	}
+	for _, pm := range list.Providers {
+		fmt.Printf("\n%s%s%s\n", Bold, safe(pm.Provider), Reset)
+		if pm.Error != "" {
+			fmt.Printf("  %s%s%s\n", Yellow, safe(pm.Error), Reset)
+		}
+		for _, m := range pm.Models {
+			fmt.Printf("  %s  %s%s%s\n", safe(m.Ref(pm.Provider)), Dim, safe(modelDetail(pm.Provider, m)), Reset)
+		}
+	}
+	if len(list.NotSetUp) > 0 {
+		fmt.Printf("\n%s%s%s\n", Dim, i18n.T("model.not_set_up", "providers", strings.Join(list.NotSetUp, ", ")), Reset)
+	}
 }

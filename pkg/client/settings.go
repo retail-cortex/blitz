@@ -65,7 +65,17 @@ type ListedModel struct {
 // configured for the workspace in dir ("" for the user's settings)
 // (ConfigService.ListModels).
 func (s *Settings) ListModels(ctx context.Context, dir string, providers ...string) ([]ProviderModels, error) {
-	res, err := s.c.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: dir, Providers: providers}))
+	return s.listModels(ctx, &pb.ListModelsRequest{Workspace: dir, Providers: providers})
+}
+
+// ListChatModels is ListModels with only the models that hold a
+// conversation, each provider's newest first (spec_061_models MOD-21).
+func (s *Settings) ListChatModels(ctx context.Context, dir string, providers ...string) ([]ProviderModels, error) {
+	return s.listModels(ctx, &pb.ListModelsRequest{Workspace: dir, Providers: providers, ChatOnly: true})
+}
+
+func (s *Settings) listModels(ctx context.Context, req *pb.ListModelsRequest) ([]ProviderModels, error) {
+	res, err := s.c.ListModels(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, fromAPI(err)
 	}

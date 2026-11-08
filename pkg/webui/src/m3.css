@@ -388,6 +388,7 @@ input[type="range"] { accent-color: var(--accent-a); width: 100%; }
 .menu-item.on { background: var(--accent-tint); }
 .menu-divider { height: 1px; margin: 8px 0; background: var(--md-outline-variant); }
 .menu-label { padding: 8px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+.menu-filter { margin: 4px 8px 6px; width: calc(100% - 16px); }
 /* An item with buttons at its end (MenuItem.actions), shown on hover or focus. */
 .menu-row { position: relative; display: flex; align-items: center; }
 .menu-row .menu-item { flex: 1; min-width: 0; padding-right: calc(16px + var(--actions, 1) * 34px); }

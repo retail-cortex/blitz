@@ -253,6 +253,7 @@ go_test(
         "hooks_test.go",
         "language_test.go",
         "leak_test.go",
+        "listmodels_test.go",
         "localmode_test.go",
         "mcp_test.go",
         "media_test.go",

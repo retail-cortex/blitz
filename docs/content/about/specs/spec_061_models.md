@@ -7,8 +7,8 @@ weight: 61
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-08, the owner's request: "This type of control is missing and is fundamental. The UI should support many providers and providers have many models."). |
-| Source | Planned: the model list in `pkg/engine/runtime/listmodels.go` (`ListModels`, `ConfiguredProviders`, `chatModel`), its cache and the workspace's call in `pkg/engine/models.go` (`Workspace.ListModels`), `WorkspaceService.ListModels` in `proto/blitz/v1/workspace.proto` and `pkg/service/server`; the status bar's agent and model menus in `apps/desktop/web/src/StatusBar.tsx` and `apps/desktop/web/src/ModelMenu.tsx` (planned); the CLI's picker in `apps/cli/internal/tui/pickers.go` |
+| Status | **Built** (2026-11-08, the owner's request: "This type of control is missing and is fundamental. The UI should support many providers and providers have many models."). Decisions in §6 taken as recommended. |
+| Source | The list in `pkg/engine/runtime/listmodels.go` (`ListModels`, `ConfiguredProviders`, `ChatModel`, `ChatModels`, `NotSetUp`, `ollamaAnswers`); `ConfigService.ListModels` with `chat_only` and `refresh` (`proto/blitz/v1/config.proto`, `pkg/service/server/models.go`, its 10-minute cache); the backend's `ListModels` (`pkg/engine/models.go`, its own cache; `pkg/client/client.go`); the status bar's agent and model buttons in `apps/desktop/web/src/StatusBar.tsx` and `apps/desktop/web/src/ModelMenu.tsx`, the menu's filter in `pkg/webui/src/controls.tsx` (`Menu` `searchAt`, `filterMenu`); the CLI's picker in `apps/cli/internal/tui/pickers.go` |
 | Depends on | [spec_056_conversation_adapters](spec_056_conversation_adapters.md) (CA-100 a conversation's own model, what a switch costs), [spec_053_enterprise](spec_053_enterprise.md) (EN-20 the organization's models, EN-35 own providers), [spec_005_approvals](spec_005_approvals.md) (APR-14c auto mode with a local model) |
 
 ## 1. Purpose
@@ -43,7 +43,7 @@ Blitz can run on many providers, and each provider has many models, but picking 
 
 ## 6. Decisions
 
-Open, with the recommendation first:
+Taken as recommended (2026-11-08), the owner to confirm:
 
 1. Models are sorted **newest family first** within a provider (recommended: the one you probably want is on top), or alphabetically.
 2. Unknown model names are **kept** (recommended: new models appear before Blitz knows them), or hidden until Blitz knows them.

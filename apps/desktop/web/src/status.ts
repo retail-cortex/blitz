@@ -54,6 +54,8 @@ interface WorkspaceStatus {
   cursor?: Cursor;
   /** The open conversation's own model, when it has one (spec_056 CA-100). */
   conversationModel?: string;
+  /** The open conversation, which the model menu moves (spec_061 MOD-12). */
+  sessionId?: string;
 }
 
 const empty: WorkspaceStatus = {};

@@ -70,6 +70,7 @@ import { shownVersion } from "./serviceVersion";
 import { contextShare, costByModel, costText, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
+import { ModelMenu } from "./ModelMenu";
 import { keepPermissionMode, setEffort as setEffortSetting } from "./workspaceSettings";
 
 /** How often the branch and changed files are asked for while shown. */
@@ -574,15 +575,9 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           placement="up end"
           className="wide-menu"
           trigger={(p) => (
-            <button
-              className="sb-item sb-button sb-model"
-              title={t("desktop.status.model_title", { agent: s.agent, model: st.conversationModel || s.model, provider: s.provider })}
-              {...p}
-              onClick={() => (loadAgents(), p.onClick())}
-            >
+            <button className="sb-item sb-button sb-agent" title={t("desktop.status.agent_title", { agent: s.agent })} {...p} onClick={() => (loadAgents(), p.onClick())}>
               <Icon path={mdiRobotOutline} size="sm" />
-              <span className="sb-low ellipsis">{s.agent}</span>
-              <span className="ellipsis">{st.conversationModel || s.model}</span>
+              <span className="ellipsis">{s.agent}</span>
             </button>
           )}
           items={[
@@ -605,6 +600,7 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           ]}
         />
       )}
+      {s && <ModelMenu dir={dir} model={st.conversationModel || s.model} provider={st.conversationModel ? "" : s.provider} sessionId={st.sessionId} />}
       {s && (
         <Menu
           placement="up end"

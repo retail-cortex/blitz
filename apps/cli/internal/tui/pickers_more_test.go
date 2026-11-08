@@ -255,6 +255,49 @@ func TestModelPickerOffersPinsAndSettings(t *testing.T) {
 	assert.Contains(t, screen, "has settings")
 }
 
+// The model picker offers every provider's models, each with its provider
+// and facts, filtered by typing; /model --refresh asks the providers again;
+// without a terminal /model prints them by provider (spec_061_models MOD-20).
+func TestModelPickerListsEveryProvidersModels(t *testing.T) {
+	app, s := stubApp(t, "")
+	f, keys := pickTerminal(t)
+	app.Input = f.in
+	refreshed := false
+	s.listModels = func(refresh bool) (api.ModelList, error) {
+		refreshed = refreshed || refresh
+		return api.ModelList{
+			Providers: []api.ProviderModels{
+				{Provider: "gemini", Models: []api.ListedModel{
+					{ID: "gemini-4-carbon", HasPrice: true, InputPerMTok: 4, OutputPerMTok: 20, Tools: true, Context: 2_000_000},
+					{ID: "gemini-3.8-flash", HasPrice: true, InputPerMTok: 0.75, OutputPerMTok: 3.75, Tools: true, Context: 1_000_000},
+				}},
+				{Provider: "ollama", Models: []api.ListedModel{{ID: "gemma3:12b", Context: 128_000}}},
+			},
+			NotSetUp: []string{"anthropic"},
+		}, nil
+	}
+	var set string
+	s.setModel = func(ref string) (string, error) { set = ref; return "", nil }
+	keys.in <- []byte("carbon\r")
+	runCmd(t, app, "/model")
+	assert.Equal(t, "gemini/gemini-4-carbon", set)
+	screen := f.output()
+	assert.Contains(t, screen, "gemini/gemini-3.8-flash")
+	assert.Contains(t, screen, "$0.75/$3.75 per 1M")
+	assert.Contains(t, screen, "128K context")
+	assert.Contains(t, screen, "ollama/gemma3:12b")
+	assert.Contains(t, screen, "no tools")
+
+	keys.in <- []byte("\x1b")
+	runCmd(t, app, "/model --refresh")
+	assert.True(t, refreshed)
+
+	app.Input = &ctrlCInput{}
+	out := runCmd(t, app, "/model")
+	assert.Contains(t, out, "gemini/gemini-4-carbon")
+	assert.Contains(t, out, "Not set up yet: anthropic")
+}
+
 // The session picker leaves out the active session, empty ones and
 // snapshots (offered by name), and says when there's nothing to resume.
 func TestSessionPickerChoices(t *testing.T) {
