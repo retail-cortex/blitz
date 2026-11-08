@@ -44,6 +44,8 @@ func fileError(err error) error {
 		return apiError(connect.CodeNotFound, "FILE_NOT_FOUND", err)
 	case errors.Is(err, fs.ErrExist):
 		return apiError(connect.CodeAlreadyExists, "FILE_EXISTS", err)
+	case errors.Is(err, engine.ErrNotInTrash):
+		return apiError(connect.CodeNotFound, "NOT_IN_TRASH", err)
 	case errors.Is(err, engine.ErrNoUpload):
 		return apiError(connect.CodeNotFound, "NO_UPLOAD", err)
 	case errors.Is(err, engine.ErrUploadTooLarge):
@@ -77,7 +79,7 @@ func (h fileService) ListDir(ctx context.Context, r req[pb.ListDirRequest]) (*co
 	if err != nil {
 		return nil, err
 	}
-	l, err := w.ListDir(ctx, r.Msg.Path, r.Msg.ShowHidden)
+	l, err := w.ListDirUpTo(ctx, r.Msg.Path, r.Msg.ShowHidden, int(r.Msg.Limit))
 	if err != nil {
 		return nil, fileError(err)
 	}
@@ -178,10 +180,39 @@ func (h fileService) DeleteFile(ctx context.Context, r req[pb.DeleteFileRequest]
 	if err != nil {
 		return nil, err
 	}
+	if r.Msg.Undoable {
+		id, err := w.TrashFile(ctx, r.Msg.Path)
+		if err != nil {
+			return nil, fileError(err)
+		}
+		return ok(&pb.DeleteFileResponse{RestoreId: id})
+	}
 	if err := w.DeleteFile(ctx, r.Msg.Path); err != nil {
 		return nil, fileError(err)
 	}
 	return ok(&pb.DeleteFileResponse{})
+}
+
+func (h fileService) RestoreFile(ctx context.Context, r req[pb.RestoreFileRequest]) (*connect.Response[pb.RestoreFileResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.RestoreFile(ctx, r.Msg.RestoreId, r.Msg.Path); err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.RestoreFileResponse{})
+}
+
+func (h fileService) CopyFile(ctx context.Context, r req[pb.CopyFileRequest]) (*connect.Response[pb.CopyFileResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.CopyFile(ctx, r.Msg.From, r.Msg.To); err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.CopyFileResponse{})
 }
 
 var gitActions = map[pb.GitAction]engine.GitAction{

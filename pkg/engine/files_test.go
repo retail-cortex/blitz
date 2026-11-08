@@ -370,6 +370,22 @@ func TestListDirTruncates(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, l.Truncated)
 	assert.Len(t, l.Entries, maxListed)
+
+	// Show more (FIL-39): a higher limit lists them all; a lower one cuts sooner.
+	for name, tc := range map[string]struct {
+		limit, want int
+		truncated   bool
+	}{
+		"more":  {2 * maxListed, maxListed + 1, false},
+		"fewer": {10, 10, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			l, err := w.ListDirUpTo(context.Background(), "many", false, tc.limit)
+			require.NoError(t, err)
+			assert.Equal(t, tc.truncated, l.Truncated)
+			assert.Len(t, l.Entries, tc.want)
+		})
+	}
 }
 
 // tools.max_file_size_bytes lowers the editor's limit; a file over it

@@ -48,8 +48,14 @@ service FileService {
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   // Moves a file or folder; the destination must not exist.
   rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
-  // Deletes a file, or a folder with everything in it.
+  // Deletes a file, or a folder with everything in it; undoable, it goes
+  // to the workspace's trash for a day (FIL-37).
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  // Puts back what an undoable DeleteFile moved to the trash.
+  rpc RestoreFile(RestoreFileRequest) returns (RestoreFileResponse);
+  // Copies a file, or a folder with everything in it; the destination must
+  // not exist (FIL-38).
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse);
   // Runs a git action on a file or folder of the workspace: stage it,
   // unstage it, discard its changes (back to the last commit), or add it to
   // the workspace's .gitignore or take it out again; the path "" stages or
@@ -121,6 +127,9 @@ message ListDirRequest {
   // "" for the workspace itself.
   string path = 2;
   bool show_hidden = 3;
+  // At most this many entries (5,000 for 0): "Show more" asks for more
+  // of a big folder (FIL-39).
+  int32 limit = 4;
 }
 
 // Response message for FileService.ListDir.
@@ -240,10 +249,38 @@ message RenameFileResponse {}
 message DeleteFileRequest {
   string workspace = 1;
   string path = 2;
+  // To the workspace's trash (.blitz/trash), restorable for a day, instead
+  // of gone for good.
+  bool undoable = 3;
 }
 
 // Response message for FileService.DeleteFile.
-message DeleteFileResponse {}
+message DeleteFileResponse {
+  // What restores it (RestoreFile), when it was undoable.
+  string restore_id = 1;
+}
+
+// Request message for FileService.RestoreFile.
+message RestoreFileRequest {
+  string workspace = 1;
+  // The DeleteFile's restore_id.
+  string restore_id = 2;
+  // Where it was; nothing may be there now.
+  string path = 3;
+}
+
+// Response message for FileService.RestoreFile.
+message RestoreFileResponse {}
+
+// Request message for FileService.CopyFile.
+message CopyFileRequest {
+  string workspace = 1;
+  string from = 2;
+  string to = 3;
+}
+
+// Response message for FileService.CopyFile.
+message CopyFileResponse {}
 
 // GitAction is what GitFileAction does.
 enum GitAction {
