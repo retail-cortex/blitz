@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.7](blitz-0.9.7.md): Gemini searches the web for you again: its own tools work beside Blitz's on the Gemini API, instead of stopping the conversation with an error.
 - [Blitz 0.9.6](blitz-0.9.6.md): local models that actually do the work: with Ollama, Blitz asks you before changes instead of letting the model review itself, and when auto mode's reviewer says no, you decide with a click.
 - [Blitz 0.9.5](blitz-0.9.5.md): SQLite databases work again on the Mac: opening one no longer stops the Blitz service.
 - [Blitz 0.9.4](blitz-0.9.4.md): a Pictures panel for making pictures (every Gemini and Imagen control, references, conversations, saving into the workspace), and edit your agents like documents: every long field in Studio opens in the visual editor, with Redraft under it, and Studio's new Specs section lists, checks, reviews and refines your project's specification (with `blitz spec review` for CI); Python projects in subfolders get their own language server and their own virtual environment.

@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.6
-weight: 1
+weight: 2
 ---
 
 **Local models that actually do the work.** With a model running on your computer through Ollama, the agent writes files and runs its tools again instead of pasting what it would have written. And when auto mode's reviewer says no, you decide with a click.
