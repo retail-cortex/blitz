@@ -102,7 +102,12 @@ func TestPrimaryAgentsHaveWorkflowTools(t *testing.T) {
 
 // A turn whose agent entered plan mode refuses tools that change things.
 func TestPlanGateRefusesWrites(t *testing.T) {
-	assert.NotNil(t, planRefusal(&runState{}, true, "create_file"), "create_file allowed while planning")
-	assert.Nil(t, planRefusal(&runState{}, true, "todo"), "todo refused while planning")
-	assert.Nil(t, planRefusal(&runState{}, false, "create_file"), "create_file refused outside plan mode")
+	assert.NotNil(t, planRefusal(&runState{}, true, "create_file", nil), "create_file allowed while planning")
+	assert.Nil(t, planRefusal(&runState{}, true, "todo", nil), "todo refused while planning")
+	assert.Nil(t, planRefusal(&runState{}, false, "create_file", nil), "create_file refused outside plan mode")
+	// The blitz tool's commands that read or open run while planning; those
+	// that change don't (spec_060 DRV-70).
+	assert.Nil(t, planRefusal(&runState{}, true, "blitz", map[string]any{"command": "connector list"}))
+	assert.Nil(t, planRefusal(&runState{}, true, "blitz", map[string]any{"command": "open file"}))
+	assert.Contains(t, planRefusal(&runState{}, true, "blitz", map[string]any{"command": "connector save"})["error"], "blitz connector save is disabled")
 }

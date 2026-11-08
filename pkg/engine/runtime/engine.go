@@ -1029,9 +1029,13 @@ func (e *Engine) noteFallback(ctx context.Context, resp *model.LLMResponse) {
 // Returning a result map skips the tool and hands that result to the model.
 func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
 	log := e.toolReg.Hooks().Audit()
-	log.LogContext(ctx, audit.Entry{Kind: audit.KindToolCall, Tool: t.Name(), Args: args})
+	name := t.Name()
+	if c, ok := args["command"].(string); ok && name == "blitz" {
+		name = "blitz:" + strings.Join(strings.Fields(strings.ToLower(c)), " ") // the command, in the audit (spec_060 DRV-73)
+	}
+	log.LogContext(ctx, audit.Entry{Kind: audit.KindToolCall, Tool: name, Args: args})
 
-	if r := planRefusal(stateFrom(ctx), tools.PlanGateFrom(ctx).Planning(), t.Name()); r != nil {
+	if r := planRefusal(stateFrom(ctx), tools.PlanGateFrom(ctx).Planning(), t.Name(), args); r != nil {
 		return r, nil
 	}
 	if r := allowedRefusal(stateFrom(ctx), t.Name()); r != nil {

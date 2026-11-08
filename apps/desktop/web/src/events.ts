@@ -113,7 +113,9 @@ export const viewEvent = "blitz:view";
 /** Which workspace, and which view to show ("chat" and "editor" close what's over the editor). */
 export interface ViewDetail {
   dir: string;
-  view: "chat" | "editor" | "changes" | "workers" | "workflows" | "processes" | "pictures";
+  view: "chat" | "editor" | "changes" | "workers" | "workflows" | "processes" | "pictures" | "studio";
+  /** Studio: the section to open (the agent's open studio, spec_060 DRV-31). */
+  studio?: string;
   /** Pictures: a first prompt, a workspace picture to start from, a folder to save in (spec_058 PIC-10). */
   picture?: { prompt?: string; reference?: string; folder?: string };
   /** Which changes: this session's (the default) or git's. */

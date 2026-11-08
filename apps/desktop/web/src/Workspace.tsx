@@ -48,7 +48,7 @@ import { workspaces } from "./api";
 import { panelWidth, useWindowWidth } from "@blitz/webui";
 import { ResizeHandle } from "@blitz/webui";
 import { Brand, MenuBar } from "./MenuBar";
-import { StudioDrawer, type StudioKind, type StudioOpen } from "./studio/StudioDrawer";
+import { isStudioKind, StudioDrawer, type StudioKind, type StudioOpen } from "./studio/StudioDrawer";
 import { intent as newIntent } from "./intent";
 import type { Section } from "./SettingsDrawer";
 
@@ -116,6 +116,7 @@ export function Workspace({
       else setStudio({ kind: "workers", intent: newIntent("show", d?.worker ?? "") });
     }
     else if (v === "workflows") setStudio({ kind: "workflows", intent: newIntent("show", d?.workflow ?? ""), run: d?.run });
+    else if (v === "studio" && d?.studio && isStudioKind(d.studio)) setStudio({ kind: d.studio });
     else {
       setDrawer(null);
       setStudio(null);

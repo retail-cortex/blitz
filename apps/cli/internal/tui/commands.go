@@ -86,17 +86,21 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 
 	case "model":
-		if len(args) == 0 {
-			if ref, ok := pickModel(ctx, app); ok {
+		if refresh := len(args) == 1 && args[0] == "--refresh"; len(args) == 0 || refresh {
+			if ref, ok := pickModel(ctx, app, refresh); ok {
 				return HandleCommand(ctx, "/model "+ref, app)
 			}
+			_, picker := terminalPicker(app)
 			m := app.Workspace.Model()
 			if cur, ok := app.Workspace.ActiveSession(); ok && cur.Model != "" {
 				fmt.Println(i18n.T("model.conversation", "model", Cyan+safe(cur.Model)+Reset))
 				fmt.Println(i18n.T("model.workspace_default", "model", safe(m.Name), "provider", m.Provider))
-				return true, nil
+			} else {
+				fmt.Println(i18n.T("model.current", "model", Cyan+safe(m.Name)+Reset, "provider", m.Provider))
 			}
-			fmt.Println(i18n.T("model.current", "model", Cyan+safe(m.Name)+Reset, "provider", m.Provider))
+			if !picker { // the picker listed them
+				printModels(ctx, app, refresh)
+			}
 			return true, nil
 		}
 		switchModel(ctx, app, args[0], slices.Contains(args[1:], "--new"))
@@ -556,6 +560,7 @@ func switchModel(ctx context.Context, app *App, ref string, fresh bool) {
 		} else {
 			fmt.Printf("%s %s%s\n", Green, i18n.T("model.set", "model", Cyan+safe(ref)), Reset)
 		}
+		printModeNote(app)
 		if pin != "" {
 			fmt.Printf("%s%s%s\n", Dim, i18n.T("pin.active_pinned", "agent", app.Workspace.ActiveAgent().Name, "model", safe(pin)), Reset)
 		}

@@ -467,6 +467,22 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   yield ev(tasks(0));
   const call = (id: string, name: string, args: JsonObject) => ev({ case: "toolCall", value: { id, name, args } });
   const result = (id: string, name: string, res: JsonObject) => ev({ case: "toolResult", value: { id, name, result: res } });
+  if (/reviewer/i.test(text)) {
+    // Auto mode's reviewer denied a write; the person may allow it anyway
+    // (spec_005_approvals APR-14d).
+    const id = `a${++nextRequest}`;
+    const decision = new Promise<string>((r) => s.pending.set(id, r));
+    yield call("r1", "create_file", { path: ".agents/scratch/db-info.md" });
+    yield ev({
+      case: "approvalRequest",
+      value: { requestId: id, tool: "create_file", kind: ActionKind.WRITE, detail: "Create .agents/scratch/db-info.md (2130 bytes)", reviewerDenied: "The action attempts to create a file outside the workspace." },
+    });
+    const d = await decision;
+    yield result("r1", "create_file", d === "deny" ? { error: "the user denied it" } : { path: ".agents/scratch/db-info.md", bytes_written: 2130 });
+    yield ev({ case: "text", value: { text: d === "deny" ? "OK, I won't write it." : "Wrote `.agents/scratch/db-info.md`." } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   yield call("1", "read_file", { path: "internal/cart/discount.go" });
   await sleep(250);
   yield result("1", "read_file", { content: "package cart\n…", lines: 84 });
@@ -995,6 +1011,11 @@ const fakeServiceRuns: { id: string; trigger: string; status: string; output?: s
 ];
 
 // What a model of provider takes, as the service says (runtime.AcceptedMedia).
+/** The engine's note while a local model would review its own actions (spec_005 APR-14c). */
+function fakeModeNote(provider: string) {
+  return provider === "ollama" ? "Auto mode is off while a model on this computer (Ollama) does the work: it would review its own actions. Blitz asks you instead. To use auto mode, set a reviewer model ([permissions.auto] model, such as gemini/gemini-3.8-flash) and open the workspace again." : "";
+}
+
 function fakeAccepted(provider: string) {
   const media = (kind: string, types: [string, string[]][], maxBytes: number) => ({ kind, mimeTypes: types.map(([m]) => m), extensions: types.flatMap(([, e]) => e), maxBytes: BigInt(maxBytes) });
   const images = media("image", [["image/png", [".png"]], ["image/jpeg", [".jpg", ".jpeg"]], ["image/gif", [".gif"]], ["image/webp", [".webp"]], ["image/bmp", [".bmp"]]], 20 << 20);
@@ -2453,7 +2474,7 @@ export function installFake() {
         runSkillScript: async ({ script, args }) => (await new Promise((r) => setTimeout(r, 900)),  ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" })),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
-          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", imageModel: s.imageModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
+          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, modeNote: fakeModeNote(s.provider), agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", imageModel: s.imageModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
         },
         // ?nomodel: the model can't be reached (the chat's warning card).
         getModel: ({ workspace }) => ({
@@ -2463,7 +2484,9 @@ export function installFake() {
         }),
         setModel: ({ workspace, ref }) => {
           const [provider, name] = ref.includes("/") ? ref.split("/", 2) : [state(workspace).settings.provider, ref];
-          Object.assign(state(workspace).settings, { provider, model: name });
+          const st = state(workspace).settings;
+          Object.assign(st, { provider, model: name });
+          if (fakeModeNote(provider) && st.mode === "auto") st.mode = "default"; // APR-14c
           return {};
         },
         listAgents: ({ workspace }) => ({
@@ -2513,8 +2536,9 @@ export function installFake() {
             err.details.push({ desc: ErrorInfoSchema, value: { reason: "BYPASS_NEEDS_SANDBOX" } });
             throw err;
           }
-          state(workspace).settings.mode = mode;
-          return { mode };
+          const st = state(workspace).settings;
+          st.mode = mode === "auto" && fakeModeNote(st.provider) ? "default" : mode; // APR-14c
+          return { mode: st.mode };
         },
         // Each model's settings, as set (none at first: Default), and the global ones under them.
         getModelSettings: ({ ref }) => (ref ? { model: fakeModelInfo(ref) } : { all: Object.fromEntries(fakeModelSettings) }),
@@ -3167,8 +3191,34 @@ export function installFake() {
           fakeOrg.signedIn = false;
           return { state: fakeOrgState(false) };
         },
-        listModels: ({ providers }) =>
-          // Connected to an organization, its models are the models.
+        listModels: ({ providers, chatOnly }) =>
+          // The model menu's list (spec_061 MOD-01): every provider set up, chat models, newest first.
+          chatOnly && !fakeOrg.url
+            ? {
+                defaultProvider: "gemini",
+                providers: [
+                  {
+                    provider: "gemini",
+                    models: [
+                      { id: "gemini-4-carbon", hasPrice: true, inputPerMtok: 4, outputPerMtok: 20, capabilities: { tools: true, images: true, thinking: true, context: 2_000_000 } },
+                      { id: "gemini-4-argon", hasPrice: true, inputPerMtok: 2, outputPerMtok: 10, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.8-pro", hasPrice: true, inputPerMtok: 1.25, outputPerMtok: 10, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.8-flash", hasPrice: true, inputPerMtok: 0.75, outputPerMtok: 3.75, capabilities: { tools: true, images: true, thinking: true, context: 1_000_000 } },
+                      { id: "gemini-3.5-flash-lite", hasPrice: true, inputPerMtok: 0.1, outputPerMtok: 0.4, capabilities: { tools: true, images: true, thinking: false, context: 1_000_000 } },
+                    ],
+                  },
+                  {
+                    provider: "ollama",
+                    models: [
+                      { id: "qwen3:14b", capabilities: { tools: true, images: false, thinking: true, context: 40_000 } },
+                      { id: "qwen2.5-coder:7b", capabilities: { tools: true, images: false, thinking: false, context: 32_768 } },
+                      { id: "gemma3:12b", capabilities: { tools: false, images: true, thinking: false, context: 128_000 } },
+                    ],
+                  },
+                ],
+                notSetUp: ["anthropic", "openai"],
+              }
+            : // Connected to an organization, its models are the models.
           fakeOrg.url && (providers.length === 0 || providers.includes("enterprise"))
             ? {
                 defaultProvider: "enterprise",

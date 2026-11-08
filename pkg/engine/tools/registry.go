@@ -76,6 +76,8 @@ type Registry struct {
 
 	browser *browserTool // nil: no browser tool
 	page    pageTool     // open_page (spec_050_agent_browser AB-10)
+	file    fileTool     // open_file (spec_060_blitz_tools DRV-31)
+	blitz   blitzTool    // blitz, Blitz's own commands (spec_060_blitz_tools DRV-01)
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
 	paint   *paint       // generate_image's image model (SetPainter)
 
@@ -528,6 +530,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if r.tools["open_page"], err = NewOpenPageTool(r); err != nil {
 		r.Close()
 		return nil, fmt.Errorf("failed to create the open_page tool: %w", err)
+	}
+	if r.tools["open_file"], err = NewOpenFileTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the open_file tool: %w", err)
+	}
+	if r.tools["blitz"], err = NewBlitzTool(r); err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the blitz tool: %w", err)
 	}
 	if r.tools["install_secret_hook"], err = NewInstallSecretHookTool(r); err != nil {
 		r.Close()

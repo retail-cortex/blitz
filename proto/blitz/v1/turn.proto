@@ -277,6 +277,9 @@ message ApprovalRequest {
   // An ask rule covers the action: it's asked even where a mode, an
   // allow rule or a remembered approval would let it through.
   bool must_ask = 11;
+  // Auto mode's reviewer denied the action, and why: the person, there to
+  // answer, may allow it anyway (spec_005_approvals APR-14d).
+  string reviewer_denied = 12;
 }
 
 // Decision answers an ApprovalRequest.
@@ -309,6 +312,9 @@ message Question {
   repeated QuestionChoice choices = 7;
   // What the choices' order rests on.
   string order = 8;
+  // The answer is a secret's value: typed hidden, never shown or kept,
+  // and never given to the model (spec_060_blitz_tools DRV-05).
+  bool secret = 9;
 }
 
 // QuestionChoice is a question's option explained.

@@ -97,6 +97,7 @@ type stubBackend struct {
 	removePermission func(rule string, save api.Scope) (api.PermissionChange, error)
 	modelSettings    func(ref string) (api.ModelSettingsInfo, error)
 	allModelSettings func() map[string]config.ModelSettings
+	listModels       func(refresh bool) (api.ModelList, error)
 	updateSettings   func(ref string, reset bool, changes []api.Setting) (api.ModelSettingsChange, error)
 }
 
@@ -561,6 +562,15 @@ func (s *stubBackend) ModelSettings(ref string) (api.ModelSettingsInfo, error) {
 		return s.modelSettings(ref)
 	}
 	return s.Backend.ModelSettings(ref)
+}
+
+// ListModels is no providers' models unless the test says, so no test
+// reaches a provider (or an Ollama running on the machine).
+func (s *stubBackend) ListModels(_ context.Context, refresh bool) (api.ModelList, error) {
+	if s.listModels != nil {
+		return s.listModels(refresh)
+	}
+	return api.ModelList{}, nil
 }
 
 func (s *stubBackend) AllModelSettings() map[string]config.ModelSettings {

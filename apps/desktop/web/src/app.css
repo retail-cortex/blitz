@@ -86,7 +86,7 @@
 .sb-accent { color: var(--md-primary); }
 .sb-model { max-width: 280px; }
 .sb-button.on { background: color-mix(in srgb, var(--md-primary) 14%, transparent); color: var(--md-on-surface); }
-.sb-model .sb-low::after { content: "·"; margin-left: 4px; opacity: 0.6; }
+.sb-agent { max-width: 180px; }
 .sb-meter { width: 36px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--md-on-surface) 14%, transparent); overflow: hidden; }
 .sb-meter > span { display: block; height: 100%; background: var(--md-primary); }
 .sb-meter.high > span { background: var(--md-error); }
@@ -99,7 +99,7 @@
 .sb-warnings { color: var(--md-warning); }
 .sb-server { max-width: 280px; }
 /* Narrow windows keep the icons and numbers. */
-@media (max-width: 900px) { .status-bar .sb-low { display: none; } .sb-model { max-width: 160px; } }
+@media (max-width: 900px) { .status-bar .sb-low { display: none; } .sb-model { max-width: 160px; } .sb-agent { max-width: 120px; } }
 @media (max-width: 640px) { .sb-cursor, .sb-ws { display: none; } }
 
 .banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--md-warning-container); color: var(--md-on-warning-container); }
@@ -289,6 +289,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 
 .approval, .question { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--md-primary); background: var(--md-surface-container-low); }
 .approval > .row > .icon, .question > .row > .icon { color: var(--md-primary); }
+.approval-reviewer { color: var(--md-warning, #b8860b); }
 .question-text { max-height: 50vh; overflow-y: auto; }
 .row.wrap { flex-wrap: wrap; }
 /* Rewrite with AI's review (WorkerEditor.tsx): what changed, the suggested

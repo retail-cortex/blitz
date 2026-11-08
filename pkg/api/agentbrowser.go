@@ -22,7 +22,8 @@ type AgentBrowserCommand struct {
 	BrowserID string
 	// Kind is "open", "message" or "close"; or, for a page the user asked
 	// to see (AB-10), "page" (a web tab) or "external" (the system's
-	// browser), with URL and no BrowserID.
+	// browser), with URL and no BrowserID; or "file", a workspace file to
+	// open in the editor, with Path and Line (spec_060_blitz_tools DRV-31).
 	Kind string
 	// Message is a DevTools Protocol command as JSON (Kind "message").
 	Message string
@@ -37,4 +38,8 @@ type AgentBrowserCommand struct {
 	DenyDomains []string
 	// URL is the page to show, for "page" and "external".
 	URL string
+	// Path is the workspace file to open (relative to the workspace), and
+	// Line the line to put the cursor on (0: the top), for "file".
+	Path string
+	Line int
 }

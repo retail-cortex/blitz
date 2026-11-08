@@ -17,6 +17,8 @@ package runtime
 import (
 	"context"
 	"iter"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +128,55 @@ func TestReviewPromptAndFailures(t *testing.T) {
 		_, _, err := f.eng.review(ctx, req)
 		assert.Error(t, err)
 	})
+}
+
+// The reviewer is told, as a fact, that a write's paths are inside the
+// workspace, and a denial saying they're outside it is no verdict: the
+// user decides (spec_005 APR-14c: a small local model denied
+// .agents/scratch/… as "outside the workspace").
+func TestReviewInsideTheWorkspace(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{})
+	ctx := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s"})
+	dir := f.eng.toolReg.Workspace().Dir()
+	write := func(kind api.ActionKind, targets ...string) api.ApprovalRequest {
+		return api.ApprovalRequest{Tool: "create_file", Kind: kind, Detail: "Create " + strings.Join(targets, ", "), Targets: targets}
+	}
+	cases := []struct {
+		name    string
+		req     api.ApprovalRequest
+		answer  string
+		fact    bool // the prompt says the paths are inside
+		verdict bool // a verdict stands (else an error: the user decides)
+		allowed bool
+	}{
+		{name: "false reason", req: write(api.ActionWrite, ".agents/scratch/notes.md"), answer: `{"decision":"deny","reason":"The action attempts to create a file outside the workspace."}`, fact: true},
+		{name: "outside of the project", req: write(api.ActionDelete, "a.md", "b/c.md"), answer: `{"decision":"deny","reason":"It deletes files outside of the project"}`, fact: true},
+		{name: "another reason stands", req: write(api.ActionWrite, "notes.md"), answer: `{"decision":"deny","reason":"It overwrites the user's work"}`, fact: true, verdict: true},
+		{name: "an allow stands", req: write(api.ActionWrite, "notes.md"), answer: `{"decision":"allow","reason":"asked for"}`, fact: true, verdict: true, allowed: true},
+		{name: "a path that climbs out", req: write(api.ActionWrite, "../elsewhere.md"), answer: `{"decision":"deny","reason":"outside the workspace"}`, verdict: true},
+		{name: "an absolute path", req: write(api.ActionWrite, "/etc/hosts"), answer: `{"decision":"deny","reason":"outside the workspace"}`, verdict: true},
+		{name: "not a file change", req: api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "ls", Targets: []string{"ls"}}, answer: `{"decision":"deny","reason":"outside the workspace"}`, verdict: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reviewer := NewMockLLM("reviewer", textContent(c.answer))
+			f.eng.reviewModel = reviewer
+			allowed, _, err := f.eng.review(ctx, c.req)
+			sent := reviewer.Requests[0].Contents[0].Parts[0].Text
+			if c.fact {
+				assert.Contains(t, sent, "inside the workspace: yes")
+				assert.Contains(t, sent, filepath.Join(dir, filepath.FromSlash(c.req.Targets[0])), "the absolute path")
+			} else {
+				assert.NotContains(t, sent, "inside the workspace: yes")
+			}
+			if c.verdict {
+				require.NoError(t, err)
+				assert.Equal(t, c.allowed, allowed)
+			} else {
+				assert.ErrorContains(t, err, "it's inside")
+			}
+		})
+	}
 }
 
 // askModel skips thoughts, prices the call under the model that served it,

@@ -144,6 +144,9 @@ type Backend interface {
 	// that would mean without moving it (spec_056 CA-100, CA-101).
 	SetSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
 	PreviewSessionModel(ctx context.Context, id, ref string) (ModelPreview, error)
+	// ListModels is every chat model of every provider set up, from the
+	// last listing unless refresh (spec_061_models MOD-01, MOD-04).
+	ListModels(ctx context.Context, refresh bool) (ModelList, error)
 	PinModel(ctx context.Context, agent, ref string) (PinResult, error)
 	Unpin(ctx context.Context, agent string) (PinResult, error)
 	AllModelSettings() map[string]config.ModelSettings

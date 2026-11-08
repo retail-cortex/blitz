@@ -434,3 +434,29 @@ func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.Draf
 	}
 	return ok(d)
 }
+
+func (h workspaceService) RunBlitzCommand(ctx context.Context, r req[pb.RunBlitzCommandRequest]) (*connect.Response[pb.RunBlitzCommandResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	var args map[string]any
+	if s := strings.TrimSpace(r.Msg.ArgsJson); s != "" {
+		if err := json.Unmarshal([]byte(s), &args); err != nil {
+			return nil, invalid(fmt.Errorf("args: %w", err))
+		}
+	}
+	run, err := w.RunBlitzCommand(ctx, r.Msg.Command, args, r.Msg.Confirm, r.Msg.Secrets)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	out := &pb.RunBlitzCommandResponse{Help: run.Help, Confirm: run.Confirm, Diff: run.Diff, Asks: run.Asks}
+	if run.Result != nil {
+		b, err := json.Marshal(run.Result)
+		if err != nil {
+			return nil, err
+		}
+		out.ResultJson = string(b)
+	}
+	return ok(out)
+}

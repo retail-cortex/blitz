@@ -58,7 +58,7 @@ func TestOllamaAuto(t *testing.T) {
 		{"not running", nil, errors.New("connection refused"), "open the Ollama app or run `ollama serve`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil)
+			a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil, true)
 			assert.Equal(t, "ollama", a.Name(), "before the first call")
 			a.list = func(context.Context) ([]string, error) { return tc.ids, tc.listErr }
 			a.build = func(_ context.Context, name string) (model.LLM, error) {
@@ -158,7 +158,7 @@ func TestOllamaAutoServer(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	a := newOllamaAuto("ollama", srv.URL+"/v1", []option.RequestOption{option.WithMaxRetries(0)})
+	a := newOllamaAuto("ollama", srv.URL+"/v1", []option.RequestOption{option.WithMaxRetries(0)}, true)
 	var text string
 	for resp, err := range a.GenerateContent(context.Background(), hiRequest(), false) {
 		require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestOllamaAutoServer(t *testing.T) {
 // model's name is still at hand: the UI and the engine's read lock don't
 // wait on it (N26 engine-runtime#28).
 func TestOllamaAutoNameDoesntWaitForTheList(t *testing.T) {
-	a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil)
+	a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil, true)
 	listing, release := make(chan struct{}), make(chan struct{})
 	a.list = func(ctx context.Context) ([]string, error) {
 		close(listing)

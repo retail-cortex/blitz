@@ -201,6 +201,23 @@ func (ttyKeysUnavailable) leave() error                      { return nil }
 func (ttyKeysUnavailable) ready(time.Duration) (bool, error) { return false, nil }
 func (ttyKeysUnavailable) read([]byte) (int, error)          { return 0, nil }
 
+// A request auto mode's reviewer denied shows its reason, and the first
+// choice allows it anyway (spec_005 APR-14d); Enter still denies.
+func TestApprovalPickerReviewerDenied(t *testing.T) {
+	f, keys := pickTerminal(t)
+	approve := NewApprover(f.in, 2)
+	req := api.ApprovalRequest{Kind: api.ActionWrite, Tool: "create_file", Detail: "Create .agents/scratch/notes.md", ReviewerDenied: "it's outside the task"}
+	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "\r": api.DecisionDeny} {
+		keys.in <- []byte(key)
+		d, err := approve(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, want, d, "%q", key)
+	}
+	out := f.output()
+	assert.Contains(t, out, "Auto mode's reviewer would deny this: it's outside the task")
+	assert.Contains(t, out, "Yes, allow it anyway")
+}
+
 func TestApprovalPicker(t *testing.T) {
 	f, keys := pickTerminal(t)
 	approve := NewApprover(f.in, 2)

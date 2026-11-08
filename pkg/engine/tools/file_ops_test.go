@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,4 +150,29 @@ func TestFileEditToolsRefuseBadPaths(t *testing.T) {
 	assert.Contains(t, errOf(out), "failed to read file")
 	out = runTool(t, replace, map[string]any{"path": "missing", "target_content": "a", "replacement_content": "b"})
 	assert.Contains(t, errOf(out), "failed to read file")
+}
+
+// read_file reads text: a binary file is refused with what reads it (a
+// database's tools, view_image), never its bytes as lines.
+func TestReadFileRefusesBinary(t *testing.T) {
+	dir := t.TempDir()
+	ws, err := NewWorkspace(dir, 1<<20)
+	require.NoError(t, err)
+	defer ws.Close()
+	rt := toolOf(t)(NewReadFileTool(ws))
+	for name, c := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"recipes.db": {append([]byte("SQLite format 3\x00"), "Mushroom Bourguignon"...), "a SQLite database, not text: query it with its connection's db__ tools"},
+		"logo.png":   {[]byte("\x89PNG\r\n\x1a\n\x00\x00"), "a picture, not text: look at it with view_image"},
+		"blob.bin":   {[]byte{1, 2, 0, 3}, "a binary file, not text"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, name), c.data, 0o600))
+			out := runTool(t, rt, map[string]any{"path": name})
+			assert.Contains(t, errOf(out), c.want)
+			assert.NotContains(t, fmt.Sprint(out["content"]), "Mushroom")
+		})
+	}
 }

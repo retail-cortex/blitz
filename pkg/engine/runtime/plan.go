@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // planReadOnlyTools may run in plan mode: they read, search or ask, and
@@ -47,6 +49,7 @@ var planReadOnlyTools = map[string]bool{
 	"read_mcp_resource":     true,
 	"list_tasks":            true,
 	"list_jobs":             true,
+	"open_file":             true, // shows the user a file, changes nothing
 	"task_output":           true,
 	"activate_skill":        true,
 	"ask_user_question":     true,
@@ -72,9 +75,15 @@ func WithReadOnly(mode string) ExecOption {
 // planRefusal returns the tool result for a tool refused in plan mode, or
 // nil when the tool may run. planning is the turn's plan state (the agent
 // entered plan mode itself).
-func planRefusal(st *runState, planning bool, toolName string) map[string]any {
+func planRefusal(st *runState, planning bool, toolName string, args map[string]any) map[string]any {
 	if planReadOnlyTools[toolName] || !planning && (st == nil || !st.planOnly) {
 		return nil
+	}
+	if toolName == "blitz" { // its commands that read or open (spec_060 DRV-70)
+		if c, _ := args["command"].(string); api.BlitzCommandRunsInPlan(c) {
+			return nil
+		}
+		toolName = "blitz " + fmt.Sprint(args["command"])
 	}
 	if st != nil && st.mode != "" {
 		return map[string]any{"error": fmt.Sprintf("%s is read-only: %s is disabled because it could change something.", st.mode, toolName)}

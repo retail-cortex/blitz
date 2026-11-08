@@ -16,7 +16,7 @@
 
 
 import { describe, expect, it } from "vitest";
-import { menuPosition, nudge } from "./controls";
+import { filterMenu, menuPosition, nudge, type MenuEntry } from "./controls";
 
 describe("menuPosition", () => {
   const anchor = { top: 800, bottom: 826, left: 1200, right: 1300 };
@@ -44,4 +44,29 @@ describe("nudge", () => {
     { name: "past the bottom", box: { top: 800, bottom: 1000, left: 100, right: 340 }, want: { x: 0, y: -108 } },
     { name: "past the left and top", box: { top: -20, bottom: 180, left: -5, right: 235 }, want: { x: 13, y: 28 } },
   ])("$name", ({ box, want }) => expect(nudge(box, 1440, 900)).toEqual(want));
+});
+
+describe("filterMenu", () => {
+  const noop = () => {};
+  const items: MenuEntry[] = [
+    { heading: "Gemini" },
+    { label: "gemini-4-carbon", detail: "$2 in", onSelect: noop },
+    { label: "gemini-3.8-flash", detail: "fast", onSelect: noop },
+    { heading: "Ollama" },
+    { label: "qwen2.5-coder:7b", onSelect: noop },
+    "divider",
+    { label: "Refresh", onSelect: noop },
+  ];
+  const labels = (es: MenuEntry[]) => es.map((e) => (e === "divider" ? "—" : "heading" in e ? `# ${e.heading}` : e.label));
+
+  it("keeps everything without a query", () => expect(filterMenu(items, " ")).toBe(items));
+  it("keeps a heading over what matches, by label or detail, any case", () => {
+    expect(labels(filterMenu(items, "FLASH"))).toEqual(["# Gemini", "gemini-3.8-flash"]);
+    expect(labels(filterMenu(items, "fast"))).toEqual(["# Gemini", "gemini-3.8-flash"]);
+  });
+  it("drops headings with nothing under them, and dividers at the ends", () => {
+    expect(labels(filterMenu(items, "qwen"))).toEqual(["# Ollama", "qwen2.5-coder:7b"]);
+    expect(labels(filterMenu(items, "refresh"))).toEqual(["Refresh"]);
+    expect(filterMenu(items, "nothing")).toEqual([]);
+  });
 });

@@ -119,7 +119,7 @@ func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Deci
 func (b *broker) question(ctx context.Context, question string, options []string) (string, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
 		choices, order := api.ChoicesOf(ctx)
-		return &pb.TurnEvent{Kind: &pb.TurnEvent_Question{Question: &pb.Question{RequestId: id, Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx), Choices: choiceMsgs(choices), Order: order}}}
+		return &pb.TurnEvent{Kind: &pb.TurnEvent_Question{Question: &pb.Question{RequestId: id, Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx), Choices: choiceMsgs(choices), Order: order, Secret: api.SecretAnswer(ctx)}}}
 	})
 	return r.text, err
 }

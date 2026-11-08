@@ -50,7 +50,7 @@ type ollamaAuto struct {
 	build func(ctx context.Context, name string) (model.LLM, error)
 }
 
-func newOllamaAuto(key, baseURL string, opts []option.RequestOption) *ollamaAuto {
+func newOllamaAuto(key, baseURL string, opts []option.RequestOption, coreTools bool) *ollamaAuto {
 	a := &ollamaAuto{key: key, baseURL: baseURL, opts: opts}
 	a.list = func(ctx context.Context) ([]string, error) {
 		client := openai.NewClient(append(append([]option.RequestOption{}, opts...), option.WithAPIKey(key), option.WithBaseURL(baseURL))...)
@@ -64,7 +64,7 @@ func newOllamaAuto(key, baseURL string, opts []option.RequestOption) *ollamaAuto
 	a.build = func(ctx context.Context, name string) (model.LLM, error) {
 		m, err := newOpenAIModel(ctx, name, key, baseURL, opts...)
 		if t, ok := m.(*toolCallParsingModel); ok {
-			t.provider, t.key = "ollama", key
+			t.provider, t.key, t.coreTools = "ollama", key, coreTools
 		}
 		return m, err
 	}

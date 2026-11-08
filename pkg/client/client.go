@@ -41,6 +41,7 @@ type Remote struct {
 	dir        string
 	sessions   pb.SessionServiceClient
 	workspaces pb.WorkspaceServiceClient
+	config     pb.ConfigServiceClient
 	// warn reports calls that failed where Backend has no error to return
 	// (a listing comes back empty instead).
 	warn     func(string)
@@ -74,6 +75,7 @@ func AttachHTTP(ctx context.Context, hc connect.HTTPClient, baseURL, dir string,
 		dir:        abs,
 		sessions:   pb.NewSessionServiceClient(hc, baseURL),
 		workspaces: pb.NewWorkspaceServiceClient(hc, baseURL),
+		config:     pb.NewConfigServiceClient(hc, baseURL),
 		warn:       warn,
 	}
 	// Opens the workspace in the service, and says whether its model works.
@@ -189,7 +191,7 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 		var err error
 		if d, err = approve(ctx, api.ApprovalRequest{
 			Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, KeyLabel: req.ScopeLabel,
-			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk,
+			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk, ReviewerDenied: req.ReviewerDenied,
 		}); err != nil {
 			d = api.DecisionDeny
 		}
@@ -206,6 +208,9 @@ func (r *Remote) answerQuestion(ctx context.Context, ask api.UserPromptFunc, q *
 			ctx = api.WithMultiSelect(ctx)
 		}
 		ctx = api.WithChoices(ctx, choicesOf(q.Choices), q.Order)
+		if q.Secret {
+			ctx = api.WithSecretAnswer(ctx)
+		}
 		answer, _ = ask(ctx, q.Question, q.Options)
 	}
 	if _, err := r.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: r.dir, RequestId: q.RequestId, Answer: answer})); err != nil {
@@ -474,7 +479,7 @@ func (r *Remote) getSettings() settings {
 	return settings{Settings: api.Settings{
 		Agency: m.Agency,
 		Model:  api.ModelInfo{Name: m.Model, Provider: m.Provider}, Agent: m.Agent, Locale: m.Locale,
-		PermissionMode: m.PermissionMode, Effort: m.Effort, Style: m.Style,
+		PermissionMode: m.PermissionMode, ModeNote: m.ModeNote, Effort: m.Effort, Style: m.Style,
 		SpeechModel: m.SpeechModel, SpeechError: m.SpeechError,
 		ImageModel: m.ImageModel, ImageError: m.ImageError,
 	}, ImagesEnabled: m.ImagesEnabled}
@@ -1087,4 +1092,26 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 		return api.EvalRun{}, fromAPI(err)
 	}
 	return api.EvalRun{}, errors.New(i18n.T("attached.eval_unfinished"))
+}
+
+// ListModels is every chat model of every provider the workspace sets up,
+// as the service lists them (spec_061_models MOD-01).
+func (r *Remote) ListModels(ctx context.Context, refresh bool) (api.ModelList, error) {
+	res, err := r.config.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: r.dir, Refresh: refresh, ChatOnly: true, Menu: true}))
+	if err != nil {
+		return api.ModelList{}, fromAPI(err)
+	}
+	out := api.ModelList{DefaultProvider: res.Msg.DefaultProvider, NotSetUp: res.Msg.NotSetUp}
+	for _, p := range res.Msg.Providers {
+		pm := api.ProviderModels{Provider: p.Provider, Error: p.Error, Note: p.Note}
+		for _, m := range p.Models {
+			lm := api.ListedModel{ID: m.Id, DisplayName: m.DisplayName, Default: m.IsDefault, HasPrice: m.HasPrice, InputPerMTok: m.InputPerMtok, OutputPerMTok: m.OutputPerMtok}
+			if c := m.Capabilities; c != nil {
+				lm.Tools, lm.Images, lm.Thinking, lm.Context = c.Tools, c.Images, c.Thinking, int(c.Context)
+			}
+			pm.Models = append(pm.Models, lm)
+		}
+		out.Providers = append(out.Providers, pm)
+	}
+	return out, nil
 }

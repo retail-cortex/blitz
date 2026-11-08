@@ -21,6 +21,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -84,6 +85,7 @@ func (w *Workspace) SetModel(ctx context.Context, ref string) (activePin string,
 		return "", err
 	}
 	w.setSettings(func(c *config.Config) { c.Blitz.DefaultModel = ref })
+	w.holdLocalAuto()
 	if m, pinned := w.engine.AgentModel(w.engine.ActiveAgent()); pinned {
 		return m, nil
 	}
@@ -225,6 +227,7 @@ func (w *Workspace) Settings() api.Settings {
 		Agency: w.cfg.Blitz.AgencyLevel,
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.replyIn().Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
+		ModeNote:       w.modeNote(),
 		Effort:         w.engine.Effort(),
 		Style:          w.styleName(),
 		SpeechModel:    w.cfg.Audio.Model,
@@ -243,7 +246,9 @@ func errText(err error) string {
 
 // SetPermissionMode changes which actions run without asking, for every
 // session of the workspace, and returns the mode's canonical name. Bypass
-// needs the OS sandbox (ErrBypassNeedsSandbox).
+// needs the OS sandbox (ErrBypassNeedsSandbox). Auto, while a local model
+// would review its own actions, is default instead (APR-14c): the name
+// returned says so, and Settings' ModeNote why.
 func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	m, err := api.ParsePermissionMode(mode)
 	if err != nil {
@@ -252,7 +257,9 @@ func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	if err := w.tools.SetPermissionMode(m); err != nil {
 		return "", err
 	}
-	return string(m), nil
+	w.autoHeld.Store(false) // the person's choice from here on
+	w.holdLocalAuto()
+	return string(w.tools.Hooks().Mode()), nil
 }
 
 // Set changes a setting for this session ("agency" or "agency_level") and
@@ -307,7 +314,12 @@ func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) err
 	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
 	w.setupPainter(ctx, func(string) {}) // and generate_image once there's a painter
 	w.setupUploader(ctx, func(string) {})
-	return w.rebuildModels(ctx)
+	w.modelsMu.Lock()
+	w.models = nil // the providers may have changed (MOD-04)
+	w.modelsMu.Unlock()
+	err := w.rebuildModels(ctx)
+	w.holdLocalAuto()
+	return err
 }
 
 // RetryModel builds the models again when the configured one couldn't be
@@ -349,4 +361,53 @@ func (w *Workspace) rebuildModels(ctx context.Context) error {
 		}
 	}
 	return err
+}
+
+// modelsFresh is how long a model list is kept (spec_061_models MOD-04).
+const modelsFresh = 10 * time.Minute
+
+// listModels is runtime.ListModels; a variable so tests needn't reach the
+// providers.
+var listModels = runtime.ListModels
+
+// ListModels is every chat model of every provider the workspace's
+// settings set up, grouped by provider (spec_061_models MOD-01..06), kept
+// for modelsFresh unless refresh.
+func (w *Workspace) ListModels(ctx context.Context, refresh bool) (api.ModelList, error) {
+	w.modelsMu.Lock()
+	if !refresh && w.models != nil && time.Now().Before(w.modelsUntil) {
+		l := *w.models
+		w.modelsMu.Unlock()
+		return l, nil
+	}
+	w.modelsMu.Unlock()
+	cfg := w.settings()
+	listed := runtime.ChatModels(listModels(ctx, cfg))
+	out := api.ModelList{DefaultProvider: strings.ToLower(cfg.LLM.Provider), NotSetUp: runtime.NotSetUp(cfg, listed)}
+	listed = runtime.MenuModels(cfg, listed, cfg.ModelName()) // what the menus list (MOD-44)
+	if cfg.Enterprise.URL != "" {
+		out.DefaultProvider = "enterprise"
+	}
+	fresh := modelsFresh
+	for _, pm := range listed {
+		p := api.ProviderModels{Provider: pm.Provider, Note: pm.Note}
+		if pm.Err != nil {
+			p.Error, fresh = pm.Err.Error(), time.Minute // a key may be added meanwhile
+		}
+		for _, m := range pm.Models {
+			lm := api.ListedModel{ID: m.ID, DisplayName: m.DisplayName, Default: m.Default}
+			if m.Price != nil {
+				lm.HasPrice, lm.InputPerMTok, lm.OutputPerMTok = true, m.Price.InputPerMTok, m.Price.OutputPerMTok
+			}
+			if c := m.Caps; c != nil {
+				lm.Tools, lm.Images, lm.Thinking, lm.Context = c.Tools, c.Images, c.Thinking, c.Context
+			}
+			p.Models = append(p.Models, lm)
+		}
+		out.Providers = append(out.Providers, p)
+	}
+	w.modelsMu.Lock()
+	w.models, w.modelsUntil = &out, time.Now().Add(fresh)
+	w.modelsMu.Unlock()
+	return out, nil
 }

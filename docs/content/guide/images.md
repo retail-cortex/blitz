@@ -87,7 +87,10 @@ Ask for a picture ("draw a poster for the study group", "make our logo blue") an
 ```toml
 [images]
 model = "gemini/gemini-3.1-flash-image"   # or gemini-3.1-flash-lite-image, gemini-3-pro-image
+# model = "openai/gpt-image-2"            # or gpt-image-2.5-sunburst, gpt-image-2.5-flare, gpt-image-1.5, gpt-image-1
 ```
+
+**OpenAI's image models** use your OpenAI key: they make up to four pictures a request, square, landscape (3:2) or portrait (2:3), and start from up to 16 pictures you give them. In Pictures they're listed under **OpenAI** once you've set up an OpenAI key. Their prices aren't in Blitz's price list yet, so the cost shown (about $0.04 a picture) is an estimate.
 
 In the desktop app it's **Image model** in a workspace's settings, under **Agent and model**. Until one is set, agents don't have the tool, and the agent tells you to set one.
 

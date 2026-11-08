@@ -16,6 +16,7 @@ package tools
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -100,7 +101,28 @@ func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, error) {
 	if info.Size() > ws.MaxFileSize() {
 		return ReadFileOutput{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit (tools.max_file_size_bytes); use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
 	}
-	return pageLines(io.LimitReader(f, ws.MaxFileSize()), input)
+	src := bufio.NewReaderSize(io.LimitReader(f, ws.MaxFileSize()), 64*1024)
+	if head, _ := src.Peek(8192); isBinary(head) {
+		return ReadFileOutput{}, errors.New(binaryHint(input.Path, head))
+	}
+	return pageLines(src, input)
+}
+
+// isBinary reports whether a file's start is binary data, not text: it
+// holds a NUL byte, which text never does.
+func isBinary(head []byte) bool { return bytes.IndexByte(head, 0) >= 0 }
+
+// binaryHint is why read_file won't read a binary file, and what reads it:
+// its bytes as lines would be noise, and a small model takes what text is
+// in them (a database's rows) for the answer (2026-11-08).
+func binaryHint(path string, head []byte) string {
+	switch {
+	case bytes.HasPrefix(head, []byte("SQLite format 3\x00")):
+		return fmt.Sprintf("%s is a SQLite database, not text: query it with its connection's db__ tools, or sqlite3 -readonly %s in run_shell_command (.tables, .schema)", path, path)
+	case bytes.HasPrefix(head, []byte("\x89PNG")), bytes.HasPrefix(head, []byte("\xff\xd8\xff")), bytes.HasPrefix(head, []byte("GIF8")), bytes.HasPrefix(head, []byte("RIFF")):
+		return fmt.Sprintf("%s is a picture, not text: look at it with view_image", path)
+	}
+	return fmt.Sprintf("%s is a binary file, not text: read_file reads text files", path)
 }
 
 // pageLines numbers r's lines, keeping the requested range.

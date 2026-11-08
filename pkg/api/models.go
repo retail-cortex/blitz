@@ -121,6 +121,42 @@ func (e *InvalidSettingError) Error() string { return e.Err.Error() }
 // Unwrap returns the reason, for errors.Is and errors.As.
 func (e *InvalidSettingError) Unwrap() error { return e.Err }
 
+// ModelList is every chat model of every provider set up, grouped by
+// provider (spec_061_models MOD-01), and the providers that aren't set up.
+type ModelList struct {
+	Providers []ProviderModels
+	// DefaultProvider is the provider a name without "provider/" is of.
+	DefaultProvider string
+	// NotSetUp are the providers the person could set up (MOD-06).
+	NotSetUp []string
+}
+
+// ProviderModels are one provider's models, or why they couldn't be listed.
+type ProviderModels struct {
+	Provider string
+	Models   []ListedModel
+	Error    string
+	// Note says what the list is when it isn't the provider's own.
+	Note string
+}
+
+// ListedModel is one model, with what Blitz knows of it.
+type ListedModel struct {
+	ID, DisplayName string
+	// Default is the organization's default model.
+	Default bool
+	// HasPrice says the price per million tokens is known.
+	HasPrice                    bool
+	InputPerMTok, OutputPerMTok float64
+	// Tools, Images and Thinking say what it can do, and Context its
+	// window in tokens (0: unknown).
+	Tools, Images, Thinking bool
+	Context                 int
+}
+
+// Ref is the model as a reference that names its provider.
+func (m ListedModel) Ref(provider string) string { return provider + "/" + m.ID }
+
 // Settings are the values /set changes, plus the model, agent and locale.
 type Settings struct {
 	Agency string
@@ -130,6 +166,10 @@ type Settings struct {
 	// PermissionMode decides which actions run without asking (a
 	// PermissionMode).
 	PermissionMode string
+	// ModeNote says why auto mode isn't used, when it isn't for a reason
+	// the person should know: a local model would review its own actions
+	// (spec_005_approvals APR-14c). "" otherwise.
+	ModeNote string
 	// Effort is the session's reasoning effort ("" when each model uses its
 	// own reasoning_effort or its default).
 	Effort string

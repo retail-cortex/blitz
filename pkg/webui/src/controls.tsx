@@ -326,12 +326,70 @@ export function FloatingLayer({ style, className = "", layerRef, label, children
 }
 
 // A Menu's list, floating.
-function FloatingMenu({ items, onPick, style, className = "", listRef }: { items: MenuEntry[]; onPick: () => void; style: CSSProperties; className?: string; listRef: React.RefObject<HTMLDivElement | null> }) {
+function FloatingMenu({
+  items,
+  onPick,
+  style,
+  className = "",
+  listRef,
+  searchAt = 0,
+}: {
+  items: MenuEntry[];
+  onPick: () => void;
+  style: CSSProperties;
+  className?: string;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  searchAt?: number;
+}) {
+  const [query, setQuery] = useState("");
+  const searching = searchAt > 0 && items.filter((it) => typeof it === "object" && "label" in it).length >= searchAt;
+  const shown = searching ? filterMenu(items, query) : items;
   return (
     <FloatingLayer style={style} className={className} layerRef={listRef}>
-      <MenuItems items={items} onPick={onPick} />
+      {searching && (
+        <input
+          className="input menu-filter"
+          placeholder={t("desktop.filter")}
+          aria-label={t("desktop.filter")}
+          value={query}
+          autoFocus
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              menuItems(e.currentTarget.parentElement!)[0]?.focus();
+            }
+          }}
+        />
+      )}
+      <MenuItems items={shown} onPick={onPick} />
+      {searching && !shown.some((it) => typeof it === "object" && "label" in it) && <div className="menu-label">{t("desktop.none_found")}</div>}
     </FloatingLayer>
   );
+}
+
+/**
+ * The entries of a menu whose label or detail has q (any case): a heading
+ * stays when an item under it does, and dividers only between what's left.
+ */
+export function filterMenu(items: MenuEntry[], q: string): MenuEntry[] {
+  const want = q.trim().toLowerCase();
+  if (!want) return items;
+  const out: MenuEntry[] = [];
+  let heading: MenuEntry | null = null;
+  for (const it of items) {
+    if (it === "divider") {
+      if (out.length && out[out.length - 1] !== "divider") out.push(it);
+      heading = null;
+    } else if ("heading" in it) {
+      heading = it;
+    } else if (it.label.toLowerCase().includes(want) || it.detail?.toLowerCase().includes(want)) {
+      if (heading) out.push(heading), (heading = null);
+      out.push(it);
+    }
+  }
+  while (out[out.length - 1] === "divider") out.pop();
+  return out;
 }
 
 /**
@@ -364,18 +422,21 @@ export function Menu({
   items,
   placement = "down start",
   className,
+  searchAt,
 }: {
   trigger: (props: { onClick: () => void; "aria-expanded": boolean; "aria-haspopup": "menu" }) => ReactNode;
   items: MenuEntry[];
   placement?: string;
   /** A class for the menu (its width, say). */
   className?: string;
+  /** With this many items or more, a filter box tops the menu (0: never). */
+  searchAt?: number;
 }) {
   const { at, toggle, close, ref, layer: list } = useAnchoredMenu<HTMLSpanElement>(placement);
   return (
     <span className="menu-anchor" ref={ref}>
       {trigger({ onClick: toggle, "aria-expanded": !!at, "aria-haspopup": "menu" })}
-      {at && <FloatingMenu items={items} onPick={close} style={at} className={className} listRef={list} />}
+      {at && <FloatingMenu items={items} onPick={close} style={at} className={className} listRef={list} searchAt={searchAt} />}
     </span>
   );
 }

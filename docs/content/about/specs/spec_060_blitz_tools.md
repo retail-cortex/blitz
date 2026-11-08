@@ -7,8 +7,8 @@ weight: 60
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-07, the owner's request; decisions in §11). Phase 1 (the tool, connections, the skill) is first. |
-| Source | Planned: the command catalog in `pkg/api/blitzcommands.go` (planned), with names, arguments and what each does, and its commands in `pkg/engine/blitzcmd/` (planned); the tool in `pkg/engine/tools/blitz.go` (planned); the skill in `pkg/engine/skills/builtin/blitz/` (planned); the CLI's commands in `apps/cli/`; the window's actions in `apps/desktop/web/src/` (the approval's secret fields, opening Pictures or the browser); the terminal's in `apps/cli/internal/tui/` |
+| Status | **Built** (2026-11-08; the owner's request 2026-11-07, decisions in §11, widened 2026-11-08). Built as specified, with these differences (§12): `open url` is `open_page`'s; `picture` without a window points to `generate_image`; `chat export` writes Markdown only; a secret is asked in a hidden question right after the approval, not in the approval card; `eval run` runs in the background, shown in Studio › Evals; jobs in the terminal stay `blitz jobs`; the CLI is `blitz do <command>`. Not built: `hook save`, `plugin install` and `plugin remove`, and `org publish` (each needs its own review of what runs or what's published), and the live check (DRV-63, which costs). |
+| Source | The catalog in `pkg/api/blitzcommands.go` (`BlitzCommands`, `FindBlitzCommand`, `BlitzCommandRunsInPlan`, `ActionBlitz`, `WithSecretAnswer`); the tool in `pkg/engine/tools/blitz.go` (`NewBlitzTool`, `BlitzHelp`, `CheckBlitzArgs`; the jobs through `create_job` and `list_jobs`); the commands in `pkg/engine/blitzcommands.go` (`runBlitzCommand`, `RunBlitzCommand` for the CLI), `connectors.Preview` in `pkg/engine/connectors/store.go`; plan mode per command in `pkg/engine/runtime/plan.go`, the audit's `blitz:<command>` in `pkg/engine/runtime/engine.go`, the job permission kind in `pkg/engine/workers/permission.go`; the skill in `pkg/engine/skills/builtin/blitz/SKILL.md`; `WorkspaceService.RunBlitzCommand` and `Question.secret`; the window's `file`, `view` and `picture` commands in `apps/desktop/web/src/agentBrowserRelay.ts`, the secret field in `apps/desktop/web/src/Conversation.tsx`; the terminal's hidden answer in `apps/cli/internal/tui/terminal.go`; `blitz do` in `apps/cli/do.go` |
 | Depends on | [spec_047_connectors](spec_047_connectors.md) (CON-06 files, CON-09 trust, CON-17 on in a workspace, CON-18 Studio stays in its workspace), [spec_046_databases](spec_046_databases.md) (DB-17 paths), [spec_039_secrets](spec_039_secrets.md), [spec_005_approvals](spec_005_approvals.md) (APR-14b auto mode reads answers), [spec_043_workflows](spec_043_workflows.md), [spec_058_pictures](spec_058_pictures.md), [spec_057_spec_driven](spec_057_spec_driven.md), the jobs tools (`create_job`, `list_jobs`) |
 
 ## 1. Purpose
@@ -49,6 +49,30 @@ By phase. Each group's commands are listed by `blitz help`.
 | `job` | `job list`, `job create` (today's `create_job`, `list_jobs`) | `create` changes | 2 |
 | `workflow` | `workflow list`, `save`, `run` | `save` changes; `run` asks as its steps do | 3 |
 | `agent`, `skill` | `list`, `save` | `save` changes | 3 |
+| `settings` | `settings show`; `settings set` (model, image model, speech model, effort, permission mode) | `show` reads; `set` changes (the mode only tighter, DRV-71) | 1 |
+| `doctor` | `doctor` (what `blitz doctor` checks: providers, keys, the service, sandbox, language servers, connections) | reads | 1 |
+| `org` | `org policy` (what the organization allows and locks), `org status` (signed in, catalog version, sync) | reads | 1 |
+| `open` | `open settings <section>`, `open view <changes\|processes\|pictures>` | opens | 2 |
+| `memory` | `memory list`, `memory forget` | `forget` changes | 2 |
+| `chat` | `chat new`, `chat export` (Markdown, PDF, Word), `chat search` | `export` writes a file, asked | 2 |
+| `process` | `process list`, `process stop` | `stop` asks | 2 |
+| `approval` | `approval list`, `approval forget` (saved "always allow" rules) | `forget` changes, only ever making Blitz ask more | 2 |
+| `secret` | `secret list` (names only), `secret set <name>` (the value asked in the form, DRV-05) | `set` changes | 2 |
+| `mcp` | `mcp list`, `mcp add`, `mcp enable`, `mcp disable` | `add` and `enable` run code: asked with the exact command or address (DRV-75) | 4 |
+| `rule`, `guardrail`, `command`, `hook` | `list`, `save` (Studio's other items) | `save` changes; a hook runs code (DRV-75) | 4 |
+| `plugin` | `plugin list`, `plugin install`, `plugin remove` | `install` brings code from elsewhere (DRV-75) | 4 |
+| `org` | `org publish` (an Admin's items to the organization's catalog, through its review) | changes, for Admins only | 4 |
+
+Phase 1 is the tool, its rules, connections, settings, doctor, the organization's policy and the skill; 2 pictures, opening things, evals, specs, jobs, memory, chats, processes, saved approvals and secrets; 3 workflows, agents and skills; 4 what brings code (DRV-75) and `org publish`.
+
+## 3a. The rules every command follows
+
+- **DRV-70** **Where a command runs.** Each command in the catalog says whether it reads, changes, costs or opens. Plan mode runs only the ones that read or open (as `open_file` is allowed there). A job or another unattended run runs only what its permissions name (`blitz:connector list`), as any tool. A subagent runs a command only when its own tool list has `blitz`, with the same approvals.
+- **DRV-71** **The permission mode only tightens.** `settings set mode` may move from `bypass` toward `plan` (bypass, auto or accept-edits, default, dont-ask, plan, by `api.Looser`), never the other way: loosening is refused, saying the person changes it in the status bar or with `/mode`. Auto with a local model follows spec_005 APR-14c.
+- **DRV-72** **The organization's policy applies.** A command is refused, with the policy's reason, when the organization's policy forbids what it would do (`connectors.own = false` refuses `connector save` with "your organization doesn't allow connections of your own"; `mcp.own = false` refuses `mcp add`); an organization's locked item can't be changed or turned off (spec_053 EN-35).
+- **DRV-73** **The audit names the command.** Each run is in the audit log as `blitz:<command>` with its arguments (secrets as names), its approval and its outcome, so `blitz:connector save` is told apart from `blitz:settings set`.
+- **DRV-74** **Scripts get JSON.** Every CLI command of the catalog takes `--json` and prints the command's result as the tool returns it, for scripts and CI.
+- **DRV-75** **Commands that bring code ask with the code in view.** Adding or turning on an MCP server, saving a hook, and installing a plugin each ask with exactly what will run (the command and its arguments, or the address; the hook's command; the plugin's source and what it brings), never pre-approved by a rule that allows other commands, and never in auto mode without the person (an ask rule, as `MustAsk`).
 
 ## 4. Connections (phase 1)
 
@@ -70,7 +94,7 @@ By phase. Each group's commands are listed by `blitz help`.
 
 ## 5. The blitz skill
 
-- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md` (planned); a workspace's own skill of that name is used instead), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
+- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md`; its name is reserved, as every built-in skill's is), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
 - **DRV-21** It says, briefly:
   - what each feature is, in a line, and its command group;
   - that `blitz help <command>` gives the arguments, and that the commands ask the person, so the agent shouldn't ask first as well;
@@ -84,6 +108,7 @@ By phase. Each group's commands are listed by `blitz help`.
 
 - **DRV-30** `picture` takes a prompt and, optionally, a model, references (workspace files) and a shape. In the window it opens **Pictures** with them filled in (spec_058_pictures), and the person makes it there: the cost shows before they press make, as always. The result tells the agent it's open, not a picture. In the terminal it's `blitz picture`, its cost asked first.
 - **DRV-31** `open url` opens the window's browser at the address, asked first as a fetch of that host is (web.allow_domains, the rules); `open file` opens a workspace file in its editor; `open studio <section>` opens Studio there (Connectors, Workflows, Specs). In the terminal, `open url` opens the system browser after asking, and the others say where it is.
+- **DRV-31a** *Built 2026-11-08 (the owner: a local model, asked to show a file it wrote, opened the browser; no tool opened a workspace file).* `open_file(path, line)` (`pkg/engine/tools/openfile.go`) opens a workspace file in the desktop's editor at the line (Markdown rendered), ahead of the `blitz` tool: it becomes `open file` when the catalog comes, keeping its name as `create_job` does (DRV-42). The path is resolved for reading (blocked paths refused) and must be a file inside the workspace's folder; nothing is read for the agent or asked. It goes to the newest window as the agent-browser stream's `file` command (`AgentBrowserCommand.path`, `line`; `Workspace.openFile`), which the desktop's relay opens with `openFile` (`agentBrowserRelay.ts`). With no window (the terminal, a job), the result tells the agent to give the path. The blitz agent has it, and its prompt says to use it for workspace files, never `open_page`, `browser` or the shell; plan mode allows it.
 - **DRV-32** A window action goes to the conversation's window as an event of the turn's stream; with no window open (the terminal, a job), the command says so and does the terminal's part.
 
 ## 7. Evals, specs and jobs (phase 2)
@@ -97,12 +122,20 @@ By phase. Each group's commands are listed by `blitz help`.
 - **DRV-50** `workflow save`: the workflow as its file (spec_043_workflows), checked with the workflow's checks (WF-02) before asking. The approval shows the steps in order, each with what it does. A Data step (spec_059_data) shows Allow writes and the BigQuery cost limit when set. `workflow run` runs it as Studio's Run does, its steps asking as they do.
 - **DRV-51** `agent save` and `skill save`: the workspace's agent or skill as Studio writes it, the approval showing the file (the instructions rendered). An agent created or changed this way has its evals run as Studio runs them (offline, after the change, never in the turn).
 
+## 8a. Settings, doctor and the organization (phase 1)
+
+- **DRV-80** `settings show` answers the workspace's model and provider, the conversation's model, the image and speech models, the effort, the permission mode (with its note, APR-14c), and the agent. `settings set` takes one of `model`, `image_model`, `speech_model`, `effort`, `mode` and a value, checked as the window checks it (a model that can't be built is refused with why, spec_061 MOD-05); the approval shows the change from and to. `settings set model` changes the conversation's model when there's a conversation (spec_056 CA-100, with what the switch costs), else the workspace's.
+- **DRV-81** `doctor` runs `blitz doctor`'s checks in the engine and answers each with its state and what to do, so "why isn't Ollama working?" is answered from the facts (Ollama's address and whether it answers, the models it has, the mode note).
+- **DRV-82** `org policy` answers what the organization's policy allows (own providers, own MCP servers, own connections and their kinds, ! commands, tools and built-ins off) and its locked items; `org status` answers the organization, whether signed in, the catalog's version and when it was fetched, and each organization workspace's sync state with its last error. Without an organization, both say so.
+
 ## 9. Tests
 
 - **DRV-60** The catalog: every command has an engine command, a CLI command of the same name and arguments (DRV-02), and a `help` entry; the tool's description names every group.
 - **DRV-61** Connections: `connector list` against the built-in descriptors and workspace and global files; `connector save`'s checks (a missing field, a path to nothing, a taken name, a global name) with nothing asked; approved (written, trusted, on, tested, `db__` tools there), declined (nothing written), a missing secret asked and saved, and the secret's value absent from the result, the transcript and the audit.
 - **DRV-62** A journey test (the scripted model, as in the other journeys): the owner's recipe prompt makes the database, calls `connector list` then `connector save`, one approval, and the next message's `@db:recipes` reads it, with no shell command reading Blitz's files or binary. Phase 2 adds `picture` opening Pictures in the fake window and `open url` asking.
 - **DRV-63** A live check, after the owner agrees its cost: the recipe prompt in the desktop app with Gemini, which should finish in under two minutes with one approval for the connection.
+
+- **DRV-64** The rules: plan mode refuses a command that changes and runs one that reads; an unattended run without `blitz:<command>` in its permissions is refused; `settings set mode` refuses a looser mode; a policy forbidding own connections refuses `connector save` with its reason; the audit has `blitz:<command>`; `--json` prints the result; `mcp add` asks with its command even where a rule allows `blitz:*`.
 
 ## 10. Not in this spec
 
@@ -120,3 +153,14 @@ The owner's answers (2026-11-07):
    - One `blitz` tool (DRV-01) is about 300 tokens a call however many commands it has, with `help` for the rest: **recommended**, always offered.
 3. Deleting a connection by tool: **not in phase 1**.
 4. Blitz's other functions callable by the agent too (evals, a picture opening Pictures, a browser opened at an address), most of them through the CLI as well: **yes** (the owner, 2026-11-07), as §3's catalog and DRV-02.
+
+## 12. As built
+
+- **DRV-90** *2026-11-08.* What differs from the draft above, and why:
+  - `open url` answers that the agent's `open_page` opens web pages (it asks where they show, AB-10).
+  - `picture` opens Pictures with the prompt and a first reference; with no window it says to use `generate_image`, which shows its cost first, rather than estimating.
+  - `chat export` writes the conversation as Markdown to a workspace file; PDF and Word are the export tools'.
+  - A secret is asked in a question marked secret (`Question.secret`: a password field in the window, hidden input in the terminal, never recorded), right after the approval card, not in it.
+  - `eval run` starts the evals in the background after the person agrees, and Studio › Evals shows them; `eval results` reads them.
+  - In the terminal, `blitz do <command> [name=value…]` runs the catalog (`--json`, `--yes`, `--args`): a change answers first with what to confirm and the secrets it needs, the person confirms `[y/N]` and types them hidden, and a second call runs it. Jobs keep `blitz jobs`.
+  - Not built yet: `hook save`, `plugin install` and `plugin remove` (code from elsewhere needs its source reviewed in the approval), and `org publish` (an Admin's review on the organization's service). The live check (DRV-63) waits for the owner's go-ahead on its cost.

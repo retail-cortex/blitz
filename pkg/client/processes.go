@@ -271,11 +271,11 @@ func (r *Remote) PendingTaskRequests() []api.TaskRequest {
 			a := k.ApprovalRequest
 			out = append(out, api.TaskRequest{ID: a.RequestId, TaskID: a.TaskId, Agent: a.Agent, Approval: &api.ApprovalRequest{
 				Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, KeyLabel: a.ScopeLabel,
-				Key: a.Key, Targets: a.Targets, MustAsk: a.MustAsk,
+				Key: a.Key, Targets: a.Targets, MustAsk: a.MustAsk, ReviewerDenied: a.ReviewerDenied,
 			}})
 		case *pb.TaskEvent_Question:
 			q := k.Question
-			out = append(out, api.TaskRequest{ID: q.RequestId, TaskID: q.TaskId, Agent: q.Agent, Question: q.Question, Options: q.Options, MultiSelect: q.MultiSelect, Choices: choicesOf(q.Choices), Order: q.Order})
+			out = append(out, api.TaskRequest{ID: q.RequestId, TaskID: q.TaskId, Agent: q.Agent, Question: q.Question, Options: q.Options, MultiSelect: q.MultiSelect, Choices: choicesOf(q.Choices), Order: q.Order, Secret: q.Secret})
 		}
 	}
 	return out

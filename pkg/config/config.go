@@ -196,6 +196,9 @@ type LLMConfig struct {
 	// contain a slash (OpenRouter), write the provider first:
 	// "openai/anthropic/claude-sonnet-5".
 	FallbackModels []string `toml:"fallback_models"`
+	// Providers are the active providers, whose models are listed and
+	// chosen (spec_061_models MOD-40); none: every provider set up.
+	Providers []string `toml:"providers"`
 
 	Gemini    GeminiConfig    `toml:"gemini"`
 	OpenAI    OpenAIConfig    `toml:"openai"`
@@ -274,6 +277,9 @@ type GeminiConfig struct {
 	APIKeyTTL     string `toml:"api_key_ttl"`
 	// Model is the Gemini model to use.
 	Model string `toml:"model"`
+	// Models are the models the menus list for it (spec_061_models
+	// MOD-42); none: its latest.
+	Models []string `toml:"models"`
 	// Auth is "api_key" ("" too: the Gemini API), "adc": Vertex AI with
 	// Application Default Credentials (a service account, a Google Cloud
 	// machine's, or gcloud's sign-in), or "oauth": Vertex AI with your
@@ -336,6 +342,9 @@ type OpenAIConfig struct {
 	BaseURL string `toml:"base_url"`
 	// Model is the model to use.
 	Model string `toml:"model"`
+	// Models are the models the menus list for it (spec_061_models
+	// MOD-42); none: its latest.
+	Models []string `toml:"models"`
 }
 
 // DefaultOpenAIModel is the openai provider's model when none is set.
@@ -351,6 +360,14 @@ type OllamaConfig struct {
 	BaseURL string `toml:"base_url"`
 	// Model is the model to use; empty: the first one Ollama has.
 	Model string `toml:"model"`
+	// Models are the models the menus list for Ollama (MOD-42); none:
+	// every model it has.
+	Models []string `toml:"models"`
+	// AllTools offers a local model every tool its agent has. Without
+	// it, it gets the core ones (files, the shell, search, the web, the
+	// connections' and Blitz's own): a small model given ninety tools
+	// writes its calls as text, or none (spec_061_models MOD-50).
+	AllTools bool `toml:"all_tools"`
 }
 
 // AnthropicConfig holds settings for Anthropic Claude.
@@ -375,8 +392,11 @@ type AnthropicConfig struct {
 	ProjectID string `toml:"project_id"`
 	Location  string `toml:"location"`
 	// Model is the Claude model to use.
-	Model   string `toml:"model"`
-	BaseURL string `toml:"base_url"` // for gateways/proxies; empty uses the API default
+	Model string `toml:"model"`
+	// Models are the models the menus list for it (spec_061_models
+	// MOD-42); none: its latest.
+	Models  []string `toml:"models"`
+	BaseURL string   `toml:"base_url"` // for gateways/proxies; empty uses the API default
 	// Fallbacks controls refusal fallback: server-side on models that
 	// support it (claude-opus-5, claude-fable-5*), where "default" routes
 	// by refusal category; client-side on Vertex AI, where "default" is

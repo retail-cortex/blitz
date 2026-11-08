@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -221,11 +223,12 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 			return nil, err
 		}
 		if provider == "ollama" && modelName == "" {
-			return newOllamaAuto(apiKey, baseURL, opts), nil
+			return newOllamaAuto(apiKey, baseURL, opts, !cfg.LLM.Ollama.AllTools), nil
 		}
 		m, err := newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
 		if t, ok := m.(*toolCallParsingModel); ok {
 			t.provider, t.key = provider, apiKey
+			t.coreTools = provider == "ollama" && !cfg.LLM.Ollama.AllTools
 		}
 		if err == nil && provider == "ollama" {
 			go listOllama(baseURL, modelName) // what Ollama says of it (spec_056 CA-11)
@@ -540,6 +543,9 @@ func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...o
 
 type toolCallParsingModel struct {
 	inner model.LLM
+	// coreTools offers the model only the core tools (a local model's,
+	// MOD-50).
+	coreTools bool
 	// provider and key, when set, let a failed call say what the provider
 	// said (providerError), with the key masked.
 	provider, key string
@@ -555,6 +561,9 @@ func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.L
 		// calls can only be recognised in the whole reply, which is parsed
 		// (spec_056 CA-50). What the adapter can't read is taken out of the
 		// reply on its way in and kept with the answer (CA-30).
+		if m.coreTools {
+			req = withCoreTools(req)
+		}
 		ctx, req := replaceImagesWithMarkers(ctx, req)
 		ctx, unshown := withUnshown(ctx)
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
@@ -624,6 +633,11 @@ func parseTextToolCalls(content *genai.Content, allowed map[string]bool) {
 		// calls among the prose, fenced or in <tool_call> tags.
 		pieces, ok := textCalls(trimmed, allowed)
 		if !ok {
+			// Or one call a line, a whole plan at once, the later ones
+			// written before any result came back: the first runs.
+			pieces, ok = firstLineCall(trimmed, allowed)
+		}
+		if !ok {
 			parts = append(parts, part)
 			continue
 		}
@@ -678,6 +692,31 @@ func textCalls(text string, allowed map[string]bool) (_ []*genai.Part, ok bool) 
 	return out, ok
 }
 
+// firstLineCall finds the first line of text that is a JSON tool call of
+// an offered tool, as a small local model writes a plan of calls one a
+// line (qwen2.5-coder on Ollama, 2026-11-08): the prose before it, and the
+// call. What follows is dropped: the calls after it, and words about
+// results, were written before the first one ran, and the model is asked
+// again once it has.
+func firstLineCall(text string, allowed map[string]bool) ([]*genai.Part, bool) {
+	if strings.Contains(text, "```") { // quoted code: a call in it isn't one
+		return nil, false
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		fc, ok := parseTextCall(strings.TrimSpace(line), allowed)
+		if !ok {
+			continue
+		}
+		var out []*genai.Part
+		if before := strings.TrimSpace(strings.Join(lines[:i], "\n")); before != "" {
+			out = append(out, &genai.Part{Text: before})
+		}
+		return append(out, &genai.Part{FunctionCall: fc}), true
+	}
+	return nil, false
+}
+
 // parseTextCall reads s as a JSON tool call {"name", "arguments"} of an
 // offered tool ("args" and "parameters" do too).
 func parseTextCall(s string, allowed map[string]bool) (*genai.FunctionCall, bool) {
@@ -708,4 +747,129 @@ func parseTextCall(s string, allowed map[string]bool) (*genai.FunctionCall, bool
 		args["path"] = fp
 	}
 	return &genai.FunctionCall{Name: call.Name, Args: args}, true
+}
+
+// coreTools are the tools a local model is offered (spec_061_models
+// MOD-50): enough to read, search, write, run and look things up, ask the
+// user, and use the workspace's connections (db__…) and Blitz's own
+// commands. Given every tool, a 7B model writes its calls as text, or
+// answers without them; given these, it calls them (2026-11-08).
+var coreTools = map[string]bool{
+	"read_file": true, "list_files": true, "glob": true, "grep": true, "search_workspace": true,
+	"create_file": true, "edit": true, "replace_in_file": true, "delete_file": true,
+	"run_shell_command": true, "web_fetch": true, "web_search": true,
+	"ask_user_question": true, "todo": true, "open_file": true, "open_page": true,
+	"blitz": true, "recall_session": true, "generate_image": true,
+	"exit_plan_mode": true, "enter_plan_mode": true,
+}
+
+// coreTool reports whether a local model is offered the tool name.
+func coreTool(name string) bool { return coreTools[name] || strings.HasPrefix(name, "db__") }
+
+// withCoreTools is req offering only the core tools: its declarations,
+// and the tools it can call, the rest left out (a copy; req isn't changed).
+func withCoreTools(req *model.LLMRequest) *model.LLMRequest {
+	if req == nil {
+		return req
+	}
+	cp := *req
+	if req.Tools != nil {
+		cp.Tools = make(map[string]any, len(req.Tools))
+		for name, t := range req.Tools {
+			if coreTool(name) {
+				cp.Tools[name] = t
+			}
+		}
+	}
+	if req.Config != nil {
+		cfg := *req.Config
+		cfg.Tools = nil
+		for _, t := range req.Config.Tools {
+			if t == nil {
+				continue
+			}
+			if len(t.FunctionDeclarations) == 0 {
+				cfg.Tools = append(cfg.Tools, t) // a provider's own tool (search): kept
+				continue
+			}
+			kept := *t
+			kept.FunctionDeclarations = nil
+			for _, fd := range t.FunctionDeclarations {
+				if fd != nil && coreTool(fd.Name) {
+					kept.FunctionDeclarations = append(kept.FunctionDeclarations, fd)
+				}
+			}
+			if len(kept.FunctionDeclarations) > 0 {
+				cfg.Tools = append(cfg.Tools, &kept)
+			}
+		}
+		cfg.SystemInstruction = leanInstruction(req.Config.SystemInstruction, offeredTools(&model.LLMRequest{Config: &cfg}))
+		cp.Config = &cfg
+	}
+	return &cp
+}
+
+// leanInstruction is a local model's instructions for its core tools
+// (MOD-50): without the skills list (it has no activate_skill) and the
+// agent kit's handoff section (no transfer_to_agent), which name tools it
+// isn't offered; and with what its tools are and that a file is written
+// with them. A copy; si isn't changed.
+func leanInstruction(si *genai.Content, tools map[string]bool) *genai.Content {
+	if si == nil {
+		return nil
+	}
+	out := &genai.Content{Role: si.Role}
+	for _, p := range si.Parts {
+		if p == nil || p.Text == "" {
+			out.Parts = append(out.Parts, p)
+			continue
+		}
+		cp := *p
+		cp.Text = withoutSection(withoutHandoff(p.Text), "## Available Agent Skills")
+		out.Parts = append(out.Parts, &cp)
+	}
+	names := slices.Sorted(maps.Keys(tools))
+	out.Parts = append(out.Parts, &genai.Part{Text: "Your tools are " + strings.Join(names, ", ") + ". Use them to do the work: " +
+		"to write or change a file, call create_file (or edit, replace_in_file) with its whole content, never paste the content in your answer instead, " +
+		"and never say a file is written until the tool said so. Make one call at a time and read its result before the next."})
+	return out
+}
+
+// withoutSection is text without the Markdown section headed heading (to
+// the next heading of its level or above, or the end).
+func withoutSection(text, heading string) string {
+	i := strings.Index(text, heading)
+	if i < 0 {
+		return text
+	}
+	rest := text[i+len(heading):]
+	end := len(text)
+	if j := strings.Index(rest, "\n## "); j >= 0 {
+		end = i + len(heading) + j + 1
+	} else if j := strings.Index(rest, "\n# "); j >= 0 {
+		end = i + len(heading) + j + 1
+	}
+	return text[:i] + text[end:]
+}
+
+// handoffStart and handoffNote begin and end the agent kit's section
+// about handing a question to another agent with transfer_to_agent.
+const (
+	handoffStart = "You have a list of other agents to transfer to"
+	handoffNote  = "**NOTE**: the only available agents for `transfer_to_agent`"
+)
+
+// withoutHandoff is text without the handoff section.
+func withoutHandoff(text string) string {
+	i := strings.Index(text, handoffStart)
+	if i < 0 {
+		return text
+	}
+	end := len(text)
+	if n := strings.Index(text[i:], handoffNote); n >= 0 {
+		if j := strings.Index(text[i+n:], "\n\n"); j >= 0 {
+			end = i + n + j
+		}
+	}
+	return strings.TrimRight(text[:i], "\n ") + text[end:]
 }

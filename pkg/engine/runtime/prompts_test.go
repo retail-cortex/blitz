@@ -61,7 +61,7 @@ func TestPlanPrompts(t *testing.T) {
 func TestRunRefusals(t *testing.T) {
 	st := &runState{}
 	WithReadOnly("/search")(st)
-	assert.Contains(t, planRefusal(st, false, "create_file")["error"], "/search is read-only")
+	assert.Contains(t, planRefusal(st, false, "create_file", nil)["error"], "/search is read-only")
 
 	st = &runState{}
 	WithAllowedTools(nil)(st)

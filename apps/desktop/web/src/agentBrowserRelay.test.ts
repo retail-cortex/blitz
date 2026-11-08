@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { AgentBrowserCommandSchema } from "./gen/blitz/v1/workspace_pb";
 import { openedMessage, runRelay, type RelayEnds } from "./agentBrowserRelay";
 
-const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[]; url: string }>) => ({ command: create(AgentBrowserCommandSchema, c) });
+const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[]; url: string; path: string; line: number }>) => ({ command: create(AgentBrowserCommandSchema, c) });
 
 /** Ends whose stream yields commands as they're pushed, recording what the relay did. */
 function fakeEnds(failOpen = false) {
@@ -56,6 +56,9 @@ function fakeEnds(failOpen = false) {
     },
     showTab: (id) => void log.push(`tab ${id}`),
     openPage: (url, external) => void log.push(`${external ? "external" : "page"} ${url}`),
+    openFile: (path, line) => void log.push(`file ${path}:${line}`),
+    openView: (view) => void log.push(`view ${view}`),
+    openPicture: (json) => void log.push(`picture ${json}`),
   };
   return { ends, log, push, emit: (event: string, arg: unknown) => listeners[event]?.(arg), listening: () => Object.keys(listeners).length };
 }
@@ -132,6 +135,33 @@ describe("the agent's browser relay", () => {
     f.push(null);
     await done;
     expect(f.log).toEqual(["page https://github.com/", "external https://example.com/"]);
+  });
+
+  it("opens a workspace file the user asked to see, in the editor (spec_060 DRV-31)", async () => {
+    const f = fakeEnds();
+    const ctl = new AbortController();
+    const done = runRelay(f.ends, ctl.signal, 1);
+    f.push(cmd({ kind: "file", path: "notes/plan.md", line: 12 }));
+    f.push(cmd({ kind: "file", path: "db-info.md" }));
+    await settle();
+    ctl.abort();
+    f.push(null);
+    await done;
+    expect(f.log).toEqual(["file notes/plan.md:12", "file db-info.md:0"]);
+  });
+
+  it("opens a view, a Studio or Settings section, and Pictures with a prompt (spec_060 DRV-30, DRV-31)", async () => {
+    const f = fakeEnds();
+    const ctl = new AbortController();
+    const done = runRelay(f.ends, ctl.signal, 1);
+    f.push(cmd({ kind: "view", path: "studio:connectors" }));
+    f.push(cmd({ kind: "view", path: "settings:providers" }));
+    f.push(cmd({ kind: "picture", message: '{"prompt":"a poster"}' }));
+    await settle();
+    ctl.abort();
+    f.push(null);
+    await done;
+    expect(f.log).toEqual(["view studio:connectors", "view settings:providers", 'picture {"prompt":"a poster"}']);
   });
 
   it("watches again when the stream ends (a service restart)", async () => {

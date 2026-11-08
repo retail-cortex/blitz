@@ -89,6 +89,8 @@ type TaskRequest struct {
 	// what that order rests on (spec_005_approvals APR-40b).
 	Choices []Choice
 	Order   string
+	// Secret: the answer is a secret's value, typed hidden (DRV-05).
+	Secret bool
 }
 
 // Label names who asks: "qa · task-3".

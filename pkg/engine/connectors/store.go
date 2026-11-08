@@ -316,6 +316,17 @@ func Save(cat Catalog, d Dirs, conn Connection, values map[string]string, previo
 	return saved, nil, nil
 }
 
+// Preview is what Save would write for conn: its file's path and text, or
+// the problems that would stop it (an organization's policy among them);
+// it writes nothing (spec_060_blitz_tools DRV-11).
+func Preview(cat Catalog, d Dirs, conn Connection, values map[string]string, previous string) (path, text string, problems []string, err error) {
+	p, problems, err := planSave(cat, d, conn, values, previous)
+	if err != nil || len(problems) > 0 {
+		return "", "", problems, err
+	}
+	return p.path, p.text, nil, nil
+}
+
 // saving is a save worked out: the connection as written, its file and
 // text, and its secret fields.
 type saving struct {

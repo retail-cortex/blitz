@@ -794,3 +794,41 @@ func TestSetWorkerPolicyValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, WorkerPermissionKinds, cfg.Workers.Policy.Allow, "back to the default")
 }
+
+// The active providers and each provider's menu models are lists, saved
+// once each; a provider Blitz doesn't know is refused (spec_061_models
+// MOD-40, MOD-42).
+func TestSetProviderLists(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	cases := []struct {
+		key, value string
+		err        string
+	}{
+		{key: "llm.providers", value: "gemini, openai, gemini,"},
+		{key: "llm.gemini.models", value: "gemini-3.8-flash,gemini-4-carbon"},
+		{key: "llm.providers", value: "gemini,acme", err: `"acme" isn't a provider`},
+	}
+	for _, c := range cases {
+		t.Run(c.key+"="+c.value, func(t *testing.T) {
+			_, err := SetValue("", ws, c.key, c.value)
+			if c.err != "" {
+				assert.ErrorContains(t, err, c.err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+	info, err := Describe("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gemini", "openai"}, info.Active)
+	assert.Equal(t, map[string][]string{"gemini": {"gemini-3.8-flash", "gemini-4-carbon"}}, info.MenuModels)
+}
+
+// A key left as modenv's xor: value is decoded when the secrets resolve.
+func TestResolveXorSecret(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LLM.OpenAI.APIKey = modenv.EncryptSecret("sk-x")
+	resolveSecrets(cfg, &secrets.Memory{})
+	assert.Equal(t, "sk-x", cfg.LLM.OpenAI.APIKey)
+}

@@ -113,8 +113,17 @@ func NewPictureMaker(ctx context.Context, cfg *config.Config, ref string) (Pictu
 		if !ok {
 			return nil, fmt.Errorf("%s isn't an image model", ref)
 		}
+	case "openai": // PIC-04
+		if !ok || info.Kind != images.KindOpenAI {
+			return nil, fmt.Errorf("%s isn't one of OpenAI's image models (gpt-image-…)", ref)
+		}
+		d, err := newOpenAIDrawer(ctx, cfg, name)
+		if err != nil {
+			return nil, err
+		}
+		return &openAIPictures{openAIDrawer: d, info: info}, nil
 	default:
-		return nil, fmt.Errorf("%s can't make pictures: choose a Gemini or Imagen model, or one of your organization's", ref)
+		return nil, fmt.Errorf("%s can't make pictures: choose a Gemini, Imagen or OpenAI image model, or one of your organization's", ref)
 	}
 	cc, err := geminiClientConfig(ctx, cfg.LLM.Gemini, policyFrom(cfg.LLM))
 	if err != nil {

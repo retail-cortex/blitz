@@ -31,6 +31,7 @@ import (
 // configured provider offers, from its API, with the prices Blitz knows
 // (spec_027_parity PAR-MOD-03).
 func newModelsCommand(g *globalFlags) *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
 		Use:   "models [provider…]",
 		Short: "List the models your providers offer, with the prices Blitz knows",
@@ -47,7 +48,11 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			list, err := client.AttachSettings(sock).ListModels(cmd.Context(), dir, args...)
+			settings := client.AttachSettings(sock)
+			list, err := settings.ListChatModels(cmd.Context(), dir, args...)
+			if all {
+				list, err = settings.ListModels(cmd.Context(), dir, args...)
+			}
 			if err != nil {
 				return err
 			}
@@ -87,6 +92,7 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "Everything the providers list, not only the models that hold a conversation")
 	cmd.AddCommand(newModelsForgetCommand())
 	return cmd
 }

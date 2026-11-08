@@ -376,17 +376,23 @@ func TestAutoModeAtTheGate(t *testing.T) {
 	}
 	rules := rulesOf(t, nil, []string{"write(ci/**)"}, []string{"write(**/*.pem)"})
 	cases := []struct {
-		name     string
-		mode     api.PermissionMode
-		path     string
-		verdict  bool
-		err      error
-		allowed  bool
-		reviewed bool
-		asked    bool
+		name       string
+		mode       api.PermissionMode
+		path       string
+		verdict    bool
+		err        error
+		background bool
+		answer     api.Decision
+		allowed    bool
+		reviewed   bool
+		asked      bool
+		denied     string // the reviewer's reason the user is shown
 	}{
 		{name: "allowed by the reviewer", mode: api.ModeAuto, path: "src/a.go", verdict: true, allowed: true, reviewed: true},
-		{name: "denied by the reviewer", mode: api.ModeAuto, path: "src/a.go", reviewed: true},
+		// APR-14d: the user, there to answer, sees why and may allow it anyway.
+		{name: "denied by the reviewer: allowed anyway", mode: api.ModeAuto, path: "src/a.go", reviewed: true, answer: api.DecisionOnce, asked: true, allowed: true, denied: "because"},
+		{name: "denied by the reviewer: the user denies too", mode: api.ModeAuto, path: "src/a.go", reviewed: true, answer: api.DecisionDeny, asked: true, denied: "because"},
+		{name: "denied by the reviewer with nobody to ask", mode: api.ModeAuto, path: "src/a.go", reviewed: true, background: true},
 		{name: "the reviewer failed: the user decides", mode: api.ModeAuto, path: "src/a.go", err: errors.New("overloaded"), reviewed: true, asked: true, allowed: true},
 		{name: "an ask rule asks the user", mode: api.ModeAuto, path: "ci/deploy.yml", verdict: true, asked: true, allowed: true},
 		{name: "a deny rule", mode: api.ModeAuto, path: "k.pem", verdict: true},
@@ -394,7 +400,11 @@ func TestAutoModeAtTheGate(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			h, reqs := approverHooks(true)
+			answer := api.DecisionOnce
+			if c.denied != "" {
+				answer = c.answer
+			}
+			h, reqs := decisionHooks(answer)
 			h.setMode(c.mode)
 			h.SetRules(rules)
 			reviewed := false
@@ -402,7 +412,11 @@ func TestAutoModeAtTheGate(t *testing.T) {
 				reviewed = true
 				return c.verdict, "because", c.err
 			})
-			err := h.Approve(context.Background(), write(c.path))
+			ctx := context.Background()
+			if c.background {
+				ctx = Background(ctx)
+			}
+			err := h.Approve(ctx, write(c.path))
 			assert.Equal(t, c.reviewed, reviewed, "reviewed")
 			assert.Equal(t, c.asked, len(*reqs) > 0, "asked the user")
 			if c.allowed {
@@ -410,7 +424,10 @@ func TestAutoModeAtTheGate(t *testing.T) {
 			} else {
 				assert.ErrorIs(t, err, ErrNotApproved)
 			}
-			if c.reviewed && !c.allowed {
+			if c.asked {
+				assert.Equal(t, c.denied, (*reqs)[0].ReviewerDenied, "the reviewer's reason, shown to the user")
+			}
+			if c.reviewed && !c.allowed && !c.asked {
 				assert.ErrorContains(t, err, "because")
 			}
 		})

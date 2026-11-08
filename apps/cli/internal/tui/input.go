@@ -17,6 +17,7 @@ package tui
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -162,6 +163,9 @@ func NewApprover(in Input, diffLines int) api.Approver {
 		for _, line := range strings.Split(safe(req.Detail), "\n") {
 			fmt.Fprintf(&sb, "   %s%s%s\n", Dim, line, Reset)
 		}
+		if req.ReviewerDenied != "" { // auto mode's reviewer said no; the person may allow it anyway (APR-14d)
+			fmt.Fprintf(&sb, "   %s%s%s\n", Yellow, i18n.T("approve.reviewer_denied", "reason", safe(req.ReviewerDenied)), Reset)
+		}
 		truncated := false
 		if req.Diff != "" {
 			var d string
@@ -288,6 +292,15 @@ func NewUserPrompter(in Input) api.UserPromptFunc {
 	return func(ctx context.Context, question string, options []string) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
+		}
+		if api.SecretAnswer(ctx) { // typed hidden, never echoed (DRV-05)
+			prompt := fmt.Sprintf("\n[%s]: %s\n> ", i18n.T("question.title"), textutil.SanitizeTerminal(question))
+			if t, ok := in.(interface {
+				AskSecret(context.Context, string) (string, error)
+			}); ok {
+				return t.AskSecret(ctx, prompt)
+			}
+			return "", errors.New("a secret can only be typed in a terminal: set it in Studio › Secrets or with blitz config")
 		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "\n[%s]: %s\n", i18n.T("question.title"), textutil.SanitizeTerminal(question))

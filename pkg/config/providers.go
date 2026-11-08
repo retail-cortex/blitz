@@ -212,6 +212,11 @@ type ScopeInfo struct {
 	// Models are each provider's own model as this scope sets it
 	// (ModelSection's model), by provider.
 	Models map[string]string
+	// Active are the active providers as this scope lists them (none:
+	// every one set up), and MenuModels each provider's models for the
+	// menus (spec_061_models MOD-40, MOD-42).
+	Active     []string
+	MenuModels map[string][]string
 }
 
 // ModelSection is the settings table holding provider's own model:
@@ -249,6 +254,15 @@ func Describe(prefixDir, workspace string) (ScopeInfo, error) {
 	}
 	info := ScopeInfo{Path: path, SecretStore: secrets.Default(ConfigDir(prefixDir)).Kind()}
 	info.Provider, _ = lookup(raw, "llm", "provider").(string)
+	info.Active = strs(lookup(raw, "llm", "providers"))
+	for _, p := range []string{"gemini", "anthropic", "openai", "ollama"} {
+		if l := strs(lookup(raw, "llm", p, "models")); len(l) > 0 {
+			if info.MenuModels == nil {
+				info.MenuModels = map[string][]string{}
+			}
+			info.MenuModels[p] = l
+		}
+	}
 	info.DefaultModel, _ = lookup(raw, "blitz", "default_model").(string)
 	var global map[string]any
 	if workspace != "" {
@@ -529,6 +543,13 @@ var typedValues = map[string]string{
 	"search.enrich_daily_limit": "int",
 	"search.include_ignored":    "bool",
 	"search.sources":            "sources",
+	// The active providers, and each one's models in the menus
+	// (spec_061_models MOD-40, MOD-42).
+	"llm.providers":        "providers",
+	"llm.gemini.models":    "models",
+	"llm.anthropic.models": "models",
+	"llm.openai.models":    "models",
+	"llm.ollama.models":    "models",
 	// Settings › Workers' limits (spec_023_workers WK-63).
 	"workers.policy.allow":                "kinds",
 	"workers.policy.max_concurrent":       "int",
@@ -624,6 +645,20 @@ func typedValue(kind, key, value string) (string, any, error) {
 			if !slices.Contains(back, any(s)) {
 				quoted, back = append(quoted, strconv.Quote(s)), append(back, s)
 			}
+		}
+		return "[" + strings.Join(quoted, ", ") + "]", back, nil
+	case "providers", "models":
+		var quoted []string
+		var back []any
+		for _, v := range strings.Split(value, ",") {
+			v = strings.TrimSpace(v)
+			if v == "" || slices.Contains(back, any(v)) {
+				continue
+			}
+			if kind == "providers" && !slices.Contains(Providers, v) {
+				return "", nil, fmt.Errorf("%q isn't a provider (%s)", v, ProviderList())
+			}
+			quoted, back = append(quoted, strconv.Quote(v)), append(back, v)
 		}
 		return "[" + strings.Join(quoted, ", ") + "]", back, nil
 	case "sources":
@@ -818,6 +853,9 @@ type ProviderChoice struct {
 	Key      string
 	Auth     *ProviderAuth
 	API      *APIProviderSettings
+	// KeepDefault saves the provider's sign-in alone: the provider and
+	// model in use stay as they are (spec_061_models MOD-40).
+	KeepDefault bool
 }
 
 // SetProvider saves a ProviderChoice in a scope as one change: everything
@@ -831,12 +869,17 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 	if c.Key != "" && !knownProvider(c.Provider) || c.Auth != nil && !knownProvider(c.Provider) && len(authMethods[c.Provider]) == 0 {
 		return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key or sign-in", strings.Join(KeyedProviders, ", "))
 	}
-	edits := []settingEdit{{"llm", "provider", c.Provider}}
-	if p, name, prefixed := splitModelRef(c.Model); c.Provider == "" || (prefixed && p != c.Provider) {
-		edits = append(edits, settingEdit{"blitz", "default_model", c.Model})
-	} else {
+	var edits []settingEdit
+	switch p, name, prefixed := splitModelRef(c.Model); {
+	case c.KeepDefault: // the sign-in alone (MOD-40)
+		if c.Provider == "" {
+			return "", errors.New("a provider is needed to save its sign-in")
+		}
+	case c.Provider == "" || (prefixed && p != c.Provider):
+		edits = append(edits, settingEdit{"llm", "provider", c.Provider}, settingEdit{"blitz", "default_model", c.Model})
+	default:
 		// The provider's own model, and no scope-wide one over it.
-		edits = append(edits, settingEdit{ModelSection(c.Provider), "model", name}, settingEdit{"blitz", "default_model", ""})
+		edits = append(edits, settingEdit{"llm", "provider", c.Provider}, settingEdit{ModelSection(c.Provider), "model", name}, settingEdit{"blitz", "default_model", ""})
 	}
 	if c.Auth != nil {
 		c.Auth.trim()
@@ -913,4 +956,16 @@ func mustMap(text string) map[string]any {
 	m := map[string]any{}
 	_, _ = toml.Decode(text, &m)
 	return m
+}
+
+// strs is a TOML list of strings as Go's (nil for anything else).
+func strs(v any) []string {
+	l, _ := v.([]any)
+	var out []string
+	for _, x := range l {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }

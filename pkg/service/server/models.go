@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -62,10 +63,10 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if err != nil {
 		return nil, err
 	}
-	key := dir + "\x00" + strings.Join(r.Msg.Providers, ",")
+	key := dir + "\x00" + strings.Join(r.Msg.Providers, ",") + "\x00" + strconv.FormatBool(r.Msg.ChatOnly) + strconv.FormatBool(r.Msg.Menu)
 	c := &h.s.models
 	c.mu.Lock()
-	if l, kept := c.byID[key]; kept && time.Now().Before(l.expires) {
+	if l, kept := c.byID[key]; kept && !r.Msg.Refresh && time.Now().Before(l.expires) {
 		c.mu.Unlock()
 		return ok(l.res)
 	}
@@ -86,7 +87,15 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		res.DefaultProvider = "enterprise" // its models are the models (spec_053_enterprise EN-20)
 	}
 	fresh := modelsFresh
-	for _, pm := range listModels(ctx, cfg, r.Msg.Providers...) {
+	listed := listModels(ctx, cfg, r.Msg.Providers...)
+	if r.Msg.ChatOnly {
+		listed = runtime.ChatModels(listed)
+		res.NotSetUp = runtime.NotSetUp(cfg, listed)
+		if r.Msg.Menu {
+			listed = runtime.MenuModels(cfg, listed, cfg.ModelName())
+		}
+	}
+	for _, pm := range listed {
 		p := &pb.ProviderModels{Provider: pm.Provider, Note: pm.Note}
 		if pm.Err != nil {
 			p.Error = pm.Err.Error()

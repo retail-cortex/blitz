@@ -276,7 +276,7 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	return ok(&pb.GetSettingsResponse{
 		Agency: st.Agency,
 		Model:  st.Model.Name, Provider: st.Model.Provider, Agent: st.Agent, Locale: st.Locale,
-		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, Effort: st.Effort, Style: st.Style,
+		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, ModeNote: st.ModeNote, Effort: st.Effort, Style: st.Style,
 		SpeechModel: st.SpeechModel, SpeechError: st.SpeechError,
 		ImageModel: st.ImageModel, ImageError: st.ImageError,
 		AcceptedMedia: acceptedMediaMsg(w.AcceptedMedia()),
@@ -1015,6 +1015,7 @@ func (h workspaceService) WatchAgentBrowser(ctx context.Context, r req[pb.WatchA
 	return w.WatchAgentBrowser(ctx, func(c api.AgentBrowserCommand) error {
 		return stream.Send(&pb.WatchAgentBrowserResponse{Command: &pb.AgentBrowserCommand{
 			BrowserId: c.BrowserID, Kind: c.Kind, Message: c.Message, Show: c.Show, Profile: c.Profile, AllowLocal: c.AllowLocal, DenyDomains: c.DenyDomains, Url: c.URL,
+			Path: c.Path, Line: int32(c.Line),
 		}})
 	})
 }

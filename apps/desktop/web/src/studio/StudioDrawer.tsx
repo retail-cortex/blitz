@@ -53,6 +53,8 @@ import { OverviewPane } from "./OverviewPane";
 const studioKinds = ["overview", "specs", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
+/** Whether s names a kind of Studio's. */
+export const isStudioKind = (s: string): s is StudioKind => (studioKinds as readonly string[]).includes(s);
 /** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */
 export const studioGroups: readonly (readonly StudioKind[])[] = [["overview", "specs"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["connectors", "secrets"]];
 

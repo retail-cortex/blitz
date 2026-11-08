@@ -279,3 +279,13 @@ func (r *Remote) TakeProcessNotices(session string) []string {
 	}
 	return res.Msg.Notices
 }
+
+// RunBlitzCommand runs one of Blitz's own commands in the service (the
+// CLI's blitz do, spec_060_blitz_tools DRV-02).
+func (r *Remote) RunBlitzCommand(ctx context.Context, command, argsJSON string, confirm bool, secrets map[string]string) (*pb.RunBlitzCommandResponse, error) {
+	res, err := r.workspaces.RunBlitzCommand(ctx, connect.NewRequest(&pb.RunBlitzCommandRequest{Workspace: r.dir, Command: command, ArgsJson: argsJSON, Confirm: confirm, Secrets: secrets}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}

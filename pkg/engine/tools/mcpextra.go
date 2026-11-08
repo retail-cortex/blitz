@@ -474,6 +474,12 @@ func (r *Registry) approveMCPServer(ctx context.Context, server, action string, 
 // askUser asks the user a question as ask_user_question does: a
 // background task's session, else the front end's prompter; nobody in an
 // unattended run.
+// AskUser asks the person question (with options, or none for a typed
+// answer): a background task's people, else the workspace's prompter.
+func (h *Hooks) AskUser(ctx context.Context, question string, options []string) (string, error) {
+	return h.askUser(ctx, question, options)
+}
+
 func (h *Hooks) askUser(ctx context.Context, question string, options []string) (string, error) {
 	if a, ok := taskAskerFrom(ctx); ok && a.Ask != nil {
 		return a.Ask(ctx, question, options)
