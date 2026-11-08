@@ -80,7 +80,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - the size is 8 to 32 pixels, 13 by default.
 
   They apply to open terminals at once.
-- **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown or the drawer is up, so nothing is lost. A window that reloads lists the workspace's terminals and puts a tab for each in the drawer (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. The drawer stays up after a reload: the terminals are there when you open it. When the shell exits, its view says so with the code and offers **Restart**, which opens a new terminal in the same folder, in the same tab.
+- **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown or the drawer is up, so nothing is lost. A window that reloads lists the workspace's terminals and puts a tab for each in the drawer (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. The drawer stays up after a reload: the terminals are there when you open it. When the shell exits (`exit`, ⌃D), its tab closes and the terminal with it, as its ✕ would, and the drawer goes up with the last; a shell that exited while no window watched is closed when a window lists it, not shown. That's what a terminal app does, and an ended shell has nothing left to show.
 
 ## 5. Opening one
 
@@ -109,7 +109,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - several watchers see the same output.
 - **TRM-41** `TerminalService` through the server: open, write, watch, resize, list and close, and each error with its reason. Terminals close with the workspace.
 - **TRM-42** The page:
-  - the drawer's state in unit tests: new, close, restart, hiding keeps the terminals, ⌃` toggles, a reload restores them once with the drawer up, the status bar's list;
+  - the drawer's state in unit tests: new, close, a shell that exits closing its tab, hiding keeps the terminals, ⌃` toggles, a reload restores them once with the drawer up, the status bar's list;
   - the fake service's terminal echoes input;
   - Playwright WebKit screenshots in `?fake` show the drawer down with two tabs, the status bar's menu and the drawer up, with powerline glyphs and ANSI colours in light and dark;
   - the file tree's **Open in terminal**.

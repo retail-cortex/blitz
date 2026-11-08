@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { mdiChevronDown, mdiChevronUp, mdiClose, mdiConsoleLine, mdiMagnify, mdiRestart } from "@mdi/js";
-import { Button, ContextMenu, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { mdiChevronDown, mdiChevronUp, mdiClose, mdiMagnify } from "@mdi/js";
+import { ContextMenu, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -52,18 +52,16 @@ export function TerminalView({
   hidden,
   onExit,
   onOpenFile,
-  onRestart,
 }: {
   workspace: string;
   entry: TermEntry;
   /** What it's called (its folder's name). */
   name: string;
   hidden: boolean;
-  onExit: (code: number) => void;
+  /** Its shell exited: the drawer closes it. */
+  onExit: () => void;
   /** Opens a workspace file the shell printed (a ⌘-click on its path). */
   onOpenFile: (path: string, line?: number, column?: number) => void;
-  /** Starts a new shell in this one's folder, in its place. */
-  onRestart: () => void;
 }) {
   const { prefs, theme } = useApp();
   const host = useRef<HTMLDivElement>(null);
@@ -75,7 +73,6 @@ export function TerminalView({
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const snack = useSnackbar();
   const id = entry.id;
-  const exited = entry.exited;
   // The latest callbacks, for xterm's handlers made once.
   const calls = useRef({ onExit, onOpenFile, setFinding });
   calls.current = { onExit, onOpenFile, setFinding };
@@ -186,7 +183,7 @@ export function TerminalView({
         for await (const m of terminals.watchTerminal({ workspace, id, from: 0n }, { signal: stop.signal })) {
           if (m.skipped > 0n) x.write("\x1b[2m…\x1b[0m\r\n");
           if (m.data.length) x.write(m.data);
-          if (m.exited) calls.current.onExit(m.exitCode);
+          if (m.exited) calls.current.onExit();
         }
       } catch (e) {
         if (!stop.signal.aborted) snack(message(e));
@@ -275,15 +272,6 @@ export function TerminalView({
               term.current?.focus();
             }}
           />
-        </div>
-      )}
-      {exited && (
-        <div className="editor-bar" role="status">
-          <Icon path={mdiConsoleLine} size="sm" />
-          <span className="spacer">{t("desktop.terminal.exited", { code: entry.exitCode ?? 0 })}</span>
-          <Button small icon={mdiRestart} onClick={onRestart}>
-            {t("desktop.terminal.restart")}
-          </Button>
         </div>
       )}
       <div

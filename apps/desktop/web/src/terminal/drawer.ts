@@ -30,8 +30,6 @@ export interface TermEntry {
   dir: string;
   /** The shell it runs (/bin/zsh), as the service says. */
   shell?: string;
-  exited?: boolean;
-  exitCode?: number;
 }
 
 /** A workspace's terminals: in the drawer's order, the one shown, and whether the drawer is down. */
@@ -58,12 +56,6 @@ export function removed(s: TermDrawer, id: string): TermDrawer {
   return { list, active, open: list.length > 0 && s.open };
 }
 
-/** s with terminal old replaced by t in its place (a restart). */
-export function replaced(s: TermDrawer, old: string, t: TermEntry): TermDrawer {
-  if (!s.list.some((x) => x.id === old)) return added(s, t);
-  return { list: s.list.map((x) => (x.id === old ? t : x)), active: s.active === old ? t.id : s.active, open: s.open };
-}
-
 /** The drawer down on terminal id (else the one shown last, else the first). */
 export function shown(s: TermDrawer, id?: string): TermDrawer {
   const active = id && s.list.some((x) => x.id === id) ? id : s.active || s.list[0]?.id || "";
@@ -72,11 +64,6 @@ export function shown(s: TermDrawer, id?: string): TermDrawer {
 
 /** The drawer up; the terminals go on. */
 export const hidden = (s: TermDrawer): TermDrawer => (s.open ? { ...s, open: false } : s);
-
-/** s with what's new of terminal id (it exited, with its code). */
-export function updated(s: TermDrawer, id: string, patch: Partial<TermEntry>): TermDrawer {
-  return { ...s, list: s.list.map((x) => (x.id === id ? { ...x, ...patch } : x)) };
-}
 
 /** s with the service's terminals a reloaded window finds (TRM-26): in the drawer, which stays up. */
 export function restored(s: TermDrawer, found: TermEntry[]): TermDrawer {
@@ -141,36 +128,28 @@ export async function closeTerminal(ws: string, id: string): Promise<void> {
   await terminals.closeTerminal({ workspace: ws, id }).catch(() => {}); // gone already: nothing to do
 }
 
-/** A new shell in the folder of terminal id, in its place (Restart, after it exited). */
-export async function restartTerminal(ws: string, id: string): Promise<void> {
-  const old = get(ws).list.find((x) => x.id === id);
-  if (!old) return;
-  const { terminal } = await terminals.openTerminal({ workspace: ws, dir: old.dir });
-  set(ws, (s) => replaced(s, id, { id: terminal!.id, dir: terminal!.dir, shell: terminal!.shell }));
-  await terminals.closeTerminal({ workspace: ws, id }).catch(() => {});
-}
-
-/** Terminal id's shell exited with code. */
-export const terminalExited = (ws: string, id: string, code: number) => set(ws, (s) => updated(s, id, { exited: true, exitCode: code }));
+/** Terminal id's shell exited (`exit`, ⌃D): it closes like its tab's ✕ (TRM-26). */
+export const terminalExited = closeTerminal;
 
 const restoredFor = new Set<string>();
 
-/** The workspace's terminals the service still runs, once a window (TRM-26): in the drawer, which stays up. */
+/** The workspace's terminals the service still runs, once a window (TRM-26): in the drawer, which stays up. Those whose shell exited meanwhile are closed instead. */
 export async function restoreTerminals(ws: string): Promise<void> {
   if (restoredFor.has(ws)) return;
   restoredFor.add(ws);
   try {
     const { terminals: list } = await terminals.listTerminals({ workspace: ws });
-    set(ws, (s) => restored(s, list.map((x) => ({ id: x.id, dir: x.dir, shell: x.shell, exited: x.exited || undefined, exitCode: x.exited ? x.exitCode : undefined }))));
+    set(ws, (s) => restored(s, list.filter((x) => !x.exited).map((x) => ({ id: x.id, dir: x.dir, shell: x.shell }))));
+    await Promise.all(list.filter((x) => x.exited).map((x) => terminals.closeTerminal({ workspace: ws, id: x.id }).catch(() => {})));
   } catch {
     // no terminals (an older service): none to show
   }
 }
 
-/** A terminal's name in a list: its folder's, and its shell's (zsh), or how it ended. */
-export function termDetail(t: TermEntry, ended: (code: number) => string): string {
+/** A terminal's name in a list: its folder's, and its shell's (zsh). */
+export function termDetail(t: TermEntry): string {
   const shell = (t.shell ?? "").split("/").filter(Boolean).pop() ?? "";
-  return [t.dir || ".", t.exited ? ended(t.exitCode ?? 0) : shell].filter(Boolean).join(" · ");
+  return [t.dir || ".", shell].filter(Boolean).join(" · ");
 }
 
 /** The drawer's height as the user left it (0: the default), within what the window has room for. */
@@ -180,8 +159,8 @@ export function drawerHeight(stored: number, room: number): number {
 }
 
 /** A workspace's terminals as the status bar's menu lists them (TRM-30a): name, folder and shell, the one shown marked. */
-export function termChoices(s: TermDrawer, ws: string, ended: (code: number) => string): { id: string; label: string; detail: string; current: boolean }[] {
-  return s.list.map((x) => ({ id: x.id, label: termName(x.dir, ws), detail: termDetail(x, ended), current: s.open && x.id === s.active }));
+export function termChoices(s: TermDrawer, ws: string): { id: string; label: string; detail: string; current: boolean }[] {
+  return s.list.map((x) => ({ id: x.id, label: termName(x.dir, ws), detail: termDetail(x), current: s.open && x.id === s.active }));
 }
 
 /** ⌃` (Control-backtick, on every system): the key that puts the drawer down or up (TRM-30b). */

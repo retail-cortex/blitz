@@ -410,7 +410,7 @@ function TerminalItem({ dir }: { dir: string }) {
   const label = t("desktop.terminal.list");
   const items: MenuEntry[] = [
     { heading: label },
-    ...termChoices(st, dir, (code) => t("desktop.terminal.ended", { code })).map((c) => ({
+    ...termChoices(st, dir).map((c) => ({
       label: c.label,
       detail: c.detail,
       icon: mdiConsoleLine,

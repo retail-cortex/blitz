@@ -27,9 +27,7 @@ import {
   isToggleTerminalKey,
   newTerminal,
   removed,
-  replaced,
   resetTermDrawers,
-  restartTerminal,
   restored,
   restoreTerminals,
   showTerminals,
@@ -39,7 +37,6 @@ import {
   termDrawer,
   terminalExited,
   toggleTerminals,
-  updated,
   type TermDrawer,
   type TermEntry,
 } from "./drawer";
@@ -72,13 +69,6 @@ describe("the terminal drawer's state", () => {
     expect(removed(s, "x")).toBe(s);
   });
 
-  it("restarts a terminal in its place, or adds it", () => {
-    const s = replaced(state(["a", "b", "c"], "b", true), "b", term("b2"));
-    expect([ids(s), s.active, s.open]).toEqual([["a", "b2", "c"], "b2", true]);
-    expect(replaced(state(["a", "b"], "a"), "b", term("b2")).active).toBe("a");
-    expect(ids(replaced(state(["a"]), "x", term("y")))).toEqual(["a", "y"]);
-  });
-
   it("drops down on the one asked for, the one shown last, or the first; and goes up", () => {
     expect(shown(state(["a", "b"], "a"), "b")).toMatchObject({ active: "b", open: true });
     expect(shown(state(["a", "b"], "b"), "gone")).toMatchObject({ active: "b", open: true });
@@ -88,10 +78,6 @@ describe("the terminal drawer's state", () => {
     expect(hidden(down)).toEqual({ ...down, open: false });
     const up = state(["a"], "a");
     expect(hidden(up)).toBe(up);
-  });
-
-  it("marks a terminal that exited", () => {
-    expect(updated(state(["a", "b"]), "b", { exited: true, exitCode: 2 }).list[1]).toMatchObject({ id: "b", exited: true, exitCode: 2 });
   });
 
   it("restores a reloaded window's terminals with the drawer up, skipping those it has", () => {
@@ -112,19 +98,18 @@ describe("the terminal drawer's state", () => {
 });
 
 describe("the status bar's list of terminals (TRM-30a)", () => {
-  const ended = (code: number) => `ended ${code}`;
-  it("names each by its folder, with its folder in the workspace and its shell or how it ended, the shown one marked", () => {
-    const s: TermDrawer = { list: [term("a"), term("b", "src/api", { exited: true, exitCode: 3 }), term("c", "web", { shell: undefined })], active: "b", open: true };
-    expect(termChoices(s, "/Users/me/shop", ended)).toEqual([
+  it("names each by its folder, with its folder in the workspace and its shell, the shown one marked", () => {
+    const s: TermDrawer = { list: [term("a"), term("b", "src/api"), term("c", "web", { shell: undefined })], active: "b", open: true };
+    expect(termChoices(s, "/Users/me/shop")).toEqual([
       { id: "a", label: "shop", detail: ". · zsh", current: false },
-      { id: "b", label: "api", detail: "src/api · ended 3", current: true },
+      { id: "b", label: "api", detail: "src/api · zsh", current: true },
       { id: "c", label: "web", detail: "web", current: false },
     ]);
-    expect(termChoices({ ...s, open: false }, "/w", ended).some((c) => c.current), "none is shown with the drawer up").toBe(false);
+    expect(termChoices({ ...s, open: false }, "/w").some((c) => c.current), "none is shown with the drawer up").toBe(false);
   });
 
-  it("writes an exit without a code as 0", () => {
-    expect(termDetail(term("a", "", { exited: true }), ended)).toBe(". · ended 0");
+  it("writes the workspace's own folder as .", () => {
+    expect(termDetail(term("a", "", { shell: "" }))).toBe(".");
   });
 });
 
@@ -199,16 +184,16 @@ describe("a workspace's terminals in the drawer", () => {
     expect(calls).toEqual(["open ", "close t1", "open ", "close gone"]);
   });
 
-  it("restarts an exited shell in its folder, in its place", async () => {
+  // TRM-26: exit closes the tab.
+  it("closes the tab of a shell that exited, and the drawer with the last", async () => {
     await newTerminal(ws, "src");
     await newTerminal(ws, "");
-    terminalExited(ws, "t1", 130);
-    expect(termDrawer(ws).list[0]).toMatchObject({ exited: true, exitCode: 130 });
-    await restartTerminal(ws, "t1");
-    expect(ids(termDrawer(ws))).toEqual(["t3", "t2"]);
-    expect(termDrawer(ws).list[0].exited).toBeUndefined();
-    await restartTerminal(ws, "nope");
-    expect(calls).toEqual(["open src", "open ", "open src", "close t1"]);
+    await terminalExited(ws, "t2");
+    expect(termDrawer(ws)).toMatchObject({ active: "t1", open: true });
+    expect(ids(termDrawer(ws))).toEqual(["t1"]);
+    await terminalExited(ws, "t1");
+    expect(termDrawer(ws)).toMatchObject({ list: [], open: false });
+    expect(calls).toEqual(["open src", "open ", "close t2", "close t1"]);
   });
 
   it("restores a reloaded window's terminals once, with the drawer up", async () => {
@@ -218,12 +203,9 @@ describe("a workspace's terminals in the drawer", () => {
     ];
     await restoreTerminals(ws);
     await restoreTerminals(ws);
-    expect(calls).toEqual([`list ${ws}`]);
+    expect(calls, "the one that exited meanwhile is closed, not shown").toEqual([`list ${ws}`, "close done"]);
     expect(termDrawer(ws)).toMatchObject({ active: "old", open: false });
-    expect(termDrawer(ws).list).toEqual([
-      { id: "old", dir: "src", shell: "/bin/zsh", exited: undefined, exitCode: undefined },
-      { id: "done", dir: "", shell: "/bin/zsh", exited: true, exitCode: 1 },
-    ]);
+    expect(termDrawer(ws).list).toEqual([{ id: "old", dir: "src", shell: "/bin/zsh" }]);
   });
 
   it("restores none from a service without terminals", async () => {
