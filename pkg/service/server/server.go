@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewConfigServiceHandler(configService{s}, limit))
 	mux.Handle(pb.NewFileServiceHandler(fileService{s}, limit))
 	mux.Handle(pb.NewLanguageServiceHandler(languageService{s}, limit))
+	mux.Handle(pb.NewTerminalServiceHandler(terminalService{s}, limit))
 	return s.act.track(s.countUse(mux))
 }
 

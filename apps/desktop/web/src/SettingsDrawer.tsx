@@ -85,6 +85,7 @@ import { OrganizationSettings } from "./OrganizationSettings";
 import { logoFor, showOrgDocument, useDarkTheme, useOrgBranding } from "./orgBranding";
 import type { Branding } from "./gen/blitz/v1/config_pb";
 import { useWorkspaceSettings } from "./workspaceSettings";
+import { bundledFont } from "./terminal/terminals";
 
 /**
  * What Settings opens on: a section (simpleMode.ts lists them, and which a
@@ -369,6 +370,34 @@ function Appearance() {
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
       <TaskAlertsSetting />
+      {/* The terminal's font and size (spec_062_terminal TRM-25). */}
+      <Setting title={t("desktop.settings.terminal_font")} detail={t("desktop.settings.terminal_font.detail")}>
+        <input
+          className="input"
+          aria-label={t("desktop.settings.terminal_font")}
+          placeholder={bundledFont}
+          defaultValue={prefs.terminal_font}
+          spellCheck={false}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v !== prefs.terminal_font) update((p) => ({ ...p, terminal_font: v }));
+          }}
+        />
+      </Setting>
+      <Setting title={t("desktop.settings.terminal_font_size")} detail={t("desktop.settings.terminal_font_size.detail")}>
+        <input
+          className="input slider-value"
+          type="number"
+          min={8}
+          max={32}
+          aria-label={t("desktop.settings.terminal_font_size")}
+          value={prefs.terminal_font_size}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value));
+            if (n >= 8 && n <= 32) update((p) => ({ ...p, terminal_font_size: n }));
+          }}
+        />
+      </Setting>
       {/* The Markdown previews' styles, in a dialog of their own. */}
       <Setting title={t("desktop.settings.documents")} detail={t("desktop.settings.documents.detail")}>
         <Button variant="outlined" icon={mdiLanguageMarkdownOutline} onClick={() => setDocuments(true)}>

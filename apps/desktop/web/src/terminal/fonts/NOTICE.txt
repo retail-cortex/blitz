@@ -1,0 +1,18 @@
+MesloLGS Nerd Font Mono, from Nerd Fonts v3.5.1
+(https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1, Meslo.tar.xz,
+SHA-256 6b6624632dc6873dfb7681c3f818e7c01ab601ab707690b6440933bbe57e2b11),
+converted from TTF to WOFF2 unchanged otherwise.
+
+Meslo LG is Copyright 2009, 2010, 2013 André Berg, under the Apache License,
+Version 2.0 (LICENSE.txt); it is a customized version of Apple's Menlo, itself
+based on Bitstream Vera Sans Mono and DejaVu Sans Mono.
+
+The Nerd Fonts patches are Copyright (c) 2014 Ryan L McIntyre: patched fonts
+under the SIL Open Font License 1.1, the patcher under the MIT License
+(LICENSE-nerd-fonts.txt). The added glyphs come from icon sets each under its
+own license, as Nerd Fonts' license audit lists them
+(https://github.com/ryanoasis/nerd-fonts/blob/v3.5.1/license-audit.md):
+Powerline Symbols and Powerline Extra Symbols (MIT), Font Awesome (SIL OFL
+1.1), Material Design Icons (Apache 2.0), Weather Icons (SIL OFL 1.1),
+GitHub Octicons (MIT), Codicons (CC BY 4.0), Devicons (MIT), Seti-UI (MIT),
+Font Logos (Unlicense) and Pomicons (SIL OFL 1.1).

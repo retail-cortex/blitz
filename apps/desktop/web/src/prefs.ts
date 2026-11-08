@@ -84,6 +84,9 @@ export interface Prefs {
   /** The user's CSS for Markdown previews in each theme, over the defaults (FIL-57). */
   markdown_css_light: string;
   markdown_css_dark: string;
+  /** The terminal's font family ("": the bundled MesloLGS Nerd Font Mono) and size in pixels (8–32), spec_062 TRM-25. */
+  terminal_font: string;
+  terminal_font_size: number;
 }
 
 /** The most Markdown CSS kept for a theme, in UTF-16 units (the Go side caps bytes). */
@@ -118,6 +121,8 @@ export const defaultPrefs: Prefs = {
   updates: "auto",
   markdown_css_light: "",
   markdown_css_dark: "",
+  terminal_font: "",
+  terminal_font_size: 13,
 };
 
 // Saved CSS: a string, no longer than the cap.
@@ -175,6 +180,8 @@ export function normalizePrefs(raw: unknown): Prefs {
     files_follow: pick(r.files_follow, ["on", "off"] as const, "on"),
     markdown_css_light: css(r.markdown_css_light),
     markdown_css_dark: css(r.markdown_css_dark),
+    terminal_font: typeof r.terminal_font === "string" && r.terminal_font.trim().length <= 200 ? r.terminal_font.trim() : "",
+    terminal_font_size: typeof r.terminal_font_size === "number" && r.terminal_font_size >= 8 && r.terminal_font_size <= 32 ? Math.round(r.terminal_font_size) : 13,
   };
 }
 
