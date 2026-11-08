@@ -84,6 +84,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
 ## 5. Opening one
 
 - **TRM-30** **New terminal** is in the editor area's tab menu (the **+**) and in the command menu (⌘K, "terminal"). It opens a terminal in the workspace's folder.
+- **TRM-30a** *2026-11-08 (the owner: "we need an icon for the terminal in the status bar next to the Processes").* The status bar has a terminal button beside Processes: it opens a new terminal in the workspace’s folder, as **New terminal** does.
 - **TRM-31** **Open in terminal** in the file tree's menu opens a terminal in that folder, or in a file's folder.
 
 ## 6. Later

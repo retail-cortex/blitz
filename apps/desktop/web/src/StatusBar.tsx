@@ -38,6 +38,7 @@ import {
   mdiCloudOutline,
   mdiCircleMedium,
   mdiCloseCircleOutline,
+  mdiConsole,
   mdiCreationOutline,
   mdiDeveloperBoard,
   mdiInboxOutline,
@@ -55,7 +56,7 @@ import { inboxCounts, useRuns } from "./backgroundRuns";
 import { FlowRunsItem } from "./FlowRunAlerts";
 import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
-import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
+import { configChanged, filesTouchedEvent, openTerminal, showPending, showView } from "./events";
 import type { AgentInfo, GetGitStatusResponse, WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import type { GetOrgSyncResponse } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
@@ -104,6 +105,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       </span>
       {/* First on the left, clear of the turn's activity on the right. */}
       {ws && serviceUp && <ProcessesItem dir={dir} />}
+      {ws && serviceUp && <TerminalItem dir={dir} />}
       {ws && (
         <>
           <span className="sb-item sb-ws" title={ws.dir}>
@@ -384,6 +386,19 @@ function TasksItem() {
 // when one is flagged) and greyed when none do, the count in its hover
 // text. It opens a menu of them by workspace, each with what it uses and
 // Stop; a pick, or Output and details, opens the drawer on its output.
+/**
+ * The terminal button beside Processes (spec_062_terminal TRM-30a): a new
+ * terminal in the workspace's folder, as ⌘K's New terminal.
+ */
+function TerminalItem({ dir }: { dir: string }) {
+  const label = t("desktop.terminal.new");
+  return (
+    <button className="sb-item sb-button sb-terminal" title={label} aria-label={label} onClick={() => openTerminal({ dir, folder: "" })}>
+      <Icon path={mdiConsole} size="sm" />
+    </button>
+  );
+}
+
 function ProcessesItem({ dir }: { dir: string }) {
   const { prefs, update } = useApp();
   const snack = useSnackbar();

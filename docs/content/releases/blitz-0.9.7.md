@@ -16,7 +16,7 @@ A terminal built into Blitz, a file tree that keeps up with your work, pictures 
 
 **A terminal, built in.**
 
-- **Open in terminal** on any folder, or **New terminal** from ⌘K, opens your own shell in a tab beside your files.
+- **Open in terminal** on any folder, the terminal button beside Processes in the status bar, or **New terminal** from ⌘K opens your own shell in a tab beside your files.
 - oh-my-zsh and powerlevel10k prompts look right: full colour, powerline segments and icons, with the MesloLGS Nerd Font included.
 - Copy, paste and find on the usual keys; ⌘-click a file path the terminal prints to open it at that line.
 - It's your terminal, not the agent's: the agents can't read it.
@@ -27,7 +27,7 @@ A terminal built into Blitz, a file tree that keeps up with your work, pictures 
 - Files appear, change and disappear in the tree as soon as they do on disk: no more waiting for it to catch up.
 - **Find in folder** on a folder's menu searches just that folder.
 - Select several files with ⌘-click, Shift-click or Shift+arrows, then copy, cut, paste, duplicate, drag or delete them together.
-- Deleted files go to a trash for a day, with **Undo** right there.
+- Delete no longer asks first: deleted files go to a trash for a day, with **Undo** right there.
 - **Filter files** finds a file anywhere in the workspace, and typing in the tree jumps to a match.
 - Files with errors or warnings show it, and so do their folders.
 - The tree follows the tab you're on, and **Reveal in Files** finds the file from its tab.
@@ -52,6 +52,7 @@ A terminal built into Blitz, a file tree that keeps up with your work, pictures 
 
 - **Gemini searches the web for you again.** On the Gemini API (a Gemini key), a conversation that used Gemini's own search, page reading or code running alongside Blitz's tools could stop with "Error 400 … Please enable tool_config.include_server_side_tool_invocations". Blitz now sends the setting Google asks for, and keeps Gemini's search steps for the next turn. Gemini on Vertex AI wasn't affected.
 - An open file that you delete and then restore with **Undo** no longer says "Deleted on disk".
+- When OpenAI won't make a picture (its safety system, say), you see its reason instead of a bare "400 Bad Request".
 
 ### Good to know
 
