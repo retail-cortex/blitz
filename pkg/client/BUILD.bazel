@@ -24,6 +24,7 @@ go_library(
         "enterprise.go",
         "jobs.go",
         "orgsync.go",
+        "pictures.go",
         "processes.go",
         "project.go",
         "settings.go",

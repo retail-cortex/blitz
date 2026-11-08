@@ -48,11 +48,12 @@ import { cost } from "../workflowRuns";
 import { againRequest, controls, fitSettings, newSeed, standsAlone, keepSettings, loadSettings, maxReferenceBytes, panoramic, ratioShape, refProblem, referenceTypes, roles, type Ref, type Role, type Settings } from "./pictures";
 import "./pictures.css";
 
-/** How Pictures was opened: a first prompt, a picture to start from, a folder to save in (PIC-10). */
+/** How Pictures was opened: a first prompt, a picture to start from, a folder to save in (PIC-10), or a session to open (an agent's picture: PIC-54). */
 export interface PicturesStart {
   prompt?: string;
   reference?: string;
   folder?: string;
+  session?: string;
 }
 
 // Pictures fetched once per session and picture, shown from object URLs.
@@ -171,6 +172,20 @@ export function PicturesDrawer({ dir, start, onClose }: { dir: string; start?: P
   useEffect(() => {
     if (start?.reference) setRefs([{ key: nextKey(), role: "object", name: start.reference.split("/").pop() ?? start.reference, mime: mimeOf(start.reference), path: start.reference, url: "" }]);
   }, [start?.reference]);
+  // An agent's picture opened from the chat (PIC-54): its session, with a
+  // Gemini model's next turn starting from it.
+  useEffect(() => {
+    if (!start?.session) return;
+    workspaces.getPictureSession({ workspace: dir, id: start.session }).then(
+      (r) => {
+        const s = r.session ?? null;
+        setSession(s);
+        const first = s?.turns[0];
+        setStartFrom(first?.kind === "gemini" ? (first.pictures[0]?.id ?? "") : "");
+      },
+      (e: unknown) => snack(message(e), { error: true }),
+    );
+  }, [dir, start?.session, snack]);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [session?.turns.length, busy]);

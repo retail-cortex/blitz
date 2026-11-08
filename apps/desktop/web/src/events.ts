@@ -117,7 +117,7 @@ export interface ViewDetail {
   /** Studio: the section to open (the agent's open studio, spec_060 DRV-31). */
   studio?: string;
   /** Pictures: a first prompt, a workspace picture to start from, a folder to save in (spec_058 PIC-10). */
-  picture?: { prompt?: string; reference?: string; folder?: string };
+  picture?: { prompt?: string; reference?: string; folder?: string; session?: string };
   /** Which changes: this session's (the default) or git's. */
   source?: "session" | "git";
   /** Studio › Workflows: the workflow to open, and the run to show on it. */

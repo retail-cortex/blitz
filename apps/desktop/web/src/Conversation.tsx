@@ -1004,6 +1004,7 @@ export function Conversation({
                       key={x.result.image_uri}
                       dir={dir}
                       entry={{ kind: "file", uri: x.result.image_uri, name: x.result.path, mime: String(x.result.mime_type ?? "image/png"), size: Number(x.result.bytes ?? 0) }}
+                      onPictures={typeof x.result.picture_session === "string" ? () => showView({ dir, view: "pictures", picture: { session: String(x.result?.picture_session) } }) : undefined}
                     />
                   ) : null,
                 )}

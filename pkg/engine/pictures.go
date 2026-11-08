@@ -471,6 +471,59 @@ func (w *Workspace) MakePicture(ctx context.Context, r PictureRequest, estimate 
 	return s, PictureEstimate{CostUSD: turn.CostUSD, Priced: true}, nil
 }
 
+// keepToolPictures keeps what generate_image drew as a Pictures session of
+// one turn (spec_058 PIC-81): its prompt, settings and references, and its
+// pictures marked saved where the tool wrote them, so Open in Pictures
+// (PIC-54) refines them there. The model's answer isn't kept, so a Gemini
+// session's next turn starts from the picture (Start from this) rather than
+// continuing a conversation it never had. "" when it can't be kept.
+func (w *Workspace) keepToolPictures(_ context.Context, k tools.KeptPictures) string {
+	if len(k.Pictures) == 0 {
+		return ""
+	}
+	now := specNow()
+	s := PictureSession{ID: newPictureID("pic-"), Name: pictureName(k.Prompt), Workspace: w.Dir(), Created: now, Updated: now}
+	dir, err := w.pictureSessionDir(s.ID)
+	if err != nil {
+		return ""
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	_, name := runtime.ParseModelRef(k.Model, "")
+	kind := images.KindGemini
+	if m, ok := images.Lookup(name); ok {
+		kind = m.Kind
+	}
+	turn := PictureTurn{ID: newPictureID("t-"), At: now, Model: k.Model, Kind: kind, Prompt: k.Prompt, Count: len(k.Pictures), AspectRatio: k.AspectRatio, Size: k.Size}
+	for i, ref := range k.References {
+		r := PictureTurnRef{File: newPictureID("r-") + pictureExt(ref.MIME), MIME: ref.MIME, Role: images.RoleObject}
+		if i < len(k.RefPaths) {
+			r.Path, r.Name = k.RefPaths[i], path.Base(k.RefPaths[i])
+		}
+		if err := os.WriteFile(filepath.Join(dir, r.File), ref.Data, 0o600); err != nil {
+			return ""
+		}
+		turn.References = append(turn.References, r)
+	}
+	for i, p := range k.Pictures {
+		f := PictureFile{ID: newPictureID("p-"), MIME: p.MIME}
+		f.File = f.ID + pictureExt(p.MIME)
+		if err := os.WriteFile(filepath.Join(dir, f.File), p.Data, 0o600); err != nil {
+			return ""
+		}
+		if i < len(k.Paths) {
+			f.Saved = []string{k.Paths[i]}
+		}
+		turn.Pictures = append(turn.Pictures, f)
+	}
+	s.Turns = []PictureTurn{turn}
+	if err := w.savePictureSession(s); err != nil {
+		return ""
+	}
+	return s.ID
+}
+
 // pictureRefs reads r's references: a workspace file (its rules hold), a
 // picture of the session, or data from the computer; StartFrom first, as
 // the picture to change.

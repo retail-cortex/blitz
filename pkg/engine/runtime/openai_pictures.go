@@ -156,12 +156,19 @@ type openAIPainter struct{ *openAIDrawer }
 func (p *openAIPainter) Model() string { return "openai/" + p.name }
 func (p *openAIPainter) Host() string  { return p.host }
 
+// Info is the model's catalog entry: generate_image takes its references,
+// shapes and count (spec_058 PIC-81).
+func (p *openAIPainter) Info() images.Model {
+	m, _ := images.Lookup(p.name)
+	return m
+}
+
 func (p *openAIPainter) Paint(ctx context.Context, req tools.PaintRequest) (*tools.Picture, error) {
-	pics, usage, err := p.draw(ctx, req.Prompt, req.References, 1, req.AspectRatio, "")
+	pics, usage, err := p.draw(ctx, req.Prompt, req.References, req.Count, req.AspectRatio, "")
 	if err != nil {
 		return nil, err
 	}
 	pic := pics[0]
-	pic.Usage = usage
+	pic.Usage, pic.More = usage, pics[1:]
 	return &pic, nil
 }

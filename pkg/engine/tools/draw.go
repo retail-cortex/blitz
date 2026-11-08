@@ -43,12 +43,14 @@ type Painter interface {
 }
 
 // PaintRequest is a picture to draw: what it shows, the pictures to start
-// from or match, and its shape and size ("" for the model's own).
+// from or match, its shape and size ("" for the model's own), and how many
+// (0 or 1 for one; more only for a model that makes several).
 type PaintRequest struct {
 	Prompt      string
 	References  []Reference
 	AspectRatio string // "1:1", "16:9", …
 	Size        string // "1K", "2K" or "4K"
+	Count       int
 }
 
 // Reference is a picture a PaintRequest starts from.
@@ -65,9 +67,40 @@ type Picture struct {
 	Text string
 	// Usage is what the model reported, for /cost (nil: none).
 	Usage *genai.GenerateContentResponseUsageMetadata
+	// More are the request's other pictures, when it asked for several.
+	More []Picture
 }
 
-// Limits on generate_image's reference pictures.
+// CatalogPainter is a painter that says what its model can do, from the
+// picture catalog (spec_058_pictures PIC-81): generate_image then takes
+// the model's references, ratios, sizes and count instead of its own
+// fixed ones.
+type CatalogPainter interface {
+	Painter
+	Info() images.Model
+}
+
+// KeptPictures is what generate_image drew, for keeping as a Pictures
+// session (PIC-81): the call's settings, its references and its pictures
+// with where they were written.
+type KeptPictures struct {
+	Session     string
+	Model       string
+	Prompt      string
+	AspectRatio string
+	Size        string
+	References  []Reference
+	RefPaths    []string
+	Pictures    []Picture
+	Paths       []string
+}
+
+// PictureKeeper keeps what generate_image drew as a Pictures session and
+// returns its ID ("" when it couldn't).
+type PictureKeeper func(ctx context.Context, k KeptPictures) string
+
+// Limits on generate_image's reference pictures: a painter that doesn't say
+// its model's (CatalogPainter) takes maxReferences.
 const (
 	maxReferences     = 3
 	maxReferenceBytes = 7 << 20
@@ -87,6 +120,7 @@ type paintState struct {
 	painter Painter
 	err     error
 	billed  SpeechBilling
+	keep    PictureKeeper
 }
 
 func (p *paint) get() paintState {
@@ -107,7 +141,18 @@ func (r *Registry) SetPainter(p Painter, err error, billed SpeechBilling) {
 	}
 	r.paint.mu.Lock()
 	defer r.paint.mu.Unlock()
-	r.paint.paintState = paintState{painter: p, err: err, billed: billed}
+	r.paint.paintState = paintState{painter: p, err: err, billed: billed, keep: r.paint.keep}
+}
+
+// SetPictureKeeper keeps what generate_image draws as Pictures sessions
+// (PIC-81), so the person can open them in the panel (PIC-54).
+func (r *Registry) SetPictureKeeper(k PictureKeeper) {
+	if r.paint == nil {
+		return
+	}
+	r.paint.mu.Lock()
+	defer r.paint.mu.Unlock()
+	r.paint.keep = k
 }
 
 // PainterErr is why the [images] model can't be used; nil when it can, or
@@ -118,15 +163,21 @@ func (r *Registry) PainterErr() error { return r.paint.get().err }
 type GenerateImageInput struct {
 	Prompt      string   `json:"prompt" jsonschema:"What the picture shows, in detail: subject, style, composition, colours, any text in it"`
 	Path        string   `json:"path" jsonschema:"Where to write the picture, e.g. images/poster.png; the extension follows what the model makes"`
-	Images      []string `json:"images,omitempty" jsonschema:"Up to 3 workspace pictures (PNG, JPEG, WebP) to edit or to match in style or subject"`
-	AspectRatio string   `json:"aspect_ratio,omitempty" jsonschema:"1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9 or 21:9; the model's default when empty"`
-	Size        string   `json:"size,omitempty" jsonschema:"1K (the default), 2K or 4K; larger costs more"`
+	Images      []string `json:"images,omitempty" jsonschema:"Workspace pictures (PNG, JPEG, WebP) to edit or to match in style or subject, up to the image model's limit (14 for Gemini's larger models, 16 for OpenAI's, none for Imagen)"`
+	AspectRatio string   `json:"aspect_ratio,omitempty" jsonschema:"The shape: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, or what else the image model takes (panoramic 1:4, 4:1, 1:8, 8:1 on some); the model's default when empty"`
+	Size        string   `json:"size,omitempty" jsonschema:"0.5K, 1K (the default), 2K or 4K, as the image model takes; larger costs more"`
+	Count       int      `json:"count,omitempty" jsonschema:"How many pictures, 1 to 4, for an image model that makes several at once (Imagen, OpenAI's); 1 when empty. Each after the first is written beside path, numbered (poster-2.png)"`
 	Overwrite   bool     `json:"overwrite,omitempty" jsonschema:"Replace the file if it already exists"`
 }
 
 // GenerateImageOutput describes the picture written.
 type GenerateImageOutput struct {
 	Path string `json:"path"`
+	// Paths are every picture written, when there were several.
+	Paths []string `json:"paths,omitempty"`
+	// PictureSession is the Pictures session they're kept in (PIC-81), for
+	// Open in Pictures (PIC-54).
+	PictureSession string `json:"picture_session,omitempty"`
 	// ImageURI is the picture's reference in the attachment store: the
 	// model sees it after the result, and the desktop app shows it.
 	ImageURI string `json:"image_uri,omitempty"`
@@ -171,17 +222,33 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 			}
 			prompt := strings.TrimSpace(input.Prompt)
 			size := strings.ToUpper(strings.TrimSpace(input.Size))
+			count := max(input.Count, 1)
+			info, catalog := catalogOf(painter)
 			switch {
 			case prompt == "":
 				return fail("prompt is empty: describe the picture")
+			case !allowNetwork:
+				return fail("network access is disabled (sandbox.allow_network = false)")
+			case catalog:
+				// The model's own limits (PIC-81); the references' types and
+				// sizes are checked as they're read.
+				if len(input.Images) > info.MaxReferences {
+					if info.MaxReferences == 0 {
+						return fail(fmt.Sprintf("%s doesn't start from pictures: leave images empty", painter.Model()))
+					}
+					return fail(fmt.Sprintf("%s takes at most %d pictures to start from", painter.Model(), info.MaxReferences))
+				}
+				if problems := info.Check(images.Request{Prompt: prompt, Count: count, AspectRatio: input.AspectRatio, Size: size}); len(problems) > 0 {
+					return fail(strings.Join(problems, "; "))
+				}
 			case input.AspectRatio != "" && !aspectRatios[input.AspectRatio]:
 				return fail("aspect_ratio is one of 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9")
 			case size != "" && size != "1K" && size != "2K" && size != "4K":
 				return fail("size is 1K, 2K or 4K")
 			case len(input.Images) > maxReferences:
 				return fail(fmt.Sprintf("at most %d pictures to start from", maxReferences))
-			case !allowNetwork:
-				return fail("network access is disabled (sandbox.allow_network = false)")
+			case count > 1:
+				return fail(fmt.Sprintf("%s makes one picture at a time: leave count empty", painter.Model()))
 			}
 
 			var refs []Reference
@@ -227,6 +294,9 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 				return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", rel, rule))
 			}
 			detail := fmt.Sprintf("Draw with %s → %s: %s", painter.Model(), rel, clip(prompt, 160))
+			if count > 1 {
+				detail = fmt.Sprintf("Draw %d pictures with %s → %s: %s", count, painter.Model(), rel, clip(prompt, 160))
+			}
 			if len(read) > 0 {
 				detail += " (from " + strings.Join(read, ", ") + ")"
 			}
@@ -238,7 +308,7 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 				return fail(err.Error())
 			}
 
-			pic, err := painter.Paint(ctx, PaintRequest{Prompt: prompt, References: refs, AspectRatio: input.AspectRatio, Size: size})
+			pic, err := painter.Paint(ctx, PaintRequest{Prompt: prompt, References: refs, AspectRatio: input.AspectRatio, Size: size, Count: count})
 			if billed != nil && pic != nil {
 				billed(context.WithoutCancel(ctx), sessionOf(ctx), painter.Model(), pic.Usage)
 			}
@@ -246,43 +316,81 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 				return fail(fmt.Sprintf("drawing failed: %v", err))
 			}
 
-			// The extension follows what the model made.
-			out, note := rel, ""
-			if ext := pictureExt(pic.MIME); ext != "" && !sameExt(path.Ext(out), ext) {
-				out = strings.TrimSuffix(out, path.Ext(out)) + ext
-				note = fmt.Sprintf("%s made a %s picture, so it is %s.", painter.Model(), strings.TrimPrefix(ext, "."), out)
-				if _, err := ws.Stat(out); err == nil && !input.Overwrite {
-					return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
+			// Each picture is written beside path, numbered after the first;
+			// the extension follows what the model made.
+			pics := append([]Picture{*pic}, pic.More...)
+			var outs []string
+			var notes []string
+			for i, p := range pics {
+				out := rel
+				if i > 0 {
+					out = fmt.Sprintf("%s-%d%s", strings.TrimSuffix(rel, path.Ext(rel)), i+1, path.Ext(rel))
 				}
-				if effect, rule := hooks.Rules().Decide(RuleWrite, []string{out}); effect == EffectDeny {
-					return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", out, rule))
+				if ext := pictureExt(p.MIME); ext != "" && !sameExt(path.Ext(out), ext) {
+					out = strings.TrimSuffix(out, path.Ext(out)) + ext
+					if i == 0 {
+						notes = append(notes, fmt.Sprintf("%s made a %s picture, so it is %s.", painter.Model(), strings.TrimPrefix(ext, "."), out))
+					}
 				}
-			}
-			unlock, err := ws.lockPaths(ctx, out)
-			if err != nil {
-				return fail(err.Error())
-			}
-			defer unlock()
-			if input.Overwrite {
-				err = ws.WriteFileAtomic(ctx, out, pic.Data)
-			} else {
-				err = ws.CreateExclusive(ctx, out, pic.Data)
-				if errors.Is(err, fs.ErrExist) {
-					return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
+				if out != rel {
+					if _, err := ws.Stat(out); err == nil && !input.Overwrite {
+						return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
+					}
+					if effect, rule := hooks.Rules().Decide(RuleWrite, []string{out}); effect == EffectDeny {
+						return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", out, rule))
+					}
 				}
+				if err := writePicture(ctx, ws, out, p.Data, input.Overwrite); err != nil {
+					return fail(err.Error())
+				}
+				outs = append(outs, out)
 			}
-			if err != nil {
-				return fail(fmt.Sprintf("failed to write file: %v", err))
+			done := GenerateImageOutput{Path: outs[0], MIME: pic.MIME, Bytes: len(pic.Data), Model: painter.Model(), Text: strings.TrimSpace(pic.Text), Note: strings.Join(notes, " "), Success: true}
+			if len(outs) > 1 {
+				done.Paths = outs
 			}
-			done := GenerateImageOutput{Path: out, MIME: pic.MIME, Bytes: len(pic.Data), Model: painter.Model(), Text: strings.TrimSpace(pic.Text), Note: note, Success: true}
 			if load != nil {
-				if m, err := load(out); err == nil {
+				if m, err := load(outs[0]); err == nil {
 					done.ImageURI, done.MIME = m.URI(), m.MIME
 				}
+			}
+			if st.keep != nil {
+				done.PictureSession = st.keep(context.WithoutCancel(ctx), KeptPictures{Session: sessionOf(ctx), Model: painter.Model(), Prompt: prompt,
+					AspectRatio: input.AspectRatio, Size: size, References: refs, RefPaths: read, Pictures: pics, Paths: outs})
 			}
 			return done, nil
 		},
 	)
+}
+
+// catalogOf is what painter's model can do, when it says (PIC-81).
+func catalogOf(painter Painter) (images.Model, bool) {
+	if c, ok := painter.(CatalogPainter); ok {
+		return c.Info(), true
+	}
+	return images.Model{}, false
+}
+
+// writePicture writes data to rel, locked, replacing a file only with
+// overwrite.
+func writePicture(ctx context.Context, ws *Workspace, rel string, data []byte, overwrite bool) error {
+	unlock, err := ws.lockPaths(ctx, rel)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if overwrite {
+		err = ws.WriteFileAtomic(ctx, rel, data)
+	} else {
+		err = ws.CreateExclusive(ctx, rel, data)
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("file '%s' already exists; set overwrite=true to replace it", rel)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+	return nil
 }
 
 // pictureExt is the extension for a picture of type mime ("" for one
