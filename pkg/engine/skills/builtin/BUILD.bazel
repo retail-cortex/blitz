@@ -29,6 +29,7 @@ go_library(
         "react/SKILL.md",
         "playwright/SKILL.md",
         "blitz/SKILL.md",
+        "mermaid/SKILL.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/skills/builtin",
     visibility = [

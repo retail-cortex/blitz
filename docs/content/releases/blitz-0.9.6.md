@@ -25,6 +25,8 @@ weight: 1
 
 **Pictures from OpenAI.** With an OpenAI key, Pictures and the agent's `generate_image` draw with OpenAI's image models too (GPT Image 2.5 Sunburst and Flare, GPT Image 2 and earlier): up to four at once, square, landscape or portrait, starting from up to 16 of your pictures.
 
+**Diagrams you can read.** A new built-in `mermaid` skill teaches the agents to style diagrams so every label stays readable: colors in pairs from Material 3, each background with its own text color, and in ER diagrams both row colors set, so the alternating rows never put white text on white (the mistake most models make).
+
 **"Open it" opens it.** Ask the agent to show a file it wrote, or any file in your workspace, and it opens in Blitz's editor (Markdown rendered, at the line it names), instead of a browser. [Opening a file for you](../guide/search.md).
 
 ### Fixes
