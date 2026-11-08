@@ -110,7 +110,7 @@ For more than one picture in passing, open **Pictures**: the brush icon in the c
 - **Pictures** (1 to 4 with Imagen), **Shape** (drawn as itself, panoramic 4:1 and 8:1 included where the model has them), **Size** (0.5K to 4K), **Thinking**, and **Search the web** (and image search) to ground a picture in real places and things.
 - **Advanced**: what to avoid, people, the format and quality, a seed, and prompt improvement (Imagen).
 
-Each turn shows what it will cost before you make it. With a Gemini model a session is a conversation: say what to change ("make the sky darker") and the next picture changes the last, or **Start from this** on any picture. Every picture can be **Saved** into the workspace (`pictures/`, or `[images] folder`), saved somewhere else, opened, used as a reference, copied or added to the chat. Sessions are kept: **Sessions** at the top reopens them.
+Each turn shows what it will cost before you make it. With a Gemini model a session is a conversation: say what to change ("make the sky darker") and the next picture changes the last, or **Start from this** on any picture. With Imagen or OpenAI's models each turn stands on its own: **Try again** under a turn makes it again as it was, and **Vary** (Imagen) makes it again with a new seed. Every picture can be **Saved** into the workspace (`pictures/`, or `[images] folder`), saved somewhere else, opened, used as a reference, copied or added to the chat. Sessions are kept: **Sessions** at the top reopens them.
 
 ## What a model makes
 
