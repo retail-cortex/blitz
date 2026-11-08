@@ -162,6 +162,9 @@ func NewApprover(in Input, diffLines int) api.Approver {
 		for _, line := range strings.Split(safe(req.Detail), "\n") {
 			fmt.Fprintf(&sb, "   %s%s%s\n", Dim, line, Reset)
 		}
+		if req.ReviewerDenied != "" { // auto mode's reviewer said no; the person may allow it anyway (APR-14d)
+			fmt.Fprintf(&sb, "   %s%s%s\n", Yellow, i18n.T("approve.reviewer_denied", "reason", safe(req.ReviewerDenied)), Reset)
+		}
 		truncated := false
 		if req.Diff != "" {
 			var d string

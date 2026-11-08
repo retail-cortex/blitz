@@ -62,7 +62,11 @@ func cmdStatus(app *App) {
 		model += " — " + err.Error()
 	}
 	row(i18n.T("status.model"), model)
-	row(i18n.T("status.mode"), st.PermissionMode)
+	mode := st.PermissionMode
+	if st.ModeNote != "" {
+		mode += " — " + st.ModeNote
+	}
+	row(i18n.T("status.mode"), mode)
 	row(i18n.T("status.sandbox"), strings.Join(app.Workspace.SandboxSummary(), "; "))
 	var mcp []string
 	for _, m := range app.Workspace.ListMCPServers() {

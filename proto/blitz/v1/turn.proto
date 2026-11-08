@@ -277,6 +277,9 @@ message ApprovalRequest {
   // An ask rule covers the action: it's asked even where a mode, an
   // allow rule or a remembered approval would let it through.
   bool must_ask = 11;
+  // Auto mode's reviewer denied the action, and why: the person, there to
+  // answer, may allow it anyway (spec_005_approvals APR-14d).
+  string reviewer_denied = 12;
 }
 
 // Decision answers an ApprovalRequest.

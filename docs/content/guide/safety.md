@@ -26,7 +26,7 @@ In plan mode, with `/plan`, or when the agent chooses to plan first, it presents
 
 A workspace starts in `auto` unless you choose another with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session. To restrict one workspace, choose its mode in its settings (**Settings › Workspaces**, Behaviour) or from the mode menu in the desktop's status bar: either way it's kept for that workspace, and new chats and the workspace after a restart open in it. Bypass can only be picked while the OS sandbox is on. `/mode` changes it until the workspace closes. A [workflow](workflows.md#its-permission-mode) runs in its own mode, but never a looser one than its workspace's.
 
-In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. A denial goes back to the agent with the reason, and every decision is in the audit log (`auto-allow`, `auto-deny`); its tokens count in `/cost`. When the reviewer can't answer (or takes more than two minutes), you're asked. A small, fast model is enough:
+In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. For a file change, Blitz tells it the full paths and that they're inside the workspace, and a denial that says they're outside it doesn't count: you're asked. When you're in the chat, a denial comes to you with the reviewer's reason: **Allow anyway** lets it run, **Deny** sends the reason back to the agent. A run nobody is watching (a background task) gets the denial. Every decision is in the audit log (`auto-allow`, `auto-deny`, then yours); the reviewer's tokens count in `/cost`. When the reviewer can't answer (or takes more than two minutes), you're asked. A small, fast model is enough:
 
 ```toml
 [permissions.auto]
@@ -35,6 +35,8 @@ environment = "Our repositories are under github.com/acme; pushing branches is f
 ```
 
 A project's `.blitz/settings.toml` can't set it. Jobs ignore the mode: they get exactly their own permissions.
+
+Without `[permissions.auto] model`, the chat's own model is the reviewer. When that's a model on your computer (Ollama), it would judge its own actions, and a small one does that badly, so the workspace uses **Ask** instead: the status bar shows ⚠ **Ask**, and choosing **Auto** again stays on Ask until you set a reviewer model and open the workspace again. Switching to a cloud model gives Auto back.
 
 ## Permission rules
 

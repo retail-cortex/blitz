@@ -1057,6 +1057,10 @@ message GetSettingsResponse {
   string image_model = 15;
   // Why the image model can't be used ("" when it can, or there's none).
   string image_error = 16;
+  // Why auto mode isn't used, for the window to show beside the mode:
+  // a local model would review its own actions (spec_005_approvals
+  // APR-14c). "" otherwise.
+  string mode_note = 17;
 }
 
 // AcceptedMedia is a kind of attachment a model takes.

@@ -36,6 +36,7 @@ func cmdMode(args []string, app *App) {
 			}
 			fmt.Printf("  %s%-13s %s%s%s\n", mark, m, Dim, i18n.T("mode.describe."+string(m)), Reset)
 		}
+		printModeNote(app)
 		return
 	}
 	mode, err := app.Workspace.SetPermissionMode(args[0])
@@ -48,6 +49,16 @@ func cmdMode(args []string, app *App) {
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("set.failed", "error", safe(err.Error())), Reset)
 	default:
 		fmt.Printf("%s%s%s\n", modeColor(mode), i18n.T("mode.set", "mode", mode), Reset)
+		printModeNote(app)
+	}
+}
+
+// printModeNote says why auto mode isn't used, when it isn't for a reason
+// the person should know (a local model would review its own actions,
+// spec_005_approvals APR-14c).
+func printModeNote(app *App) {
+	if note := app.Workspace.Settings().ModeNote; note != "" {
+		fmt.Printf("%s%s%s\n", Yellow, safe(note), Reset)
 	}
 }
 

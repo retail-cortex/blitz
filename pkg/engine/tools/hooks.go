@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -330,6 +331,16 @@ func taskAskerFrom(ctx context.Context) (TaskAsker, bool) {
 	return a, ok
 }
 
+// someoneToAsk reports whether ctx's approval requests reach a person:
+// a background task's people, or the workspace's approver for a run that
+// isn't in the background.
+func someoneToAsk(ctx context.Context, approver api.Approver) bool {
+	if a, ok := taskAskerFrom(ctx); ok && a.Approve != nil {
+		return true
+	}
+	return !IsBackground(ctx) && approver != nil
+}
+
 // refusals are the audit decisions that refuse the action: logged as
 // denials, the rest as approvals.
 var refusals = map[string]bool{
@@ -470,7 +481,12 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 			return nil
 		default:
 			decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "auto-deny: " + reason})
-			return fmt.Errorf("%w: the auto mode's reviewer denied %s: %s", ErrNotApproved, req.Detail, reason)
+			if !someoneToAsk(ctx, approver) {
+				return fmt.Errorf("%w: the auto mode's reviewer denied %s: %s", ErrNotApproved, req.Detail, reason)
+			}
+			// Someone is there: they see the reviewer's reason and decide,
+			// with a click, whether to allow it anyway (APR-14d).
+			req.ReviewerDenied = cmp.Or(reason, "no reason given")
 		}
 	}
 	if a, ok := taskAskerFrom(ctx); ok && a.Approve != nil {

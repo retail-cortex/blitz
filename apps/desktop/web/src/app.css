@@ -289,6 +289,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 
 .approval, .question { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--md-primary); background: var(--md-surface-container-low); }
 .approval > .row > .icon, .question > .row > .icon { color: var(--md-primary); }
+.approval-reviewer { color: var(--md-warning, #b8860b); }
 .question-text { max-height: 50vh; overflow-y: auto; }
 .row.wrap { flex-wrap: wrap; }
 /* Rewrite with AI's review (WorkerEditor.tsx): what changed, the suggested

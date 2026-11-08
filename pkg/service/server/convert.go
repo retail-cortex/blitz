@@ -296,7 +296,7 @@ func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
 // approvalRequestMsg is an approval request as the API's, asked as id.
 func approvalRequestMsg(id string, req api.ApprovalRequest) *pb.ApprovalRequest {
 	return &pb.ApprovalRequest{RequestId: id, Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, ScopeLabel: req.KeyLabel,
-		Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk}
+		Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk, ReviewerDenied: req.ReviewerDenied}
 }
 
 // contextBlocks is what the user added to a turn from elsewhere.

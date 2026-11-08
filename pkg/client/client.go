@@ -189,7 +189,7 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 		var err error
 		if d, err = approve(ctx, api.ApprovalRequest{
 			Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, KeyLabel: req.ScopeLabel,
-			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk,
+			Key: req.Key, Targets: req.Targets, MustAsk: req.MustAsk, ReviewerDenied: req.ReviewerDenied,
 		}); err != nil {
 			d = api.DecisionDeny
 		}
@@ -474,7 +474,7 @@ func (r *Remote) getSettings() settings {
 	return settings{Settings: api.Settings{
 		Agency: m.Agency,
 		Model:  api.ModelInfo{Name: m.Model, Provider: m.Provider}, Agent: m.Agent, Locale: m.Locale,
-		PermissionMode: m.PermissionMode, Effort: m.Effort, Style: m.Style,
+		PermissionMode: m.PermissionMode, ModeNote: m.ModeNote, Effort: m.Effort, Style: m.Style,
 		SpeechModel: m.SpeechModel, SpeechError: m.SpeechError,
 		ImageModel: m.ImageModel, ImageError: m.ImageError,
 	}, ImagesEnabled: m.ImagesEnabled}

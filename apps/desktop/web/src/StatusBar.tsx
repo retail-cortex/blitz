@@ -494,6 +494,14 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
   const snack = useSnackbar();
   const s = st.settings;
   const mode = modeOf(s?.permissionMode ?? "auto");
+  // Why auto mode isn't used (a local model would review its own actions,
+  // spec_005 APR-14c): a warning on the mode, said once as it appears.
+  const note = s?.modeNote ?? "";
+  const noted = useRef("");
+  useEffect(() => {
+    if (note && note !== noted.current) snack(note);
+    noted.current = note;
+  }, [note, snack]);
   const setMode = async (value: string) => {
     try {
       // Kept as the workspace's mode, as Settings › Workspaces keeps it (spec_005 APR-14).
@@ -602,12 +610,12 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           placement="up end"
           className="wide-menu"
           trigger={(p) => (
-            <button className={`sb-item sb-button ${mode.value === "bypass" ? "sb-error" : mode.value !== "default" ? "sb-accent" : ""}`} title={mode.detail} {...p}>
-              {mode.icon && <Icon path={mode.icon} size="sm" />}
+            <button className={`sb-item sb-button ${mode.value === "bypass" ? "sb-error" : note ? "sb-warn" : mode.value !== "default" ? "sb-accent" : ""}`} title={note || mode.detail} {...p}>
+              {note ? <Icon path={mdiAlertOutline} size="sm" /> : mode.icon && <Icon path={mode.icon} size="sm" />}
               <span className="sb-low">{mode.label}</span>
             </button>
           )}
-          items={[{ heading: t("desktop.composer.mode") }, ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
+          items={[{ heading: t("desktop.composer.mode") }, ...(note ? [{ heading: note }] : []), ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
         />
       )}
       {s && (

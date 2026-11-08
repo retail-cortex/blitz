@@ -472,7 +472,11 @@ func pickApproval(ctx context.Context, t *TerminalInput, req api.ApprovalRequest
 		decision api.Decision
 		diff     bool
 	}
-	choices := []choice{{item: PickItem{Label: i18n.T("approve.pick_yes"), Key: 'y'}, decision: api.DecisionOnce}}
+	yes := i18n.T("approve.pick_yes")
+	if req.ReviewerDenied != "" {
+		yes = i18n.T("approve.pick_anyway")
+	}
+	choices := []choice{{item: PickItem{Label: yes, Key: 'y'}, decision: api.DecisionOnce}}
 	if remembers(req) {
 		choices = append(choices,
 			choice{item: PickItem{Label: i18n.T("approve.pick_session", "label", label), Key: 's'}, decision: api.DecisionSession},

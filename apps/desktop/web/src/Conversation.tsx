@@ -1723,6 +1723,9 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
 export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
   const advanced = useAdvanced(); // Always allow: advanced
+  // Auto mode's reviewer denied it: its reason, and the person may allow
+  // it anyway with a click, Deny focused (spec_005 APR-14d).
+  const denied = !!req.reviewerDenied;
   return (
     <div className={`card approval ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.approval.label")}>
       <div className="row">
@@ -1733,6 +1736,7 @@ export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: Ap
           <span className="muted">
             {t("desktop.approval.wants", { tool: req.tool, detail: req.detail })}
           </span>
+          {denied && <span className="approval-reviewer">{t("desktop.approval.reviewer_denied", { reason: req.reviewerDenied })}</span>}
         </div>
       </div>
       {files.length > 0 && <DiffView files={files} compact />}
@@ -1742,8 +1746,8 @@ export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: Ap
             {t("desktop.approval.in_editor")}
           </Button>
         )}
-        <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus={autoFocus}>
-          {t("desktop.approval.once")}
+        <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus={autoFocus && !denied}>
+          {t(denied ? "desktop.approval.anyway" : "desktop.approval.once")}
         </Button>
         {req.scopeLabel && (
           <Button variant="tonal" onClick={() => onDecide(Decision.SESSION)}>
@@ -1751,7 +1755,7 @@ export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: Ap
           </Button>
         )}
         {advanced && req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
-        <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)}>
+        <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)} autoFocus={autoFocus && denied}>
           {t("desktop.approval.deny")}
         </Button>
       </div>

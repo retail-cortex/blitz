@@ -556,6 +556,7 @@ func switchModel(ctx context.Context, app *App, ref string, fresh bool) {
 		} else {
 			fmt.Printf("%s %s%s\n", Green, i18n.T("model.set", "model", Cyan+safe(ref)), Reset)
 		}
+		printModeNote(app)
 		if pin != "" {
 			fmt.Printf("%s%s%s\n", Dim, i18n.T("pin.active_pinned", "agent", app.Workspace.ActiveAgent().Name, "model", safe(pin)), Reset)
 		}

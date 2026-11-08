@@ -29,6 +29,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -91,6 +92,14 @@ type Workspace struct {
 	// permProblem is why rules were left out at the last reload.
 	permMu      sync.Mutex
 	permProblem error
+	// autoHeld says auto mode was switched to default because a local
+	// model would review its own actions (holdLocalAuto), so it comes back
+	// when the model doesn't run here any more.
+	autoHeld atomic.Bool
+	// ownReviewer says auto mode's reviewer is a model of its own
+	// ([permissions.auto] model, built as the workspace opened), not the
+	// session's.
+	ownReviewer bool
 	plugins     []plugins.Loaded
 	noticeMu    sync.Mutex
 	notices     map[string][]string // background processes' notices waiting, by session
@@ -437,6 +446,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			o.Warn(i18n.T("mode.auto_model_failed", "model", ref, "error", ModelErrorSummary(err, cfg)))
 		} else {
 			opts = append(opts, runtime.WithReviewModel(m))
+			w.ownReviewer = true
 		}
 	}
 	w.setupSpeaker(ctx, o.Warn)
@@ -486,6 +496,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.settingsWatch = w.watchSettings() // its reloads stop with bgCtx
 	w.tools.SetSearcher(w.Search)
 	w.openSearch(ctx)
+	w.holdLocalAuto() // APR-14c: a local model doesn't review its own actions
 	opened = true
 	return w, nil
 }

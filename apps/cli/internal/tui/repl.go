@@ -301,6 +301,7 @@ func RunREPL(ctx context.Context, app *App) error {
 		fmt.Println()
 	}
 
+	printModeNote(app)
 	if hint := reflectHint(app.Workspace); hint != "" {
 		fmt.Printf("%s%s%s\n\n", Dim, hint, Reset)
 	}

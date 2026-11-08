@@ -130,6 +130,10 @@ type Settings struct {
 	// PermissionMode decides which actions run without asking (a
 	// PermissionMode).
 	PermissionMode string
+	// ModeNote says why auto mode isn't used, when it isn't for a reason
+	// the person should know: a local model would review its own actions
+	// (spec_005_approvals APR-14c). "" otherwise.
+	ModeNote string
 	// Effort is the session's reasoning effort ("" when each model uses its
 	// own reasoning_effort or its default).
 	Effort string

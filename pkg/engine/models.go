@@ -84,6 +84,7 @@ func (w *Workspace) SetModel(ctx context.Context, ref string) (activePin string,
 		return "", err
 	}
 	w.setSettings(func(c *config.Config) { c.Blitz.DefaultModel = ref })
+	w.holdLocalAuto()
 	if m, pinned := w.engine.AgentModel(w.engine.ActiveAgent()); pinned {
 		return m, nil
 	}
@@ -225,6 +226,7 @@ func (w *Workspace) Settings() api.Settings {
 		Agency: w.cfg.Blitz.AgencyLevel,
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.replyIn().Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
+		ModeNote:       w.modeNote(),
 		Effort:         w.engine.Effort(),
 		Style:          w.styleName(),
 		SpeechModel:    w.cfg.Audio.Model,
@@ -243,7 +245,9 @@ func errText(err error) string {
 
 // SetPermissionMode changes which actions run without asking, for every
 // session of the workspace, and returns the mode's canonical name. Bypass
-// needs the OS sandbox (ErrBypassNeedsSandbox).
+// needs the OS sandbox (ErrBypassNeedsSandbox). Auto, while a local model
+// would review its own actions, is default instead (APR-14c): the name
+// returned says so, and Settings' ModeNote why.
 func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	m, err := api.ParsePermissionMode(mode)
 	if err != nil {
@@ -252,7 +256,9 @@ func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	if err := w.tools.SetPermissionMode(m); err != nil {
 		return "", err
 	}
-	return string(m), nil
+	w.autoHeld.Store(false) // the person's choice from here on
+	w.holdLocalAuto()
+	return string(w.tools.Hooks().Mode()), nil
 }
 
 // Set changes a setting for this session ("agency" or "agency_level") and
@@ -307,7 +313,9 @@ func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) err
 	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
 	w.setupPainter(ctx, func(string) {}) // and generate_image once there's a painter
 	w.setupUploader(ctx, func(string) {})
-	return w.rebuildModels(ctx)
+	err := w.rebuildModels(ctx)
+	w.holdLocalAuto()
+	return err
 }
 
 // RetryModel builds the models again when the configured one couldn't be

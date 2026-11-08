@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -64,13 +66,23 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Environment (the user's description):\n%s\n\n", orNothing(e.cfg.Permissions.Auto.Environment))
-	fmt.Fprintf(&b, "Workspace: %s\n\n", e.toolReg.Workspace().Dir())
+	dir := e.toolReg.Workspace().Dir()
+	fmt.Fprintf(&b, "Workspace: %s\n\n", dir)
 	if recent := e.recentConversation(ctx); recent != "" {
 		fmt.Fprintf(&b, "Recent conversation:\n%s\n\n", recent)
 	}
 	fmt.Fprintf(&b, "The action:\n- tool: %s\n- kind: %s\n- what: %s\n", req.Tool, req.Kind, req.Detail)
 	if len(req.Targets) > 0 {
 		fmt.Fprintf(&b, "- targets: %s\n", strings.Join(req.Targets, ", "))
+	}
+	if inWorkspace(req) {
+		// A fact Blitz checked, so the reviewer doesn't guess it from a
+		// relative path (APR-14c).
+		abs := make([]string, len(req.Targets))
+		for i, t := range req.Targets {
+			abs[i] = filepath.Join(dir, filepath.FromSlash(t))
+		}
+		fmt.Fprintf(&b, "- inside the workspace: yes, every path (Blitz checked): %s\n", strings.Join(abs, ", "))
 	}
 	if req.Diff != "" {
 		fmt.Fprintf(&b, "- the change:\n%s\n", textutil.Ellipsize(req.Diff, maxReviewDiff))
@@ -85,7 +97,32 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 		}
 		return false, "", err
 	}
-	return parseVerdict(text)
+	allowed, reason, err := parseVerdict(text)
+	if err == nil && !allowed && inWorkspace(req) && outsideWorkspace.MatchString(reason) {
+		// A denial resting on what Blitz knows is false is no verdict:
+		// the user decides (APR-14c).
+		return false, "", fmt.Errorf("the reviewer denied it as outside the workspace, and it's inside: %s", reason)
+	}
+	return allowed, reason, err
+}
+
+// outsideWorkspace matches a reason that says the action is outside the
+// workspace or project.
+var outsideWorkspace = regexp.MustCompile(`(?i)outside\s+(of\s+)?(the|this|your|its)?\s*(workspace|project|working director)`)
+
+// inWorkspace reports whether req changes files that are all inside the
+// workspace: a write or delete whose targets are all workspace-relative
+// paths that don't climb out (the file tools resolved them before asking).
+func inWorkspace(req api.ApprovalRequest) bool {
+	if (req.Kind != api.ActionWrite && req.Kind != api.ActionDelete) || len(req.Targets) == 0 {
+		return false
+	}
+	for _, t := range req.Targets {
+		if !filepath.IsLocal(filepath.FromSlash(t)) {
+			return false
+		}
+	}
+	return true
 }
 
 // askModel has llm answer prompt under instruction, and counts its tokens

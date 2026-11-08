@@ -91,6 +91,10 @@ type ApprovalRequest struct {
 	// when a mode, an allow rule or a remembered approval would let it through
 	// (and refused where nobody can be asked).
 	MustAsk bool
+	// ReviewerDenied is why auto mode's reviewer denied the action, when it
+	// did and someone is there to answer: they may allow it anyway
+	// (spec_005_approvals APR-14d).
+	ReviewerDenied string
 }
 
 // Decision is the user's answer to an approval request.
