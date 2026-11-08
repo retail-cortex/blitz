@@ -394,4 +394,10 @@ func TestKeepToolPictures(t *testing.T) {
 	s, err = w.PictureSession(other)
 	require.NoError(t, err)
 	assert.Equal(t, images.KindGemini, s.Turns[0].Kind, "a model the catalog doesn't know is taken as Gemini's")
+
+	// Where sessions are kept can't be written: the tool's pictures are
+	// still saved, with no session named.
+	require.NoError(t, os.RemoveAll(w.picturesDir()))
+	require.NoError(t, os.WriteFile(w.picturesDir(), []byte("not a folder"), 0o600))
+	assert.Empty(t, w.keepToolPictures(ctx, tools.KeptPictures{Model: "gemini/x", Prompt: "p", Pictures: []tools.Picture{{Data: []byte("P"), MIME: "image/png"}}}))
 }

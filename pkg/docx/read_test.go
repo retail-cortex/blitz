@@ -15,6 +15,8 @@
 package docx
 
 import (
+	"archive/zip"
+	"bytes"
 	"strings"
 	"testing"
 
@@ -64,6 +66,32 @@ func TestToMarkdownTooLarge(t *testing.T) {
 			assert.NotErrorIs(t, err, ErrNotDocx)
 		})
 	}
+}
+
+// A Word document's line breaks and tabs inside a paragraph read as
+// Markdown's hard line break and a tab, and a zip without the document
+// part isn't a Word document.
+func TestToMarkdownBreaksAndTabs(t *testing.T) {
+	zipped := func(name, body string) []byte {
+		var b bytes.Buffer
+		z := zip.NewWriter(&b)
+		f, err := z.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(body))
+		require.NoError(t, err)
+		require.NoError(t, z.Close())
+		return b.Bytes()
+	}
+	doc := `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>Line one</w:t><w:br/><w:t>Name</w:t><w:tab/><w:t>Count</w:t></w:r></w:p>
+</w:body></w:document>`
+	md, err := ToMarkdown(zipped("word/document.xml", doc))
+	require.NoError(t, err)
+	assert.Equal(t, "Line one  \nName\tCount", strings.TrimSpace(md))
+
+	_, err = ToMarkdown(zipped("word/other.xml", doc))
+	assert.ErrorIs(t, err, ErrNotDocx)
 }
 
 func TestParaAndTable(t *testing.T) {

@@ -39,9 +39,20 @@ type fakeOpenAIImages struct {
 	mu    sync.Mutex
 	paths []string
 	sizes []string
+	// fail answers each request with this status and OpenAI's error, when set.
+	fail int
 }
 
 func (f *fakeOpenAIImages) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	fail := f.fail
+	f.mu.Unlock()
+	if fail != 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(fail)
+		_, _ = io.WriteString(w, `{"error":{"message":"Your request was rejected by the safety system.","type":"invalid_request_error","code":"moderation_blocked"}}`)
+		return
+	}
 	n, size := 1, ""
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 		if err := r.ParseMultipartForm(8 << 20); err == nil {
@@ -146,6 +157,21 @@ func TestPictureCommand(t *testing.T) {
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
+
+	// A search the model doesn't do is the model's to refuse, not a usage error.
+	for _, search := range []string{"--search=web", "--search=image"} {
+		_, err := runCLI(t, "picture", search, "x")
+		assert.NotEqual(t, exitUsage, exitCodeFor(err), "%s: %v", search, err)
+	}
+
+	// OpenAI refusing the picture: the command fails and says why.
+	fake.mu.Lock()
+	fake.fail = http.StatusBadRequest
+	fake.mu.Unlock()
+	out, err = runCLI(t, "picture", "-o", "art/refused.png", "something it won't draw")
+	assert.Equal(t, exitFailure, exitCodeFor(err), "%s %v", out, err)
+	assert.ErrorContains(t, err, "safety system")
+	assert.NoFileExists(t, filepath.Join(ws, "art", "refused.png"))
 }
 
 // Without a prompt or an image model, blitz picture says what to do.
@@ -165,12 +191,12 @@ func TestPictureCommandWithoutModels(t *testing.T) {
 	assert.Contains(t, out, "No Pictures sessions yet")
 }
 
-// A settings file that doesn't read stops each picture and data command
-// before it reaches the service.
+// A workspace that can't be opened (--dir naming a file) stops each picture
+// and data command before it reaches the service.
 func TestPictureAndDataBrokenSettings(t *testing.T) {
-	home := isolate(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm\nprovider = \n"), 0o600))
+	isolate(t)
+	file := filepath.Join(t.TempDir(), "not-a-folder")
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	for _, args := range [][]string{
 		{"picture", "a fox"},
 		{"picture", "models"},
@@ -179,8 +205,9 @@ func TestPictureAndDataBrokenSettings(t *testing.T) {
 		{"data", "list"},
 		{"data", "query", "kitchen", "SELECT 1"},
 	} {
-		_, err := runCLI(t, args...)
-		assert.Error(t, err, strings.Join(args, " "))
+		_, err := runCLI(t, append([]string{"--dir", file}, args...)...)
+		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: %v", strings.Join(args, " "), err)
+		assert.ErrorContains(t, err, "is not a directory")
 	}
 }
 

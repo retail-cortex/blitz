@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -93,6 +94,8 @@ func TestRemoteDataWithoutTheService(t *testing.T) {
 	assert.Error(t, err)
 	_, err = r.RunDataQuery(ctx, api.DataQuery{Connection: "kitchen", Statement: "SELECT 1"})
 	assert.Error(t, err)
+	_, err = r.RunDataQuery(ctx, api.DataQuery{Connection: "kitchen", Statement: "SELECT ?", Params: []any{math.NaN()}})
+	assert.ErrorContains(t, err, "NaN", "parameters JSON can't carry, before anything is sent")
 }
 
 func TestRemotePicturesWithoutTheService(t *testing.T) {

@@ -24,6 +24,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/health"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,4 +144,17 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	} {
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
 	}
+}
+
+// A verdict carries each rubric line's score and reason, and its grade.
+func TestVerdictMsgScores(t *testing.T) {
+	at := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	m := verdictMsg(health.Verdict{Model: "gemini/gemini-3.8-flash", At: at, Overall: 4.6, Summary: "clear",
+		Scores: []health.Score{{Line: "clarity", Score: 5, Reason: "plain words"}, {Line: "tests", Score: 4, Reason: "most paths"}}}, true)
+	require.Len(t, m.Scores, 2)
+	assert.Equal(t, []any{"tests", int32(4), "most paths"}, []any{m.Scores[1].Line, m.Scores[1].Score, m.Scores[1].Reason})
+	assert.Equal(t, "A", m.Grade)
+	assert.True(t, m.Current)
+	assert.Equal(t, at, m.At.AsTime())
+	assert.Nil(t, verdictMsg(health.Verdict{}, false).At, "no time, none sent")
 }

@@ -46,6 +46,8 @@ type openAIDrawer struct {
 	api  openAIImageAPI
 	name string
 	host string
+	// key is masked out of OpenAI's messages, which errors carry.
+	key string
 }
 
 // newOpenAIDrawer is the OpenAI image model name with cfg's OpenAI key; an
@@ -67,7 +69,7 @@ func newOpenAIDrawer(ctx context.Context, cfg *config.Config, name string) (*ope
 		}
 	}
 	client := openai.NewClient(opts...)
-	return &openAIDrawer{api: &client.Images, name: name, host: host}, nil
+	return &openAIDrawer{api: &client.Images, name: name, host: host, key: key}, nil
 }
 
 // openAISizes are the sizes an aspect ratio asks for ("" and others: the
@@ -110,7 +112,9 @@ func (d *openAIDrawer) draw(ctx context.Context, prompt string, refs []tools.Ref
 			Model: openai.ImageModel(d.name), N: openai.Int(int64(count)), Size: openai.ImageEditParamsSize(size), OutputFormat: openai.ImageEditParamsOutputFormat(outFormat)})
 	}
 	if err != nil {
-		return nil, nil, err
+		// OpenAI's reason (a safety refusal, a size it doesn't take), which
+		// the SDK's error leaves out.
+		return nil, nil, providerError(err, "openai", d.name, d.key)
 	}
 	var pics []tools.Picture
 	for _, im := range resp.Data {

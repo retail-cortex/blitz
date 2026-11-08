@@ -224,6 +224,9 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"DeleteAgentFile": func() error {
 			return unary(w.DeleteAgentFile, &pb.DeleteAgentFileRequest{Workspace: ws, Scope: pb.AgentScope_AGENT_SCOPE_WORKSPACE})
 		},
+		"ListDataConnections": func() error {
+			return unary(w.ListDataConnections, &pb.ListDataConnectionsRequest{Workspace: ws})
+		},
 
 		"ListDir":     func() error { return unary(f.ListDir, &pb.ListDirRequest{Workspace: ws}) },
 		"ReadFile":    func() error { return unary(f.ReadFile, &pb.ReadFileRequest{Workspace: ws}) },

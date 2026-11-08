@@ -19,6 +19,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -150,4 +151,21 @@ func TestDataFormats(t *testing.T) {
 	for v, want := range map[any]string{nil: "", "t": "t", json.Number("1.50"): "1.50", false: "false"} {
 		assert.Equal(t, want, cellText(v))
 	}
+
+	// Output that can't be written (a closed pipe) is an error, from the
+	// header or a row, once more than the writer's buffer is waiting.
+	big := strings.Repeat("y", 8<<10)
+	for name, tc := range map[string]api.DataTable{
+		"the header": {Columns: []api.DataColumn{{Name: big}}},
+		"a row":      {Columns: []api.DataColumn{{Name: "a"}}, Rows: [][]any{{big}}},
+	} {
+		assert.ErrorIs(t, writeCSV(failingWriter{}, tc), errClosedPipe, name)
+	}
 }
+
+var errClosedPipe = errors.New("closed pipe")
+
+// failingWriter fails every write, as a closed pipe does.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errClosedPipe }

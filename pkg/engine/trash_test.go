@@ -68,6 +68,8 @@ func TestTrashAndRestore(t *testing.T) {
 		assert.Error(t, err, "trashed the workspace")
 		_, err = w.TrashFile(ctx, "missing.md")
 		assert.ErrorIs(t, err, fs.ErrNotExist)
+		_, err = w.TrashFile(ctx, "../outside.md")
+		assert.ErrorIs(t, err, ErrBadPath, "a path outside the workspace")
 	})
 
 	t.Run("something's there now", func(t *testing.T) {
