@@ -31,6 +31,7 @@ import (
 //	delete:tmp/*            deleting workspace files (glob)
 //	web:proxy.golang.org    fetching from a host, or searching with a provider
 //	mcp:github:create_issue an MCP tool, as server:tool (glob)
+//	blitz:connector list    one of Blitz's own commands (glob: "connector *")
 //
 // Globs use path.Match, where * doesn't cross "/"; a pattern ending in "/"
 // covers everything under that directory. A shell glob never covers a
@@ -40,7 +41,7 @@ import (
 // permission.
 // Anything a worker isn't permitted is refused and recorded.
 type Permission struct {
-	Kind    string // shell, write, delete, web, mcp
+	Kind    string // shell, write, delete, web, mcp, blitz
 	Pattern string
 }
 
@@ -53,6 +54,7 @@ var permissionKinds = map[string]api.ActionKind{
 	"delete": api.ActionDelete,
 	"web":    api.ActionNetwork,
 	"mcp":    api.ActionMCP,
+	"blitz":  api.ActionBlitz,
 }
 
 // ParsePermission reads "<kind>:<pattern>".
@@ -61,7 +63,7 @@ func ParsePermission(s string) (Permission, error) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	pattern = strings.TrimSpace(pattern)
 	if _, known := permissionKinds[kind]; !ok || !known || pattern == "" {
-		return Permission{}, fmt.Errorf(`permission %q: use kind:pattern with kind shell, write, delete, web or mcp`, s)
+		return Permission{}, fmt.Errorf(`permission %q: use kind:pattern with kind shell, write, delete, web, mcp or blitz`, s)
 	}
 	if kind == "write" || kind == "delete" {
 		if strings.HasPrefix(pattern, "/") || strings.Contains("/"+pattern+"/", "/../") {

@@ -343,7 +343,7 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 		},
 		Ask: func(ctx context.Context, question string, options []string) (string, error) {
 			choices, order := api.ChoicesOf(ctx)
-			r, err := e.askForTask(ctx, t, api.TaskRequest{Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx), Choices: choices, Order: order})
+			r, err := e.askForTask(ctx, t, api.TaskRequest{Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx), Choices: choices, Order: order, Secret: api.SecretAnswer(ctx)})
 			return r.text, err
 		},
 	})

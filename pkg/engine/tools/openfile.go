@@ -88,6 +88,10 @@ func NewOpenFileTool(r *Registry) (tool.Tool, error) {
 		})
 }
 
+// EditorPath is p as the editor opens it (relative to the workspace), or
+// why it can't be (spec_060_blitz_tools DRV-31).
+func (r *Registry) EditorPath(p string) (string, error) { return r.editorPath(p) }
+
 // editorPath is p as the editor opens it, relative to the workspace, or
 // why it can't be: it must be a readable file (blocked paths refused)
 // inside the workspace's folder.

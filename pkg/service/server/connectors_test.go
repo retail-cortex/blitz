@@ -203,3 +203,44 @@ func TestConnectorsOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(strings.Join(custom.Msg.Problems, " "), "YAML"))
 }
+
+// blitz do over the API: help, a change answered first with what to
+// confirm, then run once confirmed, its result as JSON; a command that
+// isn't there is refused (spec_060_blitz_tools DRV-02).
+func TestRunBlitzCommandOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "recipes.db"), nil, 0o600))
+	call := func(cmd, args string, confirm bool) (*pb.RunBlitzCommandResponse, error) {
+		res, err := c.workspaces.RunBlitzCommand(ctx, connect.NewRequest(&pb.RunBlitzCommandRequest{Workspace: dir, Command: cmd, ArgsJson: args, Confirm: confirm}))
+		if err != nil {
+			return nil, err
+		}
+		return res.Msg, nil
+	}
+	help, err := call("help", `{"command":"connector save"}`, false)
+	require.NoError(t, err)
+	assert.Contains(t, help.Help, "kind (string, required)")
+
+	args := `{"kind":"sqlite","name":"recipes","settings":{"database":"recipes.db"}}`
+	first, err := call("connector save", args, false)
+	require.NoError(t, err)
+	assert.Contains(t, first.Confirm, "Save the sqlite connection recipes")
+	assert.Contains(t, first.Diff, "recipes.db")
+	assert.Empty(t, first.ResultJson, "nothing ran before it was confirmed")
+	_, statErr := os.Stat(filepath.Join(dir, ".agents", "connectors", "databases", "recipes.yaml"))
+	assert.True(t, os.IsNotExist(statErr))
+
+	done, err := call("connector save", args, true)
+	require.NoError(t, err)
+	assert.Contains(t, done.ResultJson, `"on":true`)
+	_, err = os.Stat(filepath.Join(dir, ".agents", "connectors", "databases", "recipes.yaml"))
+	assert.NoError(t, err)
+
+	_, err = call("connector frobnicate", "", false)
+	assert.Error(t, err)
+	_, err = call("doctor", "{", false)
+	assert.Error(t, err, "args that aren't JSON")
+}

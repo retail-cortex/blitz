@@ -196,6 +196,23 @@ func (t *TerminalInput) read(ctx context.Context, text string, kind readKind) (s
 	return t.readLine(ctx, text, kind, "")
 }
 
+// AskSecret prints text and reads one answer typed hidden, kept out of
+// history: a secret's value (spec_060_blitz_tools DRV-05).
+func (t *TerminalInput) AskSecret(ctx context.Context, text string) (string, error) {
+	t.mu.Lock()
+	keys := t.keys
+	t.mu.Unlock()
+	if keys != nil {
+		resume, err := keys.pause(ctx)
+		if err != nil {
+			return "", err
+		}
+		defer resume()
+	}
+	b, err := t.rl.ReadPassword(text)
+	return string(b), err
+}
+
 // ReadInput reads a REPL entry (multi-line aware) and saves it to history.
 func (t *TerminalInput) ReadInput(ctx context.Context, prompt string) (string, error) {
 	entry, err := readMultiline(ctx, prompt, func(ctx context.Context, p string) (string, error) {

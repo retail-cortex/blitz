@@ -22,7 +22,7 @@
 // browser (AB-10).
 import { workspaces } from "./api";
 import { agentBrowser, canPreview, openURL } from "./desktop";
-import { openFile, openWeb } from "./events";
+import { openFile, openSettings, openWeb, showView } from "./events";
 import type { AgentBrowserCommand } from "./gen/blitz/v1/workspace_pb";
 
 /** What the relay needs of the window and the service (replaced in tests). */
@@ -39,6 +39,10 @@ export interface RelayEnds {
   openPage: (url: string, external: boolean) => unknown;
   /** Opens a workspace file in the editor, at a line (spec_060 DRV-31). */
   openFile: (path: string, line: number) => unknown;
+  /** Opens a view: "studio:<section>", "settings:<section>", or changes, processes, pictures (DRV-31). */
+  openView: (view: string) => unknown;
+  /** Opens Pictures with a prompt, as JSON {prompt, model, references} (DRV-30). */
+  openPicture: (json: string) => unknown;
 }
 
 /** The ends for workspace dir: the service's stream and the Electron window. */
@@ -53,6 +57,20 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     showTab,
     openPage: (url, external) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url })),
     openFile: (path, line) => openFile({ dir, path, line: line || undefined }),
+    openView: (view) => {
+      const [where, section] = view.split(":", 2);
+      if (where === "settings") return openSettings({ section });
+      if (where === "studio") return showView({ dir, view: "studio", studio: section === "jobs" ? "workers" : section });
+      if (view === "changes" || view === "processes" || view === "pictures") return showView({ dir, view });
+    },
+    openPicture: (json) => {
+      try {
+        const p = JSON.parse(json) as { prompt?: string; references?: string[] };
+        showView({ dir, view: "pictures", picture: { prompt: p.prompt, reference: p.references?.[0] } });
+      } catch {
+        showView({ dir, view: "pictures" });
+      }
+    },
   };
 }
 
@@ -106,6 +124,10 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
             ends.openPage(c.url, c.kind === "external");
           } else if (c.kind === "file") {
             ends.openFile(c.path, c.line);
+          } else if (c.kind === "view") {
+            ends.openView(c.path);
+          } else if (c.kind === "picture") {
+            ends.openPicture(c.message);
           } else if (c.kind === "close") {
             mine.delete(c.browserId);
             void ends.close(c.browserId).catch(() => undefined);

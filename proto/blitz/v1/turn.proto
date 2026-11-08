@@ -312,6 +312,9 @@ message Question {
   repeated QuestionChoice choices = 7;
   // What the choices' order rests on.
   string order = 8;
+  // The answer is a secret's value: typed hidden, never shown or kept,
+  // and never given to the model (spec_060_blitz_tools DRV-05).
+  bool secret = 9;
 }
 
 // QuestionChoice is a question's option explained.

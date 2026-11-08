@@ -447,6 +447,10 @@ service WorkspaceService {
   // as the database describes them, its rows (spec_059_data DAT-50; the
   // try capability). problem says why it didn't run.
   rpc RunConnectorQuery(RunConnectorQueryRequest) returns (RunConnectorQueryResponse);
+  // Runs one of Blitz's own commands for the CLI's blitz do
+  // (spec_060_blitz_tools DRV-02): help, the result, or what the person
+  // confirms first (and the secrets it needs) until confirm is set.
+  rpc RunBlitzCommand(RunBlitzCommandRequest) returns (RunBlitzCommandResponse);
   // Drafts one of a connection's queries from what the user is looking
   // for: its schema is read (none read is the problem) and the sql-query
   // skill writes the query (the query-builder capability). Nothing is
@@ -4703,3 +4707,29 @@ message AgentBrowserReplyRequest {
 
 // Response message for WorkspaceService.AgentBrowserReply.
 message AgentBrowserReplyResponse {}
+
+// Request message for WorkspaceService.RunBlitzCommand.
+message RunBlitzCommandRequest {
+  string workspace = 1;
+  // The command, its group then its verb ("connector save"), or help.
+  string command = 2;
+  // Its arguments, as a JSON object.
+  string args_json = 3;
+  // The person confirmed what the command answered it would do.
+  bool confirm = 4;
+  // The secrets it asked for, typed hidden in the terminal, by name.
+  map<string, string> secrets = 5;
+}
+
+// Response message for WorkspaceService.RunBlitzCommand.
+message RunBlitzCommandResponse {
+  // The command's result, as JSON ("" when it hasn't run).
+  string result_json = 1;
+  // Help: the commands, or one's arguments.
+  string help = 2;
+  // What the person confirms before it runs, the file it writes as a
+  // unified diff, and the secrets it'll need (asked hidden).
+  string confirm = 3;
+  string diff = 4;
+  repeated string asks = 5;
+}

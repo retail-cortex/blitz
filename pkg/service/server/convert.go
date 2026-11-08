@@ -316,7 +316,7 @@ func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
 		m.Agent, m.TaskId = r.Agent, r.TaskID
 		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: m}}
 	}
-	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect, Choices: choiceMsgs(r.Choices), Order: r.Order}}}
+	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect, Choices: choiceMsgs(r.Choices), Order: r.Order, Secret: r.Secret}}}
 }
 
 func taskEventMsg(ev api.SessionEvent) *pb.TaskEvent {

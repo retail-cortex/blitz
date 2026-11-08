@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "agentbrowser.go",
         "backend.go",
+        "blitzcommands.go",
         "changes.go",
         "context.go",
         "doc.go",

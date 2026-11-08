@@ -286,6 +286,10 @@ var ollamaAnswers = func(ctx context.Context) bool {
 	return res.StatusCode == http.StatusOK
 }
 
+// OllamaAnswers reports whether Ollama answers on this machine (MOD-03;
+// doctor's check, spec_060 DRV-81).
+func OllamaAnswers(ctx context.Context) bool { return ollamaAnswers(ctx) }
+
 // notChat matches the models that can't hold a conversation: embeddings,
 // image, video, music and speech models, and retired families providers
 // still list (spec_061_models MOD-02).

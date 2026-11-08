@@ -7,8 +7,8 @@ weight: 60
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-07, the owner's request; decisions in §11; widened 2026-11-08 with settings, doctor, the organization's policy, MCP servers, Studio's other items, plugins, memory, chats, processes, saved approvals and more views, and the rules every command follows, §3a). Phase 1 (the tool, connections, settings, doctor, the organization's policy, the skill) is first. Built ahead of it (2026-11-08): `open file` as its own tool, `open_file` (DRV-31a). |
-| Source | Planned: the command catalog in `pkg/api/blitzcommands.go` (planned), with names, arguments and what each does, and its commands in `pkg/engine/blitzcmd/` (planned); the tool in `pkg/engine/tools/blitz.go` (planned); the skill in `pkg/engine/skills/builtin/blitz/` (planned); the CLI's commands in `apps/cli/`; the window's actions in `apps/desktop/web/src/` (the approval's secret fields, opening Pictures or the browser); the terminal's in `apps/cli/internal/tui/` |
+| Status | **Built** (2026-11-08; the owner's request 2026-11-07, decisions in §11, widened 2026-11-08). Built as specified, with these differences (§12): `open url` is `open_page`'s; `picture` without a window points to `generate_image`; `chat export` writes Markdown only; a secret is asked in a hidden question right after the approval, not in the approval card; `eval run` runs in the background, shown in Studio › Evals; jobs in the terminal stay `blitz jobs`; the CLI is `blitz do <command>`. Not built: `hook save`, `plugin install` and `plugin remove`, and `org publish` (each needs its own review of what runs or what's published), and the live check (DRV-63, which costs). |
+| Source | The catalog in `pkg/api/blitzcommands.go` (`BlitzCommands`, `FindBlitzCommand`, `BlitzCommandRunsInPlan`, `ActionBlitz`, `WithSecretAnswer`); the tool in `pkg/engine/tools/blitz.go` (`NewBlitzTool`, `BlitzHelp`, `CheckBlitzArgs`; the jobs through `create_job` and `list_jobs`); the commands in `pkg/engine/blitzcommands.go` (`runBlitzCommand`, `RunBlitzCommand` for the CLI), `connectors.Preview` in `pkg/engine/connectors/store.go`; plan mode per command in `pkg/engine/runtime/plan.go`, the audit's `blitz:<command>` in `pkg/engine/runtime/engine.go`, the job permission kind in `pkg/engine/workers/permission.go`; the skill in `pkg/engine/skills/builtin/blitz/SKILL.md`; `WorkspaceService.RunBlitzCommand` and `Question.secret`; the window's `file`, `view` and `picture` commands in `apps/desktop/web/src/agentBrowserRelay.ts`, the secret field in `apps/desktop/web/src/Conversation.tsx`; the terminal's hidden answer in `apps/cli/internal/tui/terminal.go`; `blitz do` in `apps/cli/do.go` |
 | Depends on | [spec_047_connectors](spec_047_connectors.md) (CON-06 files, CON-09 trust, CON-17 on in a workspace, CON-18 Studio stays in its workspace), [spec_046_databases](spec_046_databases.md) (DB-17 paths), [spec_039_secrets](spec_039_secrets.md), [spec_005_approvals](spec_005_approvals.md) (APR-14b auto mode reads answers), [spec_043_workflows](spec_043_workflows.md), [spec_058_pictures](spec_058_pictures.md), [spec_057_spec_driven](spec_057_spec_driven.md), the jobs tools (`create_job`, `list_jobs`) |
 
 ## 1. Purpose
@@ -94,7 +94,7 @@ Phase 1 is the tool, its rules, connections, settings, doctor, the organization'
 
 ## 5. The blitz skill
 
-- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md` (planned); a workspace's own skill of that name is used instead), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
+- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md`; its name is reserved, as every built-in skill's is), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
 - **DRV-21** It says, briefly:
   - what each feature is, in a line, and its command group;
   - that `blitz help <command>` gives the arguments, and that the commands ask the person, so the agent shouldn't ask first as well;
@@ -153,3 +153,14 @@ The owner's answers (2026-11-07):
    - One `blitz` tool (DRV-01) is about 300 tokens a call however many commands it has, with `help` for the rest: **recommended**, always offered.
 3. Deleting a connection by tool: **not in phase 1**.
 4. Blitz's other functions callable by the agent too (evals, a picture opening Pictures, a browser opened at an address), most of them through the CLI as well: **yes** (the owner, 2026-11-07), as §3's catalog and DRV-02.
+
+## 12. As built
+
+- **DRV-90** *2026-11-08.* What differs from the draft above, and why:
+  - `open url` answers that the agent's `open_page` opens web pages (it asks where they show, AB-10).
+  - `picture` opens Pictures with the prompt and a first reference; with no window it says to use `generate_image`, which shows its cost first, rather than estimating.
+  - `chat export` writes the conversation as Markdown to a workspace file; PDF and Word are the export tools'.
+  - A secret is asked in a question marked secret (`Question.secret`: a password field in the window, hidden input in the terminal, never recorded), right after the approval card, not in it.
+  - `eval run` starts the evals in the background after the person agrees, and Studio › Evals shows them; `eval results` reads them.
+  - In the terminal, `blitz do <command> [name=value…]` runs the catalog (`--json`, `--yes`, `--args`): a change answers first with what to confirm and the secrets it needs, the person confirms `[y/N]` and types them hidden, and a second call runs it. Jobs keep `blitz jobs`.
+  - Not built yet: `hook save`, `plugin install` and `plugin remove` (code from elsewhere needs its source reviewed in the approval), and `org publish` (an Admin's review on the organization's service). The live check (DRV-63) waits for the owner's go-ahead on its cost.

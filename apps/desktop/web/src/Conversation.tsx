@@ -1829,11 +1829,21 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
           if (text.trim()) onAnswer(text.trim());
         }}
       >
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={q.options.length ? t("desktop.question.other") : t("desktop.question.answer")} autoFocus={autoFocus && q.options.length === 0} />
+        {/* A secret's value: typed hidden, sent to Blitz's secret store, never shown or given to the model (spec_060 DRV-05). */}
+        <input
+          className="input"
+          type={q.secret ? "password" : "text"}
+          autoComplete={q.secret ? "off" : undefined}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={q.secret ? t("desktop.question.secret") : q.options.length ? t("desktop.question.other") : t("desktop.question.answer")}
+          autoFocus={autoFocus && q.options.length === 0}
+        />
         <Button variant="text" type="submit" disabled={!text.trim()}>
-          {t("desktop.send")}
+          {t(q.secret ? "desktop.question.secret_save" : "desktop.send")}
         </Button>
       </form>
+      {q.secret && <span className="t-body-sm muted">{t("desktop.question.secret_hint")}</span>}
     </div>
   );
 }

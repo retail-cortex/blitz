@@ -203,7 +203,7 @@ func TestDiscover(t *testing.T) {
 
 func TestPermissions(t *testing.T) {
 	var perms []Permission
-	for _, s := range []string{"shell:go list -m -u all", "shell:git log *", "shell:make lint && make test", "write:reports/", "delete:tmp/*.log", "web:proxy.golang.org", "mcp:github:create_*"} {
+	for _, s := range []string{"shell:go list -m -u all", "shell:git log *", "shell:make lint && make test", "write:reports/", "delete:tmp/*.log", "web:proxy.golang.org", "mcp:github:create_*", "blitz:connector *"} {
 		t.Run(s, func(t *testing.T) {
 			p, err := ParsePermission(s)
 			require.NoError(t, err)
@@ -239,6 +239,8 @@ func TestPermissions(t *testing.T) {
 		{req(api.ActionNetwork, "evil.example"), false},
 		{req(api.ActionMCP, "github:create_issue"), true},
 		{req(api.ActionMCP, "github:delete_repo"), false},
+		{req(api.ActionBlitz, "connector list"), true}, // Blitz's own commands (spec_060 DRV-70)
+		{req(api.ActionBlitz, "settings set"), false},
 		{req(api.ActionWrite), false}, // nothing to match
 	} {
 		got := Allows(perms, c.req)
