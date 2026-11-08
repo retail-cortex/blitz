@@ -33,6 +33,25 @@ type Query struct {
 	Mode    string
 	// Hidden includes hidden items (dotfiles, files git ignores).
 	Hidden bool
+	// Folder keeps the items under one folder (a path relative to the
+	// workspace, "/" separated; "" for all): files and documents, since
+	// chats and notes aren't in a folder.
+	Folder string
+}
+
+// inFolder reports whether ref is folder or under it ("" holds all).
+func inFolder(ref, folder string) bool {
+	return folder == "" || ref == folder || strings.HasPrefix(ref, folder+"/")
+}
+
+// folderSQL is the condition keeping a docs row (aliased d) under folder,
+// with its arguments; "" for all.
+func folderSQL(folder string) (string, []any) {
+	if folder == "" {
+		return "", nil
+	}
+	esc := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(folder)
+	return ` AND (d.ref = ? OR d.ref LIKE ? ESCAPE '\')`, []any{folder, esc + "/%"}
 }
 
 // The ways to search: by the words (keyword), by meaning (semantic, with
@@ -162,14 +181,18 @@ func (x *Index) Search(ctx context.Context, q Query) ([]Hit, error) {
 		return nil, ErrNoEmbeddings
 	}
 	want := limit * 4 // room for the fusion and one hit per item
+	folder := strings.Trim(q.Folder, "/")
+	if folder == "." {
+		folder = ""
+	}
 	var lists [][]candidate
 	if mode != ModeSemantic {
-		words, err := x.match(ctx, "words", wordsMatch(ts, true), "bm25(words, 4.0, 1.0)", sources, want)
+		words, err := x.match(ctx, "words", wordsMatch(ts, true), "bm25(words, 4.0, 1.0)", sources, folder, want)
 		if err != nil {
 			return nil, err
 		}
 		lists = append(lists, words)
-		about, err := x.aboutMatch(ctx, wordsMatch(ts, false), sources, want)
+		about, err := x.aboutMatch(ctx, wordsMatch(ts, false), sources, folder, want)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +200,7 @@ func (x *Index) Search(ctx context.Context, q Query) ([]Hit, error) {
 			lists = append(lists, about)
 		}
 		if g := gramsMatch(ts); g != "" && codeLike.MatchString(q.Text) {
-			grams, err := x.match(ctx, "grams", g, "bm25(grams)", sources, want)
+			grams, err := x.match(ctx, "grams", g, "bm25(grams)", sources, folder, want)
 			if err != nil {
 				return nil, err
 			}
@@ -185,21 +208,26 @@ func (x *Index) Search(ctx context.Context, q Query) ([]Hit, error) {
 		}
 	}
 	if mode != ModeKeyword {
-		near, err := x.similar(ctx, q.Text, sources, want)
+		wantNear := want
+		if folder != "" {
+			wantNear = want * 8 // the vectors can't be asked by folder: room for the filter
+		}
+		near, err := x.similar(ctx, q.Text, sources, wantNear)
 		if err != nil {
 			return nil, err
 		}
 		lists = append(lists, near)
 	}
-	hits := x.fuse(lists, ts, limit, q.Hidden)
+	hits := x.fuse(lists, ts, limit, q.Hidden, folder)
 	if err := x.abouts(ctx, hits); err != nil {
 		return nil, err
 	}
 	return hits, nil
 }
 
-// match runs one FTS5 query over table, best first.
-func (x *Index) match(ctx context.Context, table, expr, rank string, sources []string, limit int) ([]candidate, error) {
+// match runs one FTS5 query over table, best first, under folder ("" for
+// all).
+func (x *Index) match(ctx context.Context, table, expr, rank string, sources []string, folder string, limit int) ([]candidate, error) {
 	if len(sources) == 0 {
 		return nil, nil
 	}
@@ -208,10 +236,11 @@ func (x *Index) match(ctx context.Context, table, expr, rank string, sources []s
 	for _, s := range sources {
 		args = append(args, s)
 	}
-	args = append(args, limit)
+	scope, scopeArgs := folderSQL(folder)
+	args = append(append(args, scopeArgs...), limit)
 	rows, err := x.db.QueryContext(ctx, `SELECT c.id, d.source, d.ref, d.title, c.start_line, c.section, `+table+`.body, d.hidden
 		FROM `+table+` JOIN chunks c ON c.id = `+table+`.rowid JOIN docs d ON d.id = c.doc
-		WHERE `+table+` MATCH ? AND d.source IN (`+in+`)
+		WHERE `+table+` MATCH ? AND d.source IN (`+in+`)`+scope+`
 		ORDER BY `+rank+` LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -229,8 +258,9 @@ func (x *Index) match(ctx context.Context, table, expr, rank string, sources []s
 }
 
 // fuse merges ranked lists by reciprocal rank, keeps each item's best
-// chunk, drops what may not be shown, and makes the hits.
-func (x *Index) fuse(lists [][]candidate, ts []string, limit int, hidden bool) []Hit {
+// chunk, drops what may not be shown or isn't under folder, and makes the
+// hits.
+func (x *Index) fuse(lists [][]candidate, ts []string, limit int, hidden bool, folder string) []Hit {
 	score := map[int64]float64{}
 	byChunk := map[int64]candidate{}
 	for _, list := range lists {
@@ -254,7 +284,7 @@ func (x *Index) fuse(lists [][]candidate, ts []string, limit int, hidden bool) [
 	for _, id := range chunks {
 		c := byChunk[id]
 		key := [2]string{c.source, c.ref}
-		if seen[key] || (c.hidden && !hidden) || (x.allowed != nil && !x.allowed(c.source, c.ref)) {
+		if seen[key] || (c.hidden && !hidden) || !inFolder(c.ref, folder) || (x.allowed != nil && !x.allowed(c.source, c.ref)) {
 			continue
 		}
 		seen[key] = true

@@ -31,6 +31,7 @@ import {
   mdiFolderOpenOutline,
   mdiFolderOutline,
   mdiFolderPlusOutline,
+  mdiFolderSearchOutline,
   mdiLinkVariant,
   mdiLoading,
   mdiLockOutline,
@@ -57,7 +58,7 @@ import {
   mdiArrowCollapseUp,
 } from "@mdi/js";
 import { canCall, canDragOut, droppedPaths, dragOut, fileManager, openURL, revealPath, servePage, trashDropped } from "../desktop";
-import { addToContext, openWeb, showHistory, showView } from "../events";
+import { addToContext, openWeb, searchWorkspace, showHistory, showView } from "../events";
 import { includeAll } from "../includeAll";
 import { files } from "../api";
 import { message } from "../errors";
@@ -97,9 +98,13 @@ import { languageSession } from "./language";
 import { isWebPath } from "./webTabs";
 import { useAdvanced, useApp } from "../state";
 import { useOrgBranding } from "../orgBranding";
+import { watchFolders } from "./watch";
 
 /** slowOpen is how long opening goes before the list says what it waits for. */
 const slowOpen = 1500;
+
+/** How often a watched tree lists everything again anyway (FIL-33b). */
+const liveRelistMs = 60_000;
 
 const gitIcons: Record<GitAction, string> = {
   [GitAction.UNSPECIFIED]: mdiSourceBranch,
@@ -153,10 +158,12 @@ export function FilesShelf({
   onToggleHidden,
   active,
   refresh,
+  poll = 0,
   reveal,
   onOpen,
   onMoved,
   onChanged,
+  onDiskChange,
   onCommit,
   onClose,
   width,
@@ -172,6 +179,13 @@ export function FilesShelf({
   active: string | null;
   /** Changes when the tree should be listed again. */
   refresh: number;
+  /**
+   * Changes every few seconds: the tree lists again on it only while the
+   * service can't stream its folders' changes (FIL-33b).
+   */
+  poll?: number;
+  /** The service saw files change in the open folders (open tabs may have). */
+  onDiskChange?: () => void;
   /** A path to show (its folders opened), then cleared. */
   reveal: { path: string } | null;
   onOpen: (path: string) => void;
@@ -277,6 +291,32 @@ export function FilesShelf({
   useEffect(() => {
     if (refresh) void reloadRef.current();
   }, [refresh]);
+
+  // The service watches the open folders and says which changed, so the
+  // tree lists just those (FIL-33b); while it can't, the tree lists on the
+  // poll, and when it can, once a minute anyway.
+  const [live, setLive] = useState(false);
+  const watched = shownFolders(tree).join("\n");
+  const onDiskRef = useRef(onDiskChange);
+  onDiskRef.current = onDiskChange;
+  useEffect(() => {
+    const shown = new Set(watched.split("\n"));
+    return watchFolders(dir, [...shown], {
+      changed: (folders) => {
+        for (const f of folders) if (shown.has(f)) void load(f).catch(() => undefined);
+        onDiskRef.current?.();
+      },
+      live: setLive,
+    });
+  }, [dir, watched, load]);
+  useEffect(() => {
+    if (poll && !live) void reloadRef.current();
+  }, [poll, live]);
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => void reloadRef.current(), liveRelistMs);
+    return () => clearInterval(timer);
+  }, [live]);
 
   // Opens or closes a folder (or a file with files nested under it). With
   // compact folders, opening one that holds only a folder opens that too,
@@ -706,6 +746,10 @@ export function FilesShelf({
       { label: t("desktop.files.new_file"), icon: mdiFilePlusOutline, onSelect: () => void startNew("file", folder) },
       { label: t("desktop.files.new_folder"), icon: mdiFolderPlusOutline, onSelect: () => void startNew("folder", folder) },
     );
+    // Search within the folder (FIL-77, SRCH-18).
+    if (e && isFolder(e) && e.agentRule !== "blocked") {
+      items.push({ label: t("desktop.files.find_in_folder"), icon: mdiFolderSearchOutline, onSelect: () => searchWorkspace("", undefined, e.path) });
+    }
     // Pictures (spec_058 PIC-10): a picture to start from, or a folder to save in.
     if (e && e.agentRule !== "blocked" && (isFolder(e) || /\.(png|jpe?g|webp)$/i.test(e.name))) {
       items.push(

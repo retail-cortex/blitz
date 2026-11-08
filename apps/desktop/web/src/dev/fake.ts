@@ -2578,10 +2578,12 @@ export function installFake() {
         removePermissionRule: ({ rule }) => ({ rule }),
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
-        searchWorkspace: ({ query, sources }) => {
+        searchWorkspace: ({ query, sources, folder }) => {
           const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-          const want = sources.length ? sources : ["files", "documents"];
-          return { sources: want, hits: fakeSearchCorpus.filter((h) => want.includes(h.source) && words.every((w) => `${h.ref} ${h.title} ${h.snippet}`.toLowerCase().includes(w))) };
+          let want = sources.length ? sources : ["files", "documents"];
+          if (folder) want = want.filter((s) => s === "files" || s === "documents"); // chats and notes aren't in a folder (SRCH-18)
+          const under = (ref: string) => !folder || ref === folder || ref.startsWith(folder + "/");
+          return { sources: want, hits: fakeSearchCorpus.filter((h) => want.includes(h.source) && under(h.ref) && words.every((w) => `${h.ref} ${h.title} ${h.snippet}`.toLowerCase().includes(w))) };
         },
         getSearchStatus: ({ workspace }) => {
           const settings = searchSettingsOf(workspace);
@@ -3618,6 +3620,12 @@ export function installFake() {
           return { data: new TextEncoder().encode("PK fake docx\n" + markdown) };
         },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
+        // The watch is on (FIL-33b) and stays open until the page stops it;
+        // the fake's files change only through the page, which lists them.
+        async *watchFiles(_r, ctx) {
+          yield { folders: [], polling: false };
+          await new Promise<void>((done) => (ctx.signal.aborted ? done() : ctx.signal.addEventListener("abort", () => done())));
+        },
       });
       service(WorkerService, {
         createWorker: (r) => {

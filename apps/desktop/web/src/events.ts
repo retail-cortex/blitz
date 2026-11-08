@@ -269,9 +269,13 @@ export function goToFile(detail: { dir: string }) {
 
 /** The event that opens workspace search. */
 export const searchWorkspaceEvent = "blitz:search-workspace";
-/** Opens workspace search on the active workspace, with query typed, on sources (undefined: the usual ones). */
-export function searchWorkspace(query = "", sources?: SearchSource[]) {
-  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query, sources } }));
+/**
+ * Opens workspace search on the active workspace, with query typed, on
+ * sources (undefined: the usual ones), within folder ("" or undefined:
+ * the whole workspace; the Files shelf's Find in folder, SRCH-18).
+ */
+export function searchWorkspace(query = "", sources?: SearchSource[], folder?: string) {
+  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query, sources, folder } }));
 }
 
 /** The event that says a workspace's files may have changed. */

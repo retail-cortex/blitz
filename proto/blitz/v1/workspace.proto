@@ -2350,6 +2350,10 @@ message SearchWorkspaceRequest {
   // Include hidden items: dotfiles, files git ignores (the desktop app
   // asks for them when it shows hidden files).
   bool hidden = 6;
+  // Only the files and documents under this folder (relative to the
+  // workspace, "/" separated; "" for the whole workspace): the Files
+  // shelf's Find in folder (SRCH-18). Chats and notes aren't in a folder.
+  string folder = 7;
 }
 
 // SearchHit is one item workspace search found.

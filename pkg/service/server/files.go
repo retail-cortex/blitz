@@ -352,3 +352,13 @@ func (h fileService) StatFiles(ctx context.Context, r req[pb.StatFilesRequest]) 
 	}
 	return ok(&pb.StatFilesResponse{Versions: w.StatFiles(r.Msg.Paths)})
 }
+
+func (h fileService) WatchFiles(ctx context.Context, r req[pb.WatchFilesRequest], stream *connect.ServerStream[pb.WatchFilesResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	return w.WatchFolders(ctx, r.Msg.Folders, func(c engine.FolderChanges) error {
+		return stream.Send(&pb.WatchFilesResponse{Folders: c.Folders, Polling: c.Polling})
+	})
+}

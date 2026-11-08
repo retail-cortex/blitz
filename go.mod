@@ -25,6 +25,7 @@ require (
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/ergochat/readline v0.1.3
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httplog/v3 v3.5.0
