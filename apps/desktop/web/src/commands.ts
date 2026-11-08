@@ -53,6 +53,9 @@ const onMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 /** A Cmd/Ctrl shortcut as the platform writes it: ⇧⌘F on macOS, Ctrl+Shift+F elsewhere. */
 export const shortcutLabel = (key: string, shift = false, mac = onMac) => (mac ? `${shift ? "⇧" : ""}⌘${key}` : `Ctrl+${shift ? "Shift+" : ""}${key}`);
 
+/** The terminal drawer's key (TRM-30b), Control on every system: ⌃` on macOS, Ctrl+` elsewhere. */
+export const terminalShortcut = (mac = onMac) => (mac ? "⌃`" : "Ctrl+`");
+
 /** A composer line as a command, or undefined when it isn't one. */
 export function parseCommand(line: string): { name: string; args: string } | undefined {
   const t = line.trim();

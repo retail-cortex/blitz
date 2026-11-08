@@ -19,8 +19,7 @@
 // changes survive switching views and workspaces.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorState } from "@codemirror/state";
-import { files, terminals } from "../api";
-import { isTermPath, termId, termName, termPath } from "../terminal/terminals";
+import { files } from "../api";
 import { onPreviewState, previewClose } from "../desktop";
 import { errorMeta, message, reason } from "../errors";
 import { secretCompletion } from "./secretCompletion";
@@ -49,17 +48,6 @@ export interface Tab {
   conflict?: string;
   /** A web page's tab (path web:<id>, spec_038_electron EL-100), not a file's. */
   web?: WebPage;
-  /** A terminal's tab (path term:<id>, spec_062_terminal TRM-20), not a file's. */
-  terminal?: TermTab;
-}
-
-/** A terminal's tab: the service's terminal, and how its shell is. */
-export interface TermTab {
-  id: string;
-  /** Its folder, relative to the workspace ("" for it). */
-  dir: string;
-  exited?: boolean;
-  exitCode?: number;
 }
 
 /** A web tab's page, as its preview last said. */
@@ -114,10 +102,6 @@ export interface EditorModel {
   openAgentWeb: (id: string) => void;
   /** What a web tab's preview said of its page. */
   setWeb: (path: string, page: Partial<WebPage>) => void;
-  /** Starts a terminal in a folder of the workspace ("" for it) and shows its tab (TRM-30, TRM-31); returns the tab's path. */
-  openTerminal: (dir: string) => Promise<string>;
-  /** What a terminal's tab learned of its shell (it exited, with a code). */
-  setTerminal: (path: string, term: Partial<TermTab>) => void;
   /** Replaces a tab's text (the visual editor's Markdown), as an edit. */
   setText: (path: string, text: string) => void;
   /** The language servers' hooks, for the visual editor's code blocks (none: no servers). */
@@ -225,8 +209,6 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       const closed = new Set(paths);
       for (const path of closed) {
         if (isWebPath(path)) closePreview(webId(path));
-        if (isTermPath(path)) void terminals.closeTerminal({ workspace: dir, id: termId(path) }).catch(() => {}); // gone already: nothing to end
-
         languageSession(dir).close(path);
         states.current.delete(path);
         saved.current.delete(path);
@@ -271,7 +253,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
   }, [load, patch]);
 
   const check = useCallback(async () => {
-    const open = tabsRef.current.filter((t) => !t.loading && !t.error && !t.web && !t.terminal);
+    const open = tabsRef.current.filter((t) => !t.loading && !t.error && !t.web);
     if (open.length === 0) return;
     let versions: Record<string, string>;
     try {
@@ -340,41 +322,6 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [],
   );
 
-  // A terminal's tab (TRM-20): not a file, so nothing to load or save.
-  const termTab = useCallback(
-    (t: TermTab): Tab => ({ path: termPath(t.id), name: termName(t.dir, dir), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, terminal: t }),
-    [dir],
-  );
-  const openTerminal = useCallback(
-    async (folder: string) => {
-      const { terminal } = await terminals.openTerminal({ workspace: dir, dir: folder });
-      const t = terminal!;
-      const tab = termTab({ id: t.id, dir: t.dir });
-      setTabs((ts) => [...ts, tab]);
-      setActive(tab.path);
-      setTarget(null);
-      return tab.path;
-    },
-    [dir, termTab],
-  );
-  const setTerminal = useCallback(
-    (path: string, term: Partial<TermTab>) => setTabs((ts) => ts.map((t) => (t.path === path && t.terminal ? { ...t, terminal: { ...t.terminal, ...term } } : t))),
-    [],
-  );
-  // The workspace's terminals, still running for a window that reloaded
-  // (TRM-26), get their tabs back.
-  useEffect(() => {
-    let live = true;
-    terminals.listTerminals({ workspace: dir }).then(
-      ({ terminals: list }) => {
-        if (!live || !list.length) return;
-        setTabs((ts) => [...ts, ...list.filter((x) => !ts.some((t) => t.path === termPath(x.id))).map((x) => termTab({ id: x.id, dir: x.dir, exited: x.exited, exitCode: x.exitCode }))]);
-      },
-      () => {}, // no terminals (an older service): no tabs
-    );
-    return () => void (live = false);
-  }, [dir, termTab]);
-
   // A closed (or remounted) workspace's web pages and language documents
   // go with it, rather than running on unseen.
   useEffect(
@@ -435,12 +382,10 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       openWeb,
       openAgentWeb,
       setWeb,
-      openTerminal,
-      setTerminal,
       setText,
       language: languageHooks,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, openWeb, openAgentWeb, setWeb, openTerminal, setTerminal, setText, languageHooks],
+    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, openWeb, openAgentWeb, setWeb, setText, languageHooks],
   );
 }

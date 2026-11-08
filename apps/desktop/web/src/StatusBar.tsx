@@ -39,10 +39,12 @@ import {
   mdiCircleMedium,
   mdiCloseCircleOutline,
   mdiConsole,
+  mdiConsoleLine,
   mdiCreationOutline,
   mdiDeveloperBoard,
   mdiInboxOutline,
   mdiLoading,
+  mdiPlus,
   mdiRobotOutline,
   mdiSourceBranch,
   mdiSourceMerge,
@@ -68,6 +70,7 @@ import { byWorkspace, countLabel, flaggedOf, isFlagged, processDetail, stopProce
 import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
+import { closeTerminal, showTerminals, termChoices, useTermDrawer } from "./terminal/drawer";
 import { contextShare, costByModel, costText, tokens, useWorkspaceStatus } from "./status";
 import { Button, Dialog, Icon, Menu, useSnackbar, type MenuEntry } from "@blitz/webui";
 import { useWorkerFailures } from "./workerFailures";
@@ -387,15 +390,48 @@ function TasksItem() {
 // text. It opens a menu of them by workspace, each with what it uses and
 // Stop; a pick, or Output and details, opens the drawer on its output.
 /**
- * The terminal button beside Processes (spec_062_terminal TRM-30a): a new
- * terminal in the workspace's folder, as ⌘K's New terminal.
+ * The terminal button beside Processes (spec_062_terminal TRM-30a): with
+ * no terminal, a new one in the workspace's folder, as ⌘K's New terminal;
+ * else a menu of them, a pick dropping the drawer down on it, and New
+ * terminal at the end.
  */
 function TerminalItem({ dir }: { dir: string }) {
-  const label = t("desktop.terminal.new");
+  const st = useTermDrawer(dir);
+  const snack = useSnackbar();
+  const fresh = () => openTerminal({ dir, folder: "" });
+  if (st.list.length === 0) {
+    const label = t("desktop.terminal.new");
+    return (
+      <button className="sb-item sb-button sb-terminal" title={label} aria-label={label} onClick={fresh}>
+        <Icon path={mdiConsole} size="sm" />
+      </button>
+    );
+  }
+  const label = t("desktop.terminal.list");
+  const items: MenuEntry[] = [
+    { heading: label },
+    ...termChoices(st, dir, (code) => t("desktop.terminal.ended", { code })).map((c) => ({
+      label: c.label,
+      detail: c.detail,
+      icon: mdiConsoleLine,
+      on: c.current,
+      onSelect: () => showTerminals(dir, c.id),
+      actions: [{ icon: mdiClose, label: t("desktop.terminal.close", { name: c.label }), removes: true, onSelect: () => void closeTerminal(dir, c.id).catch((e: unknown) => snack(message(e), { error: true })) }],
+    })),
+    "divider",
+    { label: t("desktop.terminal.new"), icon: mdiPlus, onSelect: fresh },
+  ];
   return (
-    <button className="sb-item sb-button sb-terminal" title={label} aria-label={label} onClick={() => openTerminal({ dir, folder: "" })}>
-      <Icon path={mdiConsole} size="sm" />
-    </button>
+    <Menu
+      placement="up start"
+      className="wide-menu"
+      trigger={(p) => (
+        <button className={`sb-item sb-button sb-terminal${st.open ? " on" : ""}`} title={label} aria-label={label} {...p}>
+          <Icon path={mdiConsole} size="sm" />
+        </button>
+      )}
+      items={items}
+    />
   );
 }
 

@@ -3,12 +3,12 @@ title: "062 · A terminal in the window"
 weight: 62
 ---
 
-*A terminal inside Blitz's window. It runs your own shell in your workspace, with your prompt, your oh-my-zsh theme and its glyphs drawn in a bundled Nerd Font. It opens from the file tree's **Open in terminal** and as a tab beside your files, and never in another app.*
+*A terminal inside Blitz's window. It runs your own shell in your workspace, with your prompt, your oh-my-zsh theme and its glyphs drawn in a bundled Nerd Font. It drops down from under the top menu, from the status bar's terminal button, ⌃` or the file tree's **Open in terminal**, and never opens in another app.*
 
 | | |
 |---|---|
 | Status | **Built** (2026-11-08, for v0.9.7; the owner: "I'd actually like the open in terminal not to open an external app, but to open a blitz native terminal emulator. I like the idea of the oh-my-zsh decorations being supported and a native Meslo (nerd font) integration."). macOS and Linux. Windows (ConPTY) is TRM-50, not built. |
-| Source | `pkg/terminal` (the PTY sessions: `Manager`, `Terminal`, their output kept as scrollback); `engine.Workspace.Terminals` (`pkg/engine/terminals.go`), closed with the workspace; `TerminalService` (`proto/blitz/v1/terminal.proto`, `pkg/service/server/terminal.go`); the page's terminal tab (`apps/desktop/web/src/terminal/`), MesloLGS Nerd Font (`apps/desktop/web/src/terminal/fonts/`), the tab in the editor area (`files/useEditor.ts`, `files/EditorPane.tsx`), **Open in terminal** in the file tree's menu (`files/FilesShelf.tsx`) |
+| Source | `pkg/terminal` (the PTY sessions: `Manager`, `Terminal`, their output kept as scrollback); `engine.Workspace.Terminals` (`pkg/engine/terminals.go`), closed with the workspace; `TerminalService` (`proto/blitz/v1/terminal.proto`, `pkg/service/server/terminal.go`); the page's terminal view (`apps/desktop/web/src/terminal/TerminalView.tsx`), MesloLGS Nerd Font (`apps/desktop/web/src/terminal/fonts/`), the drop-down drawer and its terminals (`terminal/TerminalDrawer.tsx`, `terminal/drawer.ts`, on `@blitz/webui`'s `Drawer`), the status bar's terminal button (`StatusBar.tsx`), **Open in terminal** in the file tree's menu (`files/FilesShelf.tsx`) |
 | Depends on | [spec_029_files](spec_029_files.md) (the editor's tabs, the file tree's menu), [spec_021_service](spec_021_service.md) (the API, SVC-30's reasons) |
 
 ## 1. Purpose
@@ -54,14 +54,15 @@ A developer keeps a terminal open beside their files: to run a build, check git,
 
 ## 4. The page
 
-- **TRM-20** **A tab beside your files.** A terminal opens as a tab in the editor area, like a web page's tab, titled with its folder's name (`shop`, `src`). It sits beside the files it works on and can be moved among them. The panel rules hold:
-  - the editor area is the primary view and gets the room;
-  - the side panels fold and resize around it;
-  - the Drawer's views slide down over it, and closing one leaves the terminal running and visible.
+- **TRM-20** **A drawer that drops down.** *2026-11-08 (the owner: "can the terminal be a dropdown drawer from the top like the yakuake terminal instead of a tabbed editor").* A workspace's terminals live in a drawer that slides down from under the top menu over the middle of the window, as the other views do (the shared `Drawer`), Yakuake-style. Inside it:
+  - a tab for each terminal, titled with its folder's name (`shop`, `src`), with a close button (middle-click closes too), and **+** for a new one;
+  - its height is yours: drag its bottom edge (double-click for the default, half the middle), and the window remembers it.
 
-  A bottom panel was weighed: it would take height from every file, and the window has no bottom panel today.
-- **TRM-21** **xterm.js.** The tab draws with `@xterm/xterm`, plus:
-  - `fit` to fill the tab and send its size on every resize (TRM-11);
+  It follows the drawer rules: clicking outside doesn't close it, the title bar still drags the window, and Escape is the shell's, so it doesn't close it either. Closing it only hides it: the shells keep running and their views stay drawn, so it comes back as it was. One drawer is down at a time; opening another view hides the terminal's.
+
+  Why a drawer, not editor tabs (the first build): a terminal is reached for, used and put away, and it belongs to the workspace, not to a file. The drawer keeps it a keystroke away without taking a tab among your files or room from the editor. A bottom panel was weighed: it would take height from every file, and the window has no bottom panel.
+- **TRM-21** **xterm.js.** The view draws with `@xterm/xterm`, plus:
+  - `fit` to fill the drawer and send its size on every resize (TRM-11);
   - `unicode11`, for the width of emoji and glyphs;
   - `web-links`, so a URL opens in the browser;
   - `search`, for **Find** (⌘F, Ctrl+Shift+F on Linux);
@@ -79,19 +80,22 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - the size is 8 to 32 pixels, 13 by default.
 
   They apply to open terminals at once.
-- **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown, so switching tabs loses nothing. A window that reloads lists the workspace's terminals and opens a tab for each (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. When the shell exits, the tab says so with the code and offers **Restart**, which opens a new terminal in the same folder.
+- **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown or the drawer is up, so nothing is lost. A window that reloads lists the workspace's terminals and puts a tab for each in the drawer (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. The drawer stays up after a reload: the terminals are there when you open it. When the shell exits, its view says so with the code and offers **Restart**, which opens a new terminal in the same folder, in the same tab.
 
 ## 5. Opening one
 
-- **TRM-30** **New terminal** is in the editor area's tab menu (the **+**) and in the command menu (⌘K, "terminal"). It opens a terminal in the workspace's folder.
-- **TRM-30a** *2026-11-08 (the owner: "we need an icon for the terminal in the status bar next to the Processes").* The status bar has a terminal button beside Processes: it opens a new terminal in the workspace’s folder, as **New terminal** does.
-- **TRM-31** **Open in terminal** in the file tree's menu opens a terminal in that folder, or in a file's folder.
+- **TRM-30** **New terminal** is the drawer's **+** and in the command menu (⌘K, "terminal"). It opens a terminal in the workspace's folder and drops the drawer down on it.
+- **TRM-30a** *2026-11-08 (the owner: "we need an icon for the terminal in the status bar next to the Processes"; then "it should also list the terminal windows open if one or more are open. This would allow the user to find the terminal").* The status bar has a terminal button beside Processes:
+  - with no terminal, it opens a new one in the workspace's folder, as **New terminal** does;
+  - with one or more, it opens a menu like Processes': each terminal by its folder's name, with its folder in the workspace and its shell (or how it ended), the one showing ticked, and a close button on each; then **New terminal**. A pick drops the drawer down on that terminal.
+- **TRM-30b** **⌃`** (Control-backtick, on every system, as in VS Code) drops the drawer down or puts it up, with a new terminal when there's none. The terminal doesn't send it to the shell. The command menu has it as **Show or hide the terminal**, with the key beside it.
+- **TRM-31** **Open in terminal** in the file tree's menu opens a terminal in that folder, or in a file's folder, and drops the drawer down on it.
 
 ## 6. Later
 
 - **TRM-50** Windows, through ConPTY (`creack/pty`'s Windows support, or `conpty` directly), with PowerShell as the default shell.
 - **TRM-51** Sharing a terminal's output with the agent, by the person's choice, as a context item (TRM-02 stays the default).
-- **TRM-52** Split terminals, and a terminal in a bottom panel for those who want one.
+- **TRM-52** Split terminals, and renaming a terminal's tab.
 
 ## 7. Tests
 
@@ -105,9 +109,9 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - several watchers see the same output.
 - **TRM-41** `TerminalService` through the server: open, write, watch, resize, list and close, and each error with its reason. Terminals close with the workspace.
 - **TRM-42** The page:
-  - the tab's state and its reconnecting offset, in unit tests;
+  - the drawer's state in unit tests: new, close, restart, hiding keeps the terminals, ⌃` toggles, a reload restores them once with the drawer up, the status bar's list;
   - the fake service's terminal echoes input;
-  - Playwright WebKit screenshots in `?fake` show powerline glyphs and ANSI colours in light and dark;
+  - Playwright WebKit screenshots in `?fake` show the drawer down with two tabs, the status bar's menu and the drawer up, with powerline glyphs and ANSI colours in light and dark;
   - the file tree's **Open in terminal**.
 - **TRM-43** **Manual:** in the desktop app, with oh-my-zsh and powerlevel10k:
   - the prompt draws with its glyphs;

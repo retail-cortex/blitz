@@ -48,6 +48,27 @@ describe("Drawer", () => {
   });
 });
 
+describe("Drawer kept while closed", () => {
+  it("stays mounted, hidden, with open false", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={settings} onClose={() => {}} open={false} style={{ height: 320 }}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).toMatch(/<aside[^>]* hidden=""[^>]*style="height:320px"/);
+    expect(html).toContain("<p>body</p>");
+  });
+
+  it("shows when open, whether Escape closes it or not", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={settings} onClose={() => {}} escapeCloses={false}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).not.toMatch(/<aside[^>]* hidden=""/);
+  });
+});
+
 describe("Dialog", () => {
   it("keeps the title bar dragging the window over its scrim", () => {
     const html = renderToStaticMarkup(

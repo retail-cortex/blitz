@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-// The window's terminals (spec_062_terminal): a terminal's tab is a path
-// of its own (term:<id>), like a web page's, and what it draws is worked
-// out here, apart from xterm.js, so it can be tested.
+// The window's terminals (spec_062_terminal): what a terminal draws is
+// worked out here, apart from xterm.js, so it can be tested; drawer.ts
+// keeps which terminals there are.
 
 /** The bundled font, with the system's monospace after it. */
 export const bundledFont = "MesloLGS Nerd Font Mono";
 
-/** A terminal's tab path. */
-export const termPath = (id: string) => `term:${id}`;
-
-/** Whether a tab is a terminal's. */
-export const isTermPath = (path: string) => path.startsWith("term:");
-
-/** The terminal a tab path names. */
-export const termId = (path: string) => path.slice("term:".length);
-
-/** A terminal tab's name: its folder's (the workspace's for ""). */
+/** A terminal's name: its folder's (the workspace's for ""). */
 export function termName(dir: string, workspace: string): string {
   const parts = (dir || workspace).split("/").filter(Boolean);
   return parts[parts.length - 1] || "/";

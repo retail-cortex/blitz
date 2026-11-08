@@ -16,16 +16,9 @@
 
 import { describe, expect, it } from "vitest";
 import { fakeBanner, fakePrompt, fakeTerminals } from "../dev/fakeTerminal";
-import { bundledFont, fontFamily, isTermPath, pathLinks, plainColor, termColors, termId, termKey, termName, termPath } from "./terminals";
+import { bundledFont, fontFamily, pathLinks, plainColor, termColors, termKey, termName } from "./terminals";
 
-describe("terminal tabs", () => {
-  it("are paths of their own", () => {
-    expect(termPath("term-1")).toBe("term:term-1");
-    expect(isTermPath("term:term-1")).toBe(true);
-    expect(isTermPath("src/term.go")).toBe(false);
-    expect(termId("term:term-1")).toBe("term-1");
-  });
-
+describe("terminals", () => {
   it.each([
     { dir: "", workspace: "/Users/me/shop", want: "shop" },
     { dir: "src/api", workspace: "/Users/me/shop", want: "api" },

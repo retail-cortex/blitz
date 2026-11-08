@@ -34,6 +34,8 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProcessesDrawer } from "./ProcessesDrawer";
+import { isToggleTerminalKey, newTerminal, restoreTerminals, toggleTerminals } from "./terminal/drawer";
+import { TerminalDrawer } from "./terminal/TerminalDrawer";
 import { PicturesDrawer, type PicturesStart } from "./pictures/PicturesDrawer";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
@@ -188,6 +190,21 @@ export function Workspace({
     setModal(null);
   }, []);
 
+  // The workspace's terminals the service still runs (a window that
+  // reloaded) go back in the drawer, which stays up (TRM-26).
+  useEffect(() => void restoreTerminals(dir), [dir]);
+  // ⌃` puts the shown workspace's terminal drawer down or up (TRM-30b).
+  useEffect(() => {
+    if (!visible) return;
+    const key = (e: KeyboardEvent) => {
+      if (!isToggleTerminalKey(e)) return;
+      e.preventDefault();
+      void toggleTerminals(dir).catch((err: unknown) => snack(message(err), { error: true }));
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [dir, visible, snack]);
+
   useEffect(() => {
     const onOpen = (e: Event) => {
       const d = (e as CustomEvent<OpenFileDetail>).detail;
@@ -205,12 +222,11 @@ export function Workspace({
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
     };
-    // A terminal opens in a tab of its own (TRM-30).
+    // A terminal opens in the drop-down drawer (TRM-30).
     const onTerminal = (e: Event) => {
       const d = (e as CustomEvent<OpenTerminalDetail>).detail;
       if (d.dir !== dir) return;
-      void editorRef.current.openTerminal(d.folder).catch((err: unknown) => snack(message(err), { error: true }));
-      setWide((w) => (w === "chat" ? "" : w));
+      void newTerminal(dir, d.folder).catch((err: unknown) => snack(message(err), { error: true }));
       setModal(null);
     };
     const onHistory = (e: Event) => {
@@ -332,7 +348,7 @@ export function Workspace({
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
             onCommit={() => setModal({ kind: "commit" })}
-            onTerminal={(folder) => void editor.openTerminal(folder).catch((e: unknown) => snack(message(e), { error: true }))}
+            onTerminal={(folder) => void newTerminal(dir, folder).catch((e: unknown) => snack(message(e), { error: true }))}
             active={editor.active}
             refresh={touched}
             poll={tick}
@@ -389,6 +405,7 @@ export function Workspace({
       )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "pictures" && <PicturesDrawer key={drawer.n} dir={dir} start={drawer.start} onClose={() => setDrawer(null)} />}
+      <TerminalDrawer dir={dir} visible={visible} onOpenFile={open} />
       {visible && drawer?.kind === "processes" && <ProcessesDrawer key={`${drawer.processIn ?? ""}#${drawer.process ?? ""}`} dir={dir} expand={drawer.process} expandIn={drawer.processIn} onClose={() => setDrawer(null)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} ask={studioAsk} onKind={setStudioKind} />}

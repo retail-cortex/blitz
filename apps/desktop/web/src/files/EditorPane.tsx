@@ -16,7 +16,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiConsole, mdiConsoleLine, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileTreeOutline,mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileTreeOutline,mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
 import { files } from "../api";
 import { canCall, canPreview, printPDF } from "../desktop";
 import { message } from "../errors";
@@ -29,8 +29,6 @@ import { Button, ContextMenu, Dialog, Icon, IconButton, Menu, Segmented, useSnac
 import { Preview } from "./Preview";
 import { WebPreview } from "./WebPreview";
 import { isWebPath } from "./webTabs";
-import { isTermPath } from "../terminal/terminals";
-import { TerminalView } from "../terminal/TerminalView";
 // The visual editor (TipTap) loads with the first Markdown file shown in it.
 const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
 import type { VisualSpot } from "./visual/VisualEditor";
@@ -76,12 +74,10 @@ export function EditorPane({
   const tab = model.tabs.find((x) => x.path === model.active);
   // A web page's tab (EL-100) shows its page, not a file.
   const web = tab?.web ? (tab as Tab & { web: NonNullable<Tab["web"]> }) : undefined;
-  // A terminal's tab (TRM-20) shows its terminal, not a file.
-  const terminal = !!tab?.terminal;
-  const ready = tab && !web && !terminal && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
+  const ready = tab && !web && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
   // Images and PDFs show as previews; Markdown and SVG can, and Markdown
   // does when it opens (FIL-54). views keeps each tab's choice.
-  const kind = tab && !web && !terminal ? previewKind(tab.path) : null;
+  const kind = tab && !web ? previewKind(tab.path) : null;
   const [views, setViews] = useState<ReadonlyMap<string, View>>(new Map());
   const atLine = !!tab && model.target?.path === tab.path && !!model.target.line;
   // A search hit in Markdown shows in the preview, its words marked.
@@ -393,8 +389,8 @@ export function EditorPane({
       "divider",
       item("saved", "desktop.files.tab.close_saved"),
       item("all", "desktop.files.tab.close_all"),
-      // A web page or a terminal has no revisions, and isn't in the tree.
-      ...(isWebPath(path) || isTermPath(path)
+      // A web page has no revisions, and isn't in the tree.
+      ...(isWebPath(path)
         ? []
         : [
             "divider" as const,
@@ -421,7 +417,7 @@ export function EditorPane({
               setTabMenu({ x: e.clientX, y: e.clientY, path: x.path });
             }}
           >
-            <Icon path={x.web ? mdiWeb : x.terminal ? mdiConsoleLine : fileIcon(x.name)} size="sm" />
+            <Icon path={x.web ? mdiWeb : fileIcon(x.name)} size="sm" />
             <span className="ellipsis">{x.name}</span>
             {x.dirty && <span className="dirty-dot" aria-label={t("desktop.files.unsaved")} />}
             <IconButton
@@ -436,7 +432,6 @@ export function EditorPane({
           </div>
         ))}
         <span className="spacer" />
-        <IconButton icon={mdiConsole} label={t("desktop.terminal.new")} small onClick={() => void model.openTerminal("").catch((e) => snack(message(e)))} />
         {canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} small onClick={() => openWeb({ dir: model.dir, url: "" })} />}
         {expand && (
           <IconButton
@@ -464,26 +459,7 @@ export function EditorPane({
         {advanced && <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />}
       </div>
       {web && <WebPreview key={web.path} tab={web} model={model} />}
-      {model.tabs.map(
-        (x) =>
-          x.terminal && (
-            <TerminalView
-              key={x.path}
-              workspace={model.dir}
-              tab={x as Tab & { terminal: NonNullable<Tab["terminal"]> }}
-              hidden={x.path !== model.active}
-              onExit={(code) => model.setTerminal(x.path, { exited: true, exitCode: code })}
-              onOpenFile={(path, line, column) => model.open(path, line, column)}
-              onRestart={() =>
-                void model.openTerminal(x.terminal!.dir).then(
-                  () => model.close(x.path),
-                  (e) => snack(message(e)),
-                )
-              }
-            />
-          ),
-      )}
-      {tab && !web && !terminal && (
+      {tab && !web && (
         <div className="editor-head">
           <nav className="crumbs ellipsis" aria-label={t("desktop.files.path")}>
             {tab.path.split("/").map((part, i, all) => (
@@ -543,9 +519,9 @@ export function EditorPane({
           </Button>
         </div>
       )}
-      {tab && !web && !terminal && <Bars tab={tab} model={model} />}
+      {tab && !web && <Bars tab={tab} model={model} />}
       {finding > 0 && findsPreview && <FindBar box={findBox} text={previewText ?? ""} focus={finding} onClose={() => setFinding(0)} />}
-      <div className="editor-body" hidden={!!web || terminal}>
+      <div className="editor-body" hidden={!!web}>
         <div className="editor-host" ref={host} hidden={!ready || showPreview} />
         {tab?.loading && <p className="editor-note muted">{t("desktop.checking")}</p>}
         {tab?.error && <p className="editor-note error-text">{tab.error}</p>}

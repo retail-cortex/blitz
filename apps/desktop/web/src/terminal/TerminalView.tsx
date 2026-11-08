@@ -29,7 +29,7 @@ import { openURL } from "../desktop";
 import { message } from "../errors";
 import { t } from "../i18n";
 import { useApp } from "../state";
-import type { Tab, TermTab } from "../files/useEditor";
+import { isToggleTerminalKey, type TermEntry } from "./drawer";
 import { bundledFont, fontFamily, pathLinks, termColors, termKey } from "./terminals";
 import "./terminal.css";
 
@@ -40,26 +40,29 @@ const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 const shown = (el: HTMLElement | null) => !!el && el.isConnected && el.offsetWidth > 0 && el.offsetHeight > 0;
 
 /**
- * A terminal's tab (spec_062_terminal TRM-20 to TRM-26): xterm.js drawing
- * the service's terminal, its output from the stream, its keys and size
- * sent back. It stays mounted while another tab is shown (hidden), so
- * nothing is replayed when it's shown again.
+ * A terminal in the drawer (spec_062_terminal TRM-20 to TRM-26): xterm.js
+ * drawing the service's terminal, its output from the stream, its keys and
+ * size sent back. It stays mounted while another terminal is shown or the
+ * drawer is up (hidden), so nothing is replayed when it's shown again.
  */
 export function TerminalView({
   workspace,
-  tab,
+  entry,
+  name,
   hidden,
   onExit,
   onOpenFile,
   onRestart,
 }: {
   workspace: string;
-  tab: Tab & { terminal: TermTab };
+  entry: TermEntry;
+  /** What it's called (its folder's name). */
+  name: string;
   hidden: boolean;
   onExit: (code: number) => void;
   /** Opens a workspace file the shell printed (a ⌘-click on its path). */
   onOpenFile: (path: string, line?: number, column?: number) => void;
-  /** Opens a new terminal in this one's folder, in place of it. */
+  /** Starts a new shell in this one's folder, in its place. */
   onRestart: () => void;
 }) {
   const { prefs, theme } = useApp();
@@ -71,8 +74,8 @@ export function TerminalView({
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const snack = useSnackbar();
-  const id = tab.terminal.id;
-  const exited = tab.terminal.exited;
+  const id = entry.id;
+  const exited = entry.exited;
   // The latest callbacks, for xterm's handlers made once.
   const calls = useRef({ onExit, onOpenFile, setFinding });
   calls.current = { onExit, onOpenFile, setFinding };
@@ -113,7 +116,7 @@ export function TerminalView({
             text: line.slice(l.start, l.end),
             decorations: { underline: true, pointerCursor: true },
             activate: (e: MouseEvent) => {
-              if (mac ? e.metaKey : e.ctrlKey) void openPrinted(workspace, tab.terminal.dir, l.path, (p) => calls.current.onOpenFile(p, l.line, l.column));
+              if (mac ? e.metaKey : e.ctrlKey) void openPrinted(workspace, entry.dir, l.path, (p) => calls.current.onOpenFile(p, l.line, l.column));
             },
           })),
         );
@@ -121,6 +124,7 @@ export function TerminalView({
     });
     // Copy, paste and find on the platform's keys (TRM-24); the rest is the shell's.
     x.attachCustomKeyEventHandler((e) => {
+      if (isToggleTerminalKey(e)) return false; // ⌃` is the drawer's (the window's handler), not the shell's
       const k = termKey(e, mac);
       if (k === "copy") {
         if (x.hasSelection()) void navigator.clipboard?.writeText(x.getSelection());
@@ -236,7 +240,7 @@ export function TerminalView({
   const paste = () => void navigator.clipboard?.readText().then((text) => term.current?.paste(text), () => {});
 
   return (
-    <div className="terminal-view" hidden={hidden} aria-label={t("desktop.terminal.label", { name: tab.name })}>
+    <div className="terminal-view" hidden={hidden} aria-label={t("desktop.terminal.label", { name })}>
       {finding && (
         <div className="find-bar" role="search">
           <Icon path={mdiMagnify} size="sm" />
@@ -276,7 +280,7 @@ export function TerminalView({
       {exited && (
         <div className="editor-bar" role="status">
           <Icon path={mdiConsoleLine} size="sm" />
-          <span className="spacer">{t("desktop.terminal.exited", { code: tab.terminal.exitCode ?? 0 })}</span>
+          <span className="spacer">{t("desktop.terminal.exited", { code: entry.exitCode ?? 0 })}</span>
           <Button small icon={mdiRestart} onClick={onRestart}>
             {t("desktop.terminal.restart")}
           </Button>

@@ -21,7 +21,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { setTransport } from "../api";
 import { FileService } from "../gen/blitz/v1/file_pb";
 import { LanguageService, ServerState } from "../gen/blitz/v1/language_pb";
-import { TerminalService } from "../gen/blitz/v1/terminal_pb";
 import type { EditorModel } from "./useEditor";
 import { openedPreviews } from "./webTabs";
 
@@ -138,49 +137,6 @@ describe("a workspace's editor", () => {
       delete files["a.txt"];
       await act(async () => void ed.ref.model!.check());
       expect(ed.ref.model!.tabs[0].disk).toBe("deleted");
-    } finally {
-      ed.unmount();
-    }
-  });
-});
-
-describe("a workspace's terminals (spec_062_terminal)", () => {
-  it("open as tabs, come back for a window that reloads, and end when closed", async () => {
-    const calls: string[] = [];
-    const running = [{ id: "term-old", dir: "src", shell: "/bin/zsh", exited: false, exitCode: 0 }];
-    setTransport(
-      createRouterTransport(({ service }) => {
-        service(FileService, { statFiles: (r) => (calls.push(`stat ${r.paths.join(",")}`), { versions: {} }) });
-        service(TerminalService, {
-          listTerminals: () => ({ terminals: running }),
-          openTerminal: (r) => (calls.push(`open ${r.dir}`), { terminal: { id: "term-new", dir: r.dir, shell: "/bin/zsh" } }),
-          closeTerminal: (r) => (calls.push(`close ${r.id}`), {}),
-        });
-      }),
-    );
-    const ed = mount("/w/shop");
-    try {
-      // The one still running gets its tab back, not shown over what was.
-      await vi.waitFor(() => expect(ed.ref.model!.tabs.map((t) => t.path)).toEqual(["term:term-old"]));
-      expect(ed.ref.model!.tabs[0]).toMatchObject({ name: "src", terminal: { id: "term-old", dir: "src" } });
-      expect(ed.ref.model!.active).toBeNull();
-
-      let path = "";
-      await act(async () => void (path = await ed.ref.model!.openTerminal("")));
-      expect(path).toBe("term:term-new");
-      expect(ed.ref.model!.active).toBe("term:term-new");
-      expect(ed.ref.model!.tabs[1]).toMatchObject({ name: "shop", terminal: { id: "term-new", dir: "" } });
-
-      act(() => ed.ref.model!.setTerminal("term:term-new", { exited: true, exitCode: 2 }));
-      expect(ed.ref.model!.tabs[1].terminal).toMatchObject({ exited: true, exitCode: 2 });
-
-      await act(async () => void ed.ref.model!.check());
-      expect(calls.filter((c) => c.startsWith("stat")), "a terminal isn't a file to check").toEqual([]);
-
-      act(() => ed.ref.model!.close("term:term-new"));
-      await vi.waitFor(() => expect(calls).toContain("close term-new"));
-      expect(ed.ref.model!.tabs.map((t) => t.path)).toEqual(["term:term-old"]);
-      expect(calls).toContain("open ");
     } finally {
       ed.unmount();
     }

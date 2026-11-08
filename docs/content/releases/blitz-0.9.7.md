@@ -8,7 +8,7 @@ A terminal built into Blitz, a file tree that keeps up with your work, pictures 
 ### Get started
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.7).
-2. Right-click a folder in **Files** and choose **Open in terminal**: your shell, your prompt, right beside your files.
+2. Press ⌃` (Ctrl+` on Linux): your shell drops down from the top of the window. Press it again to tuck it away.
 3. In **Files**, select a few files with ⌘-click, press ⌘C, pick a folder and press ⌘V. Delete one by mistake? Press **Undo**.
 4. In the terminal, try `blitz picture "a lighthouse at dusk" -n 2` or `blitz data query recipes "select title from recipes"`.
 
@@ -16,7 +16,9 @@ A terminal built into Blitz, a file tree that keeps up with your work, pictures 
 
 **A terminal, built in.**
 
-- **Open in terminal** on any folder, the terminal button beside Processes in the status bar, or **New terminal** from ⌘K opens your own shell in a tab beside your files.
+- Your terminal drops down from under the top menu, Yakuake-style, with ⌃` and tucks away again, still running. Drag its edge to the height you like; Blitz remembers it.
+- Keep several terminals as tabs in the drawer. The terminal button beside Processes lists them, so you can jump to the one you want, or start a new one.
+- **Open in terminal** on any folder, or **New terminal** from ⌘K, opens a shell right there.
 - oh-my-zsh and powerlevel10k prompts look right: full colour, powerline segments and icons, with the MesloLGS Nerd Font included.
 - Copy, paste and find on the usual keys; ⌘-click a file path the terminal prints to open it at that line.
 - It's your terminal, not the agent's: the agents can't read it.

@@ -45,9 +45,18 @@
   font-display: block;
 }
 
-/* The tab's terminal fills the editor area, as a file's text does. */
+/* A terminal fills the drawer under its tabs. */
 .terminal-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--md-surface-container-lowest); }
 .terminal-view[hidden] { display: none; }
 .terminal-host { flex: 1; min-height: 0; padding: 8px 4px 4px 12px; }
 .terminal-host .xterm { height: 100%; }
 .terminal-host .xterm-viewport { background: transparent !important; }
+
+/* The drop-down drawer (TRM-20): it slides down from under the top menu
+   over the window's middle, Yakuake-style, half the window high until its
+   bottom edge is dragged; the chat's input stays below it. */
+.drawer.terminal-drawer { bottom: auto; height: 50%; min-height: 160px; border-bottom: 1px solid var(--md-outline-variant); }
+:root[data-glass="on"] .drawer.terminal-drawer { bottom: auto; }
+.drawer.terminal-drawer > .body { position: relative; padding: 0; gap: 0; overflow: hidden; }
+.terminal-drawer-resize { position: absolute; left: 0; right: 0; bottom: -4px; height: 8px; cursor: row-resize; z-index: 5; border-radius: 4px; }
+.terminal-drawer-resize:hover, body.resizing .terminal-drawer-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
