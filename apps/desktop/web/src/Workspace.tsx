@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { changesAfter, filesTouchedEvent, goToFile, historyEvent, openFileEvent, openTerminalEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenTerminalDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -34,6 +34,8 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProcessesDrawer } from "./ProcessesDrawer";
+import { isToggleTerminalKey, newTerminal, restoreTerminals, toggleTerminals } from "./terminal/drawer";
+import { TerminalDrawer } from "./terminal/TerminalDrawer";
 import { PicturesDrawer, type PicturesStart } from "./pictures/PicturesDrawer";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
@@ -175,6 +177,9 @@ export function Workspace({
   });
   const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [touched, setTouched] = useState(0);
+  // Every 5 seconds while files are shown: open tabs are checked, and the
+  // tree lists again only while the service can't watch it (FIL-33b).
+  const [tick, setTick] = useState(0);
   const editorRef = useRef(editor);
   editorRef.current = editor;
   const showsFiles = prefs.files || editor.tabs.length > 0;
@@ -184,6 +189,21 @@ export function Workspace({
     setWide((w) => (w === "chat" ? "" : w));
     setModal(null);
   }, []);
+
+  // The workspace's terminals the service still runs (a window that
+  // reloaded) go back in the drawer, which stays up (TRM-26).
+  useEffect(() => void restoreTerminals(dir), [dir]);
+  // ⌃` puts the shown workspace's terminal drawer down or up (TRM-30b).
+  useEffect(() => {
+    if (!visible) return;
+    const key = (e: KeyboardEvent) => {
+      if (!isToggleTerminalKey(e)) return;
+      e.preventDefault();
+      void toggleTerminals(dir).catch((err: unknown) => snack(message(err), { error: true }));
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [dir, visible, snack]);
 
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -202,6 +222,13 @@ export function Workspace({
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
     };
+    // A terminal opens in the drop-down drawer (TRM-30).
+    const onTerminal = (e: Event) => {
+      const d = (e as CustomEvent<OpenTerminalDetail>).detail;
+      if (d.dir !== dir) return;
+      void newTerminal(dir, d.folder).catch((err: unknown) => snack(message(err), { error: true }));
+      setModal(null);
+    };
     const onHistory = (e: Event) => {
       const d = (e as CustomEvent<HistoryDetail>).detail;
       if (d.dir === dir) setDrawer({ kind: "history", path: d.path, folder: d.folder });
@@ -215,6 +242,7 @@ export function Workspace({
     };
     window.addEventListener(openFileEvent, onOpen);
     window.addEventListener(openWebEvent, onWeb);
+    window.addEventListener(openTerminalEvent, onTerminal);
     window.addEventListener(revealInTreeEvent, onReveal);
     window.addEventListener(historyEvent, onHistory);
     window.addEventListener(filesTouchedEvent, onTouched);
@@ -222,6 +250,7 @@ export function Workspace({
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
       window.removeEventListener(openWebEvent, onWeb);
+      window.removeEventListener(openTerminalEvent, onTerminal);
       window.removeEventListener(revealInTreeEvent, onReveal);
       window.removeEventListener(historyEvent, onHistory);
       window.removeEventListener(filesTouchedEvent, onTouched);
@@ -231,12 +260,12 @@ export function Workspace({
   // While files are shown, look for changes made elsewhere every 5 seconds.
   useEffect(() => {
     if (!visible || !showsFiles) return;
-    const timer = setInterval(() => setTouched((n) => n + 1), 5000);
+    const timer = setInterval(() => setTick((n) => n + 1), 5000);
     return () => clearInterval(timer);
   }, [visible, showsFiles]);
   useEffect(() => {
-    if (touched) void editorRef.current.check();
-  }, [touched]);
+    if (touched || tick) void editorRef.current.check();
+  }, [touched, tick]);
 
 
   useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
@@ -319,12 +348,15 @@ export function Workspace({
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
             onCommit={() => setModal({ kind: "commit" })}
+            onTerminal={(folder) => void newTerminal(dir, folder).catch((e: unknown) => snack(message(e), { error: true }))}
             active={editor.active}
             refresh={touched}
+            poll={tick}
             reveal={reveal}
             onOpen={open}
             onMoved={editor.moved}
             onChanged={() => setTouched((n) => n + 1)}
+            onDiskChange={() => void editorRef.current.check()}
             onClose={() => update((p) => ({ ...p, files: false }))}
           />
         ) : (
@@ -352,7 +384,7 @@ export function Workspace({
               onResize={(w) => update((p) => ({ ...p, chat_width: w }))}
             />
           )}
-          <FileLinksProvider dir={dir} refresh={touched}>
+          <FileLinksProvider dir={dir} refresh={touched + tick}>
             <Conversation
               dir={dir}
               name={name}
@@ -373,6 +405,7 @@ export function Workspace({
       )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "pictures" && <PicturesDrawer key={drawer.n} dir={dir} start={drawer.start} onClose={() => setDrawer(null)} />}
+      <TerminalDrawer dir={dir} visible={visible} onOpenFile={open} />
       {visible && drawer?.kind === "processes" && <ProcessesDrawer key={`${drawer.processIn ?? ""}#${drawer.process ?? ""}`} dir={dir} expand={drawer.process} expandIn={drawer.processIn} onClose={() => setDrawer(null)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} closeRequest={studioClose} ask={studioAsk} onKind={setStudioKind} />}

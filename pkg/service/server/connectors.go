@@ -23,6 +23,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/engine/databases"
@@ -363,8 +364,8 @@ func (h workspaceService) RunConnectorQuery(ctx context.Context, r req[pb.RunCon
 	if err != nil {
 		return nil, err
 	}
-	if r.Msg.Connection == nil {
-		return nil, invalid(errors.New("connection is required"))
+	if r.Msg.Connection == nil && r.Msg.ConnectionName == "" {
+		return nil, invalid(errors.New("connection or connection_name is required"))
 	}
 	run := connectors.QueryRun{Query: r.Msg.Query, Statement: r.Msg.Statement, MaxRows: int(r.Msg.MaxRows), ReadOnly: r.Msg.ReadOnly}
 	if run.Query != "" {
@@ -374,6 +375,14 @@ func (h workspaceService) RunConnectorQuery(ctx context.Context, r req[pb.RunCon
 	}
 	if err != nil {
 		return ok(&pb.RunConnectorQueryResponse{Problem: err.Error()})
+	}
+	if r.Msg.Connection == nil { // by name, as the CLI asks (DAT-45)
+		t, err := w.RunDataQuery(ctx, api.DataQuery{Connection: r.Msg.ConnectionName, Query: run.Query, Named: run.Named,
+			Statement: run.Statement, Params: run.Params, MaxRows: run.MaxRows})
+		if err != nil {
+			return ok(&pb.RunConnectorQueryResponse{Problem: redact.Mask(err.Error())})
+		}
+		return ok(&pb.RunConnectorQueryResponse{Table: apiTableMsg(t)})
 	}
 	t, err := w.RunConnectorQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, run)
 	if err != nil {
@@ -421,6 +430,36 @@ func dataTableMsg(t datatable.Table) (*pb.DataTable, error) {
 		out.Columns = append(out.Columns, &pb.DataColumn{Name: c.Name, Description: c.Description, Type: c.Type, Length: c.Length, DbType: c.DBType, Nullable: c.Nullable})
 	}
 	return out, nil
+}
+
+// apiTableMsg is t (already masked) as the API carries it.
+func apiTableMsg(t api.DataTable) *pb.DataTable {
+	rows, _ := json.Marshal(t.Rows) // what DataTableFrom read from JSON
+	out := &pb.DataTable{RowsJson: string(rows), Total: int32(t.Total), Truncated: t.Truncated, Markdown: t.Markdown}
+	for _, c := range t.Columns {
+		out.Columns = append(out.Columns, &pb.DataColumn{Name: c.Name, Description: c.Description, Type: c.Type, Length: c.Length, DbType: c.DBType, Nullable: c.Nullable})
+	}
+	return out
+}
+
+func (h workspaceService) ListDataConnections(ctx context.Context, r req[pb.ListDataConnectionsRequest]) (*connect.Response[pb.ListDataConnectionsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	conns, err := w.DataConnections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListDataConnectionsResponse{}
+	for _, c := range conns {
+		dc := &pb.DataConnection{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: redact.Mask(c.Problem)}
+		for _, q := range c.Queries {
+			dc.Queries = append(dc.Queries, &pb.DataQueryInfo{Name: q.Name, Description: q.Description, Params: q.Params})
+		}
+		out.Connections = append(out.Connections, dc)
+	}
+	return ok(out)
 }
 
 func (h workspaceService) DraftConnectorQuery(ctx context.Context, r req[pb.DraftConnectorQueryRequest]) (*connect.Response[pb.DraftConnectorQueryResponse], error) {

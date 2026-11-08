@@ -32,6 +32,8 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
+import { TerminalService } from "../gen/blitz/v1/terminal_pb";
+import { fakeTerminals } from "./fakeTerminal";
 import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, WorkspaceProcessSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
@@ -1041,6 +1043,9 @@ const fakeProfileOf = new Map<string, string>();
 // Files being uploaded (dropped from the computer), by upload id.
 const fakeUploads = new Map<string, string>();
 let fakeUploadSeq = 0;
+// What an undoable delete moved to the workspace's trash, by restore ID.
+const fakeTrash = new Map<string, Map<string, string>>();
+let fakeTrashSeq = 0;
 
 // Pictures (spec_058): the models offered, sessions and the pictures' SVGs.
 const fakeGeminiRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"];
@@ -2575,10 +2580,12 @@ export function installFake() {
         removePermissionRule: ({ rule }) => ({ rule }),
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
-        searchWorkspace: ({ query, sources }) => {
+        searchWorkspace: ({ query, sources, folder }) => {
           const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-          const want = sources.length ? sources : ["files", "documents"];
-          return { sources: want, hits: fakeSearchCorpus.filter((h) => want.includes(h.source) && words.every((w) => `${h.ref} ${h.title} ${h.snippet}`.toLowerCase().includes(w))) };
+          let want = sources.length ? sources : ["files", "documents"];
+          if (folder) want = want.filter((s) => s === "files" || s === "documents"); // chats and notes aren't in a folder (SRCH-18)
+          const under = (ref: string) => !folder || ref === folder || ref.startsWith(folder + "/");
+          return { sources: want, hits: fakeSearchCorpus.filter((h) => want.includes(h.source) && under(h.ref) && words.every((w) => `${h.ref} ${h.title} ${h.snippet}`.toLowerCase().includes(w))) };
         },
         getSearchStatus: ({ workspace }) => {
           const settings = searchSettingsOf(workspace);
@@ -3391,6 +3398,7 @@ export function installFake() {
           return { ...change(workspace), warnings: text.includes("sk-") ? ["[llm.anthropic] api_key is written as plain text: set it in Providers & keys to keep it in the keychain"] : [] };
         },
       });
+      service(TerminalService, fakeTerminals());
       service(FileService, {
         listDir: ({ path, showHidden }) => {
           const prefix = path ? path + "/" : "";
@@ -3538,8 +3546,30 @@ export function installFake() {
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
         },
-        deleteFile: ({ path }) => {
-          for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
+        deleteFile: ({ path, undoable }) => {
+          const held = new Map<string, string>();
+          for (const [p, v] of [...fakeFiles]) {
+            if (p === path || p.startsWith(path + "/")) {
+              held.set(p, v);
+              fakeFiles.delete(p);
+            }
+          }
+          if (!undoable) return {};
+          const restoreId = `trash-${++fakeTrashSeq}`;
+          fakeTrash.set(restoreId, held);
+          return { restoreId };
+        },
+        restoreFile: ({ restoreId, path }) => {
+          const held = fakeTrash.get(restoreId);
+          if (!held) throw new ConnectError("it's no longer in the workspace's trash", Code.NotFound);
+          if ([...fakeFiles.keys()].some((p) => p === path || p.startsWith(path + "/"))) throw new ConnectError(`${path}: file already exists`, Code.AlreadyExists);
+          for (const [p, v] of held) fakeFiles.set(p, v);
+          fakeTrash.delete(restoreId);
+          return {};
+        },
+        copyFile: ({ from, to }) => {
+          if ([...fakeFiles.keys()].some((p) => p === to || p.startsWith(to + "/"))) throw new ConnectError(`${to}: file already exists`, Code.AlreadyExists);
+          for (const [p, v] of [...fakeFiles]) if (p === from || p.startsWith(from + "/")) fakeFiles.set(to + p.slice(from.length), v);
           return {};
         },
         findFiles: ({ query, folders, limit, extensions }) => {
@@ -3593,6 +3623,12 @@ export function installFake() {
           return { data: new TextEncoder().encode("PK fake docx\n" + markdown) };
         },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
+        // The watch is on (FIL-33b) and stays open until the page stops it;
+        // the fake's files change only through the page, which lists them.
+        async *watchFiles(_r, ctx) {
+          yield { folders: [], polling: false };
+          await new Promise<void>((done) => (ctx.signal.aborted ? done() : ctx.signal.addEventListener("abort", () => done())));
+        },
       });
       service(WorkerService, {
         createWorker: (r) => {

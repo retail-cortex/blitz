@@ -375,3 +375,82 @@ func TestProviderToolResult(t *testing.T) {
 	assert.Equal(t, "b", span("abc", 1.0, 2.0))
 	assert.Equal(t, -1, index("x"))
 }
+
+// The Gemini API refuses its built-in tools beside function calling unless
+// asked for the server-side invocations; Vertex AI takes no such field.
+func TestServerSideInvocations(t *testing.T) {
+	t.Run("built-in tools beside functions", func(t *testing.T) {
+		req := withProviderTools(declaring("web_search", "read_file"), []string{ptWebSearch})
+		req.Config.ToolConfig = &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAuto}}
+		got := withServerSideInvocations(req)
+		require.NotNil(t, got.Config.ToolConfig.IncludeServerSideToolInvocations)
+		assert.True(t, *got.Config.ToolConfig.IncludeServerSideToolInvocations)
+		assert.Equal(t, genai.FunctionCallingConfigModeAuto, got.Config.ToolConfig.FunctionCallingConfig.Mode, "the rest of the tool config kept")
+		assert.Nil(t, req.Config.ToolConfig.IncludeServerSideToolInvocations, "the shared request is unchanged")
+	})
+	for name, req := range map[string]*model.LLMRequest{
+		"functions only":      declaring("read_file"),
+		"built-in tools only": withProviderTools(declaring("web_search"), []string{ptWebSearch}),
+		"no config":           {},
+		"none":                nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Same(t, req, withServerSideInvocations(req))
+		})
+	}
+	t.Run("only on the Gemini API", func(t *testing.T) {
+		for _, tc := range []struct {
+			configured string
+			want       bool
+		}{{"", true}, {"vertex", false}} {
+			inner := &refusing{name: "gemini-3.8-flash"}
+			m := &settingsModel{inner: inner, provider: "gemini", configured: tc.configured}
+			for range m.GenerateContent(t.Context(), declaring("web_search", "read_file"), false) {
+			}
+			require.Len(t, inner.requests, 1)
+			cfg := inner.requests[0].Config
+			require.NotEmpty(t, builtinKinds(cfg), tc.configured)
+			on := cfg.ToolConfig != nil && cfg.ToolConfig.IncludeServerSideToolInvocations != nil && *cfg.ToolConfig.IncludeServerSideToolInvocations
+			assert.Equal(t, tc.want, on, tc.configured)
+		}
+	})
+}
+
+// With server-side invocations, Gemini's answer carries its own tool calls
+// and results: they're tagged and kept for Gemini, read as client calls by
+// any other model, and no search parts are made from the grounding.
+func TestGeminiOwnToolParts(t *testing.T) {
+	geminiO := Origin{"gemini", "gemini", "gemini-3.8-flash"}
+	claudeO := Origin{"anthropic", "anthropic", "claude-opus-5-5"}
+	call := &genai.Part{ToolCall: &genai.ToolCall{ID: "s1", ToolType: genai.ToolTypeGoogleSearchWeb, Args: map[string]any{"queries": []any{"recipes"}}}, ThoughtSignature: []byte("sig")}
+	result := &genai.Part{ToolResponse: &genai.ToolResponse{ID: "s1", ToolType: genai.ToolTypeGoogleSearchWeb, Response: map[string]any{"result": "found"}}}
+	fetch := &genai.Part{ToolCall: &genai.ToolCall{ID: "u1", ToolType: genai.ToolTypeURLContext, Args: map[string]any{"url": "https://a"}}}
+	maps := &genai.Part{ToolCall: &genai.ToolCall{ID: "m1", ToolType: genai.ToolTypeGoogleMaps}}
+	resp := &model.LLMResponse{
+		Content: &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{call, result, fetch, maps, genai.NewPartFromText("Here.")}},
+		GroundingMetadata: &genai.GroundingMetadata{WebSearchQueries: []string{"recipes"},
+			GroundingChunks: []*genai.GroundingChunk{{Web: &genai.GroundingChunkWeb{URI: "https://b", Title: "B"}}}},
+	}
+	geminiProviderTools(geminiO, resp)
+	require.Len(t, resp.Content.Parts, 5, "no search parts made from the grounding")
+	assert.Equal(t, ptWebSearch, call.PartMetadata[providerToolKey])
+	assert.Equal(t, ptWebSearch, result.PartMetadata[providerToolKey])
+	assert.Equal(t, ptWebFetch, fetch.PartMetadata[providerToolKey])
+	assert.Nil(t, maps.PartMetadata[providerToolKey], "a tool Blitz doesn't offer has no kind")
+	assert.Equal(t, geminiO.key(), maps.PartMetadata[providerOriginKey], "but is Gemini's own")
+	assert.Equal(t, map[string]int{ptWebSearch: 1, ptWebFetch: 1}, resp.CustomMetadata[ProviderToolRequestsKey])
+	assert.Equal(t, []Citation{{Title: "B", URL: "https://b"}}, Citations(resp), "the grounding still cites")
+
+	history := []*genai.Content{genai.NewContentFromText("find recipes", genai.RoleUser), resp.Content}
+	got, named := asClientCalls(geminiO, history)
+	assert.Empty(t, named)
+	assert.Equal(t, []*genai.Part{call, result, fetch, maps}, got[1].Parts[:4], "Gemini gets its own back, signature and all")
+
+	got, named = asClientCalls(claudeO, history)
+	assert.True(t, named[ptWebSearch])
+	assert.True(t, named[ptWebFetch])
+	require.NotNil(t, got[1].Parts[0].FunctionCall)
+	assert.Equal(t, ptWebSearch, got[1].Parts[0].FunctionCall.Name, "another model reads a call of the client tool")
+	require.NotNil(t, got[2].Parts[0].FunctionResponse)
+	assert.Equal(t, map[string]any{"result": "found"}, got[2].Parts[0].FunctionResponse.Response)
+}

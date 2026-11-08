@@ -74,7 +74,41 @@ func NewPainter(ctx context.Context, cfg *config.Config) (tools.Painter, error) 
 	if u, err := url.Parse(cc.HTTPOptions.BaseURL); err == nil && u.Host != "" {
 		host = u.Hostname()
 	}
+	info, known := images.Lookup(name)
+	if known && info.Kind == images.KindImagen { // spec_058 PIC-81: Imagen draws through generateImages
+		return &imagenPainter{pictures: &geminiPictures{img: client.Models, name: name, info: info, host: host}}, nil
+	}
+	if known && info.Kind == images.KindGemini {
+		return &catalogPainter{Painter: &geminiPainter{models: client.Models, model: name, host: host}, info: info}, nil
+	}
 	return &geminiPainter{models: client.Models, model: name, host: host}, nil
+}
+
+// catalogPainter is a painter whose model the catalog knows: generate_image
+// takes its references, shapes, sizes and count (PIC-81).
+type catalogPainter struct {
+	tools.Painter
+	info images.Model
+}
+
+func (c *catalogPainter) Info() images.Model { return c.info }
+
+// imagenPainter draws with Imagen for generate_image: the prompt alone, 1
+// to 4 pictures (PIC-81).
+type imagenPainter struct{ pictures *geminiPictures }
+
+func (p *imagenPainter) Model() string      { return p.pictures.Model() }
+func (p *imagenPainter) Host() string       { return p.pictures.Host() }
+func (p *imagenPainter) Info() images.Model { return p.pictures.Info() }
+
+func (p *imagenPainter) Paint(ctx context.Context, req tools.PaintRequest) (*tools.Picture, error) {
+	ans, err := p.pictures.imagen(ctx, PictureCall{Prompt: req.Prompt, Count: req.Count, AspectRatio: req.AspectRatio, Size: req.Size})
+	if err != nil {
+		return nil, err
+	}
+	pic := ans.Pictures[0]
+	pic.More = ans.Pictures[1:]
+	return &pic, nil
 }
 
 // geminiPainter draws with a Gemini image model, which answers with the

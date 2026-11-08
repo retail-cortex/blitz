@@ -320,6 +320,18 @@ type Completer struct {
 	commands  map[string][]string        // command -> static argument choices
 	dynamic   map[string]func() []string // command -> argument choices computed on demand
 	workspace string
+	// mentions are the databases' @db: references, without the @
+	// (spec_059_data DAT-45).
+	mentions func() []string
+}
+
+// Mentions registers a function supplying @db: references beside the
+// workspace's paths, without the @; it's asked only when what's typed
+// could be one (@, @d, @db:…).
+func (c *Completer) Mentions(f func() []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mentions = f
 }
 
 // NewCompleter creates a completer rooted at workspace.
@@ -371,7 +383,13 @@ func (c *Completer) Do(line []rune, pos int) ([][]rune, int) {
 		}
 		c.mu.RUnlock()
 	case strings.HasPrefix(current, "@"):
-		candidates = c.paths(current[1:])
+		c.mu.RLock()
+		mentions := c.mentions
+		c.mu.RUnlock()
+		if ref := current[1:]; mentions != nil && (strings.HasPrefix("db:", ref) || strings.HasPrefix(ref, "db:")) {
+			candidates = mentions()
+		}
+		candidates = append(candidates, c.paths(current[1:])...)
 		for i := range candidates {
 			candidates[i] = "@" + candidates[i]
 		}

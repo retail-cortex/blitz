@@ -48,6 +48,40 @@ describe("Drawer", () => {
   });
 });
 
+describe("Drawer kept while closed", () => {
+  it("stays mounted, hidden, with open false", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={settings} onClose={() => {}} open={false} style={{ height: 320 }}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).toMatch(/<aside[^>]* hidden=""[^>]*style="height:320px"/);
+    expect(html).toContain("<p>body</p>");
+  });
+
+  it("shows when open, whether Escape closes it or not", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={settings} onClose={() => {}} escapeCloses={false}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).not.toMatch(/<aside[^>]* hidden=""/);
+  });
+});
+
+describe("Drawer with its header below", () => {
+  it("puts the header under the body, the title's place holding what it's given, named by its label", () => {
+    const html = renderToStaticMarkup(
+      <Drawer title={<span role="tablist">tabs</span>} label="Terminal" headBelow onClose={() => {}}>
+        <p>{body}</p>
+      </Drawer>,
+    );
+    expect(html).toContain('aria-label="Terminal"');
+    expect(html).toMatch(/<p>body<\/p><\/div><header class="drawer-head below"><div class="drawer-title spacer"><span role="tablist">tabs<\/span><\/div>/);
+    expect(html).not.toContain("<h2");
+  });
+});
+
 describe("Dialog", () => {
   it("keeps the title bar dragging the window over its scrim", () => {
     const html = renderToStaticMarkup(

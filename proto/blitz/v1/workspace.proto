@@ -445,8 +445,16 @@ service WorkspaceService {
   // Runs a statement, or one of a connection's saved queries, on the
   // connection as written and returns its result as a table: its columns
   // as the database describes them, its rows (spec_059_data DAT-50; the
-  // try capability). problem says why it didn't run.
+  // try capability). problem says why it didn't run. With
+  // connection_name instead, it runs read-only on the workspace's
+  // connection of that name, as a chat finds it (the CLI's blitz data,
+  // spec_059_data DAT-45).
   rpc RunConnectorQuery(RunConnectorQueryRequest) returns (RunConnectorQueryResponse);
+  // Lists the workspace's database connections and their saved queries,
+  // one of each name (the workspace's over a global one), as a chat
+  // finds them (the CLI's /data and blitz data list, spec_059_data
+  // DAT-45).
+  rpc ListDataConnections(ListDataConnectionsRequest) returns (ListDataConnectionsResponse);
   // Runs one of Blitz's own commands for the CLI's blitz do
   // (spec_060_blitz_tools DRV-02): help, the result, or what the person
   // confirms first (and the secrets it needs) until confirm is set.
@@ -2342,6 +2350,10 @@ message SearchWorkspaceRequest {
   // Include hidden items: dotfiles, files git ignores (the desktop app
   // asks for them when it shows hidden files).
   bool hidden = 6;
+  // Only the files and documents under this folder (relative to the
+  // workspace, "/" separated; "" for the whole workspace): the Files
+  // shelf's Find in folder (SRCH-18). Chats and notes aren't in a folder.
+  string folder = 7;
 }
 
 // SearchHit is one item workspace search found.
@@ -4599,6 +4611,42 @@ message RunConnectorQueryRequest {
   int32 max_rows = 7;
   // Refuses a statement that writes, whatever the connection allows.
   bool read_only = 8;
+  // Or, in place of connection, one of the workspace's connections by
+  // name: on, trusted and readable, run read-only (DAT-45).
+  string connection_name = 9;
+}
+
+// Request message for WorkspaceService.ListDataConnections.
+message ListDataConnectionsRequest {
+  string workspace = 1;
+}
+
+// One of a database connection's saved queries.
+message DataQueryInfo {
+  string name = 1;
+  string description = 2;
+  // Its parameters' names, in order.
+  repeated string params = 3;
+}
+
+// A database connection as the CLI lists it (spec_059_data DAT-45).
+message DataConnection {
+  string name = 1;
+  // Its kind's ID (sqlite, postgres, bigquery…).
+  string kind = 2;
+  bool read_only = 3;
+  // It's on in this workspace.
+  bool on = 4;
+  // The person trusted it.
+  bool trusted = 5;
+  // Why it can't be read ("" when it can).
+  string problem = 6;
+  repeated DataQueryInfo queries = 7;
+}
+
+// Response message for WorkspaceService.ListDataConnections.
+message ListDataConnectionsResponse {
+  repeated DataConnection connections = 1;
 }
 
 // A column of a query's result (spec_059_data DAT-02).

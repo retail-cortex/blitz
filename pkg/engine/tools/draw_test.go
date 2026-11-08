@@ -70,7 +70,7 @@ func TestGenerateImage(t *testing.T) {
 	}{
 		{name: "a picture", args: map[string]any{"prompt": "a red fox at dawn", "path": "images/fox.png", "aspect_ratio": "16:9", "size": "2k"}, network: true, wantOut: "images/fox.png",
 			check: func(t *testing.T, f *fakePainter, out map[string]any) {
-				assert.Equal(t, PaintRequest{Prompt: "a red fox at dawn", AspectRatio: "16:9", Size: "2K"}, f.got[0])
+				assert.Equal(t, PaintRequest{Prompt: "a red fox at dawn", AspectRatio: "16:9", Size: "2K", Count: 1}, f.got[0])
 				assert.Equal(t, "gemini/image", out["model"])
 				assert.Equal(t, "Here it is.", out["text"])
 				assert.Equal(t, "image/png", out["mime_type"])
@@ -101,6 +101,7 @@ func TestGenerateImage(t *testing.T) {
 		{name: "the workspace itself", args: map[string]any{"prompt": "x", "path": "."}, network: true, wantErr: "must name a file"},
 		{name: "the model fails", args: map[string]any{"prompt": "x", "path": "o.png"}, network: true, fail: errors.New("quota"), wantErr: "drawing failed: quota"},
 		{name: "no image model", args: map[string]any{"prompt": "x", "path": "o.png"}, network: true, noModel: errors.New("no key"), wantErr: "drawing isn't available: no key"},
+		{name: "one at a time", args: map[string]any{"prompt": "x", "path": "o.png", "count": 2}, network: true, wantErr: "makes one picture at a time"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -259,4 +260,116 @@ func TestGenerateImageTargets(t *testing.T) {
 	got := CallTargets("generate_image", map[string]any{"path": "o.png", "images": []any{"a.png", 3, "b.png"}})
 	assert.Equal(t, []string{"a.png", "b.png"}, got[RuleRead])
 	assert.Equal(t, []string{"o.png"}, got[RuleWrite])
+}
+
+// catalogPainter is a fakePainter whose model the catalog describes: it
+// makes as many pictures as asked (PIC-81).
+type catalogPainter struct {
+	fakePainter
+	info images.Model
+}
+
+func (c *catalogPainter) Info() images.Model { return c.info }
+func (c *catalogPainter) Paint(ctx context.Context, req PaintRequest) (*Picture, error) {
+	pic, err := c.fakePainter.Paint(ctx, req)
+	if err != nil {
+		return pic, err
+	}
+	for i := 1; i < max(req.Count, 1); i++ {
+		pic.More = append(pic.More, Picture{Data: []byte(pngHeader + "more"), MIME: "image/png"})
+	}
+	return pic, nil
+}
+
+// generate_image on the catalog (spec_058 PIC-81): the model's references,
+// shapes, sizes and count, its pictures written beside path and kept as a
+// Pictures session.
+func TestGenerateImageOnTheCatalog(t *testing.T) {
+	imagen, _ := images.Lookup("imagen-4.0-generate-preview")
+	nano, _ := images.Lookup("gemini-nano-banana-2.1")
+	many := map[string]string{}
+	var refs []any
+	for i := range 5 {
+		name := string(rune('a'+i)) + ".png"
+		many[name] = pngHeader + name
+		refs = append(refs, name)
+	}
+	tests := []struct {
+		name    string
+		info    images.Model
+		files   map[string]string
+		args    map[string]any
+		wantErr string
+		want    []string
+	}{
+		{name: "four with Imagen", info: imagen, args: map[string]any{"prompt": "a fox", "path": "fox.png", "count": 4, "aspect_ratio": "9:16"}, want: []string{"fox.png", "fox-2.png", "fox-3.png", "fox-4.png"}},
+		{name: "more references than three", info: nano, files: many, args: map[string]any{"prompt": "a collage", "path": "collage.png", "images": refs}, want: []string{"collage.png"}},
+		{name: "a panoramic shape", info: nano, args: map[string]any{"prompt": "a skyline", "path": "s.png", "aspect_ratio": "8:1", "size": "4K"}, want: []string{"s.png"}},
+		{name: "Imagen takes no pictures to start from", info: imagen, files: many, args: map[string]any{"prompt": "x", "path": "o.png", "images": []any{"a.png"}}, wantErr: "doesn't start from pictures"},
+		{name: "past the model's references", info: images.Model{ID: "m", Name: "M", Kind: images.KindGemini, MaxReferences: 2, MaxPictures: 1, Ratios: images.StandardRatios}, files: many, args: map[string]any{"prompt": "x", "path": "o.png", "images": refs}, wantErr: "takes at most 2 pictures"},
+		{name: "a shape the model doesn't make", info: imagen, args: map[string]any{"prompt": "x", "path": "o.png", "aspect_ratio": "8:1"}, wantErr: "doesn't make 8:1 pictures"},
+		{name: "more than the model makes", info: nano, args: map[string]any{"prompt": "x", "path": "o.png", "count": 3}, wantErr: "at most 1 picture"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, dir := newTestWorkspace(t)
+			for name, content := range tc.files {
+				writeFile(t, filepath.Join(dir, name), content)
+			}
+			f := &catalogPainter{info: tc.info}
+			var kept []KeptPictures
+			p := &paint{paintState: paintState{painter: f, keep: func(_ context.Context, k KeptPictures) string {
+				kept = append(kept, k)
+				return "pic-0123456789ab"
+			}}}
+			out := runTool(t, toolOf(t)(NewGenerateImageTool(ws, allowAll(), p, true, nil)), tc.args)
+			if tc.wantErr != "" {
+				assert.Contains(t, errOf(out), tc.wantErr)
+				assert.Empty(t, f.got, "nothing is sent")
+				return
+			}
+			require.Empty(t, errOf(out))
+			assert.Equal(t, tc.want[0], out["path"])
+			assert.Equal(t, "pic-0123456789ab", out["picture_session"])
+			for _, w := range tc.want {
+				_, err := os.Stat(filepath.Join(dir, w))
+				assert.NoError(t, err, w)
+			}
+			if len(tc.want) > 1 {
+				assert.Len(t, out["paths"], len(tc.want))
+			} else {
+				assert.Nil(t, out["paths"])
+			}
+			require.Len(t, kept, 1)
+			assert.Equal(t, tc.want, kept[0].Paths)
+			assert.Len(t, kept[0].Pictures, len(tc.want))
+			assert.Equal(t, tc.args["prompt"], kept[0].Prompt)
+			assert.Len(t, kept[0].References, len(kept[0].RefPaths))
+		})
+	}
+}
+
+// Several pictures write beside path: a taken name refuses, and a denied
+// one is denied, before anything's written past the first.
+func TestGenerateImageSeveralNames(t *testing.T) {
+	imagen, _ := images.Lookup("imagen-4.0-generate-preview")
+	ws, dir := newTestWorkspace(t)
+	writeFile(t, filepath.Join(dir, "fox-2.png"), "old")
+	out := runTool(t, toolOf(t)(NewGenerateImageTool(ws, allowAll(), &paint{paintState: paintState{painter: &catalogPainter{info: imagen}}}, true, nil)), map[string]any{"prompt": "x", "path": "fox.png", "count": 2})
+	assert.Contains(t, errOf(out), "'fox-2.png' already exists")
+	out = runTool(t, toolOf(t)(NewGenerateImageTool(ws, allowAll(), &paint{paintState: paintState{painter: &catalogPainter{info: imagen}}}, true, nil)), map[string]any{"prompt": "x", "path": "cat.png", "count": 2, "overwrite": true})
+	require.Empty(t, errOf(out))
+	assert.Nil(t, out["picture_session"], "no keeper, no session")
+}
+
+func TestSetPictureKeeper(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	r, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	defer r.Close()
+	r.SetPictureKeeper(func(context.Context, KeptPictures) string { return "x" })
+	r.SetPainter(&fakePainter{}, nil, nil)
+	require.NotNil(t, r.paint.get().keep, "a painter set later keeps the keeper")
+	(&Registry{}).SetPictureKeeper(nil)
 }

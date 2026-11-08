@@ -24,6 +24,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/health"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,4 +144,54 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	} {
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
 	}
+}
+
+// A verdict carries each rubric line's score and reason, and its grade.
+func TestVerdictMsgScores(t *testing.T) {
+	at := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	m := verdictMsg(health.Verdict{Model: "gemini/gemini-3.8-flash", At: at, Overall: 4.6, Summary: "clear",
+		Scores: []health.Score{{Line: "clarity", Score: 5, Reason: "plain words"}, {Line: "tests", Score: 4, Reason: "most paths"}}}, true)
+	require.Len(t, m.Scores, 2)
+	assert.Equal(t, []any{"tests", int32(4), "most paths"}, []any{m.Scores[1].Line, m.Scores[1].Score, m.Scores[1].Reason})
+	assert.Equal(t, "A", m.Grade)
+	assert.True(t, m.Current)
+	assert.Equal(t, at, m.At.AsTime())
+	assert.Nil(t, verdictMsg(health.Verdict{}, false).At, "no time, none sent")
+}
+
+// A workspace's health carries each item's runs, evals and verdict (current
+// only while its hash and the rubric match), and the days and signals.
+func TestHealthMsgItems(t *testing.T) {
+	last := time.Date(2026, 11, 8, 9, 0, 0, 0, time.UTC)
+	flow := health.Item{Kind: "workflow", Name: "orders", Hash: "h2", Daily: []int{1, 0, 3},
+		Runs:  &health.RunStats{Runs: 4, Done: 3, Failed: 1, CostUSD: 0.12, Median: 1500 * time.Millisecond, Last: last, FailingStep: "post"},
+		Evals: &health.EvalStats{Runs: 2, Last: last, Passed: 7, Cases: 8}}
+	agent := health.Item{Kind: "agent", Name: "coder", Hash: "a1"}
+	r := engine.HealthReport{
+		Facts: health.Facts{At: last, Items: []health.Item{flow, agent},
+			Days:    []health.Day{{Date: "2026-11-08", Done: 3, Failed: 1, CostUSD: 0.12}},
+			Signals: []health.Signal{{Kind: "guardrail", About: "prompt_injection", Count: 2, Last: last, Detail: "a page said to ignore"}}},
+		Verdicts: map[string]health.Verdict{
+			flow.Key():  {Hash: "h1", Rubric: health.RubricVersion, Overall: 3},
+			agent.Key(): {Hash: "a1", Rubric: health.RubricVersion, Overall: 5},
+		},
+	}
+	m := healthMsg(r, true)
+	require.Len(t, m.Items, 2)
+	f, a := m.Items[0], m.Items[1]
+	assert.Equal(t, []int32{1, 0, 3}, f.Daily)
+	require.NotNil(t, f.Runs)
+	assert.Equal(t, int32(1), f.Runs.Failed)
+	assert.Equal(t, int64(1500), f.Runs.MedianMs)
+	assert.Equal(t, "post", f.Runs.FailingStep)
+	require.NotNil(t, f.Evals)
+	assert.Equal(t, []int32{7, 8}, []int32{f.Evals.Passed, f.Evals.Cases})
+	assert.False(t, f.Verdict.Current, "judged on an older version of it")
+	assert.True(t, a.Verdict.Current)
+	assert.Nil(t, a.Runs)
+	require.Len(t, m.Days, 1)
+	assert.Equal(t, int32(1), m.Days[0].Failed)
+	require.Len(t, m.Signals, 1)
+	assert.Equal(t, "prompt_injection", m.Signals[0].About)
+	assert.True(t, m.Checking)
 }

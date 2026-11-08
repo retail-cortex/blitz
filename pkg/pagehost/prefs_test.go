@@ -44,6 +44,22 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "blitz", p.LightTheme, "defaults %+v %v", p, err)
 	require.Equal(t, "blitz", p.DarkTheme, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
+	// The Files tree's own (FIL-47, FIL-48, FIL-75).
+	require.Equal(t, "folders", p.FilesSort, "defaults %+v", p)
+	require.Equal(t, "on", p.FilesCompact, "defaults %+v", p)
+	require.Equal(t, "on", p.FilesFollow, "defaults %+v", p)
+	require.False(t, p.FilesNest, "defaults %+v", p)
+	for name, tc := range map[string]struct{ sort, compact, follow, wantSort, wantCompact, wantFollow string }{
+		"chosen":  {"type", "off", "off", "type", "off", "off"},
+		"mixed":   {"mixed", "on", "on", "mixed", "on", "on"},
+		"unknown": {"size", "maybe", "", "folders", "on", "on"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			q := Prefs{FilesSort: tc.sort, FilesCompact: tc.compact, FilesFollow: tc.follow}
+			q.normalize()
+			require.Equal(t, []string{tc.wantSort, tc.wantCompact, tc.wantFollow}, []string{q.FilesSort, q.FilesCompact, q.FilesFollow})
+		})
+	}
 	a, b := t.TempDir(), t.TempDir()
 	p.Theme, p.Composer, p.Advanced = "dark", "panel", true
 	p.Workspaces = []WorkspacePrefs{
@@ -56,6 +72,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
 	p.DocWidth, p.EditorZoom, p.GPU = "readable", 125, "off"
 	p.LightTheme, p.DarkTheme = "one-light", "one-dark-pro"
+	p.TerminalFont, p.TerminalFontSize = " JetBrainsMono Nerd Font ", 15
 	saved, err := s.Save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
@@ -73,12 +90,17 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "off", saved.GPU, "normalized %+v", saved)
 	require.Equal(t, "one-light", saved.LightTheme, "normalized %+v", saved)
 	require.Equal(t, "one-dark-pro", saved.DarkTheme, "normalized %+v", saved)
+	require.Equal(t, "JetBrainsMono Nerd Font", saved.TerminalFont, "normalized %+v", saved)
+	require.Equal(t, 15, saved.TerminalFontSize, "normalized %+v", saved)
 	p.DocWidth, p.EditorZoom = "huge", 900
+	p.TerminalFont, p.TerminalFontSize = strings.Repeat("x", 201), 99
 	p.LightTheme, p.DarkTheme = "one-dark-pro", "solarized" // not for light; unknown
 	odd, err := s.Save(p)
 	require.NoError(t, err)
 	require.Equal(t, "full", odd.DocWidth, "normalized %+v", odd)
 	require.Equal(t, 100, odd.EditorZoom, "normalized %+v", odd)
+	require.Empty(t, odd.TerminalFont, "a name too long is dropped")
+	require.Equal(t, 13, odd.TerminalFontSize, "normalized %+v", odd)
 	require.Equal(t, "blitz", odd.LightTheme, "normalized %+v", odd)
 	require.Equal(t, "blitz", odd.DarkTheme, "normalized %+v", odd)
 	info, err := os.Stat(s.path)

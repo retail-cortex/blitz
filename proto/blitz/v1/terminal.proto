@@ -1,0 +1,136 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package blitz.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
+
+// TerminalService is the window's terminals (spec_062_terminal): the
+// person's login shell in a pseudo-terminal, run by the service in the
+// workspace, outside the agent's sandbox, and never seen by the agent.
+// Output comes on a stream; input and sizes go by unary calls, since a
+// browser can't stream to the service.
+//
+// Every request names its workspace by absolute directory. Errors carry an
+// ErrorInfo detail: UNKNOWN_TERMINAL, TOO_MANY_TERMINALS, BAD_PATH,
+// TERMINAL_UNSUPPORTED.
+service TerminalService {
+  // Starts a terminal in a folder of the workspace (TRM-10).
+  rpc OpenTerminal(OpenTerminalRequest) returns (OpenTerminalResponse);
+  // A terminal's output from an offset, then as it comes, until its shell
+  // exits (TRM-12).
+  rpc WatchTerminal(WatchTerminalRequest) returns (stream WatchTerminalResponse);
+  // Writes to a terminal's input (TRM-13).
+  rpc WriteTerminal(WriteTerminalRequest) returns (WriteTerminalResponse);
+  // Sets a terminal's size (TRM-11).
+  rpc ResizeTerminal(ResizeTerminalRequest) returns (ResizeTerminalResponse);
+  // The workspace's terminals, oldest first (TRM-14).
+  rpc ListTerminals(ListTerminalsRequest) returns (ListTerminalsResponse);
+  // Ends a terminal: its shell is hung up, then killed (TRM-03).
+  rpc CloseTerminal(CloseTerminalRequest) returns (CloseTerminalResponse);
+}
+
+// A terminal as the window lists it.
+message TerminalInfo {
+  string id = 1;
+  // The folder it started in, relative to the workspace ("" for it).
+  string dir = 2;
+  // The shell it runs.
+  string shell = 3;
+  google.protobuf.Timestamp started = 4;
+  // Whether its shell has exited, and with what code.
+  bool exited = 5;
+  int32 exit_code = 6;
+}
+
+// A terminal to start.
+message OpenTerminalRequest {
+  string workspace = 1;
+  // A folder in the workspace, relative to it ("" for the workspace).
+  string dir = 2;
+  // Its size in characters; 0 for 80×24.
+  uint32 cols = 3;
+  uint32 rows = 4;
+}
+
+// The terminal started.
+message OpenTerminalResponse {
+  TerminalInfo terminal = 1;
+}
+
+// A terminal's output to watch, from where the window has read.
+message WatchTerminalRequest {
+  string workspace = 1;
+  string id = 2;
+  // Where the window has read up to, counted in bytes from the terminal's
+  // start: 0 replays the scrollback.
+  int64 from = 3;
+}
+
+// A terminal's output, or its end.
+message WatchTerminalResponse {
+  // Output, ending at offset.
+  bytes data = 1;
+  int64 offset = 2;
+  // Output before data that the scrollback no longer held.
+  int64 skipped = 3;
+  // The shell exited (the stream's last message), with its code.
+  bool exited = 4;
+  int32 exit_code = 5;
+}
+
+// Input for a terminal's shell.
+message WriteTerminalRequest {
+  string workspace = 1;
+  string id = 2;
+  // Keys or a paste, at most 64 KiB.
+  bytes data = 3;
+}
+
+// The input was written.
+message WriteTerminalResponse {}
+
+// A terminal's new size, in characters.
+message ResizeTerminalRequest {
+  string workspace = 1;
+  string id = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+}
+
+// The size was set.
+message ResizeTerminalResponse {}
+
+// The workspace whose terminals to list.
+message ListTerminalsRequest {
+  string workspace = 1;
+}
+
+// The workspace's terminals, oldest first.
+message ListTerminalsResponse {
+  repeated TerminalInfo terminals = 1;
+}
+
+// A terminal to end.
+message CloseTerminalRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// The terminal ended.
+message CloseTerminalResponse {}

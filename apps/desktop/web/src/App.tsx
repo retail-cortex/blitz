@@ -232,7 +232,7 @@ function Shell() {
   useEffect(() => onAppMenu((item) => setSettingsAt({ section: item === "about" ? "about" : "appearance" })), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Workspace search, open with the query it starts with (null: closed).
-  const [searchOpen, setSearchOpen] = useState<{ query: string; sources?: SearchSource[] } | null>(null);
+  const [searchOpen, setSearchOpen] = useState<{ query: string; sources?: SearchSource[]; folder?: string } | null>(null);
   // Cmd/Ctrl+K opens the command palette, and Cmd/Ctrl+P (Go to file) the
   // same, files first; Cmd/Ctrl+, the settings; F11 (and ⌃⌘F on macOS)
   // makes the window full screen.
@@ -260,8 +260,8 @@ function Shell() {
     };
     const goTo = () => setPaletteOpen(true);
     const search = (e: Event) => {
-      const d = (e as CustomEvent<{ query?: string; sources?: SearchSource[] }>).detail;
-      setSearchOpen({ query: d?.query ?? "", sources: d?.sources });
+      const d = (e as CustomEvent<{ query?: string; sources?: SearchSource[]; folder?: string }>).detail;
+      setSearchOpen({ query: d?.query ?? "", sources: d?.sources, folder: d?.folder });
     };
     window.addEventListener("keydown", key);
     window.addEventListener(goToFileEvent, goTo);
@@ -432,7 +432,7 @@ function Shell() {
         <TasksDialog />
         <TaskAlerts />
         <FlowRunAlerts />
-        {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen.query} initialSources={searchOpen.sources} onClose={() => setSearchOpen(null)} />}
+        {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen.query} initialSources={searchOpen.sources} initialFolder={searchOpen.folder} onClose={() => setSearchOpen(null)} />}
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
         {confirmClose && (
           <Dialog

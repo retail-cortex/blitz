@@ -18,7 +18,7 @@
 // it keeps when the model changes. The service checks every request
 // against the same catalog (PIC-62); these keep the panel from offering
 // what would be refused.
-import type { PictureModel } from "../gen/blitz/v1/workspace_pb";
+import type { PictureModel, PictureTurn } from "../gen/blitz/v1/workspace_pb";
 
 /** A reference picture's role (PIC-23). */
 export type Role = "character" | "object" | "style";
@@ -177,4 +177,47 @@ export function keepSettings(dir: string, s: Settings) {
   } catch {
     // storage refused: the panel opens on its defaults next time
   }
+}
+
+/** The picture models whose turns stand alone (PIC-42): no conversation, so a turn can be made again. */
+export function standsAlone(kind: string): boolean {
+  return kind === "imagen" || kind === "openai";
+}
+
+/** A seed for Vary: any of the model's, from 1. */
+export function newSeed(): number {
+  const n = new Uint32Array(1);
+  crypto.getRandomValues(n);
+  return (n[0] % 2147483646) + 1;
+}
+
+/**
+ * The request that makes turn again in session (PIC-42): Try again its
+ * prompt, references and settings as they were (its seed too, if it had
+ * one); Vary the same with seed instead. What a turn doesn't keep
+ * (prompt enhancement, JPEG quality) comes from the panel's settings now.
+ */
+export function againRequest(workspace: string, session: string, turn: PictureTurn, now: Pick<Settings, "enhance" | "quality">, seed?: number) {
+  return {
+    workspace,
+    session,
+    model: turn.model,
+    prompt: turn.prompt,
+    references: turn.references.map((r) => ({ picture: r.file, mime: r.mime, name: r.name, role: r.role })),
+    count: Math.max(turn.count, 1),
+    aspectRatio: turn.aspectRatio,
+    size: turn.size,
+    thinking: turn.thinking,
+    search: turn.search !== "",
+    searchImages: turn.search === "image",
+    avoid: turn.avoid,
+    people: turn.people,
+    seed: seed ?? turn.seed,
+    useSeed: seed !== undefined || turn.hasSeed,
+    enhance: now.enhance,
+    format: turn.format,
+    quality: turn.format === "image/jpeg" ? now.quality : 0,
+    startFrom: "",
+    estimate: false,
+  };
 }

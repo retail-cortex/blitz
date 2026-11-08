@@ -96,6 +96,9 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	}
 	if m.provider == "gemini" {
 		req = attachLoneSignatures(req)
+		if o.Provider == "gemini" { // the Gemini API, not Vertex AI
+			req = withServerSideInvocations(req)
+		}
 	}
 	var s config.ModelSettings
 	var ok bool

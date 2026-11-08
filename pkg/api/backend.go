@@ -208,6 +208,12 @@ type Backend interface {
 	SearchStatus() SearchStatus
 	// Reindex starts a scan of the workspace for search and returns at once.
 	Reindex() error
+
+	// Data (spec_059_data DAT-45): the workspace's database connections
+	// and their saved queries, and a query run read-only on one of them
+	// by name (on, trusted and readable, as a chat's @db: finds it).
+	DataConnections(ctx context.Context) ([]DataConnection, error)
+	RunDataQuery(ctx context.Context, q DataQuery) (DataTable, error)
 	RevokeApprovals(keys ...string) (int, error)
 	ClearApprovals() (int, error)
 

@@ -256,6 +256,8 @@ func TestNewCompleter(t *testing.T) {
 	assert.Contains(t, complete("/processes "), "log")
 	assert.Contains(t, complete("/search "), "documents")
 	assert.Contains(t, complete("/search "), "reindex")
+	got, _ := c.Do([]rune("look at @db:"), len("look at @db:")) // asks the workspace for its connections (DAT-45)
+	assert.Empty(t, got, "no connections: no mentions")
 }
 
 // Notices and the status line are for a terminal only.

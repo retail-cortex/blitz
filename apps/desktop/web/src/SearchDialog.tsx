@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiFileDocumentOutline, mdiHistory, mdiMagnify, mdiNoteTextOutline, mdiRefresh } from "@mdi/js";
+import { mdiClose, mdiFileDocumentOutline, mdiFolderOutline, mdiHistory, mdiMagnify, mdiNoteTextOutline, mdiRefresh } from "@mdi/js";
 import { workspaces } from "./api";
 import { message } from "./errors";
 import { loadSession, openFile, showView } from "./events";
@@ -33,8 +33,22 @@ import { Chip, Icon, IconButton, Segmented, useModal } from "@blitz/webui";
  * Search by default in to start, else files and PDFs). Each hit shows where it is and its passage, the words marked;
  * Enter or a click opens it: a file at its line, a chat, a plan.
  */
-export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }: { dir: string; initialQuery?: string; initialSources?: SearchSource[]; onClose: () => void }) {
+export function SearchDialog({
+  dir,
+  initialQuery = "",
+  initialSources,
+  initialFolder = "",
+  onClose,
+}: {
+  dir: string;
+  initialQuery?: string;
+  initialSources?: SearchSource[];
+  /** Only under this folder (Find in folder, SRCH-18); its chip clears it. */
+  initialFolder?: string;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState(initialQuery);
+  const [folder, setFolder] = useState(initialFolder);
   // Hidden files (dotfiles, ones git ignores) only when the Files shelf shows them.
   const hidden = useApp().prefs.show_hidden;
   // The sources: those asked for (/search web), else the workspace's
@@ -93,7 +107,7 @@ export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }
     let live = true;
     const timer = setTimeout(() => {
       setBusy(true);
-      workspaces.searchWorkspace({ workspace: dir, query, sources, limit: 30, mode: semantic ? mode : "", hidden }).then(
+      workspaces.searchWorkspace({ workspace: dir, query, sources, limit: 30, mode: semantic ? mode : "", hidden, folder }).then(
         (r) => live && (setHits(r.hits), setError("")),
         (e) => live && (setHits([]), setError(message(e))),
       ).finally(() => live && setBusy(false));
@@ -102,7 +116,7 @@ export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }
       live = false;
       clearTimeout(timer);
     };
-  }, [dir, query, sources, scanned, semantic, mode, hidden]);
+  }, [dir, query, sources, scanned, semantic, mode, hidden, folder]);
   useEffect(() => setPick(0), [hits]);
   // In braces: Chromium's scrollIntoView returns a promise, which React would take for a cleanup.
   useEffect(() => {
@@ -149,6 +163,11 @@ export function SearchDialog({ dir, initialQuery = "", initialSources, onClose }
           />
         </div>
         <div className="search-sources" role="group" aria-label={t("desktop.search.sources")}>
+          {folder && (
+            <Chip selected icon={mdiFolderOutline} aria-label={t("desktop.search.folder_clear", { folder })} onClick={() => (setFolder(""), input.current?.focus())}>
+              {t("desktop.search.in_folder", { folder })} <Icon path={mdiClose} size="sm" />
+            </Chip>
+          )}
           {semantic && (
             <Segmented
               small

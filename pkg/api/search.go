@@ -58,6 +58,11 @@ type SearchQuery struct {
 	// ignores (search.include_ignored). The desktop app asks for them when
 	// it shows hidden files.
 	Hidden bool
+	// Folder keeps the files and documents under one folder (relative to
+	// the workspace; "" for the whole workspace), as Find in folder asks
+	// (SRCH-18). Chats and notes aren't in a folder: a scoped search
+	// leaves them out.
+	Folder string
 }
 
 // SearchHit is one item found. Ref is a path relative to the workspace

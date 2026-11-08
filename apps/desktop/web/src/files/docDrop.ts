@@ -85,8 +85,9 @@ export function pastedName(type: string, now = new Date()): string {
  * the tree in the app, whose drags are the computer's).
  */
 export function readDocDrop(dt: DataTransfer): { paths: string[]; files: File[] } | null {
-  const path = dt.getData(dragType);
-  if (path) return { paths: [path], files: [] };
+  // Several rows dragged together come one a line (FIL-74).
+  const paths = dt.getData(dragType).split("\n").filter(Boolean);
+  if (paths.length > 0) return { paths, files: [] };
   const files = Array.from(dt.files);
   return files.length > 0 ? { paths: [], files } : null;
 }

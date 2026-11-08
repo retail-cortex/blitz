@@ -22,6 +22,7 @@ go_library(
         "blitzcommands.go",
         "changes.go",
         "context.go",
+        "data.go",
         "doc.go",
         "evals.go",
         "extensions.go",
@@ -50,6 +51,7 @@ go_test(
     size = "small",
     srcs = [
         "api_test.go",
+        "data_test.go",
         "ledger_test.go",
         "suggestions_test.go",
         "version_test.go",

@@ -61,6 +61,18 @@ type Prefs struct {
 	ChatWidth int `json:"chat_width,omitempty"`
 	// FilesWidth is the Files shelf's width in pixels (0: its default).
 	FilesWidth int `json:"files_width,omitempty"`
+	// FilesSort is how the tree orders a folder: "folders" (the default:
+	// folders first), "mixed" or "type" (by extension) (FIL-48).
+	FilesSort string `json:"files_sort"`
+	// FilesNest nests related files (tests, lock files) under the file
+	// they belong to (FIL-48).
+	FilesNest bool `json:"files_nest"`
+	// FilesCompact is "on" (the default: single-child folder chains on one
+	// row) or "off" (FIL-47).
+	FilesCompact string `json:"files_compact"`
+	// FilesFollow is "on" (the default: the tree shows the open tab's
+	// file) or "off" (FIL-75).
+	FilesFollow string `json:"files_follow"`
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
@@ -98,7 +110,15 @@ type Prefs struct {
 	// bytes each).
 	MarkdownCSSLight string `json:"markdown_css_light,omitempty"`
 	MarkdownCSSDark  string `json:"markdown_css_dark,omitempty"`
+	// TerminalFont is the terminal's font family ("" for the bundled
+	// MesloLGS Nerd Font Mono), and TerminalFontSize its size in pixels
+	// (8–32; 13 by default) (spec_062_terminal TRM-25).
+	TerminalFont     string `json:"terminal_font,omitempty"`
+	TerminalFontSize int    `json:"terminal_font_size"`
 }
+
+// maxFontName caps the terminal font's name.
+const maxFontName = 200
 
 // maxMarkdownCSS caps each theme's Markdown CSS: a stylesheet, not a
 // place to keep files.
@@ -153,6 +173,12 @@ func (p *Prefs) normalize() {
 	if p.EditorZoom < 50 || p.EditorZoom > 200 {
 		p.EditorZoom = 100
 	}
+	if p.TerminalFontSize < 8 || p.TerminalFontSize > 32 {
+		p.TerminalFontSize = 13
+	}
+	if p.TerminalFont = strings.TrimSpace(p.TerminalFont); len(p.TerminalFont) > maxFontName {
+		p.TerminalFont = ""
+	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"
 	}
@@ -170,6 +196,15 @@ func (p *Prefs) normalize() {
 	}
 	if p.GPU != "off" {
 		p.GPU = "on"
+	}
+	if p.FilesSort != "mixed" && p.FilesSort != "type" {
+		p.FilesSort = "folders"
+	}
+	if p.FilesCompact != "off" {
+		p.FilesCompact = "on"
+	}
+	if p.FilesFollow != "off" {
+		p.FilesFollow = "on"
 	}
 	for _, css := range []*string{&p.MarkdownCSSLight, &p.MarkdownCSSDark} {
 		if len(*css) > maxMarkdownCSS {

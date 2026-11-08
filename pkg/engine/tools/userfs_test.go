@@ -160,6 +160,42 @@ func TestUserFileOperations(t *testing.T) {
 		assert.Error(t, ws.UserRename(ctx, "x", filepath.Join("file", "sub")), "a file can't be a parent folder")
 	})
 
+	t.Run("copy", func(t *testing.T) {
+		require.NoError(t, os.Symlink(filepath.Join("y", "c.txt"), filepath.Join(dir, "x", "link")))
+		require.NoError(t, ws.UserCopy(ctx, "x", filepath.Join("copies", "x2")), "a folder, its folders made")
+		assert.FileExists(t, filepath.Join(dir, "copies", "x2", "y", "c.txt"))
+		target, err := os.Readlink(filepath.Join(dir, "copies", "x2", "link"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join("y", "c.txt"), target, "a link is copied as a link")
+		require.NoError(t, ws.UserCopy(ctx, filepath.Join("x", "y", "c.txt"), "c-copy.txt"), "a file")
+		assert.FileExists(t, filepath.Join(dir, "x", "y", "c.txt"), "the original stays")
+		assert.FileExists(t, filepath.Join(dir, "c-copy.txt"))
+
+		for name, tc := range map[string]struct {
+			from, to string
+			is       error
+		}{
+			"missing":            {"missing", "z", fs.ErrNotExist},
+			"taken":              {"x", "copies", fs.ErrExist},
+			"the workspace":      {".", "z", nil},
+			"onto the workspace": {"x", ".", nil},
+			"into itself":        {"x", filepath.Join("x", "inner"), nil},
+			"under a file":       {"c-copy.txt", filepath.Join("file", "sub"), nil},
+		} {
+			err := ws.UserCopy(ctx, tc.from, tc.to)
+			if tc.is != nil {
+				assert.ErrorIs(t, err, tc.is, name)
+			} else {
+				assert.Error(t, err, name)
+			}
+		}
+
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+		assert.Error(t, ws.UserCopy(cctx, "x", "x3"), "cancelled")
+		assert.NoDirExists(t, filepath.Join(dir, "x3"), "a copy that fails is taken back")
+	})
+
 	t.Run("remove", func(t *testing.T) {
 		require.NoError(t, ws.UserRemove(ctx, "x"))
 		assert.NoDirExists(t, filepath.Join(dir, "x"))

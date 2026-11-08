@@ -243,7 +243,14 @@ func (w *Workspace) Search(ctx context.Context, q api.SearchQuery) (api.SearchRe
 			return api.SearchResult{}, fmt.Errorf("%w: %q", api.ErrUnknownSearchSource, s)
 		}
 	}
-	hits, err := st.index.Search(ctx, search.Query{Text: q.Text, Sources: sources, Limit: q.Limit, Mode: q.Mode, Hidden: q.Hidden})
+	folder := strings.Trim(path.Clean("/"+filepath.ToSlash(q.Folder)), "/")
+	if folder != "" { // chats and notes aren't in a folder (SRCH-18)
+		sources = slices.DeleteFunc(slices.Clone(sources), func(s string) bool { return s != api.SearchFiles && s != api.SearchDocuments })
+		if len(sources) == 0 {
+			return api.SearchResult{Sources: sources, Hits: []api.SearchHit{}}, nil
+		}
+	}
+	hits, err := st.index.Search(ctx, search.Query{Text: q.Text, Sources: sources, Limit: q.Limit, Mode: q.Mode, Hidden: q.Hidden, Folder: folder})
 	switch {
 	case errors.Is(err, search.ErrNoTerms):
 		return api.SearchResult{}, api.ErrEmptySearch

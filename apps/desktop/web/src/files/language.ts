@@ -92,6 +92,9 @@ const keepEvery = 30_000;
 
 const sessions = new Map<string, LanguageSession>();
 
+/** The listeners' key for every document's changes (no path has it). */
+const anyKey = "\u0000*";
+
 /** The language session of the workspace in dir. */
 export function languageSession(dir: string): LanguageSession {
   let s = sessions.get(dir);
@@ -131,6 +134,27 @@ export class LanguageSession {
 
   private notify(key: string) {
     for (const f of this.listeners.get(key) ?? []) f();
+    for (const f of this.listeners.get(anyKey) ?? []) f();
+  }
+
+  /** Calls f when any document's problems or server state change. */
+  subscribeAll(f: () => void): () => void {
+    return this.subscribe(anyKey, f);
+  }
+
+  /**
+   * The worst problem of each open file with errors or warnings, by its
+   * workspace path (the Files tree's colours, FIL-46); a block's problems
+   * count for the file it's in.
+   */
+  worstProblems(): Map<string, "error" | "warning"> {
+    const out = new Map<string, "error" | "warning">();
+    for (const d of this.docs.values()) {
+      const list = d.problems?.list ?? [];
+      if (list.some((p) => p.severity === "error")) out.set(d.path, "error");
+      else if (list.some((p) => p.severity === "warning") && out.get(d.path) !== "error") out.set(d.path, "warning");
+    }
+    return out;
   }
 
   /** How key's server is, and its problems' counts (undefined: not open). */

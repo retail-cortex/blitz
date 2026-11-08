@@ -19,7 +19,7 @@
 // sheet over the window's middle (the Files shelf, the editor, the chat
 // and the pinned input) to the status bar. The title bar stays: its menus
 // work and it moves the window. Only its ✕ or Escape (with the focus in it) closes it.
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiClose, mdiUndoVariant } from "@mdi/js";
 import { t } from "./i18n";
@@ -104,7 +104,9 @@ let nextId = 0;
  * A view in the drawer: the counterpart of Dialog for what's browsed or
  * edited for a while, with the window's whole middle to lay it out. ✕ or
  * Escape, with the focus inside it and no dialog over it, closes it. A drawer with unsaved changes (dirty) asks before it closes,
- * or before another drawer takes its place.
+ * or before another drawer takes its place. One that keeps what it shows
+ * alive while closed (a terminal's) stays mounted, hidden, with open
+ * false, and holds the drawer only while open.
  */
 export function Drawer({
   title,
@@ -115,8 +117,14 @@ export function Drawer({
   className = "",
   dirty = false,
   closeRequest = 0,
+  open = true,
+  escapeCloses = true,
+  headBelow = false,
+  label,
+  style,
   children,
 }: {
+  /** Its title, or what stands in the header in its place (a terminal's tabs). */
   title: ReactNode;
   icon?: string;
   onClose: () => void;
@@ -129,26 +137,37 @@ export function Drawer({
   dirty?: boolean;
   /** Bumped to close it from outside (its menu button again), as its ✕ does: asking first when dirty. */
   closeRequest?: number;
+  /** Whether it's shown: false keeps it mounted and hidden, not holding the drawer. */
+  open?: boolean;
+  /** Whether Escape closes it (not where Escape is the content's, as in a terminal). */
+  escapeCloses?: boolean;
+  /** The header under the body, not over it (a terminal's: the shell's lines start at the top). */
+  headBelow?: boolean;
+  /** Its name for the accessibility tree, when the title isn't text. */
+  label?: string;
+  /** Its own size (a height the user dragged it to). */
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const host = useContext(DrawerContext);
   const ref = useRef<HTMLElement>(null);
   const [id] = useState(() => ++nextId);
-  const live = useRef({ onClose, dirty, title });
-  live.current = { onClose, dirty, title };
+  const name = label ?? (typeof title === "string" ? title : undefined);
+  const live = useRef({ onClose, dirty, name });
+  live.current = { onClose, dirty, name };
   const me = useMemo<Claim>(
     () => ({
       id,
       close: () => live.current.onClose(),
       dirty: () => live.current.dirty,
-      name: () => (typeof live.current.title === "string" ? live.current.title : ""),
+      name: () => live.current.name ?? "",
     }),
     [id],
   );
   const claim = host?.claim;
-  useLayoutEffect(() => claim?.(me), [claim, me]);
+  useLayoutEffect(() => (open ? claim?.(me) : undefined), [claim, me, open]);
   const close = useCallback(() => (host ? host.requestClose(me) : me.close()), [host, me]);
-  const shown = !host || host.current === id;
+  const shown = open && (!host || host.current === id);
   // Only a request made while it's open: the count it opened with is old.
   const closeAsked = useRef(closeRequest);
   useEffect(() => {
@@ -160,7 +179,7 @@ export function Drawer({
   // Escape closes it when the focus is inside and no dialog is over it.
   useEffect(() => {
     const el = ref.current;
-    if (!el || !shown) return;
+    if (!el || !shown || !escapeCloses) return;
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
       // A completion menu open in the field (SuggestTextarea's) takes it:
@@ -171,7 +190,7 @@ export function Drawer({
     };
     el.addEventListener("keydown", key);
     return () => el.removeEventListener("keydown", key);
-  }, [shown, close]);
+  }, [shown, close, escapeCloses]);
   // The focus goes in when it opens (to what asks for it, else the first
   // field, else the drawer), and back where it was when it closes.
   useEffect(() => {
@@ -188,22 +207,27 @@ export function Drawer({
   // One waiting behind a question (keep its changes, or not) stays mounted,
   // hidden, so keeping them finds them as they were.
   if (host && !host.slot) return null;
+  const head = (
+    <header className={headBelow ? "drawer-head below" : "drawer-head"}>
+      {icon && <Icon path={icon} className="muted" />}
+      {typeof title === "string" ? <h2 className="t-title spacer">{title}</h2> : <div className="drawer-title spacer">{title}</div>}
+      {headerActions}
+      <IconButton icon={mdiClose} label={t("desktop.close")} onClick={close} />
+    </header>
+  );
   const drawer = (
     <aside
       ref={ref}
       className={`drawer ${className}`}
       hidden={!shown}
+      style={style}
       role="complementary"
-      aria-label={typeof title === "string" ? title : undefined}
+      aria-label={name}
       tabIndex={-1}
     >
-      <header className="drawer-head">
-        {icon && <Icon path={icon} className="muted" />}
-        <h2 className="t-title spacer">{title}</h2>
-        {headerActions}
-        <IconButton icon={mdiClose} label={t("desktop.close")} onClick={close} />
-      </header>
+      {!headBelow && head}
       <div className="body">{children}</div>
+      {headBelow && head}
       {footer && <footer>{footer}</footer>}
     </aside>
   );

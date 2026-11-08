@@ -26,7 +26,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -123,10 +125,80 @@ func TestFileService(t *testing.T) {
 	found, _ := files.FindFiles(ctx, connect.NewRequest(&pb.FindFilesRequest{Workspace: dir, Query: "la"}))
 	assert.Len(t, found.Msg.Paths, 1, "find: %v", found.Msg.Paths)
 	assert.Equal(t, "lib/a.go", found.Msg.Paths[0], "find: %v", found.Msg.Paths)
+	_, err = files.CopyFile(ctx, connect.NewRequest(&pb.CopyFileRequest{Workspace: dir, From: "lib", To: "lib2"}))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dir, "lib2", "a.go"))
+	assert.NoError(t, err, "not copied")
+	_, err = files.CopyFile(ctx, connect.NewRequest(&pb.CopyFileRequest{Workspace: dir, From: "lib", To: "lib2"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FILE_EXISTS", info.Reason)
+
+	// Undoable: to the trash, and back (FIL-37).
+	del, err := files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "lib2", Undoable: true}))
+	require.NoError(t, err)
+	require.NotEmpty(t, del.Msg.RestoreId)
+	_, err = files.RestoreFile(ctx, connect.NewRequest(&pb.RestoreFileRequest{Workspace: dir, RestoreId: del.Msg.RestoreId, Path: "lib2"}))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dir, "lib2", "a.go"))
+	assert.NoError(t, err, "not restored")
+	_, err = files.RestoreFile(ctx, connect.NewRequest(&pb.RestoreFileRequest{Workspace: dir, RestoreId: del.Msg.RestoreId, Path: "lib2"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_IN_TRASH", info.Reason)
+	_, err = files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "missing", Undoable: true}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "FILE_NOT_FOUND", info.Reason, "nothing to put in the trash")
+
 	_, err = files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "lib"}))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(dir, "lib"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "not deleted")
+}
+
+// WatchFiles says the watch is on, then streams the open folders that
+// change, until the client goes (FIL-33b).
+func TestWatchFilesOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := files.WatchFiles(ctx, connect.NewRequest(&pb.WatchFilesRequest{Workspace: dir, Folders: []string{"", "src"}}))
+	require.NoError(t, err)
+	defer stream.Close()
+	got := make(chan *pb.WatchFilesResponse, 16)
+	go func() {
+		for stream.Receive() {
+			got <- stream.Msg()
+		}
+		close(got)
+	}()
+	next := func() *pb.WatchFilesResponse {
+		t.Helper()
+		select {
+		case m, ok := <-got:
+			require.True(t, ok, "the stream ended: %v", stream.Err())
+			return m
+		case <-time.After(5 * time.Second):
+			t.Fatal("nothing streamed")
+			return nil
+		}
+	}
+	first := next()
+	assert.Empty(t, first.Folders, "the watch is on")
+	assert.False(t, first.Polling)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("package a\n"), 0o644))
+	var changed []string
+	for !slices.Contains(changed, "src") {
+		changed = append(changed, next().Folders...)
+	}
+	cancel()
+	for range got { // the client went away: the stream ends
+	}
 }
 
 // Previews of images over the API, NO_PREVIEW for other files, and the

@@ -13,5 +13,6 @@ The service's API, one page per proto file in `proto/blitz/v1`: each message, en
 | [`workspace.proto`](workspace.md) | `WorkspaceService` | Agents, models, settings, context, changes, extensions, images, search |
 | [`file.proto`](file.md) | `FileService` | The workspace's files, for the desktop app |
 | [`language.proto`](language.md) | `LanguageService` | Language servers for the editor: completion, hover, definitions, problems |
+| [`terminal.proto`](terminal.md) | `TerminalService` | The window's terminals: the person's shell in a PTY, its output streamed (spec_062) |
 | [`config.proto`](config.md) | `ConfigService` | The settings files and API keys |
 | [`worker.proto`](worker.md) | `WorkerService` | Jobs and their runs |

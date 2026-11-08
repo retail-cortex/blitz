@@ -78,6 +78,7 @@ import { files, serviceLost, sessions, workers, workspaces } from "./api";
 import { ModelFile } from "./ModelFile";
 import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
 import { editorConfig, toEditor } from "./host";
+import { dragType, treeDrag } from "./files/tree";
 import { DiffView } from "./Changes";
 import { chatTitle, HistoryMenu } from "./HistoryMenu";
 import { isUnavailable, message, reason } from "./errors";
@@ -944,9 +945,13 @@ export function Conversation({
     <div
       className={`chat ${dragging ? "dragging" : ""}`}
       onDragOver={(e) => {
-        if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+        const types = Array.from(e.dataTransfer.types);
+        const fromTree = types.includes(dragType) || treeDrag.current?.dir === dir;
+        if (!types.includes("Files") && !fromTree) return;
         e.preventDefault();
-        setDragging(true);
+        // Rows from the Files tree become context, not attachments (FIL-76).
+        if (fromTree) e.dataTransfer.dropEffect = "link";
+        else setDragging(true);
       }}
       onDragLeave={(e) => {
         if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
@@ -954,6 +959,13 @@ export function Conversation({
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
+        const rows = treeDrag.current?.dir === dir ? treeDrag.current.paths : null;
+        const typed = e.dataTransfer.getData(dragType);
+        treeDrag.current = null;
+        if (rows || typed) {
+          for (const path of rows ?? typed.split("\n").filter(Boolean)) addToContextRef.current({ dir, path });
+          return;
+        }
         addFiles(Array.from(e.dataTransfer.files));
       }}
     >
@@ -1004,6 +1016,7 @@ export function Conversation({
                       key={x.result.image_uri}
                       dir={dir}
                       entry={{ kind: "file", uri: x.result.image_uri, name: x.result.path, mime: String(x.result.mime_type ?? "image/png"), size: Number(x.result.bytes ?? 0) }}
+                      onPictures={typeof x.result.picture_session === "string" ? () => showView({ dir, view: "pictures", picture: { session: String(x.result?.picture_session) } }) : undefined}
                     />
                   ) : null,
                 )}

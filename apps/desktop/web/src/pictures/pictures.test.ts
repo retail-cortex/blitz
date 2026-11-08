@@ -16,8 +16,8 @@
 
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { PictureModelSchema } from "../gen/blitz/v1/workspace_pb";
-import { controls, defaultSettings, extensionOf, fitSettings, loadSettings, keepSettings, ratioShape, refProblem, type Ref } from "./pictures";
+import { PictureModelSchema, PictureTurnSchema } from "../gen/blitz/v1/workspace_pb";
+import { againRequest, controls, defaultSettings, newSeed, standsAlone, extensionOf, fitSettings, loadSettings, keepSettings, ratioShape, refProblem, type Ref } from "./pictures";
 
 const nano = create(PictureModelSchema, {
   ref: "gemini/gemini-nano-banana-2.1", name: "Nano", kind: "gemini", maxReferences: 14, maxCharacters: 4, maxObjects: 10, maxPictures: 1,
@@ -85,5 +85,36 @@ describe("the rest", () => {
     keepSettings("/w", { ...defaultSettings, ratio: "16:9" });
     expect(loadSettings("/w").ratio).toBe("16:9");
     delete (globalThis as { localStorage?: unknown }).localStorage;
+  });
+});
+
+// Try again and Vary (PIC-42): a turn that stands alone, made again.
+describe("making a turn again", () => {
+  const turn = create(PictureTurnSchema, {
+    model: "gemini/imagen-4.0-generate-preview", kind: "imagen", prompt: "a lighthouse", count: 2, aspectRatio: "16:9", size: "2K",
+    avoid: "fog", people: "dont_allow", format: "image/jpeg", seed: 42, hasSeed: true, search: "",
+    references: [{ file: "r-1.png", mime: "image/png", name: "a.png", path: "a.png", role: "style" }],
+  });
+  it("tries again as the turn was, its seed included", () => {
+    const r = againRequest("/w", "pic-1", turn, { enhance: true, quality: 80 });
+    expect(r).toMatchObject({ workspace: "/w", session: "pic-1", model: turn.model, prompt: "a lighthouse", count: 2, aspectRatio: "16:9", size: "2K", avoid: "fog", people: "dont_allow", format: "image/jpeg", seed: 42, useSeed: true, enhance: true, quality: 80, startFrom: "", estimate: false, search: false, searchImages: false });
+    expect(r.references).toEqual([{ picture: "r-1.png", mime: "image/png", name: "a.png", role: "style" }]);
+  });
+  it("varies with a new seed", () => {
+    expect(againRequest("/w", "pic-1", turn, { enhance: false, quality: 90 }, 7)).toMatchObject({ seed: 7, useSeed: true });
+  });
+  it("sends no seed when the turn had none, and no quality for a PNG", () => {
+    const plain = create(PictureTurnSchema, { model: "openai/gpt-image-2", kind: "openai", prompt: "p", format: "image/png", search: "image" });
+    expect(againRequest("/w", "s", plain, { enhance: false, quality: 90 })).toMatchObject({ useSeed: false, quality: 0, count: 1, search: true, searchImages: true });
+  });
+  it("offers it only where turns stand alone, with seeds in range", () => {
+    expect(standsAlone("imagen")).toBe(true);
+    expect(standsAlone("openai")).toBe(true);
+    expect(standsAlone("gemini")).toBe(false);
+    for (let i = 0; i < 20; i++) {
+      const s = newSeed();
+      expect(s).toBeGreaterThan(0);
+      expect(s).toBeLessThan(2 ** 31);
+    }
   });
 });

@@ -34,17 +34,181 @@ export const emptyTree: Tree = { children: new Map(), expanded: new Set() };
 export interface Row {
   entry: FileEntry;
   depth: number;
+  /**
+   * Compact folders (FIL-47): the folders a single-child chain shows on
+   * this row, the first one first; entry is the last. Absent for a row
+   * of its own.
+   */
+  chain?: FileEntry[];
+  /** The files nested under this one (FIL-48): it opens like a folder. */
+  nests?: number;
 }
 
 /** Whether an entry is a folder. */
 export const isFolder = (e: Pick<FileEntry, "kind">) => e.kind === FileKind.FOLDER;
 
+/** How a folder's entries are ordered (FIL-48). */
+export type SortOrder = "folders" | "mixed" | "type";
+
+/** How the rows are shown (FIL-47, FIL-48). */
+export interface RowOptions {
+  sort?: SortOrder;
+  /** Related files under the one they belong to (tests under code, locks under manifests). */
+  nest?: boolean;
+  /** Single-child folder chains on one row. */
+  compact?: boolean;
+}
+
+const byName = (a: FileEntry, b: FileEntry) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+const extOf = (name: string) => {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(i + 1).toLowerCase() : "";
+};
+
+/** entries in the order sort says: folders first (the default), mixed, or by type. */
+export function sortEntries(entries: FileEntry[], sort: SortOrder = "folders"): FileEntry[] {
+  const out = [...entries];
+  out.sort((a, b) => {
+    if (sort !== "mixed" && isFolder(a) !== isFolder(b)) return isFolder(a) ? -1 : 1;
+    if (sort === "type" && !isFolder(a) && !isFolder(b)) {
+      const c = extOf(a.name).localeCompare(extOf(b.name));
+      if (c !== 0) return c;
+    }
+    return byName(a, b);
+  });
+  return out;
+}
+
+// What nests under what (FIL-48): a file's tests and generated companions
+// under it, a manifest's lock files under the manifest.
+const nestRules: { parent: RegExp; children: (m: RegExpMatchArray) => string[] }[] = [
+  { parent: /^(.+)\.(ts|tsx|js|jsx|mjs|cjs)$/, children: (m) => [`${m[1]}.test.${m[2]}`, `${m[1]}.spec.${m[2]}`, `${m[1]}.d.ts`, `${m[1]}.${m[2]}.map`] },
+  { parent: /^(.+)\.go$/, children: (m) => [`${m[1]}_test.go`] },
+  { parent: /^(.+)\.py$/, children: (m) => [`${m[1]}_test.py`, `test_${m[1]}.py`] },
+  { parent: /^package\.json$/, children: () => ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "pnpm-workspace.yaml", ".npmrc"] },
+  { parent: /^go\.mod$/, children: () => ["go.sum", "go.work", "go.work.sum"] },
+  { parent: /^MODULE\.bazel$/, children: () => ["MODULE.bazel.lock"] },
+  { parent: /^pyproject\.toml$/, children: () => ["uv.lock", "poetry.lock", "requirements.txt"] },
+  { parent: /^Cargo\.toml$/, children: () => ["Cargo.lock"] },
+  { parent: /^Gemfile$/, children: () => ["Gemfile.lock"] },
+];
+
+/**
+ * The file each file of a folder nests under, by name (FIL-48): only
+ * files, under a file of the same folder; a file that has nested files
+ * isn't nested itself.
+ */
+export function nestParents(entries: FileEntry[]): Map<string, string> {
+  const files = new Set(entries.filter((e) => !isFolder(e)).map((e) => e.name));
+  const out = new Map<string, string>();
+  for (const name of files) {
+    for (const rule of nestRules) {
+      const m = name.match(rule.parent);
+      if (!m) continue;
+      for (const child of rule.children(m)) if (child !== name && files.has(child) && !out.has(child)) out.set(child, name);
+    }
+  }
+  for (const parent of new Set(out.values())) out.delete(parent);
+  return out;
+}
+
 /** The rows shown: the workspace's entries, and each open folder's under it. */
-export function rows(tree: Tree, dir = "", depth = 0): Row[] {
+export function rows(tree: Tree, dir = "", depth = 0, opts: RowOptions = {}): Row[] {
   const out: Row[] = [];
-  for (const entry of tree.children.get(dir) ?? []) {
-    out.push({ entry, depth });
-    if (isFolder(entry) && tree.expanded.has(entry.path)) out.push(...rows(tree, entry.path, depth + 1));
+  const entries = sortEntries(tree.children.get(dir) ?? [], opts.sort);
+  const parents = opts.nest ? nestParents(entries) : new Map<string, string>();
+  const nested = new Map<string, FileEntry[]>();
+  for (const e of entries) {
+    const p = parents.get(e.name);
+    if (p) nested.set(p, [...(nested.get(p) ?? []), e]);
+  }
+  for (const first of entries) {
+    if (parents.has(first.name)) continue;
+    if (!isFolder(first)) {
+      const kids = nested.get(first.name);
+      out.push(kids ? { entry: first, depth, nests: kids.length } : { entry: first, depth });
+      if (kids && tree.expanded.has(first.path)) for (const k of kids) out.push({ entry: k, depth: depth + 1 });
+      continue;
+    }
+    // A chain of folders each holding only the next (once loaded and open).
+    let entry = first;
+    const chain = [first];
+    while (opts.compact && tree.expanded.has(entry.path)) {
+      const kids = tree.children.get(entry.path);
+      if (!kids || kids.length !== 1 || !isFolder(kids[0])) break;
+      entry = kids[0];
+      chain.push(entry);
+    }
+    out.push(chain.length > 1 ? { entry, depth, chain } : { entry, depth });
+    if (tree.expanded.has(entry.path)) out.push(...rows(tree, entry.path, depth + 1, opts));
+  }
+  return out;
+}
+
+/** A row's label: its name, or a compacted chain's names joined by "/". */
+export function rowLabel(r: Row): string {
+  return r.chain ? r.chain.map((e) => e.name).join("/") : r.entry.name;
+}
+
+/** Whether name can name a new file or folder in a folder: a path like a/b/c.md, each part a valid name (FIL-49). */
+export function validNewName(name: string): boolean {
+  const parts = name.trim().split("/");
+  return parts.every((p) => validName(p));
+}
+
+/**
+ * The row type-to-find goes to (FIL-73): the next one after from whose
+ * name starts with prefix (case aside), wrapping round; -1 for none.
+ */
+export function nextMatch(shown: Row[], from: number, prefix: string): number {
+  const q = prefix.toLowerCase();
+  if (!q) return -1;
+  for (let k = 1; k <= shown.length; k++) {
+    const i = (from + k + shown.length) % shown.length;
+    if (rowLabel(shown[i]).toLowerCase().startsWith(q)) return i;
+  }
+  return -1;
+}
+
+/** The paths of the rows from a to b (either order), for Shift's selection (FIL-74). */
+export function rangeOf(shown: Row[], a: string, b: string): string[] {
+  const i = shown.findIndex((r) => r.entry.path === a);
+  const j = shown.findIndex((r) => r.entry.path === b);
+  if (i < 0 || j < 0) return j >= 0 ? [b] : [];
+  return shown.slice(Math.min(i, j), Math.max(i, j) + 1).map((r) => r.entry.path);
+}
+
+/**
+ * The selected paths an action takes (FIL-74): without the ones under a
+ * selected folder (the folder takes them with it).
+ */
+export function topmost(paths: Iterable<string>): string[] {
+  const all = [...new Set(paths)].sort();
+  return all.filter((p) => !all.some((q) => q !== p && p.startsWith(q + "/")));
+}
+
+/**
+ * The name a copy of name takes beside the names taken (FIL-38):
+ * "a copy.md", then "a copy 2.md", …
+ */
+export function copyName(name: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(name)) return name;
+  const dot = name.lastIndexOf(".");
+  const [base, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+  for (let n = 1; ; n++) {
+    const c = `${base} copy${n > 1 ? ` ${n}` : ""}${ext}`;
+    if (!taken.has(c)) return c;
+  }
+}
+
+/**
+ * Each file's and folder's worst problem (FIL-46): the files' own, and
+ * each folder the worst of what's under it.
+ */
+export function problemsUp(files: ReadonlyMap<string, "error" | "warning">): Map<string, "error" | "warning"> {
+  const out = new Map(files);
+  for (const [path, sev] of files) {
+    for (const folder of ancestors(path)) if (out.get(folder) !== "error") out.set(folder, sev === "error" ? "error" : (out.get(folder) ?? "warning"));
   }
   return out;
 }
@@ -125,3 +289,11 @@ export function ancestors(path: string): string[] {
 
 /** The drag data type of a workspace path dragged from the tree (the editor takes it too). */
 export const dragType = "application/x-blitz-path";
+
+/**
+ * What the tree is dragging, for the chat to take as context (FIL-76): in
+ * the app a row's drag is the computer's own (its files), which says
+ * nothing of the workspace, so the tree says here what it is. Paths are
+ * the context's: a folder's ends in "/".
+ */
+export const treeDrag: { current: { dir: string; paths: string[] } | null } = { current: null };

@@ -234,17 +234,18 @@ func (x *Index) Columns(ctx context.Context, source, ref string) ([]ColumnNote, 
 }
 
 // aboutMatch is the documents whose summary or tags match, as their first
-// chunks, best first.
-func (x *Index) aboutMatch(ctx context.Context, expr string, sources []string, limit int) ([]candidate, error) {
+// chunks, best first, under folder ("" for all).
+func (x *Index) aboutMatch(ctx context.Context, expr string, sources []string, folder string, limit int) ([]candidate, error) {
 	in := strings.TrimSuffix(strings.Repeat("?, ", len(sources)), ", ")
 	args := []any{expr}
 	for _, s := range sources {
 		args = append(args, s)
 	}
-	args = append(args, limit)
+	scope, scopeArgs := folderSQL(folder)
+	args = append(append(args, scopeArgs...), limit)
 	rows, err := x.db.QueryContext(ctx, `SELECT (SELECT min(c.id) FROM chunks c WHERE c.doc = d.id)
 		FROM about JOIN docs d ON d.id = about.rowid
-		WHERE about MATCH ? AND d.source IN (`+in+`)
+		WHERE about MATCH ? AND d.source IN (`+in+`)`+scope+`
 		ORDER BY bm25(about, 2.0, 1.0, 1.0) LIMIT ?`, args...)
 	if err != nil {
 		return nil, err

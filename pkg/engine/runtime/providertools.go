@@ -269,6 +269,42 @@ func builtinTool(kind string) *genai.Tool {
 	}
 }
 
+// withServerSideInvocations asks the Gemini API for its built-in tools'
+// calls and results in the answer, as ToolCall and ToolResponse parts.
+// Since Gemini 3.8 it refuses built-in tools beside function calling
+// without it ("Please enable tool_config.include_server_side_tool_invocations
+// to use Built-in tools with Function calling", 2026-11-08); Vertex AI takes
+// no such field (the SDK refuses it there). req is shared, so a changed one
+// is a copy.
+func withServerSideInvocations(req *model.LLMRequest) *model.LLMRequest {
+	if req == nil || req.Config == nil || len(builtinKinds(req.Config)) == 0 ||
+		!slices.ContainsFunc(req.Config.Tools, func(t *genai.Tool) bool { return t != nil && len(t.FunctionDeclarations) > 0 }) {
+		return req
+	}
+	cp := *req
+	cfg := *req.Config
+	tc := genai.ToolConfig{}
+	if cfg.ToolConfig != nil {
+		tc = *cfg.ToolConfig
+	}
+	tc.IncludeServerSideToolInvocations = genai.Ptr(true)
+	cfg.ToolConfig = &tc
+	cp.Config = &cfg
+	return &cp
+}
+
+// geminiToolKind is the provider tool a Gemini ToolCall or ToolResponse
+// is, by its type; "" for one Blitz doesn't offer.
+func geminiToolKind(t genai.ToolType) string {
+	switch t {
+	case genai.ToolTypeGoogleSearchWeb, genai.ToolTypeGoogleSearchImage:
+		return ptWebSearch
+	case genai.ToolTypeURLContext:
+		return ptWebFetch
+	}
+	return ""
+}
+
 // builtinKinds is the provider tools cfg offers, in genai's fields.
 func builtinKinds(cfg *genai.GenerateContentConfig) []string {
 	if cfg == nil {
@@ -351,8 +387,10 @@ func isProviderPart(p *genai.Part) bool {
 
 // ownProviderPart reports whether the model at o made p, in a form its
 // API takes back: Claude's server tool blocks (its own, signed), Gemini's
-// code execution. Gemini's search leaves no parts of its own (the stored
-// ones are made from its grounding), and OpenAI's can't be sent back.
+// code execution and its own tool calls and results (with their type,
+// which the Gemini API sends with server-side invocations on). Gemini's
+// search parts made from its grounding aren't taken back, and OpenAI's
+// can't be sent back.
 func ownProviderPart(o Origin, p *genai.Part) bool {
 	switch o.API {
 	case "anthropic":
@@ -360,7 +398,9 @@ func ownProviderPart(o Origin, p *genai.Part) bool {
 		return ok && key == o.key() && len(payload) > 0
 	case "gemini":
 		key, _ := p.PartMetadata[providerOriginKey].(string)
-		return (p.ExecutableCode != nil || p.CodeExecutionResult != nil) && key == o.key()
+		own := p.ExecutableCode != nil || p.CodeExecutionResult != nil ||
+			p.ToolCall != nil && p.ToolCall.ToolType != "" || p.ToolResponse != nil && p.ToolResponse.ToolType != ""
+		return own && key == o.key()
 	}
 	return false
 }
@@ -557,14 +597,39 @@ func countRequests(resp *model.LLMResponse, kind string, n int) {
 }
 
 // geminiProviderTools stores what Gemini's built-in tools did in resp
-// (CA-80, CA-84): its search, from the grounding (the queries as the
-// call, the sources as the result, and the citations), and its code
-// execution, tagged with its origin.
+// (CA-80, CA-84): its own calls and results (server-side invocations), or
+// else its search from the grounding (the queries as the call, the sources
+// as the result); the citations; and its code execution; each tagged with
+// its origin.
 func geminiProviderTools(o Origin, resp *model.LLMResponse) {
 	if resp == nil || resp.Partial || resp.Content == nil {
 		return
 	}
 	code, id := 0, ""
+	own := map[string]int{}
+	for _, p := range resp.Content.Parts {
+		if p == nil {
+			continue
+		}
+		var kind string
+		switch {
+		case p.ToolCall != nil:
+			kind = geminiToolKind(p.ToolCall.ToolType)
+			own[kind]++
+		case p.ToolResponse != nil:
+			kind = geminiToolKind(p.ToolResponse.ToolType)
+		default:
+			continue
+		}
+		if p.PartMetadata == nil {
+			p.PartMetadata = map[string]any{}
+		}
+		p.PartMetadata[providerOriginKey] = o.key() // Gemini's own, to send back
+		if kind != "" {
+			p.PartMetadata[providerToolKey] = kind
+		}
+	}
+	countRequests(resp, ptWebFetch, own[ptWebFetch])
 	for _, p := range resp.Content.Parts {
 		if p != nil && (p.ExecutableCode != nil || p.CodeExecutionResult != nil) {
 			if p.PartMetadata == nil {
@@ -580,6 +645,7 @@ func geminiProviderTools(o Origin, resp *model.LLMResponse) {
 		}
 	}
 	countRequests(resp, ptCodeExecution, code)
+	countRequests(resp, ptWebSearch, own[ptWebSearch])
 	g := resp.GroundingMetadata
 	if g == nil || len(g.WebSearchQueries) == 0 && len(g.GroundingChunks) == 0 {
 		return
@@ -614,6 +680,10 @@ func geminiProviderTools(o Origin, resp *model.LLMResponse) {
 			}
 		}
 	}
+	addCitations(resp, cites)
+	if own[ptWebSearch] > 0 { // its own calls say what it searched
+		return
+	}
 	id = bzPrefix + uuid.NewString()
 	call := providerCall(ptWebSearch, id, map[string]any{"query": strings.Join(g.WebSearchQueries, "; ")}, nil)
 	result := providerResult(ptWebSearch, id, strings.Join(sources, "\n"), nil)
@@ -621,6 +691,5 @@ func geminiProviderTools(o Origin, resp *model.LLMResponse) {
 		p.PartMetadata[providerOriginKey] = o.key()
 	}
 	resp.Content.Parts = append([]*genai.Part{call, result}, resp.Content.Parts...)
-	addCitations(resp, cites)
 	countRequests(resp, ptWebSearch, max(len(g.WebSearchQueries), 1))
 }

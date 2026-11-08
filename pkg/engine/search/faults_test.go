@@ -151,7 +151,7 @@ func TestClosedIndex(t *testing.T) {
 		"about":      func() error { return x.setAbout(1, "h", Description{Summary: "s", Tags: []string{"t"}}) },
 		"columns":    func() error { _, err := x.Columns(ctx, "files", "a.md"); return err },
 		"spend":      func() error { return x.spend("2026-10-03", 1) },
-		"matches":    func() error { _, err := x.aboutMatch(ctx, `"car"`, []string{"files"}, 5); return err },
+		"matches":    func() error { _, err := x.aboutMatch(ctx, `"car"`, []string{"files"}, "", 5); return err },
 		"abouts":     func() error { return x.abouts(ctx, []Hit{{Source: "files", Ref: "a.md"}}) },
 		"known":      func() error { _, err := x.known("files"); return err },
 		"counts":     func() error { _, err := x.counts(); return err },

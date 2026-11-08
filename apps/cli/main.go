@@ -146,7 +146,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newGitCredentialCommand())
 	groupHelp(root)
 	return root
 }
@@ -641,9 +641,15 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "reload", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps", "data"} {
 		c.Command(cmd)
 	}
+	c.Mentions(func() []string { // @db:shop, @db:shop/top_customers (DAT-45)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		conns, _ := w.DataConnections(ctx)
+		return tui.DataMentions(conns)
+	})
 	c.Command("skills", "list", "show", "search", "update", "install", "registry")
 	c.Command("agents", "update")
 	c.Command("rules", "update")

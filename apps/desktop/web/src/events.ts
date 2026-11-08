@@ -80,6 +80,18 @@ export function openWeb(detail: OpenWebDetail) {
   window.dispatchEvent(new CustomEvent(openWebEvent, { detail }));
 }
 
+/** The event that opens a terminal in a workspace's editor (spec_062_terminal TRM-30). */
+export const openTerminalEvent = "blitz:open-terminal";
+/** A terminal to open: its workspace, and a folder in it ("" for it). */
+export interface OpenTerminalDetail {
+  dir: string;
+  folder: string;
+}
+/** Opens a terminal in a workspace's editor, in a tab of its own. */
+export function openTerminal(detail: OpenTerminalDetail) {
+  window.dispatchEvent(new CustomEvent(openTerminalEvent, { detail }));
+}
+
 /** The event that adds a web page's content to a workspace's next prompt (EL-104). */
 export const addWebEvent = "blitz:add-web";
 /** What Add to chat adds: a page's content (block), or a screenshot of it (image, a PNG). */
@@ -117,7 +129,7 @@ export interface ViewDetail {
   /** Studio: the section to open (the agent's open studio, spec_060 DRV-31). */
   studio?: string;
   /** Pictures: a first prompt, a workspace picture to start from, a folder to save in (spec_058 PIC-10). */
-  picture?: { prompt?: string; reference?: string; folder?: string };
+  picture?: { prompt?: string; reference?: string; folder?: string; session?: string };
   /** Which changes: this session's (the default) or git's. */
   source?: "session" | "git";
   /** Studio › Workflows: the workflow to open, and the run to show on it. */
@@ -269,9 +281,13 @@ export function goToFile(detail: { dir: string }) {
 
 /** The event that opens workspace search. */
 export const searchWorkspaceEvent = "blitz:search-workspace";
-/** Opens workspace search on the active workspace, with query typed, on sources (undefined: the usual ones). */
-export function searchWorkspace(query = "", sources?: SearchSource[]) {
-  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query, sources } }));
+/**
+ * Opens workspace search on the active workspace, with query typed, on
+ * sources (undefined: the usual ones), within folder ("" or undefined:
+ * the whole workspace; the Files shelf's Find in folder, SRCH-18).
+ */
+export function searchWorkspace(query = "", sources?: SearchSource[], folder?: string) {
+  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query, sources, folder } }));
 }
 
 /** The event that says a workspace's files may have changed. */
