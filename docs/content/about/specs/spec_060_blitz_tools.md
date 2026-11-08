@@ -8,7 +8,7 @@ weight: 60
 | | |
 |---|---|
 | Status | **Draft** (2026-11-07, the owner's request; decisions in §11). Phase 1 (the tool, connections, the skill) is first. |
-| Source | Planned: the command catalog in `pkg/api/blitzcommands.go` (names, arguments, what each does) and its commands in `pkg/engine/blitzcmd/`; the tool in `pkg/engine/tools/blitz.go`; the skill in `pkg/engine/skills/builtin/blitz/`; the CLI's commands in `apps/cli/`; the window's actions in `apps/desktop/web/src/` (the approval's secret fields, opening Pictures or the browser); the terminal's in `apps/cli/internal/tui/` |
+| Source | Planned: the command catalog in `pkg/api/blitzcommands.go` (planned), with names, arguments and what each does, and its commands in `pkg/engine/blitzcmd/` (planned); the tool in `pkg/engine/tools/blitz.go` (planned); the skill in `pkg/engine/skills/builtin/blitz/` (planned); the CLI's commands in `apps/cli/`; the window's actions in `apps/desktop/web/src/` (the approval's secret fields, opening Pictures or the browser); the terminal's in `apps/cli/internal/tui/` |
 | Depends on | [spec_047_connectors](spec_047_connectors.md) (CON-06 files, CON-09 trust, CON-17 on in a workspace, CON-18 Studio stays in its workspace), [spec_046_databases](spec_046_databases.md) (DB-17 paths), [spec_039_secrets](spec_039_secrets.md), [spec_005_approvals](spec_005_approvals.md) (APR-14b auto mode reads answers), [spec_043_workflows](spec_043_workflows.md), [spec_058_pictures](spec_058_pictures.md), [spec_057_spec_driven](spec_057_spec_driven.md), the jobs tools (`create_job`, `list_jobs`) |
 
 ## 1. Purpose
@@ -70,7 +70,7 @@ By phase. Each group's commands are listed by `blitz help`.
 
 ## 5. The blitz skill
 
-- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md`; a workspace's own skill of that name is used instead), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
+- **DRV-20** A built-in skill, **blitz** (`pkg/engine/skills/builtin/blitz/SKILL.md` (planned); a workspace's own skill of that name is used instead), whose description is what makes the agent load it: using or setting up Blitz's own features. Loaded only then, so other turns don't carry it.
 - **DRV-21** It says, briefly:
   - what each feature is, in a line, and its command group;
   - that `blitz help <command>` gives the arguments, and that the commands ask the person, so the agent shouldn't ask first as well;
