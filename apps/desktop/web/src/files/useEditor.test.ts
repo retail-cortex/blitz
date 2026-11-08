@@ -121,4 +121,24 @@ describe("a workspace's editor", () => {
       ed.unmount();
     }
   });
+
+  it("clears Deleted on disk when the file comes back as it was (Undo in the tree)", async () => {
+    const files: Record<string, { text: string; version: string }> = { "a.txt": { text: "one\n", version: "v1" } };
+    fakeService(files);
+    const ed = mount("/w/notes");
+    try {
+      act(() => ed.ref.model!.open("a.txt"));
+      await vi.waitFor(() => expect(ed.ref.model!.tabs[0]?.loading).toBe(false));
+      act(() => ed.ref.model!.moved("a.txt", null)); // the tree deleted it
+      expect(ed.ref.model!.tabs[0].disk).toBe("deleted");
+      await act(async () => void ed.ref.model!.check()); // restored: the same version again
+      expect(ed.ref.model!.tabs[0].disk).toBeUndefined();
+
+      delete files["a.txt"];
+      await act(async () => void ed.ref.model!.check());
+      expect(ed.ref.model!.tabs[0].disk).toBe("deleted");
+    } finally {
+      ed.unmount();
+    }
+  });
 });

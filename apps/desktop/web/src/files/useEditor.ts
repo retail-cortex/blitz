@@ -263,7 +263,10 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     }
     for (const t of open) {
       const v = versions[t.path] ?? "";
-      if (v === t.version || (t.conflict !== undefined && v === t.conflict)) continue;
+      if (v === t.version || (t.conflict !== undefined && v === t.conflict)) {
+        if (t.disk === "deleted" && v !== "") patch(t.path, { disk: undefined }); // back as it was (the tree's Undo)
+        continue;
+      }
       if (v === "") patch(t.path, { disk: "deleted" });
       else if (!t.dirty) void load(t.path, true);
       else patch(t.path, { disk: "changed" });
