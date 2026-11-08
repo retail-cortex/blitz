@@ -124,7 +124,7 @@ echo "make it a watercolour" | blitz picture --ref posters/lighthouse.png:style
 blitz picture --continue pic-1a2b3c4d5e6f "now at night"
 ```
 
-It prints where each picture was saved (`-o`, numbered when there are several, or the pictures folder), what it cost, and its Pictures session, which the desktop's **Pictures** reopens. `blitz picture models` lists the image models with their shapes and sizes (the default marked `*`), `blitz picture list` the sessions, and `blitz picture delete <session>` removes one (not what was saved).
+It prints where each picture was saved (`-o`, numbered when there are several, or the pictures folder), what it cost, and its Pictures session, which the desktop's **Pictures** reopens. `blitz picture models` lists the image models with their shapes and sizes (the default marked `*`), `blitz picture list` the sessions, `blitz picture show <session>` one session's turns (each prompt, its settings and references, where its pictures were saved, what the model said and what it cost; `--json` for JSON), and `blitz picture delete <session>` removes one (not what was saved).
 
 ## What a model makes
 

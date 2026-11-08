@@ -28,9 +28,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // fakeOpenAIImages answers OpenAI's image API as the SDK expects: n
@@ -129,6 +132,36 @@ func TestPictureCommand(t *testing.T) {
 	assert.Contains(t, out, session+"\tmake it a watercolour\tturns: 2\n")
 	assert.Equal(t, 2, strings.Count(out, "pic-"))
 
+	// show: each turn's model, prompt, settings, references, where its pictures went and cost.
+	out, err = runCLI(t, "picture", "show", session)
+	require.NoError(t, err, out)
+	assert.Contains(t, out, session+"\tmake it a watercolour\tturns: 2\n")
+	assert.Regexp(t, `Turn 1 · \d{4}-\d\d-\d\d \d\d:\d\d:\d\d · openai/gpt-image-2\n`, out)
+	assert.Contains(t, out, "  Prompt: make it a watercolour\n")
+	assert.Contains(t, out, "  References: art/fox.png (style)\n")
+	assert.Regexp(t, `  Picture p-\S+: pictures/make-it-a-watercolour[^\n]*\.png\n`, out)
+	assert.Contains(t, out, "  Prompt: once more\n")
+	assert.Regexp(t, `  Picture p-\S+: art/again\.png\n`, out)
+	assert.Contains(t, out, "  Cost $0.040\n")
+	out, err = runCLI(t, "picture", "show", "--json", session)
+	require.NoError(t, err, out)
+	var shown struct {
+		ID    string `json:"id"`
+		Turns []struct {
+			Prompt   string `json:"prompt"`
+			Pictures []struct {
+				Saved []string `json:"saved"`
+			} `json:"pictures"`
+		} `json:"turns"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &shown), out)
+	assert.Equal(t, session, shown.ID)
+	require.Len(t, shown.Turns, 2)
+	assert.Equal(t, "once more", shown.Turns[1].Prompt)
+	assert.Equal(t, []string{"art/again.png"}, shown.Turns[1].Pictures[0].Saved)
+	_, err = runCLI(t, "picture", "show", "pic-000000000000")
+	assert.Equal(t, exitFailure, exitCodeFor(err), "no such session")
+
 	out, err = runCLI(t, "picture", "delete", session)
 	require.NoError(t, err, out)
 	assert.Contains(t, out, "Deleted Pictures session "+session)
@@ -201,6 +234,7 @@ func TestPictureAndDataBrokenSettings(t *testing.T) {
 		{"picture", "a fox"},
 		{"picture", "models"},
 		{"picture", "list"},
+		{"picture", "show", "pic-000000000000"},
 		{"picture", "delete", "pic-000000000000"},
 		{"data", "list"},
 		{"data", "query", "kitchen", "SELECT 1"},
@@ -227,4 +261,35 @@ func TestPictureHelpers(t *testing.T) {
 	rel, err := workspacePath(dir, filepath.Join(dir, "sub", "x.png"))
 	require.NoError(t, err)
 	assert.Equal(t, "sub/x.png", rel)
+}
+
+// show's text: a turn's settings in one line, a reference without a path
+// by its name, the model's words, an unsaved picture and a problem.
+func TestShowPictureSession(t *testing.T) {
+	for _, tc := range []struct {
+		turn *pb.PictureTurn
+		want string
+	}{
+		{&pb.PictureTurn{}, ""},
+		{&pb.PictureTurn{AspectRatio: "16:9", Size: "2K", Count: 3, Thinking: "high", Search: "web", Avoid: "text", People: "adults", Format: "jpeg", Seed: 7, HasSeed: true},
+			"16:9 · 2K · ×3 · thinking high · search web · avoid text · people adults · format jpeg · seed 7"},
+		{&pb.PictureTurn{Count: 1, Seed: 0, HasSeed: true}, "seed 0"},
+	} {
+		assert.Equal(t, tc.want, turnSettings(tc.turn))
+	}
+
+	var b strings.Builder
+	showPictureSession(&b, &pb.PictureSession{Id: "pic-1", Name: "fox", Turns: []*pb.PictureTurn{{
+		At: timestamppb.New(time.Date(2026, 11, 8, 12, 0, 0, 0, time.Local)), Model: "gemini/gemini-3.1-flash-image", Prompt: "a fox",
+		References: []*pb.PictureTurnRef{{Name: "sketch.png", File: "r-1.png"}, {File: "r-2.png", Role: "character"}},
+		Text:       " Here it is. ", Pictures: []*pb.PictureFile{{Id: "p-1"}}, CostUsd: 0.039, Problem: "it stopped: IMAGE_SAFETY",
+	}}})
+	assert.Equal(t, "pic-1\tfox\tturns: 1\n\n"+
+		"Turn 1 · 2026-11-08 12:00:00 · gemini/gemini-3.1-flash-image\n"+
+		"  Prompt: a fox\n"+
+		"  References: sketch.png, r-2.png (character)\n"+
+		"  The model said: Here it is.\n"+
+		"  Picture p-1: not saved\n"+
+		"  Cost $0.039\n"+
+		"  Problem: it stopped: IMAGE_SAFETY\n", b.String())
 }
