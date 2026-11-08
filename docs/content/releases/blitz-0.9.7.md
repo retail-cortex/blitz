@@ -3,18 +3,29 @@ title: Blitz 0.9.7
 weight: 1
 ---
 
-A file tree that works like the one you're used to, pictures from the terminal, your data from the terminal, and Gemini searching the web for you again.
+A terminal built into Blitz, a file tree that keeps up with your work, pictures and data from the terminal, and Gemini searching the web for you again.
 
 ### Get started
 
 1. Update Blitz (it updates itself) or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.7).
-2. In **Files**, select a few files with ⌘-click, press ⌘C, pick a folder and press ⌘V. Delete one by mistake? Press **Undo**.
-3. In a terminal, try `blitz picture "a lighthouse at dusk" -n 2` or `blitz data query recipes "select title from recipes"`.
+2. Right-click a folder in **Files** and choose **Open in terminal**: your shell, your prompt, right beside your files.
+3. In **Files**, select a few files with ⌘-click, press ⌘C, pick a folder and press ⌘V. Delete one by mistake? Press **Undo**.
+4. In the terminal, try `blitz picture "a lighthouse at dusk" -n 2` or `blitz data query recipes "select title from recipes"`.
 
 ### What's new
 
-**A file tree that works the way you expect.**
+**A terminal, built in.**
 
+- **Open in terminal** on any folder, or **New terminal** from ⌘K, opens your own shell in a tab beside your files.
+- oh-my-zsh and powerlevel10k prompts look right: full colour, powerline segments and icons, with the MesloLGS Nerd Font included.
+- Copy, paste and find on the usual keys; ⌘-click a file path the terminal prints to open it at that line.
+- It's your terminal, not the agent's: the agents can't read it.
+- Choose the terminal's font and size in **Settings › Appearance**.
+
+**A file tree that keeps up, and works the way you expect.**
+
+- Files appear, change and disappear in the tree as soon as they do on disk: no more waiting for it to catch up.
+- **Find in folder** on a folder's menu searches just that folder.
 - Select several files with ⌘-click, Shift-click or Shift+arrows, then copy, cut, paste, duplicate, drag or delete them together.
 - Deleted files go to a trash for a day, with **Undo** right there.
 - **Filter files** finds a file anywhere in the workspace, and typing in the tree jumps to a match.
@@ -29,7 +40,7 @@ A file tree that works like the one you're used to, pictures from the terminal, 
 - **Try again** and **Vary** redo a picture, the same or with a fresh seed.
 - **Open in Pictures** takes a picture the agent drew in the chat into the Pictures panel, to keep working on it.
 - The agent's picture tool now uses each model's full set of shapes, sizes and reference pictures, and can make up to four pictures at once.
-- `blitz picture` makes pictures from the terminal, with the model, shape, size, count, reference pictures and output folder you choose.
+- `blitz picture` makes pictures from the terminal, with the model, shape, size, count, reference pictures and output folder you choose, and `blitz picture show` prints a session's turns, prompts, settings and costs.
 
 **Your data from the terminal.**
 
@@ -44,6 +55,6 @@ A file tree that works like the one you're used to, pictures from the terminal, 
 
 ### Good to know
 
-- The tree still checks for changes every few seconds; instant updates come later.
+- The built-in terminal works on macOS and Linux; Windows comes later.
 - Copy and paste in the tree use Blitz's own clipboard, not your computer's.
 - Streaming query results to workflows is still on the way.
