@@ -435,3 +435,38 @@ func TestFakeMessagesAPIIsStrict(t *testing.T) {
 		})
 	}
 }
+
+// [llm.gemini] without a key is Gemini on Vertex AI: a turn with Gemini's
+// search beside Blitz's tools reaches it, without the Gemini API's
+// include_server_side_tool_invocations, which the SDK refuses there
+// ("only supported in Gemini Developer API mode").
+func TestGeminiOnVertexAITools(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("GOOGLE_VERTEX_BASE_URL", srv.URL)
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("CLOUDSDK_CONFIG", t.TempDir())
+	fakeADC(t, nil)
+	adcFile(t)
+
+	cfg := config.DefaultConfig()
+	cfg.LLM = config.LLMConfig{}
+	cfg.LLM.Gemini.ProjectID = "p"
+	m, err := newProviderModel(context.Background(), cfg, "gemini", "gemini-3.8-flash")
+	require.NoError(t, err)
+	var got *model.LLMResponse
+	for r, err := range m.GenerateContent(context.Background(), declaring("web_search", "read_file"), false) {
+		require.NoError(t, err)
+		got = r
+	}
+	require.NotNil(t, got)
+	assert.Contains(t, body, "googleSearch", "Gemini's own search")
+	assert.NotContains(t, body, "includeServerSideToolInvocations")
+}

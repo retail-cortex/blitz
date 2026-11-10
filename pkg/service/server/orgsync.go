@@ -54,9 +54,11 @@ type orgSync struct {
 
 // asPerson is git's options for committing as the person signed in to the
 // organization: the saves are theirs, and a computer with no name and
-// email set for Git couldn't commit them at all.
+// email set for Git couldn't commit them at all. They're never signed:
+// the service has no terminal for gpg to ask for a passphrase at, so a
+// commit.gpgsign = true in the person's Git settings would fail every one.
 func asPerson(p enterprise.Person) []string {
-	return []string{"-c", "user.name=" + cmp.Or(p.Name, p.Email, "Blitz"), "-c", "user.email=" + cmp.Or(p.Email, "blitz@localhost")}
+	return []string{"-c", "user.name=" + cmp.Or(p.Name, p.Email, "Blitz"), "-c", "user.email=" + cmp.Or(p.Email, "blitz@localhost"), "-c", "commit.gpgsign=false"}
 }
 
 // gitAs is gitOut committing as the person signed in to c.

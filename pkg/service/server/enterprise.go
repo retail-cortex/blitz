@@ -146,11 +146,14 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 			if changed {
 				configService{s}.changed(ctx, "", "")
 			}
+			// Without a catalog there's no policy, and the organization's
+			// models wait for one: asked for again soon.
+			if m == nil {
+				return retry
+			}
 			every := 15 * time.Minute
-			if m != nil {
-				if d, err := time.ParseDuration(m.Policy.Refresh); err == nil && d > 0 {
-					every = d
-				}
+			if d, err := time.ParseDuration(m.Policy.Refresh); err == nil && d > 0 {
+				every = d
 			}
 			return every
 		}
@@ -162,9 +165,16 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 				continue
 			}
 			every := refresh()
-			// Each version the stream announces is fetched as it comes;
-			// a stream that ends or can't start is tried again later.
-			if err := c.WatchCatalog(ctx, func() { refresh() }); err != nil && ctx.Err() == nil {
+			// Each version the stream announces is fetched as it comes,
+			// and the policy's refresh fetches again even while it's up:
+			// a stream that stays open but says nothing (to a replica on
+			// its way out, say) never keeps Blitz on what it has. One
+			// that ends or can't start is tried again later.
+			wctx, stop := context.WithTimeout(ctx, every)
+			err := c.WatchCatalog(wctx, func() { refresh() })
+			due := wctx.Err() != nil
+			stop()
+			if err != nil && !due && ctx.Err() == nil {
 				if !wait(min(retry, every)) {
 					return
 				}
