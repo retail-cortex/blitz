@@ -304,9 +304,26 @@ pkg_files(
     strip_prefix = strip_prefix.files_only(),
 )
 
+# Blitz's apt repository and the key it's signed with (spec_025_release
+# REL-30), so the .deb installed by hand is then updated by apt upgrade.
+# The sources file is a conffile: a change made to it (Enabled: no) stays.
+pkg_files(
+    name = "deb_apt_source",
+    srcs = ["linux/blitz-desktop.sources"],
+    prefix = "etc/apt/sources.list.d",
+)
+
+pkg_files(
+    name = "deb_apt_key",
+    srcs = ["linux/blitz-desktop.asc"],
+    prefix = "usr/share/keyrings",
+)
+
 pkg_tar(
     name = "deb_data",
     srcs = [
+        ":deb_apt_key",
+        ":deb_apt_source",
         ":deb_doc",
         ":linux_icons",
         ":linux_launcher",
@@ -326,6 +343,7 @@ pkg_deb(
         "@platforms//cpu:arm64": "arm64",
         "@platforms//cpu:x86_64": "amd64",
     }),
+    conffiles = ["/etc/apt/sources.list.d/blitz-desktop.sources"],
     data = ":deb_data",
     depends = [
         "bubblewrap",

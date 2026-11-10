@@ -59,6 +59,10 @@ else
 		list="$(dpkg-deb -c "$pkg")"
 		docs=usr/share/doc/blitz-desktop
 		dpkg-deb -f "$pkg" Maintainer | grep -q "^Retail Cortex " || no "the .deb's maintainer isn't Retail Cortex"
+		# Blitz's apt repository, its key, and the source kept as a conffile.
+		grep -q "etc/apt/sources.list.d/blitz-desktop.sources$" <<<"$list" || no "no apt source for Blitz's repository"
+		grep -q "usr/share/keyrings/blitz-desktop.asc$" <<<"$list" || no "no key for Blitz's apt repository"
+		dpkg-deb -I "$pkg" conffiles 2>/dev/null | grep -qx /etc/apt/sources.list.d/blitz-desktop.sources || no "the apt source isn't a conffile"
 	fi
 	for f in NOTICE THIRD_PARTY_NOTICES; do grep -q "$docs/$f$" <<<"$list" || no "no $docs/$f"; done
 	grep -q "usr/share/metainfo/dev.blitz.desktop.metainfo.xml$" <<<"$list" || no "no AppStream metainfo"

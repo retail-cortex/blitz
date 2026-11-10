@@ -25,10 +25,24 @@ New here? Install the app (below), then set up a provider in [Settings › Provi
 
 Each carries its own `blitz`, `blitzd` and `blitz-tray`, so the app can install the service without a separate download. The app updates itself from the releases: when it opens (every five days at most) it looks for a new one, downloads it, checks its signature, and offers **Restart**; **Settings › About** checks now, and **Update automatically** turns it off. A package manager's copy (the `.deb`, the Arch package) is updated by the package manager instead. Either way the service moves to the new version: the update stops it, writes its login item again for the new `blitzd` and starts it, and when the app opens to an older service (after `apt upgrade`, say) it restarts it with its own at once, asking first only if runs would stop.
 
-**Installing the `.deb`.** Two things apt and Ubuntu's App Center say about a downloaded `.deb` are expected, not faults:
+**Installing the `.deb`.** Install the downloaded package once; it adds Blitz's apt repository, and from then on `sudo apt update && sudo apt upgrade` updates the app (Ubuntu's Software Updater too), and the app restarts the service with the new version:
 
-- `N: Download is performed unsandboxed as root as file '…/blitz-desktop_….deb' couldn't be accessed by user '_apt'. - pkgAcquire::Run (13: Permission denied)`: apt reads the package as its own `_apt` user, who can't see into your home folder. The package installs all the same; to avoid the notice, install it from a folder anyone can read: `cp blitz-desktop_*.deb /tmp && sudo apt install /tmp/blitz-desktop_*.deb`.
-- App Center shows a downloaded package's license and source as unknown and calls it unverified: it reads those from the repository a package comes from, and a downloaded file has none. The license is Apache-2.0 (`/usr/share/doc/blitz-desktop/copyright` once installed), the source is https://github.com/retail-cortex/blitz, and each release's `.deb` comes with a `.sigstore.json` bundle to check it with (`cosign verify-blob`, as for the [release's checksums](../../getting-started/_index.md)).
+```sh
+cp blitz-desktop_*.deb /tmp && sudo apt install /tmp/blitz-desktop_*.deb
+```
+
+Or add the repository first and install from it:
+
+```sh
+sudo curl -fsSLo /usr/share/keyrings/blitz-desktop.asc https://storage.googleapis.com/retail-cortex-blitz-apt/blitz-desktop.asc
+printf 'Types: deb\nURIs: https://storage.googleapis.com/retail-cortex-blitz-apt\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/blitz-desktop.asc\n' | sudo tee /etc/apt/sources.list.d/blitz-desktop.sources
+sudo apt update && sudo apt install blitz-desktop
+```
+
+The key's fingerprint is `FE74 BCE7 A38E C625 A4E0 3E05 417E 7F2D 4428 C92C` (`gpg --show-keys /usr/share/keyrings/blitz-desktop.asc`). To stop updates from it, set `Enabled: no` in `/etc/apt/sources.list.d/blitz-desktop.sources`; apt keeps that through updates. Two things apt and App Center say about a downloaded `.deb` are expected:
+
+- `N: Download is performed unsandboxed as root as file '…/blitz-desktop_….deb' couldn't be accessed by user '_apt'. - pkgAcquire::Run (13: Permission denied)`: apt reads the file as its `_apt` user, who can't see into your home folder. It installs all the same; copying it to `/tmp` first, as above, avoids the notice, and installs from the repository never show it.
+- App Center shows a downloaded file's license and source as unknown and calls it unverified: it takes those from a repository, and a file has none. Installed from the repository, the license (Apache-2.0) and homepage come from its AppStream data. Each release's `.deb` also has a `.sigstore.json` bundle to check it with (`cosign verify-blob`, as for the [release's checksums](../../getting-started/_index.md)).
 
 From source: `bazel build //:mac-app` on macOS, `//:deb`, `//:pacman` or `//:desktop-tar` on Linux, and `//:windows-zip` anywhere; or `bazel run //:desktop` to run it. See [building](../../development/building.md).
 
