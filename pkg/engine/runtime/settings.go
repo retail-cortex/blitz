@@ -51,6 +51,9 @@ type settingsModel struct {
 	// for the origin of what the model writes (spec_056 CA-02); provider
 	// when unset.
 	configured string
+	// vertexAI is a Gemini model on Vertex AI, whichever provider names
+	// it: [llm.gemini] without a key is.
+	vertexAI bool
 }
 
 // info is the model's record now (spec_056 CA-10).
@@ -96,7 +99,7 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	}
 	if m.provider == "gemini" {
 		req = attachLoneSignatures(req)
-		if o.Provider == "gemini" { // the Gemini API, not Vertex AI
+		if o.Provider == "gemini" && !m.vertexAI { // the Gemini API, not Vertex AI
 			req = withServerSideInvocations(req)
 		}
 	}

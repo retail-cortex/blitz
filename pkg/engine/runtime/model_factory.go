@@ -186,8 +186,14 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 	// The settings' max_tokens is applied first, then capped at what the
 	// model turns out to allow (outputcap.go).
 	capped := &outputCapModel{inner: &streamingModel{inner: m}, provider: cmp.Or(provider, providerOf(m))}
-	return &settingsModel{inner: capped, provider: providerOf(m), configured: provider}, nil
+	_, vertexAI := m.(onVertexAI)
+	return &settingsModel{inner: capped, provider: providerOf(m), configured: provider, vertexAI: vertexAI}, nil
 }
+
+// onVertexAI is a Gemini model [llm.gemini] reaches through Vertex AI
+// (Google Cloud's credentials, no key): the API it's on, not the
+// provider's name, says which request fields it takes.
+type onVertexAI struct{ model.LLM }
 
 // providerOf names the API a built model talks to; with provider "" the
 // choice was made from the credentials present.
@@ -215,7 +221,11 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		if err != nil {
 			return nil, err
 		}
-		return gemini.NewModel(ctx, modelName, clientCfg)
+		m, err := gemini.NewModel(ctx, modelName, clientCfg)
+		if err != nil || clientCfg.Backend != genai.BackendVertexAI {
+			return m, err
+		}
+		return onVertexAI{m}, nil
 
 	case "openai", "ollama":
 		apiKey, baseURL, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)

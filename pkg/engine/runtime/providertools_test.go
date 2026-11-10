@@ -435,10 +435,11 @@ func TestServerSideInvocations(t *testing.T) {
 	t.Run("only on the Gemini API", func(t *testing.T) {
 		for _, tc := range []struct {
 			configured string
+			vertexAI   bool
 			want       bool
-		}{{"", true}, {"vertex", false}} {
+		}{{"", false, true}, {"vertex", false, false}, {"gemini", true, false}} {
 			inner := &refusing{name: "gemini-3.8-flash"}
-			m := &settingsModel{inner: inner, provider: "gemini", configured: tc.configured}
+			m := &settingsModel{inner: inner, provider: "gemini", configured: tc.configured, vertexAI: tc.vertexAI}
 			for range m.GenerateContent(t.Context(), declaring("web_search", "read_file"), false) {
 			}
 			require.Len(t, inner.requests, 1)
