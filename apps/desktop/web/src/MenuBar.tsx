@@ -254,7 +254,7 @@ export function MenuBar({
   ];
 
   return (
-    <nav className="menubar no-drag" aria-label={t("desktop.menu.label")}>
+    <nav className="menubar" aria-label={t("desktop.menu.label")}>
       {orgDialog &&
         org &&
         createPortal(<OrgWorkspaceDialog org={org.organization} share={orgDialog.share} onClose={() => setOrgDialog(null)} onDone={(w, notes) => void orgDone(w, notes)} />, document.body)}

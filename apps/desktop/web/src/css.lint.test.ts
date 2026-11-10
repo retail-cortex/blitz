@@ -58,3 +58,18 @@ describe("the stylesheets", () => {
     expect(unclosed(readFileSync(join(dir, file), "utf8"))).toEqual([]);
   });
 });
+
+// The window moves by the title bar's free space (issue #106): only what
+// can be clicked in it stops dragging, never the menu bar as a whole, and
+// a view's header drags too.
+describe("the title bar", () => {
+  const css = readFileSync(join(dir, "app.css"), "utf8");
+  it("drags between the menus", () => {
+    expect(readFileSync(join(dir, "MenuBar.tsx"), "utf8")).not.toMatch(/className="menubar[^"]*no-drag/);
+    expect(css).toMatch(/\.drag-region button, \.drag-region input, \.drag-region \.menu-anchor \{ -webkit-app-region: no-drag; app-region: no-drag; \}/);
+  });
+  it("goes on in a view's header, whose controls stay clickable", () => {
+    expect(css).toMatch(/\.drawer > \.drawer-head:not\(\.below\) \{ -webkit-app-region: drag; app-region: drag; \}/);
+    expect(css).toMatch(/\.drawer > \.drawer-head:not\(\.below\) :is\(button, input, select, textarea, label, a, \[role="tab"\], \[tabindex\], \[contenteditable\], \.menu-anchor\) \{ -webkit-app-region: no-drag; app-region: no-drag; \}/);
+  });
+});

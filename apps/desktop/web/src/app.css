@@ -24,6 +24,11 @@
    it: menus, dialogs, the palette, snackbars and the drawer, which can
    reach over the title bar, mark themselves as not dragging. */
 :is(.menu, .context-menu, .dialog, .palette, .snackbar, .toast, .drawer, .cm-tooltip, [role="menu"], [role="dialog"], [role="listbox"]) { -webkit-app-region: no-drag; app-region: no-drag; }
+/* A view's header, right under the title bar, moves the window too (its
+   title's row); what can be clicked or typed in it doesn't. Not one at
+   the bottom (a terminal's). */
+.drawer > .drawer-head:not(.below) { -webkit-app-region: drag; app-region: drag; }
+.drawer > .drawer-head:not(.below) :is(button, input, select, textarea, label, a, [role="tab"], [tabindex], [contenteditable], .menu-anchor) { -webkit-app-region: no-drag; app-region: no-drag; }
 
 .splash, .welcome { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
 .splash > .drag-region { position: absolute; inset: 0 0 auto 0; height: 40px; }
