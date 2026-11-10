@@ -971,10 +971,15 @@ func TestShareWithOrganization(t *testing.T) {
 	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
 	ctx := context.Background()
 	git := func(dir string, args ...string) string {
-		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main"}, args...)...).CombinedOutput()
+		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Ana", "-c", "user.email=ana@acme.com", "-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
 		require.NoError(t, err, "%s", out)
 		return strings.TrimSpace(string(out))
 	}
+	// The person signs their own commits with a gpg that can't ask here:
+	// Blitz's commits are unsigned, so sharing and saving still work.
+	gitconfig := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(gitconfig, []byte("[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n"), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitconfig)
 	share := func(dir, name string, personal bool) (*connect.Response[pb.ShareWithOrganizationResponse], error) {
 		return c.ShareWithOrganization(ctx, connect.NewRequest(&pb.ShareWithOrganizationRequest{Workspace: dir, Name: name, Personal: personal}))
 	}
