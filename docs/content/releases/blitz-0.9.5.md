@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.5
-weight: 4
+weight: 5
 ---
 
 **Your SQLite databases work again on the Mac.** In Blitz 0.9.4 on macOS, the first time anything opened a SQLite database (a connection's Test, Try it, an agent's query, a chat's `@db:` or a workflow's Data step), macOS stopped the Blitz service and it restarted. Blitz 0.9.5 fixes it.
