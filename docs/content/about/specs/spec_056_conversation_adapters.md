@@ -318,6 +318,7 @@ Each adapter turns a reply back into the conversation (`Adapter.Response`).
   - **Web search** is on for an agent whose `tools` list `web_search`, or when the client tool is offered. A search provider (`web.search_provider`) isn't needed: the model's provider runs the search.
   - **Web fetch** is on only when `web_fetch` is offered (`[web] enabled`).
   - **Code execution** is on only when `run_shell_command` is offered (code runs, even in the provider's sandbox), and never in plan mode or a read-only run (`PlanAllows`).
+  - *2026-11-09 (the owner, a PDF in a conversation on gemini-3.8-flash: "Error 400 … The mime type: application/pdf is not supported for code execution").* Gemini refuses the whole call when its code execution is offered beside a file it can't open, so a call to Gemini (the API or Vertex AI) whose contents hold any file other than a PNG or JPEG picture, text (`text/*`: CSV, code) or XML goes without it (`geminiCodeFiles`). The shell is still offered, and the other provider tools are unchanged; Claude's code execution isn't affected.
   - **Switches:**
     - `[tools] provider = false` turns all of them off;
     - an agent's `tools` turns one off (`-provider:code_execution`) or all (`-provider:*`);

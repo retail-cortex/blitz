@@ -101,6 +101,40 @@ func TestProviderToolsToUse(t *testing.T) {
 	assert.Nil(t, providerToolsToUse(context.Background(), claudeO, nil))
 }
 
+// Gemini's code execution refuses a call with a file it can't open, so a
+// call with one goes without it (and Claude's isn't touched).
+func TestProviderToolsToUseGeminiFiles(t *testing.T) {
+	geminiO := Origin{"gemini", "gemini", "gemini-3.8-flash"}
+	with := func(parts ...*genai.Part) *model.LLMRequest {
+		req := declaring("web_search", "run_shell_command")
+		req.Contents = []*genai.Content{nil, {Role: genai.RoleUser, Parts: append([]*genai.Part{nil, {Text: "read this"}}, parts...)}}
+		return req
+	}
+	all := []string{ptWebSearch, ptCodeExecution}
+	for _, tc := range []struct {
+		name string
+		req  *model.LLMRequest
+		want []string
+	}{
+		{"no files", with(), all},
+		{"a PDF", with(&genai.Part{InlineData: &genai.Blob{MIMEType: "application/pdf"}}), []string{ptWebSearch}},
+		{"an uploaded PDF", with(&genai.Part{FileData: &genai.FileData{MIMEType: "Application/PDF"}}), []string{ptWebSearch}},
+		{"a WebP picture", with(&genai.Part{InlineData: &genai.Blob{MIMEType: "image/webp"}}), []string{ptWebSearch}},
+		{"PNG, CSV and XML", with(
+			&genai.Part{InlineData: &genai.Blob{MIMEType: "image/png"}},
+			&genai.Part{InlineData: &genai.Blob{MIMEType: "text/csv; charset=utf-8"}},
+			&genai.Part{FileData: &genai.FileData{MIMEType: "application/xml"}},
+			&genai.Part{InlineData: &genai.Blob{}},
+		), all},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, providerToolsToUse(context.Background(), geminiO, tc.req))
+		})
+	}
+	claudeO := Origin{"anthropic", "anthropic", "claude-opus-5-5"}
+	assert.Equal(t, all, providerToolsToUse(context.Background(), claudeO, with(&genai.Part{InlineData: &genai.Blob{MIMEType: "application/pdf"}})))
+}
+
 // The provider's tools take the client tools' places, never beside them;
 // a client tool the history calls stays declared, saying not to call it
 // (CA-80, CA-82).

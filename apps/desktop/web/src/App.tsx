@@ -146,6 +146,15 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
       setBusy(false);
     }
   };
+  // An update (the app's own, or a package's) leaves the old service
+  // running: it's restarted with this app's at once, once, asking first
+  // only when runs would stop. The button stays for when that fails.
+  const tried = useRef(false);
+  useEffect(() => {
+    if (!bin || tried.current) return;
+    tried.current = true;
+    guard(() => void restart());
+  }, [bin]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="banner">
       <Icon path={mdiServerOff} />

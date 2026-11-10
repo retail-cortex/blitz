@@ -99,9 +99,15 @@ func (a Actions) Stop() error {
 func (a Actions) Running() bool { return a.Status().Running }
 
 // Restart restarts the service (Stop then Start without a login item).
+// A login item for another blitzd than the one beside the tray (an older
+// install's) is written again for this one, which then runs.
 func (a Actions) Restart() error {
 	if loginitem.Installed() {
-		if err := loginitem.Restart(); err != nil {
+		restart := loginitem.Restart
+		if bin, err := loginitem.FindService(a.Beside); err == nil && loginitem.ServiceProgram() != bin {
+			restart = func() error { return loginitem.Install(bin) }
+		}
+		if err := restart(); err != nil {
 			return err
 		}
 		if !a.Wait(true, 15*time.Second) {

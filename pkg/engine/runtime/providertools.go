@@ -208,11 +208,44 @@ func providerToolsToUse(ctx context.Context, o Origin, req *model.LLMRequest) []
 		gate := gateTool(kind)
 		switch {
 		case pol.Disabled[kind], planning && !PlanAllows(gate):
+		case kind == ptCodeExecution && o.API == "gemini" && !geminiCodeFiles(req.Contents):
 		case declared(req.Config, gate), kind == ptWebSearch && pol.Wants[gate]:
 			use = append(use, kind)
 		}
 	}
 	return use
+}
+
+// geminiCodeFiles reports whether Gemini's code execution takes every file
+// in contents: it refuses the whole call over one it can't open ("The mime
+// type: application/pdf is not supported for code execution", Gemini 3.8,
+// 2026-11-09). It takes PNG and JPEG pictures and text (CSV, code, XML);
+// with anything else the call goes without it, and the shell stays.
+func geminiCodeFiles(contents []*genai.Content) bool {
+	for _, c := range contents {
+		if c == nil {
+			continue
+		}
+		for _, p := range c.Parts {
+			var mime string
+			switch {
+			case p == nil:
+			case p.InlineData != nil:
+				mime = p.InlineData.MIMEType
+			case p.FileData != nil:
+				mime = p.FileData.MIMEType
+			default:
+				continue
+			}
+			if mime, _, _ = strings.Cut(strings.ToLower(mime), ";"); mime == "" {
+				continue
+			}
+			if !strings.HasPrefix(mime, "text/") && mime != "image/png" && mime != "image/jpeg" && mime != "application/xml" {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // withProviderTools returns req offering kinds as provider tools (genai's
