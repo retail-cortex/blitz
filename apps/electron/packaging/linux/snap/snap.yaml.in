@@ -1,0 +1,37 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The snap's metadata (spec_025_release REL-34): @VERSION@ and @ARCH@ are
+# filled in by //apps/electron/packaging:snap_yaml. Classic: the agent
+# works on your projects with your own tools, which a confined snap can't
+# reach.
+name: blitz-desktop
+title: Blitz
+version: '@VERSION@'
+summary: An AI agent for your projects
+description: |
+  A window onto the Blitz service: workspaces, chats with the agent,
+  approvals, changes and workers. Includes the blitz command, blitz-tray
+  (the service in the system tray) and blitzd, the service, which it
+  installs and starts.
+license: Apache-2.0
+base: core24
+confinement: classic
+grade: stable
+architectures: [@ARCH@]
+apps:
+  blitz-desktop:
+    command: usr/lib/blitz-desktop/blitz-desktop
+  blitz:
+    command: usr/lib/blitz-desktop/resources/app/bin/blitz

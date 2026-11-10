@@ -66,7 +66,10 @@ func FindInstall(hostExe, goos string) (Install, error) {
 	}
 	root := filepath.Dir(res)
 	in := Install{Root: root, Program: filepath.Join(root, "blitz-desktop")}
-	if strings.HasPrefix(root, "/usr/") || strings.HasPrefix(root, "/opt/") {
+	switch {
+	case strings.HasPrefix(root, "/snap/"): // read-only, updated by snapd
+		in.Manager = "the Snap Store"
+	case strings.HasPrefix(root, "/usr/") || strings.HasPrefix(root, "/opt/"):
 		in.Manager = "your system's package manager"
 	}
 	return in, nil

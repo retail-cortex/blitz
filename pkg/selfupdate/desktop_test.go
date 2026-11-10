@@ -45,6 +45,7 @@ func TestFindInstall(t *testing.T) {
 		{"Windows", `/Users/me/Blitz/resources/app/bin/blitz-tray.exe`, "windows", Install{Root: "/Users/me/Blitz", Program: "/Users/me/Blitz/Blitz.exe"}, nil},
 		{"Linux, a tarball", "/home/me/blitz-desktop/resources/app/bin/blitz-tray", "linux", Install{Root: "/home/me/blitz-desktop", Program: "/home/me/blitz-desktop/blitz-desktop"}, nil},
 		{"Linux, a package", "/usr/lib/blitz-desktop/resources/app/bin/blitz-tray", "linux", Install{Root: "/usr/lib/blitz-desktop", Program: "/usr/lib/blitz-desktop/blitz-desktop", Manager: "your system's package manager"}, nil},
+		{"Linux, a snap", "/snap/blitz-desktop/12/usr/lib/blitz-desktop/resources/app/bin/blitz-tray", "linux", Install{Root: "/snap/blitz-desktop/12/usr/lib/blitz-desktop", Program: "/snap/blitz-desktop/12/usr/lib/blitz-desktop/blitz-desktop", Manager: "the Snap Store"}, nil},
 		{"a development build", "/work/bazel-bin/apps/tray/blitz-tray", "darwin", Install{}, ErrNotInstalled},
 		{"macOS, not in a bundle", "/tmp/x/Resources/app/bin/blitz-tray", "darwin", Install{}, ErrNotInstalled},
 	} {

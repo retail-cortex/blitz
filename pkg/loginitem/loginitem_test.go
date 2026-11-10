@@ -325,3 +325,26 @@ func TestBeside(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Dir(exe), Beside())
 }
+
+// A snap's revision becomes current, which lasts through its updates;
+// anything else stays as it is.
+func TestSnapCurrent(t *testing.T) {
+	root := t.TempDir()
+	old := snapRoot
+	snapRoot = root
+	t.Cleanup(func() { snapRoot = old })
+	bin := filepath.Join(root, "blitz-desktop", "current", "usr", "lib", "blitz-desktop", "resources", "app", "bin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "blitzd"), nil, 0o755))
+	for _, tc := range []struct{ name, in, want string }{
+		{"a revision", root + "/blitz-desktop/12/usr/lib/blitz-desktop/resources/app/bin/blitzd", root + "/blitz-desktop/current/usr/lib/blitz-desktop/resources/app/bin/blitzd"},
+		{"current already", root + "/blitz-desktop/current/usr/lib/blitz-desktop/resources/app/bin/blitzd", root + "/blitz-desktop/current/usr/lib/blitz-desktop/resources/app/bin/blitzd"},
+		{"not under current", root + "/blitz-desktop/12/usr/bin/other", root + "/blitz-desktop/12/usr/bin/other"},
+		{"the snap's own folder", root + "/blitz-desktop/12", root + "/blitz-desktop/12"},
+		{"not a snap", "/usr/lib/blitz-desktop/resources/app/bin/blitzd", "/usr/lib/blitz-desktop/resources/app/bin/blitzd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, SnapCurrent(tc.in))
+		})
+	}
+}

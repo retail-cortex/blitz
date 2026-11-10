@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.8](blitz-0.9.8.md): Blitz on Linux, the way Linux does it: install the `.deb` once and `apt upgrade` keeps it current from Blitz's own signed repository (with its license and homepage in App Center), a snap on its way to the Snap Store, updates that bring the service along on every platform, and Gemini reading PDFs again.
 - [Blitz 0.9.7](blitz-0.9.7.md): a terminal built into Blitz (with oh-my-zsh prompts and a Nerd Font), a file tree that keeps up with the disk (select several, copy and paste, Undo for delete, Find in folder), pictures and data from the terminal, and Gemini searching the web for you again.
 - [Blitz 0.9.6](blitz-0.9.6.md): every model, one click away: pick any model from any provider in the status bar, use several providers at once, ask Blitz to set itself up in plain English, and run local models that actually get work done.
 - [Blitz 0.9.5](blitz-0.9.5.md): SQLite databases work again on the Mac: opening one no longer stops the Blitz service.
