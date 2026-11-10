@@ -398,6 +398,50 @@ func TestEnterpriseCatalogLoop(t *testing.T) {
 	assert.False(t, cfg.Org.Active())
 }
 
+// The catalog is fetched again while its stream is up but silent: soon
+// while Blitz has none (and so no policy, and the organization's models
+// wait), then at the policy's refresh. A service that answered 404 at
+// sign-in and serves a catalog later, announced or not, is picked up.
+func TestEnterpriseCatalogUnannounced(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	dir := config.EnterpriseDir("", org.URL)
+	policy := filepath.Join(dir, "policy.json")
+	time.Sleep(100 * time.Millisecond)
+	assert.NoFileExists(t, policy, "none published")
+
+	org.Mu.Lock()
+	org.Catalog = map[string]enterprisetest.CatalogFile{}
+	org.CatalogPolicy = map[string]any{"refresh": "100ms"}
+	org.Mu.Unlock()
+	require.Eventually(t, func() bool { _, err := os.Stat(policy); return err == nil }, 5*time.Second, 20*time.Millisecond, "fetched with no announcement")
+
+	org.Mu.Lock()
+	org.CatalogPolicy = map[string]any{"refresh": "100ms", "tools": map[string]any{"off": []string{"web_fetch"}}}
+	org.Mu.Unlock()
+	require.Eventually(t, func() bool {
+		cfg, err := config.Load("")
+		return err == nil && slices.Contains(cfg.Permissions.Deny, "web_fetch")
+	}, 5*time.Second, 20*time.Millisecond, "the policy's refresh, with the stream still up")
+}
+
 // The organization's workspaces: listed with where each would be cloned,
 // cloned through the service with Blitz's credential helper set in the
 // clone, opened from the clone after, made anew, and Git's credential
