@@ -304,9 +304,26 @@ pkg_files(
     strip_prefix = strip_prefix.files_only(),
 )
 
+# Blitz's apt repository and the key it's signed with (spec_025_release
+# REL-30), so the .deb installed by hand is then updated by apt upgrade.
+# The sources file is a conffile: a change made to it (Enabled: no) stays.
+pkg_files(
+    name = "deb_apt_source",
+    srcs = ["linux/blitz-desktop.sources"],
+    prefix = "etc/apt/sources.list.d",
+)
+
+pkg_files(
+    name = "deb_apt_key",
+    srcs = ["linux/blitz-desktop.asc"],
+    prefix = "usr/share/keyrings",
+)
+
 pkg_tar(
     name = "deb_data",
     srcs = [
+        ":deb_apt_key",
+        ":deb_apt_source",
         ":deb_doc",
         ":linux_icons",
         ":linux_launcher",
@@ -326,6 +343,7 @@ pkg_deb(
         "@platforms//cpu:arm64": "arm64",
         "@platforms//cpu:x86_64": "amd64",
     }),
+    conffiles = ["/etc/apt/sources.list.d/blitz-desktop.sources"],
     data = ":deb_data",
     depends = [
         "bubblewrap",
@@ -445,6 +463,102 @@ pkg_tar(
     visibility = ["//visibility:public"],
 )
 
+# ---- The snap (spec_025_release REL-34): the tree snap pack makes it
+# from (the release workflow packs it: snap pack needs snapd), classic,
+# for this machine's architecture. The .deb's files in
+# /snap/blitz-desktop/current/usr/lib/blitz-desktop, but chrome-sandbox:
+# a snap can't carry a setuid program, so its hooks give Chromium's
+# sandbox its user namespaces through AppArmor instead.
+genrule(
+    name = "snap_yaml",
+    srcs = [
+        "linux/snap/snap.yaml.in",
+        "//build:version",
+    ],
+    outs = ["snap/meta/snap.yaml"],
+    # snapd's name for the architecture; the template's comments left out.
+    cmd = select({
+        cpu: "sed -e \"s/@VERSION@/$$(cat $(location //build:version))/\" -e 's/@ARCH@/%s/' $(location linux/snap/snap.yaml.in) | grep -v '^#' >$@" % arch
+        for cpu, arch in [
+            ("@platforms//cpu:arm64", "arm64"),
+            ("@platforms//cpu:x86_64", "amd64"),
+        ]
+    }),
+    target_compatible_with = _LINUX,
+)
+
+pkg_files(
+    name = "snap_meta",
+    srcs = [":snap_yaml"],
+    prefix = "meta",
+)
+
+pkg_files(
+    name = "snap_gui",
+    srcs = [
+        "linux/snap/blitz-desktop.desktop",
+        "//apps/electron:appicon.png",
+    ],
+    renames = {
+        "linux/snap/blitz-desktop.desktop": "meta/gui/blitz-desktop.desktop",
+        "//apps/electron:appicon.png": "meta/gui/icon.png",
+    },
+)
+
+pkg_files(
+    name = "snap_hooks",
+    srcs = [
+        "linux/snap/install",
+        "linux/snap/remove",
+    ],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "meta/hooks",
+)
+
+# The same install hook again after each update (a new revision's path).
+pkg_files(
+    name = "snap_refresh_hook",
+    srcs = ["linux/snap/install"],
+    attributes = pkg_attributes(mode = "0755"),
+    renames = {"linux/snap/install": "meta/hooks/post-refresh"},
+)
+
+pkg_files(
+    name = "snap_doc",
+    srcs = [
+        "//:LICENSE",
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "usr/share/doc/blitz-desktop",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "snap_install",
+    srcs = [
+        ":linux_app",
+        ":linux_program",
+        ":linux_runtime",
+    ],
+    package_dir = "usr/lib/blitz-desktop",
+    target_compatible_with = _LINUX,
+)
+
+pkg_tar(
+    name = "snap_tree",
+    srcs = [
+        ":snap_doc",
+        ":snap_gui",
+        ":snap_hooks",
+        ":snap_meta",
+        ":snap_refresh_hook",
+    ],
+    target_compatible_with = _LINUX,
+    visibility = ["//visibility:public"],
+    deps = [":snap_install"],
+)
+
 # The packages carry the programs and the license files. Tagged
 # "packaging": CI tests them after the race-detector run, not in it, so the
 # programs in them build once, as the release builds them.
@@ -482,6 +596,16 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :deb)"],
     data = [":deb"],
+    tags = ["packaging"],
+    target_compatible_with = _LINUX,
+)
+
+sh_test(
+    name = "snap_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :snap_tree)"],
+    data = [":snap_tree"],
     tags = ["packaging"],
     target_compatible_with = _LINUX,
 )

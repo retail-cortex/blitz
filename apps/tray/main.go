@@ -220,9 +220,11 @@ func applyDownloaded(staged, root, relaunch string, waitPID int) error {
 	}
 	err = tray.Update{
 		Staged: staged, Root: root, Relaunch: relaunch, WaitPID: waitPID, Actions: acts,
-		ServiceExe: func() string { return tray.ServiceExecutable(context.Background(), sock) },
-		Exited:     tray.Exited,
-		Log:        log,
+		ServiceExe:   func() string { return tray.ServiceExecutable(context.Background(), sock) },
+		LoginProgram: loginitem.ServiceProgram,
+		Reinstall:    loginitem.Install,
+		Exited:       tray.Exited,
+		Log:          log,
 	}.Run()
 	if err != nil {
 		fmt.Fprintln(log, time.Now().Format(time.RFC3339), err)

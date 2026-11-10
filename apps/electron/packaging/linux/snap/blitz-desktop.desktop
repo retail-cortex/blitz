@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Blitz
+Comment=An AI agent for your projects
+Exec=blitz-desktop %u
+MimeType=x-scheme-handler/blitz;
+Icon=${SNAP}/meta/gui/icon.png
+Terminal=false
+Categories=Development;
+StartupWMClass=blitz-desktop

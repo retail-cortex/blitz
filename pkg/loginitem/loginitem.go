@@ -381,13 +381,43 @@ func FindService(dirs ...string) (string, error) {
 	for _, d := range dirs {
 		p := filepath.Join(d, name)
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			return filepath.EvalSymlinks(p)
+			return resolved(p)
 		}
 	}
 	if p, err := exec.LookPath(name); err == nil {
-		return filepath.EvalSymlinks(p)
+		return resolved(p)
 	}
 	return "", errors.New("blitzd, the Blitz service, isn't installed beside this program or on PATH")
+}
+
+// resolved is p with its links followed, a snap's revision kept as
+// current (SnapCurrent).
+func resolved(p string) (string, error) {
+	r, err := filepath.EvalSymlinks(p)
+	return SnapCurrent(r), err
+}
+
+// snapRoot is where snapd mounts snaps (tests move it).
+var snapRoot = "/snap"
+
+// SnapCurrent is path with a snap's revision (/snap/<name>/<revision>/…)
+// made current, the link snapd moves to each new revision, so a login
+// item or a link naming it lasts through the snap's updates. Any other
+// path, or one not there under current, is returned as it is.
+func SnapCurrent(path string) string {
+	rest, ok := strings.CutPrefix(path, snapRoot+"/")
+	if !ok {
+		return path
+	}
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) < 3 || parts[1] == "current" {
+		return path
+	}
+	cur := filepath.Join(snapRoot, parts[0], "current", parts[2])
+	if _, err := os.Stat(cur); err != nil {
+		return path
+	}
+	return cur
 }
 
 // RunfilesRoots are where Bazel puts the running program's runfiles, when

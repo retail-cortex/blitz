@@ -156,6 +156,27 @@ func TestActionsWithALoginItem(t *testing.T) {
 	assert.Equal(t, "systemctl --user restart blitz.service", f.ran[len(f.ran)-1])
 }
 
+// Restarting a service whose login item runs another install's blitzd
+// writes the item again for the one beside the tray; the same one again
+// is only restarted.
+func TestRestartReinstallsAnotherBlitzd(t *testing.T) {
+	f, a := newFake(t)
+	require.NoError(t, loginitem.Install("/opt/old/blitzd"))
+	bin := filepath.Join(a.Beside, "blitzd")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, a.Restart())
+	want, err := filepath.EvalSymlinks(bin)
+	require.NoError(t, err)
+	assert.Equal(t, want, loginitem.ServiceProgram())
+	assert.True(t, f.running)
+
+	f.ran = nil
+	require.NoError(t, a.Restart())
+	ran := strings.Join(f.ran, "\n")
+	assert.NotContains(t, ran, "bootout", "the same blitzd is restarted, not reinstalled")
+	assert.NotContains(t, ran, "daemon-reload")
+}
+
 func TestActionsWithoutALoginItem(t *testing.T) {
 	f, a := newFake(t)
 	assert.Error(t, a.Start(), "no blitzd anywhere")

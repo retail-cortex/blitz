@@ -123,3 +123,52 @@ func TestUpdateServiceFailures(t *testing.T) {
 	assert.Contains(t, log.String(), "starting the service again")
 	assert.Contains(t, log.String(), "starting the app again")
 }
+
+// A service whose login item runs the app's blitzd is stopped even when it
+// doesn't say what it runs, and its login item is written again for the
+// new app and waited for; one running another program is left alone.
+func TestUpdateReinstallsTheService(t *testing.T) {
+	inside := func(root string) string { return filepath.Join(root, "resources", "app", "bin", "blitzd") }
+	for _, tc := range []struct {
+		name      string
+		exe       func(root string) string
+		login     func(root string) string
+		reinstall error
+		starts    bool
+		want      []string
+		log       string
+	}{
+		{"its login item, the service not answering", func(string) string { return "" }, inside, nil, true, []string{"reinstall"}, "the service is running again"},
+		{"running from the app with its login item", inside, inside, nil, true, []string{"reinstall"}, "the service is running again"},
+		{"reinstalled, but it doesn't start", func(string) string { return "" }, inside, nil, false, []string{"reinstall"}, "didn't start in 1m0s"},
+		{"the reinstall fails", func(string) string { return "" }, inside, errors.New("no launchctl"), true, []string{"reinstall"}, "no launchctl"},
+		{"another program's service", func(string) string { return "/usr/local/bin/blitzd" }, inside, nil, true, nil, "not this app's: left as it is"},
+		{"no login item, nothing running", func(string) string { return "" }, func(string) string { return "" }, nil, true, nil, "updated"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, a := newFake(t)
+			f.running = tc.exe("") != ""
+			dir := t.TempDir()
+			root := app(t, dir, "Blitz", "old")
+			a.Shutdown = func() error { f.running = false; return nil }
+			var did []string
+			var log bytes.Buffer
+			err := Update{
+				Staged: app(t, filepath.Join(dir, "updates"), "Blitz", "new"), Root: root, Actions: a,
+				ServiceExe:   func() string { return tc.exe(root) },
+				LoginProgram: func() string { return tc.login(root) },
+				Reinstall: func(blitzd string) error {
+					assert.Equal(t, inside(root), blitzd)
+					did = append(did, "reinstall")
+					f.running = tc.reinstall == nil && tc.starts
+					return tc.reinstall
+				},
+				Exited: func(int, time.Duration) bool { return true },
+				Log:    &log,
+			}.Run()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, did)
+			assert.Contains(t, log.String(), tc.log)
+		})
+	}
+}

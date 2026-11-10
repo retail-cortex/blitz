@@ -21,6 +21,15 @@ on:
   # (a squash merge carries it over from the branch's commits): run it by
   # hand then, on the tag (gh workflow run release.yml --ref v0.8.6).
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Only put this published tag in the apt repository and the Snap Store"
+        type: boolean
+        default: false
+  # Publishing the draft (the owner's review done) updates the apt
+  # repository: apt upgrade offers only what's published.
+  release:
+    types: [published]
 
 permissions:
   contents: write # create the GitHub release
@@ -31,8 +40,9 @@ jobs:
   # one machine by Bazel, stamped with the tag), their SBOMs, a signed
   # checksum file, and the draft release that the desktop jobs add to.
   release:
-    # By hand on a branch would name the release after the branch.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # By hand on a branch would name the release after the branch. Not
+    # again when the release is published, nor when only publishing it.
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'release' && !inputs.publish
     runs-on: ubuntu-latest
     steps:
       # GitHub's Ubuntu runners start with about 14 GB free, too little for
@@ -213,6 +223,28 @@ jobs:
           pkg="$(bazel cquery --config=release --output=files //apps/electron/packaging:pacman)"
           info="$(zstd -dcq <"$pkg" | tar -xOf - .PKGINFO)"
           cp "$pkg" "dist/blitz-desktop-$(sed -n 's/^pkgver = //p' <<<"$info")-$(sed -n 's/^arch = //p' <<<"$info").pkg.tar.zst"
+      # The snap (REL-34): Bazel builds its tree, snap pack packs it.
+      - name: Snap
+        if: runner.os == 'Linux'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bazel build --config=release //apps/electron/packaging:snap_tree
+          mkdir snap-tree
+          tar -xf "$(bazel cquery --config=release --output=files //apps/electron/packaging:snap_tree)" -C snap-tree
+          command -v snap >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q snapd; }
+          snap pack snap-tree dist
+          test -e "dist/blitz-desktop_${version}_$(dpkg --print-architecture).snap"
+      # It installs (its hooks run: the AppArmor profile is there) and its
+      # programs run; then it's removed, and the profile with it.
+      - name: Snap smoke test
+        if: runner.os == 'Linux'
+        run: |
+          sudo snap install --dangerous --classic dist/blitz-desktop_*.snap
+          blitz-desktop.blitz --version
+          /snap/blitz-desktop/current/usr/lib/blitz-desktop/resources/app/bin/blitzd --version
+          test -e /etc/apparmor.d/blitz-desktop-snap
+          sudo snap remove --purge blitz-desktop
+          test ! -e /etc/apparmor.d/blitz-desktop-snap
       # The package installs on a clean system: its dependencies resolve,
       # the app's libraries are all found, and the programs run.
       - name: Smoke test
@@ -251,7 +283,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          for f in *.dmg *.deb *.pkg.tar.zst *.tar.gz; do
+          for f in *.dmg *.deb *.snap *.pkg.tar.zst *.tar.gz; do
             [ -e "$f" ] || continue
             cosign sign-blob --yes --new-bundle-format --bundle "$f.sigstore.json" "$f"
             gh release upload "$GITHUB_REF_NAME" "$f" "$f.sigstore.json" --clobber
@@ -259,3 +291,105 @@ jobs:
       - name: Remove the signing keychain
         if: always() && runner.os == 'macOS' && env.SIGNING == 'true'
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" && rm -f "$RUNNER_TEMP/notary.p8"
+
+  # The apt repository (spec_025_release REL-30): a published release's
+  # .debs (not a pre-release's), checked against their bundles, with
+  # signed indexes and AppStream data (tools/apt_repo.sh), in the bucket
+  # that blitz-desktop.sources names. GCP takes this workflow's identity
+  # (Workload Identity Federation: no key is kept). By hand for a tag
+  # already published: gh workflow run release.yml --ref v0.9.8 -f publish=true.
+  apt:
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      ((github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish))
+    runs-on: ubuntu-24.04
+    concurrency: apt-repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v2.6.1
+      - name: The release's packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')"
+          [ "$state" = "false false" ] || { echo "::error::$GITHUB_REF_NAME isn't a published release ($state)"; exit 1; }
+          gh release download "$GITHUB_REF_NAME" --dir debs --pattern 'blitz-desktop_*.deb' --pattern 'blitz-desktop_*.deb.sigstore.json'
+          for f in debs/*.deb; do
+            cosign verify-blob --bundle "$f.sigstore.json" \
+              --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
+          done
+          rm debs/*.sigstore.json
+      - name: Repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q apt-utils appstream-compose appstream
+          gpg --batch --import <<<"$APT_SIGNING_KEY"
+          # The key signing is the one the package trusts.
+          key="$(gpg --show-keys --with-colons apps/electron/packaging/linux/blitz-desktop.asc | awk -F: '/^fpr/{print $10; exit}')"
+          gpg --list-secret-keys "$key" >/dev/null
+          tools/apt_repo.sh repo "$key" debs/*.deb
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.APT_WIF_PROVIDER }}
+          service_account: ${{ vars.APT_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      # The packages first, then the indexes naming them, InRelease last.
+      # The indexes are never cached (apt would see an old release); the
+      # packages always are. The previous release's packages stay, for a
+      # machine that read the indexes before this run; older ones go.
+      - name: Upload
+        run: |
+          b="gs://${{ vars.APT_BUCKET }}"
+          pool=pool/main/b/blitz-desktop
+          keep="$( (gcloud storage cat "$b/dists/stable/main/binary-*/Packages" 2>/dev/null || true; cat repo/dists/stable/main/binary-*/Packages) | sed -n 's/^Filename: //p' | sort -u)"
+          gcloud storage cp --cache-control="public, max-age=31536000, immutable" repo/$pool/*.deb "$b/$pool/"
+          gcloud storage rsync --recursive --delete-unmatched-destination-objects --cache-control="no-cache, max-age=0" \
+            --exclude='^stable/(InRelease|Release|Release\.gpg)$' repo/dists "$b/dists"
+          gcloud storage cp --cache-control="no-cache, max-age=0" repo/dists/stable/Release repo/dists/stable/Release.gpg "$b/dists/stable/"
+          gcloud storage cp --cache-control="no-cache, max-age=0" repo/dists/stable/InRelease "$b/dists/stable/"
+          gcloud storage cp --cache-control="no-cache, max-age=0" repo/blitz-desktop.asc "$b/"
+          for obj in $(gcloud storage ls "$b/$pool/"); do
+            grep -qx "${obj#"$b/"}" <<<"$keep" || gcloud storage rm "$obj"
+          done
+
+  # The Snap Store (REL-35): a published release's snaps (not a
+  # pre-release's), checked against their bundles, uploaded to the stable
+  # channel. Nothing until the owner stores SNAPCRAFT_STORE_CREDENTIALS
+  # (snapcraft export-login); a classic snap is held for the store's review
+  # until Canonical approves classic confinement for it.
+  snap:
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      ((github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish))
+    runs-on: ubuntu-24.04
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - name: Not set up
+        if: env.SNAPCRAFT_STORE_CREDENTIALS == ''
+        run: echo "::notice::SNAPCRAFT_STORE_CREDENTIALS isn't set, so the snaps aren't uploaded to the Snap Store"
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        with:
+          cosign-release: v2.6.1
+      - name: Upload
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir snaps --pattern 'blitz-desktop_*.snap' --pattern 'blitz-desktop_*.snap.sigstore.json'
+          sudo snap install snapcraft --classic
+          for f in snaps/*.snap; do
+            cosign verify-blob --bundle "$f.sigstore.json" \
+              --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
+            snapcraft upload --release=stable "$f"
+          done

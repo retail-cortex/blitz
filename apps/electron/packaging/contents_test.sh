@@ -35,6 +35,23 @@ elif [[ "$pkg" == *_setup.exe ]]; then
 	# The setup program, then the zip, its length and BLITZZIP (pkg/wininstall).
 	[ "$(head -c 2 "$pkg")" = "MZ" ] || no "the setup program isn't a Windows program"
 	[ "$(tail -c 8 "$pkg")" = "BLITZZIP" ] || no "the setup program carries no zip"
+elif [[ "$pkg" == *snap_tree.tar ]]; then
+	# The snap's tree: its metadata, hooks and launcher, the programs, and
+	# no setuid chrome-sandbox (the store refuses one; AppArmor stands in).
+	list="$(tar -tvf "$pkg")"
+	for f in meta/snap.yaml meta/gui/blitz-desktop.desktop meta/gui/icon.png usr/share/doc/blitz-desktop/LICENSE usr/share/doc/blitz-desktop/NOTICE usr/share/doc/blitz-desktop/THIRD_PARTY_NOTICES; do
+		grep -q " \.\?/\?$f$" <<<"$list" || no "the snap has no $f"
+	done
+	for f in meta/hooks/install meta/hooks/post-refresh meta/hooks/remove usr/lib/blitz-desktop/blitz-desktop \
+		usr/lib/blitz-desktop/resources/app/bin/blitz usr/lib/blitz-desktop/resources/app/bin/blitzd usr/lib/blitz-desktop/resources/app/bin/blitz-tray; do
+		grep -Eq "^-rwxr-xr-x .* \.?/?$f$" <<<"$list" || no "the snap has no $f, or it isn't 0755"
+	done
+	grep -q "chrome-sandbox" <<<"$list" && no "the snap carries chrome-sandbox"
+	grep -q "^-rws" <<<"$list" && no "the snap has a setuid file"
+	yaml="$(tar -xOf "$pkg" meta/snap.yaml 2>/dev/null || tar -xOf "$pkg" ./meta/snap.yaml)"
+	grep -qx "confinement: classic" <<<"$yaml" || no "the snap isn't classic"
+	grep -Eqx "architectures: \[(amd64|arm64)\]" <<<"$yaml" || no "the snap's architecture isn't filled in"
+	grep -q "@" <<<"$yaml" && no "snap.yaml still has a placeholder"
 elif [ -d "$pkg" ]; then
 	r="$pkg/Contents/Resources"
 	for exe in blitz blitzd blitz-tray; do
@@ -59,6 +76,10 @@ else
 		list="$(dpkg-deb -c "$pkg")"
 		docs=usr/share/doc/blitz-desktop
 		dpkg-deb -f "$pkg" Maintainer | grep -q "^Retail Cortex " || no "the .deb's maintainer isn't Retail Cortex"
+		# Blitz's apt repository, its key, and the source kept as a conffile.
+		grep -q "etc/apt/sources.list.d/blitz-desktop.sources$" <<<"$list" || no "no apt source for Blitz's repository"
+		grep -q "usr/share/keyrings/blitz-desktop.asc$" <<<"$list" || no "no key for Blitz's apt repository"
+		dpkg-deb -I "$pkg" conffiles 2>/dev/null | grep -qx /etc/apt/sources.list.d/blitz-desktop.sources || no "the apt source isn't a conffile"
 	fi
 	for f in NOTICE THIRD_PARTY_NOTICES; do grep -q "$docs/$f$" <<<"$list" || no "no $docs/$f"; done
 	grep -q "usr/share/metainfo/dev.blitz.desktop.metainfo.xml$" <<<"$list" || no "no AppStream metainfo"

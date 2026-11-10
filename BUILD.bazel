@@ -27,6 +27,9 @@ load("@npm//:defs.bzl", "npm_link_all_packages")
 # An IDE's own Bazel aspects (Build Server Protocol), which Bazel still
 # loads from the tree.
 # gazelle:exclude .bazelbsp
+# Coding agents' worktrees, copies of this repository inside it
+# (.claude/worktrees), which would make every package twice.
+# gazelle:exclude .claude
 
 # The npm packages' store, for the page and the extension (pnpm-lock.yaml).
 npm_link_all_packages(name = "node_modules")

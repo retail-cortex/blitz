@@ -177,7 +177,9 @@ func findCLI() (string, error) {
 	for _, d := range dirs {
 		p := filepath.Join(d, name)
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			return filepath.EvalSymlinks(p)
+			// A snap's link lasts through its updates when it names current.
+			r, err := filepath.EvalSymlinks(p)
+			return loginitem.SnapCurrent(r), err
 		}
 	}
 	return "", errors.New("the blitz command isn't installed beside the app: reinstall Blitz")
