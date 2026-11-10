@@ -108,10 +108,10 @@ func enterpriseProvider(ctx context.Context, cfg *config.Config, name string) (*
 		headers["Blitz-Workspace"] = cfg.Tools.OrgWorkspace
 	}
 	p := &apiProvider{
-		cfg:        config.APIConfig{BaseURL: c.URL() + "/api/v1", Model: m.ID, Headers: headers},
-		format:     formatResponses,
-		source:     c,
-		messagesAt: "/messages",
+		// Claude's requests go to the service's /messages.
+		cfg:    config.APIConfig{BaseURL: c.URL() + "/api/v1", Model: m.ID, Headers: headers, Paths: map[string]string{config.GatewayMessages: "/messages"}},
+		format: formatResponses,
+		source: c,
 	}
 	if m.API == enterprise.APIMessages {
 		p.format = formatMessages

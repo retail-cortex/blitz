@@ -30,7 +30,7 @@ import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
-import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
+import { ConfigService, KeySource, MCPServerConfigSchema, type ApiProviderSettings, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { TerminalService } from "../gen/blitz/v1/terminal_pb";
 import { fakeTerminals } from "./fakeTerminal";
@@ -580,7 +580,10 @@ interface FakeAuth {
   profile: string;
 }
 
-const configs = new Map<string, { text: string; provider: string; model: string; keys: Record<string, KeySource>; auth: Record<string, FakeAuth> }>();
+const configs = new Map<string, { text: string; provider: string; model: string; keys: Record<string, KeySource>; auth: Record<string, FakeAuth>; api?: ApiProviderSettings }>();
+
+/** The models the fake custom gateway lists. */
+const fakeGatewayModels = ["claude-sonnet-5-5", "gemini-3-pro", "gpt-6-luna", "glm-5", "llama-4-maverick"];
 
 function scopeConfig(workspace: string) {
   let c = configs.get(workspace);
@@ -3199,8 +3202,11 @@ export function installFake() {
           return { state: fakeOrgState(false) };
         },
         listModels: ({ providers, chatOnly }) =>
-          // The model menu's list (spec_061 MOD-01): every provider set up, chat models, newest first.
-          chatOnly && !fakeOrg.url
+          // The custom gateway's list (spec_015 MDL-112), once it's saved.
+          providers.length === 1 && providers[0] === "api"
+            ? { defaultProvider: "api", providers: [{ provider: "api", ids: fakeGatewayModels, models: fakeGatewayModels.map((id) => ({ id })) }] }
+            : // The model menu's list (spec_061 MOD-01): every provider set up, chat models, newest first.
+              chatOnly && !fakeOrg.url
             ? {
                 defaultProvider: "gemini",
                 providers: [
@@ -3257,6 +3263,7 @@ export function installFake() {
             path: configPath(workspace),
             provider: c.provider,
             defaultModel: c.model,
+            api: c.api,
             secretStore: "macOS Keychain",
             providers: Object.entries(c.keys).map(([name, keySource]) => {
               const a = c.auth[name];
@@ -3285,6 +3292,7 @@ export function installFake() {
           c.model = defaultModel;
           if (key) c.keys[provider] = KeySource.KEYCHAIN;
           if (auth) c.auth[provider] = { method, projectId: auth.projectId, location: auth.location, profile: auth.profile };
+          if (api) c.api = { ...api, headers: api.headers.map((h) => ({ ...h, value: h.value.includes("{{TOKEN_SCRIPT}}") ? h.value : "", hasValue: true })) };
           return change(workspace);
         },
         setConfigValue: ({ workspace, key, value }) => {

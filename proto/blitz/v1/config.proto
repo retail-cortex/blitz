@@ -387,13 +387,22 @@ message ApiHeader {
 // The api provider's settings: a gateway that speaks OpenAI's Responses
 // API, signed with these headers (spec_015_models §3.4).
 message ApiProviderSettings {
-  // Requests go to <base_url>/responses.
+  // A model's requests go to its API's path under it (paths).
   string base_url = 1;
   repeated ApiHeader headers = 2;
   // Prints the token {{TOKEN_SCRIPT}} stands for in a header or base_url.
   string token_script = 3;
   // shell ("" too), python or typescript.
   string token_script_language = 4;
+  // Where the gateway lists its models under base_url ("" for /models,
+  // "none" when it doesn't).
+  string models_path = 5;
+  // The API each model speaks, by model ("*" for any other): responses,
+  // chat_completions, messages, gemini or vertex. Saving replaces them.
+  map<string, string> apis = 6;
+  // Where each API's requests go under base_url, by API, in place of the
+  // defaults. Saving replaces them.
+  map<string, string> paths = 7;
 }
 
 // Request message for ConfigService.DescribeConfig.

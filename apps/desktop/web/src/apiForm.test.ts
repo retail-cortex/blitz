@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { ApiProviderSettingsSchema } from "./gen/blitz/v1/config_pb";
-import { apiFormProblems, fromApiForm, newHeader, sameApiForm, toApiForm, tokenPlaceholder, usesToken, type ApiForm } from "./apiForm";
+import { apiFormProblems, fromApiForm, guessedAPI, listedRows, newHeader, sameApiForm, toApiForm, tokenPlaceholder, usesToken, type ApiForm } from "./apiForm";
 
 const saved = create(ApiProviderSettingsSchema, {
   baseUrl: "https://gw.example/v1",
@@ -30,7 +30,8 @@ const saved = create(ApiProviderSettingsSchema, {
   tokenScriptLanguage: "",
 });
 
-const fine: ApiForm = { baseUrl: "https://gw.example/v1", headers: [{ name: "Authorization", value: "", hasValue: false, useToken: true }], tokenScript: "print-token", language: "shell" };
+const routes = { listsModels: true, modelsPath: "", models: [], otherApi: "", paths: {} };
+const fine: ApiForm = { baseUrl: "https://gw.example/v1", headers: [{ name: "Authorization", value: "", hasValue: false, useToken: true }], tokenScript: "print-token", language: "shell", ...routes };
 
 describe("the api form", () => {
   it("shows the saved settings, withholding values", () => {
@@ -43,11 +44,59 @@ describe("the api form", () => {
       ],
       tokenScript: "print-token",
       language: "shell",
+      ...routes,
     });
   });
 
   it("starts with one empty row carrying the token", () => {
-    expect(toApiForm()).toEqual({ baseUrl: "", headers: [newHeader()], tokenScript: "", language: "shell" });
+    expect(toApiForm()).toEqual({ baseUrl: "", headers: [newHeader()], tokenScript: "", language: "shell", ...routes });
+  });
+
+  // Issue #105 (spec_015_models MDL-110–112).
+  it("shows and saves each model's API, every other model's, the paths and the list", () => {
+    const f = toApiForm(create(ApiProviderSettingsSchema, { ...saved, modelsPath: "/v1/models", apis: { "gemini-3-pro": "vertex", "*": "chat_completions", "claude-sonnet-5-5": "messages" }, paths: { messages: "/v1/messages" } }));
+    expect(f).toMatchObject({
+      listsModels: true,
+      modelsPath: "/v1/models",
+      models: [
+        { model: "claude-sonnet-5-5", api: "messages" },
+        { model: "gemini-3-pro", api: "vertex" },
+      ],
+      otherApi: "chat_completions",
+      paths: { messages: "/v1/messages" },
+    });
+    const edited = { ...f, models: [{ model: " glm-5 ", api: "messages" }, ...f.models, { model: "", api: "gemini" }], paths: { messages: " /v1/messages ", responses: "/responses", gemini: "" } };
+    expect(fromApiForm(edited)).toMatchObject({
+      modelsPath: "/v1/models",
+      apis: { "*": "chat_completions", "claude-sonnet-5-5": "messages", "gemini-3-pro": "vertex", "glm-5": "messages" },
+      paths: { messages: "/v1/messages" },
+    });
+    expect(Object.keys(fromApiForm(edited).apis)).toEqual(["*", "claude-sonnet-5-5", "gemini-3-pro", "glm-5"]);
+    expect(fromApiForm({ ...f, listsModels: false }).modelsPath).toBe("none");
+    expect(toApiForm(create(ApiProviderSettingsSchema, { modelsPath: "none" }))).toMatchObject({ listsModels: false, modelsPath: "" });
+    expect(sameApiForm(f, { ...f, models: [...f.models].reverse() }), "the rows' order isn't a change").toBe(true);
+    expect(sameApiForm(f, { ...f, otherApi: "" })).toBe(false);
+  });
+
+  it("guesses an API from the name, and adds the gateway's models it doesn't name", () => {
+    expect(["claude-opus-5", "Gemini-3-pro", "gpt-6-luna", "llama-4"].map(guessedAPI)).toEqual(["messages", "gemini", "responses", "responses"]);
+    const f = { ...fine, models: [{ model: "gpt-6-luna", api: "chat_completions" }] };
+    expect(listedRows(f, ["gpt-6-luna", "claude-sonnet-5-5", "gemini-3-pro"])).toEqual([
+      { model: "claude-sonnet-5-5", api: "messages" },
+      { model: "gemini-3-pro", api: "gemini" },
+    ]);
+  });
+
+  it("refuses a model twice and paths the service would", () => {
+    const twice = { ...fine, models: [{ model: "m", api: "responses" }, { model: " m ", api: "messages" }] };
+    expect(apiFormProblems(twice)).toEqual(["desktop.keys.api.problem.model_twice"]);
+    const bad: Record<string, string>[] = [{ responses: "responses" }, { responses: "/r?x=1" }, { chat_completions: "/{deployment}/chat" }, { messages: "/{method}" }, { gemini: "/models/{model}" }, { responses: `/${tokenPlaceholder}` }];
+    for (const paths of bad) {
+      expect(apiFormProblems({ ...fine, paths }), JSON.stringify(paths)).toEqual(["desktop.keys.api.problem.path"]);
+    }
+    expect(apiFormProblems({ ...fine, modelsPath: "models" })).toEqual(["desktop.keys.api.problem.path"]);
+    expect(apiFormProblems({ ...fine, listsModels: false, modelsPath: "models" }), "a path not used isn't checked").toEqual([]);
+    expect(apiFormProblems({ ...fine, paths: { vertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}", chat_completions: "/v1/chat/completions" } })).toEqual([]);
   });
 
   it("saves the token's placeholder, keeps a withheld value and leaves out empty rows", () => {

@@ -203,8 +203,11 @@ func providerOf(m model.LLM) string {
 		return "anthropic"
 	case *apiModel:
 		// The settings the API the gateway's model speaks takes (MDL-107).
-		if m.p.format == formatMessages {
+		switch {
+		case m.p.format == formatMessages:
 			return "anthropic"
+		case m.p.format.google():
+			return "gemini"
 		}
 		return "openai"
 	case *toolCallParsingModel, *ollamaAuto:
@@ -537,7 +540,14 @@ func unpairedResult(contents []*genai.Content) error {
 // newOpenAIModel builds an OpenAI-compatible (Responses API) model with
 // image support and text-encoded tool call parsing.
 func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...option.RequestOption) (model.LLM, error) {
+	return newOpenAIModelFor(ctx, name, apiKey, baseURL, openaimodel.APIResponses, opts...)
+}
+
+// newOpenAIModelFor is newOpenAIModel speaking api: OpenAI's Responses or
+// Chat Completions (an OpenAI-compatible server's, MDL-110).
+func newOpenAIModelFor(ctx context.Context, name, apiKey, baseURL string, api openaimodel.API, opts ...option.RequestOption) (model.LLM, error) {
 	m, err := openaimodel.NewModel(ctx, name, &openaimodel.ClientConfig{
+		API:     api,
 		APIKey:  apiKey,
 		BaseURL: baseURL,
 		// The last is innermost and reads the reply first: provider tools take

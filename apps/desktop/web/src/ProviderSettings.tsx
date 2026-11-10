@@ -435,7 +435,18 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
         )}
         {choice.provider === "openai" && <p className="t-body-sm muted">{t("desktop.keys.openai_key_only")}</p>}
         {choice.provider === "ollama" && <p className="t-body-sm muted">{t("desktop.keys.ollama_limits")}</p>}
-        {isAPI && <ApiProviderForm form={choice.api} onChange={(api) => setChoice((c) => ({ ...c, api }))} problems={apiTouched ? apiProblems : []} busy={busy} onEnter={onEnter} />}
+        {isAPI && (
+          <ApiProviderForm
+            form={choice.api}
+            onChange={(api) => setChoice((c) => ({ ...c, api }))}
+            problems={apiTouched ? apiProblems : []}
+            busy={busy}
+            onEnter={onEnter}
+            advanced={advanced}
+            listed={saved.api.baseUrl ? () => gatewayModels(workspace) : undefined}
+          />
+        )}
+        {isAPI && saved.provider === "api" && saved.api.baseUrl && <MenuModels workspace={workspace} provider="api" desc={desc} busy={busy} act={act} />}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
         {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
@@ -782,6 +793,13 @@ function DefaultModel({ workspace, desc, busy, act }: { workspace: string; desc:
  * A provider's models in the menus (spec_061 MOD-42): several of all its
  * chat models; none chosen, its latest.
  */
+/** The models the gateway lists with the saved settings (MDL-112); its error when it can't. */
+async function gatewayModels(workspace: string): Promise<string[]> {
+  const pm = (await config.listModels({ workspace, providers: ["api"] })).providers.find((p) => p.provider === "api");
+  if (pm?.error) throw new Error(pm.error);
+  return pm?.models.map((m) => m.id) ?? [];
+}
+
 function MenuModels({ workspace, provider, desc, busy, act }: { workspace: string; provider: string; desc: DescribeConfigResponse; busy: boolean; act: Act }) {
   const [models, setModels] = useState<ListedModel[]>([]);
   useEffect(() => {

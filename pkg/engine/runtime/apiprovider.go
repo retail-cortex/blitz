@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"iter"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -36,41 +38,74 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/model/gemini"
+	"google.golang.org/adk/v2/model/openaimodel"
+	"google.golang.org/genai"
 )
 
 // The api provider (spec_015_models §3.4): the adapter for the API the
-// model speaks behind the gateway (MDL-100b), with a middleware that signs
-// each request with the configured headers and the session's token, and
-// fixes up the gateway's answers (apiresponse.go).
+// model speaks behind the gateway (MDL-110), with a middleware that signs
+// each request with the configured headers and the session's token, sends
+// it to that API's path (MDL-111), and fixes up the gateway's answers
+// (apiresponse.go).
 
 // apiFormat is the API a model behind the gateway speaks, which its
-// requests are written in (MDL-100b).
+// requests are written in (MDL-110).
 type apiFormat int
 
 const (
 	// formatResponses is OpenAI's Responses API, through the openai adapter.
 	formatResponses apiFormat = iota
-	// formatMessages is Anthropic's Messages API (claude-… models), through
-	// the anthropic adapter.
+	// formatMessages is Anthropic's Messages API, through the anthropic
+	// adapter.
 	formatMessages
+	// formatChat is OpenAI's Chat Completions API, through the openai
+	// adapter.
+	formatChat
+	// formatGemini is the Gemini API, through the gemini adapter.
+	formatGemini
+	// formatVertex is Vertex AI's API for Google's models, through the
+	// gemini adapter.
+	formatVertex
 )
 
-// apiFormatOf is the API model speaks: a gateway passes a Claude model's
-// request to Anthropic's API as it is.
-func apiFormatOf(model string) apiFormat {
-	if isClaude(model) {
-		return formatMessages
-	}
-	return formatResponses
+// apiFormats are the formats by [llm.api.apis]'s names.
+var apiFormats = map[string]apiFormat{
+	config.GatewayResponses:       formatResponses,
+	config.GatewayMessages:        formatMessages,
+	config.GatewayChatCompletions: formatChat,
+	config.GatewayGemini:          formatGemini,
+	config.GatewayVertex:          formatVertex,
 }
+
+// apiNames are [llm.api.apis]'s names by format.
+var apiNames = func() map[apiFormat]string {
+	out := map[apiFormat]string{}
+	for name, f := range apiFormats {
+		out[f] = name
+	}
+	return out
+}()
+
+// google reports whether f is one of Google's generateContent APIs.
+func (f apiFormat) google() bool { return f == formatGemini || f == formatVertex }
+
+// googleCallRE is a gemini adapter's model call's path: its API version,
+// Vertex AI's publisher, the model and the method.
+var googleCallRE = regexp.MustCompile(`/[^/]+/(?:publishers/google/)?models/([^/:]+):(generateContent|streamGenerateContent)$`)
 
 // apiPlaceholderKey is the SDK's key: never sent (MDL-104), but set so the
 // SDK doesn't take OPENAI_API_KEY from the environment.
 const apiPlaceholderKey = "unused"
 
-// messagesPath is where the anthropic adapter sends a request: the
-// gateway takes it at <base_url>/responses instead.
-const messagesPath = "/v1/messages"
+// adapterPaths are where each adapter sends a model call under the base
+// URL it's given, which sign moves to the API's path (MDL-111); Google's
+// match googleCallRE.
+var adapterPaths = map[apiFormat]string{
+	formatResponses: "/responses",
+	formatMessages:  "/v1/messages",
+	formatChat:      "/chat/completions",
+}
 
 // escapedPlaceholder is the placeholder as a URL's string writes it.
 var escapedPlaceholder = url.PathEscape(config.TokenPlaceholder)
@@ -83,18 +118,18 @@ var openAIEnvHeaders = []string{"Authorization", "OpenAI-Organization", "OpenAI-
 // placeholder key), removed unless configured.
 var anthropicAuthHeaders = []string{"X-Api-Key", "Authorization"}
 
+// googleAuthHeaders are the gemini adapter's (its placeholder key's).
+var googleAuthHeaders = []string{"X-Goog-Api-Key", "Authorization"}
+
 // apiProvider signs the api provider's requests.
 type apiProvider struct {
 	cfg    config.APIConfig
 	format apiFormat
+	model  string         // the model's name, the paths' {model}
 	tokens *sessionTokens // nil when nothing uses the placeholder
 	// source gives the token in place of a script: the organization's
 	// service's sign-in (spec_053_enterprise EN-20), which renews itself.
-	source tokenSource
-	// messagesAt is where Claude's requests go, under the base URL:
-	// /responses on a gateway that takes every model's there, /messages on
-	// the organization's service.
-	messagesAt string
+	source     tokenSource
 	query      url.Values // base_url's query, put on every request
 	tokenInURL bool       // base_url uses the placeholder
 
@@ -112,7 +147,7 @@ func newAPIModel(ctx context.Context, c config.APIConfig, name string, pol retry
 	if err := c.Check(); err != nil {
 		return nil, err
 	}
-	p := &apiProvider{cfg: c, format: apiFormatOf(name)}
+	p := &apiProvider{cfg: c, format: apiFormats[c.APIOf(cmp.Or(name, c.Model))]}
 	if c.UsesToken() {
 		p.tokens = newSessionTokens(p.fetchToken)
 	}
@@ -121,23 +156,14 @@ func newAPIModel(ctx context.Context, c config.APIConfig, name string, pol retry
 
 // buildAPIModel is the model p signs the requests of.
 func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPolicy) (model.LLM, error) {
-	c := p.cfg
-	p.tokenInURL = strings.Contains(c.BaseURL, config.TokenPlaceholder)
-	if p.messagesAt == "" {
-		p.messagesAt = "/responses"
-	}
+	p.model = cmp.Or(name, p.cfg.Model)
 	if p.format == formatResponses && rejectsSampling(name) {
 		p.drop = slices.Clone(samplingParams)
 	}
-	// The SDK resolves "responses" against the base URL, which drops its
-	// query: that goes on each request instead (sign).
-	base, rawQuery, _ := strings.Cut(c.BaseURL, "?")
-	query, err := url.ParseQuery(rawQuery)
+	baseURL, err := p.baseURL()
 	if err != nil {
-		return nil, fmt.Errorf("[llm.api] base_url's query: %w", err)
+		return nil, err
 	}
-	p.query = query
-	baseURL := strings.ReplaceAll(base, config.TokenPlaceholder, escapedPlaceholder)
 	if p.format == formatMessages {
 		// No credentials or base URL from the environment; no server-side
 		// fallback, which needs Anthropic's own API.
@@ -149,22 +175,104 @@ func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPo
 		inner := &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: "off"}
 		return &apiModel{inner: inner, p: p}, nil
 	}
+	if p.format.google() {
+		return buildGoogleAPIModel(ctx, p, name, baseURL, pol)
+	}
 	opts := append(pol.openAIOptions(), option.WithMiddleware(p.middleware))
-	inner, err := newOpenAIModel(ctx, name, apiPlaceholderKey, baseURL, opts...)
+	api := openaimodel.APIResponses
+	if p.format == formatChat {
+		api = openaimodel.APIChatCompletions
+	}
+	inner, err := newOpenAIModelFor(ctx, name, apiPlaceholderKey, baseURL, api, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return &apiModel{inner: inner, p: p}, nil
 }
 
+// baseURL is the base URL p's clients resolve their paths against, the
+// placeholder escaped. The SDKs drop its query, which goes on each request
+// instead (sign).
+func (p *apiProvider) baseURL() (string, error) {
+	p.tokenInURL = strings.Contains(p.cfg.BaseURL, config.TokenPlaceholder)
+	base, rawQuery, _ := strings.Cut(p.cfg.BaseURL, "?")
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return "", fmt.Errorf("[llm.api] base_url's query: %w", err)
+	}
+	p.query = query
+	return strings.ReplaceAll(base, config.TokenPlaceholder, escapedPlaceholder), nil
+}
+
+// buildGoogleAPIModel is a model speaking Gemini's or Vertex AI's API,
+// through the gemini adapter with a placeholder key (Vertex AI's express
+// mode: no project, no Google credentials) and p's middleware as its
+// client's transport.
+func buildGoogleAPIModel(ctx context.Context, p *apiProvider, name, baseURL string, pol retryPolicy) (model.LLM, error) {
+	cc := pol.geminiConfig(apiPlaceholderKey)
+	cc.Backend = genai.BackendGeminiAPI
+	if p.format == formatVertex {
+		cc.Backend = genai.BackendVertexAI
+	}
+	// Not from the environment (GOOGLE_CLOUD_PROJECT and the rest): the
+	// gateway's model is the gateway's.
+	cc.Project, cc.Location, cc.Credentials = "", "", nil
+	cc.HTTPOptions.BaseURL = strings.TrimSuffix(baseURL, "/") + "/"
+	inner := cc.HTTPClient
+	cc.HTTPClient = &http.Client{Timeout: inner.Timeout, Transport: middlewareTransport{p.middleware, inner}}
+	m, err := gemini.NewModel(ctx, name, cc)
+	if err != nil {
+		return nil, err
+	}
+	return &apiModel{inner: m, p: p}, nil
+}
+
+// middlewareTransport runs the gemini adapter's requests through mw, as
+// the other adapters' clients run theirs.
+type middlewareTransport struct {
+	mw     func(*http.Request, option.MiddlewareNext) (*http.Response, error)
+	client *http.Client
+}
+
+// RoundTrip sends req through mw, then client.
+func (t middlewareTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.mw(req, t.client.Do)
+}
+
 // isModelCall reports whether req asks for a model response, in the
 // model's API.
 func (p *apiProvider) isModelCall(req *http.Request) bool {
-	path := strings.TrimSuffix(req.URL.Path, "/")
-	if p.format == formatMessages {
-		return req.Method == http.MethodPost && strings.HasSuffix(path, messagesPath)
+	if req.Method != http.MethodPost {
+		return false
 	}
-	return req.Method == http.MethodPost && strings.HasSuffix(path, "/responses")
+	path := strings.TrimSuffix(req.URL.Path, "/")
+	if p.format.google() {
+		return googleCallRE.MatchString(path)
+	}
+	return strings.HasSuffix(path, adapterPaths[p.format])
+}
+
+// routed is u with the adapter's path for a model call replaced by the
+// API's (MDL-111): {model} the model's name, escaped, {method} Google's.
+func (p *apiProvider) routed(u *url.URL) *url.URL {
+	path := strings.TrimSuffix(u.Path, "/")
+	var prefix, method string
+	if p.format.google() {
+		loc := googleCallRE.FindStringSubmatchIndex(path)
+		prefix, method = path[:loc[0]], path[loc[4]:loc[5]]
+	} else {
+		prefix = strings.TrimSuffix(path, adapterPaths[p.format])
+	}
+	out := *u
+	out.Path = prefix + strings.NewReplacer("{model}", p.model, "{method}", method).Replace(p.cfg.PathOf(apiNames[p.format]))
+	out.RawPath = ""
+	if p.format == formatMessages {
+		// The beta client's ?beta=true isn't the gateway's.
+		q := out.Query()
+		q.Del("beta")
+		out.RawQuery = q.Encode()
+	}
+	return &out
 }
 
 // fetchToken runs the token script; the token is remembered by the
@@ -364,19 +472,15 @@ func (p *apiProvider) token(ctx context.Context, session string) (string, error)
 func (p *apiProvider) sign(req *http.Request, body []byte, token string) *http.Request {
 	r := req.Clone(req.Context())
 	strip := openAIEnvHeaders
-	if p.format == formatMessages {
+	switch {
+	case p.format == formatMessages:
 		strip = anthropicAuthHeaders
-		if p.isModelCall(r) {
-			// The gateway takes Claude's requests where it takes the others;
-			// the beta client's ?beta=true isn't the gateway's.
-			u := *r.URL
-			u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), messagesPath) + p.messagesAt
-			u.RawPath = ""
-			q := u.Query()
-			q.Del("beta")
-			u.RawQuery = q.Encode()
-			r.URL = &u
-		}
+	case p.format.google():
+		strip = googleAuthHeaders
+	}
+	call := p.isModelCall(r)
+	if call {
+		r.URL = p.routed(r.URL)
 	}
 	for _, h := range strip {
 		r.Header.Del(h)
@@ -398,7 +502,7 @@ func (p *apiProvider) sign(req *http.Request, body []byte, token string) *http.R
 		r.URL = p.requestURL(r.URL, token)
 	}
 	if body != nil {
-		if p.format == formatResponses && p.isModelCall(r) {
+		if p.format == formatResponses && call {
 			body = requestBodyFor(body, p.dropped(), p.streams())
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))

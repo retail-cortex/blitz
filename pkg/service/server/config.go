@@ -97,7 +97,7 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 // apiSettingsToProto is the api provider's settings for DescribeConfig;
 // config.Describe has already withheld the header values.
 func apiSettingsToProto(a config.APIProviderInfo) *pb.ApiProviderSettings {
-	out := &pb.ApiProviderSettings{BaseUrl: a.BaseURL, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage}
+	out := &pb.ApiProviderSettings{BaseUrl: a.BaseURL, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage, ModelsPath: a.ModelsPath, Apis: a.APIs, Paths: a.Paths}
 	for _, h := range a.Headers {
 		out.Headers = append(out.Headers, &pb.ApiHeader{Name: h.Name, Value: h.Value, HasValue: h.HasValue})
 	}
@@ -106,7 +106,7 @@ func apiSettingsToProto(a config.APIProviderInfo) *pb.ApiProviderSettings {
 
 // apiSettingsFromProto is the api provider's settings SetProvider saves.
 func apiSettingsFromProto(a *pb.ApiProviderSettings) *config.APIProviderSettings {
-	out := &config.APIProviderSettings{BaseURL: a.BaseUrl, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage}
+	out := &config.APIProviderSettings{BaseURL: a.BaseUrl, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage, ModelsPath: a.ModelsPath, APIs: a.Apis, Paths: a.Paths}
 	for _, h := range a.Headers {
 		out.Headers = append(out.Headers, config.APIHeader{Name: h.Name, Value: h.Value})
 	}

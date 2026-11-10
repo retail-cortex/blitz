@@ -255,7 +255,7 @@ func Describe(prefixDir, workspace string) (ScopeInfo, error) {
 	info := ScopeInfo{Path: path, SecretStore: secrets.Default(ConfigDir(prefixDir)).Kind()}
 	info.Provider, _ = lookup(raw, "llm", "provider").(string)
 	info.Active = strs(lookup(raw, "llm", "providers"))
-	for _, p := range []string{"gemini", "anthropic", "openai", "ollama"} {
+	for _, p := range []string{"gemini", "anthropic", "openai", "ollama", "api"} {
 		if l := strs(lookup(raw, "llm", p, "models")); len(l) > 0 {
 			if info.MenuModels == nil {
 				info.MenuModels = map[string][]string{}
@@ -550,6 +550,7 @@ var typedValues = map[string]string{
 	"llm.anthropic.models": "models",
 	"llm.openai.models":    "models",
 	"llm.ollama.models":    "models",
+	"llm.api.models":       "models",
 	// Settings › Workers' limits (spec_023_workers WK-63).
 	"workers.policy.allow":                "kinds",
 	"workers.policy.max_concurrent":       "int",
