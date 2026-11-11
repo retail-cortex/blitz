@@ -15,7 +15,9 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"google.golang.org/adk/v2/agent"
@@ -36,6 +38,9 @@ const maxReadLogAgents = 64
 // handoff leaves a read out, and that file's next read returns the
 // content. Call IDs aren't used: ADK takes the ones it made up out of
 // requests, and Gemini sends none.
+//
+// An agent handed to sees the reads of the agents before it as text, each
+// result whole (ADK's "For context:"), so those count as shown too.
 type ReadLog struct {
 	mu     sync.Mutex
 	agents map[string][]fileRead
@@ -66,8 +71,8 @@ func ReadKey(ctx agent.Context) (key string, ok bool) {
 }
 
 // Shown records the read_file results a request to the model carries for
-// the agent ctx runs, in place of those the last one carried. Results of
-// other agents come as text ("For context: ..."), so only its own count.
+// the agent ctx runs, in place of those the last one carried: its own, and
+// those of the agents before a handoff, which come as text.
 func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 	key, ok := ReadKey(ctx)
 	if l == nil || !ok {
@@ -79,10 +84,16 @@ func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 			continue
 		}
 		for _, p := range c.Parts {
-			if p == nil || p.FunctionResponse == nil || p.FunctionResponse.Name != "read_file" {
+			var resp map[string]any
+			switch {
+			case p == nil:
 				continue
+			case p.FunctionResponse != nil && p.FunctionResponse.Name == "read_file":
+				resp = p.FunctionResponse.Response
+			case c.Role == genai.RoleUser:
+				resp = handedRead(p.Text)
 			}
-			if r, ok := shownRead(p.FunctionResponse.Response); ok {
+			if r, ok := shownRead(resp); ok {
 				reads = append(reads, r)
 			}
 		}
@@ -103,6 +114,25 @@ func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 		l.order = append(l.order, key)
 	}
 	l.agents[key] = reads
+}
+
+// handedResult is how ADK shows another agent's read_file result to the
+// agent handed to: "[agent] `read_file` tool returned result: {...}", the
+// result as JSON.
+const handedResult = "`read_file` tool returned result: "
+
+// handedRead is the read_file result in text, as handedResult shows it, or
+// nil for any other text.
+func handedRead(text string) map[string]any {
+	_, result, ok := strings.Cut(text, handedResult)
+	if !ok || !strings.HasPrefix(text, "[") {
+		return nil
+	}
+	var resp map[string]any
+	if json.Unmarshal([]byte(result), &resp) != nil {
+		return nil
+	}
+	return resp
 }
 
 // shownRead is the read a read_file result names: its digest and lines.

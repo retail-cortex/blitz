@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,19 @@ func (r *reader) request() {
 // forget drops what the agent was sent, as a summary or a rewind does.
 func (r *reader) forget() { r.sent = nil }
 
+// handTo hands the conversation to agent to: it's sent this agent's
+// results as text, as ADK shows another agent's events ("For context:").
+func (r *reader) handTo(to *reader) {
+	for _, c := range r.sent {
+		for _, p := range c.Parts {
+			resp, err := json.Marshal(p.FunctionResponse.Response)
+			require.NoError(r.t, err)
+			text := fmt.Sprintf("[%s] `%s` tool returned result: %s", r.ic.agent.Name(), p.FunctionResponse.Name, resp)
+			to.sent = append(to.sent, &genai.Content{Role: genai.RoleUser, Parts: []*genai.Part{{Text: "For context:"}, {Text: text}}})
+		}
+	}
+}
+
 func TestReadFileRepeats(t *testing.T) {
 	var long strings.Builder
 	for i := 1; i <= wholeFileLines+50; i++ {
@@ -128,10 +142,27 @@ func TestReadFileRepeats(t *testing.T) {
 				a.request()
 				return a.read(map[string]any{"path": "f.txt"})
 			}},
-		{name: "another agent's read doesn't count", wantContent: "   1: one\n",
+		{name: "another agent's read not handed over doesn't count", wantContent: "   1: one\n",
 			steps: func(t *testing.T, a, b *reader, _ string) map[string]any {
 				a.read(map[string]any{"path": "f.txt"})
 				a.request()
+				return b.read(map[string]any{"path": "f.txt"})
+			}},
+		{name: "a read handed over answers unchanged", wantUnchanged: true,
+			steps: func(t *testing.T, a, b *reader, _ string) map[string]any {
+				a.read(map[string]any{"path": "f.txt"})
+				a.request()
+				a.handTo(b)
+				b.request()
+				return b.read(map[string]any{"path": "f.txt"})
+			}},
+		{name: "a read handed over and summarized away gives the content", wantContent: "   1: one\n",
+			steps: func(t *testing.T, a, b *reader, _ string) map[string]any {
+				a.read(map[string]any{"path": "f.txt"})
+				a.handTo(b)
+				b.request()
+				b.forget()
+				b.request()
 				return b.read(map[string]any{"path": "f.txt"})
 			}},
 		{name: "force gives the content", wantContent: "   1: one\n",
@@ -227,6 +258,24 @@ func TestShownRead(t *testing.T) {
 			got, ok := shownRead(tc.resp)
 			assert.Equal(t, tc.ok, ok)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestHandedRead(t *testing.T) {
+	tests := []struct {
+		name, text string
+		want       map[string]any
+	}{
+		{"a read handed over", "[coder] `read_file` tool returned result: {\"digest\":\"d\",\"lines\":\"1-2\"}", map[string]any{"digest": "d", "lines": "1-2"}},
+		{"another tool", "[coder] `list_files` tool returned result: {\"digest\":\"d\"}", nil},
+		{"words that only quote it", "I saw `read_file` tool returned result: {}", nil},
+		{"a result that isn't JSON", "[coder] `read_file` tool returned result: {cut", nil},
+		{"plain text", "For context:", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, handedRead(tc.text))
 		})
 	}
 }

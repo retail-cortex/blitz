@@ -89,3 +89,33 @@ func TestReadFileRepeatsThroughTheEngine(t *testing.T) {
 	fourth := turn("it changed")
 	assert.Contains(t, fourth["content"], "gamma", "a changed file gives its content: %v", fourth)
 }
+
+// TestReadFileRepeatsAcrossAHandoff runs a real transfer_to_agent (FS-83):
+// the agent handed to sees blitz's read as ADK's "For context:" text, the
+// result whole, so its read of the unchanged file answers unchanged.
+func TestReadFileRepeatsAcrossAHandoff(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{},
+		readCall("notes.txt"),
+		toolCall("transfer_to_agent", map[string]any{"agent_name": "qa"}),
+		readCall("notes.txt"), textContent("qa has it"))
+	require.NoError(t, os.WriteFile(filepath.Join(f.cfg.Tools.WorkspaceDir, "notes.txt"), []byte("alpha\nbeta\n"), 0o644))
+
+	var reads []map[string]any
+	var authors []string
+	require.NoError(t, f.eng.Execute(context.Background(), "s", "read notes.txt, then let qa check it", func(ev *session.Event) error {
+		if ev.Content == nil {
+			return nil
+		}
+		for _, p := range ev.Content.Parts {
+			if p.FunctionResponse != nil && p.FunctionResponse.Name == "read_file" {
+				reads = append(reads, p.FunctionResponse.Response)
+				authors = append(authors, ev.Author)
+			}
+		}
+		return nil
+	}))
+	require.Len(t, reads, 2, "authors %v", authors)
+	assert.Equal(t, []string{"blitz", "qa"}, authors)
+	assert.Contains(t, reads[0]["content"], "alpha")
+	assert.Equal(t, true, reads[1]["unchanged"], "qa was handed blitz's read: %v", reads[1])
+}
