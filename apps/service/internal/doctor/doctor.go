@@ -424,6 +424,15 @@ func checkAPI(c config.APIConfig, confirm string) (checkStatus, string) {
 	}
 	sort.Strings(names)
 	detail := fmt.Sprintf("API at %s, headers %s", c.BaseURL, strings.Join(names, ", "))
+	if c.Model != "" {
+		// What the model's requests are written in, and where they go
+		// (spec_015_models MDL-110, MDL-111).
+		api := c.APIOf(c.Model)
+		detail += fmt.Sprintf("; %s speaks %s at %s", c.Model, api, c.PathOf(api))
+	}
+	if path := c.ModelsURLPath(); path != "" {
+		detail += "; models listed at " + path
+	}
 	if c.UsesToken() {
 		return statusOK, detail + "; the token from a " + c.Language() + " token_script" + confirm
 	}

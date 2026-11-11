@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.9
-weight: 1
+weight: 2
 ---
 
 Gemini on Google Cloud answers again, and Blitz is easier to start with an organization.

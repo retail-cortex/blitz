@@ -55,6 +55,22 @@ func TestAPIConfigCheck(t *testing.T) {
 		"placeholder, no script":   {func(a *APIConfig) { a.TokenScript = "  " }, "has no token_script"},
 		"script nothing uses":      {func(a *APIConfig) { a.Headers = map[string]string{"X-Tenant": "t"} }, "no header or base_url uses"},
 		"unknown language":         {func(a *APIConfig) { a.TokenScriptLanguage = "ruby" }, `token_script_language "ruby"`},
+		// Each model's API, each API's path, the model list (MDL-110–112).
+		"apis and paths": {func(a *APIConfig) {
+			a.APIs = map[string]string{"glm-5": GatewayMessages, "*": GatewayChatCompletions}
+			a.Paths = map[string]string{GatewayMessages: "/v1/messages", GatewayVertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}"}
+			a.ModelsPath = "/v1/models"
+		}, ""},
+		"no list":               {func(a *APIConfig) { a.ModelsPath = NoModelsList }, ""},
+		"unknown API":           {func(a *APIConfig) { a.APIs = map[string]string{"m": "grpc"} }, `"m"'s API "grpc" isn't one of responses, chat_completions, messages, gemini, vertex`},
+		"path for no API":       {func(a *APIConfig) { a.Paths = map[string]string{"grpc": "/x"} }, `paths: "grpc" isn't an API`},
+		"relative path":         {func(a *APIConfig) { a.Paths = map[string]string{GatewayResponses: "responses"} }, "must start with /"},
+		"path with a query":     {func(a *APIConfig) { a.Paths = map[string]string{GatewayResponses: "/r?x=1"} }, "a path alone"},
+		"token in a path":       {func(a *APIConfig) { a.Paths = map[string]string{GatewayResponses: "/" + TokenPlaceholder} }, "can't use {{TOKEN_SCRIPT}}"},
+		"unknown fill-in":       {func(a *APIConfig) { a.Paths = map[string]string{GatewayChatCompletions: "/{deployment}/chat"} }, "{deployment} isn't something Blitz fills in ({model})"},
+		"method beyond Google":  {func(a *APIConfig) { a.Paths = map[string]string{GatewayMessages: "/{method}"} }, "{method} isn't something Blitz fills in ({model})"},
+		"Google without method": {func(a *APIConfig) { a.Paths = map[string]string{GatewayGemini: "/models/{model}"} }, "paths.gemini needs {method}"},
+		"relative models path":  {func(a *APIConfig) { a.ModelsPath = "models" }, "models_path \"models\" must start with /"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -78,6 +94,30 @@ func TestAPIConfigHelpers(t *testing.T) {
 	assert.False(t, APIConfig{Headers: map[string]string{"A": "b"}}.UsesToken())
 	assert.True(t, APIConfig{Headers: map[string]string{"A": "Bearer " + TokenPlaceholder}}.UsesToken(), "inside a longer value")
 	assert.True(t, APIConfig{BaseURL: "https://g/" + TokenPlaceholder}.UsesToken())
+}
+
+// A model's API is the settings' (by name, then "*"), else its name's; a
+// path is the settings', else the API's default; the list is at /models
+// unless it's none (MDL-110–112).
+func TestAPIConfigRoutes(t *testing.T) {
+	guessed := APIConfig{}
+	for model, want := range map[string]string{
+		"claude-sonnet-5-5": GatewayMessages, "Claude-Opus-5": GatewayMessages,
+		"gemini-3-pro": GatewayGemini, "gpt-6-luna": GatewayResponses, "llama-4": GatewayResponses,
+	} {
+		assert.Equal(t, want, guessed.APIOf(model), model)
+	}
+	set := APIConfig{APIs: map[string]string{"claude-sonnet-5-5": GatewayChatCompletions, "*": GatewayVertex}}
+	assert.Equal(t, GatewayChatCompletions, set.APIOf("claude-sonnet-5-5"))
+	assert.Equal(t, GatewayVertex, set.APIOf("gpt-6-luna"), "*: every other model")
+
+	assert.Equal(t, "/responses", guessed.PathOf(GatewayMessages), "Claude's go where the others' do")
+	assert.Equal(t, "/chat/completions", guessed.PathOf(GatewayChatCompletions))
+	assert.Equal(t, "/v1/messages", APIConfig{Paths: map[string]string{GatewayMessages: "/v1/messages"}}.PathOf(GatewayMessages))
+
+	assert.Equal(t, "/models", guessed.ModelsURLPath())
+	assert.Equal(t, "/v1/models", APIConfig{ModelsPath: "/v1/models"}.ModelsURLPath())
+	assert.Empty(t, APIConfig{ModelsPath: NoModelsList}.ModelsURLPath())
 }
 
 // SetProvider writes the api provider's settings; Describe shows them with
@@ -118,6 +158,38 @@ func TestSetProviderAPI(t *testing.T) {
 		{Name: "X.Odd", HasValue: true},
 	}, info.API.Headers, "only values using the token are shown, with the text around it")
 
+	t.Run("each model's API, the paths and the list", func(t *testing.T) {
+		require.NoError(t, save(APIProviderSettings{
+			BaseURL: "https://gateway.example.com", TokenScript: "echo t",
+			Headers:    []APIHeader{{Name: "X-Api-Key", Value: TokenPlaceholder}, {Name: "X-Tenant"}},
+			ModelsPath: " /v1/models ",
+			APIs:       map[string]string{"claude-sonnet-4.5": GatewayMessages, "*": GatewayChatCompletions, " ": GatewayGemini},
+			Paths:      map[string]string{GatewayMessages: "/v1/messages", GatewayGemini: ""},
+		}))
+		cfg, err := Load("")
+		require.NoError(t, err)
+		assert.Equal(t, "/v1/models", cfg.LLM.API.ModelsPath)
+		assert.Equal(t, map[string]string{"claude-sonnet-4.5": GatewayMessages, "*": GatewayChatCompletions}, cfg.LLM.API.APIs, "a model name with a dot, and *, are quoted keys; empty ones dropped")
+		assert.Equal(t, map[string]string{GatewayMessages: "/v1/messages"}, cfg.LLM.API.Paths)
+		info, err := Describe("", "")
+		require.NoError(t, err)
+		assert.Equal(t, "/v1/models", info.API.ModelsPath)
+		assert.Equal(t, cfg.LLM.API.APIs, info.API.APIs)
+		assert.Equal(t, cfg.LLM.API.Paths, info.API.Paths)
+
+		// Saving again replaces them: what's left out is removed.
+		require.NoError(t, save(APIProviderSettings{
+			BaseURL: "https://gateway.example.com", TokenScript: "echo t",
+			Headers: []APIHeader{{Name: "X-Api-Key", Value: TokenPlaceholder}, {Name: "X-Tenant"}},
+			APIs:    map[string]string{"*": GatewayResponses},
+		}))
+		cfg, err = Load("")
+		require.NoError(t, err)
+		assert.Empty(t, cfg.LLM.API.ModelsPath)
+		assert.Equal(t, map[string]string{"*": GatewayResponses}, cfg.LLM.API.APIs)
+		assert.Empty(t, cfg.LLM.API.Paths)
+	})
+
 	t.Run("empty value keeps it, missing header is removed", func(t *testing.T) {
 		require.NoError(t, save(APIProviderSettings{
 			BaseURL:     "https://gateway.example.com",
@@ -140,6 +212,8 @@ func TestSetProviderAPI(t *testing.T) {
 			BaseURL: "https://g.example.com", Headers: []APIHeader{{Name: "A", Value: "1"}, {Name: "A", Value: "2"}}}}, "given twice"},
 		"settings that can't build": {ProviderChoice{Provider: "api", API: &APIProviderSettings{
 			BaseURL: "https://g.example.com", Headers: []APIHeader{{Name: "A", Value: TokenPlaceholder}}}}, "has no token_script"},
+		"an API that isn't": {ProviderChoice{Provider: "api", API: &APIProviderSettings{
+			BaseURL: "https://g.example.com", Headers: []APIHeader{{Name: "A", Value: "1"}}, APIs: map[string]string{"m": "soap"}}}, `"m"'s API "soap"`},
 		"another provider": {ProviderChoice{Provider: "openai", API: &APIProviderSettings{}}, "need provider api"},
 		"a key":            {ProviderChoice{Provider: "api", Key: "k"}, "takes an API key"},
 	}

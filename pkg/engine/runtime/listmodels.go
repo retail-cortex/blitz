@@ -137,7 +137,9 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 			case "bedrock", "azure":
 				pm.Note = "the configured model: " + p + "'s console lists the others"
 			case "api":
-				pm.Note = "the configured model"
+				if cfg.LLM.API.ModelsURLPath() == "" {
+					pm.Note = "the configured models: [llm.api] models_path is none"
+				}
 			}
 			for _, id := range ids {
 				m := ListedModel{ID: id}
@@ -195,7 +197,7 @@ func listProvider(ctx context.Context, cfg *config.Config, provider string) ([]s
 	case "azure":
 		return nonEmpty(cfg.LLM.Azure.Model), nil
 	case "api":
-		return nonEmpty(cfg.LLM.API.Model), nil
+		return listAPIModels(ctx, cfg.LLM.API, pol)
 	case "openai", "ollama":
 		key, base, opts, err := openAIKey(ctx, cfg.LLM, provider, pol)
 		if err != nil {
@@ -479,6 +481,8 @@ func chosenModels(cfg *config.Config, provider string) []string {
 		return cfg.LLM.OpenAI.Models
 	case "ollama":
 		return cfg.LLM.Ollama.Models
+	case "api":
+		return cfg.LLM.API.Models
 	}
 	return nil
 }

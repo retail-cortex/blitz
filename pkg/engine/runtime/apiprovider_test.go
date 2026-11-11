@@ -415,9 +415,12 @@ func TestAPIProviderRefusedFields(t *testing.T) {
 	refusal := `{"error":{"message":"Unsupported parameter: 'temperature' is not supported with this model.","type":"invalid_request_error","param":"temperature","code":"unsupported_parameter"}}`
 
 	t.Run("known", func(t *testing.T) {
+		// A Gemini model's name is Gemini's API's unless the settings say
+		// otherwise (MDL-110): here, the Responses API.
+		responses := func(c *config.APIConfig) { c.APIs = map[string]string{"*": config.GatewayResponses} }
 		for name, drops := range map[string]bool{"gpt-5.6-sol": true, "o3-mini": true, "gpt-4.1": false, "gemini-3.8-flash": false} {
 			g := newFakeGateway(t)
-			_, _, err := callAPI(context.Background(), apiTestModelNamed(t, g, name, "echo tok-12345678", 0), sampled())
+			_, _, err := callAPI(context.Background(), apiTestModelNamed(t, g, name, "echo tok-12345678", 0, responses), sampled())
 			require.NoError(t, err, name)
 			body := g.requests()[0].Body
 			assert.Equal(t, !drops, body["temperature"] != nil, "%s: temperature", name)
@@ -562,11 +565,22 @@ func TestAPIProviderBuild(t *testing.T) {
 	assert.Equal(t, "gpt-5", name)
 	assert.False(t, SettingSupported("api", "gpt-5", "seed"))
 
+	// The gateway's list (MDL-112), else the configured models.
+	listing := newFakeGateway(t, [2]any{http.StatusOK, `{"data":[{"id":"gpt-5"},{"id":"claude-sonnet-5-5"}]}`})
+	cfg.LLM.API.BaseURL = listing.URL
 	listed := ListModels(context.Background(), cfg, "api")
 	require.Len(t, listed, 1)
 	require.NoError(t, listed[0].Err)
+	assert.Equal(t, []string{"claude-sonnet-5-5", "gpt-5"}, []string{listed[0].Models[0].ID, listed[0].Models[1].ID})
+	assert.Empty(t, listed[0].Note)
+	assert.Equal(t, "/models", listing.requests()[0].Path)
+	cfg.LLM.API.ModelsPath = config.NoModelsList
+	listed = ListModels(context.Background(), cfg, "api")
+	require.NoError(t, listed[0].Err)
 	assert.Equal(t, "gpt-5", listed[0].Models[0].ID)
-	assert.Equal(t, "the configured model", listed[0].Note)
+	assert.Equal(t, "the configured models: [llm.api] models_path is none", listed[0].Note)
+	cfg.LLM.API.Models = []string{"claude-sonnet-5-5"}
+	assert.Equal(t, []string{"claude-sonnet-5-5"}, chosenModels(cfg, "api"), "the menus' choice (MOD-42)")
 	assert.Contains(t, ConfiguredProviders(cfg), "api")
 }
 

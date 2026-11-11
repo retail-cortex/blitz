@@ -16,7 +16,7 @@ A provider is where Blitz's models come from, and setting one up is the first th
 | Ollama | `ollama` | nothing | Models running on your machine |
 | Amazon Bedrock | `bedrock` | AWS credentials or AWS IAM Identity Center | Claude, in your AWS account |
 | Azure | `azure` | API key or Entra ID | OpenAI's models, and Claude through Microsoft Foundry |
-| Your company's gateway | `api` | Headers and a token a script prints | Claude and OpenAI's models, through the gateway |
+| Your company's gateway | `api` | Headers and a token a script prints | Whatever it serves: each model in its own API (OpenAI's, Anthropic's, Gemini's, Vertex AI's or an OpenAI-compatible server's) |
 
 Keys go into your system keychain (the macOS Keychain, the Secret Service on Linux), never into a file you could commit. Settings are read only from `~/.blitz`, never from a project, so a cloned repository can't redirect your key.
 
@@ -239,7 +239,7 @@ The desktop app's provider form doesn't offer Bedrock, Azure or Claude on Vertex
 
 ## Your company's gateway
 
-The `api` provider sends requests to your company's model gateway, with the headers you give it, in the API each model speaks: a `claude-…` model gets Anthropic's Messages API (streaming, prompt caching and thinking included), any other model OpenAI's Responses API. Both go to `<base_url>/responses`, as gateways that pass each vendor's request through expect. Where a header (or the URL's path or query) says `{{TOKEN_SCRIPT}}`, Blitz puts the token your script prints:
+The `api` provider sends requests to your company's model gateway, with the headers you give it, in the API each model speaks. Where a header (or the URL's path or query) says `{{TOKEN_SCRIPT}}`, Blitz puts the token your script prints:
 
 ```toml
 [llm]
@@ -256,9 +256,30 @@ Authorization = "Bearer {{TOKEN_SCRIPT}}"
 X-Team        = "platform"
 ```
 
+**Each model's API.** Blitz doesn't need your gateway's documentation: you say what each model speaks and where the gateway takes it. Without settings, a `claude-…` model gets Anthropic's Messages API (streaming, prompt caching and thinking included), a `gemini-…` model the Gemini API, and any other OpenAI's Responses API. `[llm.api.apis]` says otherwise, by model, with `"*"` for every model you don't name:
+
+```toml
+[llm.api.apis]
+"claude-sonnet-5-5" = "messages"          # Anthropic's Messages API
+"glm-5"             = "messages"          # an Anthropic-compatible model
+"gemini-3-pro"      = "vertex"            # Vertex AI (or "gemini": the Gemini API)
+"gpt-6-luna"        = "responses"         # OpenAI's Responses API
+"*"                 = "chat_completions"  # any other: OpenAI-compatible
+```
+
+**Where each API goes.** Under `base_url`, Responses requests go to `/responses`, Chat Completions to `/chat/completions`, Gemini's to `/models/{model}:{method}` and Vertex AI's to `/publishers/google/models/{model}:{method}`; Claude's go to `/responses` too, where gateways that pass each request on by its model take them. `[llm.api.paths]` moves any of them; `{model}` is the model's name, and `{method}` Google's `generateContent` or `streamGenerateContent`:
+
+```toml
+[llm.api.paths]
+messages = "/anthropic/v1/messages"
+vertex   = "/vertex/v1/projects/acme-ai/locations/global/publishers/google/models/{model}:{method}"
+```
+
+**The gateway's models.** Blitz asks the gateway for them at `/models` under `base_url`, with the same headers and token, and reads OpenAI's, Anthropic's, Gemini's and Ollama's answers, or a plain list. `models_path` points elsewhere (`"/v1/models"`); `models_path = "none"` says the gateway doesn't list them, and the menus offer `model` and `models` instead. `models = [...]` also picks which of the listed ones the menus show.
+
 The script runs when a session first needs the token, with the service's environment and outside the sandbox, and must finish within 30 seconds. Each session keeps its token in memory; a `401` or `403` runs the script once more and retries, and a second one fails with the message to check the script. No `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` from the environment reaches the gateway. Responses API requests are never stored (`store: false`) or streamed. Requests follow the model: `temperature` and `top_p` aren't sent to models that refuse them (current Claude models, OpenAI's reasoning models), and a setting the gateway refuses for a model is left out of that model's requests from then on. Errors start `[llm.api]` and quote the gateway's reason. A project's settings can't set `[llm.api]`.
 
-In the desktop app, pick **Custom gateway** in **Settings › Providers & keys**: the endpoint, a row per header (**Use the token** puts `{{TOKEN_SCRIPT}}` in it) and the script. Header values you've saved aren't shown again; leave one empty to keep it. A header written as `Bearer {{TOKEN_SCRIPT}}` in the file shows with **Use the token** on and keeps its `Bearer `. `blitz doctor` shows the endpoint and the header names, and `blitz doctor --online` runs the script and sends a request.
+In the desktop app, pick **Custom gateway** in **Settings › Providers & keys**: the endpoint, a row per header (**Use the token** puts `{{TOKEN_SCRIPT}}` in it) and the script; **The gateway lists its models** and where; **Each model's API**, a row per model with its API, **Every other model**, and **Add the gateway's models** (what it lists, each with the API its name suggests, once the gateway is saved); and, with **Show advanced**, **Each API's path**. Once it's saved, **Models in the menus** picks which of its models the menus show. Header values you've saved aren't shown again; leave one empty to keep it. A header written as `Bearer {{TOKEN_SCRIPT}}` in the file shows with **Use the token** on and keeps its `Bearer `. `blitz doctor` shows the endpoint, the header names, the model's API and path and where the models are listed, and `blitz doctor --online` runs the script and sends a request. `blitz models api` lists the gateway's models.
 
 ## Behind a proxy
 

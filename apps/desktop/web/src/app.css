@@ -24,6 +24,11 @@
    it: menus, dialogs, the palette, snackbars and the drawer, which can
    reach over the title bar, mark themselves as not dragging. */
 :is(.menu, .context-menu, .dialog, .palette, .snackbar, .toast, .drawer, .cm-tooltip, [role="menu"], [role="dialog"], [role="listbox"]) { -webkit-app-region: no-drag; app-region: no-drag; }
+/* A view's header, right under the title bar, moves the window too (its
+   title's row); what can be clicked or typed in it doesn't. Not one at
+   the bottom (a terminal's). */
+.drawer > .drawer-head:not(.below) { -webkit-app-region: drag; app-region: drag; }
+.drawer > .drawer-head:not(.below) :is(button, input, select, textarea, label, a, [role="tab"], [tabindex], [contenteditable], .menu-anchor) { -webkit-app-region: no-drag; app-region: no-drag; }
 
 .splash, .welcome { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
 .splash > .drag-region { position: absolute; inset: 0 0 auto 0; height: 40px; }
@@ -952,9 +957,10 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-tools legend { padding: 0 4px; color: var(--md-on-surface-variant); }
 /* The api provider's header rows (DSK-61): name and value share the row,
    wrapping on a narrow card; min-width: 0 lets the fieldset shrink. */
-.api-headers { border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 8px 12px 12px; margin: 0; gap: 8px; min-width: 0; }
-.api-headers legend { padding: 0 4px; color: var(--md-on-surface-variant); }
-.api-headers .input { flex: 1 1 160px; min-width: 0; }
+.api-headers, .api-models, .api-paths { border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 8px 12px 12px; margin: 0; gap: 8px; min-width: 0; }
+:is(.api-headers, .api-models, .api-paths) legend { padding: 0 4px; color: var(--md-on-surface-variant); }
+:is(.api-headers, .api-models) .input { flex: 1 1 160px; min-width: 0; }
+.api-models .select { flex: 1 1 200px; width: auto; min-width: 0; }
 .api-provider ul.error-text { margin: 0; padding-left: 18px; }
 .api-provider ul.error-text:empty { padding: 0; }
 .agent-tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
