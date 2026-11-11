@@ -1,28 +1,28 @@
 ---
 title: Blitz 0.9.10
-weight: 1
+weight: 2
 ---
 
-Your company's gateway, your way: every model it serves, each in the API it speaks. And the window moves when you drag it.
+Does your company run its own AI gateway? Blitz now works with all of it. Every model the gateway offers shows up in Blitz, and each one talks to the gateway the way the gateway expects. And you can finally drag the window from anywhere in the title bar.
 
 ### Get started
 
-1. Update Blitz (it updates itself, or `sudo apt upgrade`), or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.10).
-2. Open **Settings › Providers & keys › Custom gateway**, then **Add the gateway's models**. Each one arrives with the API its name suggests; change any that's wrong, and save.
-3. Pick one in the model menu and ask it something.
+1. Update Blitz. It updates itself, or run `sudo apt upgrade`, or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.10).
+2. Open **Settings › Providers & keys › Custom gateway** and click **Add the gateway's models**.
+3. Check the API next to each model (Blitz guesses from the name), save, and pick one from the model menu.
 
 ### New
 
-- **Every model your gateway serves, in the menus.** Blitz asks the gateway for its list (at `/models`, or where you say), with your headers and token, and understands OpenAI's, Anthropic's, Gemini's and Ollama's answers. A gateway that doesn't list them? Switch it off and add the models yourself.
-- **Each model in its own API.** Choose per model: OpenAI Responses, OpenAI-compatible (Chat Completions), Anthropic Messages (Claude, or any Anthropic-compatible model), the Gemini API or Vertex AI. **Every other model** sets the rest in one go.
-- **Your gateway's paths, not ours.** With **Show advanced**, set where each API's requests go under the endpoint: `{model}` and `{method}` fill themselves in. Nothing about your gateway needs to be built into Blitz.
-- **Gemini through your gateway.** `gemini-…` models now speak Gemini's own API by default, or Vertex AI's when you pick it.
+- **All your gateway's models in one click.** Blitz asks the gateway what it offers and adds every model. If your gateway doesn't list them, type them in yourself.
+- **Claude, Gemini and GPT behind one gateway.** Each model uses its own API: OpenAI, Anthropic, Gemini or Vertex AI, or anything OpenAI- or Anthropic-compatible.
+- **Blitz fits your gateway, not the other way round.** If your gateway uses its own URL paths, set them under **Show advanced**. You don't have to wait for Blitz to support your setup.
 
-### Fixes
+### Fixed
 
-- **Drag the window from anywhere free in the title bar.** Only the logo's corner used to move it; now the whole space between the menus and the search field does, and with Settings (or any view) open, its header row moves the window too.
+- **Drag the window by its title bar.** It used to move only from a small corner by the logo. Now any empty space in the title bar works, even with Settings open.
 
 ### Good to know
 
-- Already using a gateway? Your models answer as before: Claude's requests still go to `/responses` with the others'. Two things are new: a `gemini-…` model now gets the Gemini API rather than OpenAI's (set it to **OpenAI Responses** if your gateway wants that), and Blitz asks the gateway for its models at `/models`. If your gateway has no list there, the model menu says so: point **The gateway lists its models** at the right path, or switch it off.
-- In the settings file it's `[llm.api.apis]`, `[llm.api.paths]` and `models_path`: see [your company's gateway](../guide/providers.md#your-companys-gateway). `blitz models api` lists the gateway's models, and `blitz doctor` says what each model speaks and where.
+- **Already set up a gateway?** Your models keep working. One change: Gemini models now use Gemini's own API. If your gateway expects OpenAI's format for them, switch them to **OpenAI Responses**.
+- **No model list?** If your gateway doesn't list its models, the model menu tells you. Turn the list off in Settings, or point it at the right place.
+- **Prefer the settings file?** See [your company's gateway](../guide/providers.md#your-companys-gateway).

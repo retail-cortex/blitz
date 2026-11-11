@@ -65,6 +65,7 @@ type Workspace struct {
 	maxFileSize int64
 	checkpoints *Checkpoints // nil when disabled
 	locks       pathLocks
+	reads       *ReadLog
 }
 
 type fsRoot struct {
@@ -88,7 +89,7 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 	if opts.Dir == "" {
 		opts.Dir = "."
 	}
-	w := &Workspace{maxFileSize: opts.MaxFileSize, readOnly: opts.ReadOnly}
+	w := &Workspace{maxFileSize: opts.MaxFileSize, readOnly: opts.ReadOnly, reads: &ReadLog{}}
 	if w.maxFileSize <= 0 {
 		w.maxFileSize = DefaultMaxFileSize
 	}
@@ -170,6 +171,15 @@ func (w *Workspace) ReadOnlyDirs() []string {
 		}
 	}
 	return out
+}
+
+// Reads returns the record of which read_file results each agent was
+// shown (FS-83).
+func (w *Workspace) Reads() *ReadLog {
+	if w == nil {
+		return nil
+	}
+	return w.reads
 }
 
 // Blocked returns the blocked-path matcher.

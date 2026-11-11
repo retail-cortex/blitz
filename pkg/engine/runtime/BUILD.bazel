@@ -191,6 +191,7 @@ go_test(
         "providertools_conformance_test.go",
         "providertools_test.go",
         "quota_test.go",
+        "readrepeats_test.go",
         "replies_test.go",
         "review_test.go",
         "rewind_test.go",

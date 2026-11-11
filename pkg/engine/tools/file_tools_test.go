@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -28,20 +29,31 @@ import (
 func TestReadFileTool(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 	writeFile(t, filepath.Join(dir, "f.txt"), "one\ntwo\nthree\nfour\n")
+	var long strings.Builder
+	for i := 1; i <= wholeFileLines+50; i++ {
+		fmt.Fprintf(&long, "line %d\n", i)
+	}
+	writeFile(t, filepath.Join(dir, "long.txt"), long.String())
 	rt := toolOf(t)(NewReadFileTool(ws))
 
-	// Positive: slicing returns only the requested lines, numbered.
-	out := runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 2, "end_line": 3})
+	// Positive: slicing a long file returns only the requested lines, numbered.
+	out := runTool(t, rt, map[string]any{"path": "long.txt", "start_line": 2, "end_line": 3})
 	content := out["content"].(string)
-	assert.Equal(t, "   2: two\n   3: three\n", content, "unexpected slice content %q", content)
-	assert.Equal(t, float64(5), out["total_lines"].(float64), "expected 5 total lines, got %v", out["total_lines"])
+	assert.Equal(t, "   2: line 2\n   3: line 3\n", content, "unexpected slice content %q", content)
+	assert.Equal(t, float64(wholeFileLines+51), out["total_lines"].(float64), "unexpected total lines %v", out["total_lines"])
 
 	// Positive: out-of-range start clamps to the last line; end < start clamps to start.
-	out = runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 99})
+	out = runTool(t, rt, map[string]any{"path": "long.txt", "start_line": 9999})
 	assert.Equal(t, "", errOf(out), "unexpected clamped output %v", out)
-	assert.Equal(t, "   5: \n", out["content"].(string), "unexpected clamped output %v", out)
-	out = runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 3, "end_line": 1})
-	assert.Equal(t, "   3: three\n", out["content"].(string), "expected end<start to clamp to start, got %q", out["content"])
+	assert.Equal(t, " 451: \n", out["content"].(string), "unexpected clamped output %v", out)
+	out = runTool(t, rt, map[string]any{"path": "long.txt", "start_line": 3, "end_line": 1})
+	assert.Equal(t, "   3: line 3\n", out["content"].(string), "expected end<start to clamp to start, got %q", out["content"])
+
+	// Positive: a range of a short file gives the whole file, and says so (FS-83).
+	out = runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 2, "end_line": 3})
+	assert.Equal(t, "   1: one\n   2: two\n   3: three\n   4: four\n   5: \n", out["content"].(string))
+	assert.Equal(t, float64(5), out["total_lines"].(float64))
+	assert.Contains(t, out["note"], "whole")
 
 	// Negative: outside the workspace, missing, and directories.
 	for _, p := range []string{"../escape.txt", "/etc/hosts", "missing.txt", "."} {
