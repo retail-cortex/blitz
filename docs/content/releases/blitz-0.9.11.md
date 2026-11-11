@@ -20,3 +20,4 @@ Your agents stop rereading the same files. They remember what they've already se
 ### Good to know
 
 - An agent that really needs a file again can still ask for a fresh copy.
+- **Includes the latest security fix** for Blitz's web connections (Go 1.27.4).
