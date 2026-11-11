@@ -45,7 +45,7 @@ const (
 var TokenScriptLanguages = []string{ScriptShell, ScriptPython, ScriptTypeScript}
 
 // The APIs a model behind the gateway can speak (spec_015_models
-// MDL-110), as [llm.api.apis] names them.
+// MDL-112), as [llm.api.apis] names them.
 const (
 	// GatewayResponses is OpenAI's Responses API.
 	GatewayResponses = "responses"
@@ -65,7 +65,7 @@ const (
 var GatewayAPIs = []string{GatewayResponses, GatewayChatCompletions, GatewayMessages, GatewayGemini, GatewayVertex}
 
 // DefaultGatewayPaths are where each API's model requests go under
-// base_url when [llm.api.paths] doesn't say (MDL-111). Claude's go where
+// base_url when [llm.api.paths] doesn't say (MDL-113). Claude's go where
 // the others' do, as gateways that route by the request's model take them;
 // {model} is the model's name and {method} Google's (generateContent, or
 // streamGenerateContent).
@@ -77,7 +77,7 @@ var DefaultGatewayPaths = map[string]string{
 	GatewayVertex:          "/publishers/google/models/{model}:{method}",
 }
 
-// DefaultModelsPath is where the gateway lists its models (MDL-112).
+// DefaultModelsPath is where the gateway lists its models (MDL-114).
 const DefaultModelsPath = "/models"
 
 // APIConfig holds settings for the api provider: a gateway whose models
@@ -117,7 +117,7 @@ type APIConfig struct {
 // NoModelsList is ModelsPath for a gateway that doesn't list its models.
 const NoModelsList = "none"
 
-// APIOf is the API model speaks behind the gateway (MDL-110): APIs says,
+// APIOf is the API model speaks behind the gateway (MDL-112): APIs says,
 // else its "*", else the name: Claude's Messages, Gemini's own API, and
 // OpenAI's Responses for any other.
 func (a APIConfig) APIOf(model string) string {
@@ -210,7 +210,7 @@ func (a APIConfig) Check() error {
 var pathPlaceholderRE = regexp.MustCompile(`\{[^}]*\}`)
 
 // checkRoutes reports what's wrong with apis, paths and models_path
-// (MDL-110–112).
+// (MDL-114–114).
 func (a APIConfig) checkRoutes() error {
 	for _, model := range sortedKeys(a.APIs) {
 		if !slices.Contains(GatewayAPIs, a.APIs[model]) {
@@ -288,8 +288,8 @@ type APIProviderInfo struct {
 	TokenScriptLanguage string
 	Headers             []APIHeaderInfo // sorted by name
 	ModelsPath          string
-	APIs                map[string]string // model → API (MDL-110)
-	Paths               map[string]string // API → path (MDL-111)
+	APIs                map[string]string // model → API (MDL-112)
+	Paths               map[string]string // API → path (MDL-113)
 }
 
 // describeAPI is the api provider's settings in a scope's file.
@@ -345,7 +345,7 @@ type APIProviderSettings struct {
 	TokenScript         string
 	TokenScriptLanguage string
 	// ModelsPath, APIs and Paths replace the file's: an API or path left
-	// out is removed (MDL-110–112).
+	// out is removed (MDL-114–114).
 	ModelsPath string
 	APIs       map[string]string
 	Paths      map[string]string

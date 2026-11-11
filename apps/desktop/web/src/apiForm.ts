@@ -43,7 +43,7 @@ export interface ApiHeaderRow {
   token?: string;
 }
 
-/** The APIs a model behind the gateway can speak (spec_015_models MDL-110). */
+/** The APIs a model behind the gateway can speak (spec_015_models MDL-112). */
 export const gatewayAPIs = ["responses", "chat_completions", "messages", "gemini", "vertex"] as const;
 
 /** Where each API's requests go when the form doesn't say (config's DefaultGatewayPaths). */
@@ -73,10 +73,10 @@ export interface ApiForm {
   /** Whether the gateway lists its models (models_path isn't "none"), and where ("" for /models). */
   listsModels: boolean;
   modelsPath: string;
-  /** Each model's API (MDL-110), and every other model's ("" goes by its name). */
+  /** Each model's API (MDL-112), and every other model's ("" goes by its name). */
   models: ApiModelRow[];
   otherApi: string;
-  /** Each API's path, by API ("" for its default, MDL-111). */
+  /** Each API's path, by API ("" for its default, MDL-113). */
   paths: Record<string, string>;
 }
 

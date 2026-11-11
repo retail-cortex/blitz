@@ -52,7 +52,7 @@ describe("the api form", () => {
     expect(toApiForm()).toEqual({ baseUrl: "", headers: [newHeader()], tokenScript: "", language: "shell", ...routes });
   });
 
-  // Issue #105 (spec_015_models MDL-110–112).
+  // Issue #105 (spec_015_models MDL-114–114).
   it("shows and saves each model's API, every other model's, the paths and the list", () => {
     const f = toApiForm(create(ApiProviderSettingsSchema, { ...saved, modelsPath: "/v1/models", apis: { "gemini-3-pro": "vertex", "*": "chat_completions", "claude-sonnet-5-5": "messages" }, paths: { messages: "/v1/messages" } }));
     expect(f).toMatchObject({
