@@ -443,7 +443,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             busy={busy}
             onEnter={onEnter}
             advanced={advanced}
-            listed={saved.api.baseUrl ? () => gatewayModels(workspace) : undefined}
+            listed={saved.api.baseUrl && saved.api.listsModels ? () => gatewayModels(workspace) : undefined}
           />
         )}
         {isAPI && saved.provider === "api" && saved.api.baseUrl && <MenuModels workspace={workspace} provider="api" desc={desc} busy={busy} act={act} />}
@@ -789,17 +789,17 @@ function DefaultModel({ workspace, desc, busy, act }: { workspace: string; desc:
   );
 }
 
-/**
- * A provider's models in the menus (spec_061 MOD-42): several of all its
- * chat models; none chosen, its latest.
- */
-/** The models the gateway lists with the saved settings (MDL-112); its error when it can't. */
+/** The models the gateway lists with the saved settings (MDL-114); its error when it can't. */
 async function gatewayModels(workspace: string): Promise<string[]> {
   const pm = (await config.listModels({ workspace, providers: ["api"] })).providers.find((p) => p.provider === "api");
   if (pm?.error) throw new Error(pm.error);
   return pm?.models.map((m) => m.id) ?? [];
 }
 
+/**
+ * A provider's models in the menus (spec_061 MOD-42): several of all its
+ * chat models; none chosen, its latest.
+ */
 function MenuModels({ workspace, provider, desc, busy, act }: { workspace: string; provider: string; desc: DescribeConfigResponse; busy: boolean; act: Act }) {
   const [models, setModels] = useState<ListedModel[]>([]);
   useEffect(() => {

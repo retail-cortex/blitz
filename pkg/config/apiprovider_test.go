@@ -55,7 +55,7 @@ func TestAPIConfigCheck(t *testing.T) {
 		"placeholder, no script":   {func(a *APIConfig) { a.TokenScript = "  " }, "has no token_script"},
 		"script nothing uses":      {func(a *APIConfig) { a.Headers = map[string]string{"X-Tenant": "t"} }, "no header or base_url uses"},
 		"unknown language":         {func(a *APIConfig) { a.TokenScriptLanguage = "ruby" }, `token_script_language "ruby"`},
-		// Each model's API, each API's path, the model list (MDL-110–112).
+		// Each model's API, each API's path, the model list (MDL-114–114).
 		"apis and paths": {func(a *APIConfig) {
 			a.APIs = map[string]string{"glm-5": GatewayMessages, "*": GatewayChatCompletions}
 			a.Paths = map[string]string{GatewayMessages: "/v1/messages", GatewayVertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}"}
@@ -98,7 +98,7 @@ func TestAPIConfigHelpers(t *testing.T) {
 
 // A model's API is the settings' (by name, then "*"), else its name's; a
 // path is the settings', else the API's default; the list is at /models
-// unless it's none (MDL-110–112).
+// unless it's none (MDL-114–114).
 func TestAPIConfigRoutes(t *testing.T) {
 	guessed := APIConfig{}
 	for model, want := range map[string]string{

@@ -416,7 +416,7 @@ func TestAPIProviderRefusedFields(t *testing.T) {
 
 	t.Run("known", func(t *testing.T) {
 		// A Gemini model's name is Gemini's API's unless the settings say
-		// otherwise (MDL-110): here, the Responses API.
+		// otherwise (MDL-112): here, the Responses API.
 		responses := func(c *config.APIConfig) { c.APIs = map[string]string{"*": config.GatewayResponses} }
 		for name, drops := range map[string]bool{"gpt-5.6-sol": true, "o3-mini": true, "gpt-4.1": false, "gemini-3.8-flash": false} {
 			g := newFakeGateway(t)
@@ -565,7 +565,7 @@ func TestAPIProviderBuild(t *testing.T) {
 	assert.Equal(t, "gpt-5", name)
 	assert.False(t, SettingSupported("api", "gpt-5", "seed"))
 
-	// The gateway's list (MDL-112), else the configured models.
+	// The gateway's list (MDL-114), else the configured models.
 	listing := newFakeGateway(t, [2]any{http.StatusOK, `{"data":[{"id":"gpt-5"},{"id":"claude-sonnet-5-5"}]}`})
 	cfg.LLM.API.BaseURL = listing.URL
 	listed := ListModels(context.Background(), cfg, "api")

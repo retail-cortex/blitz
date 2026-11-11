@@ -25,7 +25,7 @@ import { Button, IconButton, Switch } from "@blitz/webui";
  * its headers (values never shown, the token's placeholder aside) and the
  * script that prints the token; where it lists its models, each model's
  * API and, with advanced settings, each API's path (spec_015_models
- * MDL-110–112). The card saves them with the provider. listed gives the
+ * MDL-114–114). The card saves them with the provider. listed gives the
  * models the gateway lists with the saved settings.
  */
 export function ApiProviderForm({
@@ -53,14 +53,19 @@ export function ApiProviderForm({
     onChange({ ...form, models: form.models.filter((_, j) => j !== i) });
     addModel.current?.querySelector("button")?.focus();
   };
+  // The form as it is when the list arrives, not as it was when asked: an
+  // edit made while it loads is kept.
+  const latest = useRef(form);
+  latest.current = form;
   const addListed = () => {
     if (!listed) return;
     setListing({ busy: true });
     listed().then(
       (ids) => {
-        const rows = listedRows(form, ids);
+        const now = latest.current;
+        const rows = listedRows(now, ids);
         setListing({ busy: false, error: rows.length ? undefined : t("desktop.keys.api.listed_none") });
-        if (rows.length) onChange({ ...form, models: [...form.models.filter((m) => m.model.trim()), ...rows] });
+        if (rows.length) onChange({ ...now, models: [...now.models.filter((m) => m.model.trim()), ...rows] });
       },
       (e: unknown) => setListing({ busy: false, error: e instanceof Error ? e.message : String(e) }),
     );

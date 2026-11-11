@@ -44,13 +44,13 @@ import (
 )
 
 // The api provider (spec_015_models §3.4): the adapter for the API the
-// model speaks behind the gateway (MDL-110), with a middleware that signs
+// model speaks behind the gateway (MDL-112), with a middleware that signs
 // each request with the configured headers and the session's token, sends
-// it to that API's path (MDL-111), and fixes up the gateway's answers
+// it to that API's path (MDL-113), and fixes up the gateway's answers
 // (apiresponse.go).
 
 // apiFormat is the API a model behind the gateway speaks, which its
-// requests are written in (MDL-110).
+// requests are written in (MDL-112).
 type apiFormat int
 
 const (
@@ -99,7 +99,7 @@ var googleCallRE = regexp.MustCompile(`/[^/]+/(?:publishers/google/)?models/([^/
 const apiPlaceholderKey = "unused"
 
 // adapterPaths are where each adapter sends a model call under the base
-// URL it's given, which sign moves to the API's path (MDL-111); Google's
+// URL it's given, which sign moves to the API's path (MDL-113); Google's
 // match googleCallRE.
 var adapterPaths = map[apiFormat]string{
 	formatResponses: "/responses",
@@ -144,19 +144,53 @@ type apiProvider struct {
 // script isn't run here (MDL-103): a short-lived token isn't spent before a
 // session needs it.
 func newAPIModel(ctx context.Context, c config.APIConfig, name string, pol retryPolicy) (model.LLM, error) {
-	if err := c.Check(); err != nil {
+	p, err := newAPIProvider(c, apiFormats[c.APIOf(cmp.Or(name, c.Model))])
+	if err != nil {
 		return nil, err
-	}
-	p := &apiProvider{cfg: c, format: apiFormats[c.APIOf(cmp.Or(name, c.Model))]}
-	if c.UsesToken() {
-		p.tokens = newSessionTokens(p.fetchToken)
 	}
 	return buildAPIModel(ctx, p, name, pol)
 }
 
-// buildAPIModel is the model p signs the requests of.
+// newAPIProvider signs requests in format with c, which it checks first;
+// the token script isn't run until a request needs it.
+func newAPIProvider(c config.APIConfig, format apiFormat) (*apiProvider, error) {
+	if err := c.Check(); err != nil {
+		return nil, err
+	}
+	p := &apiProvider{cfg: c, format: format}
+	if c.UsesToken() {
+		p.tokens = gatewayTokens(c, p.fetchToken)
+	}
+	return p, nil
+}
+
+// sharedTokens are the token caches by token script (its language and
+// text): every model of a gateway, and its model list, use one, so a
+// token still good isn't fetched again (MDL-103).
+var sharedTokens = struct {
+	sync.Mutex
+	byScript map[string]*sessionTokens
+}{byScript: map[string]*sessionTokens{}}
+
+// gatewayTokens is the token cache for c's script, made with fetch the
+// first time.
+func gatewayTokens(c config.APIConfig, fetch func(context.Context) (string, error)) *sessionTokens {
+	key := c.Language() + "\x00" + c.TokenScript
+	sharedTokens.Lock()
+	defer sharedTokens.Unlock()
+	t, ok := sharedTokens.byScript[key]
+	if !ok {
+		t = newSessionTokens(fetch)
+		sharedTokens.byScript[key] = t
+	}
+	return t
+}
+
+// buildAPIModel is the model p signs the requests of: name, else the
+// settings' model.
 func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPolicy) (model.LLM, error) {
-	p.model = cmp.Or(name, p.cfg.Model)
+	name = cmp.Or(name, p.cfg.Model)
+	p.model = name
 	if p.format == formatResponses && rejectsSampling(name) {
 		p.drop = slices.Clone(samplingParams)
 	}
@@ -253,7 +287,8 @@ func (p *apiProvider) isModelCall(req *http.Request) bool {
 }
 
 // routed is u with the adapter's path for a model call replaced by the
-// API's (MDL-111): {model} the model's name, escaped, {method} Google's.
+// API's (MDL-113): {model} the model's name as it is (a "/" in it is a
+// path's), {method} Google's.
 func (p *apiProvider) routed(u *url.URL) *url.URL {
 	path := strings.TrimSuffix(u.Path, "/")
 	var prefix, method string
