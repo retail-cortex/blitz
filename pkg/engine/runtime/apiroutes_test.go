@@ -35,7 +35,7 @@ const (
 
 // Each model's requests are written in its API and go to that API's path
 // under base_url, signed alike; nothing comes from the environment
-// (MDL-110, MDL-111).
+// (MDL-112, MDL-113).
 func TestAPIProviderRoutes(t *testing.T) {
 	for _, k := range []string{"GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"} {
 		t.Setenv(k, "key-from-the-environment")
@@ -99,7 +99,7 @@ func TestAPIProviderRoutes(t *testing.T) {
 
 // Gemini's API through the gateway: a stream goes to streamGenerateContent
 // as server-sent events; tool calls keep their signatures; a rejected
-// token is fetched again; errors are the gateway's (MDL-105, MDL-111).
+// token is fetched again; errors are the gateway's (MDL-105, MDL-113).
 func TestAPIProviderGemini(t *testing.T) {
 	t.Run("streamed", func(t *testing.T) {
 		g := newFakeGateway(t, [2]any{http.StatusOK, "data: " + gwGeminiText + "\n\n"})
@@ -151,7 +151,7 @@ func TestAPIProviderGemini(t *testing.T) {
 
 // The gateway's models are what it lists at models_path, asked with the
 // headers and the token; any shape servers give it; the configured models
-// when it lists none or can't (MDL-112).
+// when it lists none or can't (MDL-114).
 func TestAPIModelList(t *testing.T) {
 	serve := func(t *testing.T, status int, body string) (*httptest.Server, *http.Request) {
 		var got http.Request
@@ -202,6 +202,13 @@ func TestAPIModelList(t *testing.T) {
 		ids, err := list(t, "http://127.0.0.1:1", func(c *config.APIConfig) { c.ModelsPath = config.NoModelsList })
 		require.NoError(t, err)
 		assert.Equal(t, []string{"gpt-6-luna", "claude-sonnet-5-5"}, ids, "model, then models")
+
+		ids, err = list(t, "http://127.0.0.1:1", func(c *config.APIConfig) {
+			c.ModelsPath = config.NoModelsList
+			c.APIs = map[string]string{"llama-4": config.GatewayChatCompletions, "glm-5": config.GatewayMessages, "gpt-6-luna": config.GatewayResponses, "*": config.GatewayResponses}
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"gpt-6-luna", "claude-sonnet-5-5", "glm-5", "llama-4"}, ids, "then the models apis names, sorted, * aside")
 	})
 
 	failures := map[string]struct {
@@ -222,5 +229,27 @@ func TestAPIModelList(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 			assert.Equal(t, []string{"gpt-6-luna", "claude-sonnet-5-5"}, ids, "the configured models, beside the error")
 		})
+	}
+}
+
+// The model list and the gateway's models share one token: listing
+// doesn't run the script again for a call, nor a call for a listing
+// (MDL-103, MDL-114).
+func TestAPIModelListSharesToken(t *testing.T) {
+	g := newFakeGateway(t, [2]any{http.StatusOK, `{"data":[{"id":"gpt-5"}]}`}, [2]any{http.StatusOK, `{"data":[{"id":"gpt-5"}]}`})
+	script, runs := tokenScript(t)
+	c := config.APIConfig{BaseURL: g.URL + "/gw", Headers: map[string]string{"X-Api-Key": config.TokenPlaceholder}, TokenScript: script}
+	pol := policyFrom(config.LLMConfig{})
+	for range 2 {
+		_, err := listAPIModels(context.Background(), c, pol)
+		require.NoError(t, err)
+	}
+	m, err := newAPIModel(context.Background(), c, "gpt-5", pol)
+	require.NoError(t, err)
+	_, _, err = callAPI(context.Background(), m, helloRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 1, runs())
+	for _, r := range g.requests() {
+		assert.Equal(t, "gwtok-1", r.Header.Get("X-Api-Key"), r.Path)
 	}
 }

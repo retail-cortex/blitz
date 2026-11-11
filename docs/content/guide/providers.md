@@ -267,7 +267,7 @@ X-Team        = "platform"
 "*"                 = "chat_completions"  # any other: OpenAI-compatible
 ```
 
-**Where each API goes.** Under `base_url`, Responses requests go to `/responses`, Chat Completions to `/chat/completions`, Gemini's to `/models/{model}:{method}` and Vertex AI's to `/publishers/google/models/{model}:{method}`; Claude's go to `/responses` too, where gateways that pass each request on by its model take them. `[llm.api.paths]` moves any of them; `{model}` is the model's name, and `{method}` Google's `generateContent` or `streamGenerateContent`:
+**Where each API goes.** Under `base_url`, Responses requests go to `/responses`, Chat Completions to `/chat/completions`, Gemini's to `/models/{model}:{method}` and Vertex AI's to `/publishers/google/models/{model}:{method}`; Claude's go to `/responses` too, where gateways that pass each request on by its model take them. `[llm.api.paths]` moves any of them; `{model}` is the model's name as it is (a `/` in it stays a `/` in the path), and `{method}` Google's `generateContent` or `streamGenerateContent`:
 
 ```toml
 [llm.api.paths]
@@ -275,7 +275,7 @@ messages = "/anthropic/v1/messages"
 vertex   = "/vertex/v1/projects/acme-ai/locations/global/publishers/google/models/{model}:{method}"
 ```
 
-**The gateway's models.** Blitz asks the gateway for them at `/models` under `base_url`, with the same headers and token, and reads OpenAI's, Anthropic's, Gemini's and Ollama's answers, or a plain list. `models_path` points elsewhere (`"/v1/models"`); `models_path = "none"` says the gateway doesn't list them, and the menus offer `model` and `models` instead. `models = [...]` also picks which of the listed ones the menus show.
+**The gateway's models.** Blitz asks the gateway for them at `/models` under `base_url`, with the same headers and token, and reads OpenAI's, Anthropic's, Gemini's and Ollama's answers, or a plain list. `models_path` points elsewhere (`"/v1/models"`); `models_path = "none"` says the gateway doesn't list them, and the menus offer `model`, `models` and the models `[llm.api.apis]` names instead. `models = [...]` also picks which of the listed ones the menus show.
 
 The script runs when a session first needs the token, with the service's environment and outside the sandbox, and must finish within 30 seconds. Each session keeps its token in memory; a `401` or `403` runs the script once more and retries, and a second one fails with the message to check the script. No `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` from the environment reaches the gateway. Responses API requests are never stored (`store: false`) or streamed. Requests follow the model: `temperature` and `top_p` aren't sent to models that refuse them (current Claude models, OpenAI's reasoning models), and a setting the gateway refuses for a model is left out of that model's requests from then on. Errors start `[llm.api]` and quote the gateway's reason. A project's settings can't set `[llm.api]`.
 

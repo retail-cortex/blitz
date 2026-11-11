@@ -384,8 +384,8 @@ message ApiHeader {
   bool has_value = 3;
 }
 
-// The api provider's settings: a gateway that speaks OpenAI's Responses
-// API, signed with these headers (spec_015_models §3.4).
+// The api provider's settings: a gateway whose models each speak their
+// own API (apis), signed with these headers (spec_015_models §3.4).
 message ApiProviderSettings {
   // A model's requests go to its API's path under it (paths).
   string base_url = 1;

@@ -27,7 +27,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
-// The api provider's models (spec_015_models MDL-112): what the gateway
+// The api provider's models (spec_015_models MDL-114): what the gateway
 // lists at models_path, asked as its model requests are signed.
 
 // maxModelList is how much of the gateway's list is read.
@@ -50,10 +50,18 @@ func listAPIModels(ctx context.Context, c config.APIConfig, pol retryPolicy) ([]
 	return ids, nil
 }
 
-// configuredAPIModels are [llm.api] model and models.
+// configuredAPIModels are [llm.api] model and models, then the models
+// [llm.api.apis] names (the desktop form's rows), sorted.
 func configuredAPIModels(c config.APIConfig) []string {
 	ids := nonEmpty(c.Model)
-	for _, m := range c.Models {
+	named := make([]string, 0, len(c.APIs))
+	for m := range c.APIs {
+		if m != "*" {
+			named = append(named, m)
+		}
+	}
+	slices.Sort(named)
+	for _, m := range slices.Concat(c.Models, named) {
 		if !slices.Contains(ids, m) {
 			ids = append(ids, m)
 		}
@@ -64,12 +72,9 @@ func configuredAPIModels(c config.APIConfig) []string {
 // fetchAPIModels GETs path under base_url, signed with the headers and
 // the token (MDL-101, MDL-104), and reads the list.
 func fetchAPIModels(ctx context.Context, c config.APIConfig, path string, pol retryPolicy) ([]string, error) {
-	if err := c.Check(); err != nil {
+	p, err := newAPIProvider(c, formatResponses)
+	if err != nil {
 		return nil, err
-	}
-	p := &apiProvider{cfg: c, format: formatResponses}
-	if c.UsesToken() {
-		p.tokens = newSessionTokens(p.fetchToken)
 	}
 	base, err := p.baseURL()
 	if err != nil {

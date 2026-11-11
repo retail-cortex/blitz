@@ -3202,7 +3202,7 @@ export function installFake() {
           return { state: fakeOrgState(false) };
         },
         listModels: ({ providers, chatOnly }) =>
-          // The custom gateway's list (spec_015 MDL-112), once it's saved.
+          // The custom gateway's list (spec_015 MDL-114), once it's saved.
           providers.length === 1 && providers[0] === "api"
             ? { defaultProvider: "api", providers: [{ provider: "api", ids: fakeGatewayModels, models: fakeGatewayModels.map((id) => ({ id })) }] }
             : // The model menu's list (spec_061 MOD-01): every provider set up, chat models, newest first.

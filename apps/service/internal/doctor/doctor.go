@@ -426,7 +426,7 @@ func checkAPI(c config.APIConfig, confirm string) (checkStatus, string) {
 	detail := fmt.Sprintf("API at %s, headers %s", c.BaseURL, strings.Join(names, ", "))
 	if c.Model != "" {
 		// What the model's requests are written in, and where they go
-		// (spec_015_models MDL-110, MDL-111).
+		// (spec_015_models MDL-112, MDL-113).
 		api := c.APIOf(c.Model)
 		detail += fmt.Sprintf("; %s speaks %s at %s", c.Model, api, c.PathOf(api))
 	}

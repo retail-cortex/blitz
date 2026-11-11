@@ -544,7 +544,7 @@ func newOpenAIModel(ctx context.Context, name, apiKey, baseURL string, opts ...o
 }
 
 // newOpenAIModelFor is newOpenAIModel speaking api: OpenAI's Responses or
-// Chat Completions (an OpenAI-compatible server's, MDL-110).
+// Chat Completions (an OpenAI-compatible server's, MDL-112).
 func newOpenAIModelFor(ctx context.Context, name, apiKey, baseURL string, api openaimodel.API, opts ...option.RequestOption) (model.LLM, error) {
 	m, err := openaimodel.NewModel(ctx, name, &openaimodel.ClientConfig{
 		API:     api,

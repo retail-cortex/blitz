@@ -24,5 +24,5 @@ Your company's gateway, your way: every model it serves, each in the API it spea
 
 ### Good to know
 
-- Already using a gateway? Nothing changes unless you set something: Claude's requests still go to `/responses` with the others'. The one difference: a `gemini-…` model now gets the Gemini API rather than OpenAI's, so set it to **OpenAI Responses** if your gateway wants that.
+- Already using a gateway? Your models answer as before: Claude's requests still go to `/responses` with the others'. Two things are new: a `gemini-…` model now gets the Gemini API rather than OpenAI's (set it to **OpenAI Responses** if your gateway wants that), and Blitz asks the gateway for its models at `/models`. If your gateway has no list there, the model menu says so: point **The gateway lists its models** at the right path, or switch it off.
 - In the settings file it's `[llm.api.apis]`, `[llm.api.paths]` and `models_path`: see [your company's gateway](../guide/providers.md#your-companys-gateway). `blitz models api` lists the gateway's models, and `blitz doctor` says what each model speaks and where.
