@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.8
-weight: 3
+weight: 4
 ---
 
 Blitz on Linux, the way Linux does it: install it once, and `apt upgrade` keeps it current. Updates now bring the Blitz service along on every platform, and Gemini reads your PDFs again.

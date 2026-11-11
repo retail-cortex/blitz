@@ -5,8 +5,9 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
-- [Blitz 0.9.10](blitz-0.9.10.md): every model your gateway serves, each in the API it speaks (OpenAI, Anthropic, Gemini, Vertex AI or OpenAI-compatible), with your own paths; and a window you can drag by its title bar.
-- [Blitz 0.9.9](blitz-0.9.9.md): Gemini on Google Cloud (Vertex AI) answering again, your organization's rules arriving without a restart, and sharing a workspace when you sign your Git commits.
+- [Blitz 0.9.11](blitz-0.9.11.md): agents that stop rereading the same files, so turns are faster and cheaper.
+- [Blitz 0.9.10](blitz-0.9.10.md): bring your company's AI gateway, with every model it offers in Blitz; and drag the window by its title bar.
+- [Blitz 0.9.9](blitz-0.9.9.md): Gemini on Google Cloud is back, and teams get their rules and shared workspaces without the hiccups.
 - [Blitz 0.9.8](blitz-0.9.8.md): Blitz on Linux, the way Linux does it: install the `.deb` once and `apt upgrade` keeps it current from Blitz's own signed repository (with its license and homepage in App Center), a snap on its way to the Snap Store, updates that bring the service along on every platform, and Gemini reading PDFs again.
 - [Blitz 0.9.7](blitz-0.9.7.md): a terminal built into Blitz (with oh-my-zsh prompts and a Nerd Font), a file tree that keeps up with the disk (select several, copy and paste, Undo for delete, Find in folder), pictures and data from the terminal, and Gemini searching the web for you again.
 - [Blitz 0.9.6](blitz-0.9.6.md): every model, one click away: pick any model from any provider in the status bar, use several providers at once, ask Blitz to set itself up in plain English, and run local models that actually get work done.

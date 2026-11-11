@@ -17,10 +17,16 @@ package tools
 import (
 	"bufio"
 	"bytes"
+	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,11 +41,20 @@ import (
 // maxReadOutputBytes caps how much file content read_file returns in one call.
 const maxReadOutputBytes = 512 * 1024
 
+// wholeFileLines is the longest file read_file returns whole when asked
+// for a range of it: models page short files in small pieces, a call each
+// (153 of 207 ranged reads were of files under 400 lines, 2026-11-10).
+const wholeFileLines = 400
+
+// readFileDescription tells the model how to read without reading again.
+const readFileDescription = "Read a text file with line numbers. Read the whole file: a file of up to 400 lines comes whole even when you ask for a range, so give start_line/end_line only to page a longer one. Don't read a file again when its contents are already in this conversation: a read of a file that hasn't changed since you were shown it answers unchanged (pass force to have it again)."
+
 // ReadFileInput defines arguments for reading a file.
 type ReadFileInput struct {
 	Path      string `json:"path" jsonschema:"The absolute or workspace-relative path to the file"`
 	StartLine int    `json:"start_line,omitempty" jsonschema:"Optional 1-indexed starting line number"`
 	EndLine   int    `json:"end_line,omitempty" jsonschema:"Optional 1-indexed ending line number"`
+	Force     bool   `json:"force,omitempty" jsonschema:"Return the content even when this conversation already shows it unchanged"`
 }
 
 // ReadFileOutput holds the result of reading a file.
@@ -48,6 +63,9 @@ type ReadFileOutput struct {
 	Content    string `json:"content"`
 	TotalLines int    `json:"total_lines"`
 	Truncated  bool   `json:"truncated,omitempty"`
+	Lines      string `json:"lines,omitempty"`  // the lines returned, "1-220"
+	Digest     string `json:"digest,omitempty"` // the file's version: an unchanged one reads unchanged (FS-83)
+	Unchanged  bool   `json:"unchanged,omitempty"`
 	Note       string `json:"note,omitempty"`
 	Error      string `json:"error,omitempty"`
 }
@@ -57,7 +75,7 @@ func NewReadFileTool(ws *Workspace) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "read_file",
-			Description: "Read contents of a file with line numbers and optional line slicing",
+			Description: readFileDescription,
 		},
 		func(ctx agent.Context, input ReadFileInput) (ReadFileOutput, error) {
 			if strings.HasSuffix(strings.ToLower(input.Path), ".ipynb") && input.StartLine == 0 && input.EndLine == 0 {
@@ -70,42 +88,121 @@ func NewReadFileTool(ws *Workspace) (tool.Tool, error) {
 					return out, nil
 				}
 			}
-			out, err := readFileLines(ws, input)
+			out, read, err := readFileLines(ws, input)
 			if err != nil {
 				return ReadFileOutput{Path: input.Path, Error: fmt.Sprintf("failed to read file: %v", err)}, nil
 			}
+			if out.Truncated {
+				return out, nil
+			}
+			if key, ok := ReadKey(ctx); ok && !input.Force {
+				if seen, ok := ws.reads.covering(key, read.digest, read.start, read.end); ok {
+					return unchangedRead(out, seen), nil
+				}
+			}
+			out.Lines, out.Digest = fmt.Sprintf("%d-%d", read.start, read.end), read.digest
 			return out, nil
 		},
 	)
 }
 
-// readFileLines streams the file once, keeping only the requested line range.
-func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, error) {
+// unchangedRead is the answer to a read of lines the agent was already
+// shown, the file unchanged since (FS-83): no content, and where it is.
+func unchangedRead(out ReadFileOutput, seen fileRead) ReadFileOutput {
+	return ReadFileOutput{
+		Path:       out.Path,
+		TotalLines: out.TotalLines,
+		Unchanged:  true,
+		Note:       fmt.Sprintf("Unchanged since your earlier read of lines %d-%d in this conversation: use that result, it's still there. Pass force: true only if you can't find it.", seen.start, seen.end),
+	}
+}
+
+// readFileLines streams the file once, keeping only the requested line
+// range, and says which lines of which version of the file it returned.
+func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, fileRead, error) {
 	rel, err := ws.Rel(input.Path)
 	if err != nil {
-		return ReadFileOutput{}, err
+		return ReadFileOutput{}, fileRead{}, err
 	}
 	f, err := ws.Open(rel)
+	if errors.Is(err, fs.ErrNotExist) {
+		if near := nearPaths(ws, rel); len(near) > 0 {
+			err = fmt.Errorf("%w; did you mean %s?", err, strings.Join(near, ", "))
+		}
+	}
 	if err != nil {
-		return ReadFileOutput{}, err
+		return ReadFileOutput{}, fileRead{}, err
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return ReadFileOutput{}, err
+		return ReadFileOutput{}, fileRead{}, err
 	}
 	if info.IsDir() {
-		return ReadFileOutput{}, fmt.Errorf("%s is a directory", input.Path)
+		return ReadFileOutput{}, fileRead{}, fmt.Errorf("%s is a directory", input.Path)
 	}
 	if info.Size() > ws.MaxFileSize() {
-		return ReadFileOutput{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit (tools.max_file_size_bytes); use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
+		return ReadFileOutput{}, fileRead{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit (tools.max_file_size_bytes); use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
 	}
-	src := bufio.NewReaderSize(io.LimitReader(f, ws.MaxFileSize()), 64*1024)
+	sum := sha256.New()
+	sum.Write([]byte(rel + "\x00")) // the same content in another file is another file
+	src := bufio.NewReaderSize(io.TeeReader(io.LimitReader(f, ws.MaxFileSize()), sum), 64*1024)
 	if head, _ := src.Peek(8192); isBinary(head) {
-		return ReadFileOutput{}, errors.New(binaryHint(input.Path, head))
+		return ReadFileOutput{}, fileRead{}, errors.New(binaryHint(input.Path, head))
 	}
-	return pageLines(src, input)
+	out, start, end, err := pageLines(src, input)
+	if err != nil {
+		return ReadFileOutput{}, fileRead{}, err
+	}
+	return out, fileRead{digest: hex.EncodeToString(sum.Sum(nil))[:16], start: start, end: end}, nil
+}
+
+// maxNearPaths is how many files a read of a missing one suggests, and
+// maxNearWalk how many entries it looks through to find them.
+const (
+	maxNearPaths = 5
+	maxNearWalk  = 20000
+)
+
+// nearPaths is up to five workspace files a missing path may have meant:
+// those with its name first, then those whose name holds its stem, the
+// shortest paths first. Hidden folders and node_modules aren't searched.
+func nearPaths(ws *Workspace, rel string) []string {
+	base := strings.ToLower(path.Base(filepath.ToSlash(rel)))
+	stem := strings.TrimSuffix(base, path.Ext(base))
+	if stem == "" {
+		return nil
+	}
+	var same, like []string
+	seen := 0
+	_ = ws.Walk(".", func(e WalkEntry) error {
+		if e.IsRoot {
+			return nil
+		}
+		if seen++; seen > maxNearWalk {
+			return fs.SkipAll
+		}
+		name := e.Entry.Name()
+		if e.Entry.IsDir() {
+			if strings.HasPrefix(name, ".") || name == "node_modules" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		switch lower := strings.ToLower(name); {
+		case lower == base:
+			same = append(same, e.Path)
+		case strings.Contains(lower, stem):
+			like = append(like, e.Path)
+		}
+		return nil
+	})
+	byLength := func(a, b string) int { return cmp.Or(len(a)-len(b), strings.Compare(a, b)) }
+	slices.SortFunc(same, byLength)
+	slices.SortFunc(like, byLength)
+	near := append(same, like...)
+	return near[:min(len(near), maxNearPaths)]
 }
 
 // isBinary reports whether a file's start is binary data, not text: it
@@ -125,8 +222,10 @@ func binaryHint(path string, head []byte) string {
 	return fmt.Sprintf("%s is a binary file, not text: read_file reads text files", path)
 }
 
-// pageLines numbers r's lines, keeping the requested range.
-func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
+// pageLines numbers r's lines, keeping the requested range, and returns
+// the first and last line it gave. A range of a file of up to
+// wholeFileLines lines gives the whole file.
+func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, error) {
 	start := 1
 	if input.StartLine > 1 {
 		start = input.StartLine
@@ -135,6 +234,8 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 	if end > 0 && end < start {
 		end = start
 	}
+	ranged := start > 1 || end > 0
+	var whole strings.Builder // a ranged read's lines while the file may be short
 
 	var (
 		sb        strings.Builder
@@ -147,21 +248,14 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 		if sb.Len()+len(text)+8 > maxReadOutputBytes {
 			return false
 		}
-		numBuf = strconv.AppendInt(numBuf[:0], int64(n), 10)
-		for pad := 4 - len(numBuf); pad > 0; pad-- {
-			sb.WriteByte(' ')
-		}
-		sb.Write(numBuf)
-		sb.WriteString(": ")
-		sb.WriteString(text)
-		sb.WriteByte('\n')
+		numberLine(&sb, &numBuf, n, text)
 		return true
 	}
 	r := bufio.NewReaderSize(src, 64*1024)
 	for {
 		line, readErr := r.ReadString('\n')
 		if readErr != nil && readErr != io.EOF {
-			return ReadFileOutput{}, readErr
+			return ReadFileOutput{}, 0, 0, readErr
 		}
 		// A trailing "\n" yields a final empty line, matching strings.Split semantics.
 		lineNo++
@@ -170,6 +264,9 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 		if inRange && !truncated && !writeLine(lineNo, text) {
 			truncated = true
 		}
+		if ranged && lineNo <= wholeFileLines && whole.Len()+len(text)+8 <= maxReadOutputBytes {
+			numberLine(&whole, &numBuf, lineNo, text)
+		}
 		if readErr == io.EOF {
 			lastLine = text
 			break
@@ -177,9 +274,24 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 	}
 	totalLines := lineNo
 
+	if ranged && totalLines <= wholeFileLines && whole.Len() > 0 && !truncated {
+		return ReadFileOutput{
+			Path:       input.Path,
+			Content:    whole.String(),
+			TotalLines: totalLines,
+			Note:       fmt.Sprintf("The file is %d lines, so here it is whole.", totalLines),
+		}, 1, totalLines, nil
+	}
+
 	// Out-of-range starts clamp to the last line.
-	if start > totalLines && !writeLine(totalLines, lastLine) {
-		truncated = true
+	if start > totalLines {
+		start = totalLines
+		if !writeLine(totalLines, lastLine) {
+			truncated = true
+		}
+	}
+	if end <= 0 || end > totalLines {
+		end = totalLines
 	}
 
 	content := sb.String()
@@ -191,7 +303,19 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 		Content:    content,
 		TotalLines: totalLines,
 		Truncated:  truncated,
-	}, nil
+	}, start, end, nil
+}
+
+// numberLine writes line n of a file as read_file shows it: "%4d: text".
+func numberLine(sb *strings.Builder, numBuf *[]byte, n int, text string) {
+	*numBuf = strconv.AppendInt((*numBuf)[:0], int64(n), 10)
+	for pad := 4 - len(*numBuf); pad > 0; pad-- {
+		sb.WriteByte(' ')
+	}
+	sb.Write(*numBuf)
+	sb.WriteString(": ")
+	sb.WriteString(text)
+	sb.WriteByte('\n')
 }
 
 // FileEntry represents a file in directory listing.

@@ -1,21 +1,21 @@
 ---
 title: Blitz 0.9.9
-weight: 2
+weight: 3
 ---
 
-Gemini on Google Cloud answers again, and Blitz is easier to start with an organization.
+If you use Gemini through your Google Cloud account, update now: it works again. Teams also get their organization's rules and shared workspaces without the restarts and errors.
 
 ### Get started
 
-1. Update Blitz (it updates itself), run `sudo apt upgrade` if you installed the `.deb` from 0.9.8, or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.9).
-2. Ask Gemini something. That's it.
+1. Update Blitz. It updates itself, or run `sudo apt upgrade` if you installed it with apt, or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.9.9).
+2. Open a conversation with Gemini and carry on.
 
-### Fixes
+### Fixed
 
-- **Gemini on Google Cloud works again.** If Blitz reaches Gemini with your Google Cloud sign-in rather than a Gemini key (that's Vertex AI), 0.9.7 and 0.9.8 stopped every conversation with "agent execution error: includeServerSideToolInvocations parameter is only supported in Gemini Developer API mode". Blitz now sends that setting only to the Gemini API, where it belongs. Gemini with a key wasn't affected.
-- **Your organization's rules arrive as soon as they're there.** Blitz could keep saying "your organization's policy can't be read (not fetched yet)" until it was restarted. It now checks again on its own, every 30 seconds until it has the rules, then at your organization's refresh.
-- **Sharing a workspace with your organization works when you sign your Git commits.** It failed with "gpg failed to sign the data … Inappropriate ioctl for device". Blitz's own commits for the organization aren't signed now; yours still are.
+- **Gemini through Google Cloud answers again.** Since 0.9.7, every conversation with Gemini on Vertex AI (signed in with Google Cloud rather than an API key) stopped with an error. It works now. Gemini with an API key was never affected.
+- **Your organization's rules arrive on their own.** You no longer have to restart Blitz when it says it can't read your organization's policy yet. It keeps checking until the rules arrive.
+- **Share a workspace even if you sign your commits.** Sharing with your organization failed for anyone with Git commit signing turned on. It works now, and your own commits are still signed.
 
-### Good to know
+### For organization admins
 
-- For organizations: a new organization's people can use its models straight away, before anything is published to its catalog. That's the organization's service, already updated on Retail Cortex's side; nothing to install.
+- A new organization's people can use its models right away, before you publish anything to the catalog. This is already live on the service, with nothing to install.

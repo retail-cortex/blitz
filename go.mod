@@ -1,6 +1,6 @@
 module github.com/retail-cortex/blitz
 
-go 1.27.3
+go 1.27.4
 
 require (
 	cloud.google.com/go/alloydbconn v1.19.2

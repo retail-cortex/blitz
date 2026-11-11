@@ -59,8 +59,8 @@ func TestReadFilePDF(t *testing.T) {
 	}{
 		{name: "the text, paged", args: map[string]any{"path": "paper.pdf"},
 			want: []string{"--- Page 1 ---", "Abstract", "--- Page 3 ---", "Results"}, note: "a 3-page PDF"},
-		{name: "a range", args: map[string]any{"path": "paper.pdf", "start_line": 4, "end_line": 5},
-			want: []string{"Method"}, notWant: []string{"Abstract", "Results"}},
+		{name: "a range of a short PDF gives it whole", args: map[string]any{"path": "paper.pdf", "start_line": 4, "end_line": 5},
+			want: []string{"Abstract", "Method", "Results"}},
 		{name: "not a PDF inside", args: map[string]any{"path": "fake.pdf"}, want: []string{"plain text"}},
 		{name: "unreadable", args: map[string]any{"path": "broken.pdf"}, wantErr: "unreadable PDF"},
 		{name: "outside", args: map[string]any{"path": "../x.pdf"}, wantErr: "failed to read file"},

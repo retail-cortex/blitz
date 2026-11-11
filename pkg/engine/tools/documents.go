@@ -50,7 +50,7 @@ func readPDF(ctx context.Context, ws *Workspace, input ReadFileInput) (ReadFileO
 	if err != nil {
 		return fail(err)
 	}
-	out, err := pageLines(strings.NewReader(text), input)
+	out, _, _, err := pageLines(strings.NewReader(text), input)
 	if err != nil {
 		return fail(err)
 	}

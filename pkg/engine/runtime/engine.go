@@ -848,7 +848,8 @@ func (e *Engine) agentConfig(reg *tools.Registry, spec *agents.AgentSpec, llm mo
 }
 
 // beforeModel enforces the per-run model-call budget (a sub-agent's own
-// and every calling run's), and puts {secrets:key} values into the
+// and every calling run's), tells the read log which read_file results
+// the request carries (FS-83), and puts {secrets:key} values into the
 // request's messages.
 func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.LLMResponse, error) {
 	for st := stateFrom(ctx); st != nil; st = st.parent {
@@ -859,6 +860,9 @@ func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.L
 		}
 	}
 	if req != nil {
+		if e.toolReg != nil {
+			e.toolReg.Workspace().Reads().Shown(ctx, req.Contents)
+		}
 		req.Contents = e.expandContents(req.Contents)
 	}
 	return nil, nil
