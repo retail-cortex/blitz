@@ -163,3 +163,27 @@ func TestShellModeDefault(t *testing.T) {
 		})
 	}
 }
+
+// BLITZ_LOG_LEVELS sets loggers' levels over the settings', skipping pairs
+// without a name.
+func TestLogLevelsFromEnv(t *testing.T) {
+	tests := []struct {
+		name, env string
+		file      map[string]string
+		want      map[string]string
+	}{
+		{"none", "", nil, nil},
+		{"pairs", "gateway=DEBUG, gateway.token = warn", nil, map[string]string{"gateway": "debug", "gateway.token": "warn"}},
+		{"over the settings", "gateway=debug", map[string]string{"gateway": "error", "engine": "warn"}, map[string]string{"gateway": "debug", "engine": "warn"}},
+		{"junk skipped", "=debug,gateway,,engine=info", nil, map[string]string{"engine": "info"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BLITZ_LOG_LEVELS", tc.env)
+			cfg := DefaultConfig()
+			cfg.Log.Levels = tc.file
+			applyEnvOverrides(cfg)
+			assert.Equal(t, tc.want, cfg.Log.Levels)
+		})
+	}
+}

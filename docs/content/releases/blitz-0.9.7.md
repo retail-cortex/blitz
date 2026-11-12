@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.7
-weight: 5
+weight: 6
 ---
 
 A terminal built into Blitz, a file tree that keeps up with your work, pictures and data from the terminal, and Gemini searching the web for you again.
