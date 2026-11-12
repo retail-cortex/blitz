@@ -202,6 +202,8 @@ enabled = true
 
 [log]
 level = "info"   # debug | info | warn | error | off; ~/.blitz/logs, secrets masked
+# [log.levels]   # a level per logger, the most specific name winning
+# gateway = "debug"   # each call to the custom gateway ([llm.api])
 
 [telemetry]
 enabled = false   # export OpenTelemetry traces and logs over OTLP/HTTP (or BLITZ_TELEMETRY=1)

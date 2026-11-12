@@ -115,6 +115,22 @@ func TestLoadUsesHomeConfig(t *testing.T) {
 	assert.Equal(t, "env-agent", cfg.Blitz.DefaultAgent, "expected MODENV_PREFIX config, got %q", cfg.Blitz.DefaultAgent)
 }
 
+// [log.levels] loads from the settings, without an unknown-setting warning.
+func TestLoadLogLevels(t *testing.T) {
+	home := isolateConfigEnv(t)
+	t.Setenv("BLITZ_LOG_LEVELS", "")
+	dir := filepath.Join(home, ".blitz")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[log]\nlevel = \"warn\"\n\n[log.levels]\ngateway = \"debug\"\n\"gateway.token\" = \"error\"\n"), 0o600))
+	t.Chdir(t.TempDir())
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, "warn", cfg.Log.Level)
+	assert.Equal(t, map[string]string{"gateway": "debug", "gateway.token": "error"}, cfg.Log.Levels)
+	assert.Empty(t, cfg.Warnings)
+}
+
 func TestLoadWithoutAnyConfig(t *testing.T) {
 	isolateConfigEnv(t)
 	t.Chdir(t.TempDir())

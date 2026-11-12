@@ -235,10 +235,17 @@ jobs:
           snap pack snap-tree dist
           test -e "dist/blitz-desktop_${version}_$(dpkg --print-architecture).snap"
       # It installs (its hooks run: the AppArmor profile is there) and its
-      # programs run; then it's removed, and the profile with it.
+      # programs run; then it's removed, and the profile with it. Its base
+      # comes from the Snap Store first, tried three times: a store that
+      # didn't answer failed v0.9.11's run, not the snap.
       - name: Snap smoke test
         if: runner.os == 'Linux'
         run: |
+          for try in 1 2 3; do
+            sudo snap install core24 && break
+            [ "$try" = 3 ] && exit 1
+            echo "the Snap Store didn't answer (try $try); again in 30s"; sleep 30
+          done
           sudo snap install --dangerous --classic dist/blitz-desktop_*.snap
           blitz-desktop.blitz --version
           /snap/blitz-desktop/current/usr/lib/blitz-desktop/resources/app/bin/blitzd --version

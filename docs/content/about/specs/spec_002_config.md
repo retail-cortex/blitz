@@ -65,7 +65,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[memory]` | `enabled` true, `files` `["AGENTS.md","CLAUDE.md","GEMINI.md","BLITZ.md"]`, `local_files` `["CLAUDE.local.md","BLITZ.local.md"]`, `rule_dirs` `[".blitz/rules",".agents/rules",".claude/rules"]`, `global` `~/.blitz/BLITZ.md`, `global_rules` `~/.blitz/rules`, `max_bytes` 32 KiB, `auto` true (the agent's notes) | | see [spec_012_memory](spec_012_memory.md) |
 | `[context]` | `compaction` true, `token_threshold` 120000 (left at it: the model's own point, spec_056 CA-110), `retain_events` 20 | | |
 | `[audit]` | `enabled` true, `dir` `~/.blitz/audit` | | |
-| `[log]` | `level` `info`, `dir` `~/.blitz/logs`, `retain_days` 14 | | |
+| `[log]` | `level` `info`, `dir` `~/.blitz/logs`, `retain_days` 14, `levels` (a level per logger, `gateway = "debug"`; LOG-01b) | | |
 | `[telemetry]` | `enabled` false, `endpoint`, `capture_content` false | | |
 | `[usage]` | `count` true (a daily ping counts the install as active, [spec_054_active_installs](spec_054_active_installs.md); global settings only; false sends nothing and makes no install ID) | | |
 | `[checkpoints]` | `enabled` true, `max_bytes` 64 MiB | | |

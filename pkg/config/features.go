@@ -260,6 +260,10 @@ type LogConfig struct {
 	Level      string `toml:"level"`       // debug, info, warn, error, or off
 	Dir        string `toml:"dir"`         // owner-only
 	RetainDays int    `toml:"retain_days"` // older log files are deleted (0 = keep)
+	// Levels sets a level per logger, by dotted name ("gateway",
+	// "gateway.token"), over Level: a logger takes its most specific
+	// name's, as log4j's do. BLITZ_LOG_LEVELS adds to it.
+	Levels map[string]string `toml:"levels"`
 }
 
 // TelemetryConfig controls OpenTelemetry trace and log export over OTLP/HTTP.

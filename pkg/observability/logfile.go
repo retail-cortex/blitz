@@ -278,51 +278,36 @@ func (h traceHandler) WithGroup(name string) slog.Handler {
 	return traceHandler{h.Handler.WithGroup(name)}
 }
 
-// levelHandler applies one minimum level to handlers that don't take one.
-type levelHandler struct {
-	slog.Handler
-	min slog.Level
-}
-
-func (h levelHandler) Enabled(ctx context.Context, l slog.Level) bool {
-	return l >= h.min && h.Handler.Enabled(ctx, l)
-}
-
-func (h levelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return levelHandler{h.Handler.WithAttrs(attrs), h.min}
-}
-
-func (h levelHandler) WithGroup(name string) slog.Handler {
-	return levelHandler{h.Handler.WithGroup(name), h.min}
-}
-
 // OpenLog returns a logger writing JSON lines to cfg.Dir (secrets masked)
 // and to each extra handler (e.g. Telemetry.LogHandler), plus a func that
-// flushes and closes the file. With level "off" only the extra handlers
-// receive records, at info level.
+// flushes and closes the file. Each logger (Logger) writes at its level in
+// log.levels, else at log.level. With every level "off" there is no file;
+// with log.level "off", the extra handlers receive the rest at info.
 func OpenLog(cfg config.LogConfig, r *redact.Redactor, extra ...slog.Handler) (*slog.Logger, io.Closer, error) {
-	level, on, err := ParseLevel(cfg.Level)
+	ls, err := parseLevels(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 	var handlers []slog.Handler
 	closer := io.Closer(nopCloser{})
-	if on {
+	if ls.lowest() < offLevel {
 		sink, err := newFileSink(config.ExpandHome(cfg.Dir), cfg.RetainDays)
 		if err != nil {
 			return nil, nil, err
 		}
 		closer = sink
-		handlers = append(handlers, traceHandler{slog.NewJSONHandler(sink, &slog.HandlerOptions{
-			Level:       level,
+		handlers = append(handlers, loggerHandler{Handler: traceHandler{slog.NewJSONHandler(sink, &slog.HandlerOptions{
+			Level:       ls.lowest(),
 			ReplaceAttr: redactAttr(r),
-		})})
-	} else {
-		level = slog.LevelInfo
+		})}, levels: ls})
+	}
+	shared := ls
+	if shared.root == offLevel {
+		shared.root = slog.LevelInfo
 	}
 	for _, h := range extra {
 		if h != nil {
-			handlers = append(handlers, levelHandler{h, level})
+			handlers = append(handlers, loggerHandler{Handler: h, levels: shared})
 		}
 	}
 	switch len(handlers) {

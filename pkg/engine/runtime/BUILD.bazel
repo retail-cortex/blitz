@@ -146,6 +146,7 @@ go_test(
     size = "small",
     srcs = [
         "anthropic_test.go",
+        "apilog_test.go",
         "apipictures_test.go",
         "apiprovider_test.go",
         "apiroutes_test.go",

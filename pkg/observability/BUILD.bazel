@@ -18,6 +18,7 @@ go_library(
     name = "observability",
     srcs = [
         "logfile.go",
+        "loggers.go",
         "logread.go",
         "metrics.go",
         "span.go",
@@ -52,6 +53,7 @@ go_test(
     size = "small",
     srcs = [
         "logfile_test.go",
+        "loggers_test.go",
         "logread_test.go",
         "metrics_test.go",
         "observability_test.go",

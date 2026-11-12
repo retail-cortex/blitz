@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -30,12 +32,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
@@ -198,6 +202,11 @@ func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPo
 	if err != nil {
 		return nil, err
 	}
+	if log := gatewayLog(); log.Enabled(ctx, slog.LevelDebug) {
+		log.DebugContext(ctx, "gateway model", "api", apiNames[p.format], "model", name,
+			"base_url", redact.Mask(p.cfg.BaseURL), "path", p.cfg.PathOf(apiNames[p.format]),
+			"headers", slices.Sorted(maps.Keys(p.cfg.Headers)), "token_script", p.cfg.UsesToken(), "organization", p.source != nil)
+	}
 	if p.format == formatMessages {
 		// No credentials or base URL from the environment; no server-side
 		// fallback, which needs Anthropic's own API.
@@ -313,12 +322,53 @@ func (p *apiProvider) routed(u *url.URL) *url.URL {
 // fetchToken runs the token script; the token is remembered by the
 // redactor so it never reaches a log or an error (MDL-108).
 func (p *apiProvider) fetchToken(ctx context.Context) (string, error) {
+	start := time.Now()
 	token, err := runScript(ctx, p.cfg.Language(), p.cfg.TokenScript)
 	if err != nil {
+		tokenLog().DebugContext(ctx, "gateway token script failed", "language", p.cfg.Language(), "ms", time.Since(start).Milliseconds(), "error", redact.Mask(err.Error()))
 		return "", fmt.Errorf("%s %w", p.cfg.Language(), err)
 	}
 	redact.Remember(token)
+	tokenLog().DebugContext(ctx, "gateway token script ran", "language", p.cfg.Language(), "ms", time.Since(start).Milliseconds(), "token_length", len(token))
 	return token, nil
+}
+
+// gatewayLog is the logger of the gateway's calls and models, and
+// tokenLog its tokens': log.levels' "gateway" and "gateway.token" (LOG-01b).
+// Neither writes a token: a remembered one is masked, and headers are
+// named without their values.
+func gatewayLog() *slog.Logger { return observability.Logger("gateway") }
+func tokenLog() *slog.Logger   { return observability.Logger("gateway.token") }
+
+// logCall writes one request to the gateway at debug: which API, model
+// and URL, why it was sent (a first try, or again with a fresh token or
+// without a refused field), how long the reply took to start, and its
+// status, with the start of an error's body; or the error that kept it
+// from being answered.
+func (p *apiProvider) logCall(ctx context.Context, r *http.Request, token, why string, attempt int, took time.Duration, res *http.Response, err error) {
+	log := gatewayLog()
+	if !log.Enabled(ctx, slog.LevelDebug) {
+		return
+	}
+	u := r.URL.String()
+	if token != "" {
+		// In the URL it's escaped, which the redactor doesn't know.
+		u = strings.NewReplacer(url.QueryEscape(token), config.TokenPlaceholder, token, config.TokenPlaceholder).Replace(u)
+	}
+	attrs := []any{"api", apiNames[p.format], "model", p.model, "method", r.Method,
+		"url", redact.Mask(u), "attempt", attempt, "why", why, "ms", took.Milliseconds()}
+	if session := sessionOf(ctx); session != "" {
+		attrs = append(attrs, "session", session)
+	}
+	switch {
+	case err != nil:
+		attrs = append(attrs, "error", redact.Mask(err.Error()))
+	case res.StatusCode >= http.StatusBadRequest:
+		attrs = append(attrs, "status", res.StatusCode, "body", redact.Mask(string(peekBody(res))))
+	default:
+		attrs = append(attrs, "status", res.StatusCode, "content_type", res.Header.Get("Content-Type"))
+	}
+	log.DebugContext(ctx, "gateway call", attrs...)
 }
 
 // middleware signs each request with the session's token, retries once
@@ -335,7 +385,15 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 	if err != nil {
 		return nil, err
 	}
-	res, err := next(p.sign(req, body, token))
+	attempt := 0
+	send := func(why string, r *http.Request) (*http.Response, error) {
+		attempt++
+		start := time.Now()
+		res, err := next(r)
+		p.logCall(ctx, r, token, why, attempt, time.Since(start), res, err)
+		return res, err
+	}
+	res, err := send("first", p.sign(req, body, token))
 	if p.source != nil && err == nil && res.StatusCode == http.StatusUnauthorized {
 		// The service no longer takes it (it expired early, or the key
 		// that signed it changed): renewed once.
@@ -343,19 +401,21 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 		if fresh, ferr := p.source.AccessToken(ctx); ferr == nil {
 			discardResponse(res)
 			token = fresh
-			res, err = next(p.sign(req, body, fresh))
+			res, err = send("the organization's token renewed after 401", p.sign(req, body, fresh))
 		}
 	}
 	if p.tokens != nil {
 		switch {
 		case err != nil || res.StatusCode >= http.StatusInternalServerError:
+			tokenLog().DebugContext(ctx, "gateway token dropped: the call failed, so the next one runs the script")
 			p.tokens.Invalidate(session, token)
 		case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 			p.tokens.Invalidate(session, token)
+			tokenLog().DebugContext(ctx, "gateway token rejected: running the script again", "status", res.StatusCode)
 			if fresh, ferr := p.tokens.Token(ctx, session); ferr == nil {
 				discardResponse(res)
 				token = fresh
-				res, err = next(p.sign(req, body, fresh))
+				res, err = send(fmt.Sprintf("a fresh token after %d", res.StatusCode), p.sign(req, body, fresh))
 			}
 		}
 	}
@@ -363,11 +423,11 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 	responses := p.format == formatResponses && p.isModelCall(req)
 	if err == nil && res.StatusCode == http.StatusBadRequest && responses && p.refusedStream(res) {
 		discardResponse(res)
-		res, err = next(p.sign(req, body, token))
+		res, err = send("without stream, which the gateway refused", p.sign(req, body, token))
 	}
 	for err == nil && res.StatusCode == http.StatusBadRequest && responses && p.refused(res, body) {
 		discardResponse(res)
-		res, err = next(p.sign(req, body, token))
+		res, err = send("without "+strings.Join(p.dropped(), ", ")+", which the model refused", p.sign(req, body, token))
 	}
 	if err == nil && responses && res.StatusCode/100 == 2 {
 		switch {
@@ -610,7 +670,9 @@ func (m *apiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, s
 		ctx, pictures := withMadePictures(ctx)
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
 			if err != nil {
-				err = apiError(err, reply.Load(), m.p.source != nil)
+				reported := apiError(err, reply.Load(), m.p.source != nil)
+				gatewayLog().DebugContext(ctx, "gateway call failed", "model", m.p.model, "error", reported.Error(), "cause", redact.Mask(err.Error()))
+				err = reported
 			}
 			pictures.restore(resp)
 			if !yield(resp, err) {

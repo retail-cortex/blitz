@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.2
-weight: 10
+weight: 11
 ---
 
 **Change models mid-conversation, and keep going.** Every conversation now has its own model. Switch it with `/model`, and Blitz tells you what the switch costs before the next turn runs. Gemini, Claude and OpenAI pick up each other's conversations, fallbacks really fall back, and your costs come with a breakdown by model. Models now search the web with their own tools, the pictures they draw show in the conversation, and Blitz learns what each model can and can't do.

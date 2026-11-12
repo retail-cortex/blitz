@@ -1171,6 +1171,18 @@ func applyEnvOverrides(cfg *Config) {
 	if level := os.Getenv("BLITZ_LOG_LEVEL"); level != "" {
 		cfg.Log.Level = strings.ToLower(level)
 	}
+	// Loggers' levels, "gateway=debug,gateway.token=warn", over the
+	// settings'.
+	for _, pair := range strings.Split(os.Getenv("BLITZ_LOG_LEVELS"), ",") {
+		name, level, ok := strings.Cut(pair, "=")
+		if name = strings.TrimSpace(name); !ok || name == "" {
+			continue
+		}
+		if cfg.Log.Levels == nil {
+			cfg.Log.Levels = map[string]string{}
+		}
+		cfg.Log.Levels[name] = strings.ToLower(strings.TrimSpace(level))
+	}
 	// The sandbox mode, over the settings (a container without one, say).
 	if mode := os.Getenv("BLITZ_SANDBOX_SHELL"); mode != "" {
 		cfg.Sandbox.Shell = mode
