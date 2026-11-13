@@ -16,9 +16,12 @@
 
 import { createRouterTransport } from "@connectrpc/connect";
 import { Window } from "happy-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { setTransport } from "./api";
-import { accentRules, appName, contrast, inOrder, loadBranding, logoFor } from "./orgBranding";
+import { openURL } from "./desktop";
+
+vi.mock("./desktop", async (orig) => ({ ...(await orig<typeof import("./desktop")>()), openURL: vi.fn(async () => {}) }));
+import { accentRules, appName, contrast, inOrder, loadBranding, logoFor, signInToOrg } from "./orgBranding";
 import { ConfigService, type Branding } from "./gen/blitz/v1/config_pb";
 
 describe("the organization's branding", () => {
@@ -98,5 +101,34 @@ describe("answers in order", () => {
     release();
     await first;
     expect(g.document!.title).not.toContain("Acme");
+  });
+});
+
+// EN-13a: the banner's Sign in goes straight to the organization's
+// sign-in page, as Settings' does, with no stop in Settings between.
+describe("signing in to the organization", () => {
+  it("opens the sign-in page and returns the state signed in", async () => {
+    setTransport(
+      createRouterTransport(({ service }) => {
+        service(ConfigService, {
+          async *enterpriseSignIn() {
+            yield { url: "https://org.example.com/signin?c=1" };
+            yield { done: true, state: { url: "https://org.example.com", name: "Acme", signedIn: true } };
+          },
+        });
+      }),
+    );
+    const win = new Window();
+    vi.stubGlobal("window", win);
+    vi.stubGlobal("CustomEvent", win.CustomEvent);
+    let told = 0;
+    win.addEventListener("blitz:config-changed", () => told++);
+    const pages: string[] = [];
+    const state = await signInToOrg(new AbortController().signal, (u) => pages.push(u));
+    expect(pages).toEqual(["https://org.example.com/signin?c=1"]);
+    expect(openURL).toHaveBeenCalledWith("https://org.example.com/signin?c=1");
+    expect(state).toMatchObject({ name: "Acme", signedIn: true });
+    expect(told, "the window is told: the banner checks again and goes").toBe(1);
+    vi.unstubAllGlobals();
   });
 });

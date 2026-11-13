@@ -27,6 +27,8 @@ import {
   isToggleTerminalKey,
   newTerminal,
   removed,
+  replaced,
+  restartTerminal,
   resetTermDrawers,
   restored,
   restoreTerminals,
@@ -62,6 +64,13 @@ describe("the terminal drawer's state", () => {
   ])("removes $name", ({ s, id, active, open }) => {
     expect(removed(s, id)).toMatchObject({ active, open });
     expect(ids(removed(s, id))).not.toContain(id);
+  });
+
+  it("puts a restarted terminal in its tab's place, shown if it was", () => {
+    const s = replaced(state(["a", "b", "c"], "b", true), "b", term("n"));
+    expect([ids(s), s.active, s.open]).toEqual([["a", "n", "c"], "n", true]);
+    expect(replaced(state(["a", "b"], "a"), "b", term("n")).active, "behind the shown one").toBe("a");
+    expect(ids(replaced(state(["a"], "a"), "x", term("n"))), "one it doesn't have: added").toEqual(["a", "n"]);
   });
 
   it("leaves the state alone removing one it doesn't have", () => {
@@ -182,6 +191,19 @@ describe("a workspace's terminals in the drawer", () => {
     await newTerminal(ws, "");
     await expect(closeTerminal(ws, "gone")).resolves.toBeUndefined();
     expect(calls).toEqual(["open ", "close t1", "open ", "close gone"]);
+  });
+
+  // TRM-27: Restart is a new shell in the same folder and tab, then the old one ended.
+  it("restarts a terminal in its folder and tab", async () => {
+    await newTerminal(ws, "src");
+    await newTerminal(ws, "");
+    showTerminals(ws, "t1");
+    const t = await restartTerminal(ws, "t1");
+    expect(t).toMatchObject({ id: "t3", dir: "src" });
+    expect(termDrawer(ws)).toMatchObject({ active: "t3", open: true });
+    expect(ids(termDrawer(ws))).toEqual(["t3", "t2"]);
+    expect(calls).toEqual(["open src", "open ", "open src", "close t1"]);
+    await expect(restartTerminal(ws, "gone")).resolves.toMatchObject({ id: "t4" });
   });
 
   // TRM-26: exit closes the tab.

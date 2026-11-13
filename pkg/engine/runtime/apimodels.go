@@ -28,7 +28,8 @@ import (
 )
 
 // The api provider's models (spec_015_models MDL-114): what the gateway
-// lists at models_path, asked as its model requests are signed.
+// lists at models_path, asked as its model requests are signed, or what
+// another server lists at a URL, asked with models_headers (MDL-115).
 
 // maxModelList is how much of the gateway's list is read.
 const maxModelList = 4 << 20
@@ -39,11 +40,10 @@ var errModelList = errors.New("the gateway's model list")
 // listAPIModels is the models the gateway lists, else (models_path =
 // "none", or when it can't be read, with the error) the configured ones.
 func listAPIModels(ctx context.Context, c config.APIConfig, pol retryPolicy) ([]string, error) {
-	path := c.ModelsURLPath()
-	if path == "" || c.BaseURL == "" {
+	if _, ok := c.ModelsList(); !ok {
 		return configuredAPIModels(c), nil
 	}
-	ids, err := fetchAPIModels(ctx, c, path, pol)
+	ids, err := fetchAPIModels(ctx, c, pol)
 	if err != nil {
 		return configuredAPIModels(c), err
 	}
@@ -69,18 +69,22 @@ func configuredAPIModels(c config.APIConfig) []string {
 	return ids
 }
 
-// fetchAPIModels GETs path under base_url, signed with the headers and
-// the token (MDL-101, MDL-104), and reads the list.
-func fetchAPIModels(ctx context.Context, c config.APIConfig, path string, pol retryPolicy) ([]string, error) {
-	p, err := newAPIProvider(c, formatResponses)
+// fetchAPIModels GETs the list (config's ModelsList), signed with its
+// headers and the token (MDL-101, MDL-104, MDL-115), and reads it.
+func fetchAPIModels(ctx context.Context, c config.APIConfig, pol retryPolicy) ([]string, error) {
+	if err := c.Check(); err != nil {
+		return nil, err
+	}
+	list, _ := c.ModelsList()
+	p := &apiProvider{cfg: list, format: formatResponses}
+	if list.UsesToken() {
+		p.tokens = gatewayTokens(list, p.fetchToken) // the gateway's, by its script
+	}
+	where, err := p.baseURL()
 	if err != nil {
 		return nil, err
 	}
-	base, err := p.baseURL()
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(base, "/")+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, where, nil)
 	if err != nil {
 		return nil, err
 	}

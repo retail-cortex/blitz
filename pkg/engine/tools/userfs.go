@@ -23,6 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/ostrash"
 )
 
 // The user's own file operations (the desktop app's files, spec_029_files):
@@ -313,6 +315,68 @@ func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, repla
 // UserDiscardUpload removes the unfinished upload tmp.
 func (w *Workspace) UserDiscardUpload(tmp string) {
 	_ = w.userRoot().Remove(tmp)
+}
+
+// UserTrash moves rel (a file or a folder) to the system's trash
+// (FIL-37a) and returns where it is there, for UserRestoreTrashed;
+// ostrash.ErrUnavailable when there's none. The folders above it must be
+// the workspace's own, not links out of it.
+func (w *Workspace) UserTrash(ctx context.Context, rel string) (string, error) {
+	if rel == "." {
+		return "", errors.New("can't delete the workspace")
+	}
+	unlock, err := w.lockPaths(ctx, rel)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	if _, err := w.userRoot().Lstat(rel); err != nil {
+		return "", err
+	}
+	abs, err := w.userAbs(rel)
+	if err != nil {
+		return "", err
+	}
+	return ostrash.Trash(ctx, abs)
+}
+
+// UserRestoreTrashed puts what UserTrash moved to where back at rel,
+// which must not exist.
+func (w *Workspace) UserRestoreTrashed(ctx context.Context, where, rel string) error {
+	if rel == "." {
+		return errors.New("can't restore over the workspace")
+	}
+	unlock, err := w.lockPaths(ctx, rel)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	r := w.userRoot()
+	if _, err := r.Lstat(rel); err == nil {
+		return fmt.Errorf("%s: %w", filepath.ToSlash(rel), fs.ErrExist)
+	}
+	if err := mkdirParent(r, rel); err != nil {
+		return err
+	}
+	abs, err := w.userAbs(rel)
+	if err != nil {
+		return err
+	}
+	return ostrash.Restore(where, abs)
+}
+
+// userAbs is rel's absolute path, its folder checked to be the
+// workspace's: one that's a link out of it is refused, as os.Root would.
+func (w *Workspace) userAbs(rel string) (string, error) {
+	root := w.roots[0].dir
+	parent, err := filepath.EvalSymlinks(filepath.Join(root, filepath.Dir(rel)))
+	if err != nil {
+		return "", err
+	}
+	if parent != root && !strings.HasPrefix(parent, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s: outside the workspace", filepath.ToSlash(rel))
+	}
+	return filepath.Join(parent, filepath.Base(rel)), nil
 }
 
 // UserRemove deletes rel, a folder with everything in it.

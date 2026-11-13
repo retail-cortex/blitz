@@ -21,6 +21,11 @@ import type { Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { VisualSpot } from "./VisualEditor";
 
+// The editor's first import (TipTap, CodeMirror, the language bundles)
+// can pass the hook's 10 s on a loaded machine (the race suite's
+// coverage run timed out twice).
+const importTimeout = 60_000;
+
 // A DOM for the editor, as the other tests stand one up (htmlPreview).
 const win = new Window({ url: "http://localhost/" });
 win.document.write("<!doctype html><html><head></head><body></body></html>"); // standards mode, as the app's page
@@ -28,7 +33,7 @@ let VisualEditor: typeof import("./VisualEditor").VisualEditor;
 let createRoot: typeof import("react-dom/client").createRoot;
 beforeAll(async () => {
   const w = win as unknown as Record<string, unknown>;
-  for (const name of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Text", "DocumentFragment", "MutationObserver", "ResizeObserver", "Range", "Selection", "Event", "KeyboardEvent", "MouseEvent", "InputEvent", "ClipboardEvent", "DragEvent", "CustomEvent", "FocusEvent", "DOMParser", "getComputedStyle"]) {
+  for (const name of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLButtonElement", "Text", "DocumentFragment", "MutationObserver", "ResizeObserver", "Range", "Selection", "Event", "KeyboardEvent", "MouseEvent", "InputEvent", "ClipboardEvent", "DragEvent", "CustomEvent", "FocusEvent", "DOMParser", "getComputedStyle"]) {
     const v = w[name];
     vi.stubGlobal(name, typeof v === "function" && /^[a-z]/.test(name) ? (v as (...a: unknown[]) => unknown).bind(win) : v);
   }
@@ -37,7 +42,7 @@ beforeAll(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   ({ VisualEditor } = await import("./VisualEditor"));
   ({ createRoot } = await import("react-dom/client"));
-});
+}, importTimeout);
 afterAll(async () => {
   // TipTap destroys an unmounted editor on a timer: after it, the DOM goes.
   await new Promise((r) => setTimeout(r, 100));
@@ -57,11 +62,11 @@ afterEach(() => {
 });
 
 // The editor of one tab, as EditorPane mounts it (keyed by path).
-function mount(path: string, spot: VisualSpot | undefined, spots: Map<string, VisualSpot>) {
+function mount(path: string, spot: VisualSpot | undefined, spots: Map<string, VisualSpot>, text = readme) {
   host ??= document.body.appendChild(document.createElement("div"));
   root ??= createRoot(host);
   act(() =>
-    root!.render(<VisualEditor key={path} dir="/w" path={path} text={readme} spot={spot} onSpot={(at) => spots.set(path, at)} onChange={() => {}} onSave={() => {}} />),
+    root!.render(<VisualEditor key={path} dir="/w" path={path} text={text} spot={spot} onSpot={(at) => spots.set(path, at)} onChange={() => {}} onSave={() => {}} />),
   );
 }
 
@@ -108,5 +113,29 @@ describe("VisualEditor's place per tab", () => {
     mount("README.md", { anchor: 9999, head: 9999, scroll: 0 }, spots);
     const editor = view();
     expect(editor.state.selection.from).toBeLessThanOrEqual(editor.state.doc.content.size);
+  });
+});
+
+// The HTML a document may show is drawn, its source kept; the rest stays a
+// source block (VE-05a, #115).
+describe("VisualEditor's HTML", () => {
+  const text = 'Line one<br />line two, H<sub>2</sub>O.\n\n<div align="center"><b>Centred</b></div>\n\n<script>alert(1)</script>\n';
+
+  it("draws a paragraph's and a block's HTML, and keeps a script as source", () => {
+    const changes: string[] = [];
+    host ??= document.body.appendChild(document.createElement("div"));
+    root ??= createRoot(host);
+    act(() => root!.render(<VisualEditor dir="/w" path="html.md" text={text} onChange={(t) => changes.push(t)} onSave={() => {}} />));
+    const doc = host.querySelector(".ProseMirror")!;
+    const para = doc.querySelector("p")!;
+    expect(para.querySelector(".raw-html br")).not.toBeNull();
+    expect(para.querySelector(".raw-html sub")?.textContent).toBe("2");
+    expect(para.querySelector("code.raw-inline")).toBeNull();
+    const block = doc.querySelector(".visual-html .visual-html-view");
+    expect(block?.querySelector('div[align="center"] b')?.textContent).toBe("Centred");
+    expect(doc.querySelector("script")).toBeNull();
+    const raws = [...doc.querySelectorAll(".raw-block")];
+    expect(raws.filter((r) => !r.classList.contains("visual-html")).length).toBe(1); // the script, as source
+    expect(changes).toEqual([]); // drawing isn't an edit
   });
 });

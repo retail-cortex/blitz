@@ -70,9 +70,11 @@ export interface ApiForm {
   headers: ApiHeaderRow[];
   tokenScript: string;
   language: string;
-  /** Whether the gateway lists its models (models_path isn't "none"), and where ("" for /models). */
+  /** Whether the gateway lists its models (models_path isn't "none"), and where: a path ("" for /models) or another server's URL (MDL-115). */
   listsModels: boolean;
   modelsPath: string;
+  /** The list's own headers, in place of headers (none: the gateway's, on its server). */
+  modelsHeaders: ApiHeaderRow[];
   /** Each model's API (MDL-112), and every other model's ("" goes by its name). */
   models: ApiModelRow[];
   otherApi: string;
@@ -93,12 +95,7 @@ export const newHeader = (): ApiHeaderRow => ({ name: "", value: "", hasValue: f
 
 /** The settings as the form shows them; nothing saved gives one empty row. */
 export function toApiForm(s?: ApiProviderSettings): ApiForm {
-  // A value using the placeholder anywhere is the token, as the service
-  // has it (config's UsesToken); its text around the placeholder is kept.
-  const headers = (s?.headers ?? []).map((h): ApiHeaderRow => {
-    const useToken = h.value.includes(tokenPlaceholder);
-    return { name: h.name, value: "", hasValue: h.hasValue, useToken, ...(useToken && h.value !== tokenPlaceholder ? { token: h.value } : {}) };
-  });
+  const headers = headerRows(s?.headers ?? []);
   const apis = s?.apis ?? {};
   return {
     baseUrl: s?.baseUrl ?? "",
@@ -107,6 +104,7 @@ export function toApiForm(s?: ApiProviderSettings): ApiForm {
     language: s?.tokenScriptLanguage || "shell",
     listsModels: s?.modelsPath !== "none",
     modelsPath: s?.modelsPath === "none" ? "" : (s?.modelsPath ?? ""),
+    modelsHeaders: headerRows(s?.modelsHeaders ?? []),
     models: Object.keys(apis)
       .filter((m) => m !== "*")
       .sort()
@@ -116,6 +114,19 @@ export function toApiForm(s?: ApiProviderSettings): ApiForm {
   };
 }
 
+// Saved headers as rows: a value using the placeholder anywhere is the
+// token, as the service has it (config's UsesToken); its text around the
+// placeholder is kept.
+function headerRows(saved: ApiProviderSettings["headers"]): ApiHeaderRow[] {
+  return saved.map((h): ApiHeaderRow => {
+    const useToken = h.value.includes(tokenPlaceholder);
+    return { name: h.name, value: "", hasValue: h.hasValue, useToken, ...(useToken && h.value !== tokenPlaceholder ? { token: h.value } : {}) };
+  });
+}
+
+/** Whether models_path is another server's URL rather than a path under the endpoint (MDL-115). */
+export const isModelsURL = (p: string) => /^https?:\/\//.test(p.trim());
+
 /** The models the gateway lists that the form doesn't name yet, each with its guessed API. */
 export const listedRows = (f: ApiForm, listed: string[]): ApiModelRow[] =>
   listed.filter((m) => !f.models.some((r) => r.model.trim() === m)).map((model) => ({ model, api: guessedAPI(model) }));
@@ -123,11 +134,12 @@ export const listedRows = (f: ApiForm, listed: string[]): ApiModelRow[] =>
 /** What a header using the token writes: its saved text, else the placeholder. */
 export const tokenValue = (h: ApiHeaderRow) => h.token || tokenPlaceholder;
 
-/** Whether a header or the endpoint uses the token, so the script is needed. */
-export const usesToken = (f: ApiForm) => f.baseUrl.includes(tokenPlaceholder) || f.headers.some((h) => h.name.trim() && h.useToken);
+/** Whether a header, the endpoint or the model list uses the token, so the script is needed. */
+export const usesToken = (f: ApiForm) =>
+  f.baseUrl.includes(tokenPlaceholder) || f.headers.some((h) => h.name.trim() && h.useToken) || (f.listsModels && (f.modelsPath.includes(tokenPlaceholder) || f.modelsHeaders.some((h) => h.name.trim() && h.useToken)));
 
 /** The rows that name a header: an empty row is left out, not refused. */
-const named = (f: ApiForm) => f.headers.filter((h) => h.name.trim());
+const named = (rows: ApiHeaderRow[]) => rows.filter((h) => h.name.trim());
 
 /** An HTTP header name: a token (RFC 9110 §5.6.2), as the service checks. */
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
@@ -136,16 +148,17 @@ const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 export function apiFormProblems(f: ApiForm): string[] {
   const out = new Set<string>();
   if (!/^https?:\/\/[^\s/?#]+\S*$/.test(f.baseUrl.trim())) out.add("desktop.keys.api.problem.base_url");
-  const rows = named(f);
-  if (!rows.length) out.add("desktop.keys.api.problem.no_headers");
-  const seen = new Set<string>();
-  for (const h of rows) {
-    const name = h.name.trim();
-    if (!headerName.test(name)) out.add("desktop.keys.api.problem.header_name");
-    if (seen.has(name.toLowerCase())) out.add("desktop.keys.api.problem.header_twice");
-    seen.add(name.toLowerCase());
-    if (!h.useToken && !h.value && !h.hasValue) out.add("desktop.keys.api.problem.header_value");
-    if (/[\r\n]/.test(h.value)) out.add("desktop.keys.api.problem.header_value");
+  if (!named(f.headers).length) out.add("desktop.keys.api.problem.no_headers");
+  for (const rows of f.listsModels ? [f.headers, f.modelsHeaders] : [f.headers]) {
+    const seen = new Set<string>();
+    for (const h of named(rows)) {
+      const name = h.name.trim();
+      if (!headerName.test(name)) out.add("desktop.keys.api.problem.header_name");
+      if (seen.has(name.toLowerCase())) out.add("desktop.keys.api.problem.header_twice");
+      seen.add(name.toLowerCase());
+      if (!h.useToken && !h.value && !h.hasValue) out.add("desktop.keys.api.problem.header_value");
+      if (/[\r\n]/.test(h.value)) out.add("desktop.keys.api.problem.header_value");
+    }
   }
   if (usesToken(f) && !f.tokenScript.trim()) out.add("desktop.keys.api.problem.script");
   const models = new Set<string>();
@@ -155,7 +168,10 @@ export function apiFormProblems(f: ApiForm): string[] {
     models.add(m);
   }
   const paths = Object.entries(f.paths).filter(([, p]) => p.trim());
-  if (f.listsModels && f.modelsPath.trim()) paths.push(["", f.modelsPath]);
+  if (f.listsModels && isModelsURL(f.modelsPath)) {
+    // Another server's URL: its host plain, the token only after it.
+    if (!/^https?:\/\/[^\s/?#{}]+(?:[/?][^\s#]*)?$/.test(f.modelsPath.trim())) out.add("desktop.keys.api.problem.models_url");
+  } else if (f.listsModels && f.modelsPath.trim()) paths.push(["", f.modelsPath]);
   for (const [api, raw] of paths) {
     const p = raw.trim();
     const google = api === "gemini" || api === "vertex";
@@ -170,11 +186,13 @@ function settingsInit(f: ApiForm) {
   const token = usesToken(f);
   return {
     baseUrl: f.baseUrl.trim(),
-    headers: named(f).map((h) => ({ name: h.name.trim(), value: h.useToken ? tokenValue(h) : h.value })),
+    headers: named(f.headers).map((h) => ({ name: h.name.trim(), value: h.useToken ? tokenValue(h) : h.value })),
     // A script nothing uses is refused by the service: it isn't sent.
     tokenScript: token ? f.tokenScript.trim() : "",
     tokenScriptLanguage: token ? f.language : "",
     modelsPath: f.listsModels ? f.modelsPath.trim() : "none",
+    // Only while something lists the models: a header nothing sends isn't kept.
+    modelsHeaders: f.listsModels ? named(f.modelsHeaders).map((h) => ({ name: h.name.trim(), value: h.useToken ? tokenValue(h) : h.value })) : [],
     // A row without a model isn't saved; sorted, so the order rows were
     // added in isn't a change.
     apis: Object.fromEntries(

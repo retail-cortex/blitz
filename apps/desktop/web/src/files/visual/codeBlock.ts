@@ -38,6 +38,8 @@ import { embeddedCode, languageSupport } from "../codemirror";
 import { detectIndent } from "../indent";
 import { languageExtension, type LanguageHooks } from "../language";
 import { htmlPicture, pictureURL } from "../pictures";
+import { safeHTML } from "../safeHtml";
+import { drawHTML } from "./htmlView";
 
 // A language for a fence's info string, as a file name CodeMirror knows.
 const fenceNames: Record<string, string> = { js: "x.js", javascript: "x.js", ts: "x.ts", typescript: "x.ts", tsx: "x.tsx", jsx: "x.jsx", py: "x.py", python: "x.py", go: "x.go", rust: "x.rs", rs: "x.rs", sh: "x.sh", bash: "x.sh", shell: "x.sh", zsh: "x.sh", json: "x.json", yaml: "x.yaml", yml: "x.yaml", toml: "x.toml", html: "x.html", css: "x.css", sql: "x.sql", java: "x.java", c: "x.c", cpp: "x.cpp", "c++": "x.cpp", proto: "x.proto", protobuf: "x.proto", dockerfile: "Dockerfile", md: "x.md", markdown: "x.md", diff: "x.diff", xml: "x.xml", kotlin: "x.kt", swift: "x.swift", ruby: "x.rb", php: "x.php", r: "x.r" };
@@ -155,6 +157,7 @@ export class CodeBlockView implements NodeView {
   private drawTimer?: ReturnType<typeof setTimeout>;
   private pz?: PanZoom;
   private editing = false;
+  private html = false; // an HTML block drawn (addHTML)
 
   constructor(
     private node: PMNode,
@@ -195,7 +198,33 @@ export class CodeBlockView implements NodeView {
     this.setLanguage();
     if (this.isMermaid()) this.addDiagram();
     else if (this.isPicture()) this.addPicture();
+    else if (this.isHTML()) this.addHTML();
     else if (kind === "math") this.addMath();
+  }
+
+  // An HTML block of what safeHtml.ts draws (VE-05a): drawn, its source
+  // behind Edit, as a picture's. It stays drawn while it's edited; while
+  // its HTML can't be drawn (a tag not closed yet), its source shows.
+  private isHTML() {
+    return this.kind === "raw" && this.node.attrs.kind === "html" && safeHTML(this.text()) !== null;
+  }
+
+  private addHTML() {
+    this.html = true;
+    this.diagram = document.createElement("div");
+    this.diagram.className = "visual-diagram visual-html-view";
+    this.diagram.contentEditable = "false";
+    this.addEditToggle();
+    this.dom.classList.add("visual-mermaid", "visual-html");
+    this.dom.append(this.diagram);
+    this.showHTML();
+  }
+
+  private showHTML() {
+    if (!this.diagram || !this.html) return;
+    const nodes = safeHTML(this.text());
+    if (nodes) this.diagram.replaceChildren(drawHTML(nodes, this.doc ?? { dir: "", path: "" }));
+    else this.diagram.textContent = this.text();
   }
 
   // A math block (FIL-67): drawn by KaTeX, its TeX behind Edit, as a
@@ -361,6 +390,7 @@ export class CodeBlockView implements NodeView {
       if (!update.docChanged) return;
       this.view.dispatch(this.view.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, text: update.state.doc.toString() }));
       if (this.isPicture()) this.showPicture();
+      this.showHTML();
       if (this.kind === "math") this.showMath();
       return;
     }
@@ -542,6 +572,7 @@ export class CodeBlockView implements NodeView {
       this.updating = false;
       if (this.isMermaid()) this.draw();
       if (this.isPicture()) this.showPicture();
+      this.showHTML();
       if (this.kind === "math") this.showMath();
     }
     return true;

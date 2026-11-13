@@ -26,12 +26,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/ostrash"
 )
 
-// The workspace's trash (spec_029_files FIL-37): a file or folder deleted
-// from the tree is moved under .blitz/trash, so its deletion can be undone
-// for a while, then it's gone.
+// Deleting from the tree (spec_029_files FIL-37, FIL-37a): a file or
+// folder goes to the system's trash, where the person sees, restores and
+// empties it as any other (tools.trash = "system", the default, where the
+// system has one); else to the workspace's own, under .blitz/trash, so its
+// deletion can be undone for a while, then it's gone. Either way the
+// snackbar's Undo puts it back.
 const (
 	trashDir = ".blitz/trash"
 	// trashKeep is how long a deleted file can be restored.
@@ -43,6 +49,17 @@ const (
 var ErrNotInTrash = errors.New("it's no longer in the workspace's trash")
 
 var trashIDs = regexp.MustCompile(`^[0-9]{14}-[0-9a-f]{8}$`)
+
+// systemTrashIDs are the IDs of what went to the system's trash; where
+// each went is kept in memory (Workspace.trashed), for Undo while the
+// service runs, after which the system's trash restores it.
+var systemTrashIDs = regexp.MustCompile(`^sys-[0-9a-f]{16}$`)
+
+// systemTrashed is where a deletion went in the system's trash, by ID.
+type systemTrashed struct {
+	mu    sync.Mutex
+	where map[string]string
+}
 
 // TrashFile moves p (a file or a folder) to the workspace's trash and
 // returns the ID that restores it (RestoreFile). Items older than a day
@@ -57,6 +74,26 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 	}
 	if slash == trashDir || strings.HasPrefix(slash, trashDir+"/") {
 		return "", w.DeleteFile(ctx, p) // the trash itself goes for good
+	}
+	if w.files().UsesSystemTrash() {
+		where, err := w.files().UserTrash(ctx, rel)
+		if err == nil {
+			b := make([]byte, 8)
+			_, _ = rand.Read(b)
+			id := "sys-" + hex.EncodeToString(b)
+			w.trashed.mu.Lock()
+			if w.trashed.where == nil {
+				w.trashed.where = map[string]string{}
+			}
+			w.trashed.where[id] = where
+			w.trashed.mu.Unlock()
+			w.userEdited(slash, "deleted")
+			return id, nil
+		}
+		if !errors.Is(err, ostrash.ErrUnavailable) {
+			return "", err
+		}
+		// A file the system's trash can't take (another disk): the workspace's.
 	}
 	w.emptyTrash(ctx, time.Now())
 	b := make([]byte, 4)
@@ -78,7 +115,7 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 // RestoreFile puts back what TrashFile moved to the trash under id, at p
 // (where it was); p must not exist.
 func (w *Workspace) RestoreFile(ctx context.Context, id, p string) error {
-	if !trashIDs.MatchString(id) {
+	if !trashIDs.MatchString(id) && !systemTrashIDs.MatchString(id) {
 		return ErrNotInTrash
 	}
 	rel, slash, err := userPath(p)
@@ -87,6 +124,25 @@ func (w *Workspace) RestoreFile(ctx context.Context, id, p string) error {
 	}
 	if rel == "." {
 		return ErrBadPath
+	}
+	if systemTrashIDs.MatchString(id) {
+		w.trashed.mu.Lock()
+		where, ok := w.trashed.where[id]
+		w.trashed.mu.Unlock()
+		if !ok {
+			return ErrNotInTrash
+		}
+		if _, err := os.Lstat(where); err != nil {
+			return ErrNotInTrash // emptied, or put back from the trash already
+		}
+		if err := w.files().UserRestoreTrashed(ctx, where, rel); err != nil {
+			return err
+		}
+		w.trashed.mu.Lock()
+		delete(w.trashed.where, id)
+		w.trashed.mu.Unlock()
+		w.userEdited(slash, "restored")
+		return nil
 	}
 	held := filepath.FromSlash(path.Join(trashDir, id, path.Base(slash)))
 	if _, err := w.files().UserStat(held); errors.Is(err, fs.ErrNotExist) {

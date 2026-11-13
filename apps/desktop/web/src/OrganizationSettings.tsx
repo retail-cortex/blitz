@@ -29,6 +29,7 @@ import { configChanged } from "./events";
 import type { EnterpriseState } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { OrgNoticesCard } from "./OrgNotices";
+import { signInToOrg } from "./orgBranding";
 import { Button, Field, Icon, useSnackbar } from "@blitz/webui";
 
 /** The organization's service and the sign-in to it. */
@@ -76,16 +77,9 @@ export function OrganizationSettings() {
     setError("");
     setPage("");
     try {
-      for await (const ev of config.enterpriseSignIn({}, { signal: ctl.signal })) {
-        if (ev.done) {
-          if (ev.state) setState(ev.state);
-          snack(t("desktop.org.signed_in_snack", { org: ev.state?.name || ev.state?.url || "" }));
-          configChanged({ dir: "" });
-        } else if (ev.url) {
-          setPage(ev.url);
-          void openURL(ev.url);
-        }
-      }
+      const now = await signInToOrg(ctl.signal, setPage);
+      if (now) setState(now);
+      snack(t("desktop.org.signed_in_snack", { org: now?.name || now?.url || "" }));
     } catch (e) {
       if (!ctl.signal.aborted) setError(message(e));
     } finally {

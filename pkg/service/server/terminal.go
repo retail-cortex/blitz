@@ -19,6 +19,8 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
@@ -29,6 +31,10 @@ import (
 // terminalService implements TerminalService over the workspace's
 // terminals (spec_062_terminal).
 type terminalService struct{ s *Server }
+
+// terminalHeartbeat is how often a terminal's stream says it's alive
+// (TRM-12a); a variable for tests.
+var terminalHeartbeat = 10 * time.Second
 
 // terminalError maps the terminals' errors to Connect codes and reasons
 // (TRM-15).
@@ -44,6 +50,10 @@ func terminalError(err error) error {
 		return apiError(connect.CodeInvalidArgument, "BAD_PATH", err)
 	case errors.Is(err, terminal.ErrClosed):
 		return apiError(connect.CodeUnavailable, "SHUTTING_DOWN", err)
+	case errors.Is(err, terminal.ErrNotReading):
+		return apiError(connect.CodeDeadlineExceeded, "TERMINAL_NOT_READING", err)
+	case errors.Is(err, terminal.ErrExited):
+		return apiError(connect.CodeFailedPrecondition, "TERMINAL_EXITED", err)
 	}
 	return toAPI(err)
 }
@@ -95,8 +105,45 @@ func (h terminalService) WatchTerminal(ctx context.Context, r req[pb.WatchTermin
 	if err != nil {
 		return err
 	}
-	err = t.Watch(ctx, r.Msg.From, func(c terminal.Chunk) error {
-		return stream.Send(&pb.WatchTerminalResponse{Data: c.Data, Offset: c.Offset, Skipped: c.Skipped, Exited: c.Exited, ExitCode: int32(c.ExitCode)})
+	// An empty message at once and every terminalHeartbeat while nothing
+	// else is sent, so the window knows the stream is alive and can tell
+	// a broken one from a quiet shell (TRM-12a).
+	var mu sync.Mutex
+	send := func(m *pb.WatchTerminalResponse) error {
+		mu.Lock()
+		defer mu.Unlock()
+		return stream.Send(m)
+	}
+	if err := send(&pb.WatchTerminalResponse{}); err != nil {
+		return err
+	}
+	// The beat stops, and is waited for, before the handler returns: the
+	// stream is the handler's only while it runs.
+	beat, stop := context.WithCancel(ctx)
+	var beating sync.WaitGroup
+	defer func() {
+		stop()
+		beating.Wait()
+	}()
+	beating.Add(1)
+	go func() {
+		defer beating.Done()
+		tick := time.NewTicker(terminalHeartbeat)
+		defer tick.Stop()
+		for {
+			select {
+			case <-beat.Done():
+				return
+			case <-tick.C:
+				if send(&pb.WatchTerminalResponse{}) != nil {
+					stop()
+					return
+				}
+			}
+		}
+	}()
+	err = t.Watch(beat, r.Msg.From, func(c terminal.Chunk) error {
+		return send(&pb.WatchTerminalResponse{Data: c.Data, Offset: c.Offset, Skipped: c.Skipped, Exited: c.Exited, ExitCode: int32(c.ExitCode)})
 	})
 	if errors.Is(err, context.Canceled) {
 		return nil // the window went away; the terminal goes on (TRM-03)
@@ -110,6 +157,9 @@ func (h terminalService) WriteTerminal(ctx context.Context, r req[pb.WriteTermin
 		return nil, err
 	}
 	if err := t.Write(r.Msg.Data); err != nil {
+		if errors.Is(err, terminal.ErrNotReading) || errors.Is(err, terminal.ErrExited) {
+			return nil, terminalError(err)
+		}
 		return nil, apiError(connect.CodeInvalidArgument, "INVALID_ARGUMENT", err)
 	}
 	return ok(&pb.WriteTerminalResponse{})

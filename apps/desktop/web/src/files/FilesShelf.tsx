@@ -530,10 +530,14 @@ export function FilesShelf({
   };
   useEffect(() => stopOpenTimer, []);
 
-  // The folder a drag over el would drop into: the row's folder, or its
-  // file's, or the workspace off the rows.
+  // The folder a drag over el would drop into: the row's folder (in a
+  // compacted chain, the one of its names it's over, #110), or its file's,
+  // or the workspace off the rows.
   const folderAt = (el: EventTarget) => {
-    const path = el instanceof Element ? el.closest<HTMLElement>("[data-path]")?.dataset.path : undefined;
+    if (!(el instanceof Element)) return "";
+    const part = el.closest<HTMLElement>("[data-folder]")?.dataset.folder;
+    if (part) return part;
+    const path = el.closest<HTMLElement>("[data-path]")?.dataset.path;
     if (path === undefined) return "";
     const e = findEntry(tree, path);
     return e && isFolder(e) ? e.path : parentOf(path);
@@ -888,9 +892,10 @@ export function FilesShelf({
   // duplicate; letters find.
   const onKey = (ev: React.KeyboardEvent) => {
     if (naming || (ev.target as HTMLElement).tagName === "INPUT") return;
-    const i = shown.findIndex((r) => r.entry.path === selected);
+    const i = shown.findIndex((r) => r.entry.path === selected || r.chain?.some((c) => c.path === selected));
     const cur = shown[i];
-    const row = cur?.entry;
+    // A compacted chain's folder selected by its name (#110), else the row's.
+    const row = cur?.chain?.find((c) => c.path === selected) ?? cur?.entry;
     const go = (j: number, extend = false) => {
       const r = shown[Math.max(0, Math.min(shown.length - 1, j))];
       if (!r) return;
@@ -975,6 +980,9 @@ export function FilesShelf({
     }
     ev.preventDefault();
   };
+
+  // The folder of r's compacted chain a new name is being given in, if any.
+  const chainNaming = (r: Row) => (naming && naming.kind !== "rename" ? r.chain?.find((c) => c.path === naming.dir)?.path : undefined);
 
   const newRow = (folder: string, depth: number) =>
     naming && naming.kind !== "rename" && naming.dir === folder ? (
@@ -1068,14 +1076,16 @@ export function FilesShelf({
           const { entry: e, depth } = r;
           const open = tree.expanded.has(e.path);
           const opens = isFolder(e) || !!r.nests;
-          const renaming = naming?.kind === "rename" && naming.path === e.path;
+          // A chain's folder renames on its row too (#110).
+          const renamed = naming?.kind === "rename" ? (r.chain?.find((c) => c.path === naming.path) ?? (naming.path === e.path ? e : undefined)) : undefined;
+          const renaming = !!renamed;
           const problem = problems.get(e.path);
           const cut = clip?.cut && clip.paths.some((p) => e.path === p || e.path.startsWith(p + "/"));
           const more = moreAfter.get(index);
           return (
             <div key={e.path} role="none">
               {renaming ? (
-                <NameInput depth={depth} icon={isFolder(e) ? mdiFolderOutline : fileIcon(e.name)} initial={e.name} label={t("desktop.files.rename")} onDone={finishNaming} />
+                <NameInput depth={depth} icon={isFolder(renamed!) ? mdiFolderOutline : fileIcon(renamed!.name)} initial={renamed!.name} label={t("desktop.files.rename")} onDone={finishNaming} />
               ) : (
                 <button
                   role="treeitem"
@@ -1149,12 +1159,43 @@ export function FilesShelf({
                   <Icon path={isFolder(e) ? (open ? mdiFolderOpenOutline : mdiFolderOutline) : fileIcon(e.name)} size="sm" className="tree-icon" />
                   <span className="ellipsis tree-name">
                     {r.chain
-                      ? r.chain.map((c, k) => (
-                          <span key={c.path}>
-                            {k > 0 && <span className="tree-chain-sep">/</span>}
-                            {c.name}
-                          </span>
-                        ))
+                      ? r.chain.map((c, k) => {
+                          // Each folder of a compacted chain but the last
+                          // (the row's own) is a target of its own: a click
+                          // selects it, a drop goes into it, its menu is
+                          // its (#110).
+                          const last = k === r.chain!.length - 1;
+                          return (
+                            <span key={c.path}>
+                              {k > 0 && <span className="tree-chain-sep">/</span>}
+                              <span
+                                data-folder={last ? undefined : c.path}
+                                className={last ? undefined : `tree-chain-part ${c.path === selected ? "selected" : ""} ${c.path === dropInto ? "drop-target" : ""}`}
+                                onClick={
+                                  last
+                                    ? undefined
+                                    : (ev) => {
+                                        if (ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
+                                        ev.stopPropagation();
+                                        setSelected(c.path);
+                                      }
+                                }
+                                onContextMenu={
+                                  last
+                                    ? undefined
+                                    : (ev) => {
+                                        ev.preventDefault();
+                                        ev.stopPropagation();
+                                        setSelected(c.path);
+                                        setMenu({ x: ev.clientX, y: ev.clientY, entry: c });
+                                      }
+                                }
+                              >
+                                {c.name}
+                              </span>
+                            </span>
+                          );
+                        })
                       : rowLabel(r)}
                   </span>
                   {e.kind === FileKind.SYMLINK && <Icon path={mdiLinkVariant} size="sm" className="muted" />}
@@ -1167,7 +1208,8 @@ export function FilesShelf({
                     )}
                 </button>
               )}
-              {isFolder(e) && open && newRow(e.path, depth + 1)}
+              {/* A new name in any folder of a compacted chain goes under its row, open or not: the chain's first folders have none (#110). */}
+              {isFolder(e) && (chainNaming(r) ? newRow(chainNaming(r)!, depth + 1) : open && newRow(e.path, depth + 1))}
               {more !== undefined && (
                 <button className="tree-row tree-more" style={{ paddingLeft: 8 + (more === "" ? 0 : (shown.find((x) => x.entry.path === more)?.depth ?? 0) + 1) * 14 }} onClick={() => showMore(more)}>
                   <span className="tree-twisty" />

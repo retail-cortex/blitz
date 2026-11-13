@@ -81,6 +81,10 @@ type Options struct {
 
 // Workspace is a folder opened in Blitz: everything a session needs.
 type Workspace struct {
+	// trashed is where the tree's deletions went in the system's trash
+	// (FIL-37a), for Undo.
+	trashed systemTrashed
+
 	// terms are the workspace's terminals (spec_062_terminal), made on
 	// first use.
 	termsMu sync.Mutex

@@ -16,7 +16,7 @@
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { mdiCloudDownloadOutline, mdiDeleteOutline, mdiPlus } from "@mdi/js";
-import { defaultModelsPath, defaultPaths, gatewayAPIs, guessedAPI, listedRows, newHeader, scriptLanguages, tokenPlaceholder, tokenValue, usesToken, type ApiForm, type ApiHeaderRow, type ApiModelRow } from "./apiForm";
+import { defaultModelsPath, defaultPaths, gatewayAPIs, guessedAPI, isModelsURL, listedRows, newHeader, scriptLanguages, tokenPlaceholder, tokenValue, usesToken, type ApiForm, type ApiHeaderRow, type ApiModelRow } from "./apiForm";
 import { t } from "./i18n";
 import { Button, IconButton, Switch } from "@blitz/webui";
 
@@ -77,13 +77,6 @@ export function ApiProviderForm({
   ));
   const problemsId = `${id}-problems`;
   const described = problems.length ? problemsId : undefined;
-  const setRow = (i: number, row: Partial<ApiHeaderRow>) => onChange({ ...form, headers: form.headers.map((h, j) => (j === i ? { ...h, ...row } : h)) });
-  const add = useRef<HTMLDivElement>(null);
-  // The row's button goes with it: focus moves to Add, not to the page.
-  const removeRow = (i: number) => {
-    onChange({ ...form, headers: form.headers.filter((_, j) => j !== i) });
-    add.current?.querySelector("button")?.focus();
-  };
   return (
     <div className="stack api-provider" style={{ gap: 12 }}>
       <label className="field single">
@@ -103,54 +96,7 @@ export function ApiProviderForm({
           {t("desktop.keys.api.endpoint_hint", { placeholder: tokenPlaceholder })}
         </small>
       </label>
-      <fieldset className="field single api-headers" aria-describedby={described}>
-        <legend className="t-label">{t("desktop.keys.api.headers")}</legend>
-        {form.headers.map((h, i) => {
-          const n = i + 1;
-          return (
-            <div key={i} className="row wrap" style={{ gap: 8 }}>
-              <input
-                className="input mono"
-                aria-label={t("desktop.keys.api.header_name", { n })}
-                value={h.name}
-                placeholder={t("desktop.keys.api.name_placeholder")}
-                spellCheck={false}
-                disabled={busy}
-                onChange={(e) => setRow(i, { name: e.target.value })}
-                onKeyDown={onEnter}
-              />
-              {h.useToken ? (
-                <input className="input mono" aria-label={t("desktop.keys.api.header_value", { n })} value={tokenValue(h)} readOnly disabled={busy} />
-              ) : (
-                <input
-                  className="input mono"
-                  type="password"
-                  autoComplete="off"
-                  aria-label={t("desktop.keys.api.header_value", { n })}
-                  value={h.value}
-                  placeholder={t(h.hasValue ? "desktop.keys.api.value_keep" : "desktop.keys.api.value_placeholder")}
-                  spellCheck={false}
-                  disabled={busy}
-                  onChange={(e) => setRow(i, { value: e.target.value })}
-                  onKeyDown={onEnter}
-                />
-              )}
-              <label className="row" style={{ gap: 6 }}>
-                <Switch checked={h.useToken} disabled={busy} label={t("desktop.keys.api.use_token_for", { n })} onChange={(useToken) => setRow(i, { useToken, value: "" })} />
-                <span className="t-body-sm" aria-hidden="true">
-                  {t("desktop.keys.api.use_token")}
-                </span>
-              </label>
-              <IconButton small icon={mdiDeleteOutline} label={t("desktop.keys.api.remove_header", { n })} disabled={busy} onClick={() => removeRow(i)} />
-            </div>
-          );
-        })}
-        <div ref={add}>
-          <Button small icon={mdiPlus} disabled={busy} onClick={() => onChange({ ...form, headers: [...form.headers, newHeader()] })}>
-            {t("desktop.keys.api.add_header")}
-          </Button>
-        </div>
-      </fieldset>
+      <HeaderRows legend={t("desktop.keys.api.headers")} rows={form.headers} onRows={(headers) => onChange({ ...form, headers })} busy={busy} onEnter={onEnter} described={described} />
       {usesToken(form) && (
         <div className="stack" style={{ gap: 8 }}>
           <label className="field single">
@@ -205,6 +151,17 @@ export function ApiProviderForm({
           {t(form.listsModels ? "desktop.keys.api.models_path_hint" : "desktop.keys.api.no_list_hint")}
         </small>
       </div>
+      {form.listsModels && (
+        <HeaderRows
+          legend={t("desktop.keys.api.models_headers")}
+          hint={t(isModelsURL(form.modelsPath) ? "desktop.keys.api.models_headers_hint_url" : "desktop.keys.api.models_headers_hint")}
+          rows={form.modelsHeaders}
+          onRows={(modelsHeaders) => onChange({ ...form, modelsHeaders })}
+          busy={busy}
+          onEnter={onEnter}
+          described={described}
+        />
+      )}
       <fieldset className="field single api-models" aria-describedby={`${id}-models-hint ${described ?? ""}`.trim()}>
         <legend className="t-label">{t("desktop.keys.api.models")}</legend>
         <small id={`${id}-models-hint`} className="muted">
@@ -277,5 +234,92 @@ export function ApiProviderForm({
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Header rows (the gateway's, the model list's): a name, a value never
+ * shown (the token's placeholder aside; empty keeps the saved one), and
+ * whether it's the token.
+ */
+function HeaderRows({
+  legend,
+  hint,
+  rows,
+  onRows,
+  busy,
+  onEnter,
+  described,
+}: {
+  legend: string;
+  hint?: string;
+  rows: ApiHeaderRow[];
+  onRows: (rows: ApiHeaderRow[]) => void;
+  busy: boolean;
+  onEnter: (e: KeyboardEvent) => void;
+  described?: string;
+}) {
+  const id = useId();
+  const setRow = (i: number, row: Partial<ApiHeaderRow>) => onRows(rows.map((h, j) => (j === i ? { ...h, ...row } : h)));
+  const add = useRef<HTMLDivElement>(null);
+  // The row's button goes with it: focus moves to Add, not to the page.
+  const removeRow = (i: number) => {
+    onRows(rows.filter((_, j) => j !== i));
+    add.current?.querySelector("button")?.focus();
+  };
+  return (
+    <fieldset className="field single api-headers" aria-describedby={[hint ? `${id}-hint` : "", described ?? ""].join(" ").trim() || undefined}>
+      <legend className="t-label">{legend}</legend>
+      {hint && (
+        <small id={`${id}-hint`} className="muted">
+          {hint}
+        </small>
+      )}
+      {rows.map((h, i) => {
+        const n = i + 1;
+        return (
+          <div key={i} className="row wrap" style={{ gap: 8 }}>
+            <input
+              className="input mono"
+              aria-label={t("desktop.keys.api.header_name", { n })}
+              value={h.name}
+              placeholder={t("desktop.keys.api.name_placeholder")}
+              spellCheck={false}
+              disabled={busy}
+              onChange={(e) => setRow(i, { name: e.target.value })}
+              onKeyDown={onEnter}
+            />
+            {h.useToken ? (
+              <input className="input mono" aria-label={t("desktop.keys.api.header_value", { n })} value={tokenValue(h)} readOnly disabled={busy} />
+            ) : (
+              <input
+                className="input mono"
+                type="password"
+                autoComplete="off"
+                aria-label={t("desktop.keys.api.header_value", { n })}
+                value={h.value}
+                placeholder={t(h.hasValue ? "desktop.keys.api.value_keep" : "desktop.keys.api.value_placeholder")}
+                spellCheck={false}
+                disabled={busy}
+                onChange={(e) => setRow(i, { value: e.target.value })}
+                onKeyDown={onEnter}
+              />
+            )}
+            <label className="row" style={{ gap: 6 }}>
+              <Switch checked={h.useToken} disabled={busy} label={t("desktop.keys.api.use_token_for", { n })} onChange={(useToken) => setRow(i, { useToken, value: "" })} />
+              <span className="t-body-sm" aria-hidden="true">
+                {t("desktop.keys.api.use_token")}
+              </span>
+            </label>
+            <IconButton small icon={mdiDeleteOutline} label={t("desktop.keys.api.remove_header", { n })} disabled={busy} onClick={() => removeRow(i)} />
+          </div>
+        );
+      })}
+      <div ref={add}>
+        <Button small icon={mdiPlus} disabled={busy} onClick={() => onRows([...rows, newHeader()])}>
+          {t("desktop.keys.api.add_header")}
+        </Button>
+      </div>
+    </fieldset>
   );
 }

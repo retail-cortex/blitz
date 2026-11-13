@@ -270,3 +270,52 @@ func TestFixSandboxElsewhere(t *testing.T) {
 	assert.NotEmpty(t, fix.Status.State)
 	assert.NotEmpty(t, fix.Error)
 }
+
+// The updates folder keeps the three newest releases downloaded, never
+// the one staged among those removed, after each download, each check and
+// Clean up (EL-90a). Other files there (the last check, the updater's
+// copy) stay.
+func TestUpdaterPrunesDownloads(t *testing.T) {
+	trustPackages(t)
+	src := releaseServer(t, "v0.9.12")
+	dir := t.TempDir()
+	old := []string{"v0.8.1", "v0.8.10", "v0.9.2", "v0.9.9", "v0.9.10", "v0.9.11-rc.1", "v0.9.11"}
+	for _, tag := range old {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, tag, "new"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, tag, "new", "Blitz.exe"), make([]byte, 100), 0o600))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "apply-blitz-tray.exe"), []byte("x"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o700), "not a release")
+	u := &Updater{Version: "0.9.11", HostExe: installedApp(t), Dir: dir, CacheDir: t.TempDir(), Source: func() selfupdate.Source { return src }, GOOS: "windows", GOARCH: "amd64"}
+
+	d := u.Downloads()
+	assert.Equal(t, []string{"v0.9.11", "v0.9.11-rc.1", "v0.9.10", "v0.9.9", "v0.9.2", "v0.8.10", "v0.8.1"}, d.Releases, "newest first, by version")
+	assert.Equal(t, int64(700), d.Bytes)
+
+	ctx := context.Background()
+	u.Check(ctx, false)
+	assert.Equal(t, []string{"v0.9.11", "v0.9.11-rc.1", "v0.9.10"}, u.Downloads().Releases, "a check prunes what's there")
+
+	require.True(t, u.Download(ctx).Ready)
+	assert.Equal(t, []string{"v0.9.12", "v0.9.11", "v0.9.11-rc.1"}, u.Downloads().Releases, "a download makes room for itself")
+	assert.FileExists(t, filepath.Join(dir, "apply-blitz-tray.exe"))
+	assert.DirExists(t, filepath.Join(dir, "vendor"))
+
+	// The staged one is kept, even when it isn't among the newest.
+	for _, tag := range []string{"v1.0.0", "v1.0.1", "v1.0.2"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, tag), 0o700))
+	}
+	d, err := u.PruneDownloads(KeepDownloads)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"v1.0.2", "v1.0.1", "v1.0.0", "v0.9.12"}, d.Releases)
+
+	// Clean up: none kept but the one staged.
+	h := Host{Updates: u}.Handler()
+	code, body := call(t, h, "PruneUpdateDownloads", 0)
+	require.Equal(t, http.StatusOK, code, string(body))
+	code, body = call(t, h, "UpdateDownloads")
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, string(body), `"releases":["v0.9.12"]`)
+	code, _ = call(t, h, "PruneUpdateDownloads", "all")
+	assert.Equal(t, http.StatusInternalServerError, code)
+}

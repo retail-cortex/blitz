@@ -694,7 +694,22 @@ type ToolsConfig struct {
 	// fetch, code execution) in place of Blitz's, where they have them
 	// (spec_056 CA-80); false keeps Blitz's. Unset: on.
 	Provider *bool `toml:"provider"`
+	// Trash is where deleted files go (spec_029_files FIL-37a): "system"
+	// (the default: the system's Trash, for the file tree's Delete and the
+	// agent's delete_file) or "workspace" (the tree's to .blitz/trash, the
+	// agent's for good, as before).
+	Trash string `toml:"trash"`
 }
+
+// The tools.trash choices (FIL-37a).
+const (
+	TrashSystem    = "system"
+	TrashWorkspace = "workspace"
+)
+
+// SystemTrash reports whether deleted files go to the system's Trash
+// (tools.trash, "system" unless set "workspace").
+func (t ToolsConfig) SystemTrash() bool { return !strings.EqualFold(t.Trash, TrashWorkspace) }
 
 // ProviderToolsOn reports whether models may use their provider's own
 // tools ([tools] provider, on unless set false).
@@ -1214,6 +1229,7 @@ var choices = []struct {
 	{"ui.notify", []string{"both", "bell", "desktop", "off"}, func(c *Config) *string { return &c.UI.Notify }},
 	{"ui.task_alerts", []string{"notify", "open", "off"}, func(c *Config) *string { return &c.UI.TaskAlerts }},
 	{"ui.editor", []string{"emacs", "vim"}, func(c *Config) *string { return &c.UI.Editor }},
+	{"tools.trash", []string{TrashSystem, TrashWorkspace}, func(c *Config) *string { return &c.Tools.Trash }},
 }
 
 // fixChoices checks the settings that take one of a few words: a word in

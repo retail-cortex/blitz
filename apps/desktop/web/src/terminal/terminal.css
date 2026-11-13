@@ -48,6 +48,8 @@
 /* A terminal fills the drawer under its tabs. */
 .terminal-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--md-surface-container-lowest); }
 .terminal-view[hidden] { display: none; }
+/* The connection dropped, or typed keys go unanswered: the app's banner, compact (TRM-27) */
+.terminal-view .terminal-trouble { padding: 4px 8px 4px 12px; gap: 8px; flex: none; }
 .terminal-host { flex: 1; min-height: 0; padding: 8px 4px 4px 12px; }
 .terminal-host .xterm { height: 100%; }
 .terminal-host .xterm-viewport { background: transparent !important; }

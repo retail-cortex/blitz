@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/ostrash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -306,4 +307,48 @@ func TestHooksShare(t *testing.T) {
 			c.check(t, ws, wt, asked)
 		})
 	}
+}
+
+// With tools.trash = "system" (FIL-37a), the agent's delete_file sends the
+// file to the system's trash; the checkpoint still has its text, so Undo
+// brings it back. Without it, or with no system trash, it's removed.
+func TestDeleteFileToTheSystemTrash(t *testing.T) {
+	sys := t.TempDir()
+	t.Cleanup(ostrash.Fake(sys))
+	dir := t.TempDir()
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, SystemTrash: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	assert.True(t, ws.UsesSystemTrash())
+	cp := newTestCheckpoints(ws, 0)
+	writeFile(t, filepath.Join(dir, "notes.md"), "keep me\n")
+
+	cp.Begin("turn 1")
+	h, _ := approverHooks(true)
+	runTool(t, toolOf(t)(NewDeleteFileTool(ws, h)), map[string]any{"path": "notes.md"})
+	assert.NoFileExists(t, filepath.Join(dir, "notes.md"))
+	data, err := os.ReadFile(filepath.Join(sys, "1", "notes.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "keep me\n", string(data), "in the system's trash")
+
+	_, err = cp.Undo("", false)
+	require.NoError(t, err)
+	data, err = os.ReadFile(filepath.Join(dir, "notes.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "keep me\n", string(data), "Undo puts it back")
+
+	// The tree's Delete: to the trash and back.
+	where, err := ws.UserTrash(context.Background(), "notes.md")
+	require.NoError(t, err)
+	assert.Error(t, ws.UserRestoreTrashed(context.Background(), where, "."), "never over the workspace")
+	writeFile(t, filepath.Join(dir, "notes.md"), "new\n")
+	assert.ErrorIs(t, ws.UserRestoreTrashed(context.Background(), where, "notes.md"), fs.ErrExist, "never over a file")
+	require.NoError(t, os.Remove(filepath.Join(dir, "notes.md")))
+	require.NoError(t, ws.UserRestoreTrashed(context.Background(), where, "sub/notes.md"), "its folder made")
+	assert.FileExists(t, filepath.Join(dir, "sub", "notes.md"))
+
+	off, err := OpenWorkspace(WorkspaceOptions{Dir: t.TempDir()})
+	require.NoError(t, err)
+	t.Cleanup(func() { off.Close() })
+	assert.False(t, off.UsesSystemTrash())
 }

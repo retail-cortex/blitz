@@ -844,6 +844,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* A row cut, waiting to be pasted (FIL-38). */
 .tree-row.cut .tree-name, .tree-row.cut .tree-icon { opacity: 0.5; }
 .tree-chain-sep { color: var(--md-on-surface-variant); }
+/* A compacted chain's folder, selected or a drop's target by its name (#110) */
+.tree-chain-part { border-radius: var(--md-shape-xs); padding: 0 2px; }
+.tree-chain-part:hover { text-decoration: underline; text-underline-offset: 2px; }
+.tree-chain-part.selected { background: color-mix(in srgb, var(--md-on-surface) 12%, transparent); }
+.tree-chain-part.drop-target { background: color-mix(in srgb, var(--md-primary) 16%, transparent); outline: 1px solid var(--md-primary); }
 /* Show more of a big folder (FIL-39), and the filter's rows (FIL-73). */
 .tree-row.tree-more { color: var(--md-primary); }
 .files-filter { display: flex; align-items: center; gap: 4px; padding: 0 6px 6px 12px; }

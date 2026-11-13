@@ -30,6 +30,7 @@ import { mathFromMarkdown } from "mdast-util-math";
 import { gfm } from "micromark-extension-gfm";
 import { math } from "micromark-extension-math";
 import { keepGitHubMath } from "../math";
+import { closingIndex } from "../safeHtml";
 import { sourceAttr } from "./schema";
 
 /** A block's source, and the text between it and the block before. */
@@ -148,7 +149,9 @@ type Mark = { type: string; attrs?: Record<string, unknown> };
 function inline(nodes: md.PhrasingContent[] | md.RootContent[], marks: Mark[], slice: (n: md.Node) => string): JSONContent[] {
   const out: JSONContent[] = [];
   const text = (t: string, m: Mark[]) => t && out.push(m.length ? { type: "text", text: t, marks: m } : { type: "text", text: t });
-  for (const node of nodes as md.Node[]) {
+  const all = nodes as md.Node[];
+  for (let i = 0; i < all.length; i++) {
+    const node = all[i];
     switch (node.type) {
       case "text":
         text((node as md.Text).value, marks);
@@ -181,7 +184,16 @@ function inline(nodes: md.PhrasingContent[] | md.RootContent[], marks: Mark[], s
       case "inlineMath":
         out.push({ type: "mathInline", attrs: { text: (node as md.Literal).value, dollars: slice(node).startsWith("$$") ? 2 : 1 } });
         break;
-      default: // inline HTML, reference links and images, footnote marks
+      case "html": {
+        // An element's tags and what's between them are one piece of
+        // HTML ("<sub>2</sub>"), drawn as one (VE-05a).
+        const j = closingIndex(all as { type: string; value?: string }[], i);
+        const last = j > i ? all[j] : node;
+        out.push({ type: "rawInline", attrs: { text: slice({ type: "html", position: node.position && last.position && { start: node.position.start, end: last.position.end } }) } });
+        if (j > i) i = j;
+        break;
+      }
+      default: // reference links and images, footnote marks
         out.push({ type: "rawInline", attrs: { text: slice(node) } });
     }
   }

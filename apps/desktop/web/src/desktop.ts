@@ -106,6 +106,8 @@ type AppMethods = {
   CheckUpdate(force?: boolean): Promise<UpdateStatus>;
   DownloadUpdate(): Promise<UpdateStatus>;
   ApplyUpdate(): Promise<void>;
+  UpdateDownloads(): Promise<UpdateDownloads>;
+  PruneUpdateDownloads(keep: number): Promise<UpdateDownloads>;
   Quit(): Promise<void>;
   OpenApp(): Promise<void>;
   PreviewOpen(id: string, url: string): Promise<string>;
@@ -536,6 +538,15 @@ export const canUpdate = () => canCall("CheckUpdate");
 export const checkUpdate = (force = false) => app().CheckUpdate(force);
 /** Downloads, checks and unpacks the latest release; resolves when it's done. */
 export const downloadUpdate = () => app().DownloadUpdate();
+/** The app's downloaded releases, newest first, and their size (EL-90a). */
+export interface UpdateDownloads {
+  releases: string[];
+  bytes: number;
+}
+/** What the updates folder holds; null where the app doesn't update itself. */
+export const updateDownloads = (): Promise<UpdateDownloads> | null => (canCall("UpdateDownloads") ? app().UpdateDownloads() : null);
+/** Removes the downloaded releases but the keep newest, and one waiting to be installed (EL-90a). */
+export const pruneUpdateDownloads = (keep = 0): Promise<UpdateDownloads> => app().PruneUpdateDownloads(keep);
 /**
  * Restarts into the downloaded update: the host starts the swap, which
  * waits for the app to quit (asking first about unsaved changes, as

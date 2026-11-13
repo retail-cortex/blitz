@@ -418,12 +418,7 @@ func checkAPI(c config.APIConfig, confirm string) (checkStatus, string) {
 	if err := c.Check(); err != nil {
 		return statusFail, err.Error()
 	}
-	names := make([]string, 0, len(c.Headers))
-	for name := range c.Headers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	detail := fmt.Sprintf("API at %s, headers %s", c.BaseURL, strings.Join(names, ", "))
+	detail := fmt.Sprintf("API at %s, %s", c.BaseURL, headerList(c.Headers))
 	if c.Model != "" {
 		// What the model's requests are written in, and where they go
 		// (spec_015_models MDL-112, MDL-113).
@@ -432,6 +427,10 @@ func checkAPI(c config.APIConfig, confirm string) (checkStatus, string) {
 	}
 	if path := c.ModelsURLPath(); path != "" {
 		detail += "; models listed at " + path
+		// The list's own headers, as another server's list has (MDL-115).
+		if list, _ := c.ModelsList(); len(c.ModelsHeaders) > 0 || len(list.Headers) == 0 {
+			detail += " with " + headerList(list.Headers)
+		}
 	}
 	if c.UsesToken() {
 		return statusOK, detail + "; the token from a " + c.Language() + " token_script" + confirm
@@ -701,4 +700,18 @@ func (o Options) load() (*config.Config, error) {
 		cfg.Sandbox.AllowedPaths = append(cfg.Sandbox.AllowedPaths, abs)
 	}
 	return cfg, nil
+}
+
+// headerList names headers for a check's detail ("headers A, B"), never
+// their values.
+func headerList(headers map[string]string) string {
+	if len(headers) == 0 {
+		return "no headers"
+	}
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return "headers " + strings.Join(names, ", ")
 }

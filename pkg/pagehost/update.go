@@ -22,7 +22,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +138,9 @@ func (u *Updater) Check(ctx context.Context, force bool) UpdateStatus {
 	if err == nil {
 		u.latest = latest
 	}
+	if !u.downloading {
+		_, _ = u.pruneLocked(KeepDownloads) // what earlier versions left (EL-90a)
+	}
 	s := u.statusLocked(why)
 	if err != nil {
 		s.Error = "finding the latest release: " + err.Error()
@@ -177,8 +182,95 @@ func (u *Updater) Download(ctx context.Context) UpdateStatus {
 		u.err = err.Error()
 	} else {
 		u.staged = staged
+		_, _ = u.pruneLocked(KeepDownloads) // the older downloads go (EL-90a)
 	}
 	return u.statusLocked(why)
+}
+
+// KeepDownloads is how many downloaded releases Dir keeps (EL-90a): the
+// newest, the one staged to install always among them.
+const KeepDownloads = 3
+
+// Downloads is what Dir holds of the releases downloaded: their tags,
+// newest first, and their size in bytes.
+type Downloads struct {
+	Releases []string `json:"releases"`
+	Bytes    int64    `json:"bytes"`
+}
+
+// Downloads is what Dir holds now.
+func (u *Updater) Downloads() Downloads {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.downloadsLocked()
+}
+
+// PruneDownloads removes the downloaded releases but the keep newest,
+// never the one staged to install (EL-90a; Settings › About's Clean up
+// keeps none but that), and says what's left. While one downloads, it
+// removes none.
+func (u *Updater) PruneDownloads(keep int) (Downloads, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.downloading {
+		return u.downloadsLocked(), nil
+	}
+	return u.pruneLocked(keep)
+}
+
+// pruneLocked is PruneDownloads, u.mu held.
+func (u *Updater) pruneLocked(keep int) (Downloads, error) {
+	tags := u.releasesLocked()
+	staged := ""
+	if u.staged != "" {
+		if rel, err := filepath.Rel(u.Dir, u.staged); err == nil {
+			staged = strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
+		}
+	}
+	var errs []error
+	kept := 0
+	for _, tag := range tags {
+		if tag == staged || kept < keep {
+			kept++
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(u.Dir, tag)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return u.downloadsLocked(), errors.Join(errs...)
+}
+
+// releasesLocked are Dir's release folders (v…), newest first.
+func (u *Updater) releasesLocked() []string {
+	entries, _ := os.ReadDir(u.Dir)
+	var tags []string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "v") && len(e.Name()) > 1 && e.Name()[1] >= '0' && e.Name()[1] <= '9' {
+			tags = append(tags, e.Name())
+		}
+	}
+	slices.SortFunc(tags, func(a, b string) int { return selfupdate.Compare(b, a) })
+	return tags
+}
+
+// downloadsLocked is Downloads, u.mu held.
+func (u *Updater) downloadsLocked() Downloads {
+	d := Downloads{Releases: u.releasesLocked()}
+	for _, tag := range d.Releases {
+		_ = filepath.WalkDir(filepath.Join(u.Dir, tag), func(_ string, e os.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				if info, ierr := e.Info(); ierr == nil {
+					d.Bytes += info.Size()
+				}
+			}
+			return nil
+		})
+	}
+	if d.Releases == nil {
+		d.Releases = []string{}
+	}
+	return d
 }
 
 // ErrNotReady is applying an update that hasn't been downloaded.

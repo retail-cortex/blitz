@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/ostrash"
 )
 
 // DefaultMaxFileSize bounds how much of a single file the tools will load into memory.
@@ -52,6 +53,10 @@ type WorkspaceOptions struct {
 	// ReadOnly, when set, makes the workspace itself read-only and says
 	// why (a Viewer's clone of an organization workspace, spec_053 EN-60).
 	ReadOnly string
+	// SystemTrash sends deleted files to the system's trash (tools.trash,
+	// spec_029_files FIL-37a): the agent's delete_file, and the file
+	// tree's Delete through UserTrash.
+	SystemTrash bool
 }
 
 // Workspace is the file sandbox. Every file tool goes through it: paths must
@@ -66,6 +71,7 @@ type Workspace struct {
 	checkpoints *Checkpoints // nil when disabled
 	locks       pathLocks
 	reads       *ReadLog
+	systemTrash bool // WorkspaceOptions.SystemTrash
 }
 
 type fsRoot struct {
@@ -89,7 +95,7 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 	if opts.Dir == "" {
 		opts.Dir = "."
 	}
-	w := &Workspace{maxFileSize: opts.MaxFileSize, readOnly: opts.ReadOnly, reads: &ReadLog{}}
+	w := &Workspace{maxFileSize: opts.MaxFileSize, readOnly: opts.ReadOnly, reads: &ReadLog{}, systemTrash: opts.SystemTrash}
 	if w.maxFileSize <= 0 {
 		w.maxFileSize = DefaultMaxFileSize
 	}
@@ -545,6 +551,23 @@ func writeInPlace(r *os.Root, rel string, data []byte) error {
 	return nil
 }
 
+// remove deletes loc's file: to the system's trash when the workspace
+// sends deletions there and the system has one (FIL-37a), else for good.
+// The checkpoint keeps its text either way, for Undo.
+func (w *Workspace) remove(ctx context.Context, loc location) error {
+	if w.systemTrash {
+		_, err := ostrash.Trash(ctx, loc.abs())
+		if !errors.Is(err, ostrash.ErrUnavailable) {
+			return err
+		}
+	}
+	return loc.root.root.Remove(loc.rel)
+}
+
+// UsesSystemTrash reports whether deletions go to the system's trash
+// (tools.trash, and the system has one).
+func (w *Workspace) UsesSystemTrash() bool { return w.systemTrash && ostrash.Available() }
+
 // RemoveFile deletes a single non-directory entry.
 func (w *Workspace) RemoveFile(ctx context.Context, p string) error {
 	loc, err := w.resolve(p, true)
@@ -562,7 +585,7 @@ func (w *Workspace) RemoveFile(ctx context.Context, p string) error {
 		return fmt.Errorf("%s is a directory; delete_file only removes files", p)
 	}
 	added := w.snapshot(ctx, loc)
-	if err := loc.root.root.Remove(loc.rel); err != nil {
+	if err := w.remove(ctx, loc); err != nil {
 		if added {
 			w.checkpoints.discard(sessionOf(ctx), loc.abs())
 		}
