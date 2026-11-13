@@ -183,6 +183,8 @@ func TestTerminalErrors(t *testing.T) {
 		{terminal.ErrUnsupported, connect.CodeUnimplemented, "TERMINAL_UNSUPPORTED"},
 		{engine.ErrBadPath, connect.CodeInvalidArgument, "BAD_PATH"},
 		{terminal.ErrClosed, connect.CodeUnavailable, "SHUTTING_DOWN"},
+		{terminal.ErrNotReading, connect.CodeDeadlineExceeded, "TERMINAL_NOT_READING"},
+		{terminal.ErrExited, connect.CodeFailedPrecondition, "TERMINAL_EXITED"},
 	} {
 		code, info := errorReason(t, terminalError(tc.err))
 		assert.Equal(t, tc.code, code, "%v", tc.err)
@@ -191,4 +193,52 @@ func TestTerminalErrors(t *testing.T) {
 	assert.Error(t, terminalError(errors.New("other")))
 	assert.Equal(t, uint16(0xffff), size(1<<20))
 	assert.Empty(t, terminalInfo("/w", terminal.Info{Dir: "/elsewhere"}).Dir, "a folder outside reads as the workspace")
+}
+
+// A terminal's stream says it's alive at once and every terminalHeartbeat
+// while the shell is quiet, with empty messages, so the window can tell a
+// broken stream from a quiet shell (TRM-12a).
+func TestTerminalHeartbeat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no PTYs here yet (TRM-50)")
+	}
+	old := terminalHeartbeat
+	terminalHeartbeat = 30 * time.Millisecond
+	t.Cleanup(func() { terminalHeartbeat = old })
+	t.Setenv("SHELL", "/bin/sh")
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	c := pb.NewTerminalServiceClient(http.DefaultClient, srv.URL)
+	dir := t.TempDir()
+	open, err := c.OpenTerminal(context.Background(), connect.NewRequest(&pb.OpenTerminalRequest{Workspace: dir, Cols: 80, Rows: 24}))
+	require.NoError(t, err)
+	id := open.Msg.Terminal.Id
+	// Past the prompt: from where the output is now, the shell is quiet.
+	out, last := readTerminal(t, c, dir, id, 0, "$")
+	require.NotEmpty(t, out)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := c.WatchTerminal(ctx, connect.NewRequest(&pb.WatchTerminalRequest{Workspace: dir, Id: id, From: last.Offset}))
+	require.NoError(t, err)
+	defer stream.Close()
+	beats := 0
+	for beats < 3 && stream.Receive() {
+		m := stream.Msg()
+		if len(m.Data) == 0 && !m.Exited && m.Skipped == 0 {
+			beats++
+		}
+	}
+	require.NoError(t, stream.Err())
+	assert.Equal(t, 3, beats, "the first at once, then one a beat")
+
+	// Output still arrives between the beats.
+	_, err = c.WriteTerminal(context.Background(), connect.NewRequest(&pb.WriteTerminalRequest{Workspace: dir, Id: id, Data: []byte("echo beat-$((1+1))\n")}))
+	require.NoError(t, err)
+	var got strings.Builder
+	for stream.Receive() && !strings.Contains(got.String(), "beat-2") {
+		got.Write(stream.Msg().Data)
+	}
+	assert.Contains(t, got.String(), "beat-2")
 }

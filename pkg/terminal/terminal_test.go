@@ -242,3 +242,31 @@ func ids(infos []Info) []string {
 	}
 	return out
 }
+
+// A shell that stops reading its input (a hung program, an ssh whose
+// network went) never blocks a write: once its input and the queue are
+// full, a write fails with ErrNotReading within WriteTimeout (TRM-13a).
+// Input to an exited shell is refused.
+func TestTerminalNotReading(t *testing.T) {
+	old := WriteTimeout
+	WriteTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { WriteTimeout = old })
+	m := NewManager(0, 0)
+	t.Cleanup(m.CloseAll)
+	term := open(t, m)
+	// Nothing reads the PTY from here: the line discipline's input fills.
+	require.NoError(t, term.Write([]byte("stty raw -echo; exec sleep 60\n")))
+	until(t, term, "") // it's running
+	time.Sleep(200 * time.Millisecond)
+	chunk := make([]byte, 4<<10)
+	start := time.Now()
+	var err error
+	for i := 0; i < 400 && err == nil; i++ {
+		err = term.Write(chunk)
+	}
+	require.ErrorIs(t, err, ErrNotReading, "a full input fails, never blocks")
+	assert.Less(t, time.Since(start), 5*time.Second)
+
+	require.NoError(t, m.Close(term.Info().ID))
+	assert.ErrorIs(t, term.Write([]byte("x")), ErrExited)
+}

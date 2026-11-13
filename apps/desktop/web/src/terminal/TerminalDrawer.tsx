@@ -19,7 +19,7 @@ import { Drawer, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { message } from "../errors";
 import { t } from "../i18n";
-import { closeTerminal, drawerHeight, hideTerminals, newTerminal, showTerminals, terminalExited, useTermDrawer } from "./drawer";
+import { closeTerminal, drawerHeight, hideTerminals, newTerminal, restartTerminal, showTerminals, terminalExited, useTermDrawer } from "./drawer";
 import { termName } from "./terminals";
 import { TerminalView } from "./TerminalView";
 
@@ -128,6 +128,7 @@ export function TerminalDrawer({ dir, visible, onOpenFile }: { dir: string; visi
           hidden={!open || x.id !== st.active}
           onExit={() => void terminalExited(dir, x.id)}
           onOpenFile={onOpenFile}
+          onRestart={() => void restartTerminal(dir, x.id).catch(fail)}
         />
       ))}
       <div

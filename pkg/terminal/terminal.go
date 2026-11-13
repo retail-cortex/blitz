@@ -60,7 +60,21 @@ var (
 	ErrUnsupported = errors.New("terminals aren't supported on this system yet")
 	// ErrClosed is a manager whose workspace has closed.
 	ErrClosed = errors.New("the workspace's terminals are closed")
+	// ErrNotReading is input the shell hasn't taken for WriteTimeout: what
+	// runs in it isn't reading (a hung program, an ssh whose network went),
+	// so its input is full (TRM-13a).
+	ErrNotReading = errors.New("the terminal isn't taking input: what runs in it isn't reading")
+	// ErrExited is input for a shell that has exited.
+	ErrExited = errors.New("the terminal's shell has exited")
 )
+
+// WriteTimeout is how long input waits for room in the shell's input
+// before the write fails with ErrNotReading (TRM-13a); a variable for
+// tests.
+var WriteTimeout = 5 * time.Second
+
+// inputQueue is how many writes wait behind one the PTY is taking.
+const inputQueue = 64
 
 // killAfter is how long a closed terminal's shell has to end after its
 // hangup before it's killed (TRM-03); a variable for tests.
@@ -158,6 +172,7 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 	t := &Terminal{
 		info: Info{ID: newID(), Dir: o.Dir, Shell: shell, Started: time.Now()},
 		pty:  f, cmd: cmd, limit: m.scrollback, done: make(chan struct{}), changed: make(chan struct{}),
+		in: make(chan []byte, inputQueue),
 	}
 	m.mu.Lock()
 	if m.closed { // closed while it started
@@ -170,6 +185,7 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 	m.mu.Unlock()
 	go t.read()
 	go t.wait()
+	go t.write()
 	return t, nil
 }
 
@@ -242,6 +258,7 @@ type Terminal struct {
 	readEOF bool
 	done    chan struct{} // closed when the shell has exited and its output is read
 	once    sync.Once
+	in      chan []byte // input for the writer, in order (TRM-13a)
 }
 
 // Info is the terminal as the window lists it.
@@ -251,13 +268,39 @@ func (t *Terminal) Info() Info {
 	return t.info
 }
 
-// Write writes to the shell's input (TRM-13).
+// Write writes to the shell's input (TRM-13), through the terminal's
+// writer: a PTY whose input is full blocks its writer, never the caller,
+// who gets ErrNotReading once the queue has had no room for WriteTimeout
+// (TRM-13a).
 func (t *Terminal) Write(p []byte) error {
 	if len(p) > MaxWrite {
 		return fmt.Errorf("at most %d bytes a write", MaxWrite)
 	}
-	_, err := t.pty.Write(p)
-	return err
+	timer := time.NewTimer(WriteTimeout)
+	defer timer.Stop()
+	select {
+	case t.in <- slices.Clone(p):
+		return nil
+	case <-t.done:
+		return ErrExited
+	case <-timer.C:
+		return ErrNotReading
+	}
+}
+
+// write gives the queued input to the PTY until the shell is done; a
+// write the shell isn't reading blocks here, and ends when the PTY closes.
+func (t *Terminal) write() {
+	for {
+		select {
+		case p := <-t.in:
+			if _, err := t.pty.Write(p); err != nil {
+				return
+			}
+		case <-t.done:
+			return
+		}
+	}
 }
 
 // Resize sets the terminal's size (TRM-11).

@@ -56,6 +56,12 @@ export function removed(s: TermDrawer, id: string): TermDrawer {
   return { list, active, open: list.length > 0 && s.open };
 }
 
+/** s with terminal id's tab taken by t, in its place, shown if it was (TRM-27's restart). */
+export function replaced(s: TermDrawer, id: string, t: TermEntry): TermDrawer {
+  if (!s.list.some((x) => x.id === id)) return added(s, t);
+  return { ...s, list: s.list.map((x) => (x.id === id ? t : x)), active: s.active === id ? t.id : s.active };
+}
+
 /** The drawer down on terminal id (else the one shown last, else the first). */
 export function shown(s: TermDrawer, id?: string): TermDrawer {
   const active = id && s.list.some((x) => x.id === id) ? id : s.active || s.list[0]?.id || "";
@@ -126,6 +132,20 @@ export async function toggleTerminals(ws: string): Promise<void> {
 export async function closeTerminal(ws: string, id: string): Promise<void> {
   set(ws, (s) => removed(s, id));
   await terminals.closeTerminal({ workspace: ws, id }).catch(() => {}); // gone already: nothing to do
+}
+
+/**
+ * Restarts terminal id (TRM-27): a new shell in its folder takes its tab,
+ * then the old one is ended (one that's stuck, or that the service no
+ * longer has).
+ */
+export async function restartTerminal(ws: string, id: string): Promise<TermEntry> {
+  const old = get(ws).list.find((x) => x.id === id);
+  const { terminal } = await terminals.openTerminal({ workspace: ws, dir: old?.dir ?? "" });
+  const t: TermEntry = { id: terminal!.id, dir: terminal!.dir, shell: terminal!.shell };
+  set(ws, (s) => replaced(s, id, t));
+  await terminals.closeTerminal({ workspace: ws, id }).catch(() => {}); // gone already: nothing to do
+  return t;
 }
 
 /** Terminal id's shell exited (`exit`, ⌃D): it closes like its tab's ✕ (TRM-26). */

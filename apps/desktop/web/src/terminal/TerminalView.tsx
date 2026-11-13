@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { mdiChevronDown, mdiChevronUp, mdiClose, mdiMagnify } from "@mdi/js";
-import { ContextMenu, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { mdiAlertOutline, mdiChevronDown, mdiChevronUp, mdiClose, mdiMagnify, mdiRestart } from "@mdi/js";
+import { Button, ContextMenu, Icon, IconButton } from "@blitz/webui";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -26,12 +26,22 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 import { files, terminals } from "../api";
 import { openURL } from "../desktop";
-import { message } from "../errors";
+import { reason } from "../errors";
 import { t } from "../i18n";
 import { useApp } from "../state";
 import { isToggleTerminalKey, type TermEntry } from "./drawer";
+import { answerWatch, follow, type LinkState } from "./follow";
 import { bundledFont, fontFamily, pathLinks, termColors, termKey } from "./terminals";
 import "./terminal.css";
+
+/**
+ * How long typed keys may go without an answer (their echo, or any
+ * output) before the bar offers a restart (TRM-27); a write that waits
+ * longer than writeTimeoutMs has failed (the service gives up at 5 s,
+ * TRM-13a).
+ */
+export const quietMs = 8000;
+const writeTimeoutMs = 8000;
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -52,6 +62,7 @@ export function TerminalView({
   hidden,
   onExit,
   onOpenFile,
+  onRestart,
 }: {
   workspace: string;
   entry: TermEntry;
@@ -62,6 +73,8 @@ export function TerminalView({
   onExit: () => void;
   /** Opens a workspace file the shell printed (a ⌘-click on its path). */
   onOpenFile: (path: string, line?: number, column?: number) => void;
+  /** A new shell in its folder takes its tab (TRM-27). */
+  onRestart: () => void;
 }) {
   const { prefs, theme } = useApp();
   const host = useRef<HTMLDivElement>(null);
@@ -71,7 +84,11 @@ export function TerminalView({
   const [finding, setFinding] = useState(false);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const snack = useSnackbar();
+  // The connection, and whether typed keys are going unanswered (TRM-27).
+  const [link, setLink] = useState<LinkState>("ok");
+  const [quiet, setQuiet] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const retry = useRef(() => {});
   const id = entry.id;
   // The latest callbacks, for xterm's handlers made once.
   const calls = useRef({ onExit, onOpenFile, setFinding });
@@ -156,11 +173,26 @@ export function TerminalView({
       }
     });
 
-    // Keys and pastes, in order (TRM-13).
+    // Typed keys with no answer: the shell isn't answering (TRM-27).
+    const answers = answerWatch(quietMs, (q) => {
+      setQuiet(q);
+      if (!q) setDismissed(false);
+    });
+    // Keys and pastes, in order (TRM-13), each with a time limit, so one
+    // the service can't deliver never holds up the rest (TRM-13a).
     const enc = new TextEncoder();
     let sending = Promise.resolve();
     const send = (data: Uint8Array) => {
-      sending = sending.then(() => terminals.writeTerminal({ workspace, id, data }).then(() => {}, () => {}));
+      answers.typed();
+      sending = sending.then(() =>
+        terminals.writeTerminal({ workspace, id, data }, { timeoutMs: writeTimeoutMs }).then(
+          () => {},
+          (e: unknown) => {
+            if (reason(e) === "UNKNOWN_TERMINAL") setLink("gone");
+            else setQuiet(true);
+          },
+        ),
+      );
     };
     const input = x.onData((d) => send(enc.encode(d)));
     const binary = x.onBinary((d) => send(Uint8Array.from(d, (c) => c.charCodeAt(0) & 0xff)));
@@ -175,24 +207,32 @@ export function TerminalView({
     });
     observer.observe(el);
 
-    // Its output, from the scrollback on (TRM-12, TRM-26).
+    // Its output, from the scrollback on (TRM-12, TRM-26), watched again
+    // from where it was read up to after a break (TRM-27).
     const stop = new AbortController();
-    void (async () => {
-      await ready;
-      try {
-        for await (const m of terminals.watchTerminal({ workspace, id, from: 0n }, { signal: stop.signal })) {
-          if (m.skipped > 0n) x.write("\x1b[2m…\x1b[0m\r\n");
-          if (m.data.length) x.write(m.data);
-          if (m.exited) calls.current.onExit();
-        }
-      } catch (e) {
-        if (!stop.signal.aborted) snack(message(e));
-      }
-    })();
+    void ready.then(() => {
+      if (stop.signal.aborted) return;
+      const f = follow(
+        {
+          watch: (from, signal) => terminals.watchTerminal({ workspace, id, from }, { signal }),
+          onChunk: (m) => {
+            if (m.skipped > 0n) x.write("\x1b[2m…\x1b[0m\r\n");
+            if (m.data.length) x.write(m.data);
+            answers.answered();
+          },
+          onExit: () => calls.current.onExit(),
+          onState: setLink,
+          isGone: (e) => reason(e) === "UNKNOWN_TERMINAL",
+        },
+        stop.signal,
+      );
+      retry.current = f.retry;
+    });
 
     return () => {
       disposed = true;
       stop.abort();
+      answers.stop();
       clearTimeout(sizing);
       observer.disconnect();
       input.dispose();
@@ -235,9 +275,33 @@ export function TerminalView({
     else search.current?.findNext(query);
   };
   const paste = () => void navigator.clipboard?.readText().then((text) => term.current?.paste(text), () => {});
+  // What the bar says, if anything (TRM-27): the connection first, then
+  // keys going unanswered.
+  const trouble = link !== "ok" ? link : quiet && !dismissed ? "quiet" : null;
 
   return (
     <div className="terminal-view" hidden={hidden} aria-label={t("desktop.terminal.label", { name })}>
+      {trouble && (
+        <div className="banner terminal-trouble" role="status">
+          <Icon path={mdiAlertOutline} size="sm" />
+          <span className="spacer t-body-sm">{t(`desktop.terminal.trouble.${trouble}`)}</span>
+          {(trouble === "reconnecting" || trouble === "lost") && (
+            <Button variant="text" small onClick={() => retry.current()}>
+              {t("desktop.terminal.reconnect")}
+            </Button>
+          )}
+          {trouble === "quiet" && (
+            <Button variant="text" small onClick={() => setDismissed(true)}>
+              {t("desktop.terminal.keep_waiting")}
+            </Button>
+          )}
+          {trouble !== "reconnecting" && (
+            <Button variant="tonal" small icon={mdiRestart} onClick={onRestart}>
+              {t("desktop.terminal.restart")}
+            </Button>
+          )}
+        </div>
+      )}
       {finding && (
         <div className="find-bar" role="search">
           <Icon path={mdiMagnify} size="sm" />
@@ -293,6 +357,8 @@ export function TerminalView({
             "divider",
             { label: t("desktop.terminal.clear"), onSelect: () => term.current?.clear() },
             { label: t("desktop.terminal.find"), icon: mdiMagnify, onSelect: () => setFinding(true) },
+            "divider",
+            { label: t("desktop.terminal.restart"), icon: mdiRestart, onSelect: onRestart },
           ]}
         />
       )}

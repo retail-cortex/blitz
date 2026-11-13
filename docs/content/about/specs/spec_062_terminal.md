@@ -44,7 +44,9 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   - output older than the scrollback is skipped, and the first message says how much (`skipped`).
 
   When the shell exits, the last message has `exited` and the exit code, and the stream ends. Several windows can watch one terminal.
+- **TRM-12a** *2026-11-12 (the owner: "When the console is open and there is any kind of network interruption, the console hangs and doesn't allow input.")* **A heartbeat.** `WatchTerminal` sends an empty message (no data, offset 0) when it starts and every 10 s while nothing else is sent, so the window can tell a broken stream from a quiet shell. An empty message's offset isn't where the output ends.
 - **TRM-13** `WriteTerminal(id, data)` writes to the shell's input: keys, pastes, as bytes.
+- **TRM-13a** *2026-11-12.* **Input never blocks.** Each terminal has one writer, fed by a queue of 64 writes, so a shell that stops reading its input (a hung program, an `ssh` whose network went) blocks the writer, never the call: a write that finds no room for 5 s fails with `TERMINAL_NOT_READING`, and one for a shell that has exited with `TERMINAL_EXITED`. Until then a write to a full PTY blocked `WriteTerminal` for good, and every key the window queued behind it waited.
 - **TRM-14** `ListTerminals` answers the workspace's terminals, oldest first. `CloseTerminal(id)` ends one (TRM-03).
 - **TRM-15** **Errors**, with SVC-30's ErrorInfo reasons:
   - `UNKNOWN_TERMINAL`: no such id, or it's been closed;
@@ -82,6 +84,13 @@ A developer keeps a terminal open beside their files: to run a build, check git,
   They apply to open terminals at once.
 - **TRM-26** **Coming back.** A terminal's view stays drawn while another tab is shown or the drawer is up, so nothing is lost. A window that reloads lists the workspace's terminals and puts a tab for each in the drawer (TRM-14), drawing each from its scrollback (TRM-12, from 0), so it shows as it was. The drawer stays up after a reload: the terminals are there when you open it. When the shell exits (`exit`, ⌃D), its tab closes and the terminal with it, as its ✕ would, and the drawer goes up with the last; a shell that exited while no window watched is closed when a window lists it, not shown. That's what a terminal app does, and an ended shell has nothing left to show.
 
+- **TRM-27** *2026-11-12 (the owner: "If the console is locked up, it should offer a restart.")* **Coming back from a break, or starting again** (`terminal/follow.ts`). The window watches the stream again from the offset it has read up to after an error, the stream's end without the shell's exit, or 25 s without a message (TRM-12a's heartbeat makes that a broken stream), waiting 0.5, 1, 2, then 4 s between tries. A bar over the terminal says how it is:
+  - **reconnecting**, with **Reconnect now**;
+  - after four failed tries, **lost**, with **Reconnect now** and **Restart terminal**;
+  - **gone** (`UNKNOWN_TERMINAL`: the service restarted), with **Restart terminal**;
+  - **not answering**: typed keys have had no answer (not even their echo) for 8 s, or a key couldn't be sent (each write waits at most 8 s, so one never holds up the rest). It offers **Keep waiting** and **Restart terminal**, and goes when output comes.
+
+  **Restart terminal**, also in the terminal's right-click menu, opens a new shell in the same folder in the same tab, then ends the old one.
 ## 5. Opening one
 
 - **TRM-30** **New terminal** is the drawer's **+** and in the command menu (⌘K, "terminal"). It opens a terminal in the workspace's folder and drops the drawer down on it.
