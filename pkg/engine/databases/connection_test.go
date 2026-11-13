@@ -152,7 +152,7 @@ func TestRenderReadOnlyLeavesOutWrites(t *testing.T) {
 		readOnly bool
 		offered  bool
 	}{
-		{"read-only", true, false},
+		{"read-only", true, true},
 		{"read and write", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

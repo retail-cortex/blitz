@@ -251,12 +251,19 @@ func TestTestTryAndSchema(t *testing.T) {
 		names = append(names, tl.Name)
 		assert.True(t, tl.ReadOnly, tl.Name)
 	}
-	assert.Equal(t, []string{"kitchen_count", "kitchen_list_tables"}, names, "execute_sql writes: hidden on a read-only one")
+	assert.Equal(t, []string{"kitchen_count", "kitchen_execute_sql", "kitchen_list_tables"}, names, "the file refuses writes: execute_sql runs unasked")
 
 	text, isErr, err := Backend{}.Try(ctx, env, k, c, "count", nil)
 	require.NoError(t, err)
 	assert.False(t, isErr)
 	assert.JSONEq(t, `{"n": 2}`, text)
+	text, isErr, err = Backend{}.Try(ctx, env, k, c, "execute_sql", map[string]any{"sql": "SELECT count(*) AS n FROM recipes"})
+	require.NoError(t, err)
+	assert.False(t, isErr, text)
+	assert.Contains(t, text, `"n":2`)
+	text, isErr, err = Backend{}.Try(ctx, env, k, c, "execute_sql", map[string]any{"sql": "DELETE FROM recipes"})
+	require.NoError(t, err)
+	assert.True(t, isErr, "a read-only file refuses the write: %s", text)
 
 	tables, err := Backend{}.ReadSchema(ctx, env, k, c)
 	require.NoError(t, err)

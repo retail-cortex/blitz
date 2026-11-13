@@ -77,7 +77,7 @@ It prints the table with each column's type, then how many rows (and whether `--
 | | Read-only | Can write |
 |---|---|---|
 | PostgreSQL, AlloyDB | every session is read-only, and `execute_sql` runs in a read-only transaction: no SQL gets a write through | writes work |
-| SQLite | the file is opened read-only | writes work |
+| SQLite | the file is opened read-only, so `execute_sql` can only read | writes work |
 | BigQuery | writes are blocked (`writeMode: blocked`) | writes work |
 | Tools that write | not offered | offered |
 | Asking first | tools run without asking: they can't change anything | every tool asks first, like any MCP tool |

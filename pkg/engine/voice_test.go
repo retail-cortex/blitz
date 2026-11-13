@@ -198,9 +198,11 @@ func TestVoiceConversation(t *testing.T) {
 	}
 }
 
-// Approvals by voice (VOX-13): said when it shows; a spoken yes allows
-// only that approval, only once; a no denies; anything unclear, or another
-// approval's ID, leaves it for a click. Questions are said and answered.
+// Approvals by voice (VOX-13): said when it shows, with no ID; a spoken
+// yes allows only the approval showing, only once, and only when said
+// after it showed; a no denies; anything unclear leaves it for a click.
+// One answered in the window is said to be settled. Questions are said and
+// answered.
 func TestVoiceApprovals(t *testing.T) {
 	w, live := openVoice(t, nil)
 	evs := newVoiceEvents()
@@ -210,18 +212,21 @@ func TestVoiceApprovals(t *testing.T) {
 	live.Opened(wait)
 
 	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run make deploy"})
-	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "permission (ID ap1) before you go on: to run make deploy. Ask them, in these words or close to them: \"I need permission to run make deploy, may I?\"")
+	note := fmt.Sprint(live.Next("clientContent", wait))
+	assert.Contains(t, note, "permission before you go on: to run make deploy. Ask them, in these words or close to them: \"I need permission to run make deploy, may I?\"")
+	assert.NotContains(t, note, "ap1")
 
-	for _, tc := range []struct{ heard, choice, id, want, decision string }{
-		{"hmm, what does it do", "yes", "ap1", "didn't clearly say", ""},
-		{"yes go ahead", "yes", "ap2", "isn't the one showing", ""},
-		{"yes go ahead", "yes", "ap1", "allowed once", "once"},
-		{"no don't", "no", "ap1", "denied", "deny"},
+	for _, tc := range []struct{ heard, choice, want, decision string }{
+		{"hmm, what does it do", "yes", "didn't clearly say", ""},
+		{"yes you may not", "yes", "didn't clearly say", ""},
+		{"You may", "yes", "allowed once", "once"},
+		{"Sure.", "no", "didn't clearly say", ""},
+		{"no don't", "no", "denied", "deny"},
 	} {
-		t.Run(tc.heard+"/"+tc.id, func(t *testing.T) {
+		t.Run(tc.heard, func(t *testing.T) {
 			live.Heard(tc.heard)
 			evs.next(t, "heard")
-			res := live.Call("a-"+tc.id+tc.decision, "answer", map[string]any{"choice": tc.choice, "approval_id": tc.id}, wait)
+			res := live.Call("a-"+tc.heard, "answer", map[string]any{"choice": tc.choice}, wait)
 			assert.Contains(t, fmt.Sprint(res), tc.want)
 			if tc.decision != "" {
 				ev := evs.next(t, "approve")
@@ -231,6 +236,18 @@ func TestVoiceApprovals(t *testing.T) {
 		})
 	}
 
+	// ap1 was answered by voice, so its going isn't news; a yes heard
+	// before ap2 showed isn't a yes to it.
+	live.Heard("yes go ahead")
+	evs.next(t, "heard")
+	v.Waiting(VoiceWaiting{ApprovalID: "ap2", Approval: "edit main.go"})
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "permission before you go on: to edit main.go.")
+	assert.Contains(t, fmt.Sprint(live.Call("stale", "answer", map[string]any{"choice": "yes"}, wait)), "didn't clearly say")
+
+	// ap2, clicked in the window, is said to be settled.
+	v.Waiting(VoiceWaiting{})
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "answered the permission to edit main.go in the window: don't ask about it")
+
 	v.Waiting(VoiceWaiting{Question: "Which database?", Options: []string{"Postgres", "SQLite"}})
 	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "Which database? (options: Postgres; SQLite)")
 	res := live.Call("q1", "answer", map[string]any{"choice": "Postgres"}, wait)
@@ -238,7 +255,7 @@ func TestVoiceApprovals(t *testing.T) {
 	assert.Equal(t, "Postgres", evs.next(t, "answer").Text)
 	v.Waiting(VoiceWaiting{})
 	res = live.Call("q2", "answer", map[string]any{"choice": "x"}, wait)
-	assert.Contains(t, res["error"], "no question")
+	assert.Contains(t, res["error"], "nothing is waiting")
 }
 
 // A connection the server ends (goAway, its session limit) is resumed with
@@ -393,7 +410,7 @@ func TestVoiceEdges(t *testing.T) {
 	live.Next("clientContent", wait)
 	st := fmt.Sprint(live.Call("e4", "status", map[string]any{}, wait)["status"])
 	assert.Contains(t, st, "its task list: write the test")
-	assert.Contains(t, st, "An approval is waiting (ID ap9): rm -rf build.")
+	assert.Contains(t, st, "A permission is waiting: to rm -rf build.")
 	assert.Contains(t, st, "A question is waiting: Which branch? (options: main).")
 	w.factsEnd("edges", api.TurnResult{}, nil)
 	live.Next("clientContent", wait)

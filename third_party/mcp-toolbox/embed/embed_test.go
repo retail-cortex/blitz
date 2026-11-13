@@ -236,8 +236,9 @@ func TestSQLiteVec(t *testing.T) {
 	assert.EqualValues(t, 3, rows[1]["rowid"])
 }
 
-// A read-only SQLite source offers no tool that writes, and SQLite itself
-// refuses a write, even from a tool that says it doesn't write.
+// A read-only SQLite source offers execute_sql, marked read-only (patch
+// 10), and SQLite itself refuses a write from it, or from a tool that says
+// it doesn't write.
 func TestSQLiteReadOnly(t *testing.T) {
 	db := recipes(t)
 	cfg, err := Load(context.Background(), []string{writeConfig(t, `kind: source
@@ -265,11 +266,19 @@ annotations:
 	cs := connect(t, cfg)
 	list, err := cs.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, list.Tools, 1, "run_sql writes: not offered")
-	assert.Equal(t, "wipe", list.Tools[0].Name)
+	require.Len(t, list.Tools, 2)
+	for _, tl := range list.Tools {
+		require.NotNil(t, tl.Annotations, tl.Name)
+		assert.True(t, tl.Annotations.ReadOnlyHint, tl.Name)
+	}
 	got, isErr := call(t, cs, "wipe", nil)
 	assert.True(t, isErr)
 	assert.Contains(t, got, "readonly")
+	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "DELETE FROM recipes"})
+	assert.True(t, isErr)
+	assert.Contains(t, got, "readonly")
+	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "SELECT count(*) AS n FROM recipes"})
+	assert.False(t, isErr, got)
 }
 
 // A database that can't be reached fails Start; Close is safe twice.

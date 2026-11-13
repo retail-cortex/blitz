@@ -105,7 +105,8 @@ type Voice struct {
 	waiting   VoiceWaiting
 	heard     strings.Builder // what the person said since the voice last answered
 	said      strings.Builder // what the voice is saying
-	lastHeard string          // the person's last whole line
+	lastHeard string          // the person's last whole line since the approval showing appeared
+	decided   string          // the approval the voice answered, so its going isn't news
 	handed    bool            // a run_task this conversation handed over, not yet ended
 	active    time.Time       // the last thing said or done
 	ending    string          // why, once the voice said goodbye
@@ -119,9 +120,9 @@ const voicePrompt = `You are Blitz, talking with the person who works in this wo
 - Keep every reply short: one or two sentences, unless they ask for more. You are heard, not read: no lists, no Markdown, no code read aloud; say file names plainly.
 - You only know what's in the workspace by working on it. Anything that needs reading files, explaining the project, running commands, searching or changing something, you start by calling run_task, its request a clear, complete written request (what to do, where, and how to know it's done). Call run_task first, before you say anything about it; once it returns ok, say in a few words that you're on it ("I'm looking into that now"). Never say you're on something unless run_task returned ok in this turn. While the work runs, more for it goes through steer (its request); "stop" or "cancel" is stop.
 - Don't make up what you haven't found: for where the work stands, call status; for what was said earlier in the conversation, recent.
-- When you need the person's permission to do something (yours, or part of your work running in the background), ask "I need permission to …, may I?", the action in plain words. Call answer with the approval's ID only after they clearly say yes or no. A spoken yes allows it once; for anything broader, they click.
+- When you need the person's permission to do something (yours, or part of your work running in the background), ask "I need permission to …, may I?", the action in plain words. Call answer with their words only after they clearly say yes or no. A spoken yes allows it once; for anything broader, they click.
 - When you have a question for the person, ask it with its options, then call answer with their choice.
-- Messages that start with [Blitz] are notes to you, not from the person: act on them and tell the person in your own words, in the first person. When your work ends, the note has what you found: give the gist of it (answer their question from it), and never say you found nothing unless it says so.
+- Messages that start with [Blitz] are notes to you, not from the person: act on them and tell the person in your own words, in the first person. Never read a note out, nor a tool's name or an ID. When your work ends, the note has what you found: give the gist of it (answer their question from it), and never say you found nothing unless it says so.
 - When the person says they're done ("stop listening", "goodbye", "that's all"), say a short goodbye and call end_conversation.`
 
 // StartVoice opens a voice conversation about a session (VOX-07, VOX-10):
@@ -245,13 +246,22 @@ func (v *Voice) Activity(start bool) error {
 // Waiting is what the window shows waiting on the person; a new approval
 // or question is said (VOX-13, VOX-17).
 func (v *Voice) Waiting(now VoiceWaiting) {
+	v.closeHeard()
 	v.mu.Lock()
 	before := v.waiting
 	v.waiting = now
+	settled := before.ApprovalID != "" && now.ApprovalID != before.ApprovalID && v.decided != before.ApprovalID
+	if now.ApprovalID != before.ApprovalID {
+		// A yes said before this card showed isn't a yes to it.
+		v.lastHeard = ""
+	}
 	v.mu.Unlock()
+	if settled {
+		v.tellQuietly(fmt.Sprintf("[Blitz] The person answered the permission to %s in the window: don't ask about it.", before.Approval))
+	}
 	switch {
 	case now.ApprovalID != "" && now.ApprovalID != before.ApprovalID:
-		v.tellQuietly(fmt.Sprintf("[Blitz] You need the person's permission (ID %s) before you go on: to %s. Ask them, in these words or close to them: \"I need permission to %s, may I?\"", now.ApprovalID, now.Approval, now.Approval))
+		v.tellQuietly(fmt.Sprintf("[Blitz] You need the person's permission before you go on: to %s. Ask them, in these words or close to them: \"I need permission to %s, may I?\"", now.Approval, now.Approval))
 	case now.Question != "" && now.Question != before.Question:
 		v.tellQuietly(fmt.Sprintf("[Blitz] You have a question for the person: %s%s. Ask it.", now.Question, optionsText(now.Options)))
 	}
@@ -473,8 +483,7 @@ type VoiceTaskInput struct {
 
 // VoiceAnswerInput is answer's.
 type VoiceAnswerInput struct {
-	Choice     string `json:"choice" jsonschema:"For a question: the option chosen, or the person's answer. For an approval: yes or no"`
-	ApprovalID string `json:"approval_id,omitempty" jsonschema:"The approval's ID, from Blitz's message or status, when answering an approval"`
+	Choice string `json:"choice" jsonschema:"For a question: the option chosen, or the person's answer. For a permission: yes or no"`
 }
 
 // VoiceRecentInput is recent's.
@@ -533,12 +542,12 @@ func (v *Voice) tools() ([]tool.Tool, error) {
 				v.opts.OnEvent(VoiceEvent{Kind: "stop"})
 				return VoiceResult{OK: true}, nil
 			})),
-		add(functiontool.New(functiontool.Config{Name: "status", Description: "Where things stand: what's running, what's waiting on the person (an approval with its ID, a question), and how the last task ended."},
+		add(functiontool.New(functiontool.Config{Name: "status", Description: "Where things stand: what's running, what's waiting on the person (a permission, a question), and how the last task ended."},
 			func(agent.Context, VoiceNone) (VoiceResult, error) {
 				v.touch()
 				return VoiceResult{OK: true, Status: v.status()}, nil
 			})),
-		add(functiontool.New(functiontool.Config{Name: "answer", Description: "Answer the agent's question, or an approval (with its ID) once the person clearly said yes or no."},
+		add(functiontool.New(functiontool.Config{Name: "answer", Description: "Answer the question waiting, or the permission waiting once the person clearly said yes or no."},
 			func(_ agent.Context, in VoiceAnswerInput) (VoiceResult, error) {
 				v.touch()
 				return v.answer(in), nil
@@ -560,38 +569,42 @@ func (v *Voice) tools() ([]tool.Tool, error) {
 }
 
 var (
-	spokenYes = regexp.MustCompile(`(?i)\b(yes|yeah|yep|yup|sure|ok|okay|allow( it)?|go ahead|do it|approve[d]?|sí|si|oui|d'accord|vas-y|adelante)\b`)
-	spokenNo  = regexp.MustCompile(`(?i)\b(no|nope|don'?t|deny|refuse|stop|cancel|not|non|pas|nunca)\b`)
+	spokenYes = regexp.MustCompile(`(?i)\b(yes|yeah|yep|yup|sure|ok|okay|alright|all right|fine|allow( it)?|go ahead|go for it|do it|please do|you may|you can|of course|certainly|absolutely|definitely|sounds good|proceed|granted|approve[d]?|sí|si|claro|puedes|oui|d'accord|vas-y|bien sûr|adelante)\b`)
+	spokenNo  = regexp.MustCompile(`(?i)\b(no|nope|don'?t|do not|can'?t|cannot|won'?t|shouldn'?t|deny|denied|refuse|stop|cancel|not|never|negative|non|pas|nunca)\b`)
 )
 
-// answer is VOX-13: an approval only once, only the one showing, and only
-// after the person's own words say so; a question by its answer.
+// answer is VOX-13: the approval showing, if one is, only once and only
+// after the person's own words since it showed say so; else the question
+// by its answer. The voice never handles an approval's ID: the one
+// showing is the one answered.
 func (v *Voice) answer(in VoiceAnswerInput) VoiceResult {
 	v.closeHeard()
 	v.mu.Lock()
 	w, heard := v.waiting, v.lastHeard
 	v.mu.Unlock()
-	if in.ApprovalID == "" {
+	if w.ApprovalID == "" {
 		if w.Question == "" {
-			return VoiceResult{Error: "no question is waiting"}
+			return VoiceResult{Error: "nothing is waiting on the person"}
 		}
 		v.opts.OnEvent(VoiceEvent{Kind: "answer", Text: strings.TrimSpace(in.Choice)})
 		return VoiceResult{OK: true}
 	}
-	if w.ApprovalID == "" || in.ApprovalID != w.ApprovalID {
-		return VoiceResult{Error: "that approval isn't the one showing: ask the person to look at the window"}
-	}
 	yes, no := spokenYes.MatchString(heard), spokenNo.MatchString(heard)
-	choiceYes := spokenYes.MatchString(in.Choice) && !spokenNo.MatchString(in.Choice)
-	switch {
-	case no && !yes || !choiceYes && spokenNo.MatchString(in.Choice) && no:
-		v.opts.OnEvent(VoiceEvent{Kind: "approve", ID: w.ApprovalID, Decision: "deny"})
-		return VoiceResult{OK: true, Status: "denied"}
-	case choiceYes && yes && !no:
-		v.opts.OnEvent(VoiceEvent{Kind: "approve", ID: w.ApprovalID, Decision: "once"})
-		return VoiceResult{OK: true, Status: "allowed once"}
+	choiceYes, choiceNo := spokenYes.MatchString(in.Choice), spokenNo.MatchString(in.Choice)
+	decide := func(d, status string) VoiceResult {
+		v.mu.Lock()
+		v.decided = w.ApprovalID
+		v.mu.Unlock()
+		v.opts.OnEvent(VoiceEvent{Kind: "approve", ID: w.ApprovalID, Decision: d})
+		return VoiceResult{OK: true, Status: status}
 	}
-	return VoiceResult{Error: "the person didn't clearly say yes or no: ask again, or leave it for them to click"}
+	switch {
+	case no && !yes && choiceNo:
+		return decide("deny", "denied")
+	case yes && !no && choiceYes && !choiceNo:
+		return decide("once", "allowed once")
+	}
+	return VoiceResult{Error: "the person didn't clearly say yes or no since you asked: ask again, or leave it for them to click"}
 }
 
 // status is what the status tool says (VOX-11), with nothing secret in it
@@ -616,7 +629,7 @@ func (v *Voice) status() string {
 	w := v.waiting
 	v.mu.Unlock()
 	if w.ApprovalID != "" {
-		fmt.Fprintf(&b, "An approval is waiting (ID %s): %s. ", w.ApprovalID, w.Approval)
+		fmt.Fprintf(&b, "A permission is waiting: to %s. ", w.Approval)
 	}
 	if w.Question != "" {
 		fmt.Fprintf(&b, "A question is waiting: %s%s. ", w.Question, optionsText(w.Options))

@@ -102,6 +102,25 @@ func (t Tool) ValidateSource(source sources.Source) error {
 	return nil
 }
 
+// GetAnnotations returns readOnlyHint: true and destructiveHint: false when
+// the source is read-only (Blitz): the file is opened mode=ro, so SQLite
+// refuses any write, and the tool isn't hidden on it.
+func (t Tool) GetAnnotations(src sources.Source) *tools.ToolAnnotations {
+	base := t.BaseTool.GetAnnotations(src)
+	if src == nil || !src.IsReadOnly() {
+		return base
+	}
+
+	res := tools.NewReadOnlyAnnotations()
+	if base != nil {
+		copied := *base
+		copied.ReadOnlyHint = res.ReadOnlyHint
+		copied.DestructiveHint = res.DestructiveHint
+		return &copied
+	}
+	return res
+}
+
 func (t Tool) Invoke(ctx context.Context, s sources.Source, params parameters.ParamValues, accessToken tools.AccessToken) (any, util.ToolboxError) {
 	source, ok := s.(compatibleSource)
 	if !ok {

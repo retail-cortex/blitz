@@ -61,17 +61,18 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - `run_task(request)`: starts a turn in the session with `request` as the person's message (spoken requests are rephrased into a clear written prompt, and the written prompt is what's shown and kept), through the same turn path as a typed message: hooks, the agent, approvals, limits, the record. Refused while a turn runs: then it's `steer`.
   - `steer(request)`: adds to the running turn, as the composer's steer does (spec_024).
   - `stop()`: stops the running turn, as the Stop button does.
-  - `status()`: what's running (the turn, its task list, its last tool calls by name, how long it has run), what's waiting on the person (an approval, a question), and the last turn's result (its answer's start, the files it changed, its tests, its cost).
-  - `answer(choice)`: answers the question the agent asked, by one of its offered options or as free text (VOX-13 for approvals).
+  - `status()`: what's running (the turn, its task list, its last tool calls by name, how long it has run), what's waiting on the person (a permission, a question), and the last turn's result (its answer's start, the files it changed, its tests, its cost).
+  - `answer(choice)`: answers what's waiting: the permission showing, else the question the agent asked, by one of its offered options or as free text (VOX-13).
   - `recent(n)`: the last `n` (at most 10) messages of the conversation, as text, so "what did it say about the cart?" can be answered.
   - `end_conversation()`: ends the conversation once its goodbye has been said (VOX-14).
 - **VOX-12** **Nothing secret reaches the voice.** What `status` and `recent` give the voice model goes through the same redaction as the agent's tool output (keys, tokens, hidden files never in it: spec_006 FS-15), and they never include file contents beyond what's already in the conversation.
 - **VOX-13** **Approvals by voice, carefully.** When Blitz needs permission to run a command or change a file, in the conversation's own turn or a background task's or sub-agent's, the voice asks in the first person, the action in plain words ("I need permission to run `make deploy`, may I?"). A spoken yes allows it **once**, and only when:
-  - that approval card is showing in the window, and
-  - the voice model's `answer` names that approval (its ID, which only `status` gives it), and
-  - the transcript of what the person said is a yes (Blitz checks the words, not only the model's reading of them).
+  - that approval card is showing in the window (it's the one answered: the voice model never sees an approval's ID, which it would read out), and
+  - what the person said since the card showed is a yes ("yes", "sure", "you may", "go ahead", …), with no no in it, and the model's `answer` says yes too (Blitz checks the words, not only the model's reading of them). A yes said before the card showed isn't one.
 
-  "For the session" and "always" can't be given by voice; denying can. Anything else (a mishearing, a second approval arriving) leaves the card for a click.
+  "For the session" and "always" can't be given by voice; denying can. Anything else (a mishearing, a second approval arriving) leaves the card for a click. A card answered in the window is a note to the voice ("the person answered it in the window"), so it doesn't ask about it after.
+
+  *2026-11-13 (the owner: "the buttons appear, but the agent can't seem to clear them").* "You may" wasn't a yes, so the card waited for a click; the voice kept asking about cards already clicked, and once read its note and an ID aloud. Fixed as above.
 - **VOX-14** **When it ends.** A voice conversation ends when the person clicks the microphone again, says to stop ("stop listening", the voice ends it with a goodbye), closes the workspace or the window, turns voice off, or after `idle_minutes` with nothing said and nothing running. A turn the voice started keeps running when the voice conversation ends; its summary is then spoken only with `summaries = "always"`.
 - **VOX-15** **One at a time.** One voice conversation per workspace in the service (a second is refused, `VOICE_BUSY`), and one per window: while one is open, the other workspaces' microphones are hidden. It's about the session showing when it starts.
 - **VOX-16** **The record.** The conversation keeps what was said, in writing: the person's words (from the input transcript) and the voice's replies (from the output transcript), each marked as spoken, in the session's messages beside the typed ones, so they're searched, summarised and resumed like any other. A spoken exchange that only answered (no `run_task`) is kept the same way. The voice model's own audio isn't kept; nor is the person's (VOX-51).

@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"os"
 	"testing"
 
 	"go.uber.org/goleak"
@@ -22,7 +23,13 @@ import (
 
 // No test may leave a goroutine running.
 // opencensus's stats worker runs for the process from its package's init
-// (MCP Toolbox for Databases links it, spec_046_databases).
+// (MCP Toolbox for Databases links it, spec_046_databases). The paid live
+// checks (BLITZ_LIVE=1) leave the real API's pooled HTTP/2 connection
+// open, as the service does.
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"))
+	opts := []goleak.Option{goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")}
+	if os.Getenv("BLITZ_LIVE") == "1" {
+		opts = append(opts, goleak.IgnoreAnyFunction("net/http/internal/http2.(*ClientConn).readLoop"))
+	}
+	goleak.VerifyTestMain(m, opts...)
 }

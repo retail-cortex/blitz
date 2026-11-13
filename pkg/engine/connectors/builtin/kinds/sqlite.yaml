@@ -49,7 +49,6 @@ readOnly:
 tools:
   - id: execute_sql
     type: sqlite-execute-sql
-    writes: true
     on: true
     agent: "Run a SQL statement on {connection}."
     about:
