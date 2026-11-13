@@ -272,9 +272,6 @@ func (w *Workspace) unstageGone(ctx context.Context, slashes ...string) []string
 // restage adds paths back to git's index, as they are (FIL-61): a file
 // put back from the trash, or the new name of one renamed, that was in it.
 func (w *Workspace) restage(ctx context.Context, slashes ...string) {
-	if len(slashes) == 0 {
-		return
-	}
 	if _, err := w.gitDo(ctx, nil, append([]string{"--literal-pathspecs", "add", "--all", "--"}, slashes...)...); err != nil {
 		slog.Warn("adding files back to git", "workspace", w.Dir(), "error", err)
 	}

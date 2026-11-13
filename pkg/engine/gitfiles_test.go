@@ -354,3 +354,25 @@ func TestDeletionsLeaveGit(t *testing.T) {
 		assert.Nil(t, w.deletedNow(ctx))
 	})
 }
+
+// When git can't change its index (another git holds its lock), a
+// deletion is still made and git's error only logged; an index git can't
+// read lists nothing (FIL-61).
+func TestDeletionsWhenGitFails(t *testing.T) {
+	needGit(t)
+	w := openTest(t)
+	ctx := context.Background()
+	dir := w.Dir()
+	gitOut(t, dir, "init", "-q")
+	write(t, dir, "a.go", "package a\n")
+	write(t, dir, "b.go", "package a\n")
+	gitOut(t, dir, "add", ".")
+	write(t, dir, ".git/index.lock", "")
+	require.NoError(t, w.DeleteFile(ctx, "a.go"))
+	assert.NoFileExists(t, filepath.Join(dir, "a.go"))
+	assert.Empty(t, w.unstageGone(ctx, "a.go"), "git refused: nothing taken out")
+	w.restage(ctx, "b.go") // refused too, and only logged
+	require.NoError(t, os.Remove(filepath.Join(dir, ".git/index.lock")))
+	write(t, dir, ".git/index", "not an index")
+	assert.Nil(t, w.deletedNow(ctx))
+}
