@@ -44,9 +44,9 @@ export function VoiceButton({ state, hold, onToggle, onHold }: { state: ButtonSt
   return (
     <span
       className="voice-button"
-      onPointerDown={holding ? () => onHold(true) : undefined}
+      onPointerDown={holding ? (e) => (e.currentTarget.setPointerCapture?.(e.pointerId), onHold(true)) : undefined}
       onPointerUp={holding ? () => onHold(false) : undefined}
-      onPointerLeave={holding ? () => onHold(false) : undefined}
+      onPointerCancel={holding ? () => onHold(false) : undefined}
     >
       <IconButton
         title=""

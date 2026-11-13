@@ -95,3 +95,49 @@ func TestVoiceLive(t *testing.T) {
 		}
 	}
 }
+
+// Hold to talk with the real API (VOX-07): Gemini's own activity detection
+// off, the person's start and stop sent, and an answer after the stop.
+func TestVoiceLiveHold(t *testing.T) {
+	if os.Getenv("BLITZ_LIVE") != "1" || os.Getenv("GEMINI_API_KEY") == "" || os.Getenv("BLITZ_VOICE_WAV") == "" {
+		t.Skip("BLITZ_LIVE=1, GEMINI_API_KEY and BLITZ_VOICE_WAV run it")
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	wav, err := os.ReadFile(os.Getenv("BLITZ_VOICE_WAV"))
+	require.NoError(t, err)
+	key := os.Getenv("GEMINI_API_KEY")
+	w, _ := openTestWith(t, nil)
+	t.Setenv("GEMINI_API_KEY", key)
+	for k, v := range map[string]string{"voice.enabled": "true", "voice.listen": "hold"} {
+		_, err = config.SetValue(w.cfg.Dir, "", k, v)
+		require.NoError(t, err)
+	}
+	evs := newVoiceEvents()
+	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "hold", OnEvent: evs.on})
+	require.NoError(t, err)
+	defer v.Close()
+	require.NoError(t, v.Activity(true))
+	pcm := wav[44:]
+	for i := 0; i < len(pcm); i += 3200 {
+		require.NoError(t, v.Audio(pcm[i:min(i+3200, len(pcm))]))
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.NoError(t, v.Activity(false))
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case ev := <-evs.in:
+			if ev.Kind == "said" || ev.Kind == "run_task" || ev.Kind == "heard" {
+				t.Logf("%s %q", ev.Kind, ev.Text)
+			}
+			if ev.Kind == "run_task" || ev.Kind == "said" && ev.Text != "" {
+				return
+			}
+			if ev.Kind == "end" || ev.Kind == "error" {
+				t.Fatalf("ended: %s", ev.Text)
+			}
+		case <-deadline:
+			t.Fatal("no answer after the hold ended")
+		}
+	}
+}

@@ -63,13 +63,20 @@ const framesPerSend = 5;
 export function useVoice(dir: string, sessionId: string, mic: string, handlers: VoiceHandlers, waiting: Waiting) {
   const h = useRef(handlers);
   h.current = handlers;
-  const live = useRef<{ abort: AbortController; mic: Mic | null; player: Player; id: string; sent: Waiting; heard: string; said: string; queue: Uint8Array[] } | null>(null);
+  const live = useRef<{ abort: AbortController; mic: Mic | null; player: Player; id: string; sent: Waiting; heard: string; said: string; queue: Uint8Array[]; chain: Promise<unknown>; holding: boolean } | null>(null);
+
+  // What goes to the service goes in order, one call after another: the
+  // last of the audio before "stopped speaking" (VOX-30).
+  const send = (l: NonNullable<typeof live.current>, msg: { audio?: Uint8Array; speaking?: boolean; waiting?: Waiting; end?: boolean }) => {
+    const id = l.id;
+    l.chain = l.chain.then(() => voices.sendVoice({ workspace: dir, id, ...msg }).catch(() => {}));
+  };
 
   const end = useCallback((why?: string) => {
     const l = live.current;
     live.current = null;
     if (!l) return;
-    if (l.id) void voices.sendVoice({ workspace: dir, id: l.id, end: true }).catch(() => {});
+    if (l.id) send(l, { end: true });
     l.abort.abort();
     l.mic?.close();
     l.player.close();
@@ -87,7 +94,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
       all.set(p, at);
       at += p.length;
     }
-    void voices.sendVoice({ workspace: dir, id: l.id, audio: all }).catch(() => {});
+    send(l, { audio: all });
   };
 
   const onMessage = (l: NonNullable<typeof live.current>, m: ConverseResponse) => {
@@ -132,7 +139,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
   const start = useCallback(async () => {
     if (live.current || currentConversation()) return;
     const abort = new AbortController();
-    const l = { abort, mic: null as Mic | null, player: new Player(), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[] };
+    const l = { abort, mic: null as Mic | null, player: new Player(), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[], chain: Promise.resolve() as Promise<unknown>, holding: false };
     live.current = l;
     const conv: Conversation = { dir, sessionId, id: "", phase: "connecting", state: "listening", muted: false, holding: false, listen: "tap", model: "", voice: "", heard: "", said: "", error: "" };
     setConversation(conv);
@@ -140,7 +147,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     try {
       l.mic = await openMic(mic, (pcm) => {
         const c = currentConversation();
-        if (!c || c.muted || (c.listen === "hold" && !c.holding)) return;
+        if (!c || c.muted || (c.listen === "hold" && !l.holding)) return;
         l.queue.push(pcm);
         if (l.queue.length >= framesPerSend) flushAudio(l);
       });
@@ -166,19 +173,22 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     const l = live.current;
     if (!l?.id || sameWaiting(l.sent, waiting)) return;
     l.sent = waiting;
-    void voices.sendVoice({ workspace: dir, id: l.id, waiting }).catch(() => {});
+    send(l, { waiting });
   });
 
   // The conversation ends with the workspace's view (VOX-14).
   useEffect(() => () => end(), [end]);
 
   const mute = (muted: boolean) => setConversation((c) => c && { ...c, muted });
+  // Hold to talk (VOX-07): "started speaking" once a hold begins, and
+  // "stopped" only after one began, with the audio before it.
   const hold = (holding: boolean) => {
     const l = live.current;
+    if (!l?.id || l.holding === holding) return;
+    l.holding = holding;
     setConversation((c) => c && { ...c, holding });
-    if (!l?.id) return;
     if (!holding) flushAudio(l);
-    void voices.sendVoice({ workspace: dir, id: l.id, speaking: holding }).catch(() => {});
+    send(l, { speaking: holding });
   };
   return { start, end: () => end(), mute, hold };
 }

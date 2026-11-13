@@ -720,14 +720,20 @@ export function Conversation({
       if (myVoice?.listen === "hold" && myVoice.phase === "open") voice.hold(true);
       else if (voiceState !== "not_set_up" && voiceState !== "no_mic") toggleVoice();
     };
+    // Released when any of its keys comes up: macOS sends no key-up for V
+    // while ⌘ is held, so ⌘'s or ⌥'s ends it too; and when the window
+    // loses the keys.
     const up = (e: KeyboardEvent) => {
-      if (e.code === "KeyV" && myVoice?.listen === "hold" && myVoice.holding) voice.hold(false);
+      if (["KeyV", "MetaLeft", "MetaRight", "AltLeft", "AltRight"].includes(e.code) && myVoice?.listen === "hold") voice.hold(false);
     };
+    const blur = () => myVoice?.listen === "hold" && voice.hold(false);
     document.addEventListener("keydown", down);
     document.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
     return () => {
       document.removeEventListener("keydown", down);
       document.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
     };
   });
 
