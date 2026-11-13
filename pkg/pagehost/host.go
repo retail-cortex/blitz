@@ -189,6 +189,18 @@ func (h Host) methods() map[string]hostMethod {
 			return u.Download(ctx), nil
 		}
 		m["ApplyUpdate"] = func(context.Context, []json.RawMessage) (any, error) { return nil, u.Apply() }
+		// The downloaded releases, and cleaning them up (EL-90a).
+		m["UpdateDownloads"] = func(context.Context, []json.RawMessage) (any, error) { return u.Downloads(), nil }
+		// PruneUpdateDownloads(keep): the newest keep stay, and the one staged.
+		m["PruneUpdateDownloads"] = func(_ context.Context, args []json.RawMessage) (any, error) {
+			keep := 0
+			if len(args) > 0 {
+				if err := arg(args, 0, &keep); err != nil {
+					return nil, err
+				}
+			}
+			return u.PruneDownloads(max(keep, 0))
+		}
 	}
 	return m
 }

@@ -48,7 +48,8 @@ import {
   mdiWhiteBalanceSunny,
   mdiCalendarClock,
 } from "@mdi/js";
-import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
+import { formatBytes } from "./bytes";
+import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, pruneUpdateDownloads, updateDownloads, type UpdateDownloads, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
 import { restart, shouldDownload, updateLine } from "./updates";
 import { config } from "./api";
 import { message } from "./errors";
@@ -843,7 +844,43 @@ function Updates() {
           <Switch label={t("desktop.update.auto")} checked={prefs.updates !== "off"} onChange={(on) => update((p) => ({ ...p, updates: on ? "auto" : "off" }))} />
         </Setting>
       )}
+      <UpdateDownloadsSetting />
     </>
+  );
+}
+
+/**
+ * Maintenance (EL-90a): what the downloaded updates take, with Clean up,
+ * which removes them all but one waiting to be installed. The app keeps
+ * the three newest itself, pruning after each download and check.
+ */
+export function UpdateDownloadsSetting() {
+  const snack = useSnackbar();
+  const [d, setD] = useState<UpdateDownloads | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    updateDownloads()?.then(setD, () => setD(null));
+  }, []);
+  if (!d) return null;
+  const clean = async () => {
+    setBusy(true);
+    try {
+      const before = d.bytes;
+      const after = await pruneUpdateDownloads();
+      setD(after);
+      snack(t("desktop.update.cleaned", { size: formatBytes(Math.max(0, before - after.bytes)) }));
+    } catch (e) {
+      snack(String(e instanceof Error ? e.message : e), { error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Setting title={t("desktop.update.downloads")} detail={t(d.releases.length ? "desktop.update.downloads_detail" : "desktop.update.downloads_none", { n: d.releases.length, size: formatBytes(d.bytes) })}>
+      <Button small disabled={busy || d.releases.length === 0} onClick={() => void clean()}>
+        {t("desktop.update.clean_up")}
+      </Button>
+    </Setting>
   );
 }
 
