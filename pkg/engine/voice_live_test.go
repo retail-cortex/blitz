@@ -150,7 +150,8 @@ func TestVoiceLiveHold(t *testing.T) {
 }
 
 // A permission needed is asked in the first person with the real API
-// (VOX-13): "I need permission to …, may I?"
+// (VOX-13): "I need permission to …, may I?", in plain words, never the
+// SQL itself.
 func TestVoiceLivePermission(t *testing.T) {
 	if os.Getenv("BLITZ_LIVE") != "1" || os.Getenv("GEMINI_API_KEY") == "" {
 		t.Skip("BLITZ_LIVE=1 and GEMINI_API_KEY run it")
@@ -165,7 +166,7 @@ func TestVoiceLivePermission(t *testing.T) {
 	require.NoError(t, err)
 	defer v.Close()
 	time.Sleep(time.Second)
-	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run make deploy"})
+	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run `sqlite3 shop.db \"SELECT id, customer_id, total_cents FROM orders WHERE status = 'open' ORDER BY id;\"`"})
 	var said strings.Builder
 	deadline := time.After(20 * time.Second)
 	for {
@@ -180,6 +181,11 @@ func TestVoiceLivePermission(t *testing.T) {
 				require.Contains(t, s, "permission")
 				require.Contains(t, s, "may i")
 				require.NotContains(t, s, "agent")
+				require.NotContains(t, s, "select")
+				require.NotContains(t, s, "order by")
+				require.NotContains(t, s, "customer_id")
+				require.NotContains(t, s, "recipes", "its own words, not the note's example")
+				require.Contains(t, s, "order")
 				return
 			}
 		case <-deadline:

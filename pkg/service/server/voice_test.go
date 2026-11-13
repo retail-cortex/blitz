@@ -136,7 +136,7 @@ func TestVoiceService(t *testing.T) {
 	require.NoError(t, err)
 	_, err = voice.SendVoice(ctx, connect.NewRequest(&pb.SendVoiceRequest{Workspace: dir, Id: started.Id, Waiting: &pb.VoiceWaiting{ApprovalId: "ap1", Approval: "run make"}}))
 	require.NoError(t, err)
-	assert.Contains(t, fmt.Sprint(live.Next("clientContent", voiceWait)), "I need permission to run make, may I?")
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", voiceWait)), "(the window shows it): run make.")
 
 	live.Call("c1", "run_task", map[string]any{"request": "Run the tests."}, voiceWait)
 	for m := next(); ; m = next() {

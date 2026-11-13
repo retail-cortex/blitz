@@ -213,7 +213,7 @@ func TestVoiceApprovals(t *testing.T) {
 
 	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run make deploy"})
 	note := fmt.Sprint(live.Next("clientContent", wait))
-	assert.Contains(t, note, "permission before you go on: to run make deploy. Ask them, in these words or close to them: \"I need permission to run make deploy, may I?\"")
+	assert.Contains(t, note, "permission before you go on. The action, for you only (the window shows it): run make deploy. Ask them what it does in a few plain words, never the command")
 	assert.NotContains(t, note, "ap1")
 
 	for _, tc := range []struct{ heard, choice, want, decision string }{
@@ -241,7 +241,7 @@ func TestVoiceApprovals(t *testing.T) {
 	live.Heard("yes go ahead")
 	evs.next(t, "heard")
 	v.Waiting(VoiceWaiting{ApprovalID: "ap2", Approval: "edit main.go"})
-	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "permission before you go on: to edit main.go.")
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "(the window shows it): edit main.go.")
 	assert.Contains(t, fmt.Sprint(live.Call("stale", "answer", map[string]any{"choice": "yes"}, wait)), "didn't clearly say")
 
 	// ap2, clicked in the window, is said to be settled.

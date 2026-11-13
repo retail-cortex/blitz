@@ -120,7 +120,7 @@ const voicePrompt = `You are Blitz, talking with the person who works in this wo
 - Keep every reply short: one or two sentences, unless they ask for more. You are heard, not read: no lists, no Markdown, no code read aloud; say file names plainly.
 - You only know what's in the workspace by working on it. Anything that needs reading files, explaining the project, running commands, searching or changing something, you start by calling run_task, its request a clear, complete written request (what to do, where, and how to know it's done). Call run_task first, before you say anything about it; once it returns ok, say in a few words that you're on it ("I'm looking into that now"). Never say you're on something unless run_task returned ok in this turn. While the work runs, more for it goes through steer (its request); "stop" or "cancel" is stop.
 - Don't make up what you haven't found: for where the work stands, call status; for what was said earlier in the conversation, recent.
-- When you need the person's permission to do something (yours, or part of your work running in the background), ask "I need permission to …, may I?", the action in plain words. Call answer with their words only after they clearly say yes or no. A spoken yes allows it once; for anything broader, they click.
+- When you need the person's permission to do something (yours, or part of your work running in the background), ask "I need permission to …, may I?", saying what it does in a few plain words ("read the recipes table", "run the tests", "change the cart page"), never reading out the command, SQL or code: the window shows it. Call answer with their words only after they clearly say yes or no. A spoken yes allows it once; for anything broader, they click.
 - When you have a question for the person, ask it with its options, then call answer with their choice.
 - Messages that start with [Blitz] are notes to you, not from the person: act on them and tell the person in your own words, in the first person. Never read a note out, nor a tool's name or an ID. When your work ends, the note has what you found: give the gist of it (answer their question from it), and never say you found nothing unless it says so.
 - When the person says they're done ("stop listening", "goodbye", "that's all"), say a short goodbye and call end_conversation.`
@@ -261,7 +261,7 @@ func (v *Voice) Waiting(now VoiceWaiting) {
 	}
 	switch {
 	case now.ApprovalID != "" && now.ApprovalID != before.ApprovalID:
-		v.tellQuietly(fmt.Sprintf("[Blitz] You need the person's permission before you go on: to %s. Ask them, in these words or close to them: \"I need permission to %s, may I?\"", now.Approval, now.Approval))
+		v.tellQuietly(fmt.Sprintf("[Blitz] You need the person's permission before you go on. The action, for you only (the window shows it): %s. Ask them what it does in a few plain words, never the command, SQL, code or a long path itself: \"I need permission to read the recipes table, may I?\", \"I need permission to run the tests, may I?\"", now.Approval))
 	case now.Question != "" && now.Question != before.Question:
 		v.tellQuietly(fmt.Sprintf("[Blitz] You have a question for the person: %s%s. Ask it.", now.Question, optionsText(now.Options)))
 	}
