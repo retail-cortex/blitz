@@ -276,6 +276,13 @@ func (t *Terminal) Write(p []byte) error {
 	if len(p) > MaxWrite {
 		return fmt.Errorf("at most %d bytes a write", MaxWrite)
 	}
+	// Done first: the queue may have room once the writer has stopped,
+	// and select picks at random.
+	select {
+	case <-t.done:
+		return ErrExited
+	default:
+	}
 	timer := time.NewTimer(WriteTimeout)
 	defer timer.Stop()
 	select {
