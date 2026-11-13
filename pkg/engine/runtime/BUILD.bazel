@@ -69,6 +69,7 @@ go_library(
         "tasks.go",
         "unavailable.go",
         "usage.go",
+        "voice.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/runtime",
     visibility = [

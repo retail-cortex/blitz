@@ -54,7 +54,13 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 		return w.runFlow(ctx, sessionID, f.flow, f.input, on)
 	}
 	start := time.Now()
+	if !tt.Aside {
+		on = w.factsStart(sessionID, tt.Text, on)
+	}
 	res, err := w.run(ctx, sessionID, tt, on, w.storage, opts...)
+	if !tt.Aside {
+		w.factsEnd(sessionID, res, err)
+	}
 	if tt.Command && isReflect(tt.Text) && err == nil {
 		// The next reflection's evidence starts where this one began
 		// (spec_048_harness_learning HE-04).

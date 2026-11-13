@@ -20,11 +20,17 @@ go_library(
     srcs = [
         "anthropic.go",
         "gemini.go",
+        "live.go",
         "openai.go",
         "wirefake.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/runtime/wirefake",
-    visibility = ["//pkg/engine:__subpackages__"],
+    visibility = [
+        "//pkg/engine:__subpackages__",
+        # The service's voice tests (spec_063_voice VOX-62).
+        "//pkg/service/server:__pkg__",
+    ],
+    deps = ["@com_github_gorilla_websocket//:websocket"],
 )
 
 go_test(

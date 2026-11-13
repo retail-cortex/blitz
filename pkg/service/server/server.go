@@ -67,6 +67,7 @@ type Server struct {
 	ent       enterpriseConn // the organization's service (spec_053_enterprise)
 	upkeep    upkeep         // health checks and reflections going
 
+	voice      voices // the open voice conversations
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
 	opening    map[string]*opening   // workspaces being opened, by canonical directory
@@ -121,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewFileServiceHandler(fileService{s}, limit))
 	mux.Handle(pb.NewLanguageServiceHandler(languageService{s}, limit))
 	mux.Handle(pb.NewTerminalServiceHandler(terminalService{s}, limit))
+	mux.Handle(pb.NewVoiceServiceHandler(voiceService{s}, limit))
 	return s.act.track(s.countUse(mux))
 }
 

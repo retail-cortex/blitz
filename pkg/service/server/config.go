@@ -125,6 +125,11 @@ func apiSettingsFromProto(a *pb.ApiProviderSettings) *config.APIProviderSettings
 func (h configService) changed(ctx context.Context, dir, path string) *pb.ConfigChange {
 	change := &pb.ConfigChange{Path: path}
 	h.s.models.forget() // keys or providers may differ now
+	if dir == "" {
+		if cfg, err := config.Load(h.s.configDir); err == nil && !cfg.Voice.Enabled {
+			h.s.endVoices() // off at once (spec_063_voice VOX-02)
+		}
+	}
 	h.s.mu.Lock()
 	var ws []*workspace
 	for d, w := range h.s.workspaces {
