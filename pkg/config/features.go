@@ -974,9 +974,12 @@ func ValidPersonalityName(name string) bool {
 // (spec_064_personality PER-05): how the agent and the voice address and
 // refer to them. The person's only; empty, they use gender-neutral words.
 type ProfileConfig struct {
-	Name     string `toml:"name"`
-	Gender   string `toml:"gender"`
-	Pronouns string `toml:"pronouns"` // "he/him", "she/her", "they/them", …
+	// Name is what Blitz calls the person.
+	Name string `toml:"name"`
+	// Gender is the person's, as they put it; empty, it isn't assumed.
+	Gender string `toml:"gender"`
+	// Pronouns are the person's: "he/him", "she/her", "they/them", …
+	Pronouns string `toml:"pronouns"`
 }
 
 // MaxProfileField is how long each of the profile's fields may be.
