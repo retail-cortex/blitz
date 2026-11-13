@@ -18,6 +18,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,7 @@ func TestVoiceLive(t *testing.T) {
 	}()
 	deadline := time.After(40 * time.Second)
 	var ran bool
+	var said strings.Builder
 	for {
 		select {
 		case ev := <-evs.in:
@@ -73,6 +75,9 @@ func TestVoiceLive(t *testing.T) {
 			case "audio", "state":
 			default:
 				t.Logf("%s %q final=%v", ev.Kind, ev.Text, ev.Final)
+			}
+			if ev.Kind == "said" {
+				said.WriteString(ev.Text)
 			}
 			if ev.Kind == "run_task" && !ran {
 				ran = true
@@ -83,7 +88,7 @@ func TestVoiceLive(t *testing.T) {
 					on(api.Event{ToolCall: &api.ToolCall{Name: "run_shell_command", Args: map[string]any{"command": "go test ./..."}}})
 					on(api.Event{ToolResult: &api.ToolResult{Name: "run_shell_command", Result: map[string]any{"exit_code": 0}}})
 					time.Sleep(8 * time.Second)
-					w.factsEnd("live", api.TurnResult{}, nil)
+					w.factsEnd("live", api.TurnResult{Output: "All 212 tests pass. The project is a FastAPI backend using SQLModel with Alembic migrations, and a React front end."}, nil)
 				}()
 			}
 			if ev.Kind == "end" || ev.Kind == "error" {
@@ -91,6 +96,7 @@ func TestVoiceLive(t *testing.T) {
 			}
 		case <-deadline:
 			require.True(t, ran, "the voice never handed the request over")
+			require.Contains(t, strings.ToLower(said.String()), "212", "the agent's answer was said")
 			return
 		}
 	}

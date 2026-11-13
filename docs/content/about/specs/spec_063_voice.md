@@ -79,7 +79,8 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - the files changed (their count, the main ones by name);
   - tests or builds it ran and how they went (from the shell tool's exit codes);
   - what's waiting: an approval, a question, a failed check;
-  - the cost, only when over a dollar.
+  - the cost, only when over a dollar;
+  - *2026-11-13 (the owner: "the voice agent is calling the sub agent, but then unaware of the subagents response")* the agent's answer itself, its final text (secrets masked, at most 6,000 characters), so the voice tells the person what the agent found and answers their question from it. A task the voice handed over always has its answer said, whatever `summaries` is; `status` has the last answer too.
 
   While a turn runs the voice stays quiet, except to say an approval or a question is waiting (VOX-13) or that the turn failed. With `summaries = "always"` and no voice conversation open, the summary is spoken through a short live connection opened for it (text in, audio out), and only while the window is in front and the session showing; otherwise a turn ending is the usual notification.
 - **VOX-18** **Usage.** The live model's tokens are logged by the `voice` logger at debug (VOX-33). Adding them to the session's usage and cost, as the session's other model calls are, is still to do; Settings › Voice says audio isn't free.

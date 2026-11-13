@@ -106,6 +106,7 @@ type Voice struct {
 	heard     strings.Builder // what the person said since the voice last answered
 	said      strings.Builder // what the voice is saying
 	lastHeard string          // the person's last whole line
+	handed    bool            // a run_task this conversation handed over, not yet ended
 	active    time.Time       // the last thing said or done
 	ending    string          // why, once the voice said goodbye
 	closed    bool
@@ -120,7 +121,7 @@ const voicePrompt = `You are Blitz's voice: the person's spoken link to the agen
 - Never say you did or checked something yourself: you can't see the workspace. For where things stand, call status; for what was said earlier in the conversation, recent.
 - When the agent asks for approval, say in plain words what it wants and ask whether to allow it. Call answer with the approval's ID only after the person clearly says yes or no. You can only allow it once; for anything broader, they click.
 - When the agent asks a question, read it and its options, then call answer with theirs.
-- Messages that start with [Blitz] are from Blitz, not the person: say what they ask, briefly, in your own words.
+- Messages that start with [Blitz] are from Blitz, not the person: say what they ask, briefly, in your own words. When a task ends, Blitz gives you the agent's answer: that is what the agent found. Tell the person its gist from it (answer their question from it), and never say the agent found nothing unless its answer says so.
 - When the person says they're done ("stop listening", "goodbye", "that's all"), say a short goodbye and call end_conversation.`
 
 // StartVoice opens a voice conversation about a session (VOX-07, VOX-10):
@@ -508,6 +509,9 @@ func (v *Voice) tools() ([]tool.Tool, error) {
 				if v.w.turnRunning(v.opts.SessionID) {
 					return VoiceResult{Error: "a task is running: use steer to add to it, or stop it first"}, nil
 				}
+				v.mu.Lock()
+				v.handed = true
+				v.mu.Unlock()
 				v.opts.OnEvent(VoiceEvent{Kind: "run_task", Text: strings.TrimSpace(in.Request)})
 				return VoiceResult{OK: true}, nil
 			})),
@@ -619,6 +623,9 @@ func (v *Voice) status() string {
 	}
 	if f != nil {
 		b.WriteString("The last task: " + f.describe())
+		if a := strings.TrimSpace(f.Answer); a != "" {
+			b.WriteString("\nThe agent's answer to it:\n" + cut(a, maxAnswer))
+		}
 	}
 	return v.w.secretRedactor().String(strings.TrimSpace(b.String()))
 }
@@ -655,7 +662,13 @@ func (v *Voice) recent(n int) string {
 // turnEnded is the session's turn ending: said when summaries allow it
 // (VOX-17).
 func (v *Voice) turnEnded(f *turnFacts) {
-	if v.cfg.SummaryMode() == config.VoiceSummaryOff {
+	v.mu.Lock()
+	handed := v.handed
+	v.handed = false
+	v.mu.Unlock()
+	// What the person asked for out loud is answered out loud, whatever
+	// the summaries setting.
+	if v.cfg.SummaryMode() == config.VoiceSummaryOff && !handed {
 		if f.Outcome == "failed" {
 			v.tellQuietly("[Blitz] The task failed: " + v.w.secretRedactor().String(f.Error) + ". Say so briefly.")
 		}
@@ -669,7 +682,29 @@ func (v *Voice) summaryRequest(f *turnFacts) string {
 	if f == nil {
 		return "[Blitz] Nothing has run in this conversation yet. Say so in one sentence."
 	}
-	return "[Blitz] The task ended. " + v.w.secretRedactor().String(f.describe()) + " Tell the person in one or two sentences: how it ended, what changed, how the checks went, and what's waiting on them."
+	msg := "[Blitz] The task ended. " + v.w.secretRedactor().String(f.describe())
+	if a := strings.TrimSpace(f.Answer); a != "" {
+		msg += "\n\nThe agent's answer:\n" + v.w.secretRedactor().String(cut(a, maxAnswer)) +
+			"\n\nTell the person what the agent found, its gist in two or three sentences (if they asked a question, answer it from this), then anything that changed or is waiting on them."
+	} else {
+		msg += " Tell the person in one or two sentences: how it ended, what changed, how the checks went, and what's waiting on them."
+	}
+	return msg
+}
+
+// maxAnswer is how much of the agent's answer the voice is given.
+const maxAnswer = 6000
+
+// cut is s at most n bytes, cut at a line or word, marked when cut.
+func cut(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	if i := strings.LastIndexAny(s, "\n "); i > n/2 {
+		s = s[:i]
+	}
+	return s + " …(the rest is in the window)"
 }
 
 // ---- The turns' facts (VOX-17), collected as each turn runs.
@@ -681,6 +716,7 @@ type turnFacts struct {
 	Ended    time.Time
 	Outcome  string // finished, stopped, failed, limit
 	Error    string
+	Answer   string // the agent's final text
 	Files    []string
 	Commands []commandFact
 	Tools    []string
@@ -890,6 +926,7 @@ func (w *Workspace) factsEnd(sessionID string, res api.TurnResult, err error) {
 	f.Ended = time.Now()
 	f.Outcome, f.Error = outcomeOf(err)
 	f.CostUSD = res.After.CostUSD - res.Before.CostUSD
+	f.Answer = res.Output
 	tw.last[sessionID] = f
 	watchers := slices.Clone(tw.watchers[sessionID])
 	tw.mu.Unlock()

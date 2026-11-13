@@ -438,3 +438,36 @@ func TestVoiceNotSetUp(t *testing.T) {
 	_, err = w.StartVoice(context.Background(), VoiceOptions{SessionID: "s"})
 	assert.ErrorIs(t, err, runtime.ErrVoiceNotSetUp)
 }
+
+// The voice is given the agent's answer when a task ends, cut to a length
+// it takes, and says it even with summaries off when it handed the task
+// over (VOX-17); status has it too.
+func TestVoiceRelaysTheAnswer(t *testing.T) {
+	w, live := openVoice(t, nil)
+	_, err := config.SetValue(w.cfg.Dir, "", "voice.summaries", "off")
+	require.NoError(t, err)
+	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "ans"})
+	require.NoError(t, err)
+	t.Cleanup(v.Close)
+	live.Opened(wait)
+	live.Call("h1", "run_task", map[string]any{"request": "What's the stack?"}, wait)
+	w.factsStart("ans", "What's the stack?", nil)
+	w.factsEnd("ans", api.TurnResult{Output: "**Backend:** FastAPI, SQLModel, Alembic."}, nil)
+	told := fmt.Sprint(live.Next("clientContent", wait))
+	assert.Contains(t, told, "The agent's answer:")
+	assert.Contains(t, told, "FastAPI, SQLModel, Alembic", "said though summaries are off: the voice asked")
+	st := fmt.Sprint(live.Call("h2", "status", map[string]any{}, wait)["status"])
+	assert.Contains(t, st, "The agent's answer to it:")
+
+	w.factsStart("ans", "typed", nil)
+	w.factsEnd("ans", api.TurnResult{Output: "typed answer"}, nil)
+	w.factsStart("ans", "typed", nil)
+	w.factsEnd("ans", api.TurnResult{}, errors.New("model down"))
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "model down", "a typed turn's answer isn't said with summaries off, its failure is")
+
+	long := strings.Repeat("word ", 2000)
+	got := cut(long, maxAnswer)
+	assert.LessOrEqual(t, len(got), maxAnswer+40)
+	assert.True(t, strings.HasSuffix(got, "…(the rest is in the window)"))
+	assert.Equal(t, "short", cut("short", 10))
+}
