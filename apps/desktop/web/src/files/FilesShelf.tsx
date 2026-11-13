@@ -981,6 +981,9 @@ export function FilesShelf({
     ev.preventDefault();
   };
 
+  // The folder of r's compacted chain a new name is being given in, if any.
+  const chainNaming = (r: Row) => (naming && naming.kind !== "rename" ? r.chain?.find((c) => c.path === naming.dir)?.path : undefined);
+
   const newRow = (folder: string, depth: number) =>
     naming && naming.kind !== "rename" && naming.dir === folder ? (
       <NameInput key="new" depth={depth} icon={naming.kind === "folder" ? mdiFolderOutline : mdiFilePlusOutline} initial="" label={t(naming.kind === "folder" ? "desktop.files.new_folder" : "desktop.files.new_file")} onDone={finishNaming} />
@@ -1205,8 +1208,8 @@ export function FilesShelf({
                     )}
                 </button>
               )}
-              {/* A new name in any folder of a compacted chain goes under its row: the chain's first folders have none (#110). */}
-              {isFolder(e) && open && newRow(r.chain?.find((c) => naming?.kind !== "rename" && naming?.dir === c.path)?.path ?? e.path, depth + 1)}
+              {/* A new name in any folder of a compacted chain goes under its row, open or not: the chain's first folders have none (#110). */}
+              {isFolder(e) && (chainNaming(r) ? newRow(chainNaming(r)!, depth + 1) : open && newRow(e.path, depth + 1))}
               {more !== undefined && (
                 <button className="tree-row tree-more" style={{ paddingLeft: 8 + (more === "" ? 0 : (shown.find((x) => x.entry.path === more)?.depth ?? 0) + 1) * 14 }} onClick={() => showMore(more)}>
                   <span className="tree-twisty" />

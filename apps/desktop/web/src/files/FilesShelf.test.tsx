@@ -196,6 +196,30 @@ describe("FilesShelf's compacted folders", () => {
     expect(row("a/c")).not.toBeNull();
   });
 
+  // A closed folder holding only a folder: New Folder opens it, and it joins
+  // the chain's row (still closed at b); the field shows under that row.
+  it("shows the field for a new folder in a closed folder that holds only one", async () => {
+    await mount();
+    expect(row("a")?.getAttribute("aria-expanded")).toBe("false");
+    act(() => void row("a")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
+    await settle();
+    const item = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem], .context-menu button")].find((b) => b.textContent?.includes(t("desktop.files.new_folder")));
+    act(() => item!.click());
+    await settle();
+    expect(row("a/b"), "a and b on one row").not.toBeNull();
+    const input = host!.querySelector<HTMLInputElement>(".tree-input");
+    expect(input, "the name's field").not.toBeNull();
+    expect(document.activeElement).toBe(input);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "c");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => void input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await settle();
+    expect(fs.created).toEqual(["a/c"]);
+    expect(row("a/c")).not.toBeNull();
+  });
+
   // The same from the name's right-click menu.
   it.each([
     ["new_folder", ".tree-input"],
