@@ -116,7 +116,7 @@ type Voice struct {
 const voicePrompt = `You are Blitz's voice: the person's spoken link to the agent that works in their workspace. You talk; the agent does the work.
 
 - Keep every reply short: one or two sentences, unless they ask for more. You are heard, not read: no lists, no Markdown, no code read aloud; say file names plainly.
-- Anything that needs reading files, running commands, searching or changing something goes to the agent: call run_task with a clear, complete written request (what to do, where, and how to know it's done). Say in a few words that you've passed it on. While a task runs, more for it goes through steer; "stop" or "cancel" is stop.
+- You can't see or do anything in the workspace yourself. Anything that needs reading files, explaining the project, running commands, searching or changing something goes to the agent, and the only way to send it is to call the run_task tool, its request a clear, complete written request (what to do, where, and how to know it's done). Call run_task first, before you say anything about it; only once it returns ok, say in a few words that the agent is on it. Never say you've passed something on unless run_task returned ok in this turn. While a task runs, more for it goes through the steer tool (its request); "stop" or "cancel" is the stop tool.
 - Never say you did or checked something yourself: you can't see the workspace. For where things stand, call status; for what was said earlier in the conversation, recent.
 - When the agent asks for approval, say in plain words what it wants and ask whether to allow it. Call answer with the approval's ID only after the person clearly says yes or no. You can only allow it once; for anything broader, they click.
 - When the agent asks a question, read it and its options, then call answer with theirs.
@@ -154,6 +154,11 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 		Model:               m.LLM,
 		InstructionProvider: func(agent.ReadonlyContext) (string, error) { return instruction, nil },
 		Tools:               tools,
+		// Each call is logged at debug, with what it returned (VOX-33).
+		AfterToolCallbacks: []llmagent.AfterToolCallback{func(_ agent.Context, t tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
+			slog.Debug("voice tool", "logger", "voice", "tool", t.Name(), "args", args, "result", result, "error", err)
+			return nil, nil
+		}},
 	})
 	if err != nil {
 		return nil, err
@@ -462,7 +467,7 @@ func (v *Voice) errorText(err error) string {
 
 // VoiceTaskInput is run_task's and steer's.
 type VoiceTaskInput struct {
-	Prompt string `json:"prompt" jsonschema:"The request for the agent, written out clearly: what to do, where, and how to know it's done"`
+	Request string `json:"request" jsonschema:"The request for the agent, written out clearly: what to do, where, and how to know it's done"`
 }
 
 // VoiceAnswerInput is answer's.
@@ -492,17 +497,18 @@ func (v *Voice) tools() ([]tool.Tool, error) {
 		out = append(out, t)
 		return err
 	}
+
 	errs := []error{
 		add(functiontool.New(functiontool.Config{Name: "run_task", Description: "Hand a request to the workspace's agent, as if the person typed it. Only when no task runs (then use steer)."},
 			func(_ agent.Context, in VoiceTaskInput) (VoiceResult, error) {
 				v.touch()
-				if strings.TrimSpace(in.Prompt) == "" {
+				if strings.TrimSpace(in.Request) == "" {
 					return VoiceResult{Error: "write the request out"}, nil
 				}
 				if v.w.turnRunning(v.opts.SessionID) {
 					return VoiceResult{Error: "a task is running: use steer to add to it, or stop it first"}, nil
 				}
-				v.opts.OnEvent(VoiceEvent{Kind: "run_task", Text: strings.TrimSpace(in.Prompt)})
+				v.opts.OnEvent(VoiceEvent{Kind: "run_task", Text: strings.TrimSpace(in.Request)})
 				return VoiceResult{OK: true}, nil
 			})),
 		add(functiontool.New(functiontool.Config{Name: "steer", Description: "Add to the task that's running: a correction, a detail, a next step."},
@@ -511,7 +517,7 @@ func (v *Voice) tools() ([]tool.Tool, error) {
 				if !v.w.turnRunning(v.opts.SessionID) {
 					return VoiceResult{Error: "no task is running: use run_task"}, nil
 				}
-				v.opts.OnEvent(VoiceEvent{Kind: "steer", Text: strings.TrimSpace(in.Prompt)})
+				v.opts.OnEvent(VoiceEvent{Kind: "steer", Text: strings.TrimSpace(in.Request)})
 				return VoiceResult{OK: true}, nil
 			})),
 		add(functiontool.New(functiontool.Config{Name: "stop", Description: "Stop the task that's running."},
@@ -718,23 +724,24 @@ func (f *turnFacts) describe() string {
 	default:
 		fmt.Fprintf(&b, "%d files changed, among them %s. ", n, strings.Join(f.Files[:3], ", "))
 	}
-	passed, failed := 0, []string{}
+	// The check commands by name, so the voice can't take one command
+	// for one test.
+	passed, failed := []string{}, []string{}
 	for _, c := range f.Commands {
 		if !checks.MatchString(c.Command) {
 			continue
 		}
 		if c.Exit == 0 {
-			passed++
+			passed = append(passed, fmt.Sprintf("%q", short(c.Command, 60)))
 		} else {
 			failed = append(failed, fmt.Sprintf("%q (exit %d)", short(c.Command, 60), c.Exit))
 		}
 	}
-	if passed+len(failed) > 0 {
-		fmt.Fprintf(&b, "Checks run: %d passed", passed)
-		if len(failed) > 0 {
-			fmt.Fprintf(&b, ", %d failed: %s", len(failed), strings.Join(lastN(failed, 3), ", "))
-		}
-		b.WriteString(". ")
+	if len(passed) > 0 {
+		fmt.Fprintf(&b, "Check commands that succeeded: %s. ", strings.Join(lastN(passed, 3), ", "))
+	}
+	if len(failed) > 0 {
+		fmt.Fprintf(&b, "Check commands that failed: %s. ", strings.Join(lastN(failed, 3), ", "))
 	}
 	if f.CostUSD >= 1 {
 		fmt.Fprintf(&b, "It cost $%.2f. ", f.CostUSD)

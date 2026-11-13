@@ -149,7 +149,7 @@ func TestVoiceConversation(t *testing.T) {
 	live.Heard("Run the tests ")
 	live.Heard("please")
 	assert.Equal(t, "Run the tests ", evs.next(t, "heard").Text)
-	res := live.Call("c1", "run_task", map[string]any{"prompt": "Run the test suite and fix what fails."}, wait)
+	res := live.Call("c1", "run_task", map[string]any{"request": "Run the test suite and fix what fails."}, wait)
 	assert.Equal(t, true, res["ok"])
 	assert.Equal(t, "Run the test suite and fix what fails.", evs.next(t, "run_task").Text)
 
@@ -168,9 +168,9 @@ func TestVoiceConversation(t *testing.T) {
 	assert.Equal(t, []string{"user: Run the tests please", "model: On it."}, spoken, "kept in writing")
 
 	on := w.factsStart(s.ID, "Run the tests", nil)
-	res = live.Call("c2", "run_task", map[string]any{"prompt": "more"}, wait)
+	res = live.Call("c2", "run_task", map[string]any{"request": "more"}, wait)
 	assert.Contains(t, res["error"], "use steer")
-	res = live.Call("c3", "steer", map[string]any{"prompt": "Skip the slow ones."}, wait)
+	res = live.Call("c3", "steer", map[string]any{"request": "Skip the slow ones."}, wait)
 	assert.Equal(t, true, res["ok"])
 	assert.Equal(t, "Skip the slow ones.", evs.next(t, "steer").Text)
 	on(api.Event{ToolCall: &api.ToolCall{ID: "t", Name: "run_shell_command", Args: map[string]any{"command": "go test ./..."}}})
@@ -182,7 +182,7 @@ func TestVoiceConversation(t *testing.T) {
 	evs.next(t, "stop")
 	w.factsEnd(s.ID, api.TurnResult{}, context.Canceled)
 	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "It was stopped.", "the end is said")
-	res = live.Call("c6", "steer", map[string]any{"prompt": "x"}, wait)
+	res = live.Call("c6", "steer", map[string]any{"request": "x"}, wait)
 	assert.Contains(t, res["error"], "no task is running")
 
 	res = live.Call("c7", "recent", map[string]any{"n": 2}, wait)
@@ -282,7 +282,7 @@ func TestVoiceSummaries(t *testing.T) {
 	}
 	assert.Equal(t, []string{"test"}, f.Tasks)
 	f.Outcome, f.CostUSD = "finished", 1.25
-	assert.Equal(t, `It finished. Files changed: a.go, b.go. Checks run: 1 passed, 1 failed: "go test ./..." (exit 1). It cost $1.25.`, f.describe())
+	assert.Equal(t, `It finished. Files changed: a.go, b.go. Check commands that succeeded: "go build ./...". Check commands that failed: "go test ./..." (exit 1). It cost $1.25.`, f.describe())
 	for _, tc := range []struct {
 		err  error
 		want string
@@ -383,7 +383,7 @@ func TestVoiceEdges(t *testing.T) {
 	require.NoError(t, v.Activity(false))
 	assert.Contains(t, live.Next("realtimeInput", wait), "activityEnd")
 
-	assert.Contains(t, live.Call("e1", "run_task", map[string]any{"prompt": " "}, wait)["error"], "write the request out")
+	assert.Contains(t, live.Call("e1", "run_task", map[string]any{"request": " "}, wait)["error"], "write the request out")
 	assert.Contains(t, live.Call("e2", "stop", map[string]any{}, wait)["error"], "no task is running")
 	assert.Equal(t, "No messages yet.", live.Call("e3", "recent", map[string]any{}, wait)["status"])
 

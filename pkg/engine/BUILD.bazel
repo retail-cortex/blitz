@@ -317,6 +317,7 @@ go_test(
         "trash_test.go",
         "turn_test.go",
         "upload_test.go",
+        "voice_live_test.go",
         "voice_test.go",
         "workerrewrite_test.go",
         "workers_test.go",

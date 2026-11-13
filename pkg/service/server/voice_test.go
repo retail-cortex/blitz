@@ -138,7 +138,7 @@ func TestVoiceService(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, fmt.Sprint(live.Next("clientContent", voiceWait)), "ap1")
 
-	live.Call("c1", "run_task", map[string]any{"prompt": "Run the tests."}, voiceWait)
+	live.Call("c1", "run_task", map[string]any{"request": "Run the tests."}, voiceWait)
 	for m := next(); ; m = next() {
 		if m.RunTask != "" {
 			assert.Equal(t, "Run the tests.", m.RunTask)
