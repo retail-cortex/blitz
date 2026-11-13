@@ -31,7 +31,7 @@ import type { Branding, EnterpriseState, OrgDocument, OrgWorkspace } from "./gen
 import { setAppName, t } from "./i18n";
 import { Markdown } from "./Markdown";
 import { openURL } from "./desktop";
-import { Button, Dialog, Icon } from "@blitz/webui";
+import { Button, Dialog, Icon, useSnackbar } from "@blitz/webui";
 
 let current: Branding | null = null;
 const listeners = new Set<() => void>();
@@ -278,11 +278,34 @@ export function OrgDocumentDialog() {
 const checkEvery = 2 * 60_000;
 
 /**
- * The window's word on the organization (EN-13): signed out, with Sign in
- * (Settings › Organization), or its service not answering, with Retry.
- * Work that needs the service waits; local work goes on.
+ * Signs in to the organization's service (EN-11): its page opens in the
+ * browser (onPage gets its address too), and the state signed in is
+ * returned, the window told (configChanged). Settings › Organization and
+ * the banner's Sign in both use it, so the banner signs in at once.
  */
-export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
+export async function signInToOrg(signal: AbortSignal, onPage?: (url: string) => void): Promise<EnterpriseState | null> {
+  let state: EnterpriseState | null = null;
+  for await (const ev of config.enterpriseSignIn({}, { signal })) {
+    if (ev.done) {
+      state = ev.state ?? null;
+      configChanged({ dir: "" });
+    } else if (ev.url) {
+      onPage?.(ev.url);
+      void openURL(ev.url);
+    }
+  }
+  return state;
+}
+
+/**
+ * The window's word on the organization (EN-13): signed out, with Sign in
+ * (straight to the organization's sign-in page in the browser, EN-13a),
+ * or its service not answering, with Retry. Work that needs the service
+ * waits; local work goes on.
+ */
+export function OrgBanner() {
+  const snack = useSnackbar();
+  const [signing, setSigning] = useState<AbortController | null>(null);
   const [state, setState] = useState<EnterpriseState | null>(null);
   const [checking, setChecking] = useState(false);
   const [asks] = useState(inOrder);
@@ -323,13 +346,32 @@ export function OrgBanner({ onSignIn }: { onSignIn: () => void }) {
     );
   }
   if (!state.signedIn) {
+    const signIn = async () => {
+      const ctl = new AbortController();
+      setSigning(ctl);
+      try {
+        const now = await signInToOrg(ctl.signal);
+        if (now) setState(now);
+        snack(t("desktop.org.signed_in_snack", { org: now?.name || now?.url || name }));
+      } catch (e) {
+        if (!ctl.signal.aborted) snack(message(e), { error: true });
+      } finally {
+        setSigning(null);
+      }
+    };
     return (
       <div className="banner">
         <Icon path={mdiAccountAlertOutline} />
-        <span className="spacer">{t("desktop.org.banner_signed_out", { org: name })}</span>
-        <Button variant="tonal" small onClick={onSignIn}>
-          {t("desktop.org.sign_in")}
-        </Button>
+        <span className="spacer">{t(signing ? "desktop.org.banner_signing_in" : "desktop.org.banner_signed_out", { org: name })}</span>
+        {signing ? (
+          <Button variant="text" small onClick={() => signing.abort()}>
+            {t("desktop.org.cancel_sign_in")}
+          </Button>
+        ) : (
+          <Button variant="tonal" small onClick={() => void signIn()}>
+            {t("desktop.org.sign_in")}
+          </Button>
+        )}
       </div>
     );
   }

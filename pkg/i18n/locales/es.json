@@ -2221,6 +2221,8 @@
     "desktop.org.item_locked": "De tu organización, bloqueado",
     "desktop.org.item_default": "De tu organización",
     "desktop.org.banner_signed_out": "Cerraste sesión en {org}: sus modelos esperan hasta que inicies sesión.",
+    "desktop.org.banner_signing_in": "Termina de iniciar sesión en {org} en tu navegador.",
+    "desktop.org.cancel_sign_in": "Cancelar",
     "desktop.org.banner_unreachable": "{org} no responde: sus modelos esperan. Tu trabajo local continúa.",
     "desktop.org.terms_title": "Condiciones de {org}",
     "desktop.org.terms_body": "Antes de continuar, lee y acepta las condiciones de {org} (versión {version}). Si las rechazas, se cerrará tu sesión en tu organización.",

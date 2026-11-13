@@ -396,7 +396,7 @@ function Shell() {
             </div>
           )}
           {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
-          {service.state === "up" && <OrgBanner onSignIn={() => openSettings("organization")} />}
+          {service.state === "up" && <OrgBanner />}
           <div className="main-row">
             <div className="main-col">
               {open_.length === 0 && <Welcome onOpen={open} onClose={close} onSettings={openSettings} onSearch={() => setPaletteOpen(true)} />}

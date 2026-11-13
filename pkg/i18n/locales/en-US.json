@@ -2221,6 +2221,8 @@
     "desktop.org.item_locked": "Your organization's, locked",
     "desktop.org.item_default": "Your organization's",
     "desktop.org.banner_signed_out": "You're signed out of {org}: its models wait until you sign in.",
+    "desktop.org.banner_signing_in": "Finish signing in to {org} in your browser.",
+    "desktop.org.cancel_sign_in": "Cancel",
     "desktop.org.banner_unreachable": "{org} isn't answering: its models wait. Your local work goes on.",
     "desktop.org.terms_title": "{org}'s terms",
     "desktop.org.terms_body": "Before you go on, read and accept {org}'s terms (version {version}). Declining signs you out of your organization.",
