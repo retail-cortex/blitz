@@ -19,6 +19,7 @@
 // the service turns down looks fine in ?fake. Each is a port of the Go
 // it names, with the Go's words; where a port can only come close (a
 // schedule, which the service reads with its own parser), it says so.
+import { geminiVoices } from "../personality/voices";
 import { formProblems, resolve, setPath, type Component, type Form } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
 
@@ -291,6 +292,7 @@ const settable = [
   "blitz.permission_mode",
   "health.model",
   "ui.style",
+  "ui.personality",
   "ui.locale",
   "ui.notify",
   "ui.task_alerts",
@@ -323,7 +325,14 @@ const typed: Record<string, string> = {
   "browser.show": "show",
   "browser.open": "open",
   "web.browser_fallback": "bool",
+  "voice.enabled": "bool",
+  "voice.model": "voicemodel",
+  "voice.voice": "voice",
+  "voice.listen": "listen",
+  "voice.summaries": "summaries",
+  "voice.idle_minutes": "idle",
 };
+
 
 /** Why SetConfigValue refuses key = value (config.SetValue and typedValue), or "". "" always clears a setting. */
 export function configValueProblem(key: string, value: string): string {
@@ -335,8 +344,19 @@ export function configValueProblem(key: string, value: string): string {
     const why = authProblem(auth[1], value);
     if (why) return why;
   }
+  if (key === "ui.personality" && value && !(value.length <= 40 && /^[a-z0-9][a-z0-9-]*$/.test(value))) return `${key} is a personality's name (lower-case letters, digits and -, at most 40), not ${JSON.stringify(value)}`;
   if (!kind || value === "") return "";
   switch (kind) {
+    case "voicemodel":
+      return value.startsWith("gemini/") && value.length > 7 ? "" : `${key} is a Gemini Live model, as gemini/<model>, not ${JSON.stringify(value)}`;
+    case "voice":
+      return (geminiVoices as readonly string[]).includes(value) ? "" : `${key} is one of Gemini's voices (${geminiVoices.join(", ")}), not ${JSON.stringify(value)}`;
+    case "listen":
+      return ["tap", "hold"].includes(value) ? "" : `${key} is tap or hold, not ${JSON.stringify(value)}`;
+    case "summaries":
+      return ["voice", "always", "off"].includes(value) ? "" : `${key} is voice, always, off, not ${JSON.stringify(value)}`;
+    case "idle":
+      return /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 60 ? "" : `${key} is a number of minutes from 1 to 60, not ${JSON.stringify(value)}`;
     case "bool":
       return ["true", "false", "1", "0", "t", "f", "TRUE", "FALSE", "True", "False", "T", "F"].includes(value) ? "" : `${key} is true or false, not ${JSON.stringify(value)}`;
     case "int":
@@ -434,6 +454,8 @@ export function sessionSetting(key: string, value: string): { key: string; value
     case "style":
     case "output_style":
       return { key: "style", value };
+    case "personality":
+      return { key: "personality", value: value.trim().toLowerCase() || "default" };
     case "agency":
     case "agency_level":
       return ["low", "medium", "high", "extreme"].includes(value.toLowerCase()) ? { key: "agency", value: value.toLowerCase() } : { error: "agency level must be low, medium, high or extreme", reason: "INVALID_AGENCY" };
@@ -529,4 +551,15 @@ export async function* withKeepalives<T>(src: AsyncIterable<T>, signal?: AbortSi
   } finally {
     void it.return?.();
   }
+}
+
+/** Why the service refuses a personality (engine.CheckPersonality, secrets aside), or "". */
+export function personalityCheck(p: { name: string; description: string; voice: string; text: string }): string {
+  if (!(p.name.length <= 40 && /^[a-z0-9][a-z0-9-]*$/.test(p.name))) return `a personality's name is lower-case letters, digits and -, at most 40 characters, not ${JSON.stringify(p.name)}`;
+  if (p.name === "default") return '"default" is Blitz\'s own: pick another name';
+  if (!p.text.trim()) return "a personality needs its text: how it should sound";
+  if ([...p.text].length > 2000) return `a personality's text is at most 2000 characters; this one is ${[...p.text].length}`;
+  if (p.voice && !(geminiVoices as readonly string[]).includes(p.voice)) return `${JSON.stringify(p.voice)} isn't one of Gemini's voices`;
+  if (/[\n\r]/.test(p.description)) return "a personality's description is one line";
+  return "";
 }

@@ -47,6 +47,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
   mdiCalendarClock,
+  mdiEmoticonOutline,
 } from "@mdi/js";
 import { formatBytes } from "./bytes";
 import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, pruneUpdateDownloads, updateDownloads, type UpdateDownloads, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
@@ -68,6 +69,7 @@ import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
 import { BrowserSettings } from "./BrowserSettings";
+import { PersonalitySettings } from "./personality/PersonalitySettings";
 import { McpSettings } from "./McpSettings";
 import { ConnectorsPane } from "./studio/ConnectorsPane";
 import { useDiscardGuard } from "./studio/paneParts";
@@ -105,6 +107,7 @@ const sectionIcons: Record<SectionId, string> = {
   mcp: mdiPowerPlugOutline,
   connectors: mdiConnection,
   browser: mdiWeb,
+  personality: mdiEmoticonOutline,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -193,6 +196,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "browser" && <BrowserSettings />}
+            {section === "personality" && <PersonalitySettings />}
             {homeOf(section) === "connectors" && (
               <div className="slide-box">
                 <ConnectorsPane onDirty={setDirty} connect={connect} extra={advanced && <McpSettings embedded />} />

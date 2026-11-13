@@ -24,7 +24,7 @@ import { Code, ConnectError, createRouterTransport, type ConnectRouter } from "@
 import { setTransport } from "../api";
 import { parseMessages } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
-import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
+import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, personalityCheck, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
 import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, UsageGroupSchema, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
@@ -1038,6 +1038,29 @@ function fakeAccepted(provider: string) {
 
 // A sales table for the table viewer (ReadTable reads it below).
 const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
+
+// Personalities (spec_064_personality): the built-ins as the service has
+// them, the person's own, the person's default and each workspace's.
+type FakePersonality = { name: string; description: string; voice: string; source: string; text: string };
+const fakeBuiltinPersonalities: FakePersonality[] = [
+  { name: "default", description: "Blitz's own: clear, capable, neutral", voice: "Kore", source: "built-in", text: "" },
+  { name: "calm", description: "Steady and reassuring, one step at a time", voice: "Vindemiatrix", source: "built-in", text: "Be calm and steady. Short sentences, one step at a time." },
+  { name: "cheerful", description: "Upbeat and a little playful; celebrates wins", voice: "Puck", source: "built-in", text: "Be cheerful and upbeat, a little playful. Celebrate wins." },
+  { name: "direct", description: "No pleasantries; the answer first, then the risk", voice: "Kore", source: "built-in", text: "Be direct. Lead with the answer, then the risk, then what to do." },
+  { name: "friendly", description: "Warm and encouraging, in plain words", voice: "Achird", source: "built-in", text: "Be warm and encouraging, in plain words." },
+  { name: "mentor", description: "Explains the why, one idea at a time", voice: "Sadaltager", source: "built-in", text: "Be a patient mentor: explain why, one idea at a time." },
+  { name: "reviewer", description: "Constructively sceptical; asks for evidence", voice: "Charon", source: "built-in", text: "Be a constructive sceptic, like a good code reviewer." },
+];
+const fakeOwnPersonalities = new Map<string, FakePersonality>([["coach", { name: "coach", description: "Cheers you on", voice: "Puck", source: "own", text: "Cheer the person on like a coach at the big game." }]]);
+let fakePersonalityDefault = "default";
+const fakePersonalityOf = new Map<string, string>();
+const fakePersonalities = () => [...fakeBuiltinPersonalities.filter((p) => !fakeOwnPersonalities.has(p.name)), ...[...fakeOwnPersonalities.values()].sort((a, b) => a.name.localeCompare(b.name))];
+const fakePersonality = (name: string) => {
+  const p = fakePersonalities().find((x) => x.name === name.trim().toLowerCase());
+  if (!p) throw fakeInvalid(`no personality ${JSON.stringify(name)} (/personality lists them)`, "INVALID_SETTING");
+  return p;
+};
+const fakePersonalityIn = (workspace: string) => (fakePersonalities().some((p) => p.name === (fakePersonalityOf.get(workspace) ?? fakePersonalityDefault)) ? (fakePersonalityOf.get(workspace) ?? fakePersonalityDefault) : "default");
 
 // Browser profiles, and the one each workspace browses with.
 const fakeProfiles: { name: string; created: ReturnType<typeof now>; allowDomains: string[] }[] = [{ name: "work", created: now(), allowDomains: ["mail.example.com"] }];
@@ -2536,6 +2559,7 @@ export function installFake() {
           if (r.key === "effort") s.effort = r.value;
           if (r.key === "agency") s.agency = r.value;
           if (r.key === "style") s.style = r.value;
+          if (r.key === "personality") fakePersonalityOf.set(workspace, fakePersonality(r.value).name);
           return { key: r.key };
         },
         setPermissionMode: ({ workspace, mode }) => {
@@ -2562,6 +2586,19 @@ export function installFake() {
           else fakeModelSettings.delete(name);
           // Gemini takes no seed (the provider's: reported, still saved).
           return { model: fakeModelInfo(ref), unsupported: changes.filter((c) => c.key === "seed" && c.value).map((c) => c.key) };
+        },
+        // A sample answer that shows the personality (PER-30).
+        tryPersonality: ({ text }) => {
+          const why = text.trim() ? personalityCheck({ name: "try", description: "", voice: "", text }) : "";
+          if (why) throw fakeInvalid(why, "INVALID_SETTING");
+          const answer = /mentor|explain/i.test(text)
+            ? "Let's find it together: the error names the import that's missing. Check the module is in go.mod, then run the build again. Does that make sense?"
+            : /cheer|upbeat/i.test(text)
+              ? "No worries, that's an easy one! 🎉 Add the missing module to go.mod and run the build again."
+              : /direct/i.test(text)
+                ? "Add the missing module to go.mod. Then rebuild. If it still fails, the import path is wrong."
+                : "The error names the missing import. Add its module to go.mod (go get), then run the build again.";
+          return { answer, question: "The build failed on a missing import. What now?" };
         },
         listStyles: ({ workspace }) => ({
           styles: [
@@ -2832,6 +2869,24 @@ export function installFake() {
         trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        // Personalities (spec_064_personality PER-50), kept in the page.
+        listPersonalities: ({ workspace }) => ({
+          personalities: fakePersonalities().map((p) => ({ ...p, text: "", personDefault: p.name === fakePersonalityDefault, workspaceChoice: !!workspace && p.name === fakePersonalityIn(workspace) })),
+        }),
+        getPersonality: ({ name }) => ({ personality: { ...fakePersonality(name) } }),
+        savePersonality: ({ personality: p }) => {
+          if (!p) throw fakeInvalid("no personality");
+          const why = personalityCheck(p);
+          if (why) throw fakeInvalid(why, "INVALID_SETTING");
+          fakeOwnPersonalities.set(p.name, { name: p.name, description: p.description.trim(), voice: p.voice, source: "own", text: p.text.trim() });
+          return { change: { path: `~/.blitz/personalities/${p.name}.md`, problems: [] } };
+        },
+        deletePersonality: ({ name }) => {
+          const p = fakePersonality(name);
+          if (p.source !== "own") throw fakeInvalid("a built-in personality or the organization's can't be changed: duplicate it to make your own", "READ_ONLY");
+          fakeOwnPersonalities.delete(p.name);
+          return { change: { path: `~/.blitz/personalities/${p.name}.md`, problems: [] } };
+        },
         // Browser profiles (spec_049_browser_profiles), kept in the page.
         listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
         createBrowserProfile: ({ name }) => {
@@ -3303,6 +3358,11 @@ export function installFake() {
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
           if (key === "ui.task_alerts") fakeAlerts = value;
+          if (key === "ui.personality") {
+            if (value) fakePersonality(value);
+            if (workspace) fakePersonalityOf.set(workspace, value || "default");
+            else fakePersonalityDefault = value || "default";
+          }
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
           if (key === "images.model" && workspace) state(workspace).settings.imageModel = value;
           if (key.startsWith("search.") && workspace) {

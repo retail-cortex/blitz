@@ -15,14 +15,16 @@
  */
 
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useServiceApprovals, useServiceRuns } from "./serviceRuns";
 import { notify } from "./notify";
-import type { GoingServiceRun } from "./gen/blitz/v1/config_pb";
+import type { GoingServiceRun, Personality } from "./gen/blitz/v1/config_pb";
+import { agentWithPersonality, personalityDescription, personalityLabel } from "./personality/personality";
 import { ms, took } from "./workflowRuns";
 import {
   mdiAccountAlertOutline,
+  mdiEmoticonOutline,
   mdiAccountCheckOutline,
   mdiAccountClockOutline,
   mdiCheck,
@@ -58,7 +60,7 @@ import { inboxCounts, useRuns } from "./backgroundRuns";
 import { FlowRunsItem } from "./FlowRunAlerts";
 import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
-import { configChanged, filesTouchedEvent, openTerminal, showPending, showView } from "./events";
+import { configChanged, configChangedEvent, type ConfigChangedDetail, filesTouchedEvent, openTerminal, showPending, showView } from "./events";
 import type { AgentInfo, GetGitStatusResponse, WorkspaceProcess } from "./gen/blitz/v1/workspace_pb";
 import type { GetOrgSyncResponse } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
@@ -589,6 +591,37 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
       snack(message(e), { error: true });
     }
   };
+  // The workspace's personality (spec_064_personality PER-33): beside the
+  // agent's name, and chosen from its menu.
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const loadPersonalities = useCallback(
+    () =>
+      config.listPersonalities({ workspace: dir }).then(
+        (r) => setPersonalities(r.personalities),
+        () => {},
+      ),
+    [dir],
+  );
+  useEffect(() => void loadPersonalities(), [loadPersonalities, s]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<ConfigChangedDetail>).detail;
+      if (!d.dir || d.dir === dir) void loadPersonalities();
+    };
+    window.addEventListener(configChangedEvent, on);
+    return () => window.removeEventListener(configChangedEvent, on);
+  }, [dir, loadPersonalities]);
+  const personality = personalities.find((p) => p.workspaceChoice);
+  const setPersonality = async (p: Personality) => {
+    try {
+      const def = personalities.find((x) => x.personDefault);
+      await config.setConfigValue({ workspace: dir, key: "ui.personality", value: p.name === def?.name ? "" : p.name });
+      configChanged({ dir });
+      snack(t("desktop.status.personality_set", { name: personalityLabel(p) }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const total = st.total;
   const share = total ? contextShare(total.lastPrompt, st.threshold) : undefined;
   const c = st.cursor;
@@ -626,9 +659,9 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           placement="up end"
           className="wide-menu"
           trigger={(p) => (
-            <button className="sb-item sb-button sb-agent" title={t("desktop.status.agent_title", { agent: s.agent })} {...p} onClick={() => (loadAgents(), p.onClick())}>
+            <button className="sb-item sb-button sb-agent" title={t("desktop.status.agent_title", { agent: s.agent })} {...p} onClick={() => (loadAgents(), void loadPersonalities(), p.onClick())}>
               <Icon path={mdiRobotOutline} size="sm" />
-              <span className="ellipsis">{s.agent}</span>
+              <span className="ellipsis">{agentWithPersonality(s.agent, personality)}</span>
             </button>
           )}
           items={[
@@ -646,6 +679,18 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
               on: a.active,
               onSelect: () => void setAgent(a.name, a.displayName || a.name),
             })),
+            ...(personalities.length
+              ? [
+                  { heading: t("desktop.status.personality") },
+                  ...personalities.map((p) => ({
+                    label: personalityLabel(p),
+                    detail: personalityDescription(p),
+                    icon: mdiEmoticonOutline,
+                    on: p.workspaceChoice,
+                    onSelect: () => void setPersonality(p),
+                  })),
+                ]
+              : []),
             "divider",
             { label: `${t("desktop.run_settings")}…`, icon: mdiTuneVariant, onSelect: onWorkspaceSettings },
           ]}
