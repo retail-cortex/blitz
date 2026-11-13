@@ -136,7 +136,7 @@ import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summa
 import { copyRendered, copyText } from "./clipboard";
 import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
-import { useVoice, useVoiceSetup } from "./voice/useVoice";
+import { speakSummary, useVoice, useVoiceSetup } from "./voice/useVoice";
 import { VoiceBar, VoiceButton } from "./voice/VoiceControls";
 import { buttonState, useConversation, waitingOf, type ButtonState } from "./voice/voice";
 
@@ -693,6 +693,14 @@ export function Conversation({
   );
   const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
   const toggleVoice = () => (myVoice ? voice.end() : void voice.start());
+  // With summaries = "always", a turn that ends with no conversation open
+  // is summarised aloud, while this workspace is the one showing (VOX-17).
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    const ended = wasRunning.current && !running;
+    wasRunning.current = running;
+    if (ended && visible && voiceSetup.enabled && voiceSetup.summaries === "always" && !conversationNow && session?.id && !document.hidden) void speakSummary(dir, session.id);
+  }, [running, visible, voiceSetup.enabled, voiceSetup.summaries, conversationNow, session?.id, dir]);
   // The command palette's Talk to Blitz (VOX-21).
   useEffect(() => {
     const f = (e: Event) => {

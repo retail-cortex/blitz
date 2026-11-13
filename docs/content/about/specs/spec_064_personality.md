@@ -7,8 +7,8 @@ weight: 64
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-13; the owner: "Can you add a place in the UI to include AI personality for the root agent with prebuilt + custom personality? This last feature set is intended to improve the usability before we launch v1.0.0") |
-| Source | `pkg/engine/personalities.go` (planned) and `pkg/engine/personalities/` (planned) (the built-ins, the person's, the root agent's instruction); `pkg/engine/runtime` (an instruction for the root agent only); `pkg/config` (`[ui] personality`); `WorkspaceService`'s personality calls (`proto/blitz/v1/workspace.proto`); the page's `apps/desktop/web/src/personality/` (planned) (`PersonalitySettings.tsx`, `PersonalityEditor.tsx`), the workspace's Behaviour card (`WorkspaceSettingsForm.tsx`), `slashCommands.ts`; the CLI's `/personality` |
+| Status | **Built** (2026-11-13, for v1.0.0; the owner: "Can you add a place in the UI to include AI personality for the root agent with prebuilt + custom personality? This last feature set is intended to improve the usability before we launch v1.0.0") |
+| Source | `pkg/engine/personalities.go` and `pkg/engine/personalities/` (the built-ins, the person's, the organization's, a workspace's, Try it); `pkg/engine/runtime` (`WithPersonality`, `SetPersonality`: the root agent of attended runs only); `pkg/config` (`[ui] personality`); `ConfigService`'s and `WorkspaceService.TryPersonality` (`config.proto`, `workspace.proto`, `pkg/service/server/personality.go`); the page's `apps/desktop/web/src/personality/` (`PersonalitySettings.tsx`, `PersonalityEditor.tsx`, `personality.ts`), the workspace's Behaviour card (`WorkspaceSettingsForm.tsx`), the status bar, `slashCommands.ts`; the CLI's `/personality` |
 | Depends on | [spec_012_memory](spec_012_memory.md) (MEM-40's output styles, which this sits beside), [spec_024_desktop](spec_024_desktop.md) (Settings, the workspace's Behaviour), [spec_063_voice](spec_063_voice.md) (the voice that speaks it) |
 
 ## 1. Purpose
@@ -31,11 +31,11 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
 
 ## 3. Prebuilt and custom
 
-- **PER-10** **The built-ins**, embedded in `pkg/engine/personalities/` (planned), each with a suggested voice:
+- **PER-10** **The built-ins**, embedded in `pkg/engine/personalities/`, each with a suggested voice:
 
   | Name | Sounds | Voice |
   |---|---|---|
-  | `default` | Blitz's own: clear, capable, neutral. Adds nothing. | Kore |
+  | `default` | Blitz's own: clear, capable, neutral. Adds nothing. | `[voice] voice`'s |
   | `friendly` | Warm and encouraging, plain words, says what went well before what didn't. | Achird |
   | `direct` | No pleasantries. Leads with the answer, then the risk, then what to do. | Kore |
   | `mentor` | Explains the why, one idea at a time, checks the person is following and suggests what to learn next. For students and anyone new to the code. | Sadaltager |
@@ -58,7 +58,7 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
 
 - **PER-30** **Settings › Personality.** A section of its own in Settings' *Setup* group, shown in simple mode (a choice everyone makes). It holds, with the list rows and forms Settings' other sections use (no new styles):
   1. **The list**: every personality, built-ins first, then the organization's, then the person's, each with its name, its description, where it's from (*Built in*, *Organization*, *Yours*) and its voice when voice is on. The person's default is marked, and choosing a row makes it the default (`[ui] personality`).
-  2. **Try it**, on the selected one: a short sample answer to a fixed question ("The build failed on a missing import. What now?") from the person's default model, with the personality, so they hear the difference before choosing. Each try is one small model call, and the first one says so.
+  2. **Try it**, on any row: a short sample answer to a fixed question ("The build failed on a missing import. What now?") from the workspace's suggestions model (else its main one), with the personality, so they hear the difference before choosing. Each try is one small model call, and the first one says so.
   3. **New personality**: opens the editor (PER-31) empty. **Duplicate** on any row opens it with that one's text, to make a variant (built-ins can only be duplicated, not edited).
   4. **Edit** and **Delete** on the person's own. Deleting one a workspace uses asks first and says which.
 - **PER-31** **The editor**, in Settings' drawer:
@@ -68,7 +68,7 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
   - **Try it** (PER-30), on the text as it stands, before saving;
   - **Save**, refused with the reason for a bad name, a name taken by another of the person's, too long a text, or a secret (PER-04). Unsaved changes ask before the drawer closes, as Studio's forms do.
 - **PER-32** **A workspace's Behaviour card** (spec_024 DSK-60) has **Personality** beside **Output style**: a menu of them, with *Your default (Friendly)* first. It sets the workspace's (PER-21).
-- **PER-33** **At a glance.** The status bar's agent button shows the personality beside the agent when it isn't `default` ("Blitz · Mentor"), and its menu has **Personality ›** to switch, as `/personality` does.
+- **PER-33** **At a glance.** The status bar's agent button shows the personality beside the agent when it isn't `default` ("blitz · Mentor"), and its menu lists the personalities under **Personality** to switch, as `/personality` does.
 
 ## 6. The voice
 
@@ -76,7 +76,7 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
 
 ## 7. The API
 
-- **PER-50** On `WorkspaceService`, beside `ListStyles`: `ListPersonalities(workspace)` answers each one's name, description, source, voice and whether it's the workspace's and the person's default; `GetPersonality(name)` adds its text; `SavePersonality(name, description, voice, text)` and `DeletePersonality(name)` write the person's own (PER-11), with `INVALID_ARGUMENT` and the reason for PER-04/PER-31's refusals, and `READ_ONLY` for a built-in or the organization's; `TryPersonality(workspace, text)` streams PER-30's sample. The workspace's choice is `SetSetting(key: "personality")`, as `style` is; the default is `SetConfigValue("ui.personality")`.
+- **PER-50** On `ConfigService`, since they're the person's files: `ListPersonalities(workspace)` answers each one's name, description, source, voice and whether it's the workspace's and the person's default; `GetPersonality(name)` adds its text; `SavePersonality(name, description, voice, text)` and `DeletePersonality(name)` write the person's own (PER-11), with `INVALID_ARGUMENT` and the reason for PER-04/PER-31's refusals, and `READ_ONLY` for a built-in or the organization's; and on `WorkspaceService`, `TryPersonality(workspace, text)` answers PER-30's sample and its question. The workspace's choice is `SetSetting(key: "personality")`, as `style` is; the default is `SetConfigValue("ui.personality")`.
 
 ## 8. Testing
 

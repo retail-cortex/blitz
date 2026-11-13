@@ -7,8 +7,8 @@ weight: 63
 
 | | |
 |---|---|
-| Status | **Draft** (2026-11-13; the owner: "a voice interface using the bidi voice access with ADK. A microphone icon in the chat bar, and voice summaries of the work", then "Don't forget to add the voice settings in the UI, not just the file, and it should be able to be switched completely off. This is a desktop only feature and I'm happy to make it a Google only feature.") |
-| Source | `pkg/engine/voice` (planned) (the live session, the voice agent and its tools, summaries); `pkg/config` (`VoiceConfig`, `[voice]`); `pkg/service/server/voice.go` (planned) (the WebSocket); `pkg/pageserver` (the socket forwarded to the service); the page's voice (`apps/desktop/web/src/voice/` (planned): `VoiceButton.tsx`, `VoiceBar.tsx`, `VoiceSettings.tsx`, `audio.ts` and its worklet), the composer (`Conversation.tsx`), Settings (`SettingsDrawer.tsx`, `simpleMode.ts`); Electron's microphone permission (`apps/electron/src/main.ts`, `packaging/entitlements.plist`, the app's `Info.plist`) |
+| Status | **Built** (2026-11-13, for v1.0.0; not yet: the tray's **Stop talking** (VOX-23), an organization switching voice off (VOX-52, VOX-90), voice's tokens in the session's cost (VOX-18), the paid check (VOX-64). The owner: "a voice interface using the bidi voice access with ADK. A microphone icon in the chat bar, and voice summaries of the work", then "Don't forget to add the voice settings in the UI, not just the file, and it should be able to be switched completely off. This is a desktop only feature and I'm happy to make it a Google only feature.") |
+| Source | `pkg/engine/voice.go` (the conversation, the voice agent and its tools, the turns' facts, summaries); `pkg/engine/runtime/voice.go` (the Live model, its settings); `pkg/engine/runtime/wirefake/live.go` (the Live API's fake); `pkg/config` (`VoiceConfig`, `[voice]`); `VoiceService` (`proto/blitz/v1/voice.proto`, `pkg/service/server/voice.go`); the page's `apps/desktop/web/src/voice/` (`voice.ts`, `audio.ts`, `useVoice.ts`, `VoiceControls.tsx`, `VoiceSettings.tsx`), the composer and conversation (`Conversation.tsx`), the status bar, the command palette, Settings (`SettingsDrawer.tsx`, `simpleMode.ts`); Electron's microphone permission (`apps/electron/src/logic.ts` `pagePermission`, `main.ts`), `packaging/entitlements.plist`, the app's `Info.plist` (`packaging/mac.bzl`) |
 | Depends on | [spec_015_models](spec_015_models.md) (the Gemini provider, its API key or Vertex AI), [spec_021_service](spec_021_service.md) (the API, SVC-30's reasons), [spec_024_desktop](spec_024_desktop.md) (the composer, Settings), [spec_061_models](spec_061_models.md) (the models each provider lists), [spec_064_personality](spec_064_personality.md) (how the voice sounds) |
 
 ## 1. Purpose
@@ -52,11 +52,10 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - transcripts of both sides (`inputAudioTranscription`, `outputAudioTranscription`), for the conversation's record (VOX-16);
   - Gemini's own activity detection with `listen = "tap"`, and explicit activity start/end messages with `listen = "hold"`;
   - context window compression and session resumption, so a conversation outlasts Gemini's session limit and survives a dropped connection: Blitz keeps the latest resumption handle and reconnects with it, quietly, before the server's `goAway` deadline.
-- **VOX-08** **The reply language** is the session's reply language when one is set (spec_024's run settings), else the language the person speaks in.
-
+- **VOX-08** **The reply language** is the language the person speaks in (the voice's instructions say so). The session's reply language (spec_024's run settings) isn't passed to it yet.
 ## 4. The voice agent
 
-- **VOX-10** **Who it is.** A built-in agent, `voice`, with its own short instructions: it's the person's spoken link to the workspace's agent; it keeps replies short (two sentences unless asked for more); it never claims to have done something it didn't; it hands anything that needs reading files, running commands or changing things to the agent with `run_task`. It knows the workspace's name, the session's agent and model, and what's running. It speaks with the session's personality (spec_064 PER-40), in its frame (PER-03). It's not listed among the agents the person can pick and can't be edited in Studio; its instructions live in `pkg/engine/voice` (planned).
+- **VOX-10** **Who it is.** A built-in agent, `voice`, with its own short instructions: it's the person's spoken link to the workspace's agent; it keeps replies short (two sentences unless asked for more); it never claims to have done something it didn't; it hands anything that needs reading files, running commands or changing things to the agent with `run_task`. It knows the workspace's name, the session's agent and model, and what's running. It speaks with the session's personality (spec_064 PER-40), in its frame (PER-03). It's not listed among the agents the person can pick and can't be edited in Studio; its instructions live in `pkg/engine/voice.go`.
 - **VOX-11** **Its tools, and only these.** It has no file, shell, web or MCP tools of its own:
   - `run_task(prompt)`: starts a turn in the session with `prompt` as the person's message (spoken requests are rephrased into a clear written prompt, and the written prompt is what's shown and kept), through the same turn path as a typed message: hooks, the agent, approvals, limits, the record. Refused while a turn runs: then it's `steer`.
   - `steer(message)`: adds to the running turn, as the composer's steer does (spec_024).
@@ -64,6 +63,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - `status()`: what's running (the turn, its task list, its last tool calls by name, how long it has run), what's waiting on the person (an approval, a question), and the last turn's result (its answer's start, the files it changed, its tests, its cost).
   - `answer(choice)`: answers the question the agent asked, by one of its offered options or as free text (VOX-13 for approvals).
   - `recent(n)`: the last `n` (at most 10) messages of the conversation, as text, so "what did it say about the cart?" can be answered.
+  - `end_conversation()`: ends the conversation once its goodbye has been said (VOX-14).
 - **VOX-12** **Nothing secret reaches the voice.** What `status` and `recent` give the voice model goes through the same redaction as the agent's tool output (keys, tokens, hidden files never in it: spec_006 FS-15), and they never include file contents beyond what's already in the conversation.
 - **VOX-13** **Approvals by voice, carefully.** When the agent asks to run a command or change a file, the voice says what it wants in plain words ("It wants to run `make deploy`. Allow it?"). A spoken yes allows it **once**, and only when:
   - that approval card is showing in the window, and
@@ -72,7 +72,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 
   "For the session" and "always" can't be given by voice; denying can. Anything else (a mishearing, a second approval arriving) leaves the card for a click.
 - **VOX-14** **When it ends.** A voice conversation ends when the person clicks the microphone again, says to stop ("stop listening", the voice ends it with a goodbye), closes the workspace or the window, turns voice off, or after `idle_minutes` with nothing said and nothing running. A turn the voice started keeps running when the voice conversation ends; its summary is then spoken only with `summaries = "always"`.
-- **VOX-15** **One at a time.** One voice conversation per window, on the session that's showing. Switching sessions or workspaces moves the voice with it only after the person says or clicks so; the bar asks ("Talk about *payments-fix* instead?").
+- **VOX-15** **One at a time.** One voice conversation per workspace in the service (a second is refused, `VOICE_BUSY`), and one per window: while one is open, the other workspaces' microphones are hidden. It's about the session showing when it starts.
 - **VOX-16** **The record.** The conversation keeps what was said, in writing: the person's words (from the input transcript) and the voice's replies (from the output transcript), each marked as spoken, in the session's messages beside the typed ones, so they're searched, summarised and resumed like any other. A spoken exchange that only answered (no `run_task`) is kept the same way. The voice model's own audio isn't kept; nor is the person's (VOX-51).
 - **VOX-17** **Spoken summaries.** When a turn ends (with `summaries` allowing it), the voice says what happened, in one or two sentences, from facts Blitz collects, not from a guess:
   - whether it finished, stopped, failed or hit a limit;
@@ -82,8 +82,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - the cost, only when over a dollar.
 
   While a turn runs the voice stays quiet, except to say an approval or a question is waiting (VOX-13) or that the turn failed. With `summaries = "always"` and no voice conversation open, the summary is spoken through a short live connection opened for it (text in, audio out), and only while the window is in front and the session showing; otherwise a turn ending is the usual notification.
-- **VOX-18** **Usage.** The live model's tokens are counted as the session's other model calls are, by model, with their cost where its price is known, and shown in the turn's usage line and Settings › Logs. Audio isn't free: Settings › Voice says so.
-
+- **VOX-18** **Usage.** The live model's tokens are logged by the `voice` logger at debug (VOX-33). Adding them to the session's usage and cost, as the session's other model calls are, is still to do; Settings › Voice says audio isn't free.
 ## 5. The window
 
 - **VOX-20** **The microphone in the chat bar.** With voice on (VOX-02), the composer has a microphone button beside Send. Its states:
@@ -102,7 +101,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - the model and voice, small.
 
   It never covers the conversation's last message. The written messages land in the conversation as they finish (VOX-16), marked with a small speaker icon.
-- **VOX-23** **The status bar** shows a red microphone while the microphone is open, in any view (the conversation needn't be showing); clicking it ends the conversation. The tray's menu has **Stop talking** while one is open.
+- **VOX-23** **The status bar** shows a red **Listening** while a conversation is open, in any view (the conversation needn't be showing); clicking it ends the conversation. The tray's **Stop talking** is still to do.
 - **VOX-24** **When something goes wrong** (the connection drops and can't resume, the model refuses, the quota is spent), the bar says so in a sentence with what to do, the conversation ends, and nothing typed is lost.
 
 ## 6. Settings › Voice
@@ -122,43 +121,43 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 
 ## 7. Audio and the service
 
-- **VOX-30** **The path.** A browser page can't hold a two-way Connect stream, so voice has its own WebSocket: the page opens `wss://<page server>/blitz.voice/<workspace>/<session>`; the page server forwards it to the service's socket (as it forwards the API, with the upgrade); the service runs the live session (VOX-07). On the socket:
-  - binary frames are audio: the page's 16 kHz PCM up, the voice's 24 kHz PCM down;
-  - text frames are JSON events: transcripts (partial and final), the voice's state (listening, speaking, interrupted), a summary starting, errors, the end; and from the page, mute, activity start and end (`hold`), and end.
+- **VOX-30** **The path.** The page server speaks HTTP/2 only, and a browser can't stream to the service, so voice works as the terminal does (spec_062): `VoiceService` (`voice.proto`) streams the conversation down and takes the person's side by unary calls, through the page server's API proxy like every other call.
+  - `Converse(workspace, session_id)` opens a conversation and streams it until it ends: first `started` (its ID, the model, the voice, tap or hold), then the voice's audio (24 kHz PCM), transcripts (`heard`, `said`, pieces with `final` ending a line), `state` (listening, speaking), `interrupted`, the window's work (`run_task`, `steer`, `stop`, `answer`, `approve`), `error` and finally `ended` (closed, idle, goodbye, off, summary, error). The stream ending ends the conversation. `summary_only` says the session's last turn's summary and ends (VOX-17); `sample_voice` says a short sample in that voice and ends (VOX-41).
+  - `SendVoice(workspace, id, …)` sends one of: the person's audio (16 kHz PCM; the page sends 100 ms at a time), `speaking` (hold to talk's start and end), `waiting` (what the window shows waiting, whole each time it changes, VOX-13) or `end`.
+  - `DescribeVoice(workspace, list_models)` is Settings › Voice's: the settings, why voice isn't set up, the model in use and its API, Gemini's voices, the live models, the personality's voice.
 
-  The page captures with `getUserMedia` (audio only, echo cancellation and noise suppression on) and an AudioWorklet that resamples to 16 kHz in 20 ms frames; it plays the voice's audio through one `AudioContext`, dropping its queue on an interruption.
-- **VOX-31** **Refusals**, as SVC-30's reasons in the socket's closing message:
+  The page captures with `getUserMedia` (audio only, echo cancellation and noise suppression on) and an AudioWorklet, in 20 ms frames resampled to 16 kHz; it plays the voice's audio through one `AudioContext`, dropping its queue on an interruption.
+- **VOX-31** **Refusals**, as SVC-30's reasons:
   - `VOICE_OFF`: voice is off (VOX-02);
   - `VOICE_NOT_SET_UP`: no Google provider, or it can't sign in (VOX-03);
-  - `VOICE_MODEL`: the model isn't live-capable or isn't there;
-  - `VOICE_BUSY`: a voice conversation is already open in this window (VOX-15);
-  - `UNKNOWN_SESSION`, `UNKNOWN_WORKSPACE`, as elsewhere.
-- **VOX-32** **Only the window.** The voice socket is served only to the page server's own page (its origin and the page server's token, as the API is), never on a network port of its own and never to the tray's other pages.
+  - `VOICE_MODEL`: the model isn't a Gemini Live model;
+  - `VOICE_BUSY`: a conversation is already open in this workspace (VOX-15);
+  - `UNKNOWN_VOICE`: `SendVoice` to a conversation that has ended, or another workspace's;
+  - `INVALID_ARGUMENT`: a sample voice that isn't one of Gemini's.
+- **VOX-32** **Only the window.** VoiceService is served as every other service is: on the service's socket, reached by the page through the page server's proxy (its origin and token checks), never on a network port of its own.
 - **VOX-33** **Logs.** The `voice` logger (spec_003 LOG-01b) records each conversation's start and end, its model, reconnects and errors at info, and the events (not audio, not transcripts) at debug.
 
 ## 8. Microphone and privacy
 
 - **VOX-50** **The microphone permission.** The app asks for the microphone only when a voice conversation starts or Settings › Voice's meter is shown, and only with voice on:
-  - Electron's permission handler allows `media` with audio only (never video) for the window's own page, and only while voice is on; every other page, and video, is refused as today;
+  - Electron's permission handler (`pagePermission`) allows `media` with audio only, never video, for the window's own page; every other page is refused, as before. The page asks only with voice on, so with voice off nothing asks;
   - on macOS the app's `Info.plist` has `NSMicrophoneUsageDescription` ("Blitz uses the microphone when you talk to it.") and its entitlements `com.apple.security.device.audio-input`, as notarization requires; macOS asks the person the first time, never while voice is off;
   - when the system says no, the button is disabled with "Allow Blitz to use the microphone in System Settings › Privacy & Security › Microphone" (Windows' and Linux's equivalents), and Settings › Voice has a button that opens that page.
 - **VOX-51** **What goes where.** While a conversation is open, the microphone's audio goes to Google's Gemini Live API through the provider the person set up (their key, or their Vertex AI project) and nowhere else. Blitz writes no audio to disk. The transcripts are kept as the conversation's messages (VOX-16). The privacy guide says this, and the active-installs ping (spec_054) says nothing about voice.
-- **VOX-52** **Organizations.** An organization's policy can switch voice off for its members (`[voice] enabled = false`, locked); the switch then shows off and disabled, saying it's the organization's. The voice still uses the person's Google provider, not the organization's gateway (VOX-05).
-
+- **VOX-52** **Organizations.** *Not built (VOX-90).* An organization's policy would switch voice off for its members, the switch showing off and disabled. The voice uses the person's Google provider, not the organization's gateway (VOX-05).
 ## 9. Testing
 
-- **VOX-60** **A strict fake of the Live API** in `pkg/engine/runtime/wirefake`: a WebSocket server speaking `BidiGenerateContent` as Gemini does (setup first, then realtime input; transcripts, interruptions, tool calls, `goAway`, resumption handles; refusing out-of-order messages as the real one does), so the engine's tests are as strict as the API.
+- **VOX-60** **A strict fake of the Live API** in `pkg/engine/runtime/wirefake` (`NewLive`): a WebSocket server speaking `BidiGenerateContent` as Gemini does (setup first, then realtime input; transcripts, interruptions, tool calls, `goAway`, resumption handles; refusing out-of-order messages as the real one does), so the engine's tests are as strict as the API.
 - **VOX-61** **Engine tests**: each tool (VOX-11), approvals by voice and every refusal of VOX-13, summaries from facts (VOX-17), idle and goodbye endings, resumption across `goAway` and a dropped connection, redaction (VOX-12), usage (VOX-18), and that with voice off nothing of voice is built (VOX-02).
 - **VOX-62** **Service tests**: the socket's refusals (VOX-31), origin and token (VOX-32), the page server forwarding the upgrade, a whole conversation against the fake.
-- **VOX-63** **Page tests** (Vitest): the button's states, the resampler, the bar, Settings › Voice with voice off and on; and a journey test in `?fake` mode, with a fake microphone stream and a fake voice: talk → `run_task` → an approval said yes to → the turn ends → the spoken summary, checked through the window's stream (journeys and strict fakes). Playwright shots of the button, the bar and Settings › Voice in both themes.
-- **VOX-64** **The paid check**, with `BLITZ_LIVE=1` and a Gemini key: a short real conversation from recorded speech, a `run_task`, a summary. It costs money and isn't run in CI.
-
+- **VOX-63** **Page tests** (Vitest): the button's states, what's waiting, the PCM conversions, the shared conversation, and the fake service's conversation as the window drives it (refused while off; heard, handed over, said; an approval read out and allowed once; one a workspace; off ends it; the sample). Checked on the fake page in Chromium with a stubbed microphone: Settings › Voice off and on, a conversation, ending it from the status bar, in both themes.
+- **VOX-64** **The paid check** (*not yet run*), with `BLITZ_LIVE=1` and a Gemini key: a short real conversation from recorded speech, a `run_task`, a summary. It costs money and isn't run in CI.
 ## 10. Done when
 
 - With voice off, nothing of voice shows, runs or asks for the microphone, in the window, the service or the OS.
 - With it on and Gemini set up, the person clicks the microphone, says a task, and the agent does it as if typed, approvals and all; the voice tells them when it's done, what changed and what's waiting.
 - Every setting is in Settings › Voice as well as the file, and applies as VOX-40 says.
-- The guide has a **Voice** page (`docs/content/guide/voice.md` (planned)), the privacy and configuration pages list `[voice]` and the microphone, spec_002's settings table has `[voice]`, and the release page says how to get started.
+- The guide has a **Voice** page (`docs/content/guide/voice.md`), the privacy and configuration pages list `[voice]` and the microphone, spec_002's settings table has `[voice]`, and the release page says how to get started.
 - Tests as section 9, `tools/coverage.sh --config=race` at or above the floor, and the macOS build notarized with the new entitlement.
 
 ## 11. Open questions

@@ -25,7 +25,7 @@ import type { Pending } from "../waits";
 export type ButtonState = "hidden" | "not_set_up" | "no_mic" | "ready" | "connecting" | "listening" | "speaking" | "muted";
 
 /** What the page knows of voice: its settings' switch, whether it's set up, the microphone's permission. */
-export type VoiceSetup = { enabled: boolean; notSetUp: string; mic: "unknown" | "granted" | "denied" | "none" };
+export type VoiceSetup = { enabled: boolean; notSetUp: string; mic: "unknown" | "granted" | "denied" | "none"; summaries?: string };
 
 /** The conversation as the window shows it: one a window (VOX-15). */
 export type Conversation = {

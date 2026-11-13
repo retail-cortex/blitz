@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.3
-weight: 11
+weight: 12
 ---
 
 **Ask Blitz for a picture, and get one.** Set an image model, and whatever model you're talking to draws posters, illustrations and logos into your workspace, and changes the pictures you already have. And Blitz no longer treats every request as a coding task.

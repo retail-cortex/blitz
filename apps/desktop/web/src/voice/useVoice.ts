@@ -28,7 +28,7 @@ export function useVoiceSetup(dir: string): VoiceSetup & { refresh: () => void }
   const [setup, setSetup] = useState<VoiceSetup>({ enabled: false, notSetUp: "", mic: "unknown" });
   const refresh = useCallback(() => {
     voices.describeVoice({ workspace: dir }).then(
-      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
+      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, summaries: d.summaries, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
       () => setSetup((s) => ({ ...s, enabled: false })),
     );
   }, [dir]);
@@ -196,4 +196,22 @@ export function voiceErrorText(e: unknown): string {
       return t("desktop.voice.error.busy");
   }
   return t("desktop.voice.error.other", { error: message(e) });
+}
+
+/**
+ * Says a finished turn's summary aloud with no conversation open
+ * (summaries = "always", VOX-17): one short live call, played, then done.
+ */
+export async function speakSummary(dir: string, sessionId: string) {
+  const player = new Player();
+  try {
+    for await (const m of voices.converse({ workspace: dir, sessionId, summaryOnly: true })) {
+      if (m.audio.length) player.play(m.audio);
+      if (m.ended) break;
+    }
+  } catch {
+    // a summary not said is no error of the turn's
+  } finally {
+    setTimeout(() => player.close(), 20000);
+  }
 }
