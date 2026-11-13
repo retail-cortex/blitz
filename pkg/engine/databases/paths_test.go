@@ -250,4 +250,9 @@ statement: SELECT name, type, sql FROM sqlite_master WHERE type IN ('table', 'vi
 	assert.False(t, ok, "one that can write chose its tools")
 	_, ok = upgraded(category, kinds, "recipes", strings.Replace(older, "written by Studio.", "written by hand.", 1))
 	assert.False(t, ok, "one written by hand is the person's own")
+	up, ok := upgraded(category, kinds, "recipes", older)
+	require.True(t, ok)
+	_, ok = upgraded(category, kinds, "recipes", strings.Replace(up, toolsMark, "", 1))
+	assert.False(t, ok, "one that has them already needs nothing")
+	assert.Equal(t, map[string]string{file: up}, upgrades(category, kinds, []string{file, filepath.Join(ws, "missing.yaml")}), "a file it can't read is left to Toolbox")
 }

@@ -74,12 +74,10 @@ func upgraded(cat connectors.Category, kinds []connectors.Kind, name, text strin
 	if c.Custom || !c.ReadOnly {
 		return "", false
 	}
-	i := slices.IndexFunc(kinds, func(k connectors.Kind) bool { return k.ID == c.Kind })
-	if i < 0 {
-		return "", false
-	}
+	// Not custom, so its kind is one of kinds.
+	k := &kinds[slices.IndexFunc(kinds, func(k connectors.Kind) bool { return k.ID == c.Kind })]
 	added := false
-	for _, t := range kinds[i].Tools {
+	for _, t := range k.Tools {
 		if t.AddToOlder && t.On && !slices.Contains(c.Tools, t.ID) {
 			c.Tools, added = append(c.Tools, t.ID), true
 		}
@@ -87,11 +85,8 @@ func upgraded(cat connectors.Category, kinds []connectors.Kind, name, text strin
 	if !added {
 		return "", false
 	}
-	up, err := Backend{}.Render(cat, &kinds[i], c)
-	if err != nil {
-		return "", false
-	}
-	return up, true
+	up, err := Backend{}.Render(cat, k, c)
+	return up, err == nil
 }
 
 func parse(cat connectors.Category, kinds []connectors.Kind, name, text string) connectors.Connection {
