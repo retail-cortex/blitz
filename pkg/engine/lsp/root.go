@@ -44,7 +44,11 @@ func (m *Manager) projectRoot(language, path string) string {
 	if !within(m.root, dir) {
 		return m.root
 	}
-	for _, tier := range rootMarkers[language] {
+	tiers := rootMarkers[language]
+	if language == "python" && m.bazel().rulesPython {
+		tiers = pythonBazelMarkers
+	}
+	for _, tier := range tiers {
 		for d := dir; ; d = filepath.Dir(d) {
 			for _, f := range tier {
 				if _, err := os.Stat(filepath.Join(d, f)); err == nil {
@@ -78,9 +82,9 @@ var tsLookPath = exec.LookPath
 
 // tsserverLib is the TypeScript the typescript server is given for root
 // (its initializationOptions' tsserver.path): the project's own, in
-// node_modules at root or a folder above it in the workspace; else the
-// one installed beside tsc on PATH, or beside the server's command (a
-// global npm install of both). "" for none: the server looks for itself,
+// node_modules at root or a folder above it in the workspace, or in
+// Bazel's output (rules_js); else the one installed beside tsc on PATH,
+// or beside the server's command (a global npm install of both). "" for none: the server looks for itself,
 // and says when it can't find one.
 func (m *Manager) tsserverLib(root, command string) string {
 	for d := root; within(m.root, d); d = filepath.Dir(d) {
@@ -90,6 +94,9 @@ func (m *Manager) tsserverLib(root, command string) string {
 		if d == m.root || filepath.Dir(d) == d {
 			break
 		}
+	}
+	if lib := m.bazelTSLib(root); lib != "" {
+		return lib
 	}
 	// A global install: <prefix>/bin/tsc links to
 	// <prefix>/lib/node_modules/typescript/bin/tsc, and the server's

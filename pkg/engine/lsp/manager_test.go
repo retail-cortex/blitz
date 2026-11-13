@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 
 // inProcess runs lsptest.Serve in this process, over OS pipes (buffered,
 // as a real server's stdio is).
-func inProcess(context.Context, string, []string) (lsp.Process, error) {
+func inProcess(context.Context, string, []string, []string) (lsp.Process, error) {
 	serverIn, clientOut, err := os.Pipe()
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func testManager(t *testing.T, launch lsp.Launcher) {
 
 func TestManagerCantStart(t *testing.T) {
 	m := lsp.NewManager(t.TempDir(), []lsp.Server{{Language: "go", Command: []string{"nope"}, Extensions: []string{".go"}}},
-		func(context.Context, string, []string) (lsp.Process, error) {
+		func(context.Context, string, []string, []string) (lsp.Process, error) {
 			return nil, fmt.Errorf("nope isn't installed")
 		})
 	defer m.Close()
@@ -129,7 +129,7 @@ func TestGopls(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/x\n\ngo 1.22\n"), 0o644))
 	src := filepath.Join(dir, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Answer() int { return 42 }\n\nfunc main() { _ = Answer() + \"x\" }\n"), 0o644))
-	launch := func(ctx context.Context, _ string, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	launch := func(ctx context.Context, _ string, argv, _ []string) (lsp.Process, error) { return startProcess(argv) }
 	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
 	defer m.Close()
 	ctx := context.Background()
@@ -175,7 +175,7 @@ func TestGoplsSnippets(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/demo\n\ngo 1.22\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "greet"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "greet", "greet.go"), []byte("package greet\n\n// Hello greets.\nfunc Hello(name string) string { return \"hi \" + name }\n"), 0o644))
-	launch := func(ctx context.Context, _ string, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	launch := func(ctx context.Context, _ string, argv, _ []string) (lsp.Process, error) { return startProcess(argv) }
 	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
 	defer m.Close()
 	ctx := context.Background()
@@ -243,7 +243,7 @@ func TestGoplsSnippetsOutsideModule(t *testing.T) {
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "backend"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "backend", "go.mod"), []byte("module example.com/backend\n\ngo 1.22\n"), 0o644))
-	launch := func(ctx context.Context, _ string, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	launch := func(ctx context.Context, _ string, argv, _ []string) (lsp.Process, error) { return startProcess(argv) }
 	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
 	defer m.Close()
 	info := m.OpenSnippet(context.Background(), "w", m.SnippetPath("abc", ".go"), "package daemon\n\nimport \"fmt\"\n\nfunc F() { fmt.Println(1) }\n", 1)
@@ -289,7 +289,7 @@ func TestPyright(t *testing.T) {
 		t.Skip("set BLITZ_TEST_PYRIGHT=1 to ask pyright")
 	}
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
-	launch := func(ctx context.Context, _ string, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	launch := func(ctx context.Context, _ string, argv, _ []string) (lsp.Process, error) { return startProcess(argv) }
 	m := lsp.NewManager(dir, []lsp.Server{{Language: "python", Command: []string{"pyright-langserver", "--stdio"}, Extensions: []string{".py"}}}, launch)
 	defer m.Close()
 	ctx := context.Background()

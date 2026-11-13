@@ -278,6 +278,7 @@ go_test(
         "websearch_test.go",
         "workspace_cov_test.go",
         "workspace_test.go",
+        "zz_repro_test.go",
     ],
     embed = [":tools"],
     shard_count = 8,
