@@ -9,7 +9,7 @@ weight: 63
 |---|---|
 | Status | **Draft** (2026-11-13; the owner: "a voice interface using the bidi voice access with ADK. A microphone icon in the chat bar, and voice summaries of the work", then "Don't forget to add the voice settings in the UI, not just the file, and it should be able to be switched completely off. This is a desktop only feature and I'm happy to make it a Google only feature.") |
 | Source | `pkg/engine/voice` (planned) (the live session, the voice agent and its tools, summaries); `pkg/config` (`VoiceConfig`, `[voice]`); `pkg/service/server/voice.go` (planned) (the WebSocket); `pkg/pageserver` (the socket forwarded to the service); the page's voice (`apps/desktop/web/src/voice/` (planned): `VoiceButton.tsx`, `VoiceBar.tsx`, `VoiceSettings.tsx`, `audio.ts` and its worklet), the composer (`Conversation.tsx`), Settings (`SettingsDrawer.tsx`, `simpleMode.ts`); Electron's microphone permission (`apps/electron/src/main.ts`, `packaging/entitlements.plist`, the app's `Info.plist`) |
-| Depends on | [spec_015_models](spec_015_models.md) (the Gemini provider, its API key or Vertex AI), [spec_021_service](spec_021_service.md) (the API, SVC-30's reasons), [spec_024_desktop](spec_024_desktop.md) (the composer, Settings), [spec_061_models](spec_061_models.md) (the models each provider lists) |
+| Depends on | [spec_015_models](spec_015_models.md) (the Gemini provider, its API key or Vertex AI), [spec_021_service](spec_021_service.md) (the API, SVC-30's reasons), [spec_024_desktop](spec_024_desktop.md) (the composer, Settings), [spec_061_models](spec_061_models.md) (the models each provider lists), [spec_064_personality](spec_064_personality.md) (how the voice sounds) |
 
 ## 1. Purpose
 
@@ -36,7 +36,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   |---|---|---|
   | `enabled` | `false` | Voice on or off (VOX-01, VOX-02). |
   | `model` | `""` | The Gemini Live model, as `gemini/<model>`. Empty is VOX-06's default. |
-  | `voice` | `"Kore"` | One of Gemini's prebuilt voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr…, as the model offers them). |
+  | `voice` | `"Kore"` | One of Gemini's prebuilt voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr…, as the model offers them). The session's personality's voice wins when it has one (spec_064 PER-40). |
   | `listen` | `"tap"` | `tap`: click the microphone to start, click again to end; Gemini hears when you start and stop speaking. `hold`: speak only while holding the microphone or its shortcut (VOX-21), for noisy rooms. |
   | `summaries` | `"voice"` | When work is summarised aloud (VOX-17): `voice`, only in a voice conversation; `always`, also when a turn the person typed ends; `off`, never. |
   | `idle_minutes` | `5` | A voice conversation with nothing said and nothing running for this long ends by itself (VOX-14). 1–60. |
@@ -56,7 +56,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 
 ## 4. The voice agent
 
-- **VOX-10** **Who it is.** A built-in agent, `voice`, with its own short instructions: it's the person's spoken link to the workspace's agent; it keeps replies short (two sentences unless asked for more); it never claims to have done something it didn't; it hands anything that needs reading files, running commands or changing things to the agent with `run_task`. It knows the workspace's name, the session's agent and model, and what's running. It's not listed among the agents the person can pick and can't be edited in Studio; its instructions live in `pkg/engine/voice` (planned).
+- **VOX-10** **Who it is.** A built-in agent, `voice`, with its own short instructions: it's the person's spoken link to the workspace's agent; it keeps replies short (two sentences unless asked for more); it never claims to have done something it didn't; it hands anything that needs reading files, running commands or changing things to the agent with `run_task`. It knows the workspace's name, the session's agent and model, and what's running. It speaks with the session's personality (spec_064 PER-40), in its frame (PER-03). It's not listed among the agents the person can pick and can't be edited in Studio; its instructions live in `pkg/engine/voice` (planned).
 - **VOX-11** **Its tools, and only these.** It has no file, shell, web or MCP tools of its own:
   - `run_task(prompt)`: starts a turn in the session with `prompt` as the person's message (spoken requests are rephrased into a clear written prompt, and the written prompt is what's shown and kept), through the same turn path as a typed message: hooks, the agent, approvals, limits, the record. Refused while a turn runs: then it's `steer`.
   - `steer(message)`: adds to the running turn, as the composer's steer does (spec_024).
@@ -111,7 +111,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 - **VOX-41** **What it holds**, top to bottom:
   1. **Voice**: the on/off switch (VOX-01), with a line on what it does and where the audio goes: "Talk to Blitz with Google's Gemini Live. While you talk, your microphone's audio goes to Google; Blitz keeps the words, not the audio."
   2. **Model**: a menu of the Google provider's live models (VOX-06), the default first ("Default: *name*"), with the provider used (Gemini API or Vertex AI). Without a Google provider: what's missing and **Set up Google** (VOX-03).
-  3. **Voice**: a menu of the prebuilt voices, with **Play** beside it to hear a short sample (one short live call; the first one says it costs a little).
+  3. **Voice**: a menu of the prebuilt voices (*From the personality* first when the personality has one, spec_064 PER-40), with **Play** beside it to hear a short sample (one short live call; the first one says it costs a little).
   4. **Microphone**: the input devices the system has (the window's choice, VOX-04), with a level meter that moves while the section is open and the microphone allowed, and **Allow the microphone** when it isn't (VOX-50).
   5. **Listening**: *Tap to talk* or *Hold to talk* (`listen`).
   6. **Spoken summaries**: *In voice conversations*, *Always*, *Never* (`summaries`).
