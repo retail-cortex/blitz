@@ -112,10 +112,12 @@ func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
 	for _, f := range untrusted {
 		only[f] = true
 	}
-	keys := pathKeys(connectors.Load(s.Prefix, s.Workspace).Kinds)
+	cat := connectors.Load(s.Prefix, s.Workspace)
+	keys := pathKeys(cat.Kinds)
+	texts := upgrades(s.Category, cat.KindsOf(s.Category.ID, ID), append(slices.Clone(s.Global), s.Local...))
 	files := slices.Clone(s.Global)
 	for _, f := range s.Local {
-		if _, err := embed.LoadWith(context.Background(), []string{f}, vars, rewriter(keys, baseOf, only)); err != nil {
+		if _, err := embed.LoadWith(context.Background(), []string{f}, vars, rewriter(keys, baseOf, only, texts)); err != nil {
 			if s.Warn != nil {
 				s.Warn(fmt.Sprintf("%s isn't served: %v", f, err))
 			}
@@ -137,6 +139,7 @@ func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
 		Fingerprint:   connectors.Fingerprint(files),
 		FileSettings:  keys,
 		WorkspaceOnly: slices.Sorted(maps.Keys(only)),
+		FileTexts:     texts,
 	}
 	// A global file that doesn't load still makes the server: listing its
 	// tools fails, saying why, in /mcp and Studio.
@@ -147,7 +150,7 @@ func (Backend) Serve(s connectors.Serving) []config.MCPServerConfig {
 		}
 	}
 	if len(unasked) > 0 {
-		if cfg, err := loadConfig(context.Background(), unasked, vars); err == nil {
+		if cfg, err := loadConfig(context.Background(), unasked, vars, textsOf(texts)); err == nil {
 			c.ReadOnlyTools = readOnlyTools(cfg)
 		}
 	}
@@ -169,11 +172,40 @@ func keepApart(raw []byte) []byte {
 	})
 }
 
-// rewriter is how a file's text is read: its ${NAME}s kept apart when
-// it's one of only's, then its relative paths resolved.
-func rewriter(keys map[string][]string, base func(string) string, only map[string]bool) func(string, []byte) ([]byte, error) {
-	resolve := resolver(keys, base)
+// upgrades are files' texts brought up to date (DB-21), by file: only
+// those that need it.
+func upgrades(cat connectors.Category, kinds []connectors.Kind, files []string) map[string]string {
+	out := map[string]string{}
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		if up, ok := upgraded(cat, kinds, config.ConnectorFileName(f), string(raw)); ok {
+			out[f] = up
+		}
+	}
+	return out
+}
+
+// textsOf is the rewrite that reads a file as texts has it, else as it is.
+func textsOf(texts map[string]string) func(string, []byte) ([]byte, error) {
 	return func(file string, raw []byte) ([]byte, error) {
+		if t, ok := texts[file]; ok {
+			return []byte(t), nil
+		}
+		return raw, nil
+	}
+}
+
+// rewriter is how a file's text is read: as texts has it (an older file
+// brought up to date), its ${NAME}s kept apart when it's one of only's,
+// then its relative paths resolved.
+func rewriter(keys map[string][]string, base func(string) string, only map[string]bool, texts map[string]string) func(string, []byte) ([]byte, error) {
+	resolve := resolver(keys, base)
+	read := textsOf(texts)
+	return func(file string, raw []byte) ([]byte, error) {
+		raw, _ = read(file, raw)
 		if only[file] {
 			raw = keepApart(raw)
 		}
@@ -182,7 +214,7 @@ func rewriter(keys map[string][]string, base func(string) string, only map[strin
 }
 
 var (
-	loadConfig    = embed.Load
+	loadConfig    = embed.LoadWith
 	readOnlyTools = embed.ReadOnlyTools
 )
 
@@ -201,7 +233,7 @@ func Transport(c config.MCPServerConfig) mcp.Transport {
 	for _, f := range c.WorkspaceOnly {
 		only[f] = true
 	}
-	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: c.FileSettings, base: baseOf, only: only}
+	return &transport{files: slices.Clone(c.Args), vars: maps.Clone(c.Env), keys: c.FileSettings, base: baseOf, only: only, texts: maps.Clone(c.FileTexts)}
 }
 
 type transport struct {
@@ -212,12 +244,14 @@ type transport struct {
 	base func(file string) string
 	// only are the files that get the workspace's own secrets alone.
 	only map[string]bool
+	// texts are files read as these texts (DB-21).
+	texts map[string]string
 }
 
 // config loads the files as Toolbox reads them: secrets in, paths
 // resolved.
 func (t *transport) config(ctx context.Context) (embed.Config, error) {
-	return embed.LoadWith(ctx, t.files, t.vars, rewriter(t.keys, t.base, t.only))
+	return embed.LoadWith(ctx, t.files, t.vars, rewriter(t.keys, t.base, t.only, t.texts))
 }
 
 // Connect starts Toolbox and connects to it.

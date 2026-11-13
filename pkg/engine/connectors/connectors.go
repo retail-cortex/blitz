@@ -160,6 +160,10 @@ type ReadyTool struct {
 	// Writes says it can change what it's connected to: not offered on a
 	// read-only connection.
 	Writes bool `yaml:"writes"`
+	// AddToOlder says a read-only connection saved before Studio marked
+	// its files (spec_046_databases DB-21) couldn't have it, so it gets
+	// it: SQLite's execute_sql, once taken for a write.
+	AddToOlder bool `yaml:"addToOlder"`
 	// On says a new connection has it.
 	On bool `yaml:"on"`
 }

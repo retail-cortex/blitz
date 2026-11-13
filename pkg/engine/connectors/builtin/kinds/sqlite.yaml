@@ -50,7 +50,9 @@ tools:
   - id: execute_sql
     type: sqlite-execute-sql
     on: true
-    agent: "Run a SQL statement on {connection}."
+    # Older read-only files couldn't have it (spec_046_databases DB-21).
+    addToOlder: true
+    agent: "Run a SQL statement on {connection}. Use it for this database rather than sqlite3 in the shell."
     about:
       en: "Runs any SQL the agent writes"
       es: "Ejecuta cualquier SQL que escriba el agente"

@@ -630,6 +630,10 @@ type MCPServerConfig struct {
 	// ${NAME}s it fills only from the workspace's own secrets, which Env
 	// holds apart from the rest (spec_047_connectors CON-09).
 	WorkspaceOnly []string `toml:"-"`
+	// FileTexts are an in-process server's files (of Args) read as these
+	// texts instead: an older connection file brought up to date
+	// (spec_046_databases DB-21), its own left as it is.
+	FileTexts map[string]string `toml:"-"`
 }
 
 // BrowserConfig controls the browser tool (spec_027_parity §5.2): a

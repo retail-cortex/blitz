@@ -188,7 +188,7 @@ func TestServeKeepsGlobalSecretsFromUntrustedFiles(t *testing.T) {
 			assert.Equal(t, tc.workspace, c.Env[workspaceOnly("KITCHEN_DB")])
 			// What Toolbox reads from the clone's file: the workspace's
 			// value, never the global one.
-			cfg, err := embed.LoadWith(context.Background(), []string{local}, c.Env, rewriter(c.FileSettings, baseOf, map[string]bool{local: true}))
+			cfg, err := embed.LoadWith(context.Background(), []string{local}, c.Env, rewriter(c.FileSettings, baseOf, map[string]bool{local: true}, c.FileTexts))
 			require.NoError(t, err)
 			assert.Contains(t, fmt.Sprintf("%+v", cfg.Sources["pantry"]), tc.workspace)
 			assert.NotContains(t, fmt.Sprintf("%+v", cfg.Sources["pantry"]), db)

@@ -279,7 +279,7 @@ func startWith(ctx context.Context, env connectors.Env, k *connectors.Kind, c co
 	}
 	defer cs.Close()
 	var readOnly []string
-	if loaded, err := loadConfig(ctx, t.files, t.vars); err == nil {
+	if loaded, err := loadConfig(ctx, t.files, t.vars, textsOf(t.texts)); err == nil {
 		readOnly = readOnlyTools(loaded)
 	}
 	return f(ctx, cs, readOnly)

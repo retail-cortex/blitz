@@ -55,7 +55,7 @@ func TestRenderParse(t *testing.T) {
 	}{
 		{"postgres", connectors.Connection{Name: "shop", Kind: "postgres", Description: "The shop's orders.", Settings: map[string]string{"host": "db.local", "port": "5433", "database": "shop", "user": "reader", "password": "${DB_SHOP_PASSWORD}"}, ReadOnly: true, Tools: []string{"execute_sql", "list_tables"},
 			Queries: []connectors.Query{{Name: "top_customers", Description: "The best customers", Statement: "SELECT name FROM customers\nORDER BY spent DESC\nLIMIT $1", Params: []connectors.Param{{Name: "limit", Type: "integer", Description: "How many"}}}}},
-			[]string{"# kind: postgres", `password: "${DB_SHOP_PASSWORD}"`, "readOnly: true", "# about: The shop's orders.", "name: shop_top_customers", "type: postgres-sql", `port: "5433"`, "Run a SQL statement on shop (The shop's orders)."}},
+			[]string{"# kind: postgres", `password: "${DB_SHOP_PASSWORD}"`, "readOnly: true", "# about: The shop's orders.", "name: shop_top_customers", "type: postgres-sql", `port: "5433"`, "Run a SQL statement on shop (The shop's orders). Use it for this database rather than psql in the shell."}},
 		{"alloydb", connectors.Connection{Name: "ledger", Kind: "alloydb-postgres", Settings: map[string]string{"project": "p", "region": "us-central1", "cluster": "c", "instance": "i", "database": "ledger"}, Tools: []string{"list_schemas"}},
 			[]string{"ipType: public", "type: postgres-list-schemas", "type: alloydb-postgres"}},
 		{"sqlite", connectors.Connection{Name: "notes", Kind: "sqlite", Settings: map[string]string{"database": "/data/notes.db"}, ReadOnly: true, Tools: []string{"list_tables"}},
@@ -79,7 +79,7 @@ func TestRenderParse(t *testing.T) {
 			for k, v := range tc.c.Settings {
 				assert.Equal(t, v, got.Settings[k], k)
 			}
-			_, err = loadConfig(context.Background(), []string{writeTemp(t, text)}, map[string]string{"DB_SHOP_PASSWORD": "pw"})
+			_, err = loadConfig(context.Background(), []string{writeTemp(t, text)}, map[string]string{"DB_SHOP_PASSWORD": "pw"}, nil)
 			assert.NoError(t, err, "Toolbox reads it")
 		})
 	}
