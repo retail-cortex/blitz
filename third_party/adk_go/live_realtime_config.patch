@@ -1,0 +1,12 @@
+--- a/internal/llminternal/base_flow.go
++++ b/internal/llminternal/base_flow.go
+@@ -426,6 +426,9 @@
+ 			SessionResumption:        runCfg.Live.SessionResumption,
+ 			InputAudioTranscription:  runCfg.Live.InputAudioTranscription,
+ 			OutputAudioTranscription: runCfg.Live.OutputAudioTranscription,
++			// Blitz: the caller's activity detection (hold to talk sends its
++			// own activity start and end).
++			RealtimeInputConfig: runCfg.Live.RealtimeInputConfig,
+ 		}
+ 
+ 		iCtx, isIContext := ctx.(*icontext.InvocationContext)

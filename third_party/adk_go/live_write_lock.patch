@@ -1,0 +1,57 @@
+--- a/internal/llminternal/googlellm/live_connection.go
++++ b/internal/llminternal/googlellm/live_connection.go
+@@ -19,6 +19,7 @@
+ 	"fmt"
+ 	"log"
+ 	"strings"
++	"sync"
+ 
+ 	"google.golang.org/genai"
+ 
+@@ -29,6 +30,10 @@
+ type LiveConnection struct {
+ 	// Using the correct Session type from the GenAI SDK.
+ 	sdkSession *genai.Session
++	// writeMu serializes writes to the session's socket: the flow sends
++	// tool responses from its receive loop while the caller's input is
++	// forwarded from another goroutine, and a websocket takes one writer.
++	writeMu sync.Mutex
+ 
+ 	modelName               string
+ 	backend                 genai.Backend
+@@ -48,6 +53,8 @@
+ 
+ // SendHistory sends the conversation history to prime the session.
+ func (c *LiveConnection) SendHistory(ctx context.Context, history []*genai.Content) error {
++	c.writeMu.Lock()
++	defer c.writeMu.Unlock()
+ 	// TODO: genai seems to be missing initial_history_in_client_content flag
+ 	isGemini31 := strings.Contains(c.modelName, "gemini-3.1")
+ 	if isGemini31 {
+@@ -95,6 +102,8 @@
+ 
+ // SendContent sends unary content or function responses to the model.
+ func (c *LiveConnection) SendContent(ctx context.Context, content *genai.Content) error {
++	c.writeMu.Lock()
++	defer c.writeMu.Unlock()
+ 	if content == nil || len(content.Parts) == 0 {
+ 		return fmt.Errorf("empty content")
+ 	}
+@@ -142,6 +151,8 @@
+ 
+ // SendRealtime sends real-time input (audio/video).
+ func (c *LiveConnection) SendRealtime(ctx context.Context, input any) error {
++	c.writeMu.Lock()
++	defer c.writeMu.Unlock()
+ 	switch v := input.(type) {
+ 	case *genai.Blob:
+ 		if v.MIMEType == "" {
+@@ -287,6 +298,8 @@
+ 
+ // Close closes the live server connection.
+ func (c *LiveConnection) Close() error {
++	c.writeMu.Lock()
++	defer c.writeMu.Unlock()
+ 	if c.sdkSession != nil {
+ 		return c.sdkSession.Close()
+ 	}

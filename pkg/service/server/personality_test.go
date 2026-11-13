@@ -18,6 +18,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -88,6 +90,9 @@ func TestPersonalityService(t *testing.T) {
 		"a voice setting": func() error {
 			return unary(cfg.SetConfigValue, &pb.SetConfigValueRequest{Workspace: dir, Key: "voice.enabled", Value: "true"})
 		},
+		"a bad trial workspace": func() error {
+			return unary(c.workspaces.TryPersonality, &pb.TryPersonalityRequest{Workspace: "relative", Text: "x"})
+		},
 		"too long a trial": func() error {
 			return unary(c.workspaces.TryPersonality, &pb.TryPersonalityRequest{Workspace: dir, Text: string(make([]byte, 2001))})
 		},
@@ -103,4 +108,26 @@ func TestPersonalityService(t *testing.T) {
 	_, err = cfg.DeletePersonality(ctx, connect.NewRequest(&pb.DeletePersonalityRequest{Name: "coach"}))
 	require.NoError(t, err)
 	assert.NotContains(t, list(), "coach")
+}
+
+// Settings that can't be read are said, not hidden.
+func TestPersonalityBadSettings(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	voice := pb.NewVoiceServiceClient(http.DefaultClient, srv.URL)
+	dir := filepath.Join(os.Getenv("HOME"), ".blitz")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[ui\n"), 0o600))
+	for name, call := range map[string]func() error{
+		"list":     func() error { return unary(cfg.ListPersonalities, &pb.ListPersonalitiesRequest{}) },
+		"get":      func() error { return unary(cfg.GetPersonality, &pb.GetPersonalityRequest{Name: "mentor"}) },
+		"delete":   func() error { return unary(cfg.DeletePersonality, &pb.DeletePersonalityRequest{Name: "x"}) },
+		"describe": func() error { return unary(voice.DescribeVoice, &pb.DescribeVoiceRequest{}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
+		})
+	}
 }

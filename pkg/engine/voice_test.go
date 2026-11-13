@@ -296,6 +296,10 @@ func TestVoiceSummaries(t *testing.T) {
 		g.Outcome, g.Error = outcomeOf(tc.err)
 		assert.True(t, strings.HasPrefix(g.describe(), tc.want), g.describe())
 	}
+	w0, _ := openTestWith(t, nil)
+	w0.factsEnd("none", api.TurnResult{}, nil) // nothing running: nothing to end
+	assert.Nil(t, w0.lastTurnFacts("none"))
+	assert.Equal(t, turnFacts{}, w0.currentTurnFacts("none"))
 	many := &turnFacts{Files: []string{"a", "b", "c", "d"}}
 	assert.Contains(t, many.describe(), "4 files changed, among them a, b, c.")
 
@@ -331,7 +335,9 @@ func TestVoiceIdleAndErrors(t *testing.T) {
 	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "s", OnEvent: evs.on})
 	require.NoError(t, err)
 	live.Opened(wait)
+	v.mu.Lock()
 	v.idleFor = 0
+	v.mu.Unlock()
 	go v.idleWatch(context.Background())
 	assert.Equal(t, "idle", evs.next(t, "end").Text)
 
@@ -352,4 +358,83 @@ func TestVoiceSample(t *testing.T) {
 	live.Say("Hi, I'm Blitz.", []byte{1, 2})
 	assert.Equal(t, "summary", evs.next(t, "end").Text)
 	<-v.Done()
+}
+
+// The tools' edges (VOX-11, VOX-12): an empty request, stop with nothing
+// running, status with everything waiting and the last turn, recent with
+// nothing kept and long messages cut; hold to talk's activity; an
+// interruption; summary-only with nothing run; turned off.
+func TestVoiceEdges(t *testing.T) {
+	w, live := openVoice(t, nil)
+	_, err := config.SetValue(w.cfg.Dir, "", "voice.listen", "hold")
+	require.NoError(t, err)
+	evs := newVoiceEvents()
+	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "edges", OnEvent: evs.on})
+	require.NoError(t, err)
+	t.Cleanup(v.Close)
+	setup := live.Opened(wait)
+	assert.Contains(t, fmt.Sprint(setup["realtimeInputConfig"]), "disabled:true", "hold to talk")
+	assert.Equal(t, "Kore", v.VoiceName())
+	assert.Equal(t, "gemini-live-test", v.ModelID())
+	assert.Equal(t, config.VoiceListenHold, w.VoiceSettings().ListenMode())
+
+	require.NoError(t, v.Activity(true))
+	assert.Contains(t, live.Next("realtimeInput", wait), "activityStart")
+	require.NoError(t, v.Activity(false))
+	assert.Contains(t, live.Next("realtimeInput", wait), "activityEnd")
+
+	assert.Contains(t, live.Call("e1", "run_task", map[string]any{"prompt": " "}, wait)["error"], "write the request out")
+	assert.Contains(t, live.Call("e2", "stop", map[string]any{}, wait)["error"], "no task is running")
+	assert.Equal(t, "No messages yet.", live.Call("e3", "recent", map[string]any{}, wait)["status"])
+
+	on := w.factsStart("edges", "x", nil)
+	on(api.Event{Tasks: []api.Task{{Content: "write the test", Status: "in_progress"}}})
+	v.Waiting(VoiceWaiting{ApprovalID: "ap9", Approval: "rm -rf build", Question: "Which branch?", Options: []string{"main"}})
+	live.Next("clientContent", wait)
+	st := fmt.Sprint(live.Call("e4", "status", map[string]any{}, wait)["status"])
+	assert.Contains(t, st, "its task list: write the test")
+	assert.Contains(t, st, "An approval is waiting (ID ap9): rm -rf build.")
+	assert.Contains(t, st, "A question is waiting: Which branch? (options: main).")
+	w.factsEnd("edges", api.TurnResult{}, nil)
+	live.Next("clientContent", wait)
+	st = fmt.Sprint(live.Call("e5", "status", map[string]any{}, wait)["status"])
+	assert.Contains(t, st, "No task is running.")
+	assert.Contains(t, st, "The last task: It finished.")
+
+	s, err := w.NewSession()
+	require.NoError(t, err)
+	for i := range 12 {
+		w.appendIn(w.storage, s.ID, nil, session.Message{Role: "model", Content: strings.Repeat(fmt.Sprint(i), 1300)})
+	}
+	v.opts.SessionID = s.ID
+	recent := fmt.Sprint(live.Call("e6", "recent", map[string]any{"n": 50}, wait)["status"])
+	assert.Equal(t, 10, strings.Count(recent, "The agent:"), "at most 10")
+	assert.Contains(t, recent, "…", "long ones cut")
+
+	live.Send(map[string]any{"serverContent": map[string]any{"interrupted": true}})
+	evs.next(t, "interrupted")
+	assert.Equal(t, "[Blitz] Nothing has run in this conversation yet. Say so in one sentence.", v.summaryRequest(nil))
+	assert.Equal(t, "abc…", short("abc  def", 3))
+	assert.Equal(t, 7, exitOf(map[string]any{"exit_code": int64(7)}))
+	assert.Equal(t, -1, exitOf(map[string]any{"error": "boom"}))
+	assert.Equal(t, time.Second, (&turnFacts{Started: time.Unix(0, 0), Ended: time.Unix(1, 0)}).took())
+
+	v.End("off") // voice turned off (VOX-02)
+	assert.Equal(t, "off", evs.next(t, "end").Text)
+	assert.Error(t, v.Audio([]byte{1}), "nothing to send to")
+	v.tellQuietly("[Blitz] too late") // logged, not fatal
+}
+
+// With no Google provider, the real model builder says voice isn't set up
+// (VOX-03).
+func TestVoiceNotSetUp(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("CLOUDSDK_CONFIG", t.TempDir())
+	_, err := config.SetValue(w.cfg.Dir, "", "voice.enabled", "true")
+	require.NoError(t, err)
+	_, err = w.StartVoice(context.Background(), VoiceOptions{SessionID: "s"})
+	assert.ErrorIs(t, err, runtime.ErrVoiceNotSetUp)
 }

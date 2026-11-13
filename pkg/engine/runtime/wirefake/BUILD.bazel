@@ -35,9 +35,13 @@ go_library(
 
 go_test(
     name = "wirefake_test",
-    srcs = ["wirefake_test.go"],
+    srcs = [
+        "live_test.go",
+        "wirefake_test.go",
+    ],
     embed = [":wirefake"],
     deps = [
+        "@com_github_gorilla_websocket//:websocket",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

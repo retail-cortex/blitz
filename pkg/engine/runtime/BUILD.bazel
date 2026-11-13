@@ -210,6 +210,7 @@ go_test(
         "steer_test.go",
         "tasks_test.go",
         "telemetry_test.go",
+        "voice_test.go",
     ],
     embed = [":runtime"],
     shard_count = 6,

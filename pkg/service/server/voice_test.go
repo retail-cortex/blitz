@@ -197,3 +197,50 @@ func TestVoiceEventProto(t *testing.T) {
 	}
 	assert.Nil(t, voiceEventProto(engine.VoiceEvent{Kind: "nope"}))
 }
+
+// Settings › Voice's description lists the live models and the model in
+// use (VOX-41); a sample needs one of Gemini's voices; each error has its
+// reason (VOX-31).
+func TestVoiceDescribeAndReasons(t *testing.T) {
+	voice, cfg, live := serveVoice(t)
+	ctx := context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"models":[{"name":"models/gemini-live-a","supportedGenerationMethods":["bidiGenerateContent"]},{"name":"models/gemini-x","supportedGenerationMethods":["generateContent"]}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+	t.Setenv("GEMINI_API_KEY", "a-key")
+	_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "voice.enabled", Value: "true"}))
+	require.NoError(t, err)
+
+	d, err := voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{ListModels: true}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gemini-live-a"}, d.Msg.Models)
+	assert.Equal(t, "gemini/gemini-live-a", d.Msg.ModelInUse)
+	_, err = voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{Workspace: "relative"}))
+	assert.Equal(t, "INVALID_WORKSPACE", reasonOf(err))
+
+	err = streamErr(voice.Converse(ctx, connect.NewRequest(&pb.ConverseRequest{Workspace: t.TempDir(), SampleVoice: "Bob"})))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	sample, err := voice.Converse(ctx, connect.NewRequest(&pb.ConverseRequest{Workspace: t.TempDir(), SampleVoice: "Puck"}))
+	require.NoError(t, err)
+	require.True(t, sample.Receive())
+	assert.Equal(t, "Puck", sample.Msg().Started.Voice)
+	live.Opened(voiceWait)
+	live.Say("Hi.", []byte{1, 2})
+	for sample.Receive() {
+		if sample.Msg().Ended != "" {
+			assert.Equal(t, "summary", sample.Msg().Ended)
+		}
+	}
+
+	for want, err := range map[string]error{
+		"VOICE_OFF":        engine.ErrVoiceOff,
+		"VOICE_NOT_SET_UP": runtime.ErrVoiceNotSetUp,
+		"VOICE_MODEL":      runtime.ErrVoiceModel,
+		"UNKNOWN_VOICE":    errUnknownVoice,
+	} {
+		assert.Equal(t, want, reasonOf(voiceError(fmt.Errorf("wrapped: %w", err))))
+	}
+}

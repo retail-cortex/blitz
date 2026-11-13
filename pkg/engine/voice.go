@@ -99,7 +99,7 @@ type Voice struct {
 	live    agent.LiveSession
 	cancel  context.CancelFunc
 	done    chan struct{}
-	idleFor time.Duration
+	idleFor time.Duration // under mu
 
 	mu        sync.Mutex
 	waiting   VoiceWaiting
@@ -304,7 +304,10 @@ func (v *Voice) touch() {
 
 // idleWatch ends a quiet conversation with nothing running (VOX-14).
 func (v *Voice) idleWatch(ctx context.Context) {
-	tick := time.NewTicker(max(min(v.idleFor/4, 15*time.Second), 10*time.Millisecond))
+	v.mu.Lock()
+	idle := v.idleFor
+	v.mu.Unlock()
+	tick := time.NewTicker(max(min(idle/4, 15*time.Second), 10*time.Millisecond))
 	defer tick.Stop()
 	for {
 		select {
@@ -312,7 +315,7 @@ func (v *Voice) idleWatch(ctx context.Context) {
 			return
 		case <-tick.C:
 			v.mu.Lock()
-			quiet := time.Since(v.active) >= v.idleFor
+			quiet := time.Since(v.active) >= v.idleFor // under v.mu
 			v.mu.Unlock()
 			if quiet && !v.w.turnRunning(v.opts.SessionID) {
 				v.end("idle")
