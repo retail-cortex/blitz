@@ -126,6 +126,7 @@
     "personality.hint": "Une personnalité change la façon dont Blitz s’exprime, jamais ce qu’il peut faire.",
     "git.auto_add_failed": "Impossible d'ajouter les nouveaux fichiers au contrôle de version : {error}",
     "git.auto_added": "Ajoutés au contrôle de version : {files}",
+    "git.auto_removed": "Retirés du contrôle de version : {files}",
     "git.ignored_elsewhere": "{path} est ignoré par `{pattern}` ({source}), pas par une ligne ajoutée par Blitz : modifiez ce fichier pour le changer.",
     "git.repo_config_command": "La configuration git du dépôt lui-même définit {key}, qui exécute une commande. Blitz n'exécute pas les commandes de la configuration d'un dépôt, que l'agent peut écrire : faites le pull ou le push dans un terminal, ou déplacez le réglage dans votre configuration git globale.",
     "git.timed_out": "git {cmd} a pris plus de {limit} et a été arrêté.",

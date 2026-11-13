@@ -238,6 +238,89 @@ func (w *Workspace) ignoredBy(ctx context.Context, slash string) *IgnoredElsewhe
 	return nil
 }
 
+// indexed says whether git's index has slash: the file, or anything under
+// the folder.
+func (w *Workspace) indexed(ctx context.Context, slash string) bool {
+	out, err := w.gitDo(ctx, nil, "--literal-pathspecs", "ls-files", "-z", "--", slash)
+	return err == nil && len(out) > 0
+}
+
+// unstageGone takes paths gone from the workspace out of git's index
+// (FIL-61), when [git] auto_add is on and it's a repository: a file that
+// was only staged leaves git altogether, a committed one is a staged
+// deletion. It returns those that were in the index.
+func (w *Workspace) unstageGone(ctx context.Context, slashes ...string) []string {
+	if !w.cfg.Git.AutoAdd || !w.inRepository(ctx) {
+		return nil
+	}
+	var in []string
+	for _, s := range slashes {
+		if s != "" && s != "." && w.indexed(ctx, s) {
+			in = append(in, s)
+		}
+	}
+	if len(in) == 0 {
+		return nil
+	}
+	if _, err := w.gitDo(ctx, nil, append([]string{"--literal-pathspecs", "rm", "-r", "--cached", "--quiet", "--ignore-unmatch", "--"}, in...)...); err != nil {
+		slog.Warn("taking deleted files out of git", "workspace", w.Dir(), "error", err)
+		return nil
+	}
+	return in
+}
+
+// restage adds paths back to git's index, as they are (FIL-61): a file
+// put back from the trash, or the new name of one renamed, that was in it.
+func (w *Workspace) restage(ctx context.Context, slashes ...string) {
+	if len(slashes) == 0 {
+		return
+	}
+	if _, err := w.gitDo(ctx, nil, append([]string{"--literal-pathspecs", "add", "--all", "--"}, slashes...)...); err != nil {
+		slog.Warn("adding files back to git", "workspace", w.Dir(), "error", err)
+	}
+}
+
+// deletedNow is the set of files git's index has that are gone from the
+// workspace, when [git] auto_add is on and it's a repository (nil
+// otherwise): what a turn's end compares against to find those its agent
+// deleted.
+func (w *Workspace) deletedNow(ctx context.Context) map[string]bool {
+	if !w.cfg.Git.AutoAdd || !w.inRepository(ctx) {
+		return nil
+	}
+	out, err := w.gitDo(ctx, nil, "ls-files", "--deleted", "-z", "--", ".")
+	if err != nil {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			set[p] = true
+		}
+	}
+	return set
+}
+
+// unstageDeleted takes the files the turn deleted (in the index and on
+// disk at its start, from deletedNow, gone at its end) out of git's index,
+// and says so in the turn (FIL-61).
+func (w *Workspace) unstageDeleted(ctx context.Context, before map[string]bool, on func(api.Event)) {
+	if before == nil {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	var gone []string
+	for p := range w.deletedNow(ctx) {
+		if !before[p] {
+			gone = append(gone, p)
+		}
+	}
+	slices.Sort(gone)
+	if out := w.unstageGone(ctx, gone...); len(out) > 0 {
+		on(api.Event{Notice: &api.Notice{Text: i18n.T("git.auto_removed", "files", strings.Join(out, ", "))}})
+	}
+}
+
 // untrackedNow is the set of files git doesn't track or ignore in the
 // workspace, when [git] auto_add is on and it's a repository (nil
 // otherwise, or with more than maxWalked of them): what a turn's end

@@ -126,6 +126,7 @@
     "personality.hint": "A personality changes how Blitz sounds, never what it may do.",
     "git.auto_add_failed": "Couldn't add the new files to version control: {error}",
     "git.auto_added": "Added to version control: {files}",
+    "git.auto_removed": "Removed from version control: {files}",
     "git.ignored_elsewhere": "{path} is ignored by `{pattern}` ({source}), not by a line Blitz added: edit that file to change it.",
     "git.repo_config_command": "The repository's own git config sets {key}, which runs a command. Blitz doesn't run commands from a repository's config, which the agent can write: pull or push in a terminal, or move the setting to your global git config.",
     "git.timed_out": "git {cmd} took longer than {limit} and was stopped.",

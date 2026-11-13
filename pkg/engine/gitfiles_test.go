@@ -284,3 +284,73 @@ func TestGitArgs(t *testing.T) {
 	assert.Contains(t, gitEnv(), "GIT_OPTIONAL_LOCKS=0")
 	assert.Contains(t, gitEnv(), "GIT_TERMINAL_PROMPT=0")
 }
+
+// Deleting from the tree takes the path out of git's index (FIL-61): a
+// file only staged leaves git altogether, a committed one is a staged
+// deletion; restoring it from the trash puts it back as it was; a rename
+// moves it in git; files a turn deleted leave the index at its end, and
+// say so. With auto_add off the index is left alone.
+func TestDeletionsLeaveGit(t *testing.T) {
+	needGit(t)
+	status := func(t *testing.T, dir string) string {
+		t.Helper()
+		return gitOut(t, dir, "status", "--porcelain", "--untracked-files=all", "--", ".", ":!.blitz")
+	}
+	t.Run("auto_add on", func(t *testing.T) {
+		w := openTest(t)
+		ctx := context.Background()
+		dir := w.Dir()
+		write(t, dir, "kept.go", "package a\n")
+		write(t, dir, "docs/old.md", "old\n")
+		gitOut(t, dir, "init", "-q")
+		gitOut(t, dir, "add", ".")
+		gitOut(t, dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "first")
+
+		write(t, dir, "new.go", "package a\n")
+		gitOut(t, dir, "add", "new.go") // as auto_add stages an agent's file
+		_, err := w.TrashFile(ctx, "new.go")
+		require.NoError(t, err)
+		assert.Empty(t, status(t, dir), "staged, then deleted: gone from git, no AD")
+
+		id, err := w.TrashFile(ctx, "docs")
+		require.NoError(t, err)
+		assert.Equal(t, "D  docs/old.md", status(t, dir), "committed: a staged deletion")
+		require.NoError(t, w.RestoreFile(ctx, id, "docs"))
+		assert.Empty(t, status(t, dir), "restored: back as it was")
+
+		require.NoError(t, w.RenameFile(ctx, "kept.go", "moved.go"))
+		assert.Equal(t, "R  kept.go -> moved.go", status(t, dir), "a rename, staged")
+		require.NoError(t, w.DeleteFile(ctx, "moved.go"))
+		assert.Equal(t, "D  kept.go", status(t, dir))
+
+		write(t, dir, "untracked.txt", "x\n")
+		require.NoError(t, w.DeleteFile(ctx, "untracked.txt"))
+		assert.Equal(t, "D  kept.go", status(t, dir), "never in git: nothing to do")
+
+		// A turn's deletion: gone from disk between its start and end.
+		gitOut(t, dir, "restore", "--staged", "--worktree", "--source=HEAD", "--", "kept.go")
+		before := w.deletedNow(ctx)
+		require.NotNil(t, before)
+		require.NoError(t, os.Remove(filepath.Join(dir, "kept.go")))
+		var notices []string
+		w.unstageDeleted(ctx, before, func(e api.Event) {
+			if e.Notice != nil {
+				notices = append(notices, e.Notice.Text)
+			}
+		})
+		assert.Equal(t, "D  kept.go", status(t, dir))
+		assert.Equal(t, []string{"Removed from version control: kept.go"}, notices)
+		w.unstageDeleted(ctx, nil, func(api.Event) { t.Fatal("nothing listed, nothing said") })
+	})
+	t.Run("auto_add off", func(t *testing.T) {
+		w, _ := openTestWith(t, func(c *config.Config) { c.Git.AutoAdd = false })
+		ctx := context.Background()
+		dir := w.Dir()
+		gitOut(t, dir, "init", "-q")
+		write(t, dir, "new.go", "package a\n")
+		gitOut(t, dir, "add", "new.go")
+		require.NoError(t, w.DeleteFile(ctx, "new.go"))
+		assert.Equal(t, "AD new.go", status(t, dir), "left alone")
+		assert.Nil(t, w.deletedNow(ctx))
+	})
+}
