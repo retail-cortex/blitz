@@ -193,7 +193,7 @@ func TestServeRelaysPings(t *testing.T) {
 	p := read()
 	assert.Equal(t, "https://license.example/active", p.Ping.URL)
 	assert.Equal(t, map[string]string{"front": "desktop"}, p.Ping.Body)
-	_, err = inW.Write([]byte(`{"pinged":"nobody","status":500}` + "\n" + `not json` + "\n" + `{"pinged":"` + p.Ping.ID + `","status":204}` + "\n"))
+	_, err = inW.Write([]byte(`{"pinged":"nobody","status":500}` + "\n" + `not json` + "\n" + `{"pinged":` + "\n" + `{"status":204}` + "\n" + `{"pinged":"` + p.Ping.ID + `","status":204}` + "\n"))
 	require.NoError(t, err)
 	r := <-got
 	require.NoError(t, r.err)
@@ -216,4 +216,14 @@ func TestServeRelaysPings(t *testing.T) {
 	require.NoError(t, inW.Close())
 	assert.ErrorIs(t, (<-got).err, errNoApp, "the app went: the ping in flight fails")
 	require.NoError(t, <-done)
+}
+
+// A ping line that can't be written fails at once, and nothing waits for
+// its answer.
+func TestRelayWriteFails(t *testing.T) {
+	relay := &Relay{}
+	relay.attach(&lineWriter{enc: json.NewEncoder(failingWriter{})})
+	_, err := relay.Send(context.Background(), "https://x.example", map[string]string{"a": "b"})
+	assert.Error(t, err)
+	assert.Empty(t, relay.waiting)
 }

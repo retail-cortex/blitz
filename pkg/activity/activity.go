@@ -276,10 +276,7 @@ func (r *Recorder) post(ctx context.Context, url string, ping map[string]string)
 		}
 	}
 	ping["proxy"] = proxy
-	body, err := json.Marshal(ping)
-	if err != nil {
-		return 0, err
-	}
+	body, _ := json.Marshal(ping) // a map of strings always encodes
 	req.Body = io.NopCloser(bytes.NewReader(body))
 	req.ContentLength = int64(len(body))
 	req.Header.Set("Content-Type", "application/json")

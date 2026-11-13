@@ -58,6 +58,13 @@ func TestWorkspaceHiddenPaths(t *testing.T) {
 	_, err = ws.ReadFile("new.key")
 	assert.ErrorIs(t, err, ErrHiddenPath, "and still never read it")
 
+	// Through a link with an innocent name too.
+	require.NoError(t, os.Symlink(".env", filepath.Join(dir, "settings.txt")))
+	_, err = ws.ReadFile("settings.txt")
+	assert.ErrorIs(t, err, ErrHiddenPath)
+	_, err = OpenWorkspace(WorkspaceOptions{Dir: dir, HiddenPaths: []string{`bad"name`}})
+	assert.ErrorContains(t, err, "invalid", "a pattern that can't be one")
+
 	data, err := ws.ReadFile(".env.dev.toml")
 	require.NoError(t, err, "a project's .env.*.toml isn't Blitz's settings")
 	assert.Equal(t, "port = 8080\n", string(data))

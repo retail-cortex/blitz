@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -67,12 +66,7 @@ func lspLauncher(env *ExecEnv) lsp.Launcher {
 		if dir != "" {
 			cmd.Dir = dir
 		}
-		if len(extra) > 0 {
-			if cmd.Env == nil {
-				cmd.Env = os.Environ()
-			}
-			cmd.Env = append(cmd.Env, extra...)
-		}
+		cmd.Env = append(cmd.Env, extra...) // ExecEnv set the rest
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			cmd.abandon()

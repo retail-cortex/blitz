@@ -15,11 +15,15 @@
 package lsp
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,4 +125,61 @@ bazel_dep(name = "aspect_rules_ts", version = "3.7.0")`)
 
 	assert.Equal(t, []string{"bazel-bin", "bazel-out", "bazel-testlogs", "bazel-" + filepath.Base(root)}, m.bazelOutputs())
 	assert.Equal(t, "", NewManager(t.TempDir(), nil, nil).bazelTSLib(root), "not a Bazel workspace")
+}
+
+// In a Bazel workspace each server starts with what Bazel gives it: gopls
+// the package driver and directory filters, pyright pip's packages,
+// typescript the TypeScript in bazel-bin; a driver script that can't be
+// written leaves gopls without it.
+func TestBazelServersStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the driver is a shell script")
+	}
+	cache := t.TempDir()
+	old := cacheDir
+	cacheDir = func() string { return cache }
+	t.Cleanup(func() { cacheDir = old })
+
+	root := t.TempDir()
+	writeAt(t, filepath.Join(root, "MODULE.bazel"), `bazel_dep(name = "rules_go", version = "0.63.0")
+bazel_dep(name = "rules_python", version = "1.6.0")`)
+	writeAt(t, filepath.Join(root, "bazel-bin", "node_modules", "typescript", "lib", "tsserver.js"), "")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "bazel-"+filepath.Base(root), "external", "pypi_requests", "site-packages"), 0o755))
+	for _, f := range []string{"svc/a.go", "py/a.py", "web/a.ts"} {
+		writeAt(t, filepath.Join(root, f), "")
+	}
+	var envs [][]string
+	rec := &recording{}
+	fake := rec.launcher()
+	launch := func(ctx context.Context, dir string, argv, env []string) (Process, error) {
+		envs = append(envs, env)
+		return fake(ctx, dir, argv, env)
+	}
+	m := NewManager(root, []Server{
+		{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}},
+		{Language: "python", Command: []string{"pyright"}, Extensions: []string{".py"}},
+		{Language: "typescript", Command: []string{"tls"}, Extensions: []string{".ts"}},
+	}, launch)
+	t.Cleanup(m.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, f := range []string{"svc/a.go", "py/a.py", "web/a.ts"} {
+		_, err := m.For(ctx, filepath.Join(root, f))
+		require.NoError(t, err, f)
+	}
+	require.Len(t, envs, 3)
+	assert.Contains(t, envs[0], "GOPACKAGESDRIVER="+filepath.Join(cache, "lsp", "gopackagesdriver.sh"))
+	assert.Nil(t, envs[1])
+	require.Len(t, rec.inits, 3)
+	opts, _ := json.Marshal(rec.inits[0]["initializationOptions"])
+	assert.Contains(t, string(opts), `"-bazel-bin"`, "gopls skips Bazel's output")
+	tsOpts, _ := json.Marshal(rec.inits[2]["initializationOptions"])
+	assert.Contains(t, string(tsOpts), filepath.ToSlash(filepath.Join("bazel-bin", "node_modules", "typescript", "lib")))
+
+	// The cache is a file: no driver, and gopls starts all the same.
+	blocked := filepath.Join(t.TempDir(), "file")
+	writeAt(t, blocked, "")
+	cacheDir = func() string { return blocked }
+	assert.Nil(t, NewManager(root, nil, nil).goDriverEnv(root))
+	assert.True(t, strings.HasSuffix(old(), "blitz"), "the user's cache, or the temp folder's")
 }

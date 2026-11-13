@@ -53,6 +53,7 @@ shell = "off"
 allow_network = true
 share_adc = true
 blocked_paths = ["secrets/"]
+hidden_paths = ["*.jks"]
 shell_writable_paths = ["build", "/etc"]
 
 [permissions]
@@ -163,6 +164,10 @@ func TestProjectTiers(t *testing.T) {
 		assert.Contains(t, cfg.ProjectPermissions.Deny, "shell(rm -rf *)")
 		assert.Contains(t, cfg.ProjectPermissions.Ask, "web(*)")
 		assert.Contains(t, cfg.Sandbox.BlockedPaths, "secrets/")
+		assert.Contains(t, cfg.Sandbox.HiddenPaths, "*.jks", "a project may keep more from the model")
+		assert.Contains(t, cfg.Sandbox.HiddenPaths, "*.pem", "besides the defaults")
+		_, ok := item(p.Applied, ProjectHiddenPath, "", "*.jks")
+		assert.True(t, ok)
 		assert.Equal(t, 2, cfg.Tools.MaxParallel)
 		assert.Equal(t, 3, cfg.Skills.Policy.MinHITLTier)
 		assert.NotEqual(t, int64(999999999999), cfg.Tools.MaxFileSizeBytes, "a higher limit loosens")

@@ -392,8 +392,9 @@ func TestCAFile(t *testing.T) {
 	assert.Equal(t, 1, got)
 
 	r.CAFile = func() string { return filepath.Join(t.TempDir(), "missing.pem") }
-	_, err = r.client()
-	assert.ErrorContains(t, err, "[network] ca_file")
+	_, err = r.Mark(CLI)
+	require.NoError(t, err)
+	assert.ErrorContains(t, r.Flush(context.Background()), "[network] ca_file", "a ca_file it can't read is said, and the ping kept")
 	require.NoError(t, os.WriteFile(ca, []byte("not a certificate"), 0o600))
 	r.CAFile = func() string { return ca }
 	_, err = r.client()
