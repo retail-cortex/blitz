@@ -150,6 +150,7 @@ fallbacks = "default"       # server-side refusal fallback: "default", a model I
 shell_timeout_seconds = 120
 auto_approve_commands = false
 max_parallel = 8   # tool calls from one model response that run at once
+# trash = "workspace"   # deleted files: "system" (the system's Trash, the default) or the workspace's .blitz/trash
 
 [sandbox]
 # allowed_paths   = ["~/src/shared"]     # extra read-write roots for file tools

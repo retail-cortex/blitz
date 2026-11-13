@@ -4528,7 +4528,7 @@
     "desktop.error.reason.NO_PREVIEW": "Il n'y a pas d'aperçu pour ce fichier.",
     "desktop.error.reason.NOT_A_TABLE": "Ce fichier n'est pas un tableau.",
     "desktop.error.reason.NO_UPLOAD": "Ce téléversement est introuvable.",
-    "desktop.error.reason.NOT_IN_TRASH": "Ce n'est plus dans la corbeille de l'espace de travail, donc impossible de le remettre.",
+    "desktop.error.reason.NOT_IN_TRASH": "Ce n’est plus dans la corbeille (elle a été vidée, ou c’est déjà remis), donc impossible de le remettre ici.",
     "desktop.error.reason.UNKNOWN_TERMINAL": "Ce terminal est fermé. Ouvrez-en un nouveau.",
     "desktop.error.reason.TOO_MANY_TERMINALS": "Cet espace de travail a déjà autant de terminaux ouverts qu'il le peut. Fermez-en un d'abord.",
     "desktop.error.reason.TERMINAL_UNSUPPORTED": "Les terminaux ne sont pas encore offerts sur ce système.",

@@ -4528,7 +4528,7 @@
     "desktop.error.reason.NO_PREVIEW": "There's no preview for this file.",
     "desktop.error.reason.NOT_A_TABLE": "This file isn't a table.",
     "desktop.error.reason.NO_UPLOAD": "That upload wasn't found.",
-    "desktop.error.reason.NOT_IN_TRASH": "It's no longer in the workspace's trash, so it can't be put back.",
+    "desktop.error.reason.NOT_IN_TRASH": "It's no longer in the trash (it was emptied, or put back already), so it can't be put back here.",
     "desktop.error.reason.UNKNOWN_TERMINAL": "That terminal has closed. Open a new one.",
     "desktop.error.reason.TOO_MANY_TERMINALS": "This workspace has as many terminals as it can keep open. Close one first.",
     "desktop.error.reason.TERMINAL_UNSUPPORTED": "Terminals aren't available on this system yet.",

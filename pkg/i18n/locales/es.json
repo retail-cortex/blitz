@@ -4528,7 +4528,7 @@
     "desktop.error.reason.NO_PREVIEW": "No hay vista previa para este archivo.",
     "desktop.error.reason.NOT_A_TABLE": "Este archivo no es una tabla.",
     "desktop.error.reason.NO_UPLOAD": "No se encontró esa subida.",
-    "desktop.error.reason.NOT_IN_TRASH": "Ya no está en la papelera del espacio de trabajo, así que no se puede restaurar.",
+    "desktop.error.reason.NOT_IN_TRASH": "Ya no está en la papelera (se vació, o ya se restauró), así que no se puede restaurar aquí.",
     "desktop.error.reason.UNKNOWN_TERMINAL": "Esa terminal se cerró. Abre una nueva.",
     "desktop.error.reason.TOO_MANY_TERMINALS": "Este espacio de trabajo ya tiene abiertas todas las terminales que admite. Cierra una primero.",
     "desktop.error.reason.TERMINAL_UNSUPPORTED": "Las terminales aún no están disponibles en este sistema.",

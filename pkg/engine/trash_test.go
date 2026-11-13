@@ -22,9 +22,52 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/ostrash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// With the system's trash (FIL-37a, the default where there's one), a
+// deleted file or folder goes there and Undo brings it back; what's no
+// longer there (emptied, or put back from the trash) can't be restored.
+// tools.trash = "workspace" keeps the workspace's own.
+func TestTrashToTheSystemTrash(t *testing.T) {
+	sys := t.TempDir()
+	t.Cleanup(ostrash.Fake(sys))
+	w := openTest(t)
+	ctx := context.Background()
+	write(t, w.Dir(), "docs/a.md", "a")
+
+	id, err := w.TrashFile(ctx, "docs")
+	require.NoError(t, err)
+	assert.Regexp(t, systemTrashIDs, id)
+	assert.FileExists(t, filepath.Join(sys, "1", "docs", "a.md"), "in the system's trash")
+	assert.NoDirExists(t, filepath.Join(w.Dir(), "docs"))
+	assert.NoDirExists(t, filepath.Join(w.Dir(), ".blitz", "trash"), "not the workspace's")
+
+	require.NoError(t, w.RestoreFile(ctx, id, "docs"))
+	b, err := os.ReadFile(filepath.Join(w.Dir(), "docs", "a.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "a", string(b))
+	assert.ErrorIs(t, w.RestoreFile(ctx, id, "docs"), ErrNotInTrash, "restored already")
+
+	// Emptied from the system's trash meanwhile: nothing to put back.
+	id, err = w.TrashFile(ctx, "docs/a.md")
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(filepath.Join(sys, "2")))
+	assert.ErrorIs(t, w.RestoreFile(ctx, id, "docs/a.md"), ErrNotInTrash)
+	assert.ErrorIs(t, w.RestoreFile(ctx, "sys-0000000000000000", "docs/a.md"), ErrNotInTrash, "an ID it never gave")
+
+	t.Run("the workspace's, by setting", func(t *testing.T) {
+		w, _ := openTestWith(t, func(c *config.Config) { c.Tools.Trash = config.TrashWorkspace })
+		write(t, w.Dir(), "b.md", "b")
+		id, err := w.TrashFile(ctx, "b.md")
+		require.NoError(t, err)
+		assert.Regexp(t, trashIDs, id)
+		assert.DirExists(t, filepath.Join(w.Dir(), ".blitz", "trash", id))
+	})
+}
 
 // A deleted file or folder goes to the workspace's trash and comes back
 // with its ID; old ones are emptied (FIL-37).
