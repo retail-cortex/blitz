@@ -604,6 +604,17 @@ func TestCheckAPI(t *testing.T) {
 	assert.Equal(t, "API at https://gateway.example.com, headers X-Api-Key; models listed at /models", detail)
 	assert.NotContains(t, detail, "static-secret")
 
+	// Another server's list names its own headers, or that it has none
+	// (the gateway's aren't sent to it, MDL-115).
+	c.ModelsPath = "https://catalog.example.com/models"
+	_, detail = checkAPI(c, "")
+	assert.Contains(t, detail, "models listed at https://catalog.example.com/models with no headers")
+	c.ModelsHeaders = map[string]string{"X-Catalog": "catalog-secret"}
+	_, detail = checkAPI(c, "")
+	assert.Contains(t, detail, "models listed at https://catalog.example.com/models with headers X-Catalog")
+	assert.NotContains(t, detail, "catalog-secret")
+	c.ModelsHeaders, c.ModelsPath = nil, ""
+
 	c.Model, c.ModelsPath = "gemini-3-pro", config.NoModelsList
 	c.APIs = map[string]string{"*": config.GatewayVertex}
 	c.Paths = map[string]string{config.GatewayVertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}"}

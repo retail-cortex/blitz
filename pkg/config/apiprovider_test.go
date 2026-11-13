@@ -70,7 +70,19 @@ func TestAPIConfigCheck(t *testing.T) {
 		"unknown fill-in":       {func(a *APIConfig) { a.Paths = map[string]string{GatewayChatCompletions: "/{deployment}/chat"} }, "{deployment} isn't something Blitz fills in ({model})"},
 		"method beyond Google":  {func(a *APIConfig) { a.Paths = map[string]string{GatewayMessages: "/{method}"} }, "{method} isn't something Blitz fills in ({model})"},
 		"Google without method": {func(a *APIConfig) { a.Paths = map[string]string{GatewayGemini: "/models/{model}"} }, "paths.gemini needs {method}"},
-		"relative models path":  {func(a *APIConfig) { a.ModelsPath = "models" }, "models_path \"models\" must start with /"},
+		"relative models path":  {func(a *APIConfig) { a.ModelsPath = "models" }, "models_path \"models\" must start with / (a path under base_url) or be an http or https URL"},
+		// Another server's list, with its own headers (MDL-115).
+		"models URL":                {func(a *APIConfig) { a.ModelsPath = "https://catalog.example.com/v1/models?k=" + TokenPlaceholder }, ""},
+		"models URL, token in host": {func(a *APIConfig) { a.ModelsPath = "https://" + TokenPlaceholder + ".example.com/models" }, "models_path can use {{TOKEN_SCRIPT}} only in its path or query"},
+		"models URL, no host":       {func(a *APIConfig) { a.ModelsPath = "https:///models" }, "isn't a path starting with / or an absolute http or https URL"},
+		"models URL, fragment":      {func(a *APIConfig) { a.ModelsPath = "https://c.example.com/models#x" }, "has a fragment"},
+		"models headers":            {func(a *APIConfig) { a.ModelsHeaders = map[string]string{"Authorization": "Bearer " + TokenPlaceholder} }, ""},
+		"bad models header":         {func(a *APIConfig) { a.ModelsHeaders = map[string]string{"X Bad": "v"} }, `models_headers "X Bad" isn't a valid HTTP header name`},
+		"models header line break":  {func(a *APIConfig) { a.ModelsHeaders = map[string]string{"X-A": "a\nb"} }, `models_headers "X-A"'s value has a line break`},
+		"only the list uses the token": {func(a *APIConfig) {
+			a.Headers = map[string]string{"X-Tenant": "t"}
+			a.ModelsHeaders = map[string]string{"Authorization": TokenPlaceholder}
+		}, ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -118,6 +130,46 @@ func TestAPIConfigRoutes(t *testing.T) {
 	assert.Equal(t, "/models", guessed.ModelsURLPath())
 	assert.Equal(t, "/v1/models", APIConfig{ModelsPath: "/v1/models"}.ModelsURLPath())
 	assert.Empty(t, APIConfig{ModelsPath: NoModelsList}.ModelsURLPath())
+}
+
+// The model list's URL and headers (MDL-114, MDL-115): a path is under
+// base_url, with its query, signed as the gateway's calls are unless
+// models_headers says; another server's URL gets models_headers alone,
+// never the gateway's.
+func TestAPIConfigModelsList(t *testing.T) {
+	gateway := map[string]string{"X-Api-Key": TokenPlaceholder}
+	own := map[string]string{"Authorization": "Bearer " + TokenPlaceholder}
+	tests := []struct {
+		name        string
+		base, where string
+		modelsHdrs  map[string]string
+		wantURL     string
+		wantHeaders map[string]string
+	}{
+		{"default path", "https://g.example.com/gw/?tenant=r", "", nil, "https://g.example.com/gw/models?tenant=r", gateway},
+		{"a path, its own headers", "https://g.example.com/gw", "/v1/models", own, "https://g.example.com/gw/v1/models", own},
+		{"the gateway's server by URL", "https://g.example.com/gw", "https://G.example.com/catalog", nil, "https://G.example.com/catalog", gateway},
+		{"another server", "https://g.example.com/gw", "https://catalog.example.com/models?k=" + TokenPlaceholder, nil, "https://catalog.example.com/models?k=" + TokenPlaceholder, nil},
+		{"another port", "https://g.example.com", "https://g.example.com:8443/models", nil, "https://g.example.com:8443/models", nil},
+		{"another server, its own headers", "https://g.example.com/gw", "https://catalog.example.com/models", own, "https://catalog.example.com/models", own},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a := APIConfig{BaseURL: tc.base, ModelsPath: tc.where, Headers: gateway, ModelsHeaders: tc.modelsHdrs, TokenScript: "echo t", TokenScriptLanguage: ScriptPython}
+			list, ok := a.ModelsList()
+			require.True(t, ok)
+			assert.Equal(t, tc.wantURL, list.BaseURL)
+			assert.Equal(t, tc.wantHeaders, list.Headers)
+			assert.Equal(t, "echo t", list.TokenScript, "the gateway's script: its token")
+			assert.Equal(t, ScriptPython, list.Language())
+		})
+	}
+	_, ok := APIConfig{BaseURL: "https://g.example.com", ModelsPath: NoModelsList}.ModelsList()
+	assert.False(t, ok, "none")
+	_, ok = APIConfig{}.ModelsList()
+	assert.False(t, ok, "no base_url")
+	assert.True(t, APIConfig{ModelsPath: "https://c/?k=" + TokenPlaceholder}.UsesToken(), "the list's URL")
+	assert.True(t, APIConfig{ModelsHeaders: own}.UsesToken(), "the list's headers")
 }
 
 // SetProvider writes the api provider's settings; Describe shows them with
@@ -176,6 +228,37 @@ func TestSetProviderAPI(t *testing.T) {
 		assert.Equal(t, "/v1/models", info.API.ModelsPath)
 		assert.Equal(t, cfg.LLM.API.APIs, info.API.APIs)
 		assert.Equal(t, cfg.LLM.API.Paths, info.API.Paths)
+
+		// Another server's list, with headers of its own (MDL-115): saved,
+		// described as the gateway's are, values withheld but the token's.
+		require.NoError(t, save(APIProviderSettings{
+			BaseURL: "https://gateway.example.com", TokenScript: "echo t",
+			Headers:       []APIHeader{{Name: "X-Api-Key", Value: TokenPlaceholder}, {Name: "X-Tenant"}},
+			ModelsPath:    "https://catalog.example.com/v1/models",
+			ModelsHeaders: []APIHeader{{Name: "Authorization", Value: "Bearer " + TokenPlaceholder}, {Name: "X-Catalog", Value: "secret-catalog"}},
+		}))
+		cfg, err = Load("")
+		require.NoError(t, err)
+		assert.Equal(t, "https://catalog.example.com/v1/models", cfg.LLM.API.ModelsPath)
+		assert.Equal(t, map[string]string{"Authorization": "Bearer " + TokenPlaceholder, "X-Catalog": "secret-catalog"}, cfg.LLM.API.ModelsHeaders)
+		info, err = Describe("", "")
+		require.NoError(t, err)
+		assert.Equal(t, []APIHeaderInfo{{Name: "Authorization", Value: "Bearer " + TokenPlaceholder, HasValue: true}, {Name: "X-Catalog", HasValue: true}}, info.API.ModelsHeaders)
+		// One left without a value keeps its own; one left out is removed.
+		require.NoError(t, save(APIProviderSettings{
+			BaseURL: "https://gateway.example.com", TokenScript: "echo t",
+			Headers:       []APIHeader{{Name: "X-Api-Key", Value: TokenPlaceholder}, {Name: "X-Tenant"}},
+			ModelsPath:    "https://catalog.example.com/v1/models",
+			ModelsHeaders: []APIHeader{{Name: "X-Catalog"}},
+		}))
+		cfg, err = Load("")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"X-Catalog": "secret-catalog"}, cfg.LLM.API.ModelsHeaders)
+		assert.ErrorContains(t, save(APIProviderSettings{
+			BaseURL: "https://gateway.example.com", TokenScript: "echo t",
+			Headers:       []APIHeader{{Name: "X-Api-Key", Value: TokenPlaceholder}},
+			ModelsHeaders: []APIHeader{{Name: "X-New"}},
+		}), `models_headers "X-New" needs a value`)
 
 		// Saving again replaces them: what's left out is removed.
 		require.NoError(t, save(APIProviderSettings{

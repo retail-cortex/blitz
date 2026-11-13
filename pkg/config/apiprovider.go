@@ -93,9 +93,14 @@ type APIConfig struct {
 	// MOD-42); none: every model the gateway lists.
 	Models []string `toml:"models"`
 	// ModelsPath is where, under BaseURL, the gateway lists its models
-	// (GET; default DefaultModelsPath); "none": it doesn't, and the menus
-	// list Model and Models.
+	// (GET; default DefaultModelsPath), or the http or https URL of
+	// another server that lists them (MDL-115); "none": nothing does, and
+	// the menus list Model and Models.
 	ModelsPath string `toml:"models_path"`
+	// ModelsHeaders sign the model list's request in place of Headers
+	// (MDL-115), {{TOKEN_SCRIPT}} as in them. A list on another server
+	// than BaseURL's is sent these alone, never Headers.
+	ModelsHeaders map[string]string `toml:"models_headers"`
 	// APIs is the API each model speaks, by name; "*" is every other
 	// model's. A model in neither is guessed from its name (APIOf).
 	APIs map[string]string `toml:"apis"`
@@ -140,8 +145,8 @@ func (a APIConfig) PathOf(api string) string {
 	return cmp.Or(a.Paths[api], DefaultGatewayPaths[api])
 }
 
-// ModelsURLPath is where under base_url the gateway lists its models, ""
-// when it doesn't.
+// ModelsURLPath is where the gateway lists its models: a path under
+// base_url or a URL (MDL-115); "" when nothing does.
 func (a APIConfig) ModelsURLPath() string {
 	if a.ModelsPath == NoModelsList {
 		return ""
@@ -149,15 +154,62 @@ func (a APIConfig) ModelsURLPath() string {
 	return cmp.Or(a.ModelsPath, DefaultModelsPath)
 }
 
+// ModelsList is the model list's settings (MDL-114, MDL-115): BaseURL
+// the list's URL ({{TOKEN_SCRIPT}} kept, base_url's query on a path under
+// it), and Headers models_headers, else on base_url's server the
+// gateway's, else none, so no credential of the gateway's reaches
+// another server. ok is false when nothing lists the models.
+func (a APIConfig) ModelsList() (list APIConfig, ok bool) {
+	where := a.ModelsURLPath()
+	if where == "" || a.BaseURL == "" {
+		return APIConfig{}, false
+	}
+	list = APIConfig{TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage, Headers: a.ModelsHeaders}
+	if isURL(where) {
+		list.BaseURL = where
+		if len(list.Headers) == 0 && sameServer(where, a.BaseURL) {
+			list.Headers = a.Headers
+		}
+		return list, true
+	}
+	base, query, hasQuery := strings.Cut(a.BaseURL, "?")
+	list.BaseURL = strings.TrimSuffix(base, "/") + where
+	if hasQuery {
+		list.BaseURL += "?" + query
+	}
+	if len(list.Headers) == 0 {
+		list.Headers = a.Headers
+	}
+	return list, true
+}
+
+// isURL reports whether models_path is a URL rather than a path.
+func isURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+// sameServer reports whether URLs a and b have one scheme, host and port.
+func sameServer(a, b string) bool {
+	ua, errA := url.Parse(strings.ReplaceAll(a, TokenPlaceholder, urlSentinel))
+	ub, errB := url.Parse(strings.ReplaceAll(b, TokenPlaceholder, urlSentinel))
+	return errA == nil && errB == nil && strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
+}
+
 // Language is the token script's language: shell when unset.
 func (a APIConfig) Language() string { return cmp.Or(a.TokenScriptLanguage, ScriptShell) }
 
-// UsesToken reports whether a header or the base URL uses TokenPlaceholder.
+// UsesToken reports whether a header, the base URL or the model list's
+// URL or headers use TokenPlaceholder.
 func (a APIConfig) UsesToken() bool {
-	if strings.Contains(a.BaseURL, TokenPlaceholder) {
+	if strings.Contains(a.BaseURL, TokenPlaceholder) || strings.Contains(a.ModelsPath, TokenPlaceholder) {
 		return true
 	}
 	for _, v := range a.Headers {
+		if strings.Contains(v, TokenPlaceholder) {
+			return true
+		}
+	}
+	for _, v := range a.ModelsHeaders {
 		if strings.Contains(v, TokenPlaceholder) {
 			return true
 		}
@@ -181,18 +233,11 @@ func (a APIConfig) Check() error {
 	if len(a.Headers) == 0 {
 		return errors.New("[llm.api] needs at least one header (headers)")
 	}
-	seen := map[string]string{}
-	for _, name := range sortedKeys(a.Headers) {
-		if !headerNameRE.MatchString(name) {
-			return fmt.Errorf("[llm.api] header %q isn't a valid HTTP header name", name)
-		}
-		if other, dup := seen[strings.ToLower(name)]; dup {
-			return fmt.Errorf("[llm.api] headers %q and %q are the same header", other, name)
-		}
-		seen[strings.ToLower(name)] = name
-		if strings.ContainsAny(a.Headers[name], "\r\n\x00") {
-			return fmt.Errorf("[llm.api] header %q's value has a line break", name)
-		}
+	if err := checkHeaders("header", a.Headers); err != nil {
+		return err
+	}
+	if err := checkHeaders("models_headers", a.ModelsHeaders); err != nil {
+		return err
 	}
 	switch uses, script := a.UsesToken(), strings.TrimSpace(a.TokenScript) != ""; {
 	case uses && !script:
@@ -204,6 +249,25 @@ func (a APIConfig) Check() error {
 		return fmt.Errorf("[llm.api] token_script_language %q isn't one of %s", a.TokenScriptLanguage, strings.Join(TokenScriptLanguages, ", "))
 	}
 	return a.checkRoutes()
+}
+
+// checkHeaders reports what's wrong with headers' names and values; what
+// names them in a message ("header", "models_headers").
+func checkHeaders(what string, headers map[string]string) error {
+	seen := map[string]string{}
+	for _, name := range sortedKeys(headers) {
+		if !headerNameRE.MatchString(name) {
+			return fmt.Errorf("[llm.api] %s %q isn't a valid HTTP header name", what, name)
+		}
+		if other, dup := seen[strings.ToLower(name)]; dup {
+			return fmt.Errorf("[llm.api] %s %q and %q are the same header", what, other, name)
+		}
+		seen[strings.ToLower(name)] = name
+		if strings.ContainsAny(headers[name], "\r\n\x00") {
+			return fmt.Errorf("[llm.api] %s %q's value has a line break", what, name)
+		}
+	}
+	return nil
 }
 
 // pathPlaceholderRE is a {…} in a path.
@@ -235,8 +299,30 @@ func (a APIConfig) checkRoutes() error {
 			return fmt.Errorf("[llm.api] paths.%s needs {method}: Google's API says by it whether the reply streams", api)
 		}
 	}
-	if a.ModelsPath != "" && a.ModelsPath != NoModelsList {
+	switch {
+	case a.ModelsPath == "" || a.ModelsPath == NoModelsList:
+	case isURL(a.ModelsPath):
+		return checkModelsURL(a.ModelsPath)
+	case !strings.HasPrefix(a.ModelsPath, "/"):
+		return fmt.Errorf("[llm.api] models_path %q must start with / (a path under base_url) or be an http or https URL", a.ModelsPath)
+	default:
 		return checkPath("models_path", a.ModelsPath)
+	}
+	return nil
+}
+
+// checkModelsURL reports why models_path's URL can't be asked for the
+// model list (MDL-115): as base_url's, the token only in its path or
+// query.
+func checkModelsURL(raw string) error {
+	u, err := url.Parse(strings.ReplaceAll(raw, TokenPlaceholder, urlSentinel))
+	switch {
+	case err != nil || u.Host == "" || strings.ContainsAny(raw, " \t\r\n"):
+		return fmt.Errorf("[llm.api] models_path %q isn't a path starting with / or an absolute http or https URL", raw)
+	case strings.Contains(u.Host, urlSentinel) || strings.Contains(u.User.String(), urlSentinel):
+		return fmt.Errorf("[llm.api] models_path can use %s only in its path or query, not its host", TokenPlaceholder)
+	case u.Fragment != "":
+		return fmt.Errorf("[llm.api] models_path %q has a fragment (#…)", raw)
 	}
 	return nil
 }
@@ -288,6 +374,7 @@ type APIProviderInfo struct {
 	TokenScriptLanguage string
 	Headers             []APIHeaderInfo // sorted by name
 	ModelsPath          string
+	ModelsHeaders       []APIHeaderInfo   // sorted by name (MDL-115)
 	APIs                map[string]string // model → API (MDL-112)
 	Paths               map[string]string // API → path (MDL-113)
 }
@@ -302,15 +389,23 @@ func describeAPI(raw map[string]any) APIProviderInfo {
 		APIs:                fileTable(raw, "apis"),
 		Paths:               fileTable(raw, "paths"),
 	}
-	headers := fileHeaders(raw)
+	info.Headers = headerInfos(fileHeaders(raw))
+	info.ModelsHeaders = headerInfos(fileTable(raw, "models_headers"))
+	return info
+}
+
+// headerInfos are headers as Describe reports them, by name, values
+// withheld but the token's.
+func headerInfos(headers map[string]string) []APIHeaderInfo {
+	var out []APIHeaderInfo
 	for _, name := range sortedKeys(headers) {
 		h := APIHeaderInfo{Name: name, HasValue: headers[name] != ""}
 		if strings.Contains(headers[name], TokenPlaceholder) {
 			h.Value = headers[name]
 		}
-		info.Headers = append(info.Headers, h)
+		out = append(out, h)
 	}
-	return info
+	return out
 }
 
 // fileHeaders are the [llm.api.headers] a scope's file sets.
@@ -349,13 +444,15 @@ type APIProviderSettings struct {
 	ModelsPath string
 	APIs       map[string]string
 	Paths      map[string]string
+	// ModelsHeaders sign the model list in place of Headers (MDL-115),
+	// saved as Headers are.
+	ModelsHeaders []APIHeader
 }
 
 // edits checks the settings s makes of a scope's file (raw) as the model
 // would, and returns the edits that write them.
 func (s APIProviderSettings) edits(raw map[string]any) ([]settingEdit, error) {
-	const table, headersTable = "llm.api", "llm.api.headers"
-	stored := fileHeaders(raw)
+	const table = "llm.api"
 	result := APIConfig{
 		BaseURL:             strings.TrimSpace(s.BaseURL),
 		TokenScript:         strings.TrimSpace(s.TokenScript),
@@ -373,30 +470,51 @@ func (s APIProviderSettings) edits(raw map[string]any) ([]settingEdit, error) {
 	}
 	edits = append(edits, tableEdits("llm.api.apis", fileTable(raw, "apis"), result.APIs)...)
 	edits = append(edits, tableEdits("llm.api.paths", fileTable(raw, "paths"), result.Paths)...)
-	for _, h := range s.Headers {
-		name := strings.TrimSpace(h.Name)
-		if _, dup := result.Headers[name]; dup {
-			return nil, fmt.Errorf("[llm.api] header %q is given twice", name)
-		}
-		switch {
-		case h.Value != "":
-			result.Headers[name] = h.Value
-			edits = append(edits, settingEdit{headersTable, name, h.Value})
-		case stored[name] != "":
-			result.Headers[name] = stored[name] // kept as it is: no edit
-		default:
-			return nil, fmt.Errorf("[llm.api] header %q needs a value", name)
-		}
+	var err error
+	var more []settingEdit
+	if result.Headers, more, err = headerEdits("headers", fileHeaders(raw), s.Headers); err != nil {
+		return nil, err
 	}
-	for _, name := range sortedKeys(stored) {
-		if _, kept := result.Headers[name]; !kept {
-			edits = append(edits, settingEdit{headersTable, name, ""})
-		}
+	edits = append(edits, more...)
+	if result.ModelsHeaders, more, err = headerEdits("models_headers", fileTable(raw, "models_headers"), s.ModelsHeaders); err != nil {
+		return nil, err
 	}
+	edits = append(edits, more...)
 	if err := result.Check(); err != nil {
 		return nil, err
 	}
 	return edits, nil
+}
+
+// headerEdits are the [llm.api.<table>] headers given (a value "" keeps
+// stored's) and the edits that write them, removing what stored has
+// beyond them.
+func headerEdits(table string, stored map[string]string, given []APIHeader) (map[string]string, []settingEdit, error) {
+	full := "llm.api." + table
+	what := map[string]string{"headers": "header", "models_headers": "models_headers"}[table]
+	result := map[string]string{}
+	var edits []settingEdit
+	for _, h := range given {
+		name := strings.TrimSpace(h.Name)
+		if _, dup := result[name]; dup {
+			return nil, nil, fmt.Errorf("[llm.api] %s %q is given twice", what, name)
+		}
+		switch {
+		case h.Value != "":
+			result[name] = h.Value
+			edits = append(edits, settingEdit{full, name, h.Value})
+		case stored[name] != "":
+			result[name] = stored[name] // kept as it is: no edit
+		default:
+			return nil, nil, fmt.Errorf("[llm.api] %s %q needs a value", what, name)
+		}
+	}
+	for _, name := range sortedKeys(stored) {
+		if _, kept := result[name]; !kept {
+			edits = append(edits, settingEdit{full, name, ""})
+		}
+	}
+	return result, edits, nil
 }
 
 // trimmedTable is t with its keys and values trimmed, and those left

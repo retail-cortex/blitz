@@ -198,6 +198,39 @@ func TestAPIModelList(t *testing.T) {
 		assert.Equal(t, "/gw/v1/models", got.URL.Path)
 	})
 
+	// Another server's list (MDL-115): asked with models_headers alone,
+	// the gateway's headers and base_url's query never sent to it.
+	t.Run("another server", func(t *testing.T) {
+		s, got := serve(t, http.StatusOK, shapes["openai"])
+		gw := "http://127.0.0.1:1"
+		_, err := list(t, gw, func(c *config.APIConfig) {
+			c.ModelsPath = s.URL + "/catalog/models?key=" + config.TokenPlaceholder
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "/catalog/models", got.URL.Path)
+		assert.Equal(t, "tok-list-12345", got.URL.Query().Get("key"), "the token in its URL")
+		assert.Empty(t, got.URL.Query().Get("tenant"), "base_url's query is the gateway's")
+		assert.Empty(t, got.Header.Get("X-Api-Key"), "the gateway's headers stay with it")
+
+		_, err = list(t, gw, func(c *config.APIConfig) {
+			c.ModelsPath = s.URL + "/catalog/models"
+			c.ModelsHeaders = map[string]string{"Authorization": "Bearer " + config.TokenPlaceholder, "X-Catalog": "c1"}
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer tok-list-12345", got.Header.Get("Authorization"))
+		assert.Equal(t, "c1", got.Header.Get("X-Catalog"))
+		assert.Empty(t, got.Header.Get("X-Api-Key"))
+	})
+
+	t.Run("its own headers on the gateway", func(t *testing.T) {
+		s, got := serve(t, http.StatusOK, shapes["openai"])
+		_, err := list(t, s.URL, func(c *config.APIConfig) { c.ModelsHeaders = map[string]string{"X-List": "l"} })
+		require.NoError(t, err)
+		assert.Equal(t, "l", got.Header.Get("X-List"))
+		assert.Empty(t, got.Header.Get("X-Api-Key"), "in place of the gateway's")
+		assert.Equal(t, "retail", got.URL.Query().Get("tenant"))
+	})
+
 	t.Run("none", func(t *testing.T) {
 		ids, err := list(t, "http://127.0.0.1:1", func(c *config.APIConfig) { c.ModelsPath = config.NoModelsList })
 		require.NoError(t, err)

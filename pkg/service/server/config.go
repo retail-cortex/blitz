@@ -101,6 +101,9 @@ func apiSettingsToProto(a config.APIProviderInfo) *pb.ApiProviderSettings {
 	for _, h := range a.Headers {
 		out.Headers = append(out.Headers, &pb.ApiHeader{Name: h.Name, Value: h.Value, HasValue: h.HasValue})
 	}
+	for _, h := range a.ModelsHeaders {
+		out.ModelsHeaders = append(out.ModelsHeaders, &pb.ApiHeader{Name: h.Name, Value: h.Value, HasValue: h.HasValue})
+	}
 	return out
 }
 
@@ -109,6 +112,9 @@ func apiSettingsFromProto(a *pb.ApiProviderSettings) *config.APIProviderSettings
 	out := &config.APIProviderSettings{BaseURL: a.BaseUrl, TokenScript: a.TokenScript, TokenScriptLanguage: a.TokenScriptLanguage, ModelsPath: a.ModelsPath, APIs: a.Apis, Paths: a.Paths}
 	for _, h := range a.Headers {
 		out.Headers = append(out.Headers, config.APIHeader{Name: h.Name, Value: h.Value})
+	}
+	for _, h := range a.ModelsHeaders {
+		out.ModelsHeaders = append(out.ModelsHeaders, config.APIHeader{Name: h.Name, Value: h.Value})
 	}
 	return out
 }

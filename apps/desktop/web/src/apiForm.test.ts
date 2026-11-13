@@ -16,7 +16,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { ApiProviderSettingsSchema } from "./gen/blitz/v1/config_pb";
+import { ApiHeaderSchema, ApiProviderSettingsSchema } from "./gen/blitz/v1/config_pb";
 import { apiFormProblems, fromApiForm, guessedAPI, listedRows, newHeader, sameApiForm, toApiForm, tokenPlaceholder, usesToken, type ApiForm } from "./apiForm";
 
 const saved = create(ApiProviderSettingsSchema, {
@@ -30,7 +30,7 @@ const saved = create(ApiProviderSettingsSchema, {
   tokenScriptLanguage: "",
 });
 
-const routes = { listsModels: true, modelsPath: "", models: [], otherApi: "", paths: {} };
+const routes = { listsModels: true, modelsPath: "", modelsHeaders: [], models: [], otherApi: "", paths: {} };
 const fine: ApiForm = { baseUrl: "https://gw.example/v1", headers: [{ name: "Authorization", value: "", hasValue: false, useToken: true }], tokenScript: "print-token", language: "shell", ...routes };
 
 describe("the api form", () => {
@@ -97,6 +97,50 @@ describe("the api form", () => {
     expect(apiFormProblems({ ...fine, modelsPath: "models" })).toEqual(["desktop.keys.api.problem.path"]);
     expect(apiFormProblems({ ...fine, listsModels: false, modelsPath: "models" }), "a path not used isn't checked").toEqual([]);
     expect(apiFormProblems({ ...fine, paths: { vertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}", chat_completions: "/v1/chat/completions" } })).toEqual([]);
+  });
+
+  // Issue #111 (spec_015_models MDL-115): another server's list, with its own headers.
+  it("shows and saves the model list's URL and headers", () => {
+    const f = toApiForm(
+      create(ApiProviderSettingsSchema, {
+        ...saved,
+        modelsPath: "https://catalog.example/v1/models",
+        modelsHeaders: [
+          create(ApiHeaderSchema, { name: "Authorization", value: `Bearer ${tokenPlaceholder}`, hasValue: true }),
+          create(ApiHeaderSchema, { name: "X-Catalog", value: "", hasValue: true }),
+        ],
+      }),
+    );
+    expect(f.modelsPath).toBe("https://catalog.example/v1/models");
+    expect(f.modelsHeaders).toEqual([
+      { name: "Authorization", value: "", hasValue: true, useToken: true, token: `Bearer ${tokenPlaceholder}` },
+      { name: "X-Catalog", value: "", hasValue: true, useToken: false },
+    ]);
+    expect(apiFormProblems(f)).toEqual([]);
+    expect(fromApiForm(f)).toMatchObject({
+      modelsPath: "https://catalog.example/v1/models",
+      modelsHeaders: [
+        { name: "Authorization", value: `Bearer ${tokenPlaceholder}` },
+        { name: "X-Catalog", value: "" },
+      ],
+    });
+    expect(fromApiForm({ ...f, listsModels: false }).modelsHeaders, "nothing lists: nothing to sign").toEqual([]);
+  });
+
+  it("checks the model list's URL and headers", () => {
+    expect(apiFormProblems({ ...fine, modelsPath: `https://catalog.example/models?k=${tokenPlaceholder}` })).toEqual([]);
+    expect(apiFormProblems({ ...fine, modelsPath: `https://${tokenPlaceholder}.example/models` })).toEqual(["desktop.keys.api.problem.models_url"]);
+    expect(apiFormProblems({ ...fine, modelsPath: "https://catalog.example/models#x" })).toEqual(["desktop.keys.api.problem.models_url"]);
+    const header = (name: string, value = "v") => ({ name, value, hasValue: false, useToken: false });
+    expect(apiFormProblems({ ...fine, modelsHeaders: [header("X Bad")] })).toEqual(["desktop.keys.api.problem.header_name"]);
+    expect(apiFormProblems({ ...fine, modelsHeaders: [header("X-A"), header("x-a")] })).toEqual(["desktop.keys.api.problem.header_twice"]);
+    expect(apiFormProblems({ ...fine, modelsHeaders: [header("Authorization")] }), "a name the gateway's headers have too").toEqual([]);
+    expect(apiFormProblems({ ...fine, listsModels: false, modelsHeaders: [header("X Bad")] }), "not used, not checked").toEqual([]);
+    // The list's token needs the script, even when the gateway's headers don't use it.
+    const noToken = { ...fine, headers: [header("X-Key")], tokenScript: "" };
+    expect(usesToken(noToken)).toBe(false);
+    expect(usesToken({ ...noToken, modelsHeaders: [{ ...header("Authorization", ""), useToken: true }] })).toBe(true);
+    expect(apiFormProblems({ ...noToken, modelsPath: `https://c.example/m?k=${tokenPlaceholder}` })).toEqual(["desktop.keys.api.problem.script"]);
   });
 
   it("saves the token's placeholder, keeps a withheld value and leaves out empty rows", () => {
