@@ -29,9 +29,9 @@ import (
 	"github.com/retail-cortex/blitz/pkg/activity"
 )
 
-// A command counts the CLI's use, once a day; --version and --help don't
-// (spec_054_active_installs AI-01, AI-03), and the CLI waits for the ping
-// at most pingGrace.
+// A command counts the CLI's use, once a day; --version and --help don't,
+// nor a command the agent runs (spec_054_active_installs AI-01, AI-03,
+// AI-03a), and the CLI waits for the ping at most pingGrace.
 func TestCommandsCountUse(t *testing.T) {
 	var mu sync.Mutex
 	var fronts []string
@@ -66,6 +66,13 @@ func TestCommandsCountUse(t *testing.T) {
 		require.Empty(t, fronts, "%v isn't use", args)
 		mu.Unlock()
 	}
+	// A command the agent runs is Blitz's use, not the person's (AI-03a).
+	t.Setenv(activity.AgentEnv, "1")
+	run("doctor")
+	mu.Lock()
+	require.Empty(t, fronts, "the agent's command isn't use")
+	mu.Unlock()
+	t.Setenv(activity.AgentEnv, "")
 	run("doctor")
 	run("doctor")
 	mu.Lock()

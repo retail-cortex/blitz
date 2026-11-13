@@ -67,7 +67,7 @@ Kinds: `shell(…)`, checked on every sub-command, through pipes, `bash -c` and 
 
 ## File sandbox
 
-File tools reach only the workspace, plus `sandbox.allowed_paths` (read-write; `--add-dir <dir>` adds one for a run) and `sandbox.read_only_paths`, enforced with Go's `os.Root`: no `..` or symlink escapes. `sandbox.blocked_paths` (by default `.env` files, keys, `~/.ssh`, cloud credentials and more) are never readable or writable, including through symlinks, `grep` and `list_files`. A pattern takes `*`, `**`, `?`, a class such as `id_[rd]sa`, and alternatives such as `**/*.{pem,key}`.
+File tools reach only the workspace, plus `sandbox.allowed_paths` (read-write; `--add-dir <dir>` adds one for a run) and `sandbox.read_only_paths`, enforced with Go's `os.Root`: no `..` or symlink escapes. `sandbox.blocked_paths` (by default `~/.ssh`, cloud credentials and Blitz's own settings, which hold its keys) are never readable or writable, by the file tools or by commands, including through symlinks, `grep` and `list_files`. `sandbox.hidden_paths` (by default `.env` files, keys and certificates such as `*.pem`) are kept from the model only: the file tools never read them, but the agent can create one, and commands use them as any program does, so `pip` finds your system's certificates and your app's tests read its `.env`. A private key that a command prints is masked before the model sees it. A pattern takes `*`, `**`, `?`, a class such as `id_[rd]sa`, and alternatives such as `**/*.{pem,key}`.
 
 ## Command policy
 

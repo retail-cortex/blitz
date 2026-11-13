@@ -96,6 +96,46 @@ export function parseLink(line: string): PageLink | undefined {
   return { url, fingerprint };
 }
 
+/** A ping the host asks the app to send (spec_054_active_installs AI-14). */
+export type RelayPing = { id: string; url: string; body: Record<string, string> };
+
+/**
+ * The host's "ping" line ({"ping": {"id", "url", "body"}}): its daily
+ * ping, for the app to send through the system's network. undefined for
+ * anything else; the address is HTTPS (or HTTP on the loopback, for
+ * tests) and the body flat strings.
+ */
+export function parsePing(line: string): RelayPing | undefined {
+  let ping: unknown;
+  try {
+    ({ ping } = JSON.parse(line) as { ping?: unknown });
+  } catch {
+    return undefined;
+  }
+  if (!ping || typeof ping !== "object") return undefined;
+  const { id, url, body } = ping as { id?: unknown; url?: unknown; body?: unknown };
+  if (typeof id !== "string" || !id || typeof url !== "string" || !body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  if (!Object.values(body).every((v) => typeof v === "string")) return undefined;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost"))) return undefined;
+  } catch {
+    return undefined;
+  }
+  return { id, url, body: body as Record<string, string> };
+}
+
+/**
+ * The ping's JSON with its proxy field: "Y" when the system sends it
+ * through a proxy (Chromium's answer for its address, "PROXY host:port;
+ * DIRECT" and the like), "N" when it goes direct. Which proxy is never
+ * said.
+ */
+export function pingBody(body: Record<string, string>, proxyRule: string): string {
+  const first = proxyRule.split(";")[0]?.trim().toUpperCase() ?? "";
+  return JSON.stringify({ ...body, proxy: first === "" || first === "DIRECT" ? "N" : "Y" });
+}
+
 /**
  * Whether a certificate is the page server's: on the loopback address,
  * with the fingerprint blitz-tray --serve named (pinned). The window

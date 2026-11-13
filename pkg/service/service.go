@@ -163,7 +163,7 @@ func Run(ctx context.Context, o Options) error {
 	// Each workspace gets its own configuration: a workspace owns and
 	// changes it.
 	// The front ends' use, counted once a day (spec_054_active_installs).
-	use := &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: o.Version, On: config.CountsUsage}
+	use := &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: o.Version, On: config.CountsUsage, CAFile: config.NetworkCAFile}
 	var s *server.Server
 	s = server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
 		cfg, err := config.LoadWorkspace(o.Config, dir) // its own settings over the global ones

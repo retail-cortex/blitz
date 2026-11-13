@@ -59,13 +59,17 @@ func UserPath(p string) (string, error) {
 func (w *Workspace) userRoot() *os.Root { return w.roots[0].root }
 
 // AgentRule is the agent's rule for the workspace-relative path rel:
-// "blocked", "read_only", or "" when the agent may read and write it.
+// "blocked" (a hidden file's too: the agent never reads it), "read_only",
+// or "" when the agent may read and write it.
 func (w *Workspace) AgentRule(rel string) string {
 	loc, ok := w.locate(filepath.Join(w.Dir(), rel))
 	if !ok {
 		return "blocked"
 	}
 	err := w.check(loc, true)
+	if err == nil {
+		err = w.check(loc, false)
+	}
 	switch {
 	case errors.Is(err, ErrBlockedPath):
 		return "blocked"

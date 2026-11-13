@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "lsp",
     srcs = [
+        "bazel.go",
         "client.go",
         "documents.go",
         "manager.go",
@@ -31,6 +32,7 @@ go_test(
     name = "lsp_test",
     size = "small",
     srcs = [
+        "bazel_test.go",
         "documents_test.go",
         "lsp_test.go",
         "manager_test.go",

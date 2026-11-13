@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.9
-weight: 4
+weight: 5
 ---
 
 If you use Gemini through your Google Cloud account, update now: it works again. Teams also get their organization's rules and shared workspaces without the restarts and errors.

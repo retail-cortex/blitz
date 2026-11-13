@@ -49,7 +49,7 @@ type fakeServer struct {
 }
 
 func (f *fakeServer) launcher() Launcher {
-	return func(context.Context, string, []string) (Process, error) {
+	return func(context.Context, string, []string, []string) (Process, error) {
 		serverIn, clientOut := io.Pipe()
 		clientIn, serverOut := io.Pipe()
 		f.mu.Lock()
@@ -300,11 +300,11 @@ func TestManagerSlowStart(t *testing.T) {
 	m := NewManager(dir, []Server{
 		{Language: "go", Command: []string{"stuck"}, Extensions: []string{".go"}},
 		{Language: "python", Command: []string{"quick"}, Extensions: []string{".py"}},
-	}, func(ctx context.Context, dir string, argv []string) (Process, error) {
+	}, func(ctx context.Context, dir string, argv, env []string) (Process, error) {
 		if argv[0] == "stuck" {
-			return launchStuck(ctx, dir, argv)
+			return launchStuck(ctx, dir, argv, env)
 		}
-		return launchQuick(ctx, dir, argv)
+		return launchQuick(ctx, dir, argv, env)
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

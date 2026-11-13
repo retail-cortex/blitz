@@ -732,12 +732,12 @@ func harnessFolders(dir string) string {
 	return b.String()
 }
 
-// loadMemory reads instruction files and rules; imports of blocked paths
-// (.env, keys) are never read into the prompt.
+// loadMemory reads instruction files and rules; imports of blocked or
+// hidden paths (.env, keys) are never read into the prompt.
 func (w *Workspace) loadMemory() {
-	blocked := w.tools.Workspace().Blocked()
+	ws := w.tools.Workspace()
 	w.memory = memory.LoadAll(w.Dir(), w.cfg.Memory, memory.Options{Blocked: func(p string) bool {
-		_, b := blocked.Match(p)
+		_, b := ws.KeptFromModel(p)
 		return b
 	}})
 	w.memoryStamp = memory.Stamp(w.Dir(), w.cfg.Memory, w.memory)

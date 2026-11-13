@@ -112,6 +112,7 @@ go_library(
         "//pkg/pageserver:__pkg__",
     ],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/config",
         "//pkg/docx",
@@ -129,6 +130,7 @@ go_library(
         "//pkg/observability",
         "//pkg/ostrash",
         "//pkg/pdftext",
+        "//pkg/redact",
         "//pkg/secrets",
         "//pkg/secretscan",
         "//pkg/socket",
@@ -198,6 +200,7 @@ go_test(
         "grep_test.go",
         "guard_test.go",
         "harness_evidence_test.go",
+        "hidden_test.go",
         "hookdecisions_test.go",
         "hookif_test.go",
         "hooks_cov_test.go",
@@ -283,6 +286,7 @@ go_test(
     # macOS.
     tags = ["no-sandbox"],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/config",
         "//pkg/config/configtest",

@@ -19,7 +19,7 @@
 import type { ProjectItem, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
 
-const itemKinds = new Set(["hook", "mcp", "allow", "writable", "model", "agent_model", "worker_allow", "skill_scripts", "deny", "ask", "blocked_path"]);
+const itemKinds = new Set(["hook", "mcp", "allow", "writable", "model", "agent_model", "worker_allow", "skill_scripts", "deny", "ask", "blocked_path", "hidden_path"]);
 
 /** One project setting in words: "hook stop runs ./scripts/stop.sh". */
 export function projectItemText(it: Pick<ProjectItem, "kind" | "key" | "value" | "file">): string {

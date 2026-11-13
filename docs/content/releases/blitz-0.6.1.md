@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.1
-weight: 28
+weight: 29
 ---
 
 **Closing the window, cleanly, on NVIDIA.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.1).

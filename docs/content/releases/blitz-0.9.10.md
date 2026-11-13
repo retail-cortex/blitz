@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.10
-weight: 3
+weight: 4
 ---
 
 Does your company run its own AI gateway? Blitz now works with all of it. Every model the gateway offers shows up in Blitz, and each one talks to the gateway the way the gateway expects. And you can finally drag the window from anywhere in the title bar.

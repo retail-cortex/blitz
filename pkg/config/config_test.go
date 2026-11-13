@@ -202,11 +202,21 @@ func TestSandboxDefaults(t *testing.T) {
 		}
 		return false
 	}
-	for _, p := range []string{".env", "~/.ssh", "*.pem"} {
+	// The secret stores are blocked; keys, certificates and .env files are
+	// only kept from the model, so commands can use them (a CA bundle).
+	for _, p := range []string{"~/.ssh", "~/.blitz/.env.toml", "~/.blitz/.env.*.toml"} {
 		t.Run(p, func(t *testing.T) {
 			assert.True(t, has(sb.BlockedPaths, p), "default blocked paths missing %q", p)
 		})
 	}
+	for _, p := range []string{".env", "*.pem", "*.key"} {
+		t.Run(p, func(t *testing.T) {
+			assert.True(t, has(sb.HiddenPaths, p), "default hidden paths missing %q", p)
+			assert.False(t, has(sb.BlockedPaths, p), "%q is hidden, not blocked", p)
+		})
+	}
+	assert.False(t, has(sb.BlockedPaths, ".env.*.toml"), "a project's .env.*.toml is its own")
+	assert.False(t, has(sb.HiddenPaths, ".env.*.toml"), "a project's .env.*.toml is its own")
 	assert.True(t, has(sb.Commands.Deny, "sudo *"), "default deny list missing sudo")
 	// Defaults are copies: mutating one config must not affect another.
 	cfg.Sandbox.BlockedPaths[0] = "changed"
@@ -318,6 +328,29 @@ func TestCountsUsage(t *testing.T) {
 			}
 			t.Setenv("MODENV_PREFIX", dir)
 			assert.Equal(t, tc.want, CountsUsage())
+		})
+	}
+}
+
+// The pings trust [network] ca_file's authorities too (spec_054 AI-14):
+// its path, ~ expanded; "" without one or settings that can't be read.
+func TestNetworkCAFile(t *testing.T) {
+	home := t.TempDir()
+	for _, tc := range []struct{ name, file, want string }{
+		{"no settings", "", ""},
+		{"none set", "[blitz]\ndefault_agent = \"blitz\"\n", ""},
+		{"set", "[network]\nca_file = \"~/corp.pem\"\n", filepath.Join(home, "corp.pem")},
+		{"settings it can't read", "[network\n", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateConfigEnv(t)
+			t.Setenv("HOME", home)
+			dir := t.TempDir()
+			if tc.file != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tc.file), 0o600))
+			}
+			t.Setenv("MODENV_PREFIX", dir)
+			assert.Equal(t, tc.want, NetworkCAFile())
 		})
 	}
 }

@@ -56,6 +56,8 @@ import {
   isShowLink,
   tasksURL,
   parseLink,
+  parsePing,
+  pingBody,
   renewEvery,
   shouldRenew,
   pictureExtension,
@@ -74,6 +76,40 @@ import {
   waitForPrint,
   windowMethods,
 } from "./logic";
+
+// The host's daily ping, sent through the system's network (spec_054
+// AI-14): a ping line is read only when whole, and its proxy field says
+// whether a proxy carries it, never which.
+describe("parsePing", () => {
+  const body = { install: "ab", day: "2026-11-13", front: "desktop" };
+  const line = (ping: unknown) => JSON.stringify({ ping });
+  it.each([
+    { name: "the host's ping", line: line({ id: "1", url: "https://license.retailcortex.com/v1/blitz/active", body }), want: { id: "1", url: "https://license.retailcortex.com/v1/blitz/active", body } },
+    { name: "a test server on the loopback", line: line({ id: "2", url: "http://127.0.0.1:8080/active", body }), want: { id: "2", url: "http://127.0.0.1:8080/active", body } },
+    { name: "a link line", line: '{"url":"https://127.0.0.1:5123/open?t=ab12","fingerprint":"AB"}', want: undefined },
+    { name: "not JSON", line: "starting", want: undefined },
+    { name: "no id", line: line({ url: "https://x.example/a", body }), want: undefined },
+    { name: "plain http elsewhere", line: line({ id: "1", url: "http://x.example/a", body }), want: undefined },
+    { name: "a nested body", line: line({ id: "1", url: "https://x.example/a", body: { a: { b: "c" } } }), want: undefined },
+    { name: "a list for a body", line: line({ id: "1", url: "https://x.example/a", body: ["a"] }), want: undefined },
+  ])("$name", ({ line, want }) => expect(parsePing(line)).toEqual(want));
+});
+
+describe("pingBody", () => {
+  const body = { install: "ab", front: "desktop" };
+  it.each([
+    { rule: "DIRECT", want: "N" },
+    { rule: "", want: "N" },
+    { rule: "PROXY proxy.corp:8080", want: "Y" },
+    { rule: "PROXY proxy.corp:8080; DIRECT", want: "Y" },
+    { rule: "HTTPS secure.corp:443", want: "Y" },
+    { rule: "SOCKS5 socks.corp:1080", want: "Y" },
+  ])("$rule", ({ rule, want }) => {
+    const got = JSON.parse(pingBody(body, rule)) as Record<string, string>;
+    expect(got).toEqual({ ...body, proxy: want });
+    expect(JSON.stringify(got)).not.toContain("corp");
+  });
+});
 
 describe("parseLink", () => {
   const fp = Array(32).fill("AB").join(":");

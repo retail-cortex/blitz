@@ -41,6 +41,9 @@ var (
 	ErrReadOnlyPath = errors.New("path is read-only")
 	// ErrBlockedPath is returned when a path matches a blocked-path pattern.
 	ErrBlockedPath = errors.New("path is blocked by sandbox policy")
+	// ErrHiddenPath is a read of a file kept from the model (hidden_paths):
+	// a key, a certificate, a .env. It is an ErrBlockedPath too.
+	ErrHiddenPath = fmt.Errorf("%w: its contents are kept from the model (hidden_paths); commands can still use it", ErrBlockedPath)
 )
 
 // WorkspaceOptions configures the file sandbox.
@@ -49,6 +52,7 @@ type WorkspaceOptions struct {
 	AllowedPaths  []string // additional read-write roots
 	ReadOnlyPaths []string // additional read-only roots
 	BlockedPaths  []string // glob patterns never readable or writable
+	HiddenPaths   []string // glob patterns the file tools never read (they may write them)
 	MaxFileSize   int64
 	// ReadOnly, when set, makes the workspace itself read-only and says
 	// why (a Viewer's clone of an organization workspace, spec_053 EN-60).
@@ -67,6 +71,7 @@ type Workspace struct {
 	roots       []*fsRoot // roots[0] is the workspace
 	readOnly    string    // why the workspace is read-only ("" when it isn't)
 	blocked     *PathMatcher
+	hidden      *PathMatcher
 	maxFileSize int64
 	checkpoints *Checkpoints // nil when disabled
 	locks       pathLocks
@@ -136,6 +141,10 @@ func OpenWorkspace(opts WorkspaceOptions) (*Workspace, error) {
 		return nil, err
 	}
 	w.blocked = blocked
+	if w.hidden, err = NewPathMatcher(opts.HiddenPaths, w.RootDirs()); err != nil {
+		w.Close()
+		return nil, err
+	}
 	return w, nil
 }
 
@@ -188,8 +197,18 @@ func (w *Workspace) Reads() *ReadLog {
 	return w.reads
 }
 
-// Blocked returns the blocked-path matcher.
+// Blocked returns the blocked-path matcher: what neither the file tools
+// nor the OS sandbox's commands read or write.
 func (w *Workspace) Blocked() *PathMatcher { return w.blocked }
+
+// KeptFromModel reports the pattern that keeps abs's contents from the
+// model, blocked or hidden, if any.
+func (w *Workspace) KeptFromModel(abs string) (string, bool) {
+	if pat, ok := w.blocked.Match(abs); ok {
+		return pat, true
+	}
+	return w.hidden.Match(abs)
+}
 
 // Close releases all root handles.
 func (w *Workspace) Close() error {
@@ -279,6 +298,10 @@ func (w *Workspace) check(loc location, write bool) error {
 	if pat, blocked := w.blocked.Match(loc.abs()); blocked {
 		return fmt.Errorf("%w (%s): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 	}
+	// A hidden file may be written (made), never read.
+	if pat, hidden := w.hidden.Match(loc.abs()); hidden && !write {
+		return fmt.Errorf("%w (%s): %s", ErrHiddenPath, pat, w.display(loc.abs()))
+	}
 	// A symlink can point at a blocked or read-only location that the
 	// lexical path doesn't reveal; check where it really leads. A file not
 	// made yet is checked where its folder really is: a new file through a
@@ -286,6 +309,9 @@ func (w *Workspace) check(loc location, write bool) error {
 	if real, err := resolveExistingPrefix(loc.abs()); err == nil && real != loc.abs() {
 		if pat, blocked := w.blocked.Match(real); blocked {
 			return fmt.Errorf("%w (%s via symlink): %s", ErrBlockedPath, pat, w.display(loc.abs()))
+		}
+		if pat, hidden := w.hidden.Match(real); hidden && !write {
+			return fmt.Errorf("%w (%s via symlink): %s", ErrHiddenPath, pat, w.display(loc.abs()))
 		}
 		if write {
 			if target, ok := w.locate(real); ok && !target.root.writable {
@@ -661,7 +687,7 @@ type WalkEntry struct {
 func (e WalkEntry) Open() (fs.File, error) { return e.fsys.Open(e.fsPath) }
 
 // Walk visits p and everything beneath it in lexical order, skipping blocked
-// entries. fn may return fs.SkipDir or fs.SkipAll.
+// and hidden entries. fn may return fs.SkipDir or fs.SkipAll.
 func (w *Workspace) Walk(p string, fn func(WalkEntry) error) error {
 	loc, err := w.resolve(p, false)
 	if err != nil {
@@ -678,7 +704,7 @@ func (w *Workspace) Walk(p string, fn func(WalkEntry) error) error {
 		}
 		abs := filepath.Join(loc.root.dir, filepath.FromSlash(path))
 		if path != start {
-			if _, blocked := w.blocked.Match(abs); blocked {
+			if _, kept := w.KeptFromModel(abs); kept {
 				if d.IsDir() {
 					return fs.SkipDir
 				}
@@ -703,6 +729,9 @@ func (w *Workspace) Describe() []string {
 	}
 	if pats := w.blocked.Patterns(); len(pats) > 0 {
 		lines = append(lines, "blocked: "+strings.Join(pats, ", "))
+	}
+	if pats := w.hidden.Patterns(); len(pats) > 0 {
+		lines = append(lines, "hidden (commands use them; file tools don't read them): "+strings.Join(pats, ", "))
 	}
 	return lines
 }

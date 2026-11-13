@@ -59,6 +59,9 @@ type Manager struct {
 	closed  bool
 	scratch string // code blocks' folders outside the workspace (snippet.go)
 
+	bazelOnce sync.Once
+	bazelWS   bazelWorkspace // the workspace's Bazel setup (bazel.go)
+
 	docs documents // the editor's (documents.go)
 }
 
@@ -210,15 +213,26 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 	if len(cfg.Command) == 0 {
 		return nil, errors.New("no command")
 	}
-	proc, err := m.launch(context.Background(), root, cfg.Command) // lives past ctx
+	var env []string
+	if cfg.Language == "go" {
+		env = m.goDriverEnv(root)
+	}
+	proc, err := m.launch(context.Background(), root, cfg.Command, env) // lives past ctx
 	if err != nil {
 		return nil, err
 	}
 	s := &server{lang: cfg.Language, root: root, text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}), onDiags: m.diagnosed}
 	var settings map[string]any
 	if cfg.Language == "python" {
+		python := map[string]any{}
 		if py := m.pythonPath(root); py != "" {
-			settings = map[string]any{"python": map[string]any{"pythonPath": py}}
+			python["pythonPath"] = py
+		}
+		if extra := m.sitePackages(); len(extra) > 0 {
+			python["analysis"] = map[string]any{"extraPaths": extra}
+		}
+		if len(python) > 0 {
+			settings = map[string]any{"python": python}
 		}
 	}
 	s.c = newConn(proc, s.notified, settings)
@@ -253,6 +267,14 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 			},
 			"workspace": map[string]any{"symbol": map[string]any{}, "configuration": true, "workspaceFolders": true},
 		},
+	}
+	// gopls never looks in Bazel's output, which is much of the disk.
+	if cfg.Language == "go" && m.bazel().ok {
+		var filters []string
+		for _, d := range m.bazelOutputs() {
+			filters = append(filters, "-"+d)
+		}
+		params["initializationOptions"] = map[string]any{"directoryFilters": filters}
 	}
 	if cfg.Language == "typescript" {
 		if lib := m.tsserverLib(root, cfg.Command[0]); lib != "" {

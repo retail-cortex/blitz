@@ -132,11 +132,11 @@ func (r *recording) launcher() Launcher {
 		return map[string]any{}, ""
 	}}
 	launch := f.launcher()
-	return func(ctx context.Context, dir string, argv []string) (Process, error) {
+	return func(ctx context.Context, dir string, argv, env []string) (Process, error) {
 		r.mu.Lock()
 		r.dirs = append(r.dirs, dir)
 		r.mu.Unlock()
-		return launch(ctx, dir, argv)
+		return launch(ctx, dir, argv, env)
 	}
 }
 
@@ -188,11 +188,11 @@ func TestStartFailsPerRoot(t *testing.T) {
 	rec := &recording{}
 	ok := rec.launcher()
 	m := NewManager(root, []Server{{Language: "typescript", Command: []string{"tls"}, Extensions: []string{".ts"}}},
-		func(ctx context.Context, dir string, argv []string) (Process, error) {
+		func(ctx context.Context, dir string, argv, env []string) (Process, error) {
 			if filepath.Base(dir) == "bad" {
 				return nil, errors.New("Could not find a valid TypeScript installation")
 			}
-			return ok(ctx, dir, argv)
+			return ok(ctx, dir, argv, env)
 		})
 	t.Cleanup(m.Close)
 	_, err := m.For(context.Background(), filepath.Join(root, "bad", "a.ts"))

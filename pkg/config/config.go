@@ -819,7 +819,8 @@ func (p PermissionsConfig) Merge(ws PermissionsConfig) PermissionsConfig {
 // command policy and, when Shell is "auto" or "required", run under the OS
 // sandbox (macOS Seatbelt): writes are limited to the writable roots,
 // ShellWritablePaths and temp/cache dirs, blocked paths can't be read, and
-// network access follows AllowNetwork.
+// network access follows AllowNetwork. HiddenPaths are kept from the model
+// only: its file tools don't read them, and commands use them freely.
 type SandboxConfig struct {
 	// AllowedPaths are directories outside the workspace the file tools may
 	// read and write.
@@ -828,8 +829,14 @@ type SandboxConfig struct {
 	// read.
 	ReadOnlyPaths []string `toml:"read_only_paths"`
 	// BlockedPaths (globs) are never read or written, by file tools or, in the
-	// OS sandbox, by commands: secrets by default.
+	// OS sandbox, by commands: the secret stores by default.
 	BlockedPaths []string `toml:"blocked_paths"`
+	// HiddenPaths (globs) are files whose contents the model never gets:
+	// its file tools don't read them (they may create them), but commands
+	// use them as any program does (a CA bundle for pip, a key for curl,
+	// a .env for the app's tests). Private keys in command output are
+	// masked either way.
+	HiddenPaths []string `toml:"hidden_paths"`
 	// ShellWritablePaths are directories sandboxed commands may also write
 	// (caches).
 	ShellWritablePaths []string `toml:"shell_writable_paths"`
@@ -876,12 +883,22 @@ type CommandsConfig struct {
 	AutoApprove []string `toml:"auto_approve"`
 }
 
-// DefaultBlockedPaths are secrets that tools never read or write.
+// DefaultBlockedPaths are the secret stores that neither tools nor the
+// commands the model runs read or write: Blitz's own settings, which hold
+// its keys, and the credentials of the tools people sign in with.
 var DefaultBlockedPaths = []string{
-	".env", ".env.local", ".env.*.local", ".env.toml", ".env.*.toml",
-	"*.pem", "*.key", "*.p12", "id_rsa*", "id_ecdsa*", "id_ed25519*",
+	"~/.blitz/.env.toml", "~/.blitz/.env.*.toml", "~/.blitz/workspaces/*/.env.toml", "~/.blitz/workspaces/*/.env.*.toml",
 	"~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gcloud", "~/.azure", "~/.kube",
 	"~/.docker/config.json", "~/.netrc",
+}
+
+// DefaultHiddenPaths are files whose contents the model never gets, by
+// name wherever they are: keys, certificates and .env files. Commands
+// still use them (the system's CA bundle is a .pem; a fetched archive may
+// hold a .env).
+var DefaultHiddenPaths = []string{
+	".env", ".env.local", ".env.*.local",
+	"*.pem", "*.key", "*.p12", "id_rsa*", "id_ecdsa*", "id_ed25519*",
 }
 
 // DefaultScrubEnv are environment variables withheld from commands the model
@@ -997,6 +1014,7 @@ func DefaultConfig() *Config {
 		Processes: ProcessesConfig{CPUPercent: 90, BusyFor: "2m", MemoryMB: 2048, GrowthWindow: "10m", LeftAfter: "2h"},
 		Sandbox: SandboxConfig{
 			BlockedPaths:       append([]string(nil), DefaultBlockedPaths...),
+			HiddenPaths:        append([]string(nil), DefaultHiddenPaths...),
 			ShellWritablePaths: []string{"~/.cache", "~/go/pkg/mod", "~/.npm"},
 			Shell:              "auto",
 			AllowNetwork:       true,

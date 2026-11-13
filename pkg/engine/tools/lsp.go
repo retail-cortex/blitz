@@ -51,10 +51,11 @@ func lspServers(cfg *config.Config) []lsp.Server {
 }
 
 // lspLauncher starts language servers as shell commands run: guarded, in
-// the OS sandbox, with the scrubbed environment, in dir (the server's
-// project root in the workspace).
+// the OS sandbox, with the scrubbed environment plus extra (a Bazel
+// workspace's package driver), in dir (the server's project root in the
+// workspace).
 func lspLauncher(env *ExecEnv) lsp.Launcher {
-	return func(ctx context.Context, dir string, argv []string) (lsp.Process, error) {
+	return func(ctx context.Context, dir string, argv, extra []string) (lsp.Process, error) {
 		if _, err := exec.LookPath(argv[0]); err != nil {
 			return nil, &lsp.NotInstalledError{Command: argv[0]}
 		}
@@ -65,6 +66,7 @@ func lspLauncher(env *ExecEnv) lsp.Launcher {
 		if dir != "" {
 			cmd.Dir = dir
 		}
+		cmd.Env = append(cmd.Env, extra...) // ExecEnv set the rest
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			cmd.abandon()

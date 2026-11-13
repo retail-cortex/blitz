@@ -335,6 +335,16 @@ func CountsUsage() bool {
 	return err == nil && cfg.Usage.Count
 }
 
+// NetworkCAFile is the global settings' [network] ca_file, its ~
+// expanded: "" for none, or when the settings can't be read.
+func NetworkCAFile() string {
+	cfg, err := Load("")
+	if err != nil || cfg.Network.CAFile == "" {
+		return ""
+	}
+	return ExpandHome(cfg.Network.CAFile)
+}
+
 // CheckpointConfig controls file snapshots used by /undo and /rewind.
 type CheckpointConfig struct {
 	// Enabled keeps file snapshots for /undo and /rewind.
