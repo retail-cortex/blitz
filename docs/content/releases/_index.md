@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.9.13](blitz-0.9.13.md): language servers that understand Bazel, and keys and certificates your commands can use while the model never reads them.
 - [Blitz 0.9.12](blitz-0.9.12.md): see every call to your company's gateway, and turn up the log for one part of Blitz at a time.
 - [Blitz 0.9.11](blitz-0.9.11.md): agents that stop rereading the same files, so turns are faster and cheaper.
 - [Blitz 0.9.10](blitz-0.9.10.md): bring your company's AI gateway, with every model it offers in Blitz; and drag the window by its title bar.

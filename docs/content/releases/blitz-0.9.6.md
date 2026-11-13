@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.6
-weight: 7
+weight: 8
 ---
 
 Pick any model from any provider right from the status bar, ask Blitz to set itself up in plain English, and run local models that actually get work done.

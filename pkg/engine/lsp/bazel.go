@@ -24,7 +24,7 @@ import (
 	"strings"
 )
 
-// Bazel workspaces (FS-61b): MODULE.bazel (or a WORKSPACE file) says
+// Bazel workspaces (FS-61c): MODULE.bazel (or a WORKSPACE file) says
 // which rules the workspace builds with, and Bazel, not go.mod or
 // node_modules beside the sources, has what the servers need: rules_go's
 // package driver gives gopls the packages of sources with no go.mod above

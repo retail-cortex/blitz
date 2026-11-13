@@ -21,7 +21,7 @@ Nothing else: no analytics, no crash reports, no usage of your workspaces, agent
 
 ## Counting active installs
 
-On a day you use Blitz, it tells Retail Cortex once that this install was in use, so Retail Cortex can count how many installs are active each day and month, and on which versions and platforms. It's sent the first time each day you open the desktop app's window, run a `blitz` command (not `--version` or help), or start a session in the VS Code extension: at most one message a day for each of those you use. If you don't use Blitz on a day, nothing is sent; the Blitz service running in the background isn't use. Each message is a request to `license.retailcortex.com`, with exactly this:
+On a day you use Blitz, it tells Retail Cortex once that this install was in use, so Retail Cortex can count how many installs are active each day and month, and on which versions and platforms. It's sent the first time each day you open the desktop app's window, run a `blitz` command (not `--version` or help, nor one the agent runs for you), or start a session in the VS Code extension: at most one message a day for each of those you use. If you don't use Blitz on a day, nothing is sent; the Blitz service running in the background isn't use. Each message is a request to `license.retailcortex.com`, with exactly this:
 
 | | Example |
 |---|---|
@@ -30,6 +30,7 @@ On a day you use Blitz, it tells Retail Cortex once that this install was in use
 | Which front end: the desktop app, the CLI or VS Code | `desktop` |
 | Blitz's version | `v0.9.0` |
 | The operating system and processor | `darwin`, `arm64` |
+| Whether it went through a proxy (not which one) | `Y` or `N` |
 
 Nothing about what you did: no prompts, files, workspaces, models, providers or account. The ID is random: it isn't made from your machine, your name, your account or your network address, and nothing else Blitz sends carries it. Delete the file and the next message makes a new one. If you're offline, the message waits in `~/.blitz/activity.json` and goes later, for up to three days. Retail Cortex keeps each message for 13 months after an install's last, uses only counts made from them (active installs by day, week and month, by front end, version and platform, and how many new installs come back), and doesn't keep your network address.
 

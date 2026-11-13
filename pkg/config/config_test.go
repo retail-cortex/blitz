@@ -331,3 +331,26 @@ func TestCountsUsage(t *testing.T) {
 		})
 	}
 }
+
+// The pings trust [network] ca_file's authorities too (spec_054 AI-14):
+// its path, ~ expanded; "" without one or settings that can't be read.
+func TestNetworkCAFile(t *testing.T) {
+	home := t.TempDir()
+	for _, tc := range []struct{ name, file, want string }{
+		{"no settings", "", ""},
+		{"none set", "[blitz]\ndefault_agent = \"blitz\"\n", ""},
+		{"set", "[network]\nca_file = \"~/corp.pem\"\n", filepath.Join(home, "corp.pem")},
+		{"settings it can't read", "[network\n", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateConfigEnv(t)
+			t.Setenv("HOME", home)
+			dir := t.TempDir()
+			if tc.file != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tc.file), 0o600))
+			}
+			t.Setenv("MODENV_PREFIX", dir)
+			assert.Equal(t, tc.want, NetworkCAFile())
+		})
+	}
+}

@@ -166,8 +166,9 @@ func (h Host) methods() map[string]hostMethod {
 	m["ReinstallCLI"] = func(context.Context, []json.RawMessage) (any, error) { return ReinstallCLI() }
 	if u := h.Use; u != nil {
 		// Used: the window opened or came forward. A ping goes the first
-		// time each day, in the background.
-		m["Used"] = func(context.Context, []json.RawMessage) (any, error) { u.Use(activity.Desktop); return nil, nil }
+		// time each day, in the background, with any the service couldn't
+		// send (it has no proxy; the app's network has, AI-14).
+		m["Used"] = func(context.Context, []json.RawMessage) (any, error) { u.UseAndSend(activity.Desktop); return nil, nil }
 	}
 	if u := h.Updates; u != nil {
 		// CheckUpdate(force): when the app opens (force false: GitHub is

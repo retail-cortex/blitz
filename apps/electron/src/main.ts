@@ -29,7 +29,7 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { Pages } from "./pageserve";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type NativeImage, type Session } from "electron";
 import {
   absolutePaths,
   agentRequestResolved,
@@ -56,6 +56,9 @@ import {
   originOf,
   parseDeepLink,
   parseLink,
+  parsePing,
+  pingBody,
+  type RelayPing,
   shouldRenew,
   parseRunLink,
   parseTasksLink,
@@ -367,6 +370,8 @@ function serve(): Promise<string> {
     sidecar = child;
     let first = true;
     createInterface({ input: child.stdout! }).on("line", (line) => {
+      const ping = parsePing(line);
+      if (ping) return void relayPing(child, ping);
       const link = parseLink(line);
       if (!link) return;
       pinned = link.fingerprint;
@@ -397,6 +402,33 @@ function serve(): Promise<string> {
       }, wait);
     });
   });
+}
+
+/** How long a relayed ping may take (the host waits as long: AI-11). */
+const pingTimeoutMs = 5000;
+
+/**
+ * Sends the host's daily ping through the app's network (AI-14): the
+ * system's proxy settings, PAC file and proxy sign-in, and the
+ * certificates the system trusts, which the host's Go client doesn't
+ * read; no cookies. Answers with a "pinged" line.
+ */
+async function relayPing(child: ChildProcess, p: RelayPing) {
+  let answer: { pinged: string; status?: number; error?: string };
+  try {
+    const rule = await session.defaultSession.resolveProxy(p.url);
+    const res = await net.fetch(p.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: pingBody(p.body, rule),
+      credentials: "omit",
+      signal: AbortSignal.timeout(pingTimeoutMs),
+    });
+    answer = { pinged: p.id, status: res.status };
+  } catch (err) {
+    answer = { pinged: p.id, error: err instanceof Error ? err.message : String(err) || "the ping failed" };
+  }
+  if (child.stdin && !child.stdin.destroyed) child.stdin.write(JSON.stringify(answer) + "\n");
 }
 
 /** Points the open windows at the page served again (a new one-time link each). */

@@ -17,8 +17,11 @@ package activity
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -103,7 +106,7 @@ func TestOncePerDayPerFront(t *testing.T) {
 	require.NoError(t, err)
 	got := s.pings()
 	require.Len(t, got, 3)
-	assert.Equal(t, map[string]string{"install": id, "day": "2026-11-04", "front": "cli", "version": "v0.9.0", "os": goruntime.GOOS, "arch": goruntime.GOARCH}, got[0], "these fields, nothing else")
+	assert.Equal(t, map[string]string{"install": id, "day": "2026-11-04", "front": "cli", "version": "v0.9.0", "os": goruntime.GOOS, "arch": goruntime.GOARCH, "proxy": "N"}, got[0], "these fields, nothing else")
 	assert.Equal(t, "desktop", got[1]["front"])
 	assert.Equal(t, "2026-11-05", got[2]["day"])
 	s.mu.Lock()
@@ -346,4 +349,109 @@ func TestFailures(t *testing.T) {
 	due, err := bad.Mark(CLI)
 	require.NoError(t, err)
 	assert.False(t, due, "kept, not marked again")
+}
+
+// A ping says whether a proxy carried it, never which (AI-10).
+func TestProxyField(t *testing.T) {
+	s := newServer(t)
+	now := start
+	r := newRecorder(t, "http://ping.example/v1/blitz/active", &now)
+	proxy, err := url.Parse(s.srv.URL)
+	require.NoError(t, err)
+	r.HTTP = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxy)}}
+	_, err = r.Mark(Desktop)
+	require.NoError(t, err)
+	require.NoError(t, r.Flush(context.Background()))
+	got := s.pings()
+	require.Len(t, got, 1)
+	assert.Equal(t, "Y", got[0]["proxy"])
+	for _, v := range got[0] {
+		assert.NotContains(t, v, proxy.Host, "not which proxy")
+	}
+}
+
+// [network] ca_file's certificate authorities are trusted besides the
+// system's: a company's TLS-inspecting proxy (AI-14).
+func TestCAFile(t *testing.T) {
+	var got int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		got++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+	now := start
+	r := newRecorder(t, srv.URL, &now)
+	_, err := r.Mark(Desktop)
+	require.NoError(t, err)
+	assert.ErrorContains(t, r.Flush(context.Background()), "certificate", "its authority isn't the system's")
+
+	ca := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600))
+	r.CAFile = func() string { return ca }
+	require.NoError(t, r.Flush(context.Background()), "kept, and sent once it's trusted")
+	assert.Equal(t, 1, got)
+
+	r.CAFile = func() string { return filepath.Join(t.TempDir(), "missing.pem") }
+	_, err = r.client()
+	assert.ErrorContains(t, err, "[network] ca_file")
+	require.NoError(t, os.WriteFile(ca, []byte("not a certificate"), 0o600))
+	r.CAFile = func() string { return ca }
+	_, err = r.client()
+	assert.ErrorContains(t, err, "no PEM certificates")
+}
+
+// Send sends the pings another way (the desktop app's network): what it
+// takes is kept sent, what it refuses isn't sent again, what fails is
+// tried again (AI-12, AI-14).
+func TestSend(t *testing.T) {
+	now := start
+	r := newRecorder(t, "https://ping.example/active", &now)
+	var sent []map[string]string
+	status, fail := http.StatusNoContent, error(nil)
+	r.Send = func(_ context.Context, url string, ping map[string]string) (int, error) {
+		assert.Equal(t, "https://ping.example/active", url)
+		sent = append(sent, ping)
+		return status, fail
+	}
+	ctx := context.Background()
+	_, err := r.Mark(Desktop)
+	require.NoError(t, err)
+	require.NoError(t, r.Flush(ctx))
+	require.Len(t, sent, 1)
+	assert.Equal(t, "desktop", sent[0]["front"])
+	assert.NotContains(t, sent[0], "proxy", "the sender says")
+
+	fail = errors.New("offline")
+	_, err = r.Mark(CLI)
+	require.NoError(t, err)
+	assert.ErrorContains(t, r.Flush(ctx), "offline")
+	fail, status = nil, http.StatusBadRequest
+	require.NoError(t, r.Flush(ctx), "refused: not sent again")
+	require.NoError(t, r.Flush(ctx))
+	assert.Len(t, sent, 3)
+}
+
+// UseAndSend sends what another process marked and couldn't send (the
+// service's desktop ping, behind a proxy it doesn't know), even when its
+// own mark isn't due (AI-14).
+func TestUseAndSend(t *testing.T) {
+	s := newServer(t)
+	now := start
+	r := newRecorder(t, s.srv.URL, &now)
+	s.status.Store(http.StatusServiceUnavailable)
+	_, err := r.Mark(Desktop)
+	require.NoError(t, err)
+	assert.Error(t, r.Flush(context.Background()), "the service's try")
+	s.status.Store(http.StatusNoContent)
+
+	<-r.UseAndSend(Desktop)
+	got := s.pings()
+	require.Len(t, got, 2)
+	assert.Equal(t, "desktop", got[1]["front"], "sent, though this mark wasn't due")
+	<-r.UseAndSend(Desktop)
+	assert.Len(t, s.pings(), 2, "once")
+
+	r.On = func() bool { return false }
+	<-r.UseAndSend(CLI)
+	assert.Len(t, s.pings(), 2, "off")
 }

@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -177,8 +178,13 @@ func (e *ExecEnv) command(ctx context.Context, argv []string) (*guardedCmd, erro
 	if childEnd != nil {
 		cmd.ExtraFiles = []*os.File{childEnd}
 	}
-	if e != nil && len(e.ScrubEnv) > 0 {
-		cmd.Env = scrubEnv(os.Environ(), e.ScrubEnv)
+	if e != nil {
+		cmd.Env = os.Environ()
+		if len(e.ScrubEnv) > 0 {
+			cmd.Env = scrubEnv(cmd.Env, e.ScrubEnv)
+		}
+		// A blitz command the agent runs isn't the person's use (AI-03a).
+		cmd.Env = append(cmd.Env, activity.AgentEnv+"=1")
 	}
 	if e != nil && len(e.Credentials) > 0 {
 		env, remove, err := e.copyCredentials()

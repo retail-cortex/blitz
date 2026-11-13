@@ -15,19 +15,23 @@
 // Package activity counts the install as active, once a day it's used
 // (spec_054_active_installs): the first time a front end is used on a day,
 // it's marked in ~/.blitz/activity.json and a ping goes to Retail Cortex
-// with the install's random ID, the day, the front end, the version and
-// the platform, and nothing else. A ping that fails is tried again for
-// up to Keep days. [usage] count = false turns all of it off.
+// with the install's random ID, the day, the front end, the version, the
+// platform and whether it went through a proxy (not which), and nothing
+// else. A ping that fails is tried again for up to Keep days. [usage]
+// count = false turns all of it off.
 package activity
 
 import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,6 +56,11 @@ const (
 // Fronts are the front ends a ping may name.
 var Fronts = []string{Desktop, CLI, VSCode}
 
+// AgentEnv marks the commands Blitz runs for the model (its shell, its
+// language servers): a blitz command run there is the agent's, not the
+// person's use of the CLI, and isn't counted (AI-03a).
+const AgentEnv = "BLITZ_AGENT"
+
 // Wait is how long a ping may take (AI-11); Keep how many days before
 // today a ping that failed is still tried (AI-12).
 var (
@@ -71,6 +80,15 @@ type Recorder struct {
 	URL  string
 	HTTP *http.Client
 	Now  func() time.Time
+	// CAFile is a PEM file of certificate authorities to trust besides the
+	// system's ([network] ca_file: a company's TLS-inspecting proxy), read
+	// at each ping; nil or "" for none.
+	CAFile func() string
+	// Send, when set, sends a ping another way than Go's HTTP client: the
+	// desktop app's own network (AI-14), which uses the system's proxy
+	// settings, its PAC file and sign-in, as the browser does. It sets
+	// the ping's proxy field and says the answer's HTTP status.
+	Send func(ctx context.Context, url string, ping map[string]string) (int, error)
 
 	mu       sync.Mutex // activity.json's reads and writes in this process, one at a time; never held over the network
 	flushing sync.Mutex // one flush at a time, so a ping isn't sent twice by this process
@@ -213,37 +231,92 @@ func (r *Recorder) Flush(ctx context.Context) error {
 // errRefused is a ping Retail Cortex won't count: it's never sent again.
 var errRefused = errors.New("the ping isn't counted")
 
-// send posts one ping, with exactly the fields AI-10 names.
+// send sends one ping, with exactly the fields AI-10 names (the sender
+// adds proxy).
 func (r *Recorder) send(ctx context.Context, id string, e entry) error {
-	body, err := json.Marshal(map[string]string{
+	ping := map[string]string{
 		"install": id, "day": e.Day, "front": e.Front, "version": r.Version, "os": goruntime.GOOS, "arch": goruntime.GOARCH,
-	})
-	if err != nil {
-		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, Wait)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.url(), bytes.NewReader(body))
+	sendFn := r.post
+	if r.Send != nil {
+		sendFn = r.Send
+	}
+	status, err := sendFn(ctx, r.url(), ping)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	switch {
+	case status == http.StatusNoContent || status == http.StatusOK:
+		return nil
+	case status == http.StatusBadRequest:
+		return fmt.Errorf("%w: HTTP %d", errRefused, status)
+	}
+	return fmt.Errorf("HTTP %d", status)
+}
+
+// post sends ping with Go's HTTP client: the proxy the environment names
+// (HTTPS_PROXY), the system's certificates and CAFile's.
+func (r *Recorder) post(ctx context.Context, url string, ping map[string]string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return 0, err
+	}
 	hc := r.HTTP
 	if hc == nil {
-		hc = http.DefaultClient
+		if hc, err = r.client(); err != nil {
+			return 0, err
+		}
 	}
+	proxy := "N"
+	if t, ok := hc.Transport.(*http.Transport); ok && t.Proxy != nil {
+		if u, err := t.Proxy(req); err == nil && u != nil {
+			proxy = "Y"
+		}
+	}
+	ping["proxy"] = proxy
+	body, err := json.Marshal(ping)
+	if err != nil {
+		return 0, err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.Header.Set("Content-Type", "application/json")
 	res, err := hc.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	res.Body.Close()
-	switch {
-	case res.StatusCode == http.StatusNoContent || res.StatusCode == http.StatusOK:
-		return nil
-	case res.StatusCode == http.StatusBadRequest:
-		return fmt.Errorf("%w: HTTP %d", errRefused, res.StatusCode)
+	return res.StatusCode, nil
+}
+
+// client is Go's default transport, trusting CAFile's certificate
+// authorities too.
+func (r *Recorder) client() (*http.Client, error) {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	if r.CAFile != nil {
+		if file := r.CAFile(); file != "" {
+			pem, err := os.ReadFile(file)
+			if err != nil {
+				return nil, fmt.Errorf("[network] ca_file: %w", err)
+			}
+			pool, err := x509.SystemCertPool()
+			if err != nil || pool == nil {
+				pool = x509.NewCertPool()
+			}
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("[network] ca_file %s: no PEM certificates in it", file)
+			}
+			tc := &tls.Config{MinVersion: tls.VersionTLS12}
+			if t.TLSClientConfig != nil {
+				tc = t.TLSClientConfig.Clone()
+			}
+			tc.RootCAs = pool
+			t.TLSClientConfig = tc
+		}
 	}
-	return fmt.Errorf("HTTP %d", res.StatusCode)
+	return &http.Client{Transport: t}, nil
 }
 
 // Use marks front's use today and, when a ping is due, sends it in the
@@ -253,6 +326,24 @@ func (r *Recorder) Use(front string) <-chan struct{} {
 	done := make(chan struct{})
 	due, err := r.Mark(front)
 	if err != nil || !due {
+		close(done)
+		return done
+	}
+	go func() {
+		defer close(done)
+		_ = r.Flush(context.Background())
+	}()
+	return done
+}
+
+// UseAndSend marks front's use today and sends, in the background, every
+// ping still to send, due today or not: the desktop app's host, which
+// sends through the system's proxy (AI-14), sends the pings another
+// process marked and couldn't (the service, which has no proxy). The
+// channel closes when that's done.
+func (r *Recorder) UseAndSend(front string) <-chan struct{} {
+	done := make(chan struct{})
+	if _, err := r.Mark(front); err != nil || !r.on() {
 		close(done)
 		return done
 	}

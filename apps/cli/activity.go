@@ -15,6 +15,7 @@
 package main
 
 import (
+	"os"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/activity"
@@ -24,7 +25,7 @@ import (
 // activeUse counts the CLI's use, once a day (spec_054_active_installs
 // AI-03): whether it's attached to the service or runs in-process. A
 // variable for tests.
-var activeUse = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage}
+var activeUse = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage, CAFile: config.NetworkCAFile}
 
 // pinging is the day's ping in flight, if one is due.
 var pinging <-chan struct{}
@@ -33,7 +34,14 @@ var pinging <-chan struct{}
 // sent by then is kept and sent next time (AI-11, AI-12).
 var pingGrace = time.Second
 
-func markUse() { pinging = activeUse.Use(activity.CLI) }
+// markUse counts the day's use of the CLI, unless the agent runs it
+// (activity.AgentEnv, AI-03a): that's Blitz's use, not the person's.
+func markUse() {
+	if os.Getenv(activity.AgentEnv) != "" {
+		return
+	}
+	pinging = activeUse.Use(activity.CLI)
+}
 
 // waitForPing gives the day's ping, if there is one, up to pingGrace to
 // finish before the program exits.

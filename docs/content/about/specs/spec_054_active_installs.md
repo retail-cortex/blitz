@@ -29,6 +29,7 @@ What it must never become: a way to know who someone is, what they work on, what
   Not use: the service running with no one using it, scheduled workers, status polls and health checks, the tray menu, or an update check.
 - **AI-02** Each front end names itself on every request to the service (spec_021_service) with the header `Blitz-Client: desktop | cli | vscode`: the CLI and the desktop app's host through `pkg/socket`, the VS Code extension through its proxy. The service marks the day's use only on the calls a person makes (a turn, a steer, a session started or opened, an approval, an answer), never on polling, and only for a front end it knows by that header.
 - **AI-03** Each front end also marks its own use, whether or not the service runs: the CLI on each command (attached or in-process, spec_020_cli), the desktop app's host when the page says its window opened or came forward (`Used`, at most every ten minutes).
+- **AI-03a** *2026-11-13 (the owner: CLI use was counted for people who use the desktop app).* A `blitz` command the agent runs (its shell, its language servers: what `ExecEnv` starts carries `BLITZ_AGENT=1`) is Blitz's use, not the person's, and isn't counted.
 - **AI-04** Marking is local and cheap: the day and the front ends used are kept in `~/.blitz/activity.json` (mode 0600), shared by the service and the CLI, written atomically. Nothing about what was done is kept.
 - **AI-04** *2026-11-05 (scan N26-pkg-small-1#10: a flush saved the list of pings it had read before sending, dropping a day another process marked meanwhile).* A flush merges what it sent into the file as it is when it saves, so a day marked meanwhile, by this process or another, stays pending. (Two processes flushing at once may each send a day's ping; the server counts it once.)
 
@@ -39,12 +40,14 @@ What it must never become: a way to know who someone is, what they work on, what
   - `day`: the day, `2006-01-02`, UTC;
   - `front`: `desktop`, `cli` or `vscode`;
   - `version`: Blitz's version (`v0.9.0`, or `dev`);
-  - `os` and `arch`: Go's `GOOS` and `GOARCH`.
+  - `os` and `arch`: Go's `GOOS` and `GOARCH`;
+  - `proxy`: `Y` when the ping went through a proxy, `N` when it went direct (2026-11-13, the owner: "Don't pass the proxy ip, just the proxy=Y/N"). Which proxy is never said.
 
   So an install sends at most one ping a day for each front end it uses: one, for most people. No cookies, no headers beyond Go's own, no account, path, workspace, provider or model.
 - **AI-11** It waits at most 5 seconds and never holds anything up: a person's request is answered first, and the ping goes after, on its own.
 - **AI-11** *2026-11-05 (scan N26-pkg-small-1#5: a flush held the file's lock while its pings went, so with the license server unreachable the next request's mark waited 5 s for each ping still to send).* The file is locked only to read and write it, never while a ping goes: a flush reads what's pending, sends it unlocked (one flush at a time in a process), then saves what was sent.
 - **AI-12** A ping that fails (offline, the server down) is kept and tried again at the next use, or by the service within the hour, for up to 3 days; then it's dropped. One Retail Cortex refuses as not counted (`400`) isn't sent again. A day that was used but never reached Retail Cortex is lost, not guessed. The CLI waits at most a second for its ping before it exits; one not sent by then goes next time.
+- **AI-14** *2026-11-13 (the owner: no pings from people behind a company firewall, and few desktop ones).* The desktop app's host sends its pings through the app's network (`net.fetch`, over the `--serve` protocol: a `{"ping": {"id", "url", "body"}}` line out, a `{"pinged": id, "status"}` or `{"pinged": id, "error"}` line back), which uses the system's proxy settings, its PAC file and proxy sign-in, and the certificates the system trusts; the app sets `proxy` from Chromium's answer for the address, and sends no cookies. When the window says it's in use (`Used`), the host also sends the pings another process marked and couldn't send (the service, which has no proxy). Pings Go sends (the CLI, the service, the tray on its own) use the proxy the environment names (`HTTPS_PROXY`) and trust `[network] ca_file`'s certificate authorities besides the system's.
 - **AI-13** `BLITZ_ACTIVITY_URL` replaces the address, for tests and a local license server; empty, the default.
 
 ## 4. The install's ID

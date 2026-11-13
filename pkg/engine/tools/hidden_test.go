@@ -15,11 +15,14 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,4 +94,26 @@ func TestShellHidesPrivateKeys(t *testing.T) {
 	assert.Contains(t, out.Output, "BEGIN CERTIFICATE")
 	assert.Contains(t, out.Output, "before\n[a private key, kept from the model]\nafter")
 	assert.NotContains(t, out.Output, "MIIEsecret")
+}
+
+// What Blitz runs for the model says so (activity.AgentEnv): a blitz
+// command there isn't the person's use of the CLI (spec_054 AI-03a). A
+// language server gets its extra environment too (a Bazel workspace's
+// package driver).
+func TestCommandsSayTheyreTheAgents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh")
+	}
+	cmd, err := (&ExecEnv{Dir: t.TempDir()}).command(context.Background(), []string{"sh", "-c", "echo $" + activity.AgentEnv})
+	require.NoError(t, err)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(out))
+
+	p, err := lspLauncher(&ExecEnv{Dir: t.TempDir()})(context.Background(), "", []string{"sh", "-c", "echo $" + activity.AgentEnv + " $EXTRA"}, []string{"EXTRA=driver"})
+	require.NoError(t, err)
+	line, err := bufio.NewReader(p.Stdout()).ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "1 driver\n", line)
+	p.Stop()
 }

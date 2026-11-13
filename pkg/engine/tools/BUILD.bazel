@@ -112,6 +112,7 @@ go_library(
         "//pkg/pageserver:__pkg__",
     ],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/config",
         "//pkg/docx",
@@ -278,7 +279,6 @@ go_test(
         "websearch_test.go",
         "workspace_cov_test.go",
         "workspace_test.go",
-        "zz_repro_test.go",
     ],
     embed = [":tools"],
     shard_count = 8,
@@ -286,6 +286,7 @@ go_test(
     # macOS.
     tags = ["no-sandbox"],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/config",
         "//pkg/config/configtest",

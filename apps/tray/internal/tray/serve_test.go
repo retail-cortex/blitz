@@ -16,6 +16,7 @@ package tray
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -46,7 +47,7 @@ func TestServe(t *testing.T) {
 	outR, outW := io.Pipe()
 	done := make(chan error, 1)
 	go func() {
-		done <- Serve(pageserver.Options{Page: page, Socket: filepath.Join(shortTemp(t), "none.sock")}, inR, outW)
+		done <- Serve(pageserver.Options{Page: page, Socket: filepath.Join(shortTemp(t), "none.sock")}, inR, outW, nil)
 		outW.Close()
 	}()
 	lines := bufio.NewScanner(outR)
@@ -119,10 +120,10 @@ func TestPageDirRefusesOtherDirectories(t *testing.T) {
 func TestServeFailures(t *testing.T) {
 	page, err := PageDir(writePage(t))
 	require.NoError(t, err)
-	assert.Error(t, Serve(pageserver.Options{Page: page, Addr: "example.com:80"}, strings.NewReader(""), io.Discard), "not a loopback address")
-	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader(""), failingWriter{}), "the link can't be written")
+	assert.Error(t, Serve(pageserver.Options{Page: page, Addr: "example.com:80"}, strings.NewReader(""), io.Discard, nil), "not a loopback address")
+	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader(""), failingWriter{}, nil), "the link can't be written")
 	var w limitedWriter
-	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader("link\n"), &w), "the second link can't be written")
+	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader("link\n"), &w, nil), "the second link can't be written")
 }
 
 // writePage is a folder with the page's index.html.
@@ -144,4 +145,75 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 		return 0, errors.New("closed")
 	}
 	return len(p), nil
+}
+
+// With a relay, the host's ping goes to the app as a "ping" line and its
+// answer comes back as a "pinged" line (spec_054_active_installs AI-14);
+// with no app, or once it's gone, a ping fails rather than waits.
+func TestServeRelaysPings(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("<title>Blitz</title>"), 0o600))
+	page, err := PageDir(dir)
+	require.NoError(t, err)
+	relay := &Relay{}
+	_, err = relay.Send(context.Background(), "https://x.example", map[string]string{"a": "b"})
+	assert.ErrorIs(t, err, errNoApp, "no app yet")
+
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	done := make(chan error, 1)
+	go func() {
+		done <- Serve(pageserver.Options{Page: page, Socket: filepath.Join(shortTemp(t), "none.sock")}, inR, outW, relay)
+		outW.Close()
+	}()
+	lines := bufio.NewScanner(outR)
+	require.True(t, lines.Scan(), "the link first")
+
+	type result struct {
+		status int
+		err    error
+	}
+	send := func(ctx context.Context) chan result {
+		got := make(chan result, 1)
+		go func() {
+			status, err := relay.Send(ctx, "https://license.example/active", map[string]string{"front": "desktop"})
+			got <- result{status, err}
+		}()
+		return got
+	}
+	read := func() relayPing {
+		t.Helper()
+		require.True(t, lines.Scan(), "a ping line")
+		var p relayPing
+		require.NoError(t, json.Unmarshal(lines.Bytes(), &p))
+		return p
+	}
+
+	got := send(context.Background())
+	p := read()
+	assert.Equal(t, "https://license.example/active", p.Ping.URL)
+	assert.Equal(t, map[string]string{"front": "desktop"}, p.Ping.Body)
+	_, err = inW.Write([]byte(`{"pinged":"nobody","status":500}` + "\n" + `not json` + "\n" + `{"pinged":"` + p.Ping.ID + `","status":204}` + "\n"))
+	require.NoError(t, err)
+	r := <-got
+	require.NoError(t, r.err)
+	assert.Equal(t, 204, r.status)
+
+	got = send(context.Background())
+	p = read()
+	_, err = inW.Write([]byte(`{"pinged":"` + p.Ping.ID + `","error":"net::ERR_PROXY_CONNECTION_FAILED"}` + "\n"))
+	require.NoError(t, err)
+	assert.EqualError(t, (<-got).err, "net::ERR_PROXY_CONNECTION_FAILED")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	got = send(ctx)
+	read()
+	cancel()
+	assert.ErrorIs(t, (<-got).err, context.Canceled, "it stops waiting with its context")
+
+	got = send(context.Background())
+	read()
+	require.NoError(t, inW.Close())
+	assert.ErrorIs(t, (<-got).err, errNoApp, "the app went: the ping in flight fails")
+	require.NoError(t, <-done)
 }

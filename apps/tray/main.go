@@ -192,13 +192,15 @@ func serveWindow(dir string) error {
 		}
 	}()
 	// The Electron app updates itself through its host (pkg/pagehost).
-	host.Use = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage}
+	// Its pings go through the app's network: the system's proxy (AI-14).
+	relay := &tray.Relay{}
+	host.Use = &activity.Recorder{Dir: config.ExpandHome("~/.blitz"), Version: version, On: config.CountsUsage, CAFile: config.NetworkCAFile, Send: relay.Send}
 	host.Updates = &pagehost.Updater{
 		Version: version, HostExe: host.Tray,
 		Dir: config.ExpandHome("~/.blitz/updates"), CacheDir: config.ExpandHome("~/.blitz"),
 		Source: selfupdate.GitHub, Spawn: tray.Detached, GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH,
 	}
-	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: host.Handler()}, os.Stdin, os.Stdout)
+	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: host.Handler()}, os.Stdin, os.Stdout, relay)
 }
 
 // applyDownloaded puts the staged app in place of root (--apply-update),
