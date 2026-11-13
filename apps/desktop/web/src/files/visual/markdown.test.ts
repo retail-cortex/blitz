@@ -218,3 +218,25 @@ describe("escaping", () => {
   it("escapes pipes in tables", () => expect(escapeText("a|b", true)).toBe("a\\|b"));
 });
 
+
+// HTML in a paragraph is kept as HTML: an element's tags and what's
+// between them are one piece, written back as they were (VE-05a, #115).
+describe("inline HTML", () => {
+  const text = "Line one<br />line two, H<sub>2</sub>O and <kbd>⌘</kbd><kbd>S</kbd>.\n";
+
+  it("reads an element's tags and what's between them as one piece", () => {
+    const para = parseMarkdown(text).doc.content![0];
+    const raw = para.content!.filter((n) => n.type === "rawInline").map((n) => n.attrs!.text);
+    expect(raw).toEqual(["<br />", "<sub>2</sub>", "<kbd>⌘</kbd>", "<kbd>S</kbd>"]);
+  });
+
+  it("writes it back as it was when the paragraph is edited", () => {
+    const out = roundTrip(text, (doc) => new Transform(doc).insert(1, schema.text("Hello ")).doc);
+    expect(out).toBe("Hello " + text);
+  });
+
+  it("keeps a tag that isn't closed as it is", () => {
+    const para = parseMarkdown("a <sub>b\n").doc.content![0];
+    expect(para.content!.map((n) => n.attrs?.text ?? n.text)).toEqual(["a ", "<sub>", "b"]);
+  });
+});

@@ -62,6 +62,7 @@ import { files } from "../../api";
 import { altText, imageExtensions, insertsIn, readDocDrop, relativeLink, type Insert } from "../docDrop";
 import { pictureURL } from "../pictures";
 import { CodeBlockView, type BlockContext } from "./codeBlock";
+import { rawInlineView } from "./htmlView";
 import { MathInlineView } from "./mathInline";
 import { fingerprints, parseMarkdown, serializeMarkdown, type Parsed } from "./markdown";
 import { sourceAttr, visualExtensions } from "./schema";
@@ -72,7 +73,8 @@ const writeDelay = 150;
 
 // The extensions with their views: code and raw blocks as CodeMirror,
 // pictures shown when they're in the document or the workspace, else as
-// Preview's boxes (a web picture is never loaded, DSK-24).
+// Preview's boxes (a web picture is never loaded, DSK-24), and HTML drawn
+// where it can be (VE-05a).
 function editorExtensions(doc: { dir: string; path: string }, context?: BlockContext) {
   return visualExtensions().map((ext) => {
     switch (ext.name) {
@@ -82,6 +84,8 @@ function editorExtensions(doc: { dir: string; path: string }, context?: BlockCon
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "raw", undefined, doc) });
       case "mathBlock":
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "math") });
+      case "rawInline":
+        return ext.extend({ addNodeView: () => ({ node }: NodeViewRendererProps) => rawInlineView(node, doc) });
       case "mathInline":
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new MathInlineView(node, view, getPos) });
       case "image":

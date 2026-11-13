@@ -20,7 +20,10 @@
 // they name (FIL-56), and #anchors scroll to a heading. Pictures in the
 // document (data: images) and, in a document, the workspace's are shown
 // (files/pictures.ts); a web picture is never fetched (DSK-24): it shows
-// as a link. A lone HTML <img> is such a picture too; other HTML shows as
+// as a link. A lone HTML <img> is such a picture too. In a document, the
+// formatting HTML files/safeHtml.ts reads (<br />, <sub>, <kbd>, a
+// centred <div>, <details>) is drawn as elements made from what it kept
+// (spec_037_visual_editor VE-05a); other HTML, and a reply's, shows as
 // nothing. ```mermaid blocks are drawn as diagrams (mermaid.tsx), and math
 // ($…$ in a document, $$…$$ and ```math anywhere) by KaTeX (files/math.ts).
 import { createContext, memo, useContext, useEffect, useState, type MouseEvent, type ReactNode } from "react";
@@ -39,6 +42,7 @@ import { resolveLink, slugger, type LinkTarget } from "./files/mdlinks";
 import { githubMath } from "./files/math";
 import { isLocalLink } from "./files/webTabs";
 import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
+import { closingIndex, safeHTML, type SafeNode } from "./files/safeHtml";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
 import type { DocTarget } from "./docs/index";
@@ -225,7 +229,7 @@ const urlTransform: UrlTransform = (url, key, node) => (key === "src" && node.ta
 
 // A lone HTML <img> becomes a Markdown picture (its src, alt and size
 // only); the rest of the HTML is skipped (skipHtml).
-type MdNode = { type: string; value?: string; url?: string; alt?: string; title?: null; children?: MdNode[]; data?: { hProperties?: Record<string, string> } };
+type MdNode = { type: string; value?: string; url?: string; alt?: string; title?: null; children?: MdNode[]; data?: { hName?: string; hProperties?: Record<string, string> } };
 function htmlPictures() {
   const walk = (n: MdNode) => {
     n.children?.forEach((c, i, all) => {
@@ -241,7 +245,55 @@ function htmlPictures() {
   return (tree: MdNode) => walk(tree);
 }
 
-const components: Components = {
+// A document's HTML that files/safeHtml.ts can draw becomes a blitz-html
+// element holding its source (an element's tags and what's between them
+// as one); the rest stays HTML, which skipHtml drops (VE-05a).
+type Pos = { start: { offset?: number }; end: { offset?: number } };
+type HtmlMdNode = MdNode & { position?: Pos };
+function documentHTML() {
+  const walk = (n: HtmlMdNode, text: string) => {
+    const kids = n.children as HtmlMdNode[] | undefined;
+    if (!kids) return;
+    for (let i = 0; i < kids.length; i++) {
+      const c = kids[i];
+      if (c.type !== "html") {
+        walk(c, text);
+        continue;
+      }
+      const j = closingIndex(kids, i);
+      const last = j > i ? kids[j] : c;
+      const source = j > i ? text.slice(c.position?.start.offset ?? 0, last.position?.end.offset ?? 0) : (c.value ?? "");
+      if (!safeHTML(source)) continue;
+      kids.splice(i, j > i ? j - i + 1 : 1, { type: "blitzHtml", data: { hName: "blitz-html", hProperties: { dataSource: source } } });
+    }
+  };
+  return (tree: HtmlMdNode, file: { value?: unknown }) => walk(tree, String(file.value ?? ""));
+}
+
+// HTML drawn from what files/safeHtml.ts kept: links as the document's
+// others, pictures from the document or the workspace only.
+function SafeHtml({ nodes }: { nodes: SafeNode[] }) {
+  return (
+    <>
+      {nodes.map((n, i) => {
+        if (typeof n === "string") return n;
+        const { title, align, colspan, rowspan, start, open } = n.attrs;
+        const kids = <SafeHtml nodes={n.children} />;
+        if (n.tag === "a") return <Link key={i} href={n.attrs.href}>{kids}</Link>;
+        if (n.tag === "img") return n.attrs.src ? <Picture key={i} src={n.attrs.src} alt={n.attrs.alt ?? ""} width={n.attrs.width} height={n.attrs.height} /> : null;
+        const Tag = n.tag as "div";
+        const props: Record<string, unknown> = { title, align, colSpan: colspan, rowSpan: rowspan, start, open: open === undefined ? undefined : true };
+        return (
+          <Tag key={i} {...props}>
+            {n.children.length ? kids : undefined}
+          </Tag>
+        );
+      })}
+    </>
+  );
+}
+
+const components = {
   a: ({ href, children }) => <Link href={href}>{children}</Link>,
   img: ({ src, alt, width, height }) =>
     typeof src === "string" && src ? <Picture src={src} alt={alt ?? ""} width={width === undefined ? undefined : String(width)} height={height === undefined ? undefined : String(height)} /> : <span>{alt}</span>,
@@ -254,12 +306,16 @@ const components: Components = {
     if (lang || text.includes("\n")) return <CodeBlock lang={lang ?? ""}>{text.replace(/\n$/, "")}</CodeBlock>;
     return <InlineCode text={text} />;
   },
+  "blitz-html": ({ node }: { node?: { properties?: Record<string, unknown> } }) => {
+    const nodes = safeHTML(String(node?.properties?.dataSource ?? ""));
+    return nodes ? <SafeHtml nodes={nodes} /> : null;
+  },
   table: ({ children }) => (
     <div className="table-wrap">
       <table>{children}</table>
     </div>
   ),
-};
+} as Components;
 
 // A document's headings get ids (as GitHub's), for #anchor links, and a
 // # beside them that scrolls there.
@@ -292,7 +348,7 @@ function sourceLines() {
 }
 // Documents take $…$ as GitHub does; the chat only $$…$$ (and ```math),
 // so a reply's prices stay prices.
-const docRemark = [remarkGfm, remarkMath, githubMath, htmlPictures];
+const docRemark = [remarkGfm, remarkMath, githubMath, htmlPictures, documentHTML];
 const chatRemark = [remarkGfm, [remarkMath, { singleDollarTextMath: false }], htmlPictures] as NonNullable<Options["remarkPlugins"]>;
 
 // KaTeX loads the first time a text has math (its own chunk, mathRender.ts);

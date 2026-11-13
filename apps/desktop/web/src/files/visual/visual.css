@@ -70,6 +70,11 @@
 .visual-editor .visual-doc .visual-picture { background: none; }
 .visual-editor .visual-doc .visual-picture-view { padding: 8px; text-align: center; }
 .visual-editor .visual-doc .visual-picture-view img { max-width: 100%; height: auto; }
+/* HTML the document may show (VE-05a): drawn as Preview draws it, the
+   source behind Edit, as a picture's */
+.visual-editor .visual-doc .visual-html { background: none; }
+.visual-editor .visual-doc .visual-mermaid.visual-html .visual-html-view { padding: 4px 14px 12px; white-space: normal; }
+.visual-editor .visual-doc .raw-html { cursor: default; }
 
 /* Task lists: TipTap's markup, Preview's look */
 .visual-editor .visual-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
