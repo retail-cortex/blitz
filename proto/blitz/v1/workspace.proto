@@ -563,6 +563,9 @@ service WorkspaceService {
   // Returns the output styles, with the one in use (SetSetting "style"
   // changes it).
   rpc ListStyles(ListStylesRequest) returns (ListStylesResponse);
+  // A short sample answer in a personality's text, before choosing it
+  // (spec_064_personality PER-30): one small model call.
+  rpc TryPersonality(TryPersonalityRequest) returns (TryPersonalityResponse);
 
   // Returns the configured hooks, by event, with their recent failures.
   rpc ListHooks(ListHooksRequest) returns (ListHooksResponse);
@@ -2125,6 +2128,21 @@ message ListStylesRequest {
 // Response message for WorkspaceService.ListStyles.
 message ListStylesResponse {
   repeated Style styles = 1;
+}
+
+// Request message for WorkspaceService.TryPersonality.
+message TryPersonalityRequest {
+  string workspace = 1;
+  // The personality's text, as it stands ("": Blitz's own).
+  string text = 2;
+}
+
+// Response message for WorkspaceService.TryPersonality.
+message TryPersonalityResponse {
+  // The sample answer.
+  string answer = 1;
+  // The question it answers.
+  string question = 2;
 }
 
 // Hook is a configured hook.

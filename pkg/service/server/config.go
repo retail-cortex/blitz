@@ -147,6 +147,7 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 				problem(w, "permission rules not reloaded", perr)
 			}
 			w.ReloadSearch(cfg)
+			w.ReloadPersonality(ctx, cfg)
 			w.ReloadWorkerPolicy(cfg)
 			if merr := w.ReloadMCP(ctx, cfg); merr != nil {
 				problem(w, "MCP servers not reloaded", merr)

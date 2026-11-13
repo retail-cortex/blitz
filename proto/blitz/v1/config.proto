@@ -82,6 +82,16 @@ service ConfigService {
   rpc SetProvider(SetProviderRequest) returns (SetProviderResponse);
   // Sets one of the forms' settings ("" removes it).
   rpc SetConfigValue(SetConfigValueRequest) returns (SetConfigValueResponse);
+  // The personalities (spec_064_personality): the built-ins, the
+  // organization's and the person's, with the person's default and, for a
+  // workspace that's open, its own.
+  rpc ListPersonalities(ListPersonalitiesRequest) returns (ListPersonalitiesResponse);
+  // A personality with its text.
+  rpc GetPersonality(GetPersonalityRequest) returns (GetPersonalityResponse);
+  // Saves one of the person's own personalities (~/.blitz/personalities).
+  rpc SavePersonality(SavePersonalityRequest) returns (SavePersonalityResponse);
+  // Deletes one of the person's own personalities.
+  rpc DeletePersonality(DeletePersonalityRequest) returns (DeletePersonalityResponse);
   // A scope's permission rules: its own file's, the global ones a
   // workspace adds to, and the built-in read-only rules.
   rpc DescribePermissions(DescribePermissionsRequest) returns (DescribePermissionsResponse);
@@ -495,6 +505,66 @@ message SetConfigValueRequest {
 
 // Response message for ConfigService.SetConfigValue.
 message SetConfigValueResponse {
+  ConfigChange change = 1;
+}
+
+// Personality is how the root agent sounds (spec_064_personality).
+message Personality {
+  string name = 1;
+  string description = 2;
+  // The Gemini voice it speaks with in a voice conversation ("": [voice]
+  // voice's).
+  string voice = 3;
+  // "built-in", "organization" or "own".
+  string source = 4;
+  // How it should sound; empty in lists.
+  string text = 5;
+  // Whether it's the person's default ([ui] personality).
+  bool person_default = 6;
+  // Whether it's the workspace's, when the request named one.
+  bool workspace_choice = 7;
+}
+
+// Request message for ConfigService.ListPersonalities.
+message ListPersonalitiesRequest {
+  // A workspace that's open, to mark its personality ("": none).
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListPersonalities.
+message ListPersonalitiesResponse {
+  repeated Personality personalities = 1;
+}
+
+// Request message for ConfigService.GetPersonality.
+message GetPersonalityRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.GetPersonality.
+message GetPersonalityResponse {
+  Personality personality = 1;
+}
+
+// Request message for ConfigService.SavePersonality.
+message SavePersonalityRequest {
+  // Its name, description, voice and text; source and the flags are
+  // ignored.
+  Personality personality = 1;
+}
+
+// Response message for ConfigService.SavePersonality.
+message SavePersonalityResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.DeletePersonality.
+message DeletePersonalityRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.DeletePersonality.
+message DeletePersonalityResponse {
   ConfigChange change = 1;
 }
 

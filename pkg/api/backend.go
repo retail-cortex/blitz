@@ -69,6 +69,10 @@ type Backend interface {
 	// The output styles, with the one in use (Set "style" changes it).
 	ListStyles() []StyleInfo
 
+	// The personalities (spec_064_personality), with the one in use (Set
+	// "personality" changes it).
+	ListPersonalities() []Personality
+
 	// The configured hooks, by event, with recent failures (/hooks).
 	ListHooks() []HookInfo
 

@@ -267,6 +267,24 @@ func (r *Remote) ListStyles() []api.StyleInfo {
 	return out
 }
 
+// ListPersonalities are the personalities (ConfigService.ListPersonalities),
+// the workspace's marked active; on failure warn is told and there are
+// none.
+func (r *Remote) ListPersonalities() []api.Personality {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.config.ListPersonalities(ctx, connect.NewRequest(&pb.ListPersonalitiesRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("listing the personalities", err)
+		return nil
+	}
+	out := make([]api.Personality, len(res.Msg.Personalities))
+	for i, p := range res.Msg.Personalities {
+		out[i] = api.Personality{Name: p.Name, Description: p.Description, Voice: p.Voice, Source: p.Source, Active: p.WorkspaceChoice}
+	}
+	return out
+}
+
 // TakeProcessNotices are what the session's watched processes reported
 // while it was idle (WorkspaceService.TakeProcessNotices).
 func (r *Remote) TakeProcessNotices(session string) []string {

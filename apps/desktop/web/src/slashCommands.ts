@@ -474,6 +474,23 @@ export const builtinCommands: Builtin[] = [
     },
   },
   {
+    name: "personality",
+    args: "[name]",
+    group: "agents",
+    describe: "help.personality",
+    async run(c) {
+      if (!c.args) {
+        const r = await config.listPersonalities({ workspace: c.dir });
+        return c.say(bullets(t("personality.list"), r.personalities.map((p) => `${p.workspaceChoice ? "**" : ""}${code(p.name)}${p.workspaceChoice ? "**" : ""}: ${md(p.description)}`)), "info", true);
+      }
+      const name = c.args.trim().toLowerCase();
+      await workspaces.setSetting({ workspace: c.dir, key: "personality", value: name });
+      await config.setConfigValue({ workspace: c.dir, key: "ui.personality", value: name === "default" ? "" : name });
+      c.say(t("personality.set", { name }));
+      c.settingsChanged();
+    },
+  },
+  {
     name: "unpin",
     args: "<agent>",
     group: "agents",

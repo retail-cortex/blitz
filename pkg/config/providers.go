@@ -524,6 +524,7 @@ var settableValues = map[string]bool{
 	// The workspace dashboard's judge (spec_044_health).
 	"health.model":   true,
 	"ui.style":       true,
+	"ui.personality": true,
 	"ui.locale":      true,
 	"ui.notify":      true,
 	"ui.task_alerts": true,
@@ -572,6 +573,13 @@ var typedValues = map[string]string{
 	"browser.show":         "show",
 	"browser.open":         "open",
 	"web.browser_fallback": "bool",
+	// Settings › Voice (spec_063_voice VOX-04): the person's only.
+	"voice.enabled":      "bool",
+	"voice.model":        "voicemodel",
+	"voice.voice":        "voice",
+	"voice.listen":       "listen",
+	"voice.summaries":    "summaries",
+	"voice.idle_minutes": "idle",
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given
@@ -632,6 +640,32 @@ func typedValue(kind, key, value string) (string, any, error) {
 			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(BrowserOpens, ", "), value)
 		}
 		return strconv.Quote(value), value, nil
+	case "voicemodel":
+		if !strings.HasPrefix(value, "gemini/") || len(value) == len("gemini/") {
+			return "", nil, fmt.Errorf("%s is a Gemini Live model, as gemini/<model>, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "voice":
+		if !slices.Contains(GeminiVoices, value) {
+			return "", nil, fmt.Errorf("%s is one of Gemini's voices (%s), not %q", key, strings.Join(GeminiVoices, ", "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "listen":
+		if !slices.Contains(VoiceListens, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(VoiceListens, " or "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "summaries":
+		if !slices.Contains(VoiceSummaries, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(VoiceSummaries, ", "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "idle":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > MaxVoiceIdle {
+			return "", nil, fmt.Errorf("%s is a number of minutes from 1 to %d, not %q", key, MaxVoiceIdle, value)
+		}
+		return strconv.Itoa(n), int64(n), nil
 	case "kinds":
 		// "none": workers may only read.
 		quoted, back := []string{}, []any{}
@@ -698,6 +732,12 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 		}
 		sort.Strings(keys)
 		return "", fmt.Errorf("%q isn't one of the settings set this way (%s); edit the file for the rest", key, strings.Join(keys, ", "))
+	}
+	if strings.HasPrefix(key, "voice.") && workspace != "" {
+		return "", fmt.Errorf("%s is the person's own setting: a workspace can't change it (spec_063_voice VOX-04)", key)
+	}
+	if key == "ui.personality" && value != "" && !ValidPersonalityName(value) {
+		return "", fmt.Errorf("%s is a personality's name (lower-case letters, digits and -, at most %d), not %q", key, MaxPersonalityName, value)
 	}
 	if key == "llm.provider" && value != "" && !ValidProvider(value) {
 		return "", fmt.Errorf("unknown provider %q (%s)", value, ProviderList())

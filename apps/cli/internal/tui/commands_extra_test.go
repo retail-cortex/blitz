@@ -293,6 +293,14 @@ func TestSessionAndListCommandOutputs(t *testing.T) {
 			setup: func(s *stubBackend) { s.set = func(string, string) (string, error) { return "terse", nil } },
 			line:  "/style terse", want: []string{"Output style terse"},
 		},
+		"personality fails": {
+			setup: func(s *stubBackend) { s.set = func(string, string) (string, error) { return "", errBoom } },
+			line:  "/personality mentor", want: []string{"✗ boom"},
+		},
+		"personality set": {
+			setup: func(s *stubBackend) { s.set = func(string, string) (string, error) { return "personality", nil } },
+			line:  "/personality Mentor", want: []string{"Personality Mentor", "ui.personality"},
+		},
 		"styles listed": {
 			setup: func(s *stubBackend) {
 				s.listStyles = func() []api.StyleInfo {
@@ -300,6 +308,14 @@ func TestSessionAndListCommandOutputs(t *testing.T) {
 				}
 			},
 			line: "/style", want: []string{"Output styles", "● " + Reset + "plain", "terse"},
+		},
+		"personalities": {
+			setup: func(s *stubBackend) {
+				s.listPersonalities = func() []api.Personality {
+					return []api.Personality{{Name: "default", Description: "Blitz's own"}, {Name: "mentor", Description: "Explains", Active: true}}
+				}
+			},
+			line: "/personality", want: []string{"Personalities", "● " + Reset + "mentor", "never what it may do"},
 		},
 		"no hooks": {
 			setup: func(s *stubBackend) { s.listHooks = func() []api.HookInfo { return nil } },

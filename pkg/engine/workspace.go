@@ -120,6 +120,7 @@ type Workspace struct {
 	notices     map[string][]string // background processes' notices waiting, by session
 	styleMu     sync.Mutex
 	style       string // the output style ("": [ui] style, else none)
+	personality string // the personality's name ("": default), under styleMu
 	// appendPrompt is added to the instructions for this run
 	// (--append-system-prompt).
 	appendPrompt string
@@ -491,6 +492,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	}
 	w.engine, err = runtime.NewEngine(ctx, cfg, w.agents, w.skills, w.tools, llm, append(opts,
 		runtime.WithInstructions(w.instructions()),
+		runtime.WithPersonality(w.personalityAtOpen(cfg, o.Warn)),
 		runtime.WithStreaming(o.Streaming),
 		runtime.WithTurnStore(w.storage),
 		runtime.WithUsageStore(w.storage),

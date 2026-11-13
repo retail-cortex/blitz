@@ -185,6 +185,7 @@ go_test(
         "outputcap_test.go",
         "outputlimit_test.go",
         "painter_test.go",
+        "personality_test.go",
         "pictures_test.go",
         "pin_test.go",
         "plan_test.go",

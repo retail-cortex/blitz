@@ -220,6 +220,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		"ProjectSettings":     func() any { return r.ProjectSettings().Hash },
 		"ListHooks":           func() any { return r.ListHooks() },
 		"ListStyles":          func() any { return r.ListStyles() },
+		"ListPersonalities":   func() any { return r.ListPersonalities() },
 		"Running":             func() any { return r.Processes().Running() },
 		"Shutdown":            func() any { r.Processes().Shutdown(); return nil },
 		"AuditShell":          func() any { r.AuditShell("ls", 0, errors.New("x")); return nil },
@@ -350,6 +351,13 @@ func TestRemoteBackendCalls(t *testing.T) {
 		assert.Empty(t, r.ListMCPServers())
 		assert.NotEmpty(t, r.ActiveAgentTools().Tools)
 		assert.NotEmpty(t, r.ListStyles())
+		var active []string
+		for _, p := range r.ListPersonalities() {
+			if p.Active {
+				active = append(active, p.Name)
+			}
+		}
+		assert.Equal(t, []string{"default"}, active, "the workspace's personality")
 		assert.NotEmpty(t, r.ListHooks(), "the configured hook")
 	})
 

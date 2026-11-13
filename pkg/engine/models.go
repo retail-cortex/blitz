@@ -282,6 +282,8 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 		return "effort", nil
 	case "style", "output_style":
 		return "style", w.setStyle(ctx, value)
+	case "personality":
+		return "personality", w.setPersonality(ctx, value)
 	case "agency", "agency_level":
 		switch strings.ToLower(value) {
 		case "low", "medium", "high", "extreme":
