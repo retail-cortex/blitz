@@ -56,7 +56,7 @@ func (h configService) ListPersonalities(ctx context.Context, r req[pb.ListPerso
 			choice = w.Personality().Name
 		}
 	}
-	out := &pb.ListPersonalitiesResponse{}
+	out := &pb.ListPersonalitiesResponse{Profile: &pb.PersonProfile{Name: cfg.Profile.Name, Gender: cfg.Profile.Gender, Pronouns: cfg.Profile.Pronouns}}
 	for _, p := range engine.ListPersonalities(cfg.Org) {
 		m := personalityProto(p)
 		m.PersonDefault = p.Name == def

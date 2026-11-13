@@ -1055,6 +1055,8 @@ const fakeBuiltinPersonalities: FakePersonality[] = [
 ];
 const fakeOwnPersonalities = new Map<string, FakePersonality>([["coach", { name: "coach", description: "Cheers you on", voice: "Puck", source: "own", text: "Cheer the person on like a coach at the big game." }]]);
 let fakePersonalityDefault = "default";
+// About you ([profile]).
+const fakeProfile = { name: "", gender: "", pronouns: "" };
 const fakePersonalityOf = new Map<string, string>();
 const fakePersonalities = () => [...fakeBuiltinPersonalities.filter((p) => !fakeOwnPersonalities.has(p.name)), ...[...fakeOwnPersonalities.values()].sort((a, b) => a.name.localeCompare(b.name))];
 const fakePersonality = (name: string) => {
@@ -2873,6 +2875,7 @@ export function installFake() {
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
         // Personalities (spec_064_personality PER-50), kept in the page.
         listPersonalities: ({ workspace }) => ({
+          profile: { ...fakeProfile },
           personalities: fakePersonalities().map((p) => ({ ...p, text: "", personDefault: p.name === fakePersonalityDefault, workspaceChoice: !!workspace && p.name === fakePersonalityIn(workspace) })),
         }),
         getPersonality: ({ name }) => ({ personality: { ...fakePersonality(name) } }),
@@ -3361,6 +3364,11 @@ export function installFake() {
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
           if (key === "ui.task_alerts") fakeAlerts = value;
+          if (key.startsWith("profile.")) {
+            if (workspace) throw fakeInvalid(`${key} is the person's own setting: a workspace can't change it`);
+            if (value.length > 60 || /[\n\r]/.test(value)) throw fakeInvalid(`${key} is one line of at most 60 characters`);
+            fakeProfile[key.slice(8) as keyof typeof fakeProfile] = value;
+          }
           if (key === "ui.personality") {
             if (value) fakePersonality(value);
             if (workspace) fakePersonalityOf.set(workspace, value || "default");

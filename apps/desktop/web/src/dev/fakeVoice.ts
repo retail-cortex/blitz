@@ -131,7 +131,7 @@ export function fakeVoice(personalityVoice: (workspace: string) => string) {
       else if (waiting?.approvalId && waiting.approvalId !== c.approval) {
         c.approval = waiting.approvalId;
         c.push({ state: "speaking" });
-        c.push({ said: { text: `It wants to run ${waiting.approval}. Allow it?`, final: false } });
+        c.push({ said: { text: `I need permission to ${waiting.approval}, may I?`, final: false } });
         c.push({ said: { text: "", final: true } });
         c.push({ heard: { text: "Yes, go ahead.", final: false } });
         c.push({ heard: { text: "", final: true } });

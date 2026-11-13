@@ -63,15 +63,36 @@ export type Waiting = { approvalId: string; approval: string; question: string; 
 /** Nothing waiting. */
 export const nothingWaiting: Waiting = { approvalId: "", approval: "", question: "", options: [] };
 
-/** What's waiting, from the conversation's first pending request. */
-export function waitingOf(pending: Pending | null): Waiting {
-  if (!pending) return nothingWaiting;
-  if (pending.kind === "approval") {
-    const r = pending.req;
-    const what = r.detail ? `${r.tool}: ${r.detail}` : r.tool;
-    return { ...nothingWaiting, approvalId: r.requestId, approval: what.length > 300 ? what.slice(0, 300) + "…" : what };
-  }
-  return { ...nothingWaiting, question: pending.q.question, options: [...pending.q.options] };
+// What an approval would do, in words the voice can say after "I need
+// permission to" (VOX-13): the tool's action and its target.
+const actions: Record<string, string> = {
+  run_shell_command: "run",
+  create_file: "create",
+  replace_in_file: "edit",
+  apply_patch: "change",
+  delete_file: "delete",
+  web_fetch: "open",
+  browser: "browse to",
+};
+
+/** What an approval would do, in plain words: "run make deploy", "edit cart.go". */
+export function actionWords(tool: string, detail: string): string {
+  const verb = actions[tool];
+  const what = verb ? (detail ? `${verb} ${detail}` : verb) : detail ? `use ${tool} for ${detail}` : `use ${tool}`;
+  return what.length > 300 ? what.slice(0, 300) + "…" : what;
+}
+
+/**
+ * What's waiting, from the conversation's first pending request, else a
+ * background task's or a sub-agent's (id: the request's): the voice asks
+ * for either.
+ */
+export function waitingOf(pending: Pending | null, task?: { id: string; approval?: { tool: string; detail: string }; question?: { question: string; options: string[] } }): Waiting {
+  if (pending?.kind === "approval") return { ...nothingWaiting, approvalId: pending.req.requestId, approval: actionWords(pending.req.tool, pending.req.detail) };
+  if (pending?.kind === "question") return { ...nothingWaiting, question: pending.q.question, options: [...pending.q.options] };
+  if (task?.approval) return { ...nothingWaiting, approvalId: task.id, approval: actionWords(task.approval.tool, task.approval.detail) };
+  if (task?.question) return { ...nothingWaiting, question: task.question.question, options: [...task.question.options] };
+  return nothingWaiting;
 }
 
 /** Whether two waits are the same (so the service hears of each change once). */

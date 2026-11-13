@@ -682,14 +682,23 @@ export function Conversation({
     {
       send: (text) => void submitRef.current(text),
       stop: () => void stop(),
-      answer: (text) => void answer(text),
+      // The conversation's own request first, else a background task's or
+      // a sub-agent's (spec_063_voice VOX-13).
+      answer: (text) => {
+        if (pending?.kind === "question") return void answer(text);
+        const r = taskRequests.find((x) => x.question);
+        if (r) void answerTask(r, { text });
+      },
       approve: (id, decision) => {
-        if (pending?.kind === "approval" && pending.req.requestId === id) void decide(decision === "once" ? Decision.ONCE : Decision.DENY);
+        const d = decision === "once" ? Decision.ONCE : Decision.DENY;
+        if (pending?.kind === "approval" && pending.req.requestId === id) return void decide(d);
+        const r = taskRequests.find((x) => x.id === id && x.approval);
+        if (r) void answerTask(r, { decision: d });
       },
       spoken: (who, text) => setEntries((e) => [...e, { kind: "spoken", who, text }]),
       error: (text) => snack(text, { error: true }),
     },
-    waitingOf(pending),
+    waitingOf(pending, taskRequests[0]),
   );
   const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
   const toggleVoice = () => (myVoice ? voice.end() : void voice.start());

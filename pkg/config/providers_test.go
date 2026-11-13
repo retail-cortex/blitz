@@ -896,3 +896,21 @@ func TestVoiceDefaults(t *testing.T) {
 	assert.False(t, ValidPersonalityName("-calm"))
 	assert.Contains(t, GeminiVoices, DefaultVoice)
 }
+
+// About you is the person's, one short line each (PER-05).
+func TestSetProfile(t *testing.T) {
+	keysEnv(t)
+	for k, v := range map[string]string{"profile.name": "Ryan", "profile.gender": "male", "profile.pronouns": "he/him"} {
+		_, err := SetValue("", "", k, v)
+		require.NoError(t, err)
+	}
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, ProfileConfig{Name: "Ryan", Gender: "male", Pronouns: "he/him"}, cfg.Profile)
+	_, err = SetValue("", t.TempDir(), "profile.name", "x")
+	assert.ErrorContains(t, err, "the person's own setting")
+	_, err = SetValue("", "", "profile.name", strings.Repeat("x", 61))
+	assert.ErrorContains(t, err, "one line of at most 60")
+	_, err = SetValue("", "", "profile.gender", "a\nb")
+	assert.ErrorContains(t, err, "one line")
+}

@@ -13,8 +13,9 @@ Talk to Blitz. Click the microphone in the chat bar, say what you want done, and
 
 ### New
 
-- **Voice, on your terms.** Talk to Blitz with Google's Gemini Live. The voice hands real work to your agent, so approvals, the sandbox and Changes work exactly as when you type. Ask "what's it doing?" while it works, steer it, or stop it. When the agent wants approval, the voice asks; a clear "yes" allows it once. When the work ends you hear a sentence or two: what changed, how the tests went, what's waiting. Voice is off until you turn it on, and completely gone when it's off. [More about voice](https://retail-cortex.github.io/blitz/guide/voice/).
+- **Voice, on your terms.** Talk to Blitz with Google's Gemini Live. The voice hands real work to your agent, so approvals, the sandbox and Changes work exactly as when you type. Ask "what's it doing?" while it works, steer it, or stop it. When Blitz needs permission it asks, "I need permission to …, may I?", and a clear "yes" allows it once. When the work ends you hear a sentence or two: what changed, how the tests went, what's waiting. Voice is off until you turn it on, and completely gone when it's off. [More about voice](https://retail-cortex.github.io/blitz/guide/voice/).
 - **Personalities.** Choose how Blitz sounds: friendly, direct, mentor, cheerful, calm or reviewer, or write your own in Settings. Set your default, choose one per workspace, or switch with `/personality`. A personality changes the tone only, never what the agent may do, and the agents it hands work to stay neutral. Each personality has a voice to match.
+- **Blitz knows how to address you.** Tell it your name and pronouns in Settings › Personality › About you; until you do, it uses gender-neutral words rather than guess.
 - **Hear your work finish.** With spoken summaries set to Always, Blitz says how a long task went even when you typed it.
 
 ### Good to know

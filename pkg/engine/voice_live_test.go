@@ -97,6 +97,7 @@ func TestVoiceLive(t *testing.T) {
 		case <-deadline:
 			require.True(t, ran, "the voice never handed the request over")
 			require.Contains(t, strings.ToLower(said.String()), "212", "the agent's answer was said")
+			require.NotContains(t, strings.ToLower(said.String()), "agent", "first person: no agent mentioned")
 			return
 		}
 	}
@@ -144,6 +145,45 @@ func TestVoiceLiveHold(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatal("no answer after the hold ended")
+		}
+	}
+}
+
+// A permission needed is asked in the first person with the real API
+// (VOX-13): "I need permission to …, may I?"
+func TestVoiceLivePermission(t *testing.T) {
+	if os.Getenv("BLITZ_LIVE") != "1" || os.Getenv("GEMINI_API_KEY") == "" {
+		t.Skip("BLITZ_LIVE=1 and GEMINI_API_KEY run it")
+	}
+	key := os.Getenv("GEMINI_API_KEY")
+	w, _ := openTestWith(t, nil)
+	t.Setenv("GEMINI_API_KEY", key)
+	_, err := config.SetValue(w.cfg.Dir, "", "voice.enabled", "true")
+	require.NoError(t, err)
+	evs := newVoiceEvents()
+	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "perm", OnEvent: evs.on})
+	require.NoError(t, err)
+	defer v.Close()
+	time.Sleep(time.Second)
+	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run make deploy"})
+	var said strings.Builder
+	deadline := time.After(20 * time.Second)
+	for {
+		select {
+		case ev := <-evs.in:
+			if ev.Kind == "said" {
+				said.WriteString(ev.Text)
+			}
+			if ev.Kind == "said" && ev.Final && said.Len() > 0 {
+				t.Logf("said %q", said.String())
+				s := strings.ToLower(said.String())
+				require.Contains(t, s, "permission")
+				require.Contains(t, s, "may i")
+				require.NotContains(t, s, "agent")
+				return
+			}
+		case <-deadline:
+			t.Fatalf("not asked; said %q", said.String())
 		}
 	}
 }

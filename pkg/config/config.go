@@ -79,6 +79,7 @@ type Config struct {
 	Search      SearchConfig     `toml:"search"`
 	Audio       AudioConfig      `toml:"audio"`
 	Voice       VoiceConfig      `toml:"voice"`
+	Profile     ProfileConfig    `toml:"profile"`
 	Hooks       HooksConfig      `toml:"hooks"`
 	MCP         MCPConfig        `toml:"mcp"`
 	Web         WebConfig        `toml:"web"`

@@ -73,6 +73,11 @@ func TestPersonalityService(t *testing.T) {
 	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "ui.personality", Value: "calm"}))
 	require.NoError(t, err)
 	assert.True(t, list()["calm"].PersonDefault)
+	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "profile.pronouns", Value: "he/him"}))
+	require.NoError(t, err)
+	res, err := cfg.ListPersonalities(ctx, connect.NewRequest(&pb.ListPersonalitiesRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "he/him", res.Msg.Profile.Pronouns, "About you")
 
 	tried, err := c.workspaces.TryPersonality(ctx, connect.NewRequest(&pb.TryPersonalityRequest{Workspace: dir, Text: "Be kind."}))
 	require.NoError(t, err)

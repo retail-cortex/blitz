@@ -525,11 +525,15 @@ var settableValues = map[string]bool{
 	"health.model":   true,
 	"ui.style":       true,
 	"ui.personality": true,
-	"ui.locale":      true,
-	"ui.notify":      true,
-	"ui.task_alerts": true,
-	"ui.theme":       true,
-	"ui.editor":      true,
+	// Settings › Personality's About you (spec_064_personality PER-05).
+	"profile.name":     true,
+	"profile.gender":   true,
+	"profile.pronouns": true,
+	"ui.locale":        true,
+	"ui.notify":        true,
+	"ui.task_alerts":   true,
+	"ui.theme":         true,
+	"ui.editor":        true,
 	// Workspace search, from its panel in the desktop app.
 	"search.embedding_model": true,
 	"search.enrich_model":    true,
@@ -732,6 +736,14 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 		}
 		sort.Strings(keys)
 		return "", fmt.Errorf("%q isn't one of the settings set this way (%s); edit the file for the rest", key, strings.Join(keys, ", "))
+	}
+	if strings.HasPrefix(key, "profile.") {
+		if workspace != "" {
+			return "", fmt.Errorf("%s is the person's own setting: a workspace can't change it", key)
+		}
+		if len(value) > MaxProfileField || strings.ContainsAny(value, "\n\r") {
+			return "", fmt.Errorf("%s is one line of at most %d characters", key, MaxProfileField)
+		}
 	}
 	if strings.HasPrefix(key, "voice.") && workspace != "" {
 		return "", fmt.Errorf("%s is the person's own setting: a workspace can't change it (spec_063_voice VOX-04)", key)

@@ -19,7 +19,7 @@ import { mdiCheckCircleOutline, mdiContentCopy, mdiDeleteOutline, mdiEmoticonOut
 import { config, workspaces } from "../api";
 import { message } from "../errors";
 import { configChanged } from "../events";
-import type { Personality } from "../gen/blitz/v1/config_pb";
+import type { PersonProfile, Personality } from "../gen/blitz/v1/config_pb";
 import { t } from "../i18n";
 import { useApp } from "../state";
 import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
@@ -42,6 +42,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
   const { prefs } = useApp();
   const workspace = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
   const [list, setList] = useState<Personality[]>([]);
+  const [profile, setProfile] = useState<PersonProfile | undefined>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ draft: Draft; original: string } | null>(null);
@@ -53,6 +54,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
     try {
       const r = await config.listPersonalities({ workspace });
       setList(r.personalities);
+      setProfile(r.profile);
       setError("");
     } catch (e) {
       setError(message(e));
@@ -100,6 +102,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
   };
   return (
     <div className="stack personality-settings" style={{ gap: 12 }}>
+      <AboutYou profile={profile} busy={busy} onSet={(key, value) => void act(() => config.setConfigValue({ workspace: "", key: `profile.${key}`, value: value.trim() }), t("desktop.personality.about.saved"))} />
       <p className="t-body-sm muted">{t("desktop.personality.intro")}</p>
       {error && <p className="error-text">{error}</p>}
       <div className="list provider-list" role="radiogroup" aria-label={t("desktop.settings.personality")}>
@@ -190,5 +193,39 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
         </Dialog>
       )}
     </div>
+  );
+}
+
+/**
+ * About you (spec_064_personality PER-05): the name, gender and pronouns
+ * the agent and the voice use for the person, each saved as it's left.
+ * Left empty, they use gender-neutral words and never guess.
+ */
+function AboutYou({ profile, busy, onSet }: { profile: PersonProfile | undefined; busy: boolean; onSet: (key: "name" | "gender" | "pronouns", value: string) => void }) {
+  if (!profile) return null;
+  const field = (key: "name" | "gender" | "pronouns", placeholder: string) => (
+    <label className="field" style={{ flex: 1, minWidth: 160 }}>
+      <span className="t-label">{t(`desktop.personality.about.${key}`)}</span>
+      <input
+        key={profile[key]}
+        className="input"
+        defaultValue={profile[key]}
+        maxLength={60}
+        placeholder={placeholder}
+        disabled={busy}
+        onBlur={(e) => e.target.value.trim() !== profile[key] && onSet(key, e.target.value)}
+      />
+    </label>
+  );
+  return (
+    <section className="card outlined stack" style={{ gap: 8 }}>
+      <span className="t-title-sm">{t("desktop.personality.about")}</span>
+      <span className="t-body-sm muted">{t("desktop.personality.about.detail")}</span>
+      <div className="row wrap" style={{ gap: 8 }}>
+        {field("name", t("desktop.personality.about.name_placeholder"))}
+        {field("gender", t("desktop.personality.about.gender_placeholder"))}
+        {field("pronouns", t("desktop.personality.about.pronouns_placeholder"))}
+      </div>
+    </section>
   );
 }

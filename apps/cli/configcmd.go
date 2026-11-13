@@ -189,6 +189,12 @@ page_size = "auto"   # export_pdf's paper: a4, letter, or auto (from the locale)
 # speakers = [{ name = "Ana", voice = "Kore" }, { name = "Ben", voice = "Puck" }]   # a two-host overview
 max_chars = 9000   # about ten minutes
 
+[profile]
+# How Blitz addresses you and refers to you (Settings › Personality › About you); empty: gender-neutral words, never guessed.
+# name = "Sam"
+# gender = ""
+# pronouns = "they/them"
+
 [voice]
 # Talking to Blitz in the desktop app, with Google's Gemini Live (Settings › Voice sets these too).
 enabled = false   # off: no microphone, nothing sent to Google

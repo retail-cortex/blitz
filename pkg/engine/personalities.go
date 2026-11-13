@@ -298,13 +298,14 @@ func (w *Workspace) setPersonality(ctx context.Context, name string) error {
 	w.styleMu.Lock()
 	w.personality = p.Name
 	w.styleMu.Unlock()
-	return w.engine.SetPersonality(ctx, framedPersonality(p))
+	return w.engine.SetPersonality(ctx, framedPersonality(p)+aboutPerson(w.settings().Profile))
 }
 
 // ReloadPersonality applies cfg's [ui] personality, as the settings now
 // read: a name that has gone (its file deleted) is default, with a
 // warning (PER-22).
 func (w *Workspace) ReloadPersonality(ctx context.Context, cfg *config.Config) {
+	w.setSettings(func(c *config.Config) { c.Profile = cfg.Profile })
 	name := strings.ToLower(strings.TrimSpace(cfg.UI.Personality))
 	if name == "" {
 		name = DefaultPersonality
@@ -321,17 +322,18 @@ func (w *Workspace) ReloadPersonality(ctx context.Context, cfg *config.Config) {
 // personalityAtOpen is the root agent's framed personality as the
 // workspace opens, from cfg, with warn told of one that has gone.
 func (w *Workspace) personalityAtOpen(cfg *config.Config, warn func(string)) string {
+	about := aboutPerson(cfg.Profile)
 	name := strings.ToLower(strings.TrimSpace(cfg.UI.Personality))
 	if name == "" || name == DefaultPersonality {
-		return ""
+		return about
 	}
 	p, err := GetPersonality(cfg.Org, name)
 	if err != nil {
 		warn(fmt.Sprintf("ui.personality %q: no such personality, so Blitz sounds as it does by default", cfg.UI.Personality))
-		return ""
+		return about
 	}
 	w.personality = p.Name
-	return framedPersonality(p)
+	return framedPersonality(p) + about
 }
 
 // TryQuestion is what Try it asks (PER-30).
@@ -361,4 +363,23 @@ func (w *Workspace) TryPersonality(ctx context.Context, text string) (string, er
 		slog.InfoContext(ctx, "personality tried", "model", served, "input_tokens", usage.PromptTokenCount, "output_tokens", usage.CandidatesTokenCount)
 	}
 	return strings.TrimSpace(reply), nil
+}
+
+// aboutPerson is what the agent knows of the person it talks with
+// (PER-05): their name, gender and pronouns as they gave them, and never
+// a guess: with none given, gender-neutral words.
+func aboutPerson(p config.ProfileConfig) string {
+	var b strings.Builder
+	b.WriteString("\n\n## The person\n")
+	if n := strings.TrimSpace(p.Name); n != "" {
+		fmt.Fprintf(&b, "Their name is %s. ", n)
+	}
+	if g := strings.TrimSpace(p.Gender); g != "" {
+		fmt.Fprintf(&b, "Their gender: %s. ", g)
+	}
+	if pr := strings.TrimSpace(p.Pronouns); pr != "" {
+		fmt.Fprintf(&b, "Their pronouns are %s: use them when you refer to them. ", pr)
+	}
+	b.WriteString("Never guess anyone's gender or pronouns, from a name, a voice or anything else: what isn't given here, leave out, using gender-neutral words (\"you\", \"they\").")
+	return b.String()
 }

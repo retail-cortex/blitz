@@ -969,3 +969,15 @@ var personalityName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 func ValidPersonalityName(name string) bool {
 	return len(name) <= MaxPersonalityName && personalityName.MatchString(name)
 }
+
+// ProfileConfig is what the person tells Blitz about themselves
+// (spec_064_personality PER-05): how the agent and the voice address and
+// refer to them. The person's only; empty, they use gender-neutral words.
+type ProfileConfig struct {
+	Name     string `toml:"name"`
+	Gender   string `toml:"gender"`
+	Pronouns string `toml:"pronouns"` // "he/him", "she/her", "they/them", …
+}
+
+// MaxProfileField is how long each of the profile's fields may be.
+const MaxProfileField = 60

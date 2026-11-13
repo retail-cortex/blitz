@@ -534,6 +534,17 @@ message ListPersonalitiesRequest {
 // Response message for ConfigService.ListPersonalities.
 message ListPersonalitiesResponse {
   repeated Personality personalities = 1;
+  // What the person told Blitz about themselves ([profile]): set with
+  // SetConfigValue profile.name, profile.gender, profile.pronouns.
+  PersonProfile profile = 2;
+}
+
+// PersonProfile is how the agent and the voice address and refer to the
+// person (spec_064_personality PER-05); empty fields aren't guessed.
+message PersonProfile {
+  string name = 1;
+  string gender = 2;
+  string pronouns = 3;
 }
 
 // Request message for ConfigService.GetPersonality.

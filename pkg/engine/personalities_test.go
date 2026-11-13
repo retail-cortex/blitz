@@ -244,3 +244,32 @@ func writePersonality(t *testing.T, path, text string) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(text), 0o644))
 }
+
+// What the person said about themselves reaches the root agent whatever
+// the personality, and nothing is guessed: with nothing given, gender-
+// neutral words (PER-05).
+func TestAboutPerson(t *testing.T) {
+	w, llm := openTestWith(t, func(c *config.Config) {
+		c.Profile = config.ProfileConfig{Name: "Ryan", Gender: "male", Pronouns: "he/him"}
+	}, text("a"), text("b"))
+	ctx := context.Background()
+	s, _ := w.NewSession()
+	system := func() string {
+		_, err := w.Run(ctx, s.ID, api.Turn{Text: "hi"}, func(api.Event) {})
+		require.NoError(t, err)
+		return systemText(llm.Requests[len(llm.Requests)-1].Config)
+	}
+	sys := system()
+	assert.Contains(t, sys, "## The person")
+	assert.Contains(t, sys, "Their name is Ryan.")
+	assert.Contains(t, sys, "Their gender: male.")
+	assert.Contains(t, sys, "Their pronouns are he/him")
+	assert.Contains(t, sys, "Never guess anyone's gender")
+
+	cfg := *w.settings()
+	cfg.Profile = config.ProfileConfig{}
+	w.ReloadPersonality(ctx, &cfg)
+	sys = system()
+	assert.NotContains(t, sys, "Ryan")
+	assert.Contains(t, sys, "gender-neutral words")
+}

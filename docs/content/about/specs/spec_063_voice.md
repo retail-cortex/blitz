@@ -56,6 +56,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 ## 4. The voice agent
 
 - **VOX-10** **Who it is.** A built-in agent, `voice`, with its own short instructions: it's the person's spoken link to the workspace's agent; it keeps replies short (two sentences unless asked for more); it never claims to have done something it didn't; it hands anything that needs reading files, running commands or changing things to the agent with `run_task`. It knows the workspace's name, the session's agent and model, and what's running. It speaks with the session's personality (spec_064 PER-40), in its frame (PER-03). It's not listed among the agents the person can pick and can't be edited in Studio; its instructions live in `pkg/engine/voice.go`.
+  *2026-11-13 (the owner: "all communication from the agent should be first person, like \"I'm looking into the details …\"")* It speaks as Blitz, always in the first person ("I'm looking into that now", "I found…", "I need your OK to…"), and never mentions an agent, a subagent, a tool or a hand-off: the work is its own. Blitz's notes to it ([Blitz] …) are written the same way.
 - **VOX-11** **Its tools, and only these.** It has no file, shell, web or MCP tools of its own:
   - `run_task(request)`: starts a turn in the session with `request` as the person's message (spoken requests are rephrased into a clear written prompt, and the written prompt is what's shown and kept), through the same turn path as a typed message: hooks, the agent, approvals, limits, the record. Refused while a turn runs: then it's `steer`.
   - `steer(request)`: adds to the running turn, as the composer's steer does (spec_024).
@@ -65,7 +66,7 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
   - `recent(n)`: the last `n` (at most 10) messages of the conversation, as text, so "what did it say about the cart?" can be answered.
   - `end_conversation()`: ends the conversation once its goodbye has been said (VOX-14).
 - **VOX-12** **Nothing secret reaches the voice.** What `status` and `recent` give the voice model goes through the same redaction as the agent's tool output (keys, tokens, hidden files never in it: spec_006 FS-15), and they never include file contents beyond what's already in the conversation.
-- **VOX-13** **Approvals by voice, carefully.** When the agent asks to run a command or change a file, the voice says what it wants in plain words ("It wants to run `make deploy`. Allow it?"). A spoken yes allows it **once**, and only when:
+- **VOX-13** **Approvals by voice, carefully.** When Blitz needs permission to run a command or change a file, in the conversation's own turn or a background task's or sub-agent's, the voice asks in the first person, the action in plain words ("I need permission to run `make deploy`, may I?"). A spoken yes allows it **once**, and only when:
   - that approval card is showing in the window, and
   - the voice model's `answer` names that approval (its ID, which only `status` gives it), and
   - the transcript of what the person said is a yes (Blitz checks the words, not only the model's reading of them).

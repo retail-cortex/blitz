@@ -53,6 +53,7 @@ A **personality** changes how the agent you talk to sounds: warm, direct, a pati
 - **Choose one for a workspace** in its **Workspace settings**, from the status bar's agent menu, or with `/personality <name>` (in the app and the CLI). `/personality` lists them.
 - **Write your own**: **New personality** or **Duplicate** in Settings › Personality, or a Markdown file in `~/.blitz/personalities/<name>.md` (an optional `description` and `voice` in its frontmatter, then how it should sound, at most 2,000 characters). A project's settings can pick a personality by name but can't bring its own text.
 - **With [voice](voice.md)**, the voice speaks with the same personality, in its voice when it has one.
+- **About you**, at the top of Settings › Personality: your name, gender and pronouns, for how Blitz addresses you and refers to you, in writing and out loud (`[profile]` in the settings file). Left empty, Blitz uses gender-neutral words; it never guesses from your name or your voice.
 
 ## Built-in agents
 

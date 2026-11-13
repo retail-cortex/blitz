@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { fakeVoice, fakeVoiceSettings, setFakeVoice } from "../dev/fakeVoice";
-import { buttonState, currentConversation, extend, fromPCM16, level, nothingWaiting, sameWaiting, setConversation, toPCM16k, waitingOf, type Conversation } from "./voice";
+import { actionWords, buttonState, currentConversation, extend, fromPCM16, level, nothingWaiting, sameWaiting, setConversation, toPCM16k, waitingOf, type Conversation } from "./voice";
 
 const conv: Conversation = { dir: "/w", sessionId: "s", id: "v1", phase: "open", state: "listening", muted: false, holding: false, listen: "tap", model: "m", voice: "Kore", heard: "", said: "", error: "" };
 
@@ -38,7 +38,13 @@ describe("voice", () => {
   it("tells the service what waits: the approval showing, or the question", () => {
     expect(waitingOf(null)).toEqual(nothingWaiting);
     const approval = waitingOf({ kind: "approval", req: { requestId: "r1", tool: "run_shell_command", detail: "make deploy" } as never });
-    expect(approval).toEqual({ ...nothingWaiting, approvalId: "r1", approval: "run_shell_command: make deploy" });
+    expect(approval).toEqual({ ...nothingWaiting, approvalId: "r1", approval: "run make deploy" });
+    expect(waitingOf(null, { id: "t1", approval: { tool: "replace_in_file", detail: "cart.go" } })).toEqual({ ...nothingWaiting, approvalId: "t1", approval: "edit cart.go" });
+    expect(waitingOf(null, { id: "t2", question: { question: "Which?", options: ["A"] } })).toEqual({ ...nothingWaiting, question: "Which?", options: ["A"] });
+    expect(waitingOf(approval.approvalId ? { kind: "approval", req: { requestId: "r1", tool: "x", detail: "" } as never } : null, { id: "t1", approval: { tool: "y", detail: "" } }).approvalId).toBe("r1");
+    expect(actionWords("mcp_query", "orders")).toBe("use mcp_query for orders");
+    expect(actionWords("mcp_query", "")).toBe("use mcp_query");
+    expect(actionWords("delete_file", "")).toBe("delete");
     expect(waitingOf({ kind: "approval", req: { requestId: "r2", tool: "x", detail: "y".repeat(400) } as never }).approval.length).toBe(301);
     const q = waitingOf({ kind: "question", q: { requestId: "q", question: "Which?", options: ["A", "B"] } as never });
     expect(q).toEqual({ ...nothingWaiting, question: "Which?", options: ["A", "B"] });

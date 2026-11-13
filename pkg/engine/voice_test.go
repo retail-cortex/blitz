@@ -133,7 +133,7 @@ func TestVoiceConversation(t *testing.T) {
 	assert.Contains(t, setup, "inputAudioTranscription")
 	assert.Contains(t, setup, "outputAudioTranscription")
 	instruction := fmt.Sprint(setup["systemInstruction"])
-	assert.Contains(t, instruction, "Blitz's voice")
+	assert.Contains(t, instruction, "always in the first person")
 	assert.Contains(t, instruction, "patient mentor")
 	var names []string
 	for _, tl := range setup["tools"].([]any) {
@@ -210,7 +210,7 @@ func TestVoiceApprovals(t *testing.T) {
 	live.Opened(wait)
 
 	v.Waiting(VoiceWaiting{ApprovalID: "ap1", Approval: "run make deploy"})
-	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "approval (ID ap1): run make deploy")
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "permission (ID ap1) before you go on: to run make deploy. Ask them, in these words or close to them: \"I need permission to run make deploy, may I?\"")
 
 	for _, tc := range []struct{ heard, choice, id, want, decision string }{
 		{"hmm, what does it do", "yes", "ap1", "didn't clearly say", ""},
@@ -314,7 +314,7 @@ func TestVoiceSummaries(t *testing.T) {
 	w.factsEnd("s", api.TurnResult{}, nil)
 	w.factsStart("s", "y", nil)
 	w.factsEnd("s", api.TurnResult{}, errors.New("model down"))
-	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "The task failed: model down", "only the failure, with summaries off")
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "Your work failed: model down", "only the failure, with summaries off")
 	v.Close()
 
 	evs := newVoiceEvents()
@@ -413,7 +413,7 @@ func TestVoiceEdges(t *testing.T) {
 
 	live.Send(map[string]any{"serverContent": map[string]any{"interrupted": true}})
 	evs.next(t, "interrupted")
-	assert.Equal(t, "[Blitz] Nothing has run in this conversation yet. Say so in one sentence.", v.summaryRequest(nil))
+	assert.Equal(t, "[Blitz] You haven't worked on anything in this conversation yet. Say so in one sentence.", v.summaryRequest(nil))
 	assert.Equal(t, "abc…", short("abc  def", 3))
 	assert.Equal(t, 7, exitOf(map[string]any{"exit_code": int64(7)}))
 	assert.Equal(t, -1, exitOf(map[string]any{"error": "boom"}))
@@ -454,10 +454,10 @@ func TestVoiceRelaysTheAnswer(t *testing.T) {
 	w.factsStart("ans", "What's the stack?", nil)
 	w.factsEnd("ans", api.TurnResult{Output: "**Backend:** FastAPI, SQLModel, Alembic."}, nil)
 	told := fmt.Sprint(live.Next("clientContent", wait))
-	assert.Contains(t, told, "The agent's answer:")
+	assert.Contains(t, told, "What you found:")
 	assert.Contains(t, told, "FastAPI, SQLModel, Alembic", "said though summaries are off: the voice asked")
 	st := fmt.Sprint(live.Call("h2", "status", map[string]any{}, wait)["status"])
-	assert.Contains(t, st, "The agent's answer to it:")
+	assert.Contains(t, st, "What you found:")
 
 	w.factsStart("ans", "typed", nil)
 	w.factsEnd("ans", api.TurnResult{Output: "typed answer"}, nil)
