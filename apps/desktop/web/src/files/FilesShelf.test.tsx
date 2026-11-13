@@ -25,15 +25,18 @@ const fs = vi.hoisted(() => {
   const FILE = 1;
   const tree = new Map<string, { name: string; kind: number }[]>();
   const renames: { from: string; to: string }[] = [];
+  const created: string[] = [];
   const entry = (folder: string, e: { name: string; kind: number }) => ({ ...e, path: folder ? `${folder}/${e.name}` : e.name, git: "", hidden: false, agentRule: "", staged: "" });
   return {
     FOLDER,
     FILE,
     tree,
     renames,
+    created,
     reset() {
       tree.clear();
       renames.length = 0;
+      created.length = 0;
       tree.set("", [
         { name: "a", kind: FOLDER },
         { name: "x.md", kind: FILE },
@@ -43,6 +46,13 @@ const fs = vi.hoisted(() => {
     },
     files: {
       listDir: async ({ path }: { path: string }) => ({ entries: (tree.get(path) ?? []).map((e) => entry(path, e)), truncated: false, repository: false }),
+      createFolder: async ({ path }: { path: string }) => {
+        created.push(path);
+        const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+        tree.set(parent, [...(tree.get(parent) ?? []), { name: path.slice(path.lastIndexOf("/") + 1), kind: FOLDER }]);
+        tree.set(path, []);
+        return {};
+      },
       renameFile: async ({ from, to }: { from: string; to: string }) => {
         renames.push({ from, to });
         const name = (p: string) => p.slice(p.lastIndexOf("/") + 1);
@@ -69,15 +79,17 @@ const win = new Window({ url: "http://localhost/" });
 win.document.write("<!doctype html><html><head></head><body></body></html>");
 let FilesShelf: typeof import("./FilesShelf").FilesShelf;
 let createRoot: typeof import("react-dom/client").createRoot;
+let t: typeof import("../i18n").t;
 beforeAll(async () => {
   const w = win as unknown as Record<string, unknown>;
-  for (const name of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLButtonElement", "Text", "DocumentFragment", "MutationObserver", "ResizeObserver", "Event", "MouseEvent", "KeyboardEvent", "DragEvent", "DataTransfer", "CustomEvent", "FocusEvent", "CSS", "getComputedStyle"]) {
+  for (const name of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLButtonElement", "HTMLInputElement", "Text", "DocumentFragment", "MutationObserver", "ResizeObserver", "Event", "MouseEvent", "KeyboardEvent", "DragEvent", "DataTransfer", "CustomEvent", "FocusEvent", "CSS", "getComputedStyle"]) {
     const v = w[name];
     vi.stubGlobal(name, typeof v === "function" && /^[a-z]/.test(name) ? (v as (...a: unknown[]) => unknown).bind(win) : v);
   }
   vi.stubGlobal("requestAnimationFrame", (f: () => void) => setTimeout(f, 0));
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   ({ FilesShelf } = await import("./FilesShelf"));
+  ({ t } = await import("../i18n"));
   const { FileKind } = await import("../gen/blitz/v1/file_pb");
   expect([FileKind.FILE, FileKind.FOLDER]).toEqual([fs.FILE, fs.FOLDER]);
   ({ createRoot } = await import("react-dom/client"));
@@ -160,5 +172,27 @@ describe("FilesShelf's compacted folders", () => {
     expect(part.classList.contains("selected")).toBe(true);
     expect(row("a/b")?.classList.contains("selected")).toBe(false);
     expect(row("a/b")?.getAttribute("aria-expanded")).toBe("true"); // a click on a name doesn't close the chain
+  });
+
+  // The new name's field shows under the chain's row: a has no row of its own.
+  it("makes a new folder in the chain's first folder", async () => {
+    await mount();
+    act(() => row("a")!.click());
+    await settle();
+    act(() => host!.querySelector<HTMLElement>('[data-folder="a"]')!.click());
+    const newFolder = [...host!.querySelectorAll<HTMLButtonElement>("button[aria-label]")].find((b) => b.getAttribute("aria-label") === t("desktop.files.new_folder"))!;
+    act(() => newFolder.click());
+    await settle();
+    const input = host!.querySelector<HTMLInputElement>(".tree-input");
+    expect(input, "the name's field").not.toBeNull();
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "c");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => void input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await settle();
+    expect(fs.created).toEqual(["a/c"]);
+    expect(row("a")?.getAttribute("aria-expanded"), "a holds two folders now: its own row, open").toBe("true");
+    expect(row("a/c")).not.toBeNull();
   });
 });

@@ -1205,7 +1205,8 @@ export function FilesShelf({
                     )}
                 </button>
               )}
-              {isFolder(e) && open && newRow(e.path, depth + 1)}
+              {/* A new name in any folder of a compacted chain goes under its row: the chain's first folders have none (#110). */}
+              {isFolder(e) && open && newRow(r.chain?.find((c) => naming?.kind !== "rename" && naming?.dir === c.path)?.path ?? e.path, depth + 1)}
               {more !== undefined && (
                 <button className="tree-row tree-more" style={{ paddingLeft: 8 + (more === "" ? 0 : (shown.find((x) => x.entry.path === more)?.depth ?? 0) + 1) * 14 }} onClick={() => showMore(more)}>
                   <span className="tree-twisty" />
