@@ -117,9 +117,17 @@ func (h terminalService) WatchTerminal(ctx context.Context, r req[pb.WatchTermin
 	if err := send(&pb.WatchTerminalResponse{}); err != nil {
 		return err
 	}
+	// The beat stops, and is waited for, before the handler returns: the
+	// stream is the handler's only while it runs.
 	beat, stop := context.WithCancel(ctx)
-	defer stop()
+	var beating sync.WaitGroup
+	defer func() {
+		stop()
+		beating.Wait()
+	}()
+	beating.Add(1)
 	go func() {
+		defer beating.Done()
 		tick := time.NewTicker(terminalHeartbeat)
 		defer tick.Stop()
 		for {
