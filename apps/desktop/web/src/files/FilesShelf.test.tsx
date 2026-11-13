@@ -195,4 +195,24 @@ describe("FilesShelf's compacted folders", () => {
     expect(row("a")?.getAttribute("aria-expanded"), "a holds two folders now: its own row, open").toBe("true");
     expect(row("a/c")).not.toBeNull();
   });
+
+  // The same from the name's right-click menu.
+  it.each([
+    ["new_folder", ".tree-input"],
+    ["new_file", ".tree-input"],
+  ])("opens %s's field from the chain's first folder's menu", async (key, field) => {
+    await mount();
+    act(() => row("a")!.click());
+    await settle();
+    const part = host!.querySelector<HTMLElement>('[data-folder="a"]')!;
+    act(() => void part.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
+    await settle();
+    const item = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem], .context-menu button")].find((b) => b.textContent?.includes(t(`desktop.files.${key}`)));
+    expect(item, "the menu's item").toBeDefined();
+    act(() => item!.click());
+    await settle();
+    const input = host!.querySelector<HTMLInputElement>(field);
+    expect(input, "the name's field").not.toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
 });
