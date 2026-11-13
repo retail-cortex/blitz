@@ -47,10 +47,10 @@ export const homeOf = (s: SectionId): SectionId => homes[s] ?? s;
  * shown inside them (homeOf), they're allSections.
  */
 export const sectionGroups: readonly { id: string; sections: readonly SectionId[] }[] = [
-  { id: "start", sections: ["providers", "organization", "appearance"] },
-  { id: "setup", sections: ["agents", "personality", "voice", "connectors", "browser"] },
+  { id: "start", sections: ["providers", "personality", "appearance"] },
+  { id: "setup", sections: ["agents", "voice", "connectors", "browser"] },
   { id: "access", sections: ["workspaces", "permissions"] },
-  { id: "system", sections: ["service", "logs", "about"] },
+  { id: "system", sections: ["service", "organization", "logs", "about"] },
 ];
 
 const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "organization", "appearance", "personality", "voice", "connectors", "workspaces", "about"]);
