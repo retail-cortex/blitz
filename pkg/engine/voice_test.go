@@ -339,3 +339,17 @@ func TestVoiceIdleAndErrors(t *testing.T) {
 	assert.Contains(t, v.errorText(errors.New("RESOURCE_EXHAUSTED")), "quota")
 	assert.Contains(t, v.errorText(errors.New("socket closed")), "The voice conversation stopped")
 }
+
+// Play's sample says one line in the voice asked for, then ends (VOX-41).
+func TestVoiceSample(t *testing.T) {
+	w, live := openVoice(t, nil)
+	evs := newVoiceEvents()
+	v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: "s", SampleVoice: "Puck", OnEvent: evs.on})
+	require.NoError(t, err)
+	setup := live.Opened(wait)
+	assert.Contains(t, fmt.Sprint(setup["generationConfig"]), "Puck")
+	assert.Contains(t, fmt.Sprint(live.Next("clientContent", wait)), "Hi, I'm Blitz")
+	live.Say("Hi, I'm Blitz.", []byte{1, 2})
+	assert.Equal(t, "summary", evs.next(t, "end").Text)
+	<-v.Done()
+}

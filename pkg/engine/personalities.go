@@ -71,7 +71,8 @@ func PersonalitiesDir() string { return config.ExpandHome("~/.blitz/personalitie
 // organization's (org's defaults, then its locked ones), then the person's.
 func allPersonalities(org config.OrgLayer) map[string]api.Personality {
 	out := map[string]api.Personality{DefaultPersonality: {
-		Name: DefaultPersonality, Description: "Blitz's own: clear, capable, neutral", Voice: config.DefaultVoice, Source: PersonalityBuiltIn,
+		// No voice of its own: [voice] voice's (spec_064_personality PER-40).
+		Name: DefaultPersonality, Description: "Blitz's own: clear, capable, neutral", Source: PersonalityBuiltIn,
 	}}
 	entries, _ := builtinPersonalities.ReadDir("personalities")
 	for _, e := range entries {

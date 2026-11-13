@@ -48,6 +48,7 @@ import {
   mdiWhiteBalanceSunny,
   mdiCalendarClock,
   mdiEmoticonOutline,
+  mdiMicrophoneOutline,
 } from "@mdi/js";
 import { formatBytes } from "./bytes";
 import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, pruneUpdateDownloads, updateDownloads, type UpdateDownloads, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
@@ -70,6 +71,8 @@ import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
 import { BrowserSettings } from "./BrowserSettings";
 import { PersonalitySettings } from "./personality/PersonalitySettings";
+import { VoiceSettings } from "./voice/VoiceSettings";
+import { useVoiceSetup } from "./voice/useVoice";
 import { McpSettings } from "./McpSettings";
 import { ConnectorsPane } from "./studio/ConnectorsPane";
 import { useDiscardGuard } from "./studio/paneParts";
@@ -108,6 +111,7 @@ const sectionIcons: Record<SectionId, string> = {
   connectors: mdiConnection,
   browser: mdiWeb,
   personality: mdiEmoticonOutline,
+  voice: mdiMicrophoneOutline,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -125,7 +129,7 @@ const sectionIcons: Record<SectionId, string> = {
  */
 export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "", connect }: { onClose: () => void; initial?: Section; scope?: string; connect?: string }) {
   const advanced = useAdvanced();
-  const { update } = useApp();
+  const { update, prefs } = useApp();
   const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
   // Whether a section's form holds unsaved changes (Connectors): closing
   // or picking another section asks first, as Studio does.
@@ -143,6 +147,8 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
   // first.
   const groups = shownGroups(advanced);
   const section = sectionShown(asked, advanced);
+  // Personalities show their voices when voice is on (spec_064 PER-30).
+  const voiceOn = useVoiceSetup(prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "").enabled;
   const showFile = flip.face === "file" && advanced;
   const actions = (
     <>
@@ -196,7 +202,8 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "browser" && <BrowserSettings />}
-            {section === "personality" && <PersonalitySettings />}
+            {section === "personality" && <PersonalitySettings voiceOn={voiceOn} />}
+            {section === "voice" && <VoiceSettings />}
             {homeOf(section) === "connectors" && (
               <div className="slide-box">
                 <ConnectorsPane onDirty={setDirty} connect={connect} extra={advanced && <McpSettings embedded />} />

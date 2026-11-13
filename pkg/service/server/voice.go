@@ -17,6 +17,8 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -156,7 +158,10 @@ func (h voiceService) Converse(ctx context.Context, r req[pb.ConverseRequest], s
 		closed = true
 		mu.Unlock()
 	}()
-	v, err := w.StartVoice(ctx, engine.VoiceOptions{SessionID: r.Msg.SessionId, SummaryOnly: r.Msg.SummaryOnly, OnEvent: func(e engine.VoiceEvent) {
+	if r.Msg.SampleVoice != "" && !slices.Contains(config.GeminiVoices, r.Msg.SampleVoice) {
+		return invalid(fmt.Errorf("%q isn't one of Gemini's voices", r.Msg.SampleVoice))
+	}
+	v, err := w.StartVoice(ctx, engine.VoiceOptions{SessionID: r.Msg.SessionId, SummaryOnly: r.Msg.SummaryOnly, SampleVoice: r.Msg.SampleVoice, OnEvent: func(e engine.VoiceEvent) {
 		if m := voiceEventProto(e); m != nil {
 			push(m)
 		}

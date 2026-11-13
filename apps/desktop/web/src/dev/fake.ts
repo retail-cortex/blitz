@@ -33,6 +33,8 @@ import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb
 import { ConfigService, KeySource, MCPServerConfigSchema, type ApiProviderSettings, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { TerminalService } from "../gen/blitz/v1/terminal_pb";
+import { VoiceService } from "../gen/blitz/v1/voice_pb";
+import { fakeVoice, setFakeVoice } from "./fakeVoice";
 import { fakeTerminals } from "./fakeTerminal";
 import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, WorkspaceProcessSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
@@ -1043,7 +1045,7 @@ const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 24
 // them, the person's own, the person's default and each workspace's.
 type FakePersonality = { name: string; description: string; voice: string; source: string; text: string };
 const fakeBuiltinPersonalities: FakePersonality[] = [
-  { name: "default", description: "Blitz's own: clear, capable, neutral", voice: "Kore", source: "built-in", text: "" },
+  { name: "default", description: "Blitz's own: clear, capable, neutral", voice: "", source: "built-in", text: "" },
   { name: "calm", description: "Steady and reassuring, one step at a time", voice: "Vindemiatrix", source: "built-in", text: "Be calm and steady. Short sentences, one step at a time." },
   { name: "cheerful", description: "Upbeat and a little playful; celebrates wins", voice: "Puck", source: "built-in", text: "Be cheerful and upbeat, a little playful. Celebrate wins." },
   { name: "direct", description: "No pleasantries; the answer first, then the risk", voice: "Kore", source: "built-in", text: "Be direct. Lead with the answer, then the risk, then what to do." },
@@ -3354,6 +3356,7 @@ export function installFake() {
           // Refused as the service refuses it (config.SetValue): a key it doesn't set this way, or a value not of its type.
           const why = configValueProblem(key, value);
           if (why) throw fakeInvalid(why);
+          if (setFakeVoice(workspace, key, value)) return change(workspace);
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
@@ -3467,6 +3470,7 @@ export function installFake() {
         },
       });
       service(TerminalService, fakeTerminals());
+      service(VoiceService, fakeVoice((workspace) => fakePersonalities().find((p) => p.name === fakePersonalityIn(workspace))?.voice ?? ""));
       service(FileService, {
         listDir: ({ path, showHidden }) => {
           const prefix = path ? path + "/" : "";

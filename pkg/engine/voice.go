@@ -85,6 +85,9 @@ type VoiceOptions struct {
 	// SummaryOnly speaks the session's last turn's summary and ends
 	// (summaries = "always" without a conversation open, VOX-17).
 	SummaryOnly bool
+	// SampleVoice says a short sample in that voice and ends (Settings ›
+	// Voice's Play, VOX-41).
+	SampleVoice string
 }
 
 // Voice is a live conversation (one at a time per window, VOX-15).
@@ -166,6 +169,10 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 		return nil, err
 	}
 	v.live, v.cancel = live, cancel
+	if opts.SampleVoice != "" {
+		opts.SummaryOnly = true // one thing said, then the end
+		v.opts.SummaryOnly = true
+	}
 	if !opts.SummaryOnly {
 		v.unwatch = w.watchTurns(opts.SessionID, v.turnEnded)
 	}
@@ -173,7 +180,7 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 	go v.loop(runCtx, events)
 	if !opts.SummaryOnly {
 		go v.idleWatch(runCtx)
-	} else if err := v.tell(v.summaryRequest(w.lastTurnFacts(opts.SessionID))); err != nil {
+	} else if err := v.tell(v.firstWords()); err != nil {
 		v.end("error")
 		return nil, err
 	}
@@ -190,10 +197,22 @@ func (w *Workspace) voiceSettings() *config.Config {
 	return &cfg
 }
 
-// voiceName is the voice spoken in: the personality's, else [voice]
-// voice's, else the default (spec_064_personality PER-40).
+// voiceName is the voice spoken in: a sample's, else the personality's,
+// else [voice] voice's, else the default (spec_064_personality PER-40).
 func (v *Voice) voiceName() string {
-	return cmp.Or(v.w.Personality().Voice, v.cfg.Voice, config.DefaultVoice)
+	return cmp.Or(v.opts.SampleVoice, v.w.Personality().Voice, v.cfg.Voice, config.DefaultVoice)
+}
+
+// sampleLine is what Play says (VOX-41).
+const sampleLine = "[Blitz] Say exactly this, warmly: Hi, I'm Blitz. Tell me what you'd like done, and I'll hand it to your agent."
+
+// firstWords is what a one-thing conversation says: a sample, or the last
+// turn's summary.
+func (v *Voice) firstWords() string {
+	if v.opts.SampleVoice != "" {
+		return sampleLine
+	}
+	return v.summaryRequest(v.w.lastTurnFacts(v.opts.SessionID))
 }
 
 // context is what the voice knows of where it is (VOX-10).

@@ -62,6 +62,8 @@ elif [ -d "$pkg" ]; then
 	done
 	[ "$(plutil -extract CFBundleIdentifier raw "$pkg/Contents/Info.plist")" = dev.blitz.desktop ] || no "Blitz.app isn't dev.blitz.desktop"
 	[ "$(plutil -extract CFBundleName raw "$pkg/Contents/Info.plist")" = Blitz ] || no "Blitz.app isn't named Blitz"
+	# Talking to Blitz needs the microphone's reason (spec_063_voice VOX-50).
+	plutil -extract NSMicrophoneUsageDescription raw "$pkg/Contents/Info.plist" >/dev/null 2>&1 || no "Blitz.app doesn't say why it uses the microphone"
 	[ -e "$r/default_app.asar" ] && no "Blitz.app still has Electron's default app"
 	# The bundle itself, not the test's links to its files, which codesign
 	# can't check.

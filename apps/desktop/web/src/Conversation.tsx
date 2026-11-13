@@ -22,6 +22,8 @@ import type { JsonObject } from "@bufbuild/protobuf";
 import {
   mdiAlertCircleOutline,
   mdiArrowUp,
+  mdiMicrophoneOutline,
+  mdiWaveform,
   mdiCheck,
   mdiCheckboxBlankOutline,
   mdiCheckboxMarked,
@@ -108,6 +110,7 @@ import {
   type AddWebDetail,
   type ComposeDetail,
   type LoadSessionDetail,
+  talkEvent,
 } from "./events";
 import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
 import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
@@ -133,6 +136,9 @@ import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summa
 import { copyRendered, copyText } from "./clipboard";
 import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
+import { useVoice, useVoiceSetup } from "./voice/useVoice";
+import { VoiceBar, VoiceButton } from "./voice/VoiceControls";
+import { buttonState, useConversation, waitingOf, type ButtonState } from "./voice/voice";
 
 /** A background task's approval request or question, waiting for an answer. */
 type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
@@ -664,6 +670,59 @@ export function Conversation({
     await sessions.answer({ workspace: dir, requestId, answer: text }).catch(fail);
   };
 
+  // Talking to Blitz (spec_063_voice): the voice hands the work to this
+  // conversation, which runs it as typed; its lines join the conversation.
+  const voiceSetup = useVoiceSetup(dir);
+  const conversationNow = useConversation();
+  const myVoice = conversationNow?.dir === dir ? conversationNow : null;
+  const voice = useVoice(
+    dir,
+    session?.id ?? "",
+    prefs.voice_mic,
+    {
+      send: (text) => void submitRef.current(text),
+      stop: () => void stop(),
+      answer: (text) => void answer(text),
+      approve: (id, decision) => {
+        if (pending?.kind === "approval" && pending.req.requestId === id) void decide(decision === "once" ? Decision.ONCE : Decision.DENY);
+      },
+      spoken: (who, text) => setEntries((e) => [...e, { kind: "spoken", who, text }]),
+      error: (text) => snack(text, { error: true }),
+    },
+    waitingOf(pending),
+  );
+  const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
+  const toggleVoice = () => (myVoice ? voice.end() : void voice.start());
+  // The command palette's Talk to Blitz (VOX-21).
+  useEffect(() => {
+    const f = (e: Event) => {
+      if ((e as CustomEvent<{ dir: string }>).detail.dir === dir && !myVoice && voiceState === "ready") void voice.start();
+    };
+    window.addEventListener(talkEvent, f);
+    return () => window.removeEventListener(talkEvent, f);
+  });
+  // ⌥⌘V starts and ends it; with hold to talk, holding it talks (VOX-21).
+  useEffect(() => {
+    if (!visible || voiceState === "hidden") return;
+    const isKey = (e: KeyboardEvent) => e.altKey && e.metaKey && e.code === "KeyV";
+    const down = (e: KeyboardEvent) => {
+      if (!isKey(e)) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      if (myVoice?.listen === "hold" && myVoice.phase === "open") voice.hold(true);
+      else if (voiceState !== "not_set_up" && voiceState !== "no_mic") toggleVoice();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "KeyV" && myVoice?.listen === "hold" && myVoice.holding) voice.hold(false);
+    };
+    document.addEventListener("keydown", down);
+    document.addEventListener("keyup", up);
+    return () => {
+      document.removeEventListener("keydown", down);
+      document.removeEventListener("keyup", up);
+    };
+  });
+
   const newSession = async () => {
     try {
       show((await sessions.newSession({ workspace: dir })).session!);
@@ -919,6 +978,7 @@ export function Conversation({
   const dock = (
     <div className="chat-column dock" ref={dockRef}>
       {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
+      {myVoice && <VoiceBar conv={myVoice} onMute={voice.mute} onEnd={voice.end} />}
       <Composer
         commands={commands}
         attachments={attachments}
@@ -934,6 +994,7 @@ export function Conversation({
         dir={dir}
         onSubmit={submit}
         onStop={stop}
+        voice={<VoiceButton state={voiceState} hold={myVoice?.listen === "hold"} onToggle={toggleVoice} onHold={voice.hold} />}
       />
     </div>
   );
@@ -1270,6 +1331,16 @@ const EntryView = memo(function EntryView({
       return <Thought text={entry.text} open={entry.open} />;
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
+    case "spoken":
+      return (
+        <div className="notice info row spoken-line">
+          <Icon path={entry.who === "person" ? mdiMicrophoneOutline : mdiWaveform} size="sm" />
+          <span>
+            <strong>{t(entry.who === "person" ? "desktop.voice.bar.you" : "desktop.voice.bar.voice")}: </strong>
+            {entry.text}
+          </span>
+        </div>
+      );
     case "reflect":
     case "shell":
     case "file":
@@ -1960,6 +2031,7 @@ function Composer({
   dir,
   onSubmit,
   onStop,
+  voice,
 }: {
   commands: CommandSpec[];
   attachments: Attachment[];
@@ -1976,6 +2048,8 @@ function Composer({
   dir: string;
   onSubmit: (t: string) => void;
   onStop: () => void;
+  /** The microphone, beside Send (spec_063_voice VOX-20). */
+  voice?: ReactNode;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -2309,6 +2383,7 @@ function Composer({
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />
+        {voice}
         {running && <IconButton title="" icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
         <IconButton title="" icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
       </div>

@@ -81,6 +81,9 @@ message ConverseRequest {
   // Speaks the session's last turn's summary and ends (summaries =
   // "always" without a conversation open, VOX-17).
   bool summary_only = 3;
+  // Says a short sample in this voice and ends (Settings › Voice's Play,
+  // VOX-41): one short live call.
+  string sample_voice = 4;
 }
 
 // Response message for VoiceService.Converse: one of its fields.

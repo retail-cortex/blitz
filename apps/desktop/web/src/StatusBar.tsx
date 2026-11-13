@@ -21,10 +21,12 @@ import { useServiceApprovals, useServiceRuns } from "./serviceRuns";
 import { notify } from "./notify";
 import type { GoingServiceRun, Personality } from "./gen/blitz/v1/config_pb";
 import { agentWithPersonality, personalityDescription, personalityLabel } from "./personality/personality";
+import { endConversation, useConversation } from "./voice/voice";
 import { ms, took } from "./workflowRuns";
 import {
   mdiAccountAlertOutline,
   mdiEmoticonOutline,
+  mdiMicrophone,
   mdiAccountCheckOutline,
   mdiAccountClockOutline,
   mdiCheck,
@@ -591,6 +593,9 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
       snack(message(e), { error: true });
     }
   };
+  // The microphone is open (spec_063_voice VOX-23): in any view, and a
+  // click ends the conversation.
+  const voiceOpen = !!useConversation();
   // The workspace's personality (spec_064_personality PER-33): beside the
   // agent's name, and chosen from its menu.
   const [personalities, setPersonalities] = useState<Personality[]>([]);
@@ -653,6 +658,12 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
             </span>
           )}
         </span>
+      )}
+      {voiceOpen && (
+        <button className="sb-item sb-button sb-error" title={t("desktop.voice.status_end")} onClick={endConversation}>
+          <Icon path={mdiMicrophone} size="sm" />
+          <span>{t("desktop.voice.status")}</span>
+        </button>
       )}
       {s && (
         <Menu
