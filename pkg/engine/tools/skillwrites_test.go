@@ -63,7 +63,7 @@ func writerFixture(t *testing.T, d api.Decision) (string, *SkillScripts, *Checkp
 		os.MkdirAll(filepath.Dir(filepath.Join(wsDir, name)), 0o755)
 		os.WriteFile(filepath.Join(wsDir, name), []byte(body), 0o644)
 	}
-	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir, BlockedPaths: config.DefaultBlockedPaths})
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir, BlockedPaths: config.DefaultBlockedPaths, HiddenPaths: config.DefaultHiddenPaths})
 	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
 	cps := newTestCheckpoints(ws, 0)

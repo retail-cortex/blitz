@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/redact"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -203,7 +204,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 
 	runErr := cmd.Run()
 	result := RunShellCommandOutput{
-		Output:     out.String(),
+		Output:     hideKeys(out.String()),
 		DurationMs: time.Since(start).Milliseconds(),
 		Truncated:  out.Truncated(),
 	}
@@ -226,6 +227,23 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 		}
 	}
 	return result
+}
+
+// privateKey is a PEM private key, as the redactor knows it.
+var privateKey = func() *regexp.Regexp {
+	for _, f := range redact.Formats {
+		if f.Kind == "private key" {
+			return f.Pattern
+		}
+	}
+	panic("redact.Formats has no private key")
+}()
+
+// hideKeys masks the private keys in a command's output: commands use
+// keys and certificates (hidden_paths), the model never gets one,
+// whichever command printed it.
+func hideKeys(s string) string {
+	return privateKey.ReplaceAllString(s, "[a private key, kept from the model]")
 }
 
 type ownerSessionKey struct{}

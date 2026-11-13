@@ -200,6 +200,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		AllowedPaths:  sb.AllowedPaths,
 		ReadOnlyPaths: sb.ReadOnlyPaths,
 		BlockedPaths:  blocked,
+		HiddenPaths:   sb.HiddenPaths,
 		MaxFileSize:   cfg.Tools.MaxFileSizeBytes,
 		ReadOnly:      cfg.Tools.ReadOnly,
 		SystemTrash:   cfg.Tools.SystemTrash(),

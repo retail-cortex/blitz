@@ -38,7 +38,7 @@ func ProjectItem(it api.ProjectItem) string {
 	case "limit", "skill_policy", "worker_limit":
 		kind = "limit"
 	case "hook", "mcp", "allow", "writable", "model", "agent_model", "worker_allow", "skill_scripts",
-		"deny", "ask", "blocked_path":
+		"deny", "ask", "blocked_path", "hidden_path":
 	default:
 		kind = "setting"
 	}

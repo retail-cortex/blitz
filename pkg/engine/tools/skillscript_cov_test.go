@@ -273,7 +273,7 @@ func newCovFixture(t *testing.T, docs map[string]string, files map[string]string
 
 	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, os.WriteFile(filepath.Join(wsDir, "README.md"), []byte("original\n"), 0o644))
-	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir, BlockedPaths: config.DefaultBlockedPaths})
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir, BlockedPaths: config.DefaultBlockedPaths, HiddenPaths: config.DefaultHiddenPaths})
 	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
 	policy := config.DefaultConfig().Skills.Policy

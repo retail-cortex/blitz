@@ -423,7 +423,7 @@ func NewManageBackgroundTool(pm *ProcessManager) (tool.Tool, error) {
 				if err != nil {
 					return ManageBackgroundOutput{Error: err.Error()}, nil
 				}
-				return ManageBackgroundOutput{Process: &info, Output: out}, nil
+				return ManageBackgroundOutput{Process: &info, Output: hideKeys(out)}, nil
 			case "kill":
 				info, err := pm.Kill(input.ProcessID)
 				if err != nil {

@@ -73,7 +73,7 @@ func copyWorkspace(ws *Workspace) (*wsCopy, error) {
 			if d.Name() == ".git" && p != root {
 				return filepath.SkipDir
 			}
-			if _, blocked := ws.Blocked().Match(p); blocked && p != root {
+			if _, blocked := ws.KeptFromModel(p); blocked && p != root {
 				return filepath.SkipDir
 			}
 			return os.MkdirAll(filepath.Join(tmp, rel), 0o700)
@@ -81,7 +81,7 @@ func copyWorkspace(ws *Workspace) (*wsCopy, error) {
 		if !d.Type().IsRegular() {
 			return nil
 		}
-		if _, blocked := ws.Blocked().Match(p); blocked {
+		if _, blocked := ws.KeptFromModel(p); blocked {
 			return nil
 		}
 		info, err := d.Info()
@@ -220,6 +220,12 @@ func (c *wsCopy) keepChanges(ctx context.Context, ws *Workspace, hooks *Hooks, s
 	var errs []error
 	for _, ch := range changes {
 		var err error
+		// A skill's script never gets, so never makes, a hidden file: a
+		// key or .env it wrote stays in its copy.
+		if pat, kept := ws.KeptFromModel(filepath.Join(ws.Dir(), ch.path)); kept {
+			errs = append(errs, fmt.Errorf("%s: %w (%s)", ch.path, ErrBlockedPath, pat))
+			continue
+		}
 		if ch.deleted {
 			err = ws.RemoveFile(ctx, ch.path)
 			if errors.Is(err, fs.ErrNotExist) {

@@ -60,6 +60,7 @@ const (
 	ProjectDeny        = "deny"         // a deny rule (A)
 	ProjectAsk         = "ask"          // an ask rule (A)
 	ProjectBlockedPath = "blocked_path" // a blocked path (A)
+	ProjectHiddenPath  = "hidden_path"  // a path kept from the model (A)
 	ProjectLimit       = "limit"        // a lower limit (A)
 	ProjectSkillPolicy = "skill_policy" // a stricter skill policy value (A)
 	ProjectWorkerLimit = "worker_limit" // a stricter worker policy value (A)
@@ -128,6 +129,7 @@ type projectFile struct {
 	} `toml:"permissions" json:"permissions"`
 	Sandbox struct {
 		BlockedPaths       []string `toml:"blocked_paths" json:"-"`
+		HiddenPaths        []string `toml:"hidden_paths" json:"-"`
 		ShellWritablePaths []string `toml:"shell_writable_paths" json:"shell_writable_paths,omitempty"`
 	} `toml:"sandbox" json:"sandbox"`
 	Tools struct {
@@ -518,6 +520,10 @@ func (p *Project) ApplyTightening(cfg *Config) {
 		for _, b := range pf.Sandbox.BlockedPaths {
 			cfg.Sandbox.BlockedPaths = appendNew(cfg.Sandbox.BlockedPaths, b)
 			applied(ProjectBlockedPath, "", b)
+		}
+		for _, h := range pf.Sandbox.HiddenPaths {
+			cfg.Sandbox.HiddenPaths = appendNew(cfg.Sandbox.HiddenPaths, h)
+			applied(ProjectHiddenPath, "", h)
 		}
 		// Lower limits; 0 in the user's settings means none.
 		lower := func(key string, v int64, cur *int64) {
