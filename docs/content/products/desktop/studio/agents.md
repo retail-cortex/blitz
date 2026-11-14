@@ -3,13 +3,13 @@ title: Agents
 weight: 20
 ---
 
-**Studio › Agents** is where you write the workspace's own agents: each a specialist with its own instructions, tools and limits, which you can switch to in the chat and which other agents can hand work to. Make one when a kind of task keeps coming back and deserves its own instructions, such as reviewing a change or answering support questions.
+**Studio › Resources › Agents** is where you write the workspace's own agents: each a specialist with its own instructions, tools and limits, which you can switch to in the chat and which other agents can hand work to. Make one when a kind of task keeps coming back and deserves its own instructions, such as reviewing a change or answering support questions.
 
 ## Open it
 
-Choose **Studio › Agents**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
+Choose **Studio › Resources › Agents**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
 
-![Studio › Agents: the workspace's agents in .agents/agents](../../../../images/desktop/studio-agents.png)
+![Studio › Resources › Agents: the workspace's agents in .agents/agents](../../../../images/desktop/studio-agents.png)
 
 The list shows the agents in `.agents/agents`, each with its description and, once the workspace has been checked, its grade. A file that doesn't load says so in red: open it to see why.
 

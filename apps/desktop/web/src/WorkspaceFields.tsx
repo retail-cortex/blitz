@@ -34,7 +34,7 @@ export const lookOf = (ws: WorkspacePrefs): WorkspaceLook => ({ name: ws.name ??
 /**
  * The fields for how a workspace is shown (name, description, colour) and
  * its folder, to copy: the Workspace card of a workspace's settings (the
- * panel, and Settings › Workspaces). onBlur says a text field was left (the
+ * panel, and Studio › Settings). onBlur says a text field was left (the
  * panel saves then; a colour is saved as it's picked).
  */
 export function WorkspaceFields({ ws, value, onChange, onBlur, compact }: { ws: WorkspacePrefs; value: WorkspaceLook; onChange: (v: WorkspaceLook) => void; onBlur?: () => void; compact?: boolean }) {

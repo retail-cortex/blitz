@@ -194,7 +194,7 @@ func TestEnterpriseModel(t *testing.T) {
 		status int
 		want   string
 	}{
-		{name: "a refused sign-in", status: http.StatusForbidden, want: "your organization's service refused your sign-in (HTTP 403): sign in again (Settings › Organization, or blitz enterprise login)"},
+		{name: "a refused sign-in", status: http.StatusForbidden, want: "your organization's service refused your sign-in (HTTP 403): sign in again (Settings › Providers › Organization, or blitz enterprise login)"},
 		{name: "another error", status: http.StatusNotFound, want: "your organization's service: HTTP 404 Not Found: no such model"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

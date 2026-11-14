@@ -19,7 +19,7 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 
 ## Your first job
 
-**Desktop:** **Studio › Jobs**, then **New job** (the calendar icon). **Compose with AI**, at the top, drafts the job from a description after a few questions (when, in which time zone, where the results go, what it may reach) and fills the form for you to review. Or fill it in yourself:
+**Desktop:** **Studio › Resources › Jobs**, then **New job** (the calendar icon). **Compose with AI**, at the top, drafts the job from a description after a few questions (when, in which time zone, where the results go, what it may reach) and fills the form for you to review. Or fill it in yourself:
 
 | Field | What to put |
 |---|---|
@@ -30,7 +30,7 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 | Runs | **Its prompt, as a turn**, or a [workflow](workflows.md) to run |
 | Prompt (or **Its input** for a workflow) | What it does on each run, as you'd type it in the chat; **Rewrite with AI** tightens it |
 | May do without asking | A rule per thing it may do, each a kind (shell, write, delete, web, MCP) and what it covers (below); none: read only |
-| Model calls a run, Cost a run (USD), Time a run | Empty for the defaults (50 calls, $1, 30 minutes); a cap set in Settings › Library › Jobs shows under each, and a value over it is marked |
+| Model calls a run, Cost a run (USD), Time a run | Empty for the defaults (50 calls, $1, 30 minutes); a cap set in Settings › Resources › Jobs shows under each, and a value over it is marked |
 | Missed runs | Skip, or Run once |
 
 In an organization workspace the form also has **Runs on** (this computer or your organization's service), and for the service **When it needs more** and **Its changes** ([Organizations](organization.md)).
@@ -93,7 +93,7 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 `[workers.policy]` in your settings governs every job: which kinds of permission are allowed at all, the limits a job that sets none gets (50 calls, $1, 30 minutes), an optional cap on what one may ask for (`max_turns`, `max_cost_usd`, `max_timeout`; none by default since v0.8.4, so a job may set more than the defaults), and how many runs at once across workspaces (`max_concurrent`, 2).
 
-A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Library › Jobs**, or the guardrail's file.
+A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Resources › Jobs**, or the guardrail's file.
 
 ## Enabling, editing and running
 
@@ -103,11 +103,11 @@ A job's limits cover its whole run, every model call and every step of a `workfl
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz jobs run <name>`, runs an enabled job at once and shows what it does.
 - **Two at once?** The same job never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** **Studio › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Library › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
+- **Stop a run:** **Studio › Resources › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Resources › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
-| **Studio › Jobs › New job** | Write `WORKER.md` |
+| **Studio › Resources › Jobs › New job** | Write `WORKER.md` |
 | Open a job, **Enable as shown** | `blitz jobs enable <name>` |
 | **Run now** | `blitz jobs run <name>` |
 | **Disable** | `blitz jobs disable <name>` |
@@ -120,11 +120,11 @@ A job's limits cover its whole run, every model call and every step of a `workfl
 
 Some work belongs to no project: a morning news digest, tidying your downloads. A **global job** is saved in `~/.blitz/workers/<name>/WORKER.md` and runs in a folder of its own, `~/.blitz/home`, made the first time it's needed. Everything else is the same: review and enable, schedules, permissions, runs.
 
-**Desktop:** **Settings › Library › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
+**Desktop:** **Settings › Resources › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
 
 ## Limits for every job
 
-**Settings › Library › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
+**Settings › Resources › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
 
 | Setting | What it does |
 |---|---|
@@ -136,7 +136,7 @@ A change applies from each job's next run.
 
 ## Every workspace's jobs
 
-The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Library › Jobs** lists every workspace with jobs on record, so none runs unseen:
+The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Resources › Jobs** lists every workspace with jobs on record, so none runs unseen:
 
 - **Not in your workspaces:** **Add and open** brings it back into the app, on its jobs.
 - **Folder missing:** the folder was moved or deleted, so its jobs don't run. **Forget** disables them and stops the service looking for the folder; nothing on disk is touched.
@@ -159,11 +159,11 @@ notify_on = ["failed", "limited"]
 
 ## Jobs on the service
 
-When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: choose **Runs on › Your organization's service** in Studio's job form, or **Move to the service** on the job (`blitz jobs move <name>`), or set `runs_on: service` yourself, and push it to the workspace's `main` (a workspace with sync on does that). Before it moves, Blitz says what won't work there as it works here: an MCP server that's a program on your computer, a connector or address on your computer (`localhost`), a file outside the workspace. The service picks it up within a minute, and at once when you look at the job in Studio; this computer leaves it alone. Until the service has it, Studio says why, with what to do: **Push to main** when its changes aren't on `main` yet (a workspace with sync off; `blitz enterprise jobs push <job>` from the terminal), sync's progress while sync puts them there, or why the service doesn't run it (its `WORKER.md` doesn't read, or doesn't say `runs_on: service`). Each run clones `main` and runs the job with the organization's models as the job's owner: whoever last pushed a change to its `WORKER.md` to `main`, as long as they're still a Runner of the workspace. Changes to the workspace's files go to a branch of the run's own, `blitz/jobs/<job>/<run>`, for you to review and merge. Files the job makes for people (reports, data, charts) go in the folder it's told of, `out/`: they're kept with the run for 30 days, with the run's log, and you can download them from the organization's service. In Studio › Jobs, such a job shows the service's runs, not this computer's: how each went, its last message and branch, and **Files** to save what it left in your Downloads folder; **Run now** and **Turn off** act on the service. While a run goes, it's also in the status bar's Processes menu, under **On your organization's service**.
+When you're signed in to your organization's Blitz service, a job in one of its workspaces can run there instead, at every time, whether or not your computer is on: choose **Runs on › Your organization's service** in Studio's job form, or **Move to the service** on the job (`blitz jobs move <name>`), or set `runs_on: service` yourself, and push it to the workspace's `main` (a workspace with sync on does that). Before it moves, Blitz says what won't work there as it works here: an MCP server that's a program on your computer, a connector or address on your computer (`localhost`), a file outside the workspace. The service picks it up within a minute, and at once when you look at the job in Studio; this computer leaves it alone. Until the service has it, Studio says why, with what to do: **Push to main** when its changes aren't on `main` yet (a workspace with sync off; `blitz enterprise jobs push <job>` from the terminal), sync's progress while sync puts them there, or why the service doesn't run it (its `WORKER.md` doesn't read, or doesn't say `runs_on: service`). Each run clones `main` and runs the job with the organization's models as the job's owner: whoever last pushed a change to its `WORKER.md` to `main`, as long as they're still a Runner of the workspace. Changes to the workspace's files go to a branch of the run's own, `blitz/jobs/<job>/<run>`, for you to review and merge. Files the job makes for people (reports, data, charts) go in the folder it's told of, `out/`: they're kept with the run for 30 days, with the run's log, and you can download them from the organization's service. In Studio › Resources › Jobs, such a job shows the service's runs, not this computer's: how each went, its last message and branch, and **Files** to save what it left in your Downloads folder; **Run now** and **Turn off** act on the service. While a run goes, it's also in the status bar's Processes menu, under **On your organization's service**.
 
-A run on the service that needs something its permissions don't allow pauses and waits for you, its owner (or an Owner of its workspace): nothing runs meanwhile, and its times are skipped. You're notified, the status bar shows how many wait, and its menu and Studio › Jobs show what each asks to do, with **Approve** and **Deny** and a note for its agent. The run goes on from where it stopped: approved, it does that one thing; denied, it goes on without. A run nobody answers in 7 days stops. Set `on_request: refuse` for a job that should never wait.
+A run on the service that needs something its permissions don't allow pauses and waits for you, its owner (or an Owner of its workspace): nothing runs meanwhile, and its times are skipped. You're notified, the status bar shows how many wait, and its menu and Studio › Resources › Jobs show what each asks to do, with **Approve** and **Deny** and a note for its agent. The run goes on from where it stopped: approved, it does that one thing; denied, it goes on without. A run nobody answers in 7 days stops. Set `on_request: refuse` for a job that should never wait.
 
-A run on the service saves its changes on a branch of its own, then adds them to the workspace's main, where they reach your folder like anyone's changes. When they'd clash with main's (both changed the same lines), or the job says `merge: never`, they stay on the branch: Studio › Jobs shows the run's branch and why, with **Add to my workspace**, and `blitz enterprise jobs take <job>` does the same from the terminal. From the terminal: `blitz enterprise jobs pending`, then `approve <run>` or `deny <run>` (`--note`).
+A run on the service saves its changes on a branch of its own, then adds them to the workspace's main, where they reach your folder like anyone's changes. When they'd clash with main's (both changed the same lines), or the job says `merge: never`, they stay on the branch: Studio › Resources › Jobs shows the run's branch and why, with **Add to my workspace**, and `blitz enterprise jobs take <job>` does the same from the terminal. From the terminal: `blitz enterprise jobs pending`, then `approve <run>` or `deny <run>` (`--note`).
 
 From the terminal, `blitz enterprise jobs` lists the jobs the service runs in your workspaces; `runs <job>`, `run <job>`, `on <job>` and `off <job>` do what Studio does, and `files <urn> [--save]` lists or saves what a run left.
 

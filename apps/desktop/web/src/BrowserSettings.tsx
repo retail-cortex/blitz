@@ -32,7 +32,7 @@ export const domainsText = (d: readonly string[]) => d.join("\n");
 export const parseDomains = (text: string) => [...new Set(text.split(/[\s,]+/).map((d) => d.trim().toLowerCase()).filter(Boolean))];
 
 /**
- * Settings › Browser (spec_049_browser_profiles): the browser profiles
+ * Settings › Resources › Browsers (spec_049_browser_profiles): the browser profiles
  * the agents browse with, so they can use the sign-ins (OAuth, SSO, a
  * site's own) the person made in them. Each: Sign in… (a window of the
  * app's on the profile, for the browsing the agent does in the app),

@@ -161,7 +161,7 @@ func NewCreateJobTool(r *Registry) (tool.Tool, error) {
 			}
 			return CreateJobOutput{
 				Name: info.Name, Path: r.Workspace().display(info.Path), Schedule: info.Schedule, NextRuns: next, Paused: true,
-				Note: "Created paused: tell the user to review it and enable it (the card below, or Studio › Jobs).",
+				Note: "Created paused: tell the user to review it and enable it (the card below, or Studio › Resources › Jobs).",
 			}, nil
 		})
 }

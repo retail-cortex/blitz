@@ -60,7 +60,7 @@ Calls reach the network as `web_fetch` does: only when the web is on, public add
 
 ## Querying a database
 
-A **Data** step runs a query on one of the workspace's database connections ([Studio › Connectors](databases.md)): one of the connection's saved queries, or SQL written in the step. **Describe it** and **Draft the SQL** write the SQL from the connection's schema for you to review; the step then runs that SQL every time, not a new draft. Values that change go into the **parameters** (`?`, `$1` or `@name`, as the database takes them), which take templates such as `{{ input }}`. The SQL itself never takes templates, so another step's answer can't change the query.
+A **Data** step runs a query on one of the workspace's database connections ([Studio › Resources › Connectors](databases.md)): one of the connection's saved queries, or SQL written in the step. **Describe it** and **Draft the SQL** write the SQL from the connection's schema for you to review; the step then runs that SQL every time, not a new draft. Values that change go into the **parameters** (`?`, `$1` or `@name`, as the database takes them), which take templates such as `{{ input }}`. The SQL itself never takes templates, so another step's answer can't change the query.
 
 Its output is a **table**. Its text is the table in Markdown (the first 50 rows), so an agent step after it reads the data. Its data is `{columns, rows, total, truncated}`, so a condition or a template can read it too, for example `output.data.rows[0][1]` or `steps.orders.data.total`. Each column says its name, its type, its length when it has one, and its description from the schema:
 
@@ -134,7 +134,7 @@ The workspace's mode is the limit. If you restrict a workspace to *Ask*, its wor
 
 ## Running on a schedule
 
-A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. A scheduled run may do what the workflow's steps do, as they are when it runs, without asking: write the files its save steps save (a path with `{{…}}` in it: its folder, never the whole workspace, your home folder or anything outside the workspace), reach the hosts its calls call, use its MCP steps' tools, run its Data steps' writes and browse for its browser steps; the schedule lists them. Anything else it may do, and its limits, are the job's, in **Studio › Jobs**.
+A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. A scheduled run may do what the workflow's steps do, as they are when it runs, without asking: write the files its save steps save (a path with `{{…}}` in it: its folder, never the whole workspace, your home folder or anything outside the workspace), reach the hosts its calls call, use its MCP steps' tools, run its Data steps' writes and browse for its browser steps; the schedule lists them. Anything else it may do, and its limits, are the job's, in **Studio › Resources › Jobs**.
 
 ## The file
 

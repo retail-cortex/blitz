@@ -51,7 +51,7 @@ func newDataCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "data",
 		Short: "The workspace's databases: list them and their saved queries, or run a query and print its table",
-		Long: `The workspace's database connections (Studio › Connectors) from the terminal.
+		Long: `The workspace's database connections (Studio › Resources › Connectors) from the terminal.
   blitz data list                                  the connections and their saved queries
   blitz data query shop "select * from orders"     run SQL, read-only, and print the table
   blitz data query shop --query top_customers      run a saved query

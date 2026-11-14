@@ -35,6 +35,6 @@ If a run fails, you hear of it wherever you are, with **Open** to see where and 
 
 ## Run it on a schedule
 
-In the workflow's settings, **Schedule** › **Add a schedule**, and say when, in words or as cron (*every weekday at 9:00*). Each schedule is a [job](jobs.md): what a scheduled run may do without asking, and its limits, are the job's, in **Studio › Jobs**.
+In the workflow's settings, **Schedule** › **Add a schedule**, and say when, in words or as cron (*every weekday at 9:00*). Each schedule is a [job](jobs.md): what a scheduled run may do without asking, and its limits, are the job's, in **Studio › Resources › Jobs**.
 
 More: [Workflows](../../../guide/workflows.md).

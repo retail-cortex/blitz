@@ -37,7 +37,7 @@ import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webu
 const overviewPollMs = 10000;
 
 /**
- * Settings › Library › Jobs (spec_023_workers WK-60–WK-63, spec_040
+ * Settings › Resources › Jobs (spec_023_workers WK-60–WK-63, spec_040
  * STU-03): the global jobs, saved in ~/.blitz/workers and run in the home
  * workspace, listed and edited as Studio lists a workspace's; the limits
  * on every job (WK-63); the job runs going now, in every workspace; and every workspace the service has workers on record

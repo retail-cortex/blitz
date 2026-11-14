@@ -181,7 +181,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	switch {
 	case ev.NeedsReview:
 		if err := s.hooks.Approve(ctx, api.ApprovalRequest{Tool: "run_skill_script", Kind: api.ActionCommand, MustAsk: true,
-			Detail: detail + ": its scripts are new or changed since they were reviewed (trust them in Studio › Skills)"}); err != nil {
+			Detail: detail + ": its scripts are new or changed since they were reviewed (trust them in Studio › Resources › Skills)"}); err != nil {
 			return fail("%v", err)
 		}
 	case ev.Bypass:

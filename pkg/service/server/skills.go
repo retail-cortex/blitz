@@ -28,7 +28,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// Skill registries for the desktop app's Settings › Skills (spec_013_skills
+// Skill registries for the desktop app's Settings › Resources › Skills (spec_013_skills
 // SK-90..SK-96): the same store `blitz skills` uses, in the service's
 // settings directory.
 

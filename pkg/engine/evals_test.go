@@ -37,6 +37,29 @@ func writeEval(t *testing.T, w *Workspace, name, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(w.ProjectEvalsDir(), name+".md"), []byte(content), 0o644))
 }
 
+// TestEvalsDir: a workspace's evals are in its .agents/evals; the home
+// workspace's are the global evals, ~/.blitz/evals (EV-40).
+func TestEvalsDir(t *testing.T) {
+	prefix := t.TempDir()
+	t.Setenv("MODENV_PREFIX", prefix)
+	home, err := config.EnsureHomeWorkspace("")
+	require.NoError(t, err)
+	project := t.TempDir()
+	tests := []struct {
+		name string
+		dir  string
+		want string
+	}{
+		{"a project", project, filepath.Join(project, ".agents", "evals")},
+		{"the home workspace", home, filepath.Join(prefix, "evals")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, evalsDir(tt.dir))
+		})
+	}
+}
+
 // TestRunEval runs three cases: an exact one that passes, a near one the
 // judge scores, and one whose write is refused and whose answer misses
 // (scoped warn); the cases' sessions are gone after.

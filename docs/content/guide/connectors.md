@@ -3,7 +3,7 @@ title: Connectors
 weight: 45
 ---
 
-**Connectors** are the systems your agents reach, set up in **Studio › Connectors** (a workspace's) and **Settings › Connectors** (every workspace's) rather than installed: [databases](databases.md) today, more categories to come. Every connection that's on in a workspace has its tools offered to the agents there, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
+**Connectors** are the systems your agents reach, set up in **Studio › Resources › Connectors** (a workspace's) and **Settings › Resources › Connectors** (every workspace's) rather than installed: [databases](databases.md) today, more categories to come. Every connection that's on in a workspace has its tools offered to the agents there, named after its category (`db__shop_top_customers`), with the same approvals as any tool.
 
 Spec: [connectors](../about/specs/spec_047_connectors.md).
 
@@ -24,7 +24,7 @@ New connections are read-only where the kind can be. Tool names (`db__orders_exe
 
 | | This workspace | Every workspace |
 |---|---|---|
-| Set up in | **Studio › Connectors** | **Settings › Connectors** (shown without advanced settings too) |
+| Set up in | **Studio › Resources › Connectors** | **Settings › Resources › Connectors** (shown without advanced settings too) |
 | Connections | `.agents/connectors/<category>/<name>.yaml` | `~/.blitz/connectors/<category>/<name>.yaml` |
 | Your own kinds | `.agents/connectors/kinds/<id>.yaml` | `~/.blitz/connectors/kinds/<id>.yaml` |
 
@@ -36,7 +36,7 @@ Passwords and other secret settings go into your system's keychain as [secrets](
 
 ## Choose what each workspace can reach
 
-Every connection, your global ones too, has a switch in Studio › Connectors. Turn one **off** and the agents in this workspace no longer get its tools, so they can't draw on that data here; other workspaces aren't changed. That's how you keep a project's answers to the sources that belong to it: your sales warehouse on for the analysis workspace, off for the website.
+Every connection, your global ones too, has a switch in Studio › Resources › Connectors. Turn one **off** and the agents in this workspace no longer get its tools, so they can't draw on that data here; other workspaces aren't changed. That's how you keep a project's answers to the sources that belong to it: your sales warehouse on for the analysis workspace, off for the website.
 
 The tray has the same switches: each workspace's submenu ends with **Connectors**, every connection it reaches ticked while it's on there, so you can put a data source in or out of scope without opening the app.
 
@@ -93,4 +93,4 @@ A kind lists the ones it has, and its backend must be able to: the **toolbox** b
 
 ## MCP servers
 
-**Settings › Connectors** also holds your global [MCP servers](mcp.md) (with advanced settings): any MCP server's tools, for every workspace. **Studio › Connectors** holds a workspace's own, beside your global ones (each can be switched off there) and the project's ([one workspace's servers](mcp.md#one-workspaces-servers)).
+**Settings › Resources › Connectors** also holds your global [MCP servers](mcp.md) (with advanced settings): any MCP server's tools, for every workspace. **Studio › Resources › Connectors** holds a workspace's own, beside your global ones (each can be switched off there) and the project's ([one workspace's servers](mcp.md#one-workspaces-servers)).

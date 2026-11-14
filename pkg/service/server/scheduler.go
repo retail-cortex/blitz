@@ -177,7 +177,7 @@ func (sc *scheduler) rescan(ctx context.Context) {
 	for _, dir := range sc.cfg.Store.Workspaces() {
 		// A folder that's gone (moved, deleted, an unplugged drive) is said
 		// once, not every rescan; its workers run again if it comes back,
-		// and Settings › Workers can forget them (WK-62).
+		// and Settings › Resources › Jobs can forget them (WK-62).
 		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
 			sc.mu.Lock()
 			said := sc.missing[dir]

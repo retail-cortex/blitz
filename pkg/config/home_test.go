@@ -27,6 +27,7 @@ func TestHomeWorkspace(t *testing.T) {
 	prefix := t.TempDir()
 	assert.Equal(t, filepath.Join(prefix, "home"), HomeWorkspace(prefix))
 	assert.Equal(t, filepath.Join(prefix, "workers"), UserWorkersDir(prefix))
+	assert.Equal(t, filepath.Join(prefix, "evals"), UserEvalsDir(prefix))
 	assert.False(t, IsHomeWorkspace(prefix, HomeWorkspace(prefix)+"-not"))
 
 	home, err := EnsureHomeWorkspace(prefix)

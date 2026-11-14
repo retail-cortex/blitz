@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The worker runs going now (Studio › Workers, a workspace's; Settings ›
+// The worker runs going now (Studio › Resources › Workers, a workspace's; Settings ›
 // Workers, every workspace's), each with Stop (spec_024_desktop DSK-91a).
 
 import { timestampDate } from "@bufbuild/protobuf/wkt";

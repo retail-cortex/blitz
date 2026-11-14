@@ -711,7 +711,7 @@ func apiError(err error, reply *errorReply, org bool) error {
 		return maskedError{prefix + strings.TrimPrefix(err.Error(), adapterPrefix), err}
 	}
 	if org && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
-		return fmt.Errorf("your organization's service refused your sign-in (HTTP %d): sign in again (Settings › Organization, or blitz enterprise login), then retry", status)
+		return fmt.Errorf("your organization's service refused your sign-in (HTTP %d): sign in again (Settings › Providers › Organization, or blitz enterprise login), then retry", status)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return fmt.Errorf("[llm.api] the API rejected the token (HTTP %d). Check the token script, sign in again if needed, then retry", status)

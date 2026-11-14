@@ -36,8 +36,8 @@ const workersPollMs = 5000;
 type Open = { mode: "read" | "edit"; name: string } | { mode: "new"; name: "" };
 
 /**
- * A workspace's workers (Studio › Workers; the global ones, the home
- * workspace's, in Settings › Workers): its runs going now, each with
+ * A workspace's workers (Studio › Resources › Workers; the global ones, the home
+ * workspace's, in Settings › Resources › Jobs): its runs going now, each with
  * Stop, then its workers, filling the pane. A worker's view (what it does
  * and may do, its runs; Run, Enable or Disable, Edit, Delete), its form
  * or a new worker's slides in over the list; back, Cancel or Save return,

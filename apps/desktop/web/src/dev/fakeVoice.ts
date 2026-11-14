@@ -27,7 +27,7 @@ import { geminiVoices } from "../personality/voices";
 /** [voice] as the fake keeps it. */
 export const fakeVoiceSettings = { enabled: false, model: "", voice: "", listen: "tap", summaries: "voice", idle: 5 };
 
-/** Applies one of Settings › Voice's settings, as config.SetValue does; true when key was voice's. */
+/** Applies one of Settings › Personality › Voice's settings, as config.SetValue does; true when key was voice's. */
 export function setFakeVoice(workspace: string, key: string, value: string): boolean {
   if (!key.startsWith("voice.")) return false;
   if (workspace) throw new ConnectError(`${key} is the person's own setting: a workspace can't change it (spec_063_voice VOX-04)`, Code.InvalidArgument);
@@ -74,7 +74,7 @@ export function fakeVoice(personalityVoice: (workspace: string) => string) {
       orgOff: false,
     }),
     async *converse({ workspace, sampleVoice }: { workspace: string; sessionId: string; summaryOnly: boolean; sampleVoice: string }, ctx: { signal: AbortSignal }) {
-      if (!fakeVoiceSettings.enabled) throw refused("VOICE_OFF", "voice is off: turn it on in Settings › Voice");
+      if (!fakeVoiceSettings.enabled) throw refused("VOICE_OFF", "voice is off: turn it on in Settings › Personality › Voice");
       if (!sampleVoice && [...open.values()].some((c) => c.dir === workspace && !c.ended)) throw refused("VOICE_BUSY", "a voice conversation is already open in this workspace");
       const voice = sampleVoice || fakeVoiceSettings.voice || personalityVoice(workspace) || "Kore";
       const c: Conv = {

@@ -636,7 +636,7 @@ const fakeLimits = (w: { maxTurns: number; maxCostUsd: number; timeout: string }
 const fakeGlobal: FakeWorker[] = [
   { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
 ];
-// Other workspaces with workers on record (Settings › Workers): one not
+// Other workspaces with workers on record (Settings › Resources › Jobs): one not
 // in the app's workspaces, one whose folder is gone.
 const fakeElsewhere = [
   { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
@@ -1200,7 +1200,7 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 // The user's secrets' names, by scope ("" global).
 const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
 
-// Settings › Connectors › MCP servers: the global servers, edited in place.
+// Settings › Resources › Connectors › MCP servers: the global servers, edited in place.
 // Each workspace's own MCP servers, and the global ones it turned off.
 const fakeWorkspaceMCP = new Map<string, MCPServerConfig[]>();
 const fakeMCPOff = new Map<string, Set<string>>();
@@ -2240,7 +2240,7 @@ export function installFake() {
           fakeFlows.splice(i, 1);
           return {};
         },
-        // Studio › Evals: two evals, their runs, and a run streamed case by case.
+        // Studio › Resources › Evals: two evals, their runs, and a run streamed case by case.
         listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
         saveEval: ({ workspace, previousName, eval: spec }) => {
           const e = spec!;
@@ -2331,7 +2331,7 @@ export function installFake() {
           if (guardrail?.builtin === "prompt_injection") return /ignore|you are now/i.test(sample) ? { pass: false, reason: "it contains text aimed at the agent" } : { pass: true, reason: "Nothing in it looks aimed at the agent." };
           return /delete|-D|drop/i.test(sample) ? { pass: false, reason: "It deletes a branch." } : { pass: true, reason: "Nothing here is deleted." };
         },
-        // Studio › Connectors.
+        // Studio › Resources › Connectors.
         listConnectors: ({ workspace }) => ({
           categories: [
             {
@@ -2432,7 +2432,7 @@ export function installFake() {
           return {};
         },
         tryRule: async ({ sample }) => (await new Promise((r) => setTimeout(r, 700)), /test/i.test(sample) ? { pass: true, reason: "It names the tests it ran." } : { pass: false, reason: "It doesn't say how the change was tested." }),
-        // Studio › Skills: the workspace's own skills, their files, copies.
+        // Studio › Resources › Skills: the workspace's own skills, their files, copies.
         getSkillFile: ({ workspace, name }) => {
           const x = fakeProjectSkills.find((k) => k.name === name);
           if (x) return { file: fakeSkillFile(workspace, x) };
@@ -2949,7 +2949,7 @@ export function installFake() {
                 path: mcpPath(workspace),
               }
             : { servers: fakeMCP.map((m) => ({ ...m, scope: "global" })), path: mcpPath("") },
-        // Settings › Connectors: the global connections.
+        // Settings › Resources › Connectors: the global connections.
         listGlobalConnectors: () => ({
           categories: [{ ...fakeConnectorCategory, workspaceDir: "", state: "", toolCount: 0 }],
           kinds: fakeConnectorKinds,
@@ -3386,7 +3386,7 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
-          // Settings › Library › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
+          // Settings › Resources › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
           if (key === "workers.policy.allow")
             fakePolicy.allow = value
               ? value

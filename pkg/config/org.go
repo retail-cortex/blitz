@@ -162,7 +162,7 @@ func applyOrg(cfg *Config, prefixDir string) {
 		if errors.Is(err, os.ErrNotExist) {
 			cfg.Org.Problem = "not fetched yet"
 		}
-		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, plugins, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Organization or with blitz enterprise login", path, cfg.Org.Problem))
+		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, plugins, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Providers › Organization or with blitz enterprise login", path, cfg.Org.Problem))
 	}
 	cfg.Org.Policy, cfg.Org.Expires = st.Policy, st.Expires
 	orgLayers.Store(ConfigDir(prefixDir), cfg.Org)

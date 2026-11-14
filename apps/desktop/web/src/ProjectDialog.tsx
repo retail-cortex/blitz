@@ -28,7 +28,7 @@ import { Button, Dialog, useSnackbar } from "@blitz/webui";
  * do that needs trust, what applies without it, and what was ignored,
  * with Trust and Don't trust (spec_031_project_config PRJ-33). Shown when
  * a workspace opens with settings waiting for a decision, from the bar
- * above the conversation, and from Settings › Workspaces.
+ * above the conversation, and from Studio › Settings.
  */
 export function ProjectDialog({ dir, onClose, onDecided }: { dir: string; onClose: () => void; onDecided?: () => void }) {
   const snack = useSnackbar();

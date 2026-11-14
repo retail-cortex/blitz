@@ -17,6 +17,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   mdiBookshelf,
+  mdiBookOpenPageVariantOutline,
+  mdiFlaskOutline,
+  mdiFolderLockOutline,
   mdiBrain,
   mdiCheckCircleOutline,
   mdiXml,
@@ -29,14 +32,11 @@ import {
   mdiProgressClock,
   mdiPuzzleOutline,
   mdiRobotOutline,
-  mdiArrowLeft,
-  mdiFolderOpenOutline,
   mdiShieldCheckOutline,
   mdiInformationOutline,
   mdiLanguageMarkdownOutline,
   mdiMonitor,
   mdiPaletteOutline,
-  mdiPencilOutline,
   mdiPowerPlugOutline,
   mdiConnection,
   mdiWeb,
@@ -56,12 +56,12 @@ import { restart, shouldDownload, updateLine } from "./updates";
 import { config } from "./api";
 import { message } from "./errors";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
-import { configChanged, showLicense } from "./events";
+import { showLicense, showView } from "./events";
 import { useStopGuard } from "./stopGuard";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
-import { displayName, editWorkspace, forgetWorkspace, openWorkspace, type WorkspacePrefs } from "./prefs";
+import { displayName, forgetWorkspace, openWorkspace } from "./prefs";
 import { PermissionSettings } from "./PermissionSettings";
 import { AgentEditor } from "./AgentEditor";
 import { AgentScope } from "./gen/blitz/v1/workspace_pb";
@@ -81,16 +81,16 @@ import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
 import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
-import { homeOf, libraryTabs, sectionShown, shownGroups, type SectionId } from "./simpleMode";
+import { entryOf, sectionShown, shownEntries, shownTabs, tabOf, type EntryId, type SectionId } from "./simpleMode";
+import { EvalsPane } from "./studio/EvalsPane";
+import { useHomeWorkspace } from "./homeWorkspace";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "@blitz/webui";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "@blitz/webui";
 import { Drawer } from "@blitz/webui";
-import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { logoFor, showOrgDocument, useDarkTheme, useOrgBranding } from "./orgBranding";
 import type { Branding } from "./gen/blitz/v1/config_pb";
-import { useWorkspaceSettings } from "./workspaceSettings";
 import { bundledFont } from "./terminal/terminals";
 
 /**
@@ -102,16 +102,17 @@ export type Section = SectionId | "file";
 const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
   organization: mdiDomain,
-  secrets: mdiKeyVariant,
-  appearance: mdiPaletteOutline,
-  agents: mdiBookshelf, // the Library's entry
-  skills: mdiPuzzleOutline,
-  workers: mdiCalendarClock,
-  mcp: mdiPowerPlugOutline,
-  connectors: mdiConnection,
-  browser: mdiWeb,
   personality: mdiEmoticonOutline,
   voice: mdiMicrophoneOutline,
+  appearance: mdiPaletteOutline,
+  agents: mdiRobotOutline,
+  skills: mdiPuzzleOutline,
+  evals: mdiFlaskOutline,
+  workers: mdiCalendarClock,
+  connectors: mdiConnection,
+  mcp: mdiPowerPlugOutline,
+  secrets: mdiKeyVariant,
+  browser: mdiWeb,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -119,13 +120,23 @@ const sectionIcons: Record<SectionId, string> = {
   about: mdiInformationOutline,
 };
 
+/** The side list's entries' icons. */
+const entryIcons: Record<EntryId, string> = {
+  providers: mdiKeyChainVariant,
+  personality: mdiEmoticonOutline,
+  appearance: mdiPaletteOutline,
+  resources: mdiBookshelf,
+  access: mdiFolderLockOutline,
+  system: mdiServerNetwork,
+};
+
 /**
- * The window's settings, opening on a section (initial) and, for
- * Workspaces and the settings file, on a workspace (scope): a workspace's
- * own settings are in Workspaces (its pencil in the Workspaces menu, and
- * the status bar's model, open them there). The title bar holds Show
- * advanced settings and, with them, the settings file (</>): Settings turns
- * over to show it, as a page's source, and back.
+ * The window's settings, every workspace's (a workspace's own are in its
+ * Studio › Settings), opening on a section (initial) and, for the
+ * settings file, on a workspace (scope). Six entries at the left, each
+ * holding its sections as tabs (settingsEntries). The title bar holds
+ * Show advanced settings and, with them, the settings file (</>):
+ * Settings turns over to show it, as a page's source, and back.
  */
 export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "", connect }: { onClose: () => void; initial?: Section; scope?: string; connect?: string }) {
   const advanced = useAdvanced();
@@ -140,13 +151,16 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
       setDirty(false);
       setSection(id);
     });
-  const [scope, setScope] = useState(initialScope);
+  const [scope] = useState(initialScope);
+  // The global agent Evals opens for (from its form).
+  const [evalsFor, setEvalsFor] = useState("");
   const flip = useFlip(initial === "file");
-  // Simple mode shows what a newcomer needs (settingsSections), in their
-  // groups; a section hidden when advanced is turned off falls back to the
-  // first.
-  const groups = shownGroups(advanced);
+  // Simple mode shows what a newcomer needs (shownTabs); a section hidden
+  // when advanced is turned off falls back to the first.
+  const entries = shownEntries(advanced);
   const section = sectionShown(asked, advanced);
+  const entry = entryOf(section);
+  const tabs = shownTabs(entry, advanced);
   // Personalities show their voices when voice is on (spec_064 PER-30).
   const voiceOn = useVoiceSetup(prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "").enabled;
   const showFile = flip.face === "file" && advanced;
@@ -171,53 +185,50 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
       <div className={`settings-flip ${flip.turning}`} onAnimationEnd={flip.turned}>
         <div className="settings" hidden={showFile}>
           <div className="settings-nav list" role="tablist">
-            {groups.flatMap((g) => [
-              // Headings with advanced settings, when there are enough sections to need them.
-              ...(advanced ? [<span key={`group-${g.id}`} role="presentation" className="settings-nav-group">{t(`desktop.settings.group.${g.id}`)}</span>] : []),
-              ...g.sections.map((id) => (
+            {entries.map((id) => (
               <button
                 key={id}
                 role="tab"
-                aria-selected={id === homeOf(section)}
-                data-autofocus={id === homeOf(section) && !showFile ? "" : undefined}
-                className={`list-item ${id === homeOf(section) ? "active" : ""}`}
-                title={t(entryLabel(id))}
-                onClick={() => (id === homeOf(section) ? undefined : pick(id))}
+                aria-selected={id === entry}
+                data-autofocus={id === entry && !showFile ? "" : undefined}
+                className={`list-item ${id === entry ? "active" : ""}`}
+                title={t(`desktop.settings.entry.${id}`)}
+                onClick={() => (id === entry ? undefined : pick(shownTabs(id, advanced)[0]))}
               >
-                <Icon path={sectionIcons[id]} />
-                <span className="settings-nav-label">{t(entryLabel(id))}</span>
+                <Icon path={entryIcons[id]} />
+                <span className="settings-nav-label">{t(`desktop.settings.entry.${id}`)}</span>
               </button>
-            )),
-            ])}
+            ))}
           </div>
           <div className="settings-pane">
-            {homeOf(section) === "agents" && (
-              <Tabs label={t("desktop.settings.library")} value={section} tabs={libraryTabs.map((id) => ({ value: id, label: t(`desktop.settings.${id}`), icon: libraryIcons[id] }))} onChange={(id) => pick(id)} />
+            {/* The entry's tabs, when it shows more than one. */}
+            {tabs.length > 1 && (
+              <Tabs label={t(`desktop.settings.entry.${entry}`)} value={tabOf(section)} tabs={tabs.map((id) => ({ value: id, label: t(`desktop.settings.${id}`), icon: sectionIcons[id] }))} onChange={(id) => pick(id)} />
             )}
             {section === "providers" && <ProviderSettings workspace="" />}
             {section === "organization" && <OrganizationSettings />}
             {section === "secrets" && <SecretsEditor />}
             {section === "appearance" && <Appearance />}
-            {section === "agents" && <UserAgents />}
+            {section === "agents" && (
+              <UserAgents
+                onEvals={(agent) => {
+                  setEvalsFor(agent);
+                  pick("evals");
+                }}
+              />
+            )}
+            {section === "evals" && <GlobalEvals onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
             {section === "skills" && <SkillSettings />}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "browser" && <BrowserSettings />}
             {section === "personality" && <PersonalitySettings voiceOn={voiceOn} />}
             {section === "voice" && <VoiceSettings />}
-            {homeOf(section) === "connectors" && (
+            {tabOf(section) === "connectors" && (
               <div className="slide-box">
                 <ConnectorsPane onDirty={setDirty} connect={connect} extra={advanced && <McpSettings embedded />} />
               </div>
             )}
-            {section === "workspaces" && (
-              <Workspaces
-                initial={initial === "workspaces" ? initialScope : ""}
-                onSettingsFile={(dir) => {
-                  setScope(dir);
-                  flip.turn("file");
-                }}
-              />
-            )}
+            {section === "workspaces" && <Workspaces onLeave={onClose} />}
             {section === "permissions" && <PermissionSettings workspace="" />}
             {section === "service" && <Service />}
             {section === "logs" && <LogViewer />}
@@ -231,16 +242,10 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
           </div>
         )}
       </div>
-      {discard(t(entryLabel(homeOf(section))))}
+      {discard(t(`desktop.settings.entry.${entry}`))}
     </Drawer>
   );
 }
-
-/** The Library's tabs' icons. */
-const libraryIcons: Record<(typeof libraryTabs)[number], string> = { agents: mdiRobotOutline, skills: mdiPuzzleOutline, workers: mdiCalendarClock, secrets: mdiKeyVariant };
-
-/** A side list entry's name: its section's, but the Library's for agents (its first tab). */
-const entryLabel = (id: SectionId) => (id === "agents" ? "desktop.settings.library" : `desktop.settings.${id}`);
 
 /**
  * Settings' two sides: the sections and the settings file. Turning goes
@@ -274,11 +279,25 @@ function useFlip(file: boolean) {
 }
 
 // The user's agents (~/.blitz/agents), offered the tools and models of
-// the workspace shown, if one is.
-function UserAgents() {
+// the workspace shown, if one is; an agent's Evals opens the global evals.
+function UserAgents({ onEvals }: { onEvals: (agent: string) => void }) {
   const { prefs } = useApp();
+  const home = useHomeWorkspace();
   const active = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
-  return <AgentEditor workspace="" scope={AgentScope.USER} context={active} />;
+  return <AgentEditor workspace="" scope={AgentScope.USER} context={active} onEvals={onEvals} evalsIn={home.dir} />;
+}
+
+// The global evals (~/.blitz/evals, spec_042_evals EV-40): the global
+// agents' and skills', run in the home workspace as the global jobs are.
+function GlobalEvals({ onDirty, forAgent, onHandled }: { onDirty: (dirty: boolean) => void; forAgent: string; onHandled: () => void }) {
+  const home = useHomeWorkspace();
+  if (home.error) return <p className="error-text">{home.error}</p>;
+  if (!home.dir) return null;
+  return (
+    <div className="slide-box">
+      <EvalsPane workspace={home.dir} global onDirty={onDirty} forAgent={forAgent} onHandled={onHandled} />
+    </div>
+  );
 }
 
 function Setting({ title, detail, children }: { title: string; detail?: string; children: React.ReactNode }) {
@@ -495,89 +514,43 @@ function FileSection({ scope }: { scope: string }) {
   return <SettingsFile scopes={prefs.workspaces.map((w) => ({ dir: w.dir, name: displayName(w) }))} initial={scope} />;
 }
 
-// The workspaces the window knows. The pencil opens one's settings here
-// (the Workspaces menu's and the status bar's open them on one): for an
-// open workspace every setting; for a closed one how it's shown, and Open.
-function Workspaces({ initial, onSettingsFile }: { initial: string; onSettingsFile: (dir: string) => void }) {
+// The workspaces the window knows. An open one's settings are in its
+// Studio › Settings (Open in Studio); a closed one can be opened, or
+// forgotten.
+function Workspaces({ onLeave }: { onLeave: () => void }) {
   const { prefs, update, theme } = useApp();
-  const [editing, setEditing] = useState<string | null>(initial || null);
-  const ws = prefs.workspaces.find((w) => w.dir === editing);
-  if (ws) return <WorkspaceEdit ws={ws} onBack={() => setEditing(null)} onSettingsFile={onSettingsFile} />;
   if (prefs.workspaces.length === 0) return <p className="muted">{t("desktop.settings.no_workspaces")}</p>;
+  const studio = (dir: string) => {
+    update((p) => openWorkspace(p, dir));
+    showView({ dir, view: "studio", studio: "settings" });
+    onLeave();
+  };
   return (
-    <div className="list">
-      {prefs.workspaces.map((w) => (
-        <div key={w.dir} className="list-item static-item">
-          <span className="avatar" style={{ background: workspaceColor(w.color, theme) }}>
-            {displayName(w).slice(0, 1).toUpperCase()}
-          </span>
-          <span className="lines">
-            <span className="ellipsis">{displayName(w)}</span>
-            <small className="ellipsis mono">{w.dir}</small>
-          </span>
-          <span className="trailing">
-            {w.open ? (
-              <Chip className="static">{t("desktop.settings.open")}</Chip>
-            ) : (
-              <Button small onClick={() => update((p) => forgetWorkspace(p, w.dir))}>
-                {t("desktop.forget")}
+    <div className="stack" style={{ gap: 12 }}>
+      <p className="t-body-sm muted">{t("desktop.settings.workspaces_intro")}</p>
+      <div className="list">
+        {prefs.workspaces.map((w) => (
+          <div key={w.dir} className="list-item static-item">
+            <span className="avatar" style={{ background: workspaceColor(w.color, theme) }}>
+              {displayName(w).slice(0, 1).toUpperCase()}
+            </span>
+            <span className="lines">
+              <span className="ellipsis">{displayName(w)}</span>
+              <small className="ellipsis mono">{w.dir}</small>
+            </span>
+            <span className="trailing">
+              {!w.open && (
+                <Button small onClick={() => update((p) => forgetWorkspace(p, w.dir))}>
+                  {t("desktop.forget")}
+                </Button>
+              )}
+              <Button small variant="tonal" icon={mdiBookOpenPageVariantOutline} onClick={() => studio(w.dir)}>
+                {t("desktop.settings.open_in_studio")}
               </Button>
-            )}
-            <IconButton icon={mdiPencilOutline} label={t("desktop.menu.workspaces.edit", { name: displayName(w) })} small onClick={() => setEditing(w.dir)} />
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function WorkspaceEdit({ ws, onBack, onSettingsFile }: { ws: WorkspacePrefs; onBack: () => void; onSettingsFile: (dir: string) => void }) {
-  const { update, theme } = useApp();
-  return (
-    <div className="stack ws-edit" style={{ gap: 12 }}>
-      <div className="row" style={{ gap: 12 }}>
-        <IconButton icon={mdiArrowLeft} label={t("desktop.settings.back_to_workspaces")} onClick={onBack} />
-        <span className="avatar" style={{ background: workspaceColor(ws.color, theme) }}>
-          {displayName(ws).slice(0, 1).toUpperCase()}
-        </span>
-        <span className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
-          <span className="t-title ellipsis">{displayName(ws)}</span>
-          <small className="ellipsis mono muted">{ws.dir}</small>
-        </span>
-      </div>
-      {ws.open ? (
-        <OpenWorkspaceSettings dir={ws.dir} onSettingsFile={() => onSettingsFile(ws.dir)} />
-      ) : (
-        <div className="stack" style={{ gap: 16 }}>
-          <LookFields ws={ws} onSave={(look) => update((p) => editWorkspace(p, ws.dir, look))} />
-          <div className="card row" style={{ gap: 12 }}>
-            <span className="spacer t-body-sm">{t("desktop.settings.closed_workspace")}</span>
-            <Button small variant="tonal" icon={mdiFolderOpenOutline} onClick={() => update((p) => openWorkspace(p, ws.dir))}>
-              {t("desktop.settings.open_workspace")}
-            </Button>
+            </span>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// An open workspace's settings; what changes here is told to the window
-// (configChanged), so the status bar and the chat see it.
-function OpenWorkspaceSettings({ dir, onSettingsFile }: { dir: string; onSettingsFile: () => void }) {
-  const { settings, settingsError, refreshSettings } = useWorkspaceSettings(dir);
-  return (
-    <div className="ws-settings-embedded">
-      <WorkspaceSettingsForm
-        dir={dir}
-        settings={settings}
-        error={settingsError}
-        onChanged={() => {
-          void refreshSettings();
-          configChanged({ dir });
-        }}
-        onSettingsFile={onSettingsFile}
-      />
+        ))}
+      </div>
     </div>
   );
 }

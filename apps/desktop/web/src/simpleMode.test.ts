@@ -15,12 +15,18 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allSections, homeOf, libraryTabs, menuIds, sectionGroups, sectionShown, settingsSections, showsSignIn, shownGroups } from "./simpleMode";
+import { allSections, entryOf, menuIds, resourceTabs, sectionShown, settingsEntries, showsSignIn, shownEntries, shownTabs, studioResourceTabs, tabOf } from "./simpleMode";
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
-    expect(settingsSections(false)).toEqual(["providers", "personality", "appearance", "voice", "connectors", "workspaces", "organization", "about"]);
-    expect(settingsSections(true)).toEqual(["providers", "personality", "appearance", "agents", "voice", "connectors", "browser", "workspaces", "permissions", "service", "organization", "logs", "about"]);
+    expect(shownEntries(false)).toEqual(["providers", "personality", "appearance", "resources", "access", "system"]);
+    expect(shownEntries(true)).toEqual(["providers", "personality", "appearance", "resources", "access", "system"]);
+    expect(shownTabs("resources", false)).toEqual(["connectors"]);
+    expect(shownTabs("resources", true)).toEqual(["agents", "skills", "evals", "workers", "connectors", "secrets", "browser"]);
+    expect(shownTabs("access", false)).toEqual(["workspaces"]);
+    expect(shownTabs("system", false)).toEqual(["about"]);
+    expect(shownTabs("system", true)).toEqual(["service", "logs", "about"]);
+    expect(shownTabs("providers", false)).toEqual(["providers", "organization"]);
   });
 
   it.each([
@@ -33,6 +39,9 @@ describe("simple mode", () => {
     { asked: "workers" as const, advanced: true, want: "workers" },
     { asked: "mcp" as const, advanced: true, want: "mcp" },
     { asked: "mcp" as const, advanced: false, want: "connectors" },
+    { asked: "evals" as const, advanced: true, want: "evals" },
+    { asked: "evals" as const, advanced: false, want: "providers" },
+    { asked: "voice" as const, advanced: false, want: "voice" },
   ])("opens $asked as $want (advanced: $advanced)", ({ asked, advanced, want }) => {
     expect(sectionShown(asked, advanced)).toBe(want);
   });
@@ -51,22 +60,21 @@ describe("simple mode", () => {
   ])("shows sign-in for $method: $want (advanced: $advanced)", ({ advanced, method, want }) => {
     expect(showsSignIn(advanced, method)).toBe(want);
   });
-  it("shows every section once: an entry of its own, or inside one", () => {
-    const entries = sectionGroups.flatMap((g) => g.sections);
-    expect(new Set(entries).size).toBe(entries.length);
-    expect(allSections.filter((s) => homeOf(s) === s)).toEqual(allSections.filter((s) => entries.includes(s)));
-    for (const s of allSections) expect(entries).toContain(homeOf(s));
-    expect(libraryTabs.map(homeOf)).toEqual(["agents", "agents", "agents", "agents"]);
-    expect(homeOf("mcp")).toBe("connectors");
+  it("shows every section once, as a tab of one entry (MCP servers inside Connectors')", () => {
+    const tabs = settingsEntries.flatMap((e) => [...e.tabs]);
+    expect(new Set(tabs).size).toBe(tabs.length);
+    expect([...tabs, "mcp"].sort()).toEqual([...allSections].sort());
+    expect(tabOf("mcp")).toBe("connectors");
+    expect(entryOf("mcp")).toBe("resources");
+    expect(resourceTabs.map(entryOf)).toEqual(resourceTabs.map(() => "resources"));
+    expect(entryOf("organization")).toBe("providers");
+    expect(entryOf("voice")).toBe("personality");
+    expect(entryOf("permissions")).toBe("access");
+    expect(entryOf("logs")).toBe("system");
   });
 
-  it("shows only the groups with a section shown", () => {
-    expect(shownGroups(false).map((g) => [g.id, g.sections])).toEqual([
-      ["start", ["providers", "personality", "appearance"]],
-      ["setup", ["voice", "connectors"]],
-      ["access", ["workspaces"]],
-      ["system", ["organization", "about"]],
-    ]);
-    expect(shownGroups(true).map((g) => g.id)).toEqual(["start", "setup", "access", "system"]);
+  it("gives Studio's Resources Settings' tabs: all of them with advanced, the connectors without", () => {
+    expect(studioResourceTabs(true)).toEqual([...resourceTabs]);
+    expect(studioResourceTabs(false)).toEqual(["connectors"]);
   });
 });

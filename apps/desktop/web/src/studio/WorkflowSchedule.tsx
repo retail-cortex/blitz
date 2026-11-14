@@ -47,7 +47,7 @@ type Draft = { name: string; schedule: string; input: string };
  * and removed here. What its steps do it may do without asking: the
  * service works that out from the workflow as each run starts
  * (permissions, from WorkflowFile.schedulePermissions, only says so).
- * What else a worker may do and its limits are in Studio › Workers.
+ * What else a worker may do and its limits are in Studio › Resources › Workers.
  */
 export function WorkflowSchedule({ workspace, workflow, disabled, permissions = [], needsInput = false }: { workspace: string; workflow: string; disabled: boolean; permissions?: string[]; needsInput?: boolean }) {
   const snack = useSnackbar();

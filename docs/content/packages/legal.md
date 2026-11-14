@@ -7,7 +7,7 @@ The license texts every program shows. Source: [`pkg/legal`](https://github.com/
 
 `pkg/legal` embeds the repository's `LICENSE` (Apache 2.0), `NOTICE` (Blitz's copyright and Code Puppy's MIT notice) and `THIRD_PARTY_NOTICES` (the licenses of the software the programs include). Bazel copies them in when the package is built, so they can't drift from the repository's.
 
-The CLI shows them with `blitz license` and `/license`, the service with `blitzd --license`, and the desktop app in **Settings › About**.
+The CLI shows them with `blitz license` and `/license`, the service with `blitzd --license`, and the desktop app in **Settings › System › About**.
 
 ## API
 

@@ -3,15 +3,17 @@ title: Configure the desktop app
 weight: 10
 ---
 
-Everything the desktop app can change is in **Settings**: the gear at the top right, or ⌘, (Ctrl+, on Windows and Linux). On macOS it's also **Blitz › Settings…** in the menu bar.
+What every workspace shares is in **Settings**: the gear at the top right, or ⌘, (Ctrl+, on Windows and Linux). On macOS it's also **Blitz › Settings…** in the menu bar. What belongs to one workspace (its own settings, agents, skills, jobs, connectors and secrets) is in that workspace's [Studio](studio/_index.md).
+
+Settings has six entries at its left, each holding its panes as tabs: **Providers** (Providers & keys, Organization), **Personality** (Personality, Voice), **Appearance**, **Resources** (Agents, Skills, Evals, Jobs, Connectors, Secrets, Browsers), **Access** (Workspaces, Permissions) and **System** (Service, Logs, About).
 
 Start with **Providers & keys**: until a provider has a key or a sign-in, no chat, job or eval can run, and the welcome page says so with **Set up a provider**. The rest has sensible defaults you can come back to.
 
 ## Show advanced
 
-Settings opens with the few panes most people need: **Providers & keys**, **Appearance**, **Connectors**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (the **Library** of your own agents, skills, jobs and secrets, MCP servers under Connectors, the browser, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
+Settings opens with the few panes most people need: **Providers & keys**, **Organization**, **Personality**, **Voice**, **Appearance**, **Connectors**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (your own agents, skills, evals, jobs and secrets, MCP servers under Connectors, browsers, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
 
-![Settings with Show advanced on: Getting started, Global setup (Library, Connectors, Browser), Workspaces and access, and System; Gemini signing in with Google Cloud](../../../images/desktop/settings-providers-signin.png)
+![Settings with Show advanced on: Providers, Personality, Appearance, Resources, Access and System, open on Resources › Agents](../../../images/desktop/settings-resources.png)
 
 ## Providers & keys
 
@@ -35,9 +37,9 @@ Bedrock, Azure and Claude on Vertex AI aren't in the form yet: set them in the s
 
 ## A workspace's own settings
 
-Each workspace can have its own provider, key, model, permissions and more, kept in `~/.blitz` and never in the folder itself. Open them from **Workspaces** in the menu bar (the gear beside the workspace's name), or from **Settings › Workspaces**.
+Each workspace can have its own provider, key, model, permissions and more, kept in `~/.blitz` and never in the folder itself. They're in the workspace's **Studio › Settings**: open them from **Workspaces** in the menu bar (the pencil beside the workspace's name), the status bar's agent menu, **Settings › Access › Workspaces** (**Open in Studio**), or the Studio menu.
 
-![recipes' own settings: Workspace, Agent and model, Behaviour, then the advanced ones](../../../images/desktop/settings-workspace.png)
+![recipes' Studio › Settings: Workspace, Agent and model, Behaviour, then the advanced ones](../../../images/desktop/settings-workspace.png)
 
 - **Agent and model**: the agent the workspace starts with, and its model.
 - **Behaviour**: the permission mode (such as **Auto**) and the agency level, how much the agent takes on by itself. [Safety](../../guide/safety.md#permission-modes) describes the modes; [Agents](../../guide/agents.md) the agency levels.
@@ -58,37 +60,40 @@ How the window looks and behaves, for every workspace.
 - **Chat input** pinned to the bottom or with the conversation, **Density**, **Transparency** (glass surfaces), **Conversation width** and **Document width**.
 - With **Show advanced** on: **Show thinking**, and **Continue after background tasks**.
 
-## Global setup
+## Resources
 
-These panes hold what every workspace shares; **Library** and **Browser** show with **Show advanced** on. A workspace's own agents, skills, jobs, connectors and secrets are in [Studio](studio/_index.md), which never changes the global ones.
+What every workspace shares: the same tabs as a workspace's **Studio › Resources**, which holds that workspace's own and never changes these. **Connectors** shows without **Show advanced**; the rest with it.
 
-| Pane | What it holds |
+| Tab | What it holds |
 |---|---|
-| **Library › Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one. [Agents](../../guide/agents.md) |
-| **Library › Skills** | Skill registries (such as your organization's Castor registry) to install skills from, and the built-in skills. [Skills](../../guide/skills.md) |
-| **Library › Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
-| **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. **+** starts with the kind, takes a pasted connection URL, and tests before it saves (shown without advanced settings too; `/connect` and **Connect a database…** in the chat box's database menu open it). With **Show advanced** on, also your **MCP servers**: servers that give the agent more tools, each switched on or off, **+** for a new one. [Connectors](studio/connectors.md), [MCP servers](../../guide/mcp.md) |
-| **Browser** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in that workspace's settings (**Browser profile**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
-| **Library › Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
+| **Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one; an agent's **Evals** opens its evals. [Agents](../../guide/agents.md) |
+| **Skills** | Skill registries (such as your organization's Castor registry) to install skills from, and the built-in skills. [Skills](../../guide/skills.md) |
+| **Evals** | Evals for your own agents and skills, in `~/.blitz/evals`. They run in a folder of their own, `~/.blitz/home`, as the global jobs do, so they never touch a project's files. [Evals](../../guide/evals.md) |
+| **Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
+| **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. **+** starts with the kind, takes a pasted connection URL, and tests before it saves (`/connect` and **Connect a database…** in the chat box's database menu open it). With **Show advanced** on, also your **MCP servers**: servers that give the agent more tools, and the resources they offer, each switched on or off, **+** for a new one. [Connectors](studio/connectors.md), [MCP servers](../../guide/mcp.md) |
+| **Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
+| **Browsers** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in its **Studio › Resources › Browsers** (**Use here**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
 
-![Settings › Library › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
+![Settings › Resources › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
 
-![Settings › Connectors › MCP servers: three servers, two on](../../../images/desktop/settings-mcp.png)
+![Settings › Resources › Connectors › MCP servers: three servers, two on](../../../images/desktop/settings-mcp.png)
 
-## Workspaces and access
+## Access
 
-- **Workspaces** lists the workspaces you've opened. Choose one for its own settings (above).
+- **Workspaces** lists the workspaces you've opened. **Open in Studio** shows one with its Studio open on its own settings (above); a closed one can be **Forget**-ten.
 - **Permissions** holds the rules for every workspace: **allow** runs matching actions without asking, **ask** always asks, **deny** never runs them; deny wins over ask, and ask over allow. **Try it on** checks a command or path against them. **Allow common read-only commands** lets `ls`, `cat`, `grep`, `git status` and the like run without asking. [Safety](../../guide/safety.md) has the rules' syntax.
 
-![Settings › Permissions: a deny rule, an allow rule and Try it on](../../../images/desktop/settings-permissions.png)
+![Settings › Access › Permissions: a deny rule, an allow rule and Try it on](../../../images/desktop/settings-permissions.png)
 
 ## System
+
+Your organization's sign-in is under **Providers › Organization**, and **Voice** under **Personality**.
 
 - **Service**: the Blitz service holds your workspaces and runs jobs, also while the window is closed. **Restart** or **Stop** it, start it at login, and **Show in the system tray**. [The service](../service.md) explains what it does.
 - **Logs**: the service's log by day, filtered by level (**All**, **Info**, **Warnings**, **Errors**) and text. The first place to look when something fails.
 - **About**: the version, the license and the third-party notices.
 
-![Settings › Service: running, starts at login, and the tray](../../../images/desktop/settings-service.png)
+![Settings › System › Service: running, starts at login, and the tray](../../../images/desktop/settings-service.png)
 
 ## The settings file
 

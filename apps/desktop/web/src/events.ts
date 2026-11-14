@@ -135,7 +135,7 @@ export interface ViewDetail {
   /** Studio › Workflows: the workflow to open, and the run to show on it. */
   workflow?: string;
   run?: string;
-  /** Studio › Jobs: the job whose details to open. */
+  /** Studio › Resources › Jobs: the job whose details to open. */
   worker?: string;
   /** Processes: the one (by its number in its workspace) whose output to show, and its workspace (else this one). */
   process?: number;
@@ -297,7 +297,7 @@ export function filesTouched(detail: { dir: string }) {
   window.dispatchEvent(new CustomEvent(filesTouchedEvent, { detail }));
 }
 
-// Show the license dialog (Settings › About, or /license), on one of its texts.
+// Show the license dialog (Settings › System › About, or /license), on one of its texts.
 export const showLicenseEvent = "blitz:show-license";
 /** Opens the Licenses dialog on one of its texts. */
 export function showLicense(detail: { which: "notice" | "full" | "third-party" }) {

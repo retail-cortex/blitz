@@ -27,7 +27,7 @@ import { micPermission, microphones, openMic, Player, type Mic } from "./audio";
 import { voiceErrorText } from "./useVoice";
 
 /**
- * Settings › Voice (spec_063_voice VOX-40, VOX-41): the switch, and with
+ * Settings › Personality › Voice (spec_063_voice VOX-40, VOX-41): the switch, and with
  * voice on, the model, the voice with a sample, the microphone with its
  * level, how it listens, when work is summarised aloud and how long a
  * quiet conversation lasts. Every setting is [voice]'s, the person's

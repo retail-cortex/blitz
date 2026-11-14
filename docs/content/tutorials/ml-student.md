@@ -178,7 +178,7 @@ An audio overview is two hosts talking a topic through: a script the model write
 
 First, **set a speech model**:
 
-- **Desktop:** **Settings › Workspaces**, this workspace's settings, **Agent and model › Speech model**: `gemini/gemini-2.5-flash-preview-tts` (with a Gemini key), or `openai/gpt-4o-mini-tts`.
+- **Desktop:** **Studio › Settings**, this workspace's settings, **Agent and model › Speech model**: `gemini/gemini-2.5-flash-preview-tts` (with a Gemini key), or `openai/gpt-4o-mini-tts`.
 - **Settings file:**
 
   ```toml
@@ -237,7 +237,7 @@ The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A job is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Jobs](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Jobs › New job** in the desktop app):
+A job is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Jobs](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Resources › Jobs › New job** in the desktop app):
 
 ```markdown
 ---

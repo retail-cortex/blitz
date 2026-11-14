@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Settings › Organization (spec_053_enterprise EN-10 to EN-13): the
+// Settings › Providers › Organization (spec_053_enterprise EN-10 to EN-13): the
 // organization's Blitz service this computer connects to, and the
 // sign-in to it, kept by the service (ConfigService.GetEnterprise,
 // ConnectEnterprise, EnterpriseSignIn, EnterpriseSignOut). The sign-in

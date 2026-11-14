@@ -66,7 +66,7 @@ func NewProvider() (*Provider, error) {
 }
 
 // Builtins are the skills Blitz ships with, by name: what every workspace
-// has before it finds any of its own (Settings › Skills lists them).
+// has before it finds any of its own (Settings › Resources › Skills lists them).
 func Builtins() ([]*Skill, error) {
 	p, err := NewProvider()
 	if err != nil {

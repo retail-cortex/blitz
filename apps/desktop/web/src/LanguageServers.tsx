@@ -16,7 +16,7 @@
 
 
 // A workspace's language servers (spec_037_visual_editor VE-45): each
-// language's server, how it is, and Restart; in Settings › Workspaces.
+// language's server, how it is, and Restart; in Studio › Settings.
 import { useCallback, useEffect, useState } from "react";
 import { mdiRestart } from "@mdi/js";
 import { language as languageApi } from "./api";

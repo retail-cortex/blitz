@@ -9,15 +9,19 @@ Spec: [evals](../about/specs/spec_042_evals.md).
 
 ## From an agent to its evals
 
-Evals belong with making an agent, so in Studio they come right after **Agents**:
+Evals belong with making an agent, so in Studio's **Resources** they're the tab after **Agents** and **Skills**:
 
 1. **Write the agent** (or let another agent write it).
-2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Evals lists your agents without evals (not Blitz's built-in ones) with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
+2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Resources › Evals lists your agents without evals (not Blitz's built-in ones) with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
 3. **Run them.** A run goes on in the background: leave the eval, or close Studio, and it carries on. Open the eval again to follow it, or **Stop** it.
 4. **Refine.** When the agent misses cases, **Refine its instructions** has the model rewrite them with those cases in hand; you review the change, and it's saved to the agent.
 5. **Run again.** Later, saving the agent (or a skill its evals use) offers to run its evals again.
 
 Evals run when you make or change an agent, never during a conversation: checking each answer as it happens is what [rules and guardrails](extending.md) are for.
+
+## Your own agents' evals
+
+Your own agents and skills, the ones every workspace has, get evals too: **Settings › Resources › Evals**, or **Evals** on one of your agents in **Settings › Resources › Agents**. They're saved in `~/.blitz/evals/` and run in a folder of their own, `~/.blitz/home` (where your global jobs run), so they never touch a project's files, and they can name only your own agents and skills and Blitz's built-in ones. A workspace's evals stay in its `.agents/evals/`.
 
 ## An eval file
 
@@ -50,7 +54,7 @@ Each case runs in a throwaway session, unattended. It can read the workspace, bu
 
 ## Running one
 
-In the desktop app, **Studio › Evals** lists the evals with their last run; ▶ runs one. An eval's **Cases** tab edits its cases (each opens into its editor), **Settings** its agents, skills and scoring, and **Runs** shows the run as each case is scored, with what it has cost so far (each case's agent calls and the judge's scoring), then past runs and their cost: open a result to see the expected answer beside the agent's, and why.
+In the desktop app, **Studio › Resources › Evals** lists the evals with their last run; ▶ runs one. An eval's **Cases** tab edits its cases (each opens into its editor), **Settings** its agents, skills and scoring, and **Runs** shows the run as each case is scored, with what it has cost so far (each case's agent calls and the judge's scoring), then past runs and their cost: open a result to see the expected answer beside the agent's, and why.
 
 From the shell, for CI:
 

@@ -20,59 +20,76 @@
 // The smaller choices (a row, a button) are made where they're drawn,
 // with useAdvanced (state.tsx); the larger ones are here.
 
-/** The Settings dialog's sections, in order. */
-export const allSections = ["providers", "organization", "appearance", "agents", "skills", "workers", "mcp", "connectors", "browser", "personality", "voice", "secrets", "workspaces", "permissions", "service", "logs", "about"] as const;
+/** The Settings dialog's sections, each a tab of an entry (settingsEntries) or, MCP servers, inside one. */
+export const allSections = ["providers", "organization", "personality", "voice", "appearance", "agents", "skills", "evals", "workers", "connectors", "mcp", "secrets", "browser", "workspaces", "permissions", "service", "logs", "about"] as const;
 /** A section of the Settings dialog. */
 export type SectionId = (typeof allSections)[number];
 
 /**
- * The Library's tabs (its entry in the side list is agents'): the global
- * agents, skills, jobs and secrets, each a section of its own to open on.
+ * Resources' tabs, the same in Settings (every workspace's) and Studio
+ * (this workspace's): who does the work, what they know, what proves
+ * them, what runs, what they reach, what they need, and the browsers they
+ * sign in with.
  */
-export const libraryTabs = ["agents", "skills", "workers", "secrets"] as const;
+export const resourceTabs = ["agents", "skills", "evals", "workers", "connectors", "secrets", "browser"] as const;
+/** A tab of Resources. */
+export type ResourceTab = (typeof resourceTabs)[number];
 
 /**
- * Sections shown inside another's entry: the Library's tabs, and MCP
- * servers under Connectors (the systems the agents reach, together).
+ * Settings' side list: six entries, each holding its sections as tabs
+ * (desktop.settings.entry.<id>): the models and who provides them; how
+ * Blitz talks; how the app looks; the Resources every workspace shares;
+ * where Blitz works and what it may do; the system.
  */
-const homes: Partial<Record<SectionId, SectionId>> = { skills: "agents", workers: "agents", secrets: "agents", mcp: "connectors" };
+export const settingsEntries = [
+  { id: "providers", tabs: ["providers", "organization"] },
+  { id: "personality", tabs: ["personality", "voice"] },
+  { id: "appearance", tabs: ["appearance"] },
+  { id: "resources", tabs: resourceTabs },
+  { id: "access", tabs: ["workspaces", "permissions"] },
+  { id: "system", tabs: ["service", "logs", "about"] },
+] as const satisfies readonly { id: string; tabs: readonly SectionId[] }[];
+/** An entry of Settings' side list. */
+export type EntryId = (typeof settingsEntries)[number]["id"];
 
-/** The side list's entry a section is shown under (itself, mostly). */
-export const homeOf = (s: SectionId): SectionId => homes[s] ?? s;
+/** The tab a section shows in: its own, but MCP servers' is Connectors'. */
+export const tabOf = (s: SectionId): SectionId => (s === "mcp" ? "connectors" : s);
 
-/**
- * The side list's entries in groups, each under a heading
- * (desktop.settings.group.<id>): getting started; the global setup;
- * where Blitz works and what it may do; the system. With the sections
- * shown inside them (homeOf), they're allSections.
- */
-export const sectionGroups: readonly { id: string; sections: readonly SectionId[] }[] = [
-  { id: "start", sections: ["providers", "personality", "appearance"] },
-  { id: "setup", sections: ["agents", "voice", "connectors", "browser"] },
-  { id: "access", sections: ["workspaces", "permissions"] },
-  { id: "system", sections: ["service", "organization", "logs", "about"] },
-];
+/** The side list's entry a section is shown under. */
+export function entryOf(s: SectionId): EntryId {
+  const tab = tabOf(s);
+  return settingsEntries.find((e) => (e.tabs as readonly SectionId[]).includes(tab))?.id ?? "providers";
+}
 
 const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "organization", "appearance", "personality", "voice", "connectors", "workspaces", "about"]);
 
-/** The side list's entries shown: everything, or what a newcomer needs. */
-export function settingsSections(advanced: boolean): SectionId[] {
-  return sectionGroups.flatMap((g) => g.sections).filter((s) => advanced || simpleSections.has(s));
+/** An entry's tabs shown: every one, or what a newcomer needs. */
+export function shownTabs(entry: EntryId, advanced: boolean): SectionId[] {
+  const e = settingsEntries.find((x) => x.id === entry);
+  return (e?.tabs ?? []).filter((s) => advanced || simpleSections.has(s));
 }
 
-/** The groups shown, each with its sections shown (none left: the group isn't). */
-export function shownGroups(advanced: boolean): { id: string; sections: SectionId[] }[] {
-  const shown = settingsSections(advanced);
-  return sectionGroups.map((g) => ({ id: g.id, sections: g.sections.filter((s) => shown.includes(s)) })).filter((g) => g.sections.length > 0);
+/** The side list's entries shown: those with a tab shown. */
+export function shownEntries(advanced: boolean): EntryId[] {
+  return settingsEntries.map((e) => e.id).filter((id) => shownTabs(id, advanced).length > 0);
 }
 
 /**
- * The section to open on: the one asked for, unless its entry is hidden
+ * The section to open on: the one asked for, unless its tab is hidden
  * (then the first). MCP servers show with advanced settings only.
  */
 export function sectionShown(asked: SectionId, advanced: boolean): SectionId {
   if (asked === "mcp" && !advanced) return "connectors";
-  return settingsSections(advanced).includes(homeOf(asked)) ? asked : allSections[0];
+  return shownTabs(entryOf(asked), advanced).includes(tabOf(asked)) ? asked : allSections[0];
+}
+
+/**
+ * Studio's Resources tabs shown: every one with advanced settings; a
+ * newcomer, who opens Studio only on its Settings (the Workspaces menu's
+ * pencil, the status bar), sees the connectors, as Settings shows them.
+ */
+export function studioResourceTabs(advanced: boolean): ResourceTab[] {
+  return resourceTabs.filter((s) => advanced || simpleSections.has(s));
 }
 
 /** The top bar's menus, in order. */

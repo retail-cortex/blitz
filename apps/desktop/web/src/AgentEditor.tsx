@@ -43,8 +43,8 @@ type Open = { path: string } | { path: "" } | null;
  * The agents of one scope, the workspace's (.agents/agents) or the user's
  * (~/.blitz/agents), and a form for each of an agent file's settings,
  * its prompt and the model settings it runs with. The user's
- * (Settings › Library › Agents) are listed beside the form; the
- * workspace's are Studio › Agents' list, the form sliding in over it
+ * (Settings › Resources › Agents) are listed beside the form; the
+ * workspace's are Studio › Resources › Agents' list, the form sliding in over it
  * (slide), opened from intent.
  * context is the workspace asked for the tools and models to offer (the
  * user's agents have none of their own; "" offers none, and tools are
@@ -59,6 +59,7 @@ export function AgentEditor({
   slide,
   onDirty,
   onEvals,
+  evalsIn = workspace,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -70,8 +71,10 @@ export function AgentEditor({
   slide?: boolean;
   /** Hears whether the form holds unsaved changes (Studio's drawer asks before closing). */
   onDirty?: (dirty: boolean) => void;
-  /** Opens Studio › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
+  /** Opens Studio › Resources › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
   onEvals?: (agent: string) => void;
+  /** The workspace whose evals cover the agents: this one, or for the global agents the home workspace (EV-40). */
+  evalsIn?: string;
 }) {
   const snack = useSnackbar();
   const [evals, setEvals] = useState<EvalFile[]>([]);
@@ -103,7 +106,7 @@ export function AgentEditor({
     try {
       const res = await workspaces.listAgentFiles({ workspace, scope });
       setFiles(res.files);
-      if (onEvals) workspaces.listEvals({ workspace }).then((r) => setEvals(r.evals), () => {});
+      if (onEvals && evalsIn) workspaces.listEvals({ workspace: evalsIn }).then((r) => setEvals(r.evals), () => {});
       setDir(res.dir);
       setError("");
       // The open file changed on disk: shown again, unless it has unsaved edits.
@@ -120,7 +123,7 @@ export function AgentEditor({
     } catch (e) {
       setError(message(e));
     }
-  }, [workspace, scope]);
+  }, [workspace, scope, evalsIn]);
   // Files added or edited on disk show up: the list is asked for again
   // while the editor is open.
   useEffect(() => {
@@ -166,7 +169,7 @@ export function AgentEditor({
       setProblems([]);
     });
 
-  // The user's agents (Settings › Library › Agents) keep their list
+  // The user's agents (Settings › Resources › Agents) keep their list
   // beside the form; Studio's slide over theirs.
   const listed = slide || (list ?? scope === AgentScope.USER);
   // Back to the list (slide), asking first when there are unsaved edits.

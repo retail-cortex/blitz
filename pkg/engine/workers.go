@@ -62,7 +62,7 @@ func (w *Workspace) workerPolicy() config.WorkerPolicy {
 	return w.cfg.Workers.Policy
 }
 
-// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Workers'
+// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Resources › Jobs'
 // limits) from the next listing or run (WK-63); a run going keeps the
 // limits it started with.
 func (w *Workspace) ReloadWorkerPolicy(cfg *config.Config) {

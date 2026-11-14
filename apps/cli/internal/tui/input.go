@@ -300,7 +300,7 @@ func NewUserPrompter(in Input) api.UserPromptFunc {
 			}); ok {
 				return t.AskSecret(ctx, prompt)
 			}
-			return "", errors.New("a secret can only be typed in a terminal: set it in Studio › Secrets or with blitz config")
+			return "", errors.New("a secret can only be typed in a terminal: set it in Studio › Resources › Secrets or with blitz config")
 		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "\n[%s]: %s\n", i18n.T("question.title"), textutil.SanitizeTerminal(question))

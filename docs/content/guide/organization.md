@@ -37,7 +37,7 @@ url = "https://blitz.acme.com"
 workspaces_dir = "/Users/Shared/Acme"   # optional: where the organization's workspaces are cloned
 ```
 
-Blitz is then connected to that organization from the start, and Settings › Organization and `blitz enterprise status` say it's set by device management: it can't be changed or disconnected there. Each person still signs in as themselves. To try a file before sending it out, name it in `BLITZ_MANAGED_SETTINGS`.
+Blitz is then connected to that organization from the start, and Settings › Providers › Organization and `blitz enterprise status` say it's set by device management: it can't be changed or disconnected there. Each person still signs in as themselves. To try a file before sending it out, name it in `BLITZ_MANAGED_SETTINGS`.
 
 The desktop app, the CLI and the tray share one sign-in: the Blitz service on your computer keeps it. Your sign-in lasts as long as your organization allows (often a working day); Blitz renews it on its own until then, and asks you to sign in again after.
 
@@ -76,7 +76,7 @@ If you're one of your organization's Admins, Studio's **Publish to organization�
 
 ## Job notices
 
-When a job of yours runs on your organization's service, Settings › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to turn them on, `--email=false`, `--webhook ""` and `--every-run=false` to turn them off. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
+When a job of yours runs on your organization's service, Settings › Providers › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to turn them on, `--email=false`, `--webhook ""` and `--every-run=false` to turn them off. The status bar, Studio › Resources › Jobs and the tray show runs waiting for your answer too.
 
 ## Your organization's workspaces
 
@@ -98,7 +98,7 @@ git config --global credential.https://blitz.acme.com.helper "!blitz git-credent
 
 ## Disconnect
 
-Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.
+Settings › Providers › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.
 
 ## When something's wrong
 
@@ -106,7 +106,7 @@ Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: 
 
 | What you see | What to do |
 |---|---|
-| "Sign in to your organization … to use its models" | Sign in: Settings › Organization, or `blitz enterprise login` |
+| "Sign in to your organization … to use its models" | Sign in: Settings › Providers › Organization, or `blitz enterprise login` |
 | "… isn't answering" | Check your network or VPN; **Retry** |
 | "… offers you no models" | Ask your admins for access to a model |
 | "Accept the organization's terms" | Your organization changed its terms: accept them where it asks, or in a terminal with `blitz enterprise terms` |

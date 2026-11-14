@@ -372,7 +372,7 @@ type UsageConfig struct {
 // EnterpriseConfig is the organization's service (spec_053_enterprise).
 type EnterpriseConfig struct {
 	// URL is the service's address, such as https://blitz.acme.com; empty
-	// for none. Set it with Settings › Organization or blitz enterprise
+	// for none. Set it with Settings › Providers › Organization or blitz enterprise
 	// connect.
 	URL string `toml:"url"`
 	// WorkspacesDir is where the organization's workspaces are cloned,

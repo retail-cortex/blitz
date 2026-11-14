@@ -64,10 +64,10 @@ type DialogOpen = "delete" | "promote" | "build" | null;
 /**
  * The connectors the agents reach (spec_047_connectors), by category
  * (Databases, served by MCP Toolbox for Databases inside Blitz). With a
- * workspace it's Studio › Connectors: the workspace's connections, which
+ * workspace it's Studio › Resources › Connectors: the workspace's connections, which
  * it changes and can make global, and the global ones, shown as they are
  * with a switch turning each on or off here (CON-17). Without one it's
- * Settings › Connectors: the global connections, changed there alone
+ * Settings › Resources › Connectors: the global connections, changed there alone
  * (CON-18). A connection's form (ConnectorFields) slides in over the
  * list, with Test and Read the tables as its kind can. A new one is
  * tested as it's saved (Save anyway when it fails) and stays open, for

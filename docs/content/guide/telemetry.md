@@ -7,7 +7,7 @@ Spec: [observability](../about/specs/spec_003_observability.md).
 
 ## Diagnostic log
 
-`~/.blitz/logs/blitz-YYYY-MM-DD.jsonl` (owner-only, secrets masked, kept `log.retain_days`, 14 by default) records warnings, failed turns and errors, with trace IDs when telemetry is on. `log.level` (or `BLITZ_LOG_LEVEL`) is `debug`, `info`, `warn`, `error` or `off`. A background goroutine writes it, so logging never waits on the disk. The desktop app reads it in **Settings › Logs**, where a past day's log can be deleted (today's is still being written).
+`~/.blitz/logs/blitz-YYYY-MM-DD.jsonl` (owner-only, secrets masked, kept `log.retain_days`, 14 by default) records warnings, failed turns and errors, with trace IDs when telemetry is on. `log.level` (or `BLITZ_LOG_LEVEL`) is `debug`, `info`, `warn`, `error` or `off`. A background goroutine writes it, so logging never waits on the disk. The desktop app reads it in **Settings › System › Logs**, where a past day's log can be deleted (today's is still being written).
 
 ### More detail from one part of Blitz
 
@@ -24,7 +24,7 @@ gateway = "debug"         # every call to your custom gateway
 | `gateway` | Each model built for your [custom gateway](providers.md#your-companys-gateway) (its API, base URL, path and header names), each request (the URL, which attempt and why, how long the reply took to start, the status, and the start of an error's reply), and each failed call. |
 | `gateway.token` | Each run of the token script (how long it took, or why it failed) and each token dropped or rejected. |
 
-No token is ever written. The service reads the levels when it starts: set them in `~/.blitz/.env.toml` and restart the service. For one run from a shell, `BLITZ_LOG_LEVELS=gateway=debug blitz --local` does the same. Every line names its part in a `logger` field, so you can pick them out in **Settings › Logs**.
+No token is ever written. The service reads the levels when it starts: set them in `~/.blitz/.env.toml` and restart the service. For one run from a shell, `BLITZ_LOG_LEVELS=gateway=debug blitz --local` does the same. Every line names its part in a `logger` field, so you can pick them out in **Settings › System › Logs**.
 
 The [audit log](safety.md#audit-log) is separate: a record of what the agent did, not of Blitz's own health.
 

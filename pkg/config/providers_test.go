@@ -834,7 +834,7 @@ func TestResolveXorSecret(t *testing.T) {
 	assert.Equal(t, "sk-x", cfg.LLM.OpenAI.APIKey)
 }
 
-// Settings › Voice's settings are checked, read back and the person's
+// Settings › Personality › Voice's settings are checked, read back and the person's
 // alone (spec_063_voice VOX-04); ui.personality takes a personality's name
 // (spec_064_personality PER-20).
 func TestSetVoiceAndPersonality(t *testing.T) {

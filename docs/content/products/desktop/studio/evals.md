@@ -3,13 +3,13 @@ title: Evals
 weight: 30
 ---
 
-**Studio › Evals** checks that your agents still answer as they should. An eval is a set of cases, each a prompt and the answer you expect; a run gives each prompt to the agents you choose, without changing files, and compares their answers with yours. Write evals right after an agent, and run them whenever you change it: a model update or a tidied prompt can quietly break an agent that worked last week.
+**Studio › Resources › Evals** checks that your agents still answer as they should. An eval is a set of cases, each a prompt and the answer you expect; a run gives each prompt to the agents you choose, without changing files, and compares their answers with yours. Write evals right after an agent, and run them whenever you change it: a model update or a tidied prompt can quietly break an agent that worked last week.
 
 ## Open it
 
-Choose **Studio › Evals**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
+Choose **Studio › Resources › Evals**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
 
-![Studio › Evals: the evals with their last run, and the agents that have none](../../../../images/desktop/studio-evals.png)
+![Studio › Resources › Evals: the evals with their last run, and the agents that have none](../../../../images/desktop/studio-evals.png)
 
 Each eval shows its cases, its last run (passed, warnings, cost) and ▶ to run it. **Agents without evals** lists your agents that nothing checks yet, each with **Draft evals**.
 

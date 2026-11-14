@@ -59,7 +59,8 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     openFile: (path, line) => openFile({ dir, path, line: line || undefined }),
     openView: (view) => {
       const [where, section] = view.split(":", 2);
-      if (where === "settings") return openSettings({ section });
+      // Updates are About's (Settings › System › About).
+      if (where === "settings") return openSettings({ section: section === "updates" ? "about" : section });
       if (where === "studio") return showView({ dir, view: "studio", studio: section === "jobs" ? "workers" : section });
       if (view === "changes" || view === "processes" || view === "pictures") return showView({ dir, view });
     },

@@ -560,7 +560,7 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
   }, [note, snack]);
   const setMode = async (value: string) => {
     try {
-      // Kept as the workspace's mode, as Settings › Workspaces keeps it (spec_005 APR-14).
+      // Kept as the workspace's mode, as Studio › Settings keeps it (spec_005 APR-14).
       await keepPermissionMode(dir, value);
       configChanged({ dir });
     } catch (e) {

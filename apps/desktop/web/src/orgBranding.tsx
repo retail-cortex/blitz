@@ -280,7 +280,7 @@ const checkEvery = 2 * 60_000;
 /**
  * Signs in to the organization's service (EN-11): its page opens in the
  * browser (onPage gets its address too), and the state signed in is
- * returned, the window told (configChanged). Settings › Organization and
+ * returned, the window told (configChanged). Settings › Providers › Organization and
  * the banner's Sign in both use it, so the banner signs in at once.
  */
 export async function signInToOrg(signal: AbortSignal, onPage?: (url: string) => void): Promise<EnterpriseState | null> {
