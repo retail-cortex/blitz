@@ -104,7 +104,7 @@ func newRootCommand() *cobra.Command {
 	o := &rootOptions{}
 	root := &cobra.Command{
 		Use:   "blitz [flags] [prompt...]",
-		Short: "Blitz - an autonomous AI agent for your workspace, built on Google ADK",
+		Short: "Blitz - an autonomous AI agent for your workspace",
 		Long: `Blitz is an AI agent for your workspace: code, documents, research and
 data. Run it with no arguments for an interactive session, or pass a
 prompt to run once and exit.
@@ -228,7 +228,7 @@ func newExecCommand(root *rootOptions) *cobra.Command {
 
 func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.version {
-		fmt.Printf("Blitz Go (Google ADK) version %s\n", version)
+		fmt.Printf("Blitz version %s\n", version)
 		return nil
 	}
 	// --resume's value is optional, so "--resume <id>" parses as --resume
