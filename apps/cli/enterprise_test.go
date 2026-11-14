@@ -521,57 +521,18 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 		assert.Contains(t, out, want)
 	}
 
-	// Publishing to the catalog (EN-36).
-	pubWS := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(pubWS, ".agents", "agents"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "writer.md"), []byte("---\nname: writer\ndescription: Writes briefs\n---\nWrite.\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "broken.md"), []byte("no front matter"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "helper.md"), []byte("---\nname: helper\ndescription: Helps\ngroups: [eng]\n---\nHelp.\n"), 0o644))
-	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS)
-	require.NoError(t, err)
-	assert.Contains(t, out, "agent/writer  (default)")
-	assert.Contains(t, out, "agent/broken  (default)\n    ! ")
-	assert.Contains(t, out, "agent/helper  (default, for eng)")
-	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/writer", "--lock", "locked", "--groups", "sales,eng")
-	require.NoError(t, err)
-	assert.Contains(t, out, "✓ In review: Publish agent writer")
-	org.Mu.Lock()
-	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales, eng]")
-	org.Mu.Unlock()
-	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "writer")
-	assert.ErrorContains(t, err, "<kind>/<name>")
-	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/broken")
-	assert.ErrorContains(t, err, "the catalog would refuse it")
-	out, err = runCLI(t, "enterprise", "reviews")
-	require.NoError(t, err)
-	assert.Contains(t, out, "open  by ana@acme.com: Publish agent writer")
-	out, err = runCLI(t, "enterprise", "reviews", "--state", "approved")
-	require.NoError(t, err)
-	assert.Contains(t, out, "No reviews.")
-	org.Mu.Lock()
-	org.Reviews = append(org.Reviews, map[string]any{"id": "rev-9", "title": "Publish rule style", "by_email": "bo@acme.com", "paths": []string{"rules/style.md"},
-		"problems": []string{"rules/style.md: no front matter"}, "state": "approved", "version": 7, "note": "Looks good.", "created": time.Now()})
-	org.Mu.Unlock()
-	out, err = runCLI(t, "enterprise", "reviews")
-	require.NoError(t, err)
-	assert.Contains(t, out, "rev-9  published in version 7  by bo@acme.com: Publish rule style\n    ! rules/style.md: no front matter\n    Looks good.")
-	empty := t.TempDir()
-	out, err = runCLI(t, "enterprise", "publish", "-d", empty)
-	require.NoError(t, err)
-	assert.Contains(t, out, "Nothing to publish")
-
 	org.Close()
-	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"},
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"},
 		{"jobs", "runs", "tidy"}, {"jobs", "run", "tidy"}, {"jobs", "on", "tidy"}, {"jobs", "push", "fresh"}, {"jobs", "take", "fresh"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}
 }
 
-// blitz enterprise catalog (EN-34): the organization's items with their
-// lock and groups, a default one copied into the workspace and then shown
-// as the workspace's own, a locked one refused, and a malformed name.
-func TestEnterpriseCatalogCommand(t *testing.T) {
+// blitz enterprise policy (EN-39; catalog as before): the person's
+// settings with who decided each, then the rules and guardrails it
+// applies to them; never the catalog's agents.
+func TestEnterprisePolicyCommand(t *testing.T) {
 	t.Cleanup(http.DefaultClient.CloseIdleConnections)
 	isolate(t)
 	secrets.SetDefault(&secrets.Memory{})
@@ -579,37 +540,40 @@ func TestEnterpriseCatalogCommand(t *testing.T) {
 	org := enterprisetest.NewService(t, idp.URL)
 	org.Catalog = map[string]enterprisetest.CatalogFile{
 		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
-		"rules/style.md":     {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+		"rules/style.md":     {Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."},
+	}
+	org.Policy = map[string]any{
+		"schema": 2,
+		"policy": map[string]any{"refresh": "1h", "connectors": map[string]any{"own": true}},
+		"explain": map[string]any{
+			"connectors.own": map[string]any{"value": true, "level": "group", "by": []string{"Data"}},
+			"mcp.own":        map[string]any{"value": false, "level": "global", "locked": true},
+			"rules.style":    map[string]any{"value": true, "level": "person", "by": []string{"ana@acme.com"}},
+		},
+		"rules": []map[string]any{{"kind": "rule", "name": "style", "body": "Use Go."}},
 	}
 	ws := t.TempDir()
-	_, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	_, err := runCLI(t, "enterprise", "policy", "-d", ws)
 	assert.Error(t, err, "not connected")
 	_, err = runCLI(t, "enterprise", "connect", org.URL)
 	require.NoError(t, err)
-	out, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	out, err := runCLI(t, "enterprise", "policy", "-d", ws)
 	require.NoError(t, err)
-	assert.Contains(t, out, "nothing for you yet")
+	assert.Contains(t, out, "applies no rules or guardrails to you")
 	_, err = runCLI(t, "enterprise", "login")
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		out, err = runCLI(t, "enterprise", "catalog", "-d", ws)
-		return err == nil && strings.Contains(out, "rule/style")
+		out, err = runCLI(t, "enterprise", "policy", "-d", ws)
+		return err == nil && strings.Contains(out, "rule/style (")
 	}, 5*time.Second, 50*time.Millisecond)
-	assert.Contains(t, out, "agent/reviewer  (locked, for eng)")
-	assert.Contains(t, out, "rule/style  (default)\n")
-
-	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "agent/reviewer")
-	assert.ErrorContains(t, err, "locked")
-	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "style")
-	assert.ErrorContains(t, err, "<kind>/<name>")
-	out, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "rule/style")
-	require.NoError(t, err)
-	assert.Contains(t, out, "✓ Copied to .agents/rules/style.md")
-	assert.FileExists(t, filepath.Join(ws, ".agents", "rules", "style.md"))
+	assert.Contains(t, out, "connectors.own = true  (your group (Data))")
+	assert.Contains(t, out, "mcp.own = false  (your organization, locked)")
+	assert.Contains(t, out, "rule/style (the policy an admin set for you decides it)")
+	assert.NotContains(t, out, "reviewer", "the catalog's agents don't come to Blitz")
 	out, err = runCLI(t, "enterprise", "catalog", "-d", ws, "--kind", "rule")
-	require.NoError(t, err)
-	assert.Contains(t, out, "rule/style  (default)  this workspace has its own")
-	assert.NotContains(t, out, "reviewer")
+	require.NoError(t, err, "catalog, as before")
+	assert.NotContains(t, out, "connectors.own", "the rules alone")
+	assert.Contains(t, out, "rule/style")
 
 	// How one hears of one's jobs' runs (JB-31).
 	out, err = runCLI(t, "enterprise", "notices")

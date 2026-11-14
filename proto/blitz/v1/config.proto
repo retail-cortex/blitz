@@ -296,25 +296,10 @@ service ConfigService {
   rpc GetOrgNotices(GetOrgNoticesRequest) returns (GetOrgNoticesResponse);
   // Keeps how the person hears of their jobs' runs (JB-31).
   rpc SetOrgNotices(SetOrgNoticesRequest) returns (SetOrgNoticesResponse);
-  // The workspace's items that can be published to the organization's
-  // catalog (EN-36): its .agents folder's agents, skills, rules,
-  // guardrails, commands and connectors, each with how it applies now and
-  // what the catalog would refuse.
-  rpc ListPublishable(ListPublishableRequest) returns (ListPublishableResponse);
-  // Publishes items to the organization's catalog as a review another
-  // Admin approves (EN-36; an Admin's; FAILED_PRECONDITION PROBLEMS when
-  // the catalog would refuse one).
-  rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse);
-  // The catalog's reviews, the newest first (an Admin's).
-  rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse);
-  // The organization's catalog items this person gets (EN-34): each with
-  // its lock and groups, and whether the workspace has its own of that
-  // name (which a default gives way to).
+  // The organization's rules and guardrails the person works under
+  // (EN-34, EN-39): the ones their policy switches on, each locked and
+  // with who decided it.
   rpc ListOrgItems(ListOrgItemsRequest) returns (ListOrgItemsResponse);
-  // Copies one of the organization's default items into the workspace's
-  // .agents folder, to change there (EN-34; FAILED_PRECONDITION LOCKED for
-  // a locked one, ALREADY_EXISTS when the workspace has its own).
-  rpc CopyOrgItem(CopyOrgItemRequest) returns (CopyOrgItemResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -1991,81 +1976,9 @@ message GetOrgUsageResponse {
   bool prompt_logs = 5;
 }
 
-// An item in a workspace that can be published to the catalog.
-message PublishableItem {
-  // agent, skill, rule, guardrail, command or connector.
-  string kind = 1;
-  string name = 2;
-  // Its path in the catalog (and in the workspace's .agents folder).
-  string path = 3;
-  // What the catalog would refuse ("" none).
-  repeated string problems = 4;
-  // How it applies now: locked or default, and its groups.
-  string lock = 5;
-  repeated string groups = 6;
-}
-
-// Request message for ConfigService.ListPublishable.
-message ListPublishableRequest {
-  string workspace = 1;
-}
-
-// Response message for ConfigService.ListPublishable.
-message ListPublishableResponse {
-  repeated PublishableItem items = 1;
-}
-
-// An item to publish, and how it's to apply.
-message PublishItem {
-  string kind = 1;
-  string name = 2;
-  // locked or default ("" is default).
-  string lock = 3;
-  // Who it's for; everyone when none.
-  repeated string groups = 4;
-}
-
-// A change to the catalog, waiting for an Admin (its author too) or answered.
-message CatalogReview {
-  string id = 1;
-  string title = 2;
-  string by_email = 3;
-  repeated string paths = 4;
-  repeated string problems = 5;
-  // open, approved or rejected.
-  string state = 6;
-  string note = 7;
-  // The version it went out in, once approved (0 before).
-  int32 version = 8;
-  google.protobuf.Timestamp created = 9;
-}
-
-// Request message for ConfigService.PublishToOrganization.
-message PublishToOrganizationRequest {
-  string workspace = 1;
-  repeated PublishItem items = 2;
-  string title = 3;
-}
-
-// Response message for ConfigService.PublishToOrganization.
-message PublishToOrganizationResponse {
-  CatalogReview review = 1;
-}
-
-// Request message for ConfigService.ListCatalogReviews.
-message ListCatalogReviewsRequest {
-  // open, approved, rejected, or "" for all.
-  string state = 1;
-}
-
-// Response message for ConfigService.ListCatalogReviews.
-message ListCatalogReviewsResponse {
-  repeated CatalogReview reviews = 1;
-}
-
-// One of the organization's catalog items.
+// One of the organization's rules or guardrails.
 message OrgItem {
-  // agent, skill, rule, guardrail, command, mcp or connector.
+  // rule or guardrail.
   string kind = 1;
   string name = 2;
   // Its path in the catalog.
@@ -2075,6 +1988,9 @@ message OrgItem {
   repeated string groups = 5;
   // The workspace has its own of this name (a default gives way to it).
   bool overridden = 6;
+  // Who decided it applies (EN-39): "the policy for Data"; "" from a
+  // service before the policy.
+  string decided_by = 7;
 }
 
 // Request message for ConfigService.ListOrgItems.
@@ -2089,19 +2005,6 @@ message ListOrgItemsResponse {
   repeated OrgItem items = 1;
   // The catalog's version ("" before the first).
   int32 version = 2;
-}
-
-// Request message for ConfigService.CopyOrgItem.
-message CopyOrgItemRequest {
-  string workspace = 1;
-  string kind = 2;
-  string name = 3;
-}
-
-// Response message for ConfigService.CopyOrgItem.
-message CopyOrgItemResponse {
-  // The files written, in the workspace.
-  repeated string paths = 1;
 }
 
 // How the person hears of their jobs' runs on the organization's service.

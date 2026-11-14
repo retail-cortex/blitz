@@ -340,18 +340,6 @@ func orgMCP(own []MCPServerConfig, o OrgLayer) ([]MCPServerConfig, []string) {
 	return out, problems
 }
 
-// around is subfolder sub of the organization's layers, around the
-// person's and the workspace's folders: its defaults first and its
-// locked items last, for lists where a later folder's item wins (agents,
-// skills, commands).
-func (o OrgLayer) around(sub string, dirs []string) []string {
-	if !o.Active() {
-		return dirs
-	}
-	out := append([]string{filepath.Join(o.Defaults, sub)}, dirs...)
-	return append(out, filepath.Join(o.Locked, sub))
-}
-
 // LockedFirst is subfolders of the organization's layers around dirs for
 // lists where an earlier folder's item wins (rules): its locked items
 // first and its defaults last.

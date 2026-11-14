@@ -299,7 +299,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
             </div>
           </section>
         )}
-        <OrgItems workspace={workspace} kind="rule" onCopied={() => void refresh()} />
+        <OrgItems kind="rule" />
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (

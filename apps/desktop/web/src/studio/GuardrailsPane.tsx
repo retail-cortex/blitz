@@ -246,7 +246,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
             ))}
           </div>
         </section>
-        <OrgItems workspace={workspace} kind="guardrail" onCopied={() => void refresh()} />
+        <OrgItems kind="guardrail" />
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open && (

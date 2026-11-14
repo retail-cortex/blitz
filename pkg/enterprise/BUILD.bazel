@@ -24,7 +24,6 @@ go_library(
         "models.go",
         "policy.go",
         "reach.go",
-        "reviews.go",
         "run.go",
         "signin.go",
         "usage.go",

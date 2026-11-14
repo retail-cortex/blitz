@@ -974,21 +974,14 @@ const fakeWorkers: FakeWorker[] = [
   },
 ];
 
-// The catalog's reviews (EN-36).
+// The organization's rules and guardrails the person's policy applies
+// (EN-34, EN-39).
 const fakeOrgItems = [
-  { kind: "agent", name: "brand-voice", path: "agents/brand-voice.md", lock: "locked", groups: [], overridden: false },
-  { kind: "agent", name: "analyst", path: "agents/analyst.md", lock: "default", groups: ["sales"], overridden: false },
-  { kind: "skill", name: "quarterly-report", path: "skills/quarterly-report/SKILL.md", lock: "default", groups: [], overridden: false },
-  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false },
-  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "default", groups: [], overridden: false },
-  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: ["eng", "sales"], overridden: false },
+  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy (locked)" },
+  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy for Data" },
+  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy an admin set for you" },
 ];
 const fakeNotices = { email: true, webhook: "", everyRun: false, emailAvailable: true };
-const fakeReviews: { id: string; title: string; byEmail: string; paths: string[]; problems: string[]; state: string; note: string; version: number; created: ReturnType<typeof now> }[] = [
-  { id: "rev-1", title: "Publish agent writer", byEmail: "ana@acme.com", paths: ["agents/writer.md"], problems: [], state: "approved", note: "", version: 7, created: timestampFromDate(new Date(Date.now() - 50 * 3600e3)) },
-  { id: "rev-2", title: "Publish rule short-answers", byEmail: "bo@acme.com", paths: ["rules/short-answers.md"], problems: [], state: "rejected", note: "Too strict for support.", version: 0, created: timestampFromDate(new Date(Date.now() - 120 * 3600e3)) },
-];
-
 // The organization's workspaces the person has a role in.
 const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boolean; dir: string; cloned: boolean }[] = [
   { handle: "plans", name: "Plans", role: "editor", sync: true, dir: "/home/me/Blitz/Acme Assist/plans", cloned: true },
@@ -3172,22 +3165,6 @@ export function installFake() {
           }
         },
         // The person's usage and limits (EN-24): ?budget nearly spent.
-        // Publish to organization (EN-36): ?admin is one of its Admins.
-        listPublishable: () => ({
-          items: [
-            { kind: "agent", name: "reviewer", path: "agents/reviewer.md", problems: [], lock: "default", groups: [] },
-            { kind: "skill", name: "release-notes", path: "skills/release-notes/SKILL.md", problems: [], lock: "default", groups: [] },
-            { kind: "rule", name: "no-secrets", path: "rules/no-secrets.md", problems: [], lock: "locked", groups: ["eng"] },
-            { kind: "agent", name: "draft", path: "agents/draft.md", problems: ["agents/draft.md: the front matter needs a description"], lock: "default", groups: [] },
-          ],
-        }),
-        publishToOrganization: async ({ items, title }) => {
-          await sleep(700);
-          const review = { id: `rev-${Date.now()}`, title: title || `Publish ${items.map((i) => `${i.kind} ${i.name}`).join(", ")}`, byEmail: "ana@acme.com", paths: items.map((i) => `${i.kind}s/${i.name}.md`), problems: [], state: "open", note: "", version: 0, created: now() };
-          fakeReviews.unshift(review);
-          return { review };
-        },
-        listCatalogReviews: () => ({ reviews: fakeReviews }),
         // Job notices (JB-31): ?org&signedin.
         getOrgNotices: () => ({ notices: fakeNotices }),
         setOrgNotices: async ({ notices }) => {
@@ -3196,18 +3173,11 @@ export function installFake() {
           Object.assign(fakeNotices, notices);
           return { notices: fakeNotices };
         },
-        // The organization's items in Studio's lists (EN-34): ?org&signedin.
+        // The organization's rules and guardrails in Studio's lists (EN-34, EN-39): ?org&signedin.
         listOrgItems: ({ kind }) => ({
           version: 7,
           items: fakeOrg.signedIn ? fakeOrgItems.filter((i) => !kind || i.kind === kind) : [],
         }),
-        copyOrgItem: async ({ kind, name }) => {
-          await sleep(400);
-          const it = fakeOrgItems.find((i) => i.kind === kind && i.name === name);
-          if (!it || it.lock === "locked") throw new ConnectError(`the organization's ${kind} ${name} is locked: its Admins change it, through a review`, Code.FailedPrecondition);
-          it.overridden = true;
-          return { paths: [`.agents/${it.path}`] };
-        },
         getOrgUsage: () => ({
           today: [
             { model: "claude-sonnet-5-5", requests: 42n, inputTokens: 380_000n, outputTokens: 41_000n, costUsd: 1.84 },

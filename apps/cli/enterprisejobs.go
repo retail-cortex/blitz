@@ -15,6 +15,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -492,129 +493,35 @@ func rateText(r *pb.OrgRateLimit) string {
 	return strings.Join(parts, ", ")
 }
 
-// newEnterprisePublishCommand is blitz enterprise publish: a workspace's
-// items to the organization's catalog, as a review (spec_053 EN-36).
-func newEnterprisePublishCommand(g *globalFlags) *cobra.Command {
-	var lock, title string
-	var groups []string
-	cmd := &cobra.Command{
-		Use:   "publish [<kind>/<name>...]",
-		Short: "Publish a workspace's agents, skills, rules… to your organization's catalog, for an Admin (you too) to approve",
-		Long: `Publishes items from a workspace's .agents folder (agent/<name>, skill/<name>,
-rule/<name>, guardrail/<name>, command/<name>, connector/<name>) to your
-organization's catalog as a review: an Admin (you too) approves it in the admin
-console, and the next version carries it. With none named, lists what
-can be published and how each applies now. For the organization's Admins.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := orgSettings(cmd)
-			if err != nil {
-				return err
-			}
-			abs, err := orgWorkspace(g)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if len(args) == 0 {
-				items, err := s.Publishable(cmd.Context(), abs)
-				if err != nil {
-					return err
-				}
-				if len(items) == 0 {
-					fmt.Fprintln(out, i18n.T("org.publish_none"))
-				}
-				for _, it := range items {
-					line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
-					if len(it.Groups) > 0 {
-						line += i18n.T("org.item_for", "groups", strings.Join(it.Groups, ", "))
-					}
-					fmt.Fprintln(out, line+")")
-					for _, p := range it.Problems {
-						fmt.Fprintln(out, "    ! "+p)
-					}
-				}
-				return nil
-			}
-			var items []*pb.PublishItem
-			for _, a := range args {
-				kind, name, ok := strings.Cut(a, "/")
-				if !ok {
-					return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", a))
-				}
-				items = append(items, &pb.PublishItem{Kind: kind, Name: name, Lock: lock, Groups: groups})
-			}
-			rv, err := s.PublishToOrganization(cmd.Context(), abs, title, items)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(out, i18n.T("org.published", "title", rv.Title, "paths", strings.Join(rv.Paths, ", ")))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&lock, "lock", "default", "locked (nobody changes or switches it off) or default (a workspace or person may)")
-	cmd.Flags().StringSliceVar(&groups, "groups", nil, "who it's for (everyone when none)")
-	cmd.Flags().StringVar(&title, "title", "", "the review's title (default: what's published)")
-	return cmd
-}
-
-// newEnterpriseReviewsCommand is blitz enterprise reviews: the catalog's
-// reviews (EN-36).
-func newEnterpriseReviewsCommand() *cobra.Command {
-	var state string
-	cmd := &cobra.Command{
-		Use:   "reviews",
-		Short: "Changes to your organization's catalog: waiting, approved or rejected",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := orgSettings(cmd)
-			if err != nil {
-				return err
-			}
-			list, err := s.CatalogReviews(cmd.Context(), state)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if len(list) == 0 {
-				fmt.Fprintln(out, i18n.T("org.reviews_none"))
-			}
-			for _, rv := range list {
-				status := rv.State
-				if rv.State == "approved" && rv.Version > 0 {
-					status = i18n.T("org.review_published", "version", rv.Version)
-				}
-				fmt.Fprintln(out, i18n.T("org.review_line", "id", rv.Id, "status", status, "email", rv.ByEmail, "title", rv.Title))
-				for _, p := range rv.Problems {
-					fmt.Fprintln(out, "    ! "+p)
-				}
-				if rv.Note != "" {
-					fmt.Fprintln(out, "    "+rv.Note)
-				}
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&state, "state", "", "open, approved or rejected")
-	return cmd
-}
-
-// newEnterpriseCatalogCommand is blitz enterprise catalog: the
-// organization's items a workspace gets, and copying a default one in to
-// change (spec_053 EN-34).
-func newEnterpriseCatalogCommand(g *globalFlags) *cobra.Command {
+// newEnterprisePolicyCommand is blitz enterprise policy: the person's
+// effective policy, each setting with who decided it, and the rules and
+// guardrails it applies to them (spec_053 EN-39); "catalog" as before.
+func newEnterprisePolicyCommand(g *globalFlags) *cobra.Command {
 	var kind string
 	cmd := &cobra.Command{
-		Use:   "catalog",
-		Short: "The agents, skills, rules… your organization gives this workspace",
-		Long: `Lists the organization's catalog items this workspace gets, each locked
-(its Admins change it, through a review) or default (the workspace may
-have its own instead: "blitz enterprise catalog copy <kind>/<name>"
-copies it into .agents to change).`,
+		Use:     "policy",
+		Aliases: []string{"catalog"},
+		Short:   "What your organization's policy lets you do, who decided each setting, and its rules and guardrails for you",
+		Long: `Lists your organization's policy as it applies to you: each setting, its
+value, and who decided it (the default, your organization, one of your
+groups, or an admin for you alone), locked or not; then the rules and
+guardrails it applies to you. Your organization's admins change it in its
+admin console. --kind rule or guardrail lists those alone.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
+			}
+			out := cmd.OutOrStdout()
+			if kind == "" {
+				settings, err := s.Policy(cmd.Context())
+				if err != nil {
+					return err
+				}
+				for _, p := range settings {
+					fmt.Fprintln(out, i18n.T("org.policy_line", "path", p.Path, "value", p.ValueJson, "by", policyDecided(p)))
+				}
 			}
 			abs, err := orgWorkspace(g)
 			if err != nil {
@@ -624,54 +531,36 @@ copies it into .agents to change).`,
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
 			if len(res.Items) == 0 {
 				fmt.Fprintln(out, i18n.T("org.catalog_none"))
 				return nil
 			}
-			fmt.Fprintln(out, i18n.T("org.catalog_version", "version", res.Version))
 			for _, it := range res.Items {
-				line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
-				if len(it.Groups) > 0 {
+				line := it.Kind + "/" + it.Name
+				if it.DecidedBy != "" {
+					line += i18n.T("org.item_decided", "by", it.DecidedBy)
+				} else if len(it.Groups) > 0 {
 					line += i18n.T("org.item_for", "groups", strings.Join(it.Groups, ", "))
-				}
-				line += ")"
-				if it.Overridden {
-					line += i18n.T("org.item_overridden")
 				}
 				fmt.Fprintln(out, line)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "one kind: agent, skill, rule, guardrail, command, mcp or connector")
-	copyCmd := &cobra.Command{
-		Use:   "copy <kind>/<name>",
-		Short: "Copy one of the organization's default items into this workspace, to change there",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			k, name, ok := strings.Cut(args[0], "/")
-			if !ok {
-				return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", args[0]))
-			}
-			s, err := orgSettings(cmd)
-			if err != nil {
-				return err
-			}
-			abs, err := orgWorkspace(g)
-			if err != nil {
-				return err
-			}
-			paths, err := s.CopyOrgItem(cmd.Context(), abs, k, name)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.catalog_copied", "paths", strings.Join(paths, ", ")))
-			return nil
-		},
-	}
-	cmd.AddCommand(copyCmd)
+	cmd.Flags().StringVar(&kind, "kind", "", "rule or guardrail")
 	return cmd
+}
+
+// policyDecided is who decided a setting, as a line says it.
+func policyDecided(p *pb.PolicySetting) string {
+	by := i18n.T("org.decided_" + cmp.Or(p.Level, "global"))
+	if p.Level == "group" || p.Level == "person" {
+		by += " (" + strings.Join(p.By, ", ") + ")"
+	}
+	if p.Locked {
+		by += i18n.T("org.decided_locked")
+	}
+	return by
 }
 
 // newEnterpriseNoticesCommand is blitz enterprise notices: how the person

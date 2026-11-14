@@ -1392,131 +1392,9 @@ func TestShareWithOrganization(t *testing.T) {
 	assert.Empty(t, id+readOnly, "never said: neither")
 }
 
-// An Admin publishes a workspace's items to the organization's catalog
-// (EN-36): listed with how each applies and what the catalog would
-// refuse, sent with their lock and groups set (a skill with its files),
-// and the reviews listed; one the catalog would refuse isn't sent.
-func TestPublishToOrganization(t *testing.T) {
-	t.Cleanup(http.DefaultClient.CloseIdleConnections)
-	_, s := serve(t, nil)
-	secrets.SetDefault(&secrets.Memory{})
-	idp := enterprisetest.NewProvider(t)
-	org := enterprisetest.NewService(t, idp.URL)
-	srv := httptest.NewServer(s.Handler())
-	t.Cleanup(srv.Close)
-	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
-	ctx := context.Background()
-	ws := t.TempDir()
-	for p, data := range map[string]string{
-		".agents/agents/writer.md":   "---\nname: writer\ndescription: Writes briefs\n---\nWrite a brief.\n",
-		".agents/agents/broken.md":   "no front matter",
-		".agents/rules/short.md":     "---\nwhen: after_agent\naction: warn\n---\nOne line.\n",
-		".agents/skills/go/SKILL.md": "---\nname: go\ndescription: Go\n---\nUse gofmt.\n",
-		".agents/skills/go/lint.sh":  "#!/bin/sh\ngolangci-lint run\n",
-		".agents/notes/readme.md":    "not an item",
-	} {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(ws, p)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(ws, p), []byte(data), 0o644))
-	}
-
-	list, err := c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: ws}))
-	require.NoError(t, err)
-	got := map[string]*pb.PublishableItem{}
-	for _, it := range list.Msg.Items {
-		got[it.Kind+"/"+it.Name] = it
-	}
-	require.Len(t, got, 4, "agents, a rule and a skill, not its script nor notes")
-	assert.Equal(t, "default", got["agent/writer"].Lock)
-	assert.NotEmpty(t, got["agent/broken"].Problems)
-	assert.Empty(t, got["skill/go"].Problems)
-
-	publish := func(items ...*pb.PublishItem) (*connect.Response[pb.PublishToOrganizationResponse], error) {
-		return c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: ws, Items: items}))
-	}
-	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked"})
-	_, info := errorReason(t, err)
-	assert.Equal(t, "NOT_CONNECTED", info.Reason)
-	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
-	require.NoError(t, err)
-	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
-	require.NoError(t, err)
-	for stream.Receive() {
-	}
-	require.NoError(t, stream.Err())
-	_ = stream.Close()
-
-	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "broken", Lock: "default"})
-	_, info = errorReason(t, err)
-	assert.Equal(t, "PROBLEMS", info.Reason)
-	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "nope", Lock: "default"})
-	_, info = errorReason(t, err)
-	assert.Equal(t, "NOT_FOUND", info.Reason)
-	_, err = publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "maybe"})
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	_, err = publish()
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-
-	// A key in what would be published, in a skill's script (the catalog's
-	// own check reads only the items): nothing goes (EN-36a).
-	leaky := filepath.Join(ws, ".agents", "skills", "go", "deploy.sh")
-	require.NoError(t, os.WriteFile(leaky, []byte("#!/bin/sh\nKEY='AKIAIOSFODNN7EXAMPLE' make deploy\n"), 0o644))
-	_, err = publish(&pb.PublishItem{Kind: "skill", Name: "go"})
-	_, info = errorReason(t, err)
-	assert.Equal(t, "SECRETS_FOUND", info.Reason)
-	assert.Contains(t, err.Error(), ".agents/skills/go/deploy.sh:2")
-	require.NoError(t, os.Remove(leaky))
-
-	// The workspace named as every workspace call's is: never "" (blitzd's
-	// own folder) or a relative one.
-	for _, bad := range []string{"", "relative"} {
-		calls := map[string]func() error{
-			"ListPublishable": func() error {
-				_, err := c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: bad}))
-				return err
-			},
-			"PublishToOrganization": func() error {
-				_, err := c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: bad, Items: []*pb.PublishItem{{Kind: "agent", Name: "writer"}}}))
-				return err
-			},
-		}
-		for name, call := range calls {
-			_, info := errorReason(t, call())
-			assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "%s %q", name, bad)
-		}
-	}
-
-	made, err := publish(&pb.PublishItem{Kind: "agent", Name: "writer", Lock: "locked", Groups: []string{"sales"}}, &pb.PublishItem{Kind: "skill", Name: "go"})
-	require.NoError(t, err)
-	assert.Equal(t, "open", made.Msg.Review.State)
-	assert.Equal(t, []string{"agents/writer.md", "skills/go/SKILL.md", "skills/go/lint.sh"}, made.Msg.Review.Paths)
-	assert.Contains(t, made.Msg.Review.Title, "agent writer, skill go")
-	org.Mu.Lock()
-	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales]")
-	assert.Equal(t, "#!/bin/sh\ngolangci-lint run\n", org.Published["skills/go/lint.sh"])
-	assert.Contains(t, org.Published["skills/go/SKILL.md"], "lock: default", "none named: a default")
-	org.Mu.Unlock()
-	data, err := os.ReadFile(filepath.Join(ws, ".agents", "agents", "writer.md"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "lock:", "the workspace's own file as it was")
-
-	reviews, err := c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{}))
-	require.NoError(t, err)
-	require.Len(t, reviews.Msg.Reviews, 1)
-	org.Mu.Lock()
-	org.NotAdmin = true
-	org.Mu.Unlock()
-	_, err = c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{}))
-	_, info = errorReason(t, err)
-	assert.Equal(t, "FORBIDDEN", info.Reason)
-	_, err = publish(&pb.PublishItem{Kind: "rule", Name: "short", Lock: "default"})
-	_, info = errorReason(t, err)
-	assert.Equal(t, "FORBIDDEN", info.Reason)
-}
-
-// The organization's items in a workspace (EN-37): listed with their lock
-// and groups and whether the workspace has its own, a skill as one item;
-// a default one copied into .agents (a skill's whole folder), a locked one
-// and one the workspace has already refused, and nothing before a catalog.
+// The organization's rules and guardrails the person works under (EN-34,
+// EN-39): only those, each with who decided it when the policy says;
+// none of its agents or skills.
 func TestOrgItems(t *testing.T) {
 	t.Cleanup(http.DefaultClient.CloseIdleConnections)
 	_, s := serve(t, nil)
@@ -1526,36 +1404,32 @@ func TestOrgItems(t *testing.T) {
 	org := enterprisetest.NewService(t, idp.URL)
 	org.Catalog = map[string]enterprisetest.CatalogFile{
 		"agents/reviewer.md":     {Kind: "agent", Name: "reviewer", Lock: "locked", Data: "---\nname: reviewer\n---\nReview."},
-		"rules/style.md":         {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+		"rules/style.md":         {Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."},
+		"guardrails/no-pii.md":   {Kind: "guardrail", Name: "no-pii", Lock: "locked", Data: "---\nstage: output\n---\nNo personal data."},
 		"skills/deploy/SKILL.md": {Kind: "skill", Name: "deploy", Lock: "default", Data: "---\nname: deploy\n---\nDeploy."},
-		"skills/deploy/run.sh":   {Kind: "skill_file", Name: "deploy", Lock: "default", Data: "echo hi"},
+	}
+	org.Policy = map[string]any{
+		"schema":  2,
+		"policy":  map[string]any{"refresh": "1h"},
+		"explain": map[string]any{"rules.style": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
+		"rules":   []map[string]any{{"kind": "rule", "name": "style", "body": "Use Go."}},
 	}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
 	ctx := context.Background()
-	ws := t.TempDir()
 	list := func(kind string) *pb.ListOrgItemsResponse {
-		res, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: ws, Kind: kind}))
+		res, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Kind: kind}))
 		require.NoError(t, err)
 		return res.Msg
 	}
-	copyItem := func(kind, name string) (*connect.Response[pb.CopyOrgItemResponse], error) {
-		return c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: ws, Kind: kind, Name: name}))
-	}
 
-	_, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: ws}))
+	_, err := c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{}))
 	_, info := errorReason(t, err)
-	assert.Equal(t, "NOT_CONNECTED", info.Reason)
-	_, err = copyItem("rule", "style")
-	_, info = errorReason(t, err)
 	assert.Equal(t, "NOT_CONNECTED", info.Reason)
 	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
 	require.NoError(t, err)
 	assert.Empty(t, list("").Items, "no catalog yet")
-	_, err = copyItem("rule", "style")
-	_, info = errorReason(t, err)
-	assert.Equal(t, "NOT_FOUND", info.Reason)
 
 	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
 	require.NoError(t, err)
@@ -1563,43 +1437,16 @@ func TestOrgItems(t *testing.T) {
 	}
 	require.NoError(t, stream.Err())
 	_ = stream.Close()
-	require.Eventually(t, func() bool { return len(list("").Items) == 3 }, 5*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool { return len(list("").Items) == 2 }, 5*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool { return list("rule").Items[0].DecidedBy != "" }, 5*time.Second, 20*time.Millisecond, "once the policy's fetched")
 
 	all := list("")
-	assert.Equal(t, int32(4), all.Version)
-	assert.Equal(t, []string{"agents/reviewer.md", "rules/style.md", "skills/deploy/SKILL.md"}, []string{all.Items[0].Path, all.Items[1].Path, all.Items[2].Path})
-	assert.Equal(t, "locked", all.Items[0].Lock)
+	assert.Equal(t, []string{"guardrails/no-pii.md", "rules/style.md"}, []string{all.Items[0].Path, all.Items[1].Path})
+	assert.Empty(t, all.Items[0].DecidedBy, "the policy doesn't say")
 	rules := list("rule")
 	require.Len(t, rules.Items, 1)
-	assert.False(t, rules.Items[0].Overridden)
-
-	_, err = copyItem("agent", "reviewer")
-	_, info = errorReason(t, err)
-	assert.Equal(t, "LOCKED", info.Reason)
-	_, err = copyItem("agent", "nope")
-	_, info = errorReason(t, err)
-	assert.Equal(t, "NOT_FOUND", info.Reason)
-
-	got, err := copyItem("skill", "deploy")
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{".agents/skills/deploy/SKILL.md", ".agents/skills/deploy/run.sh"}, got.Msg.Paths)
-	data, err := os.ReadFile(filepath.Join(ws, ".agents", "skills", "deploy", "run.sh"))
-	require.NoError(t, err)
-	assert.Equal(t, "echo hi", string(data))
-	_, err = copyItem("rule", "style")
-	require.NoError(t, err)
-	assert.True(t, list("rule").Items[0].Overridden, "the workspace has its own now")
-	_, err = copyItem("rule", "style")
-	_, info = errorReason(t, err)
-	assert.Equal(t, "ALREADY_EXISTS", info.Reason)
-	for _, bad := range []string{"", "relative"} {
-		_, err = c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: bad, Kind: "rule", Name: "style"}))
-		_, info = errorReason(t, err)
-		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "copied into %q", bad)
-		_, err = c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: bad}))
-		_, info = errorReason(t, err)
-		assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "listed for %q", bad)
-	}
+	assert.Equal(t, "the policy for Data", rules.Items[0].DecidedBy)
+	assert.Equal(t, "locked", rules.Items[0].Lock)
 
 	// How the person hears of their jobs' runs (JB-31).
 	notices, err := c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))

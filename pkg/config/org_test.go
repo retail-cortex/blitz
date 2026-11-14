@@ -76,10 +76,9 @@ func TestOrgLayer(t *testing.T) {
 
 	ws := t.TempDir()
 	agents := cfg.AgentSearchPaths(ws)
-	assert.Equal(t, filepath.Join(dir, "catalog", "default", "agents"), agents[0], "defaults first: the person's and the workspace's win")
-	assert.Equal(t, filepath.Join(dir, "catalog", "locked", "agents"), agents[len(agents)-1], "locked last: it wins")
-	skills := cfg.SkillSearchPaths(ws)
-	assert.Equal(t, filepath.Join(dir, "catalog", "locked", "skills"), skills[len(skills)-1])
+	for _, d := range append(agents, cfg.SkillSearchPaths(ws)...) {
+		assert.NotContains(t, d, "catalog", "the organization's agents and skills no longer come to Blitz (spec_012_policy PO-42)")
+	}
 	rules := cfg.Org.LockedFirst([]string{"ws"}, "rules", "guardrails")
 	assert.Equal(t, []string{filepath.Join(dir, "policy", "rules"), filepath.Join(dir, "catalog", "locked", "rules"),
 		filepath.Join(dir, "policy", "guardrails"), filepath.Join(dir, "catalog", "locked", "guardrails"), "ws",
@@ -89,8 +88,6 @@ func TestOrgLayer(t *testing.T) {
 	assert.Equal(t, "default", cfg.Org.LockOf(filepath.Join(dir, "catalog", "default", "agents", "a.md")))
 	assert.Equal(t, "", cfg.Org.LockOf(filepath.Join(home, ".blitz", "agents", "a.md")))
 	assert.Equal(t, "", OrgLayer{}.LockOf("/x"))
-	cmds := cfg.Org.around("commands", []string{"mine"})
-	assert.Equal(t, "mine", cmds[1])
 
 	names := map[string]string{}
 	for _, s := range cfg.MCP.Servers {

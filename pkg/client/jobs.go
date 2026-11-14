@@ -220,37 +220,9 @@ func (s *Settings) OrgUsage(ctx context.Context) (OrgUsage, error) {
 	return res.Msg, nil
 }
 
-// Publishable are the workspace's items that can be published to the
-// organization's catalog (ConfigService.ListPublishable).
-func (s *Settings) Publishable(ctx context.Context, dir string) ([]*pb.PublishableItem, error) {
-	res, err := s.c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: dir}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Items, nil
-}
-
-// PublishToOrganization sends items to the catalog as a review
-// (ConfigService.PublishToOrganization).
-func (s *Settings) PublishToOrganization(ctx context.Context, dir, title string, items []*pb.PublishItem) (*pb.CatalogReview, error) {
-	res, err := s.c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: dir, Title: title, Items: items}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Review, nil
-}
-
-// CatalogReviews are the catalog's reviews (ConfigService.ListCatalogReviews).
-func (s *Settings) CatalogReviews(ctx context.Context, state string) ([]*pb.CatalogReview, error) {
-	res, err := s.c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{State: state}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Reviews, nil
-}
-
-// OrgItems are the organization's catalog items for a workspace, of one
-// kind or every one (ConfigService.ListOrgItems).
+// OrgItems are the organization's rules and guardrails the person works
+// under, of one kind or both, with who decided each
+// (ConfigService.ListOrgItems).
 func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgItemsResponse, error) {
 	res, err := s.c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: dir, Kind: kind}))
 	if err != nil {
@@ -259,14 +231,14 @@ func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgI
 	return res.Msg, nil
 }
 
-// CopyOrgItem copies one of the organization's default items into the
-// workspace's .agents folder (ConfigService.CopyOrgItem).
-func (s *Settings) CopyOrgItem(ctx context.Context, dir, kind, name string) ([]string, error) {
-	res, err := s.c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: dir, Kind: kind, Name: name}))
+// Policy is the person's effective policy from their organization, each
+// setting with who decided it (EnterpriseState.policy, spec_053 EN-39).
+func (s *Settings) Policy(ctx context.Context) ([]*pb.PolicySetting, error) {
+	res, err := s.c.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{}))
 	if err != nil {
 		return nil, fromAPI(err)
 	}
-	return res.Msg.Paths, nil
+	return res.Msg.State.GetPolicy(), nil
 }
 
 // OrgNotices are how the person hears of their jobs' runs on the

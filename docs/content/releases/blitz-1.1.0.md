@@ -34,3 +34,4 @@ Know where everything lives. Settings is now everything every workspace shares, 
 - A workspace's own agent can't be switched off there: choose another one first.
 - Your own evals can use your own agents and skills and Blitz's built-in ones. A project's agents keep their evals in that project's Studio.
 - Without **Show advanced**, a workspace's Studio shows just its Settings and Connectors.
+- **For organizations:** your organization's rules and guardrails now come with your policy, set by its admins in its console, and show read-only at the end of Studio's Rules and Guardrails with who decided each. **Publish to organization** is gone, and your organization's agents, skills and commands no longer come to Blitz. `blitz enterprise policy` shows your policy from the terminal.
