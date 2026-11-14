@@ -11,7 +11,7 @@ On macOS or Linux, the install script puts `blitz`, `blitzd` and `blz` in `~/.lo
 curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/install.sh | sh
 ```
 
-`BLITZ_BIN` picks another folder, `BLITZ_VERSION={{< release >}}` a particular release (the latest without it), and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
+`BLITZ_BIN` picks another folder, `BLITZ_VERSION={{< release >}}` a particular release (the latest without it), and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz` (the command line) or `brew install --cask retail-cortex/tap/blitz` (the desktop app). Homebrew 7 and later load another tap's formulae and casks only once you trust it: `brew trust retail-cortex/tap` first.
 
 Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature and its checksum itself, with nothing else to install (releases before v0.7.0 need cosign for their signature). A copy installed by Homebrew is updated with `brew upgrade blitz`.
 

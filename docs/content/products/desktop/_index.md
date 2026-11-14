@@ -19,7 +19,7 @@ New here? Install the app (below), then set up a provider in [Settings › Provi
 
 *Since v0.7.0 the desktop app is built on Electron*, the same on every platform:
 
-- **macOS 13 and later:** `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `Blitz_<version>_macos_x64.dmg` (Intel), signed with a Developer ID and notarized when the release is.
+- **macOS 13 and later:** `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `Blitz_<version>_macos_x64.dmg` (Intel), signed with a Developer ID and notarized when the release is. Or with Homebrew: `brew trust retail-cortex/tap` (Homebrew 7 and later ask for it once), then `brew install --cask retail-cortex/tap/blitz`. The app keeps updating itself, and `brew uninstall --cask blitz` also stops its service and tray. A copy already in Applications from the disk image is Homebrew's with `--force`.
 - **Windows 10 (1803) and later:** `Blitz_<version>_windows_x64_setup.exe`. Run it: it installs Blitz for you, with no administrator needed, adds it to the Start menu, the desktop and **Add or remove programs** (where you can uninstall it; your settings and conversations stay), and starts it. It isn't signed yet, so SmartScreen asks first (**More info › Run anyway**). Or take `Blitz_<version>_windows_x64.zip`, unzip it anywhere and run `Blitz.exe`. Either way Blitz keeps itself up to date.
 - **Linux:** `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later, the snap (`blitz-desktop_<version>_<arch>.snap`; from the Snap Store, and Ubuntu's App Center, once the store has approved it), the Arch Linux package, or `blitz-desktop_<version>_linux_<arch>.tar.gz` for any distribution (unpack it and run `blitz-desktop`; on Ubuntu 24.04 and later prefer the `.deb`, which can set up Electron's sandbox).
 

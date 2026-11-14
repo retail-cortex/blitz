@@ -34,7 +34,7 @@ var wordRE = regexp.MustCompile(`[A-Za-z]{3,}`)
 // Literals allowed to stay as they are: --version output (parsed by
 // scripts), product names, key names, a rule kind and an AppleScript
 // command (not shown).
-var lintAllowed = []string{"Blitz Go (Google ADK) version", "Blitz Go", "Ctrl+C", "mcp:", "display notification %s with title %s"}
+var lintAllowed = []string{"Blitz version", "Ctrl+C", "mcp:", "display notification %s with title %s"}
 
 // English sources: doctor's report (English by policy, spec_020 CLI-30)
 // and headless.go's stream-json protocol, which programs read.

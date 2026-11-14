@@ -107,6 +107,7 @@ sh_test(
 
 # The install script (curl … | sh), attached to each release.
 exports_files([
+    "homebrew_cask.sh",
     "homebrew_formula.sh",
     "install.sh",
 ])
@@ -117,6 +118,14 @@ sh_test(
     srcs = ["install_test.sh"],
     args = ["$(location install.sh)"],
     data = ["install.sh"],
+)
+
+sh_test(
+    name = "homebrew_cask_test",
+    size = "small",
+    srcs = ["homebrew_cask_test.sh"],
+    args = ["$(location homebrew_cask.sh)"],
+    data = ["homebrew_cask.sh"],
 )
 
 sh_test(

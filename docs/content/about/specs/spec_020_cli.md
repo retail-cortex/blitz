@@ -83,7 +83,7 @@ Run flags (root and `exec`):
 | `--add-dir DIR`, `--plugin-dir DIR` | Another read-write directory, or a plugin, for this run, in a service of its own (CLI-11; repeatable) |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |
 
-Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints `Blitz Go (Google ADK) version <v>`; version stamped into release builds from the git tag (`bazel build --config=release`), `dev` otherwise).
+Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints `Blitz version <v>`; version stamped into release builds from the git tag (`bazel build --config=release`), `dev` otherwise).
 
 *2026-11-05 (scan N26-cli-1#6).* The enterprise commands that work on a workspace (`share` without a folder, `sync`, `jobs push` and its "why not", `publish`, `catalog`) take it from the global `-d/--dir`, else the current directory; they no longer declare a `-d` of their own.
 
