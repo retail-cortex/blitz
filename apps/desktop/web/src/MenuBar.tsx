@@ -126,8 +126,8 @@ export function MenuBar({
   const failures = useWorkerFailures();
   const failed = dir ? (failures[dir] ?? 0) : 0;
 
-  // Studio: its entries, as the drawer lists them, a failed worker run
-  // noted on Resources (its Workers tab); Close Studio while it's open.
+  // Studio: its entries, as the drawer lists them, a failed job run
+  // noted on Jobs; Close Studio while it's open.
   const studioOn = studioKind ? studioEntryOf(studioKind) : null;
   const studio: MenuEntry[] = [
     ...studioGroups.flatMap((group, i): MenuEntry[] => [
@@ -136,7 +136,7 @@ export function MenuBar({
         label: t(`desktop.studio.${k}`),
         icon: studioIcons[k],
         on: studioOn === k,
-        detail: k === "resources" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
+        detail: k === "workers" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
         onSelect: () => onStudio?.(k),
       })),
     ]),

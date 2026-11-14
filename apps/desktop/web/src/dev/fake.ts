@@ -636,7 +636,7 @@ const fakeLimits = (w: { maxTurns: number; maxCostUsd: number; timeout: string }
 const fakeGlobal: FakeWorker[] = [
   { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
 ];
-// Other workspaces with workers on record (Settings › Resources › Jobs): one not
+// Other workspaces with workers on record (Settings › Jobs): one not
 // in the app's workspaces, one whose folder is gone.
 const fakeElsewhere = [
   { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
@@ -1203,6 +1203,8 @@ const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_k
 // Settings › Resources › Connectors › MCP servers: the global servers, edited in place.
 // Each workspace's own MCP servers, and the global ones it turned off.
 const fakeWorkspaceMCP = new Map<string, MCPServerConfig[]>();
+// The global agents switched off, by workspace (STU-15).
+const fakeAgentsOff = new Map<string, Set<string>>();
 const fakeMCPOff = new Map<string, Set<string>>();
 function workspaceMCP(workspace: string): MCPServerConfig[] {
   let list = fakeWorkspaceMCP.get(workspace);
@@ -2240,7 +2242,7 @@ export function installFake() {
           fakeFlows.splice(i, 1);
           return {};
         },
-        // Studio › Resources › Evals: two evals, their runs, and a run streamed case by case.
+        // Studio › Resources › Agents › Evals: two evals, their runs, and a run streamed case by case.
         listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
         saveEval: ({ workspace, previousName, eval: spec }) => {
           const e = spec!;
@@ -2413,7 +2415,7 @@ export function installFake() {
           const problems = ruleProblems(r);
           if (problems.length) return { problems };
           const i = fakeRules.findIndex((x) => x.name === previousName);
-          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text };
+          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text, off: r.off };
           if (i >= 0) fakeRules[i] = next;
           else fakeRules.push(next);
           return { rule: fakeRuleList(workspace).find((x) => x.name === r.name) };
@@ -2537,7 +2539,17 @@ export function installFake() {
         },
         listAgentFiles: ({ workspace, scope }) => {
           const dir = agentFolder(workspace, scope);
-          return { dir, files: [...fakeAgentFiles.get(dir)!.values()].sort((a, b) => (a.path ?? "").localeCompare(b.path ?? "")) };
+          // The global agents asked for with a workspace say which are off there (STU-15).
+          const off = workspace && scope === AgentScope.USER ? (fakeAgentsOff.get(workspace) ?? new Set<string>()) : new Set<string>();
+          const files = [...fakeAgentFiles.get(dir)!.values()].map((f) => ({ ...f, offHere: off.has(f.agent?.name ?? "") }));
+          return { dir, files: files.sort((a, b) => (a.path ?? "").localeCompare(b.path ?? "")) };
+        },
+        setAgentEnabled: ({ workspace, name, enabled }) => {
+          const off = fakeAgentsOff.get(workspace) ?? new Set<string>();
+          if (enabled) off.delete(name);
+          else off.add(name);
+          fakeAgentsOff.set(workspace, off);
+          return {};
         },
         saveAgentFile: ({ workspace, scope, previousName, agent }) => saveAgent(workspace, scope, previousName, agent!),
         // The active agent's tools, or with all every tool an agent can be given.
@@ -3386,7 +3398,7 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
-          // Settings › Resources › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
+          // Settings › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
           if (key === "workers.policy.allow")
             fakePolicy.allow = value
               ? value

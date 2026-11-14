@@ -244,7 +244,7 @@ func (w *Workspace) limitSetting(gr gates.Guardrail, key string) string {
 }
 
 // jobLimitHints say where a job's run's limits came from: the job's
-// WORKER.md, the jobs' defaults or their cap (Settings › Resources › Jobs).
+// WORKER.md, the jobs' defaults or their cap (Settings › Jobs).
 func (w *Workspace) jobLimitHints(wk *workers.Worker, p config.WorkerPolicy) limitHints {
 	path := w.workspaceRel(wk.Path)
 	hint := func(key string, own, def, cap float64) string {

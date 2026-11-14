@@ -126,6 +126,7 @@ const entryIcons: Record<EntryId, string> = {
   personality: mdiEmoticonOutline,
   appearance: mdiPaletteOutline,
   resources: mdiBookshelf,
+  jobs: mdiCalendarClock,
   access: mdiFolderLockOutline,
   system: mdiServerNetwork,
 };
@@ -209,6 +210,21 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "organization" && <OrganizationSettings />}
             {section === "secrets" && <SecretsEditor />}
             {section === "appearance" && <Appearance />}
+            {/* Agents' two tabs: your agents, and the evals that prove them. */}
+            {tabOf(section) === "agents" && (
+              <div className="row agents-switch">
+                <Segmented
+                  small
+                  label={t("desktop.settings.agents")}
+                  value={section === "evals" ? "evals" : "agents"}
+                  options={[
+                    { value: "agents", label: t("desktop.settings.agents"), icon: sectionIcons.agents },
+                    { value: "evals", label: t("desktop.settings.evals"), icon: sectionIcons.evals },
+                  ]}
+                  onChange={(id) => pick(id)}
+                />
+              </div>
+            )}
             {section === "agents" && (
               <UserAgents
                 onEvals={(agent) => {

@@ -73,6 +73,10 @@ service WorkspaceService {
   rpc SaveAgentFile(SaveAgentFileRequest) returns (SaveAgentFileResponse);
   // Deletes an agent's file (UNKNOWN_AGENT).
   rpc DeleteAgentFile(DeleteAgentFileRequest) returns (DeleteAgentFileResponse);
+  // Turns one of the user's global agents on or off in a workspace
+  // (spec_040_studio STU-15; UNKNOWN_AGENT, or FAILED_PRECONDITION for
+  // the workspace's own agent).
+  rpc SetAgentEnabled(SetAgentEnabledRequest) returns (SetAgentEnabledResponse);
   // Returns the model the active agent runs on.
   rpc GetModel(GetModelRequest) returns (GetModelResponse);
   // Switches every unpinned agent to a model.
@@ -869,6 +873,9 @@ message AgentFile {
   AgentDefinition agent = 2;
   // Why it doesn't load ("" when it does).
   string problem = 3;
+  // A global agent switched off in the workspace ListAgentFiles named
+  // (STU-15): it isn't loaded there.
+  bool off_here = 4;
 }
 
 // Request message for WorkspaceService.ListAgentFiles.
@@ -915,6 +922,17 @@ message DeleteAgentFileRequest {
 
 // Response message for WorkspaceService.DeleteAgentFile.
 message DeleteAgentFileResponse {}
+
+// Request message for WorkspaceService.SetAgentEnabled.
+message SetAgentEnabledRequest {
+  string workspace = 1;
+  // A global agent's name (one in ~/.blitz/agents).
+  string name = 2;
+  bool enabled = 3;
+}
+
+// Response message for WorkspaceService.SetAgentEnabled.
+message SetAgentEnabledResponse {}
 
 // Request message for WorkspaceService.GetModel.
 message GetModelRequest {
@@ -3282,6 +3300,9 @@ message RuleFile {
   string problem = 10;
   // In .agents/rules: Studio may change it.
   bool editable = 11;
+  // Switched off (enabled: false in its front matter, STU-16): it
+  // checks and says nothing.
+  bool off = 12;
 }
 
 // What Studio's rule form edits.
@@ -3294,6 +3315,8 @@ message RuleSpec {
   string description = 6;
   repeated string paths = 7;
   string text = 8;
+  // Switched off: enabled: false (STU-16).
+  bool off = 9;
 }
 
 // Request message for WorkspaceService.ListRules.

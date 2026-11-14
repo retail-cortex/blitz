@@ -50,7 +50,16 @@ type Registry struct {
 	locked []string
 	// reload keeps one load at a time, so an older one can't win.
 	reload sync.Mutex
+	// hide, set before the first load, skips a file's agent (its folder,
+	// its name): a global agent switched off in this workspace (STU-15).
+	hide func(dir, name string) bool
 }
+
+// Hide makes loading skip the agents f picks (by folder and name): the
+// global agents this workspace turned off. Call it before loading; f is
+// asked at each load, so a change shows once the agents load again
+// (Invalidate, then Refresh).
+func (r *Registry) Hide(f func(dir, name string) bool) { r.hide = f }
 
 // NewRegistry creates a new Registry and loads built-in embedded agent specs.
 func NewRegistry() (*Registry, error) {
@@ -231,6 +240,9 @@ func (r *Registry) load(into map[string]*AgentSpec, dirs []string) []error {
 			}
 			if r.builtin[spec.Name] {
 				errs = append(errs, fmt.Errorf("%s: agent name %q is reserved by a built-in agent", path, spec.Name))
+				return nil
+			}
+			if r.hide != nil && r.hide(dir, spec.Name) {
 				return nil
 			}
 			if prev := into[spec.Name]; prev != nil && r.isLocked(prev.Path) && !r.isLocked(path) {

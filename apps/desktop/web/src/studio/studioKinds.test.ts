@@ -18,8 +18,8 @@ import { describe, expect, it } from "vitest";
 import { isStudioKind, studioEntriesShown, studioEntryOf, studioGroups, studioKindShown, type StudioKind } from "./StudioDrawer";
 
 describe("Studio's entries", () => {
-  it("groups the workspace, its resources and workflows, and what it follows", () => {
-    expect(studioGroups).toEqual([["overview", "settings", "specs"], ["resources", "workflows"], ["rules", "guardrails"]]);
+  it("groups the workspace, its resources and what runs, and what it follows", () => {
+    expect(studioGroups).toEqual([["overview", "settings", "specs"], ["resources", "workers", "workflows"], ["rules", "guardrails"]]);
     expect(studioEntriesShown(true)).toEqual(studioGroups.flat());
     expect(studioEntriesShown(false)).toEqual(["settings", "resources"]);
   });
@@ -29,6 +29,8 @@ describe("Studio's entries", () => {
     { asked: "resources" as StudioKind, advanced: false, want: "connectors" },
     { asked: "evals" as StudioKind, advanced: true, want: "evals" },
     { asked: "evals" as StudioKind, advanced: false, want: "settings" },
+    { asked: "workers" as StudioKind, advanced: true, want: "workers" },
+    { asked: "workers" as StudioKind, advanced: false, want: "settings" },
     { asked: "connectors" as StudioKind, advanced: false, want: "connectors" },
     { asked: "workflows" as StudioKind, advanced: false, want: "settings" },
     { asked: "settings" as StudioKind, advanced: false, want: "settings" },
@@ -38,7 +40,8 @@ describe("Studio's entries", () => {
   });
 
   it("shows Resources' tabs under Resources, and knows every kind", () => {
-    for (const k of ["agents", "skills", "evals", "workers", "connectors", "secrets", "browser"] as const) expect(studioEntryOf(k)).toBe("resources");
+    for (const k of ["agents", "skills", "evals", "connectors", "browser", "secrets"] as const) expect(studioEntryOf(k)).toBe("resources");
+    expect(studioEntryOf("workers")).toBe("workers");
     expect(studioEntryOf("workflows")).toBe("workflows");
     expect(isStudioKind("settings")).toBe(true);
     expect(isStudioKind("browser")).toBe(true);

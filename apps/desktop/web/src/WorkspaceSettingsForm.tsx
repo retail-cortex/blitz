@@ -443,7 +443,7 @@ export function WorkspaceSettingsForm({
               <span className="t-label">{t("desktop.rs.advanced")}</span>
             </div>
 
-            {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Resources › Browsers. */}
+            {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Resources › Browser. */}
             <Section id="browser" icon={mdiWeb} title={t("desktop.rs.browser")} summary={browser.current || t("desktop.rs.browser_none")}>
               <Field label={t("desktop.rs.browser_profile")} supporting={t("desktop.rs.browser_profile_help")}>
                 {(id) => (

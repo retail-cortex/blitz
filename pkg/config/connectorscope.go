@@ -42,6 +42,14 @@ func OpenConnectorScope(dir string) *ConnectorScope {
 	return &ConnectorScope{path: filepath.Join(dir, "connector-scope.json")}
 }
 
+// OpenAgentScope is the same kind of store for the global agents the
+// person turned off in each workspace (spec_040_studio STU-15):
+// agent-scope.json in the settings directory dir, each workspace's off
+// agents by name. It's the person's, never the project's.
+func OpenAgentScope(dir string) *ConnectorScope {
+	return &ConnectorScope{path: filepath.Join(dir, "agent-scope.json")}
+}
+
 // Off is the keys of the connections turned off in workspace. It reads
 // the file each time, so a change made in another process counts at
 // once.

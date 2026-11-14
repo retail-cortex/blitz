@@ -5,13 +5,13 @@ weight: 10
 
 What every workspace shares is in **Settings**: the gear at the top right, or ⌘, (Ctrl+, on Windows and Linux). On macOS it's also **Blitz › Settings…** in the menu bar. What belongs to one workspace (its own settings, agents, skills, jobs, connectors and secrets) is in that workspace's [Studio](studio/_index.md).
 
-Settings has six entries at its left, each holding its panes as tabs: **Providers** (Providers & keys, Organization), **Personality** (Personality, Voice), **Appearance**, **Resources** (Agents, Skills, Evals, Jobs, Connectors, Secrets, Browsers), **Access** (Workspaces, Permissions) and **System** (Service, Logs, About).
+Settings has seven entries at its left, each holding its panes as tabs: **Providers** (Providers & keys, Organization), **Personality** (Personality, Voice), **Appearance**, **Resources** (Agents, Skills, Connectors, Browser, Secrets), **Jobs**, **Access** (Workspaces, Permissions) and **System** (Service, Logs, About).
 
 Start with **Providers & keys**: until a provider has a key or a sign-in, no chat, job or eval can run, and the welcome page says so with **Set up a provider**. The rest has sensible defaults you can come back to.
 
 ## Show advanced
 
-Settings opens with the few panes most people need: **Providers & keys**, **Organization**, **Personality**, **Voice**, **Appearance**, **Connectors**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (your own agents, skills, evals, jobs and secrets, MCP servers under Connectors, browsers, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
+Settings opens with the few panes most people need: **Providers & keys**, **Organization**, **Personality**, **Voice**, **Appearance**, **Connectors**, **Workspaces** and **About**. **Show advanced**, in Settings' title bar, adds the rest (your own agents and their evals, skills, secrets and jobs, MCP servers under Connectors, browser profiles, permissions, the service and its logs), model and generation settings in each workspace, and the **Studio** menu in the menu bar. Turn it off again to go back to sensible defaults.
 
 ![Settings with Show advanced on: Providers, Personality, Appearance, Resources, Access and System, open on Resources › Agents](../../../images/desktop/settings-resources.png)
 
@@ -66,17 +66,19 @@ What every workspace shares: the same tabs as a workspace's **Studio › Resourc
 
 | Tab | What it holds |
 |---|---|
-| **Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one; an agent's **Evals** opens its evals. [Agents](../../guide/agents.md) |
+| **Agents** | Your own agents, in `~/.blitz/agents`, there in every workspace. Choose one to edit it, or **+** for a new one. Each row says how many evals cover it: click that to open them, or **Draft evals** when there are none. **Evals**, Agents' second tab, holds the evals of your own agents and skills, in `~/.blitz/evals`; they run in a folder of their own, `~/.blitz/home`, as the global jobs do, so they never touch a project. [Agents](../../guide/agents.md), [Evals](../../guide/evals.md) |
 | **Skills** | Skill registries (such as your organization's Castor registry) to install skills from, and the built-in skills. [Skills](../../guide/skills.md) |
-| **Evals** | Evals for your own agents and skills, in `~/.blitz/evals`. They run in a folder of their own, `~/.blitz/home`, as the global jobs do, so they never touch a project's files. [Evals](../../guide/evals.md) |
-| **Jobs** | **Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md) |
 | **Connectors** | Your own database connections, there in every workspace; a workspace can turn any of them off. **+** starts with the kind, takes a pasted connection URL, and tests before it saves (`/connect` and **Connect a database…** in the chat box's database menu open it). With **Show advanced** on, also your **MCP servers**: servers that give the agent more tools, and the resources they offer, each switched on or off, **+** for a new one. [Connectors](studio/connectors.md), [MCP servers](../../guide/mcp.md) |
+| **Browser** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in its **Studio › Resources › Browser** (**Use here**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
 | **Secrets** | Tokens and passwords every workspace can use as `{secrets:global:name}`, kept in the keychain and put in only as Blitz calls the model. |
-| **Browsers** | Browser profiles: the sign-ins the agents browse with. Make one, **Sign in…** to the sites it's for (a window of the app's; **Sign in with Chrome…** for jobs and the command line), list the sites it may browse without asking, and choose it for a workspace in its **Studio › Resources › Browsers** (**Use here**). **Sign out of everything** clears it; **Delete** removes it. [The browser](../../guide/search.md#the-browser) |
-
-![Settings › Resources › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
 
 ![Settings › Resources › Connectors › MCP servers: three servers, two on](../../../images/desktop/settings-mcp.png)
+
+## Jobs
+
+**Limits for every job** (model calls, cost, time, runs at once, and what jobs may be given), your global jobs, and every workspace's jobs, open or not. [Jobs](../../guide/workers.md)
+
+![Settings › Jobs: the limits for every job, and the global jobs](../../../images/desktop/settings-jobs.png)
 
 ## Access
 

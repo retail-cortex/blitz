@@ -81,6 +81,9 @@ type Rule struct {
 	Text string
 	// Problem says why its front matter doesn't hold (it's skipped).
 	Problem string
+	// Off is a rule switched off (enabled: false, spec_040_studio
+	// STU-16): it gates nothing and isn't an instruction.
+	Off bool
 }
 
 // IsGate reports whether the rule gates turns.
@@ -101,6 +104,7 @@ type meta struct {
 	Action      string   `yaml:"action"`
 	Description string   `yaml:"description"`
 	Paths       any      `yaml:"paths"`
+	Enabled     *bool    `yaml:"enabled"`
 }
 
 // Parse reads a rule file. A front matter that doesn't hold (an unknown
@@ -118,6 +122,7 @@ func Parse(name, path string, data []byte) Rule {
 		return r
 	}
 	r.When, r.Order, r.Agents, r.Action, r.Description = strings.ToLower(strings.TrimSpace(m.When)), m.Order, m.Agents, strings.ToLower(strings.TrimSpace(m.Action)), m.Description
+	r.Off = m.Enabled != nil && !*m.Enabled
 	switch v := m.Paths.(type) {
 	case string:
 		r.Paths = []string{v}
@@ -216,11 +221,11 @@ func compare(a, b Rule) int {
 }
 
 // Gates are the rules that run when for the agent, in order, without
-// those whose front matter doesn't hold.
+// those whose front matter doesn't hold or that are switched off.
 func Gates(rules []Rule, when, agent string) []Rule {
 	var out []Rule
 	for _, r := range rules {
-		if r.When == when && r.Problem == "" && r.OfferedTo(agent) {
+		if r.When == when && r.Problem == "" && !r.Off && r.OfferedTo(agent) {
 			out = append(out, r)
 		}
 	}
@@ -294,6 +299,8 @@ type Spec struct {
 	Description string
 	Paths       []string
 	Text        string
+	// Off switches the rule off (enabled: false), keeping the rest.
+	Off bool
 }
 
 // nameRE is a rule's file name: lowercase letters, digits, single
@@ -360,6 +367,7 @@ func Save(dir string, spec Spec, previous string) (string, []string, error) {
 		f.Int("order", map[bool]int{true: spec.Order}[gate])
 		f.List("agents", map[bool][]string{true: spec.Agents}[gate])
 		f.List("paths", map[bool][]string{false: spec.Paths}[gate])
+		f.Flag("enabled", !spec.Off, true)
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("the rule's %w", err)

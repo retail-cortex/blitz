@@ -556,7 +556,7 @@ var typedValues = map[string]string{
 	"llm.openai.models":    "models",
 	"llm.ollama.models":    "models",
 	"llm.api.models":       "models",
-	// Settings › Resources › Jobs' limits (spec_023_workers WK-63).
+	// Settings › Jobs' limits (spec_023_workers WK-63).
 	"workers.policy.allow":                "kinds",
 	"workers.policy.max_concurrent":       "int",
 	"workers.policy.default_max_turns":    "int",
@@ -573,7 +573,7 @@ var typedValues = map[string]string{
 	"harness.max_cost_usd":     "usd",
 	// When /reflect is suggested (spec_048_harness_learning HE-62).
 	"harness.reflect_threshold": "int",
-	// Settings › Resources › Browsers (spec_050_agent_browser AB-02, spec_008_web WEB-09).
+	// Settings › Resources › Browser (spec_050_agent_browser AB-02, spec_008_web WEB-09).
 	"browser.show":         "show",
 	"browser.open":         "open",
 	"web.browser_fallback": "bool",

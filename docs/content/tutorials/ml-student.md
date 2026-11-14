@@ -237,7 +237,7 @@ The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A job is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Jobs](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Resources › Jobs › New job** in the desktop app):
+A job is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Jobs](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Jobs › New job** in the desktop app):
 
 ```markdown
 ---

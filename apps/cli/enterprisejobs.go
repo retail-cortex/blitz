@@ -62,7 +62,7 @@ func missingErr(name string, m *client.ServiceJobMissing) error {
 }
 
 // newEnterpriseJobsCommand is blitz enterprise jobs: the jobs your
-// organization's service runs (spec_053 EN-42, EN-43), as Studio › Resources › Jobs
+// organization's service runs (spec_053 EN-42, EN-43), as Studio › Jobs
 // and the status bar show them.
 func newEnterpriseJobsCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{

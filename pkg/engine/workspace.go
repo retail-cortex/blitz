@@ -310,6 +310,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		// Its locked agents keep their names over plugins' (EN-31).
 		w.agents.Lock(filepath.Join(cfg.Org.Locked, "agents"))
 	}
+	// The global agents switched off here aren't loaded (STU-15).
+	userAgents := filepath.Clean(config.ExpandHome(config.UserAgentsDir))
+	w.agents.Hide(func(from, name string) bool {
+		return filepath.Clean(from) == userAgents && agentScope(cfg).Off(dir)[name]
+	})
 	if err := w.agents.LoadExternalAgents(cfg.AgentSearchPaths(dir)...); err != nil {
 		o.Warn(err.Error())
 	}

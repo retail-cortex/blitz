@@ -949,6 +949,9 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .studio-secrets-body { padding-inline: 12px 4px; }
 /* A list pane's intro and group headings line up with its title (12px in, as .side-head). */
 .slide-list > p.t-body-sm:not(.agent-dir), .slide-list > section > :is(.t-title-sm, .t-body-sm, p) { margin-inline: 12px 4px; }
+/* Studio's global agents: their heading row in line with the list's title, and one switched off here dimmed. */
+.global-agents > .row { margin-inline: 12px 4px; }
+.list-item.is-off .lines { opacity: 0.6; }
 /* Studio's Settings and Browsers: their intro, error and list in line with the title, as the list panes'. */
 .studio-settings { display: flex; flex-direction: column; gap: 8px; }
 :is(.studio-settings, .studio-browsers) > :is(p, .list, .ws-settings-embedded) { margin: 0 4px 0 12px; }
@@ -1239,8 +1242,10 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .studio-drawer .settings { height: 100%; min-height: 0; gap: 24px; }
 .studio-drawer .settings-pane { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 /* Resources: its tabs on top, the tab's pane in the rest of the height (not all of it). */
-.studio-drawer .settings-pane.studio-resources > .tabs { flex: none; }
-.studio-drawer .settings-pane.studio-resources > :not(.tabs) { flex: 1; min-height: 0; height: auto; }
+.studio-drawer .settings-pane.studio-resources > :is(.tabs, .agents-switch) { flex: none; }
+.studio-drawer .settings-pane.studio-resources > :not(.tabs, .agents-switch) { flex: 1; min-height: 0; height: auto; }
+/* Agents' two tabs (Agents, Evals), under Resources' tabs, in Studio and Settings. */
+.agents-switch { padding: 12px 12px 4px; }
 /* The editor answers to its pane, not the window: in a narrow pane (the
    Agents view beside a wide chat, Settings on a small screen) the list
    goes above the form, and then the form's pairs become one column. */

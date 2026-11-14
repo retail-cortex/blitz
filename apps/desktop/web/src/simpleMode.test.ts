@@ -20,9 +20,10 @@ import { allSections, entryOf, menuIds, resourceTabs, sectionShown, settingsEntr
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
     expect(shownEntries(false)).toEqual(["providers", "personality", "appearance", "resources", "access", "system"]);
-    expect(shownEntries(true)).toEqual(["providers", "personality", "appearance", "resources", "access", "system"]);
+    expect(shownEntries(true)).toEqual(["providers", "personality", "appearance", "resources", "jobs", "access", "system"]);
     expect(shownTabs("resources", false)).toEqual(["connectors"]);
-    expect(shownTabs("resources", true)).toEqual(["agents", "skills", "evals", "workers", "connectors", "secrets", "browser"]);
+    expect(shownTabs("resources", true)).toEqual(["agents", "skills", "connectors", "browser", "secrets"]);
+    expect(shownTabs("jobs", false)).toEqual([]);
     expect(shownTabs("access", false)).toEqual(["workspaces"]);
     expect(shownTabs("system", false)).toEqual(["about"]);
     expect(shownTabs("system", true)).toEqual(["service", "logs", "about"]);
@@ -60,11 +61,14 @@ describe("simple mode", () => {
   ])("shows sign-in for $method: $want (advanced: $advanced)", ({ advanced, method, want }) => {
     expect(showsSignIn(advanced, method)).toBe(want);
   });
-  it("shows every section once, as a tab of one entry (MCP servers inside Connectors')", () => {
+  it("shows every section once, as a tab of one entry (MCP servers inside Connectors', the evals Agents' second tab)", () => {
     const tabs = settingsEntries.flatMap((e) => [...e.tabs]);
     expect(new Set(tabs).size).toBe(tabs.length);
-    expect([...tabs, "mcp"].sort()).toEqual([...allSections].sort());
+    expect([...tabs, "mcp", "evals"].sort()).toEqual([...allSections].sort());
     expect(tabOf("mcp")).toBe("connectors");
+    expect(tabOf("evals")).toBe("agents");
+    expect(entryOf("evals")).toBe("resources");
+    expect(entryOf("workers")).toBe("jobs");
     expect(entryOf("mcp")).toBe("resources");
     expect(resourceTabs.map(entryOf)).toEqual(resourceTabs.map(() => "resources"));
     expect(entryOf("organization")).toBe("providers");

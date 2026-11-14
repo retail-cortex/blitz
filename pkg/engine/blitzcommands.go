@@ -626,7 +626,7 @@ func (w *Workspace) cmdEvalRun(ctx context.Context, c api.BlitzCommand, args map
 		return nil, err
 	}
 	go func() { _, _ = w.RunEval(context.WithoutCancel(ctx), name, api.EvalOptions{}) }()
-	return map[string]any{"started": name, "note": "It runs in the background; eval results reads it once done (Studio › Resources › Evals shows it as it goes)."}, nil
+	return map[string]any{"started": name, "note": "It runs in the background; eval results reads it once done (Studio › Resources › Agents › Evals shows it as it goes)."}, nil
 }
 
 func (w *Workspace) cmdEvalResults(_ context.Context, _ api.BlitzCommand, args map[string]any) (any, error) {
@@ -845,7 +845,7 @@ func (w *Workspace) cmdAgentSave(ctx context.Context, c api.BlitzCommand, args m
 	}
 	w.RefreshAgents(ctx)
 	rel, _ = filepath.Rel(w.Dir(), path)
-	return map[string]any{"saved": rel, "note": "Its evals run when the person runs them (Studio › Resources › Evals): never in this turn."}, nil
+	return map[string]any{"saved": rel, "note": "Its evals run when the person runs them (Studio › Resources › Agents › Evals): never in this turn."}, nil
 }
 
 func (w *Workspace) cmdSkillList(context.Context, api.BlitzCommand, map[string]any) (any, error) {

@@ -23,6 +23,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -32,7 +33,7 @@ import (
 // (RefreshAgents); the one asked about is refreshed at once.
 
 func (h workspaceService) ListAgentFiles(ctx context.Context, r req[pb.ListAgentFilesRequest]) (*connect.Response[pb.ListAgentFilesResponse], error) {
-	dir, _, err := h.agentsDir(ctx, r.Msg.Workspace, r.Msg.Scope)
+	dir, w, err := h.agentsDir(ctx, r.Msg.Workspace, r.Msg.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -41,10 +42,32 @@ func (h workspaceService) ListAgentFiles(ctx context.Context, r req[pb.ListAgent
 		return nil, err
 	}
 	out := &pb.ListAgentFilesResponse{Dir: dir}
+	// The global agents asked for with a workspace say which are off there (STU-15).
+	var off map[string]bool
+	if w != nil && r.Msg.Scope == pb.AgentScope_AGENT_SCOPE_USER {
+		off = w.AgentsOffHere()
+	}
 	for _, f := range files {
-		out.Files = append(out.Files, agentFileMsg(f))
+		m := agentFileMsg(f)
+		m.OffHere = f.Spec != nil && off[f.Spec.Name]
+		out.Files = append(out.Files, m)
 	}
 	return ok(out)
+}
+
+// SetAgentEnabled turns a global agent on or off in a workspace (STU-15).
+func (h workspaceService) SetAgentEnabled(ctx context.Context, r req[pb.SetAgentEnabledRequest]) (*connect.Response[pb.SetAgentEnabledResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.SetAgentOn(ctx, r.Msg.Name, r.Msg.Enabled); err != nil {
+		if errors.Is(err, engine.ErrAgentInUse) {
+			return nil, apiError(connect.CodeFailedPrecondition, "AGENT_IN_USE", err)
+		}
+		return nil, toAPI(err)
+	}
+	return ok(&pb.SetAgentEnabledResponse{})
 }
 
 func (h workspaceService) SaveAgentFile(ctx context.Context, r req[pb.SaveAgentFileRequest]) (*connect.Response[pb.SaveAgentFileResponse], error) {

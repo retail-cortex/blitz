@@ -60,6 +60,7 @@ export function AgentEditor({
   onDirty,
   onEvals,
   evalsIn = workspace,
+  listFooter,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -71,10 +72,12 @@ export function AgentEditor({
   slide?: boolean;
   /** Hears whether the form holds unsaved changes (Studio's drawer asks before closing). */
   onDirty?: (dirty: boolean) => void;
-  /** Opens Studio › Resources › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
+  /** Opens Studio › Resources › Agents › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
   onEvals?: (agent: string) => void;
   /** The workspace whose evals cover the agents: this one, or for the global agents the home workspace (EV-40). */
   evalsIn?: string;
+  /** Shown under the list: in Studio, the global agents with their switches for this workspace (STU-15). */
+  listFooter?: ReactNode;
 }) {
   const snack = useSnackbar();
   const [evals, setEvals] = useState<EvalFile[]>([]);
@@ -309,22 +312,33 @@ export function AgentEditor({
           )}
           {files.map((f) => {
             const name = fileName(f.path, f.agent?.name);
+            const agent = f.agent?.name;
+            const covered = onEvals && agent ? evalsForAgent(evals, agent).length : 0;
             return (
-              <button key={f.path} className={`list-item ${open?.path === f.path ? "active" : ""} ${f.problem ? "has-problem" : ""}`} title={f.problem || f.path} onClick={() => show(f)}>
-                <Icon path={f.problem ? mdiAlertCircleOutline : mdiRobotOutline} className={f.problem ? "error-text" : undefined} />
-                <span className="lines">
-                  <span className="ellipsis">
-                    {f.agent?.displayName || name} <GradeBadge kind="agent" name={f.agent?.name || name} />
+              <div key={f.path} className={`list-item agent-row ${open?.path === f.path ? "active" : ""} ${f.problem ? "has-problem" : ""}`}>
+                <button type="button" className="row-open" title={f.problem || f.path} onClick={() => show(f)}>
+                  <Icon path={f.problem ? mdiAlertCircleOutline : mdiRobotOutline} className={f.problem ? "error-text" : undefined} />
+                  <span className="lines">
+                    <span className="ellipsis">
+                      {f.agent?.displayName || name} <GradeBadge kind="agent" name={agent || name} />
+                    </span>
+                    <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>{f.problem ? t("desktop.agents.broken") : f.agent?.description}</small>
                   </span>
-                  <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>
-                    {f.problem ? t("desktop.agents.broken") : [f.agent?.description, onEvals && f.agent && evalsForAgent(evals, f.agent.name).length === 0 ? t("desktop.evals.no_evals_yet") : ""].filter(Boolean).join(" · ")}
-                  </small>
-                </span>
-              </button>
+                </button>
+                {/* Its evals, one click away: the count opens them, none offers a draft (STU-13). */}
+                {onEvals && agent && !f.problem && (
+                  <span className="trailing">
+                    <Button small variant="text" icon={mdiFlaskOutline} onClick={() => onEvals(agent)}>
+                      {covered > 0 ? tn("desktop.agents.evals_count", covered) : t("desktop.agents.evals_none")}
+                    </Button>
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
         {scope === AgentScope.WORKSPACE && <OrgItems workspace={workspace} kind="agent" onCopied={() => void refresh()} />}
+        {listFooter}
       </aside>
       )}
       <section className={`split-main ${slide ? "slide-detail" : ""}`} inert={slide && open === null}>

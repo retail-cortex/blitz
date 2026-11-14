@@ -38,7 +38,7 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t } from "../i18n";
 import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
-import { Button, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "@blitz/webui";
+import { Button, Field, Icon, IconButton, Segmented, Switch, useSnackbar, MultiSelect } from "@blitz/webui";
 import { DraftButton } from "./Draft";
 import { MarkdownField } from "./MarkdownField";
 import { GatesTitle } from "./RulesOrGuardrails";
@@ -187,6 +187,19 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
     }
   };
 
+  // A rule's switch: off writes enabled: false in its file (the project's,
+  // as a guardrail's), keeping everything else; on takes it out (STU-16).
+  const toggle = async (r: RuleFile, on: boolean) => {
+    try {
+      await workspaces.saveRule({ workspace, previousName: r.name, rule: specFromForm({ ...formFromRule(r), off: !on }) });
+      snack(t(on ? "desktop.rules.switched_on" : "desktop.rules.switched_off", { name: r.name }));
+      await refresh();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  const onOff = (r: RuleFile) => <Switch label={t("desktop.rules.switch", { name: r.name })} checked={!r.off} onChange={(on) => void toggle(r, on)} />;
+
   const gateList = (key: "before" | "after", list: RuleFile[]) => (
     <section className="stack rule-section" style={{ gap: 4 }}>
       <span className="t-title-sm">{t(`desktop.rules.${key}`)}</span>
@@ -196,7 +209,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
         {list.map((r, i) => (
           <div
             key={r.name}
-            className={`list-item rule-row ${dragging?.list === key && dragging.index === i ? "dragging" : ""}`}
+            className={`list-item rule-row ${dragging?.list === key && dragging.index === i ? "dragging" : ""} ${r.off ? "is-off" : ""}`}
             draggable={r.editable}
             onDragStart={() => setDragging({ list: key, index: i })}
             onDragOver={(e) => dragging?.list === key && e.preventDefault()}
@@ -210,7 +223,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                 <span className="ellipsis">
                   <span className="rule-step">{i + 1}.</span> {r.name} <GradeBadge kind="rule" name={r.name} />
                 </span>
-                <small className={`ellipsis ${r.problem ? "error-text" : ""}`}>{r.problem || [t(`desktop.rules.action.${r.action || "warn"}`), r.agents.length ? t("desktop.rules.for", { agents: r.agents.join(", ") }) : "", r.description || r.text].filter(Boolean).join(" · ")}</small>
+                <small className={`ellipsis ${r.problem ? "error-text" : ""}`}>{r.problem || [r.off ? t("desktop.rules.off") : t(`desktop.rules.action.${r.action || "warn"}`), r.agents.length ? t("desktop.rules.for", { agents: r.agents.join(", ") }) : "", r.description || r.text].filter(Boolean).join(" · ")}</small>
               </span>
             </button>
             {r.editable && (
@@ -218,6 +231,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                 {/* Only the moves there are: none for the first's up or the last's down. */}
                 {i > 0 && <IconButton icon={mdiArrowUp} label={t("desktop.rules.up", { name: r.name })} small className="hover-only" onClick={() => void reorder(list, i, i - 1)} />}
                 {i < list.length - 1 && <IconButton icon={mdiArrowDown} label={t("desktop.rules.down", { name: r.name })} small className="hover-only" onClick={() => void reorder(list, i, i + 1)} />}
+                {onOff(r)}
               </span>
             )}
           </div>
@@ -253,15 +267,18 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
           <span className="t-body-sm muted">{t("desktop.rules.instructions_hint")}</span>
           <div className="list">
             {sections.instructions.map((r) => (
-              <button key={r.path} className="list-item" title={r.path} onClick={() => show(r)}>
-                <Icon path={mdiFileDocumentOutline} />
-                <span className="lines">
-                  <span className="ellipsis">
-                    {r.name} <GradeBadge kind="rule" name={r.name} />
+              <div key={r.path} className={`list-item rule-row ${r.off ? "is-off" : ""}`}>
+                <button type="button" className="row-open" title={r.path} onClick={() => show(r)}>
+                  <Icon path={mdiFileDocumentOutline} />
+                  <span className="lines">
+                    <span className="ellipsis">
+                      {r.name} <GradeBadge kind="rule" name={r.name} />
+                    </span>
+                    <small className="ellipsis">{[r.off ? t("desktop.rules.off") : r.paths.length ? t("desktop.rules.scoped", { paths: r.paths.join(", ") }) : t("desktop.rules.always"), r.editable ? "" : r.path].filter(Boolean).join(" · ")}</small>
                   </span>
-                  <small className="ellipsis">{[r.paths.length ? t("desktop.rules.scoped", { paths: r.paths.join(", ") }) : t("desktop.rules.always"), r.editable ? "" : r.path].filter(Boolean).join(" · ")}</small>
-                </span>
-              </button>
+                </button>
+                {r.editable && <span className="trailing">{onOff(r)}</span>}
+              </div>
             ))}
           </div>
         </section>

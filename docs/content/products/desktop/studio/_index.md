@@ -11,7 +11,7 @@ Studio is in the menu bar once **Show advanced** is on (in Settings' title bar).
 
 ![Studio's Overview: the workspace's grade, its runs, eval coverage and what needs attention](../../../images/desktop/studio-overview.png)
 
-Studio only ever changes the workspace it's open in. What every workspace shares (your own agents, skills, evals, jobs, connections, secrets and browsers) is in [Settings › Resources](../configure.md#resources), with the same tabs.
+Studio only ever changes the workspace it's open in. What every workspace shares (your own agents and their evals, skills, connections, browser profiles and secrets) is in [Settings › Resources](../configure.md#resources), with the same tabs, and your global jobs in [Settings › Jobs](../configure.md#jobs).
 
 ## The areas
 
@@ -21,15 +21,15 @@ Studio only ever changes the workspace it's open in. What every workspace shares
 | [Settings](../configure.md#a-workspaces-own-settings) | The workspace's own agent, model, permissions, browser and the rest |
 | Specs | The project's specification, in `.agents/specs` |
 | **Resources** | What the workspace's agents are and use, a tab each, as in Settings › Resources: |
-| › [Agents](agents.md) | Specialists with their own instructions, tools and limits |
+| › [Agents](agents.md) | Specialists with their own instructions, tools and limits; your own agents from Settings are listed under them, each with a switch for this workspace. Agents' second tab is **Evals** |
+| › › [Evals](evals.md) | Prompts with the answers you expect, to prove an agent still works after a change; each agent's row says how many cover it, one click away |
 | › [Skills](skills.md) | Recipes the agent follows for one kind of task, some with scripts |
-| › [Evals](evals.md) | Prompts with the answers you expect, to prove an agent still works after a change |
-| › [Jobs](jobs.md) | Prompts or workflows that run on a schedule, unattended |
 | › [Connectors](connectors.md) | Databases your agents can query, read-only unless you say otherwise, and MCP servers |
+| › Browser | The browser profile this workspace's agents browse with (**Use here**); the profiles themselves are made in Settings |
 | › [Secrets](secrets.md) | Tokens and passwords this workspace's prompts, instructions and servers can use, kept out of conversations and logs |
-| › Browsers | The browser profile this workspace's agents browse with (**Use here**); the profiles themselves are made in Settings |
+| [Jobs](jobs.md) | Prompts or workflows that run on a schedule, unattended |
 | [Workflows](workflows.md) | Steps in order, each one's output the next one's input, built on a canvas or composed with AI |
-| [Rules](rules.md) | The work's quality: checks on each prompt, each answer, or instructions for some files |
+| [Rules](rules.md) | The work's quality: checks on each prompt, each answer, or instructions for some files; each with a switch to turn it off |
 | [Guardrails](guardrails.md) | Safety and limits: prompt injection, secrets and personal data, and your own checks |
 
 ## A good order

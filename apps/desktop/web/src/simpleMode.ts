@@ -27,11 +27,11 @@ export type SectionId = (typeof allSections)[number];
 
 /**
  * Resources' tabs, the same in Settings (every workspace's) and Studio
- * (this workspace's): who does the work, what they know, what proves
- * them, what runs, what they reach, what they need, and the browsers they
- * sign in with.
+ * (this workspace's): who does the work (with the evals that prove them,
+ * Agents' second tab), what they know, what they reach, the browser they
+ * sign in with, and what they need.
  */
-export const resourceTabs = ["agents", "skills", "evals", "workers", "connectors", "secrets", "browser"] as const;
+export const resourceTabs = ["agents", "skills", "connectors", "browser", "secrets"] as const;
 /** A tab of Resources. */
 export type ResourceTab = (typeof resourceTabs)[number];
 
@@ -39,21 +39,22 @@ export type ResourceTab = (typeof resourceTabs)[number];
  * Settings' side list: six entries, each holding its sections as tabs
  * (desktop.settings.entry.<id>): the models and who provides them; how
  * Blitz talks; how the app looks; the Resources every workspace shares;
- * where Blitz works and what it may do; the system.
+ * the global jobs; where Blitz works and what it may do; the system.
  */
 export const settingsEntries = [
   { id: "providers", tabs: ["providers", "organization"] },
   { id: "personality", tabs: ["personality", "voice"] },
   { id: "appearance", tabs: ["appearance"] },
   { id: "resources", tabs: resourceTabs },
+  { id: "jobs", tabs: ["workers"] },
   { id: "access", tabs: ["workspaces", "permissions"] },
   { id: "system", tabs: ["service", "logs", "about"] },
 ] as const satisfies readonly { id: string; tabs: readonly SectionId[] }[];
 /** An entry of Settings' side list. */
 export type EntryId = (typeof settingsEntries)[number]["id"];
 
-/** The tab a section shows in: its own, but MCP servers' is Connectors'. */
-export const tabOf = (s: SectionId): SectionId => (s === "mcp" ? "connectors" : s);
+/** The tab a section shows in: its own, but MCP servers' is Connectors' and the evals' is Agents' (their second tab). */
+export const tabOf = (s: SectionId): SectionId => (s === "mcp" ? "connectors" : s === "evals" ? "agents" : s);
 
 /** The side list's entry a section is shown under. */
 export function entryOf(s: SectionId): EntryId {

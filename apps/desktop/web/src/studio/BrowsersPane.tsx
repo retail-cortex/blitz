@@ -24,9 +24,9 @@ import { t } from "../i18n";
 import { Button, Chip, Icon, IconButton, useSnackbar } from "@blitz/webui";
 
 /**
- * Studio › Resources › Browsers (spec_049_browser_profiles BP-03a): the
+ * Studio › Resources › Browser (spec_049_browser_profiles BP-03b): the
  * browser profiles, which are every workspace's (made and changed in
- * Settings › Resources › Browsers), listed read-only, with the one this
+ * Settings › Resources › Browser), listed read-only, with the one this
  * workspace's agents browse with marked and Use here to choose another:
  * the workspace's own choice, as a connector's switch is.
  */

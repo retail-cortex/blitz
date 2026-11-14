@@ -1760,7 +1760,7 @@ function ReflectCard({ dir, patterns }: { dir: string; patterns: number }) {
 
 /**
  * A job the agent made from the chat (create_job, spec_023_workers WK-70):
- * paused until it's reviewed, with Review (Studio › Resources › Jobs, its details) and
+ * paused until it's reviewed, with Review (Studio › Jobs, its details) and
  * Enable here; once enabled, when it next runs.
  */
 function JobCard({ dir, name }: { dir: string; name: string }) {

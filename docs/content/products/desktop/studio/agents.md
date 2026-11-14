@@ -13,6 +13,10 @@ Choose **Studio › Resources › Agents**. Studio's menu shows once **Show adva
 
 The list shows the agents in `.agents/agents`, each with its description and, once the workspace has been checked, its grade. A file that doesn't load says so in red: open it to see why.
 
+Each agent's row also says how many evals cover it: click it to open them under **Evals**, Agents' second tab, or **Draft evals** to have some written when there are none.
+
+Under the list, **From every workspace** shows your own agents from Settings, each with a switch for this workspace. Switch one off and it isn't offered here (in conversations, jobs or evals) while the other workspaces keep it; the choice is yours, not the project's. The workspace's own agent can't be switched off: choose another one first. The gear opens them in Settings, where they're edited.
+
 ## Make an agent
 
 1. Choose **+** (**New agent**).

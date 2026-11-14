@@ -30,13 +30,13 @@ import (
 func ruleMsg(r gates.Rule, dir string) *pb.RuleFile {
 	return &pb.RuleFile{
 		Name: r.Name, Path: r.Path, When: r.When, Action: r.Action, Order: int32(r.Order), Agents: r.Agents,
-		Description: r.Description, Paths: r.Paths, Text: r.Text, Problem: r.Problem,
+		Description: r.Description, Paths: r.Paths, Text: r.Text, Problem: r.Problem, Off: r.Off,
 		Editable: gates.ValidName(r.Name) && filepath.Dir(r.Path) == dir,
 	}
 }
 
 func ruleSpec(s *pb.RuleSpec) engine.RuleSpec {
-	return engine.RuleSpec{Name: s.GetName(), When: s.GetWhen(), Action: s.GetAction(), Order: int(s.GetOrder()), Agents: s.GetAgents(), Description: s.GetDescription(), Paths: s.GetPaths(), Text: s.GetText()}
+	return engine.RuleSpec{Name: s.GetName(), When: s.GetWhen(), Action: s.GetAction(), Order: int(s.GetOrder()), Agents: s.GetAgents(), Description: s.GetDescription(), Paths: s.GetPaths(), Text: s.GetText(), Off: s.GetOff()}
 }
 
 // ruleErr is a rule edit's error as the API's.

@@ -135,7 +135,7 @@ export interface ViewDetail {
   /** Studio › Workflows: the workflow to open, and the run to show on it. */
   workflow?: string;
   run?: string;
-  /** Studio › Resources › Jobs: the job whose details to open. */
+  /** Studio › Jobs: the job whose details to open. */
   worker?: string;
   /** Processes: the one (by its number in its workspace) whose output to show, and its workspace (else this one). */
   process?: number;

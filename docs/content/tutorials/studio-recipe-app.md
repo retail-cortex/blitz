@@ -113,7 +113,7 @@ Its instructions also name the spec IDs it checks against (`SRCH-01`–`SRCH-06`
 
 Instructions drift. A model update, a tidy-up of the prompt or a new skill can quietly break an agent that worked last week. An **eval** catches that: a table of prompts, each with the answer you expect, run on the agent whenever it changes.
 
-**Studio › Resources › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
+**Studio › Resources › Agents › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
 
 | ID | Prompt | Output (expected) | Type | Threshold | Scope |
 |---|---|---|---|---|---|
@@ -307,7 +307,7 @@ edges:
 
 The composer doesn't set schedules, because a schedule lives outside the workflow's file. Select nothing on the canvas, then **Schedule** › **Add a schedule**: *every weekday at 7:00*.
 
-The schedule is a **job**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Studio › Resources › Jobs** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the job pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Jobs](../guide/workers.md).
+The schedule is a **job**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Studio › Jobs** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the job pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Jobs](../guide/workers.md).
 
 ## 11. Grade the whole workspace
 

@@ -329,7 +329,7 @@ function Shell() {
   useEffect(() => onNotificationOpen((dir) => (dir ? update((p) => openWorkspace(p, dir)) : showTasks())), [update]);
   // A blitz://open link opens its folder with the prompt filled in, not
   // sent; blitz://workers (the tray's) opens it on its workers, or
-  // Settings › Resources › Jobs for the global ones; blitz://processes (the tray's)
+  // Settings › Jobs for the global ones; blitz://processes (the tray's)
   // shows the Processes view, in its folder or the one shown.
   const activeDir = useRef("");
   activeDir.current = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
@@ -343,7 +343,7 @@ function Shell() {
           showView({ dir, view: "processes", process: link.process, processIn: dir });
           return;
         }
-        // The global workers' (the home workspace's) are in Settings › Resources › Jobs.
+        // The global workers' (the home workspace's) are in Settings › Jobs.
         if (link.view === "workers" && link.dir === (await globalHome())) {
           setSettingsAt({ section: "workers", scope: link.worker });
           return;

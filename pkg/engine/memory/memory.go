@@ -240,15 +240,15 @@ func (l *loader) rules(dir, root, base string) {
 		if !ok {
 			continue
 		}
-		paths, gate, body, err := splitRule(text)
+		paths, gate, off, body, err := splitRule(text)
 		if err != nil {
 			// Never an instruction in every prompt: a rule meant for some
 			// files (paths: *.go unquoted) or a gate with a typo would be.
 			l.out.Problems = append(l.out.Problems, fmt.Sprintf("%s: the front matter can't be read, so the rule isn't used (quote globs: paths: \"*.go\"): %v", f, err))
 			continue
 		}
-		if gate {
-			continue // a gate (when:), judged around the turn, not an instruction (spec_041_gates)
+		if gate || off {
+			continue // a gate (when:), judged around the turn, not an instruction (spec_041_gates); or switched off (enabled: false, STU-16)
 		}
 		if len(paths) == 0 {
 			// Loaded like an instruction file (imports included).
@@ -286,17 +286,18 @@ func (l *loader) rules(dir, root, base string) {
 // list of globs; "when": the rule gates turns) and returns the paths,
 // whether it's a gate, and the body; err when the front matter isn't
 // YAML (N26 engine-sub-2#18).
-func splitRule(text string) (paths []string, gate bool, body string, err error) {
+func splitRule(text string) (paths []string, gate, off bool, body string, err error) {
 	fm, rest, ok := frontmatter.Split([]byte(text))
 	if !ok {
-		return nil, false, text, nil
+		return nil, false, false, text, nil
 	}
 	var meta struct {
-		Paths any    `yaml:"paths"`
-		When  string `yaml:"when"`
+		Paths   any    `yaml:"paths"`
+		When    string `yaml:"when"`
+		Enabled *bool  `yaml:"enabled"`
 	}
 	if err := yaml.Unmarshal(fm, &meta); err != nil {
-		return nil, false, text, err
+		return nil, false, false, text, err
 	}
 	switch v := meta.Paths.(type) {
 	case string:
@@ -308,7 +309,7 @@ func splitRule(text string) (paths []string, gate bool, body string, err error) 
 			}
 		}
 	}
-	return paths, strings.TrimSpace(meta.When) != "", string(rest), nil
+	return paths, strings.TrimSpace(meta.When) != "", meta.Enabled != nil && !*meta.Enabled, string(rest), nil
 }
 
 // importRE finds @path tokens: at the start of a line or after
