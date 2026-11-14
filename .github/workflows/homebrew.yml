@@ -14,11 +14,13 @@
 
 name: homebrew
 
-# The Homebrew formula (spec_027_parity PAR-MOD-06): when a release is
-# published (not a pre-release), its signed checksums are verified and
-# release/homebrew_formula.sh writes Formula/blitz.rb in
-# retail-cortex/homebrew-tap, so `brew install retail-cortex/tap/blitz`
-# installs it. It needs a HOMEBREW_TAP_TOKEN secret that can push to the
+# The Homebrew formula and cask (spec_025_release REL-16, REL-16a): when a
+# release is published (not a pre-release), its signed checksums and
+# signed macOS disk images are verified, and release/homebrew_formula.sh
+# and release/homebrew_cask.sh write Formula/blitz.rb and Casks/blitz.rb
+# in retail-cortex/homebrew-tap, so `brew install retail-cortex/tap/blitz`
+# installs the command line and `brew install --cask
+# retail-cortex/tap/blitz` the desktop app. It needs a HOMEBREW_TAP_TOKEN secret that can push to the
 # tap; without one the job says so and does nothing.
 on:
   release:
@@ -41,7 +43,7 @@ jobs:
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: v2.6.1
-      - name: Formula
+      - name: Formula and cask
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -55,13 +57,21 @@ jobs:
           cosign verify-blob --bundle dl/checksums.txt.sigstore.json \
             --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com dl/checksums.txt
+          gh release download "$TAG" --pattern 'Blitz_*_macos_*.dmg' --pattern 'Blitz_*_macos_*.dmg.sigstore.json' --dir dmg
+          for f in dmg/*.dmg; do
+            cosign verify-blob --bundle "$f.sigstore.json" \
+              --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
+          done
+          (cd dmg && sha256sum *.dmg) > dmg-checksums.txt
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/retail-cortex/homebrew-tap.git" tap
-          mkdir -p tap/Formula
+          mkdir -p tap/Formula tap/Casks
           release/homebrew_formula.sh "$TAG" dl/checksums.txt > tap/Formula/blitz.rb
+          release/homebrew_cask.sh "$TAG" dmg-checksums.txt > tap/Casks/blitz.rb
           cd tap
           git config user.name "blitz-release"
           git config user.email "blitz-release@users.noreply.github.com"
-          git add Formula/blitz.rb
-          git diff --cached --quiet && { echo "The formula is up to date."; exit 0; }
+          git add Formula/blitz.rb Casks/blitz.rb
+          git diff --cached --quiet && { echo "The formula and cask are up to date."; exit 0; }
           git commit -m "blitz ${TAG#v}"
           git push origin HEAD
