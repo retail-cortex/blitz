@@ -684,7 +684,7 @@ func TestOrgConnections(t *testing.T) {
 	assert.Empty(t, got["org-default/notes"], "the person's refused: the organization's is used")
 	_, refused, err := connectors.Save(cat, d, connectors.Connection{Name: "scratch", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": "/tmp/s.db"}}, nil, "")
 	require.NoError(t, err)
-	assert.Contains(t, refused, "your organization doesn't allow sqlite connections")
+	assert.Contains(t, refused, "your organization doesn't allow sqlite connections (the organization's policy decides it)", "it says who decided (EN-39)")
 
 	// Served: the organization's locked one even when turned off, with the
 	// person's global secrets; the person's refused ones not.
@@ -768,7 +768,7 @@ func TestOrgKindsByWhatAFileIs(t *testing.T) {
 		cat := connectors.Load("", ws)
 		_, refused, err := connectors.Save(cat, d, connectors.Connection{Name: "custom", Category: "databases", Scope: connectors.ScopeWorkspace, Custom: true, Text: "# kind: postgres\n" + named(bq, "custom")}, nil, "")
 		require.NoError(t, err)
-		assert.Contains(t, refused, "your organization doesn't allow bigquery connections")
+		assert.Contains(t, refused, "your organization doesn't allow bigquery connections (the organization's policy decides it)")
 	})
 
 	t.Run("an unreadable file of the person's", func(t *testing.T) {

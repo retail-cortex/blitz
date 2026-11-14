@@ -255,7 +255,15 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   };
 
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
-  if (org?.url) return <OrganizationModels workspace={workspace} org={org} desc={desc} onSaved={() => void load()} />;
+  // Connected to an organization, its models; and the providers of their
+  // own its policy allows, below them (EN-35).
+  const orgModels = org?.url ? <OrganizationModels workspace={workspace} org={org} desc={desc} onSaved={() => void load()} /> : null;
+  if (org?.url && org.ownProviders.length === 0) return orgModels;
+  const allowedOwn = org?.url ? org.ownProviders : null;
+  const shownProviders = allowedOwn ? listedProviders.filter((p) => allowedOwn.some((o) => o.provider === p)) : listedProviders;
+  // A provider the policy doesn't allow isn't set up here, though it was
+  // chosen before the organization: the person picks one it allows.
+  const choiceShown = !allowedOwn || shownProviders.some((p) => p === choice.provider);
   const keyed = desc.providers.find((p) => p.name === choice.provider);
   const others = authMethods[choice.provider] ?? [];
   const saved = savedChoice(desc, effectiveProvider(desc.provider, workspace));
@@ -323,10 +331,21 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const signIn = showsSignIn(advanced, choice.method);
   return (
     <div className="stack provider-settings" style={{ gap: 12 }}>
+      {orgModels}
+      {allowedOwn && (
+        <div className="stack own-providers-note" style={{ gap: 4 }}>
+          <span className="t-title-sm">{t("desktop.org.own_title")}</span>
+          <span className="t-body-sm muted">
+            {t("desktop.org.own_allowed", {
+              providers: allowedOwn.map((o) => (o.models.length ? t("desktop.org.own_models", { provider: nameOf(o.provider), models: o.models.join(", ") }) : nameOf(o.provider))).join("; "),
+            })}
+          </span>
+        </div>
+      )}
       <p className="t-body-sm muted">
         <Icon path={mdiLockOutline} size="sm" /> {t(workspace ? "desktop.keys.intro_workspace" : "desktop.keys.intro", { store: desc.secretStore })}
       </p>
-      <DefaultModel workspace={workspace} desc={desc} busy={busy} act={act} />
+      {!allowedOwn && <DefaultModel workspace={workspace} desc={desc} busy={busy} act={act} />}
       <div className="list provider-list" role="radiogroup" aria-label={t("desktop.keys.provider")}>
         {workspace && (
           <ProviderRow
@@ -339,7 +358,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             onUse={() => use("")}
           />
         )}
-        {listedProviders.map((p) => (
+        {shownProviders.map((p) => (
           <ProviderRow
             key={p}
             name={nameOf(p)}
@@ -355,6 +374,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           />
         ))}
       </div>
+      {choiceShown && (
       <section className={`card provider-choice ${compact ? "compact" : ""}`}>
         <div className="row" style={{ gap: 8 }}>
           <span className="t-title-sm spacer">{choice.provider ? nameOf(choice.provider) : t("desktop.keys.use_global")}</span>
@@ -458,6 +478,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           </Button>
         </div>
       </section>
+      )}
       {modelError && (
         <p className="card warn row t-body-sm">
           <Icon path={mdiAlertCircleOutline} size="sm" />

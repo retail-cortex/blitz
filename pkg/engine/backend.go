@@ -128,7 +128,7 @@ func (w *Workspace) RunUserShell(ctx context.Context, command string, out func([
 		return 0, false, errors.New("no command after the exclamation mark")
 	}
 	if o := w.settings().Org; o.Active() && !o.Policy.Tools.ShellCommands {
-		return 0, false, errors.New("your organization doesn't allow your own ! commands")
+		return 0, false, fmt.Errorf("your organization doesn't allow your own ! commands (%s decides it)", o.Why("tools.shell_commands"))
 	}
 	cmd := tools.UserCommand(ctx, w.Dir(), command)
 	sink := &cappedWriter{out: out, left: MaxUserShellOutput}

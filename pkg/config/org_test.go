@@ -81,8 +81,10 @@ func TestOrgLayer(t *testing.T) {
 	skills := cfg.SkillSearchPaths(ws)
 	assert.Equal(t, filepath.Join(dir, "catalog", "locked", "skills"), skills[len(skills)-1])
 	rules := cfg.Org.LockedFirst([]string{"ws"}, "rules", "guardrails")
-	assert.Equal(t, []string{filepath.Join(dir, "catalog", "locked", "rules"), filepath.Join(dir, "catalog", "locked", "guardrails"), "ws",
-		filepath.Join(dir, "catalog", "default", "rules"), filepath.Join(dir, "catalog", "default", "guardrails")}, rules)
+	assert.Equal(t, []string{filepath.Join(dir, "policy", "rules"), filepath.Join(dir, "catalog", "locked", "rules"),
+		filepath.Join(dir, "policy", "guardrails"), filepath.Join(dir, "catalog", "locked", "guardrails"), "ws",
+		filepath.Join(dir, "catalog", "default", "rules"), filepath.Join(dir, "catalog", "default", "guardrails")}, rules, "the person's policy's first (EN-38)")
+	assert.Equal(t, "locked", cfg.Org.LockOf(filepath.Join(dir, "policy", "rules", "tested.md")))
 	assert.Equal(t, "locked", cfg.Org.LockOf(filepath.Join(dir, "catalog", "locked", "agents", "a.md")))
 	assert.Equal(t, "default", cfg.Org.LockOf(filepath.Join(dir, "catalog", "default", "agents", "a.md")))
 	assert.Equal(t, "", cfg.Org.LockOf(filepath.Join(home, ".blitz", "agents", "a.md")))
@@ -163,6 +165,53 @@ func TestOrgLayer(t *testing.T) {
 // MCP servers that come after the settings load (a trusted project's, a
 // plugin's) go through one check of the organization's policy: with
 // mcp.own false, none is added (EN-35; N26 api-client-config#1).
+// EN-35, EN-39: own providers by provider and their models, from a
+// service that says, else own_providers for all; who decided a setting.
+func TestOrgPolicyProviders(t *testing.T) {
+	var p OrgPolicy
+	ok, _ := p.OwnProvider("ollama")
+	assert.False(t, ok, "nothing allowed")
+	assert.False(t, p.AnyOwnProvider())
+	p.Models.OwnProviders = true
+	ok, models := p.OwnProvider("ollama")
+	assert.True(t, ok, "own_providers: every one")
+	assert.Nil(t, models)
+	p.Models.Own = map[string]OwnProvider{"ollama": {Allowed: true, Models: []string{"llama3*"}}, "anthropic": {}}
+	p.Models.OwnProviders = false
+	ok, models = p.OwnProvider("ollama")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"llama3*"}, models)
+	ok, _ = p.OwnProvider("anthropic")
+	assert.False(t, ok, "the service said, by provider")
+	assert.True(t, p.AnyOwnProvider())
+
+	tests := []struct {
+		model    string
+		patterns []string
+		want     bool
+	}{
+		{"llama3.2:3b", []string{"llama3*"}, true},
+		{"qwen2.5-coder:7b", []string{"llama3*", "qwen2.5-coder:*"}, true},
+		{"mistral:7b", []string{"llama3*"}, false},
+		{"anything", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, ModelAllowed(tt.model, tt.patterns))
+		})
+	}
+
+	o := OrgLayer{Explain: map[string]PolicyDecision{
+		"connectors.own":       {Level: "group", By: []string{"Data", "Ops"}},
+		"mcp.own":              {Level: "person", By: []string{"ana@acme.com"}},
+		"tools.shell_commands": {Level: "default"},
+	}}
+	assert.Equal(t, "the policy for Data, Ops", o.Why("connectors.own"))
+	assert.Equal(t, "the policy an admin set for you", o.Why("mcp.own"))
+	assert.Equal(t, "the organization's policy (its default)", o.Why("tools.shell_commands"))
+	assert.Equal(t, "the organization's policy", o.Why("sharing.link"), "the service didn't say")
+}
+
 func TestAddMCPServer(t *testing.T) {
 	org := func(own bool) OrgLayer {
 		o := OrgLayer{Defaults: "/org/default", Locked: "/org/locked"}

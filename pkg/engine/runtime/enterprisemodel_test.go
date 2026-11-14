@@ -321,6 +321,21 @@ func TestEnterprisePolicy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/api/v1/responses", s.g.requests()[0].Path, "a bare name is the organization's")
 
+	// By provider, and its models by pattern: OpenAI's gpt-x* only, Gemini
+	// not, though its key is set (EN-35).
+	cfg.Org.Policy.Models.OwnProviders = false
+	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"openai": {Allowed: true, Models: []string{"gpt-x*"}}}
+	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
+	own, err = NewModel(context.Background(), cfg, "openai/gpt-x")
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-x", own.Name())
+	_, err = NewModel(context.Background(), cfg, "openai/o9")
+	require.ErrorIs(t, err, ErrModelNotAllowed)
+	assert.ErrorContains(t, err, "o9 isn't one of the openai models the organization's policy allows (gpt-x*)")
+	stood, err = NewModel(context.Background(), cfg, "gemini/gemini-3")
+	require.NoError(t, err)
+	assert.Equal(t, "smart", stood.Name(), "a provider not allowed: the organization's stands in")
+
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
 	assert.ErrorContains(t, err, "catalog is out of date")

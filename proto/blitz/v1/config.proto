@@ -1448,6 +1448,35 @@ message EnterpriseState {
   // The machine-wide settings set the organization (EN-10): the person
   // can't change or disconnect it.
   bool managed = 14;
+  // The person's effective policy (EN-39): each setting, and which level
+  // of the organization's policy decided it. Empty without one, or from a
+  // service before /api/v1/policy.
+  repeated PolicySetting policy = 15;
+  // The providers the policy lets the person use themselves, each with
+  // the models it allows (EN-35).
+  repeated OwnProviderPolicy own_providers = 16;
+}
+
+// One setting of the person's effective policy and why (EN-39).
+message PolicySetting {
+  // Its path, such as "connectors.own" or "models.own.ollama.models".
+  string path = 1;
+  // Its value, as JSON.
+  string value_json = 2;
+  // The level that decided it: default, global, group or person.
+  string level = 3;
+  // Who: the groups' names, or the person's email.
+  repeated string by = 4;
+  // Whether the organization locked it.
+  bool locked = 5;
+}
+
+// A provider the organization lets the person use themselves (EN-35).
+message OwnProviderPolicy {
+  // Blitz's name for it, such as "ollama".
+  string provider = 1;
+  // The models allowed, as patterns ("llama3*"); every model when none.
+  repeated string models = 2;
 }
 
 // Request message for ConfigService.GetEnterprise.

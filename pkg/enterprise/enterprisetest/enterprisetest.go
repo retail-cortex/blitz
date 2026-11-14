@@ -206,8 +206,12 @@ type Service struct {
 	Catalog       map[string]CatalogFile
 	CatalogPolicy map[string]any
 	CatalogExpiry time.Time
-	Announce      chan int
-	FileCalls     int
+	// Policy is what /api/v1/policy serves (404, as from a service before
+	// it, when nil): the person's policy, why, rules and guardrails.
+	Policy      map[string]any
+	PolicyCalls int
+	Announce    chan int
+	FileCalls   int
 	// Workspaces are the organization's workspaces, by handle, each a bare
 	// repository in repos served through Git's smart HTTP at /git/, which
 	// takes the access token as the password, as the service's proxy does.
@@ -479,6 +483,31 @@ func NewService(t testing.TB, issuer string) *Service {
 			_, key, _ = ed25519.GenerateKey(nil)
 		}
 		env := seal(s.KeyID, key, m)
+		sum := sha256.Sum256(env)
+		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = w.Write(env)
+	})
+	mux.HandleFunc("GET /api/v1/policy", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		s.PolicyCalls++
+		if s.Policy == nil {
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
+			return
+		}
+		key := s.Key
+		if s.Forged {
+			_, key, _ = ed25519.GenerateKey(nil)
+		}
+		env := seal(s.KeyID, key, s.Policy)
 		sum := sha256.Sum256(env)
 		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
 		w.Header().Set("ETag", etag)

@@ -398,6 +398,63 @@ func TestEnterpriseCatalogLoop(t *testing.T) {
 	assert.False(t, cfg.Org.Active())
 }
 
+// The person's own policy, from a service that serves /api/v1/policy:
+// fetched once signed in, its rules first, and the window told each
+// setting, who decided it, and the providers of their own it allows
+// (EN-35, EN-38, EN-39).
+func TestEnterprisePolicyLoop(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Catalog = map[string]enterprisetest.CatalogFile{}
+	org.CatalogPolicy = map[string]any{"connectors": map[string]any{"own": false}}
+	org.Policy = map[string]any{
+		"schema": 2,
+		"policy": map[string]any{"refresh": "1h", "connectors": map[string]any{"own": true}, "models": map[string]any{"own": map[string]any{"ollama": map[string]any{"allowed": true, "models": []string{"llama3*"}}}}},
+		"explain": map[string]any{
+			"connectors.own":            map[string]any{"value": true, "level": "group", "by": []string{"Data"}},
+			"models.own.ollama.allowed": map[string]any{"value": true, "level": "global", "locked": true},
+		},
+		"rules": []map[string]any{{"kind": "rule", "name": "tested", "body": "Say how it was tested."}},
+	}
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	dir := config.EnterpriseDir("", org.URL)
+	var cfg *config.Config
+	require.Eventually(t, func() bool {
+		cfg, err = config.Load("")
+		return err == nil && cfg.Org.Policy.Connectors.Own
+	}, 5*time.Second, 20*time.Millisecond, "the policy's, not the catalog's")
+	assert.Equal(t, filepath.Join(dir, "policy", "rules"), cfg.Org.LockedFirst(nil, "rules")[0])
+
+	got, err := c.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{}))
+	require.NoError(t, err)
+	st := got.Msg.State
+	require.Len(t, st.Policy, 2)
+	assert.Equal(t, "connectors.own", st.Policy[0].Path)
+	assert.Equal(t, "true", st.Policy[0].ValueJson)
+	assert.Equal(t, "group", st.Policy[0].Level)
+	assert.Equal(t, []string{"Data"}, st.Policy[0].By)
+	assert.True(t, st.Policy[1].Locked)
+	require.Len(t, st.OwnProviders, 1)
+	assert.Equal(t, "ollama", st.OwnProviders[0].Provider)
+	assert.Equal(t, []string{"llama3*"}, st.OwnProviders[0].Models)
+}
+
 // The catalog is fetched again while its stream is up but silent: soon
 // while Blitz has none (and so no policy, and the organization's models
 // wait), then at the policy's refresh. A service that answered 404 at

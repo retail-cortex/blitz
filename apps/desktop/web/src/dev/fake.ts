@@ -64,6 +64,21 @@ function fakeOrgState(checked: boolean) {
     reachable: checked,
     // ?managed: device management set it (EN-10).
     managed: fakeParam("managed"),
+    // The person's effective policy and why (EN-35, EN-39): Ollama with
+    // llama3* for the Data group, connections locked off.
+    ...(fakeOrg.signedIn
+      ? {
+          policy: [
+            { path: "connectors.own", valueJson: "false", level: "global", by: [], locked: true },
+            { path: "mcp.own", valueJson: "false", level: "default", by: [], locked: false },
+            { path: "models.own.ollama.allowed", valueJson: "true", level: "group", by: ["Data"], locked: false },
+            { path: "models.own.ollama.models", valueJson: '["llama3*"]', level: "group", by: ["Data"], locked: false },
+            { path: "rules.tested", valueJson: "true", level: "person", by: ["ana@acme.com"], locked: false },
+            { path: "tools.shell_commands", valueJson: "true", level: "default", by: [], locked: false },
+          ],
+          ownProviders: [{ provider: "ollama", models: ["llama3*"] }],
+        }
+      : {}),
   };
 }
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };

@@ -43,7 +43,7 @@ The desktop app, the CLI and the tray share one sign-in: the Blitz service on yo
 
 ## What changes while you're connected
 
-- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Under the choice, Blitz says what that model can do (tools, images, thinking, how much it reads at once) and its price; `blitz models` lists the same. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back.
+- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Under the choice, Blitz says what that model can do (tools, images, thinking, how much it reads at once) and its price; `blitz models` lists the same. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back. Those your organization's policy lets you keep (Ollama on your computer, say) stay below its models, under **Your own providers**, with the models it allows of each.
 - **Its limits apply.** Your organization may cap what you spend, a day or a month, and how fast you can send requests.
 - **What you send goes to it.** Your requests to models go through your organization's service, which may keep a record of them under its policies. In one of your organization's workspaces, each request says which, so its guardrails and limits apply. Ask your admins what they keep.
 - **Signed out, the models wait.** A workspace tells you to sign in rather than falling back to your own keys.
@@ -59,6 +59,16 @@ When your organization's service doesn't answer (it's down, or you're offline), 
 Studio's Agents, Skills, Rules and Guardrails lists end with **From your organization**: what the catalog gives this workspace, each marked locked or default and with the groups it's for. A locked one is changed by your organization's Admins, through a review. A default one has **Copy to this workspace**, which puts it in `.agents` for you to change; the workspace's copy then takes its place. From the terminal, `blitz enterprise catalog` lists them and `blitz enterprise catalog copy rule/house-style` copies one.
 
 Its policy may also switch off Blitz's own built-in agents, skills or guardrails (never the agent your sessions start with), turn off tools for every agent, your own `!` commands, your own MCP servers or connections (or the kinds of connection it doesn't list, judged by what a file connects to, not by its `# kind:` comment), or your own model providers. Where it turns off your own MCP servers, that includes those a trusted project or a plugin brings. It may also turn off your own [plugins](extending.md#plugins), whether installed, from a marketplace or a folder: then none of their skills, agents, commands, hooks or MCP servers loads, a workspace says "your organization turns off your own plugins", and so does `blitz plugin list`. Until Blitz has your organization's policy (before your first sign-in), or if its copy is damaged, nothing of your own (plugins included) is allowed and the organization's models wait; Blitz says so when it starts. Studio's Connectors marks the organization's connections, and says why one of yours isn't used. Where it allows your own providers, name one with its prefix (`anthropic/claude-…`) to use it; bare model names are your organization's.
+
+### Your policy
+
+Your organization's admins set its policy in its admin console: for everyone, for groups, and for one person. Blitz gets **yours**, the result for you, when you sign in and again whenever an admin changes it. **Settings › Providers › Organization › Your policy** lists every setting, its value for you, and who decided it: the default, your organization, your group (by name), or an admin for you alone, and whether it's locked. You can't change it there; ask your admins.
+
+- **Your own providers, one by one.** The policy may allow some of your own providers and not others, and only some of their models: Ollama with `llama3*`, for example. Settings › Providers then offers just those; the model menu and `blitz models` list only the models it allows; and a model it doesn't allow is refused, saying which ones it does. With no model chosen, Ollama uses the first one you've pulled that it allows.
+- **Every refusal says who decided.** "Your organization doesn't allow connections of your own (the policy for Data decides it…)" tells you which level to ask about.
+- **Its rules and guardrails apply to you** before a workspace's and your own, as a locked catalog's do.
+
+A service from before this policy keeps sending its catalog's policy, which applies to everyone the same way.
 
 ## Your organization's look and terms
 

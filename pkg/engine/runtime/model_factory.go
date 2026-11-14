@@ -170,14 +170,24 @@ func openAIKey(ctx context.Context, llm config.LLMConfig, provider string, pol r
 	return key, baseURL, opts, nil
 }
 
+// ErrModelNotAllowed is a model of the person's own provider the
+// organization's policy doesn't allow (EN-35).
+var ErrModelNotAllowed = errors.New("your organization doesn't allow that model")
+
 // newProviderModel builds one model of the given provider, applying its
 // [model_settings] on each call.
 func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelName string) (model.LLM, error) {
-	if cfg.Enterprise.URL != "" && !(cfg.Org.Policy.Models.OwnProviders && provider != "") {
+	if cfg.Enterprise.URL != "" {
 		// Connected to an organization, its models are the models
 		// (spec_053_enterprise EN-20), unless its policy lets the person
-		// name one of their own (EN-35).
-		provider = "enterprise"
+		// name a provider of their own, and that model of it (EN-35).
+		allowed, patterns := cfg.Org.Policy.OwnProvider(provider)
+		switch {
+		case provider == "" || !allowed:
+			provider = "enterprise"
+		case modelName != "" && !config.ModelAllowed(modelName, patterns):
+			return nil, fmt.Errorf("%w: %s isn't one of the %s models %s allows (%s)", ErrModelNotAllowed, modelName, provider, cfg.Org.Why("models.own."+provider+".models"), strings.Join(patterns, ", "))
+		}
 	}
 	m, err := buildProviderModel(ctx, cfg, provider, modelName)
 	if err != nil {
@@ -236,7 +246,11 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 			return nil, err
 		}
 		if provider == "ollama" && modelName == "" {
-			return newOllamaAuto(apiKey, baseURL, opts, !cfg.LLM.Ollama.AllTools), nil
+			a := newOllamaAuto(apiKey, baseURL, opts, !cfg.LLM.Ollama.AllTools)
+			if cfg.Enterprise.URL != "" {
+				_, a.allowed = cfg.Org.Policy.OwnProvider("ollama")
+			}
+			return a, nil
 		}
 		m, err := newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
 		if t, ok := m.(*toolCallParsingModel); ok {

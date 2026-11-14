@@ -186,15 +186,24 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 		return LoadCatalog(dir), false, err
 	}
 	rawKeys, _ := json.Marshal(keys)
-	// What the settings read as they load: the policy and the expiry.
-	policy, _ := json.Marshal(struct {
-		Policy  Policy    `json:"policy"`
-		Expires time.Time `json:"expires"`
-	}{m.Policy, m.Expires})
-	for _, f := range []struct {
+	files := []struct {
 		name string
 		data []byte
-	}{{keysFile, rawKeys}, {PolicyFile, policy}, {catalogFile, data}, {catalogETag, []byte(res.Header.Get("ETag"))}} {
+	}{{keysFile, rawKeys}, {catalogFile, data}, {catalogETag, []byte(res.Header.Get("ETag"))}}
+	// What the settings read as they load: the policy and the expiry, from
+	// the manifest while the service doesn't serve one of its own; once it
+	// does, its (with why) stands (EN-38).
+	if _, err := os.Stat(filepath.Join(dir, policyETag)); err != nil {
+		policy, _ := json.Marshal(struct {
+			Policy  Policy    `json:"policy"`
+			Expires time.Time `json:"expires"`
+		}{m.Policy, m.Expires})
+		files = append(files, struct {
+			name string
+			data []byte
+		}{PolicyFile, policy})
+	}
+	for _, f := range files {
 		if err := writeFile(dir, f.name, f.data); err != nil {
 			return &m, true, err
 		}

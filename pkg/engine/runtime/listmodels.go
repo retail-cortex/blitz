@@ -74,13 +74,18 @@ func ConfiguredProviders(cfg *config.Config) []string {
 
 // setUpProviders are the providers cfg has credentials (or settings) for,
 // active or not.
-func setUpProviders(cfg *config.Config) []string {
-	var out []string
+func setUpProviders(cfg *config.Config) (out []string) {
+	var org []string
 	if cfg.Enterprise.URL != "" {
-		out = []string{"enterprise"}
-		if !cfg.Org.Policy.Models.OwnProviders {
-			return out
+		org = []string{"enterprise"}
+		if !cfg.Org.Policy.AnyOwnProvider() {
+			return org
 		}
+		// Only the providers its policy allows, after the organization's
+		// (EN-35).
+		defer func() {
+			out = append(org, slices.DeleteFunc(out, func(p string) bool { ok, _ := cfg.Org.Policy.OwnProvider(p); return !ok })...)
+		}()
 	}
 	if cfg.LLM.Gemini.APIKey != "" || cfg.LLM.Gemini.APIKeyCommand != "" || cfg.LLM.Gemini.UsesADC() {
 		out = append(out, "gemini")
@@ -114,7 +119,7 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 		providers = ConfiguredProviders(cfg)
 		// Ollama on this machine, when it answers (MOD-03).
 		active := cfg.LLM.Providers
-		if ownProviders(cfg) && !slices.Contains(providers, "ollama") && (len(active) == 0 || slices.Contains(active, "ollama")) && ollamaAnswers(ctx) {
+		if ownProvider(cfg, "ollama") && !slices.Contains(providers, "ollama") && (len(active) == 0 || slices.Contains(active, "ollama")) && ollamaAnswers(ctx) {
 			providers = append(providers, "ollama")
 		}
 	}
@@ -140,6 +145,11 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 				if cfg.LLM.API.ModelsURLPath() == "" {
 					pm.Note = "the configured models: [llm.api] models_path is none"
 				}
+			}
+			if cfg.Enterprise.URL != "" {
+				// Only the models the organization's policy allows of it (EN-35).
+				_, patterns := cfg.Org.Policy.OwnProvider(p)
+				ids = slices.DeleteFunc(ids, func(id string) bool { return !config.ModelAllowed(id, patterns) })
 			}
 			for _, id := range ids {
 				m := ListedModel{ID: id}
@@ -268,10 +278,14 @@ func listEnterprise(ctx context.Context, cfg *config.Config) ProviderModels {
 	return pm
 }
 
-// ownProviders reports whether the person's own providers may be used:
-// no organization, or one whose policy allows them (EN-35).
-func ownProviders(cfg *config.Config) bool {
-	return cfg.Enterprise.URL == "" || cfg.Org.Policy.Models.OwnProviders
+// ownProvider reports whether the person's own provider may be used: no
+// organization, or one whose policy allows it (EN-35).
+func ownProvider(cfg *config.Config, provider string) bool {
+	if cfg.Enterprise.URL == "" {
+		return true
+	}
+	ok, _ := cfg.Org.Policy.OwnProvider(provider)
+	return ok
 }
 
 // ollamaAddress is where Ollama answers on this machine by default.
@@ -363,15 +377,12 @@ func compareVersions(a, b []int) int {
 var ownProviderNames = []string{"gemini", "anthropic", "openai", "ollama"}
 
 // NotSetUp are the providers the person could set up and hasn't, given
-// those listed (spec_061_models MOD-06); none under an organization that
-// doesn't allow their own.
+// those listed (spec_061_models MOD-06); under an organization, only
+// those its policy allows.
 func NotSetUp(cfg *config.Config, listed []ProviderModels) []string {
-	if !ownProviders(cfg) {
-		return nil
-	}
 	var out []string
 	for _, p := range ownProviderNames {
-		if !slices.ContainsFunc(listed, func(pm ProviderModels) bool { return pm.Provider == p }) {
+		if ownProvider(cfg, p) && !slices.ContainsFunc(listed, func(pm ProviderModels) bool { return pm.Provider == p }) {
 			out = append(out, p)
 		}
 	}

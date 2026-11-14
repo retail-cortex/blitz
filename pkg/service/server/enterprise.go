@@ -17,9 +17,12 @@ package server
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -143,6 +146,14 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 			if err != nil && ctx.Err() == nil {
 				slog.Warn("the organization's catalog", "error", err)
 			}
+			// The person's own policy, with why each setting is what it is
+			// and their rules and guardrails (EN-38), from a service that
+			// serves one; the catalog's stands from one that doesn't.
+			polChanged, err := c.RefreshPolicy(ctx, dir)
+			if err != nil && !errors.Is(err, enterprise.ErrNoPolicyAPI) && ctx.Err() == nil {
+				slog.Warn("the organization's policy", "error", err)
+			}
+			changed = changed || polChanged
 			if changed {
 				configService{s}.changed(ctx, "", "")
 			}
@@ -216,6 +227,9 @@ func (s *Server) enterpriseState(ctx context.Context, c *enterprise.Client, chec
 	}
 	st := c.Status()
 	out := &pb.EnterpriseState{Url: st.URL, SignedIn: st.SignedIn, TermsVersion: st.Terms, Managed: config.Managed()}
+	if cfg, err := config.Load(s.configDir); err == nil && cfg.Org.Active() {
+		out.Policy, out.OwnProviders = policyState(cfg.Org)
+	}
 	info := st.Info
 	if check {
 		cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
@@ -454,4 +468,22 @@ func enterpriseError(err error) error {
 	default:
 		return apiError(connect.CodeUnavailable, "UNREACHABLE", err)
 	}
+}
+
+// policyState is the person's effective policy and the providers it lets
+// them use, as the window shows them (EN-35, EN-39).
+func policyState(o config.OrgLayer) ([]*pb.PolicySetting, []*pb.OwnProviderPolicy) {
+	var settings []*pb.PolicySetting
+	for _, path := range slices.Sorted(maps.Keys(o.Explain)) {
+		d := o.Explain[path]
+		v, _ := json.Marshal(d.Value)
+		settings = append(settings, &pb.PolicySetting{Path: path, ValueJson: string(v), Level: d.Level, By: d.By, Locked: d.Locked})
+	}
+	var own []*pb.OwnProviderPolicy
+	for _, p := range config.Providers {
+		if ok, models := o.Policy.OwnProvider(p); ok {
+			own = append(own, &pb.OwnProviderPolicy{Provider: p, Models: models})
+		}
+	}
+	return settings, own
 }

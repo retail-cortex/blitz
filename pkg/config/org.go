@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,7 +40,15 @@ type OrgLayer struct {
 	// Defaults and Locked are the layers' folders, laid out as a
 	// workspace's .agents folder; "" when there's no catalog.
 	Defaults, Locked string
-	Policy           OrgPolicy
+	// PolicyDir holds the rules and guardrails the person's policy
+	// switches on (rules/, guardrails/), which apply as locked items do
+	// (EN-38); "" when there's no organization.
+	PolicyDir string
+	Policy    OrgPolicy
+	// Explain says, by setting ("connectors.own"), which level of the
+	// organization's policy decided it (EN-39); empty from a service
+	// before /api/v1/policy.
+	Explain map[string]PolicyDecision
 	// Expires is when Blitz stops working under it unrenewed (EN-33).
 	Expires time.Time
 	// Problem is why the organization's policy couldn't be read ("" when
@@ -56,7 +65,8 @@ func (o OrgLayer) LockOf(path string) string {
 	switch {
 	case !o.Active() || path == "":
 		return ""
-	case strings.HasPrefix(path, o.Locked+string(filepath.Separator)):
+	case strings.HasPrefix(path, o.Locked+string(filepath.Separator)),
+		o.PolicyDir != "" && strings.HasPrefix(path, o.PolicyDir+string(filepath.Separator)):
 		return "locked"
 	case strings.HasPrefix(path, o.Defaults+string(filepath.Separator)):
 		return "default"
@@ -73,7 +83,85 @@ func (o OrgLayer) PluginsOff() bool {
 }
 
 // Active reports whether a catalog applies.
-func (o OrgLayer) Active() bool { return o.Defaults != "" || o.Locked != "" }
+func (o OrgLayer) Active() bool { return o.Defaults != "" || o.Locked != "" || o.PolicyDir != "" }
+
+// PolicyDecision is how the organization decided one setting of the
+// person's policy (the service's spec_012_policy PO-11): its value, the
+// level (default, global, group, person), who (groups' names, the
+// person's email), and whether the organization locked it.
+type PolicyDecision struct {
+	Value  any      `json:"value"`
+	Level  string   `json:"level"`
+	By     []string `json:"by,omitempty"`
+	Locked bool     `json:"locked,omitempty"`
+}
+
+// Why says who decided setting path, for a refusal: "the organization's
+// policy", "the policy for Data science", "your own policy", the default;
+// "the organization's policy" when the service didn't say.
+func (o OrgLayer) Why(path string) string {
+	d, ok := o.Explain[path]
+	if !ok {
+		return "the organization's policy"
+	}
+	switch d.Level {
+	case "group":
+		return "the policy for " + strings.Join(d.By, ", ")
+	case "person":
+		return "the policy an admin set for you"
+	case "default":
+		return "the organization's policy (its default)"
+	}
+	return "the organization's policy"
+}
+
+// OwnProvider is a provider the organization lets people use themselves.
+type OwnProvider struct {
+	Allowed bool `json:"allowed"`
+	// Models are the models allowed, as patterns ("llama3*"); every model
+	// when none.
+	Models []string `json:"models,omitempty"`
+}
+
+// OwnProvider says whether the policy lets people use provider (one of
+// Providers) themselves, and which of its models (every one when none,
+// EN-35): by provider from a service that says (Models.Own), else
+// own_providers for every one.
+func (p OrgPolicy) OwnProvider(provider string) (bool, []string) {
+	if o, ok := p.Models.Own[provider]; ok {
+		return o.Allowed, o.Models
+	}
+	return p.Models.OwnProviders, nil
+}
+
+// AnyOwnProvider reports whether the policy lets people use any provider
+// of their own.
+func (p OrgPolicy) AnyOwnProvider() bool {
+	if p.Models.OwnProviders {
+		return true
+	}
+	for _, o := range p.Models.Own {
+		if o.Allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// ModelAllowed reports whether model matches one of patterns (every
+// model when there are none): shell-style globs, such as "llama3*" or
+// "qwen2.5-coder:*".
+func ModelAllowed(model string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, pat := range patterns {
+		if ok, _ := path.Match(pat, model); ok {
+			return true
+		}
+	}
+	return false
+}
 
 // Expired reports whether the catalog is past its expiry at now, or its
 // policy couldn't be read: the organization's work waits until it's
@@ -88,8 +176,12 @@ func (o OrgLayer) Expired(now time.Time) bool {
 type OrgPolicy struct {
 	Models struct {
 		// OwnProviders lets people use their own providers beside the
-		// organization's models.
+		// organization's models: every one, as the service said before
+		// Own (and still says when every one is allowed whole).
 		OwnProviders bool `json:"own_providers"`
+		// Own says by provider which ones people may use and which of
+		// their models (the service's spec_012_policy PO-21).
+		Own map[string]OwnProvider `json:"own,omitempty"`
 	} `json:"models"`
 	Tools struct {
 		// Off are tools no agent may use.
@@ -132,8 +224,9 @@ func EnterpriseDir(prefixDir, raw string) string {
 
 // orgState is policy.json, as the service writes it beside the catalog.
 type orgState struct {
-	Policy  OrgPolicy `json:"policy"`
-	Expires time.Time `json:"expires"`
+	Policy  OrgPolicy                 `json:"policy"`
+	Explain map[string]PolicyDecision `json:"explain,omitempty"`
+	Expires time.Time                 `json:"expires"`
 }
 
 // applyOrg puts the organization's catalog in cfg, when the service has
@@ -146,7 +239,7 @@ func applyOrg(cfg *Config, prefixDir string) {
 		return
 	}
 	layers := filepath.Join(dir, "catalog")
-	cfg.Org = OrgLayer{Defaults: filepath.Join(layers, "default"), Locked: filepath.Join(layers, "locked")}
+	cfg.Org = OrgLayer{Defaults: filepath.Join(layers, "default"), Locked: filepath.Join(layers, "locked"), PolicyDir: filepath.Join(dir, "policy")}
 	path := filepath.Join(dir, "policy.json")
 	var st orgState
 	raw, err := os.ReadFile(path)
@@ -164,7 +257,7 @@ func applyOrg(cfg *Config, prefixDir string) {
 		}
 		cfg.Warnings = append(cfg.Warnings, fmt.Sprintf("your organization's policy (%s) can't be read (%s): nothing of your own (providers, MCP servers, plugins, connections, ! commands) is allowed, and its work waits until Blitz fetches it again; sign in under Settings › Providers › Organization or with blitz enterprise login", path, cfg.Org.Problem))
 	}
-	cfg.Org.Policy, cfg.Org.Expires = st.Policy, st.Expires
+	cfg.Org.Policy, cfg.Org.Explain, cfg.Org.Expires = st.Policy, st.Explain, st.Expires
 	orgLayers.Store(ConfigDir(prefixDir), cfg.Org)
 	for _, tool := range st.Policy.Tools.Off {
 		if !slices.Contains(cfg.Permissions.Deny, tool) {
@@ -197,7 +290,7 @@ var ErrMCPNameTaken = errors.New("an MCP server of that name exists already")
 // ErrMCPNameTaken when one of its name is there already.
 func (c *Config) AddMCPServer(s MCPServerConfig) error {
 	if c.Org.Active() && !c.Org.Policy.MCP.Own {
-		return ErrOrgMCP
+		return fmt.Errorf("%w (%s decides it)", ErrOrgMCP, c.Org.Why("mcp.own"))
 	}
 	if slices.ContainsFunc(c.MCP.Servers, func(u MCPServerConfig) bool { return u.Name == s.Name }) {
 		return ErrMCPNameTaken
@@ -267,7 +360,12 @@ func (o OrgLayer) LockedFirst(dirs []string, subs ...string) []string {
 		return dirs
 	}
 	var out []string
+	// The person's policy's rules and guardrails first (EN-38), then the
+	// catalog's locked ones.
 	for _, s := range subs {
+		if o.PolicyDir != "" {
+			out = append(out, filepath.Join(o.PolicyDir, s))
+		}
 		out = append(out, filepath.Join(o.Locked, s))
 	}
 	out = append(out, dirs...)

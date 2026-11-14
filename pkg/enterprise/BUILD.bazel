@@ -22,6 +22,7 @@ go_library(
         "enterprise.go",
         "jobs.go",
         "models.go",
+        "policy.go",
         "reach.go",
         "reviews.go",
         "run.go",

@@ -908,6 +908,72 @@ func TestCatalog(t *testing.T) {
 // changed on disk isn't read, an access token the service no longer takes
 // is refused (and renewed next time), a file the service won't give stops
 // the version, and the stream refused says so.
+// EN-38, EN-39: the person's own policy from /api/v1/policy, with why,
+// and their rules and guardrails laid out; the catalog's policy.json no
+// longer overwrites it; a service before it (404) leaves the catalog's.
+func TestPolicy(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	_, err := c.RefreshPolicy(ctx, dir)
+	assert.ErrorIs(t, err, ErrNoPolicyAPI, "a service before /api/v1/policy")
+
+	s.Policy = map[string]any{
+		"schema":     2,
+		"policy":     map[string]any{"refresh": "5m", "connectors": map[string]any{"own": true}, "models": map[string]any{"own": map[string]any{"ollama": map[string]any{"allowed": true, "models": []string{"llama3*"}}}}},
+		"explain":    map[string]any{"connectors.own": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
+		"rules":      []map[string]any{{"kind": "rule", "name": "tested", "body": "Say how it was tested."}},
+		"guardrails": []map[string]any{{"kind": "guardrail", "name": "no-pii", "body": "---\nstage: output\n---\nNo personal data."}},
+		"expires":    time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC),
+	}
+	changed, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	raw, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	require.NoError(t, err)
+	var st struct {
+		Policy  config.OrgPolicy
+		Explain map[string]config.PolicyDecision
+	}
+	require.NoError(t, json.Unmarshal(raw, &st))
+	assert.True(t, st.Policy.Connectors.Own)
+	ok, models := st.Policy.OwnProvider("ollama")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"llama3*"}, models)
+	assert.Equal(t, []string{"Data"}, st.Explain["connectors.own"].By)
+	assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"))
+	assert.FileExists(t, filepath.Join(dir, "policy", "guardrails", "no-pii.md"))
+
+	changed, err = c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed, "unchanged: 304")
+
+	// A catalog version now leaves the policy's policy.json as it is.
+	s.Catalog = map[string]enterprisetest.CatalogFile{"rules/style.md": {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."}}
+	s.CatalogPolicy = map[string]any{"connectors": map[string]any{"own": false}}
+	_, _, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	again, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	require.NoError(t, err)
+	assert.Equal(t, string(raw), string(again))
+
+	t.Run("a rule named to leave its folder is refused", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{{"kind": "rule", "name": "../evil", "body": "x"}}
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "can't be a file")
+		assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"), "the last kept")
+	})
+	t.Run("forged: refused, the last kept", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{}
+		s.Forged = true
+		defer func() { s.Forged = false }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorIs(t, err, ErrSignature)
+	})
+}
+
 func TestCatalogFailures(t *testing.T) {
 	_, s, c, _, _ := setup(t)
 	ctx := context.Background()

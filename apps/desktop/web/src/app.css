@@ -1625,3 +1625,8 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 /* A gateway path's fill-ins, in the ⓘ's tooltip (MDL-113). */
 .fills-tip { display: inline-flex; color: var(--md-on-surface-variant); cursor: help; border-radius: 50%; }
 .fills-tip:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 1px; }
+/* Your policy (EN-39): the organization's settings for the person, and who decided each. */
+.org-policy > summary { cursor: pointer; }
+.org-policy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.org-policy-table th { text-align: left; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--md-outline-variant); }
+.org-policy-table td { padding: 6px 8px; border-bottom: 1px solid var(--md-outline-variant); vertical-align: top; }
