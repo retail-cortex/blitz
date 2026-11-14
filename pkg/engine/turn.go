@@ -54,7 +54,13 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 		return w.runFlow(ctx, sessionID, f.flow, f.input, on)
 	}
 	start := time.Now()
+	if !tt.Aside {
+		on = w.factsStart(sessionID, tt.Text, on)
+	}
 	res, err := w.run(ctx, sessionID, tt, on, w.storage, opts...)
+	if !tt.Aside {
+		w.factsEnd(sessionID, res, err)
+	}
 	if tt.Command && isReflect(tt.Text) && err == nil {
 		// The next reflection's evidence starts where this one began
 		// (spec_048_harness_learning HE-04).
@@ -389,9 +395,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	prompt = withAdded(prompt, t.Context)
 	// What git doesn't track yet, so the files the turn's commands make
 	// are added at its end too (auto_add).
-	var untracked map[string]bool
+	var untracked, deleted map[string]bool
 	if !t.Aside {
-		untracked = w.untrackedNow(ctx)
+		untracked, deleted = w.untrackedNow(ctx), w.deletedNow(ctx)
 	}
 	var err error
 	// The turn's model calls are counted together, across its runs (an
@@ -504,6 +510,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		// The files the agent created go to git, in one batch, while the
 		// turn can still say so.
 		w.stageCreated(ctx, sessionID, untracked, on)
+		// And the files it deleted leave git's index (FIL-61).
+		w.unstageDeleted(ctx, deleted, on)
 		// Approved requirements whose work it changed: verify them again (SDD-31).
 		w.noteSpecDrift(sessionID, on)
 	}

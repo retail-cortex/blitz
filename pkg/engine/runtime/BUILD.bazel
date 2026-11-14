@@ -69,6 +69,7 @@ go_library(
         "tasks.go",
         "unavailable.go",
         "usage.go",
+        "voice.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/runtime",
     visibility = [
@@ -185,6 +186,7 @@ go_test(
         "outputcap_test.go",
         "outputlimit_test.go",
         "painter_test.go",
+        "personality_test.go",
         "pictures_test.go",
         "pin_test.go",
         "plan_test.go",
@@ -208,6 +210,7 @@ go_test(
         "steer_test.go",
         "tasks_test.go",
         "telemetry_test.go",
+        "voice_test.go",
     ],
     embed = [":runtime"],
     shard_count = 6,

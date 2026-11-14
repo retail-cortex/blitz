@@ -94,12 +94,14 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, 15, saved.TerminalFontSize, "normalized %+v", saved)
 	p.DocWidth, p.EditorZoom = "huge", 900
 	p.TerminalFont, p.TerminalFontSize = strings.Repeat("x", 201), 99
+	p.VoiceMic = strings.Repeat("m", 201)
 	p.LightTheme, p.DarkTheme = "one-dark-pro", "solarized" // not for light; unknown
 	odd, err := s.Save(p)
 	require.NoError(t, err)
 	require.Equal(t, "full", odd.DocWidth, "normalized %+v", odd)
 	require.Equal(t, 100, odd.EditorZoom, "normalized %+v", odd)
 	require.Empty(t, odd.TerminalFont, "a name too long is dropped")
+	require.Empty(t, odd.VoiceMic, "a microphone's ID too long is dropped")
 	require.Equal(t, 13, odd.TerminalFontSize, "normalized %+v", odd)
 	require.Equal(t, "blitz", odd.LightTheme, "normalized %+v", odd)
 	require.Equal(t, "blitz", odd.DarkTheme, "normalized %+v", odd)
@@ -214,4 +216,14 @@ func TestThemesMatchThePage(t *testing.T) {
 			assert.Equal(t, tc.want, ids)
 		})
 	}
+}
+
+// Preferences that can't be written say so.
+func TestPrefsUnwritable(t *testing.T) {
+	dir := t.TempDir()
+	s := &PrefsStore{path: filepath.Join(dir, "desktop.json")}
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	_, err := s.Save(Prefs{})
+	assert.Error(t, err)
 }

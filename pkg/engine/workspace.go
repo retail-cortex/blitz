@@ -60,6 +60,9 @@ import (
 type Options struct {
 	// Streaming asks the model for partial responses as they are generated.
 	Streaming bool
+	// NewVoiceModel builds the voice's model (spec_063_voice; nil:
+	// runtime.NewVoiceModel).
+	NewVoiceModel func(ctx context.Context, cfg *config.Config) (*runtime.VoiceModel, error)
 	// AppendSystemPrompt is added to the agent's instructions for this run
 	// (--append-system-prompt).
 	AppendSystemPrompt string
@@ -120,6 +123,7 @@ type Workspace struct {
 	notices     map[string][]string // background processes' notices waiting, by session
 	styleMu     sync.Mutex
 	style       string // the output style ("": [ui] style, else none)
+	personality string // the personality's name ("": default), under styleMu
 	// appendPrompt is added to the instructions for this run
 	// (--append-system-prompt).
 	appendPrompt string
@@ -210,8 +214,14 @@ type Workspace struct {
 	runsMu    sync.Mutex
 	running   map[string]bool // workers running now, by name
 	newModel  func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
-	warnedMu  sync.Mutex
-	warned    map[string]bool // messages warnOnce has shown
+	// newVoiceModel builds the voice's model (runtime.NewVoiceModel; tests
+	// set a fake's).
+	newVoiceModel func(ctx context.Context, cfg *config.Config) (*runtime.VoiceModel, error)
+	// turns are the sessions' turns' facts, for the voice (spec_063_voice
+	// VOX-17).
+	turns    turnWatch
+	warnedMu sync.Mutex
+	warned   map[string]bool // messages warnOnce has shown
 	// sessionContext is session_start hook output waiting for each
 	// session's next prompt.
 	hookCtxMu      sync.Mutex
@@ -254,6 +264,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	observability.RememberSecrets(cfg) // the process's log and telemetry mask this workspace's keys too
 	w := &Workspace{cfg: cfg, locales: SetupLocale(cfg, o.Warn), warn: o.Warn}
 	w.reply = i18n.Current()
+	w.newVoiceModel = o.NewVoiceModel
 	if w.newModel = o.NewModel; w.newModel == nil {
 		w.newModel = runtime.NewModel
 	}
@@ -491,6 +502,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	}
 	w.engine, err = runtime.NewEngine(ctx, cfg, w.agents, w.skills, w.tools, llm, append(opts,
 		runtime.WithInstructions(w.instructions()),
+		runtime.WithPersonality(w.personalityAtOpen(cfg, o.Warn)),
 		runtime.WithStreaming(o.Streaming),
 		runtime.WithTurnStore(w.storage),
 		runtime.WithUsageStore(w.storage),

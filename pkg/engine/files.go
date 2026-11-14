@@ -389,6 +389,9 @@ func (w *Workspace) RenameFile(ctx context.Context, from, to string) error {
 	if err := w.files().UserRename(ctx, fromRel, toRel); err != nil {
 		return err
 	}
+	if len(w.unstageGone(ctx, fromSlash)) > 0 {
+		w.restage(ctx, toSlash) // the new name in git in the old one's place (FIL-61)
+	}
 	w.userEdited(fromSlash, "renamed to "+toSlash)
 	return nil
 }
@@ -402,6 +405,7 @@ func (w *Workspace) DeleteFile(ctx context.Context, p string) error {
 	if err := w.files().UserRemove(ctx, rel); err != nil {
 		return err
 	}
+	w.unstageGone(ctx, slash) // FIL-61
 	w.userEdited(slash, "deleted")
 	return nil
 }

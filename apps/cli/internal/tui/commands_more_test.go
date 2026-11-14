@@ -383,3 +383,25 @@ func TestStatusNamesTheConfigFile(t *testing.T) {
 	app.ConfigDir = t.TempDir()
 	assert.Contains(t, runCmd(t, app, "/status"), filepath.Join(config.ConfigDir(app.ConfigDir), ".env.toml"))
 }
+
+// /personality default clears the workspace's, and a settings file that
+// can't be written says so (spec_064_personality PER-23).
+func TestPersonalitySaved(t *testing.T) {
+	app, s := stubApp(t, "")
+	app.ConfigDir = t.TempDir()
+	s.set = func(string, string) (string, error) { return "personality", nil }
+	out := runCmd(t, app, "/personality default")
+	assert.Contains(t, out, "Personality default")
+	assert.Contains(t, out, "ui.personality")
+	notDir := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(notDir, nil, 0o600))
+	app.ConfigDir = notDir
+	assert.Contains(t, runCmd(t, app, "/personality mentor"), "✗ ")
+}
+
+// /goal and /loop reach their commands.
+func TestGoalAndLoopDispatch(t *testing.T) {
+	app, _ := stubApp(t, "")
+	assert.NotEmpty(t, runCmd(t, app, "/goal"))
+	assert.NotEmpty(t, runCmd(t, app, "/loop"))
+}

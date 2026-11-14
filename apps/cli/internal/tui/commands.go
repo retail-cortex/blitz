@@ -216,6 +216,7 @@ var helpGroups = []struct {
 		{"/model_settings [<model> [key=value…|reset]]", "help.model_settings"},
 		{"/pin_model [<agent> <model>]", "help.pin"},
 		{"/style [name]", "help.style"},
+		{"/personality [name]", "help.personality"},
 		{"/unpin <agent>", "help.unpin"},
 	}},
 	{"help.group.work", [][2]string{

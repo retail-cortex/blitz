@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.12
-weight: 2
+weight: 3
 ---
 
 When your company's gateway won't answer, Blitz now shows you exactly what it sent and what came back. Turn on detail for just the part you're looking at and leave the rest of the log quiet. And the HTML in your documents finally looks the way you wrote it.

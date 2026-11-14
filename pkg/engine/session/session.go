@@ -131,6 +131,9 @@ const (
 	KindRule  = "rule" // after-agent rules asking for a revision (spec_041_gates)
 	KindPlan  = "plan" // the approved plan's go-ahead
 	KindTask  = "task" // a background task that ended (the model's side)
+	// KindSpoken is a voice conversation's line, the person's or the
+	// voice's (spec_063_voice VOX-16).
+	KindSpoken = "spoken"
 )
 
 // IsPrompt reports whether m is a prompt the user sent (a rewind point).

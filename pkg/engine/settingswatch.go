@@ -183,4 +183,5 @@ func (w *Workspace) reloadRules() {
 		w.warn("reloading the permission rules: " + err.Error())
 	}
 	w.ReloadSearch(cfg)
+	w.ReloadPersonality(context.Background(), cfg)
 }

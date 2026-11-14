@@ -846,3 +846,15 @@ export function devToolsAllowed(method: string): boolean {
   if (/^(Browser|Target|SystemInfo|Storage|DOMStorage|IndexedDB|CacheStorage|Tethering|ServiceWorker)\./.test(method)) return false;
   return !/^Network\.(getAllCookies|getCookies|setCookie|setCookies|deleteCookies|clearBrowserCookies)$/.test(method);
 }
+
+/**
+ * Whether the window's page may have a permission (main.ts's handler):
+ * notifications, writing to the clipboard (copy), full screen, and the
+ * microphone, audio only, for the page itself (spec_063_voice VOX-50: the
+ * page asks only with voice on, and never for the camera).
+ */
+export function pagePermission(permission: string, requesting: string, origin: string, mediaTypes: readonly string[] = []): boolean {
+  if (["notifications", "clipboard-sanitized-write", "fullscreen"].includes(permission)) return true;
+  if (permission !== "media") return false;
+  return !!origin && originOf(requesting) === origin && mediaTypes.length > 0 && mediaTypes.every((t) => t === "audio");
+}

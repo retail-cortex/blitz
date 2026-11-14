@@ -347,3 +347,11 @@ export function onDataMenu(dir: string, open: () => void): () => void {
   window.addEventListener(dataMenuEvent, f);
   return () => window.removeEventListener(dataMenuEvent, f);
 }
+
+// Voice (spec_063_voice VOX-21): the command palette starts a voice
+// conversation in a workspace's conversation, as ⌥⌘V does.
+export const talkEvent = "blitz:talk";
+/** Asks dir's conversation to start talking. */
+export function talk(detail: { dir: string }) {
+  window.dispatchEvent(new CustomEvent(talkEvent, { detail }));
+}

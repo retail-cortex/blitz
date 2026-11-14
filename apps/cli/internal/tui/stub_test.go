@@ -30,76 +30,77 @@ import (
 type stubBackend struct {
 	api.Backend
 
-	activeSession    func() (api.SessionInfo, bool)
-	newSession       func() (api.SessionInfo, error)
-	listSessions     func(all bool) ([]api.SessionInfo, error)
-	loadSession      func(ref string) (api.SessionInfo, bool, error)
-	saveSnapshot     func(name string, force bool) (api.SessionInfo, error)
-	renameSession    func(title string) (api.SessionInfo, error)
-	forkSession      func(turn int) (api.SessionInfo, error)
-	exportSession    func(id string) (string, error)
-	undo             func(session string, force bool) (api.UndoResult, error)
-	listCheckpoints  func() []api.Checkpoint
-	gitDiff          func() (string, error)
-	sessionDiff      func() string
-	sessionUsage     func() (api.Usage, error)
-	contextInfo      func() (api.ContextInfo, error)
-	compact          func(focus string) (api.CompactResult, error)
-	reloadMemory     func() ([]string, error)
-	reload           func() (api.ReloadResult, error)
-	addMemory        func(text string) (string, error)
-	listNotes        func() ([]api.Note, error)
-	forgetNote       func(name string) error
-	reflection       func() (api.Reflection, error)
-	set              func(key, value string) (string, error)
-	listStyles       func() []api.StyleInfo
-	listHooks        func() []api.HookInfo
-	listMCPServers   func() []api.MCPServer
-	dataConnections  func() ([]api.DataConnection, error)
-	listAgents       func() []api.AgentInfo
-	pinModel         func(agent, ref string) (api.PinResult, error)
-	unpin            func(agent string) (api.PinResult, error)
-	activeAgentTools func() api.AgentTools
-	availableLocales func() ([]api.LocaleInfo, string)
-	setLocale        func(input string) (api.LocaleChange, error)
-	rewindPoints     func() ([]api.RewindPoint, error)
-	rewind           func(index int, mode api.RewindMode, force bool) (api.RewindResult, error)
-	setGoal          func(cond string) (api.Goal, error)
-	goal             func() (api.Goal, error)
-	clearGoal        func() error
-	run              func(ctx context.Context, t api.Turn, on func(api.Event)) (api.TurnResult, error)
-	steer            func(text string) error
-	listTasks        func() []api.TaskInfo
-	stopTask         func(id string) (api.TaskInfo, error)
-	runningProcs     func(everywhere bool) ([]api.WorkspaceProcess, error)
-	stopProcIn       func(workspace string, id int) (api.ProcessInfo, error)
-	procOutputIn     func(workspace string, id int) (string, api.ProcessInfo, error)
-	takeNotices      func() []string
-	task             func(id string) (api.TaskInfo, []string, error)
-	pendingRequests  func() []api.TaskRequest
-	answerRequest    func(id string, d api.Decision, answer string) error
-	setModel         func(ref string) (string, error)
-	setAgent         func(name string) (api.AgentInfo, error)
-	setPermission    func(mode string) (string, error)
-	settings         func() api.Settings
-	modelErr         func() error
-	sandboxSummary   func() []string
-	projectSettings  func() api.ProjectSettings
-	trustProject     func(hash string, trusted bool) error
-	searchSkills     func(q string) []api.SkillInfo
-	listSkills       func() []api.SkillInfo
-	skill            func(name string) (api.SkillInfo, bool)
-	listEnvs         func() ([]api.Env, error)
-	removeEnv        func(key string) error
-	pruneEnvs        func() (api.PruneResult, error)
-	searchProvider   func() (string, error)
-	searchWeb        func(terms string) (api.WebSearch, error)
-	addPermission    func(effect, rule string, save api.Scope) (api.PermissionChange, error)
-	removePermission func(rule string, save api.Scope) (api.PermissionChange, error)
-	modelSettings    func(ref string) (api.ModelSettingsInfo, error)
-	allModelSettings func() map[string]config.ModelSettings
-	listModels       func(refresh bool) (api.ModelList, error)
-	updateSettings   func(ref string, reset bool, changes []api.Setting) (api.ModelSettingsChange, error)
+	activeSession     func() (api.SessionInfo, bool)
+	newSession        func() (api.SessionInfo, error)
+	listSessions      func(all bool) ([]api.SessionInfo, error)
+	loadSession       func(ref string) (api.SessionInfo, bool, error)
+	saveSnapshot      func(name string, force bool) (api.SessionInfo, error)
+	renameSession     func(title string) (api.SessionInfo, error)
+	forkSession       func(turn int) (api.SessionInfo, error)
+	exportSession     func(id string) (string, error)
+	undo              func(session string, force bool) (api.UndoResult, error)
+	listCheckpoints   func() []api.Checkpoint
+	gitDiff           func() (string, error)
+	sessionDiff       func() string
+	sessionUsage      func() (api.Usage, error)
+	contextInfo       func() (api.ContextInfo, error)
+	compact           func(focus string) (api.CompactResult, error)
+	reloadMemory      func() ([]string, error)
+	reload            func() (api.ReloadResult, error)
+	addMemory         func(text string) (string, error)
+	listNotes         func() ([]api.Note, error)
+	forgetNote        func(name string) error
+	reflection        func() (api.Reflection, error)
+	set               func(key, value string) (string, error)
+	listStyles        func() []api.StyleInfo
+	listPersonalities func() []api.Personality
+	listHooks         func() []api.HookInfo
+	listMCPServers    func() []api.MCPServer
+	dataConnections   func() ([]api.DataConnection, error)
+	listAgents        func() []api.AgentInfo
+	pinModel          func(agent, ref string) (api.PinResult, error)
+	unpin             func(agent string) (api.PinResult, error)
+	activeAgentTools  func() api.AgentTools
+	availableLocales  func() ([]api.LocaleInfo, string)
+	setLocale         func(input string) (api.LocaleChange, error)
+	rewindPoints      func() ([]api.RewindPoint, error)
+	rewind            func(index int, mode api.RewindMode, force bool) (api.RewindResult, error)
+	setGoal           func(cond string) (api.Goal, error)
+	goal              func() (api.Goal, error)
+	clearGoal         func() error
+	run               func(ctx context.Context, t api.Turn, on func(api.Event)) (api.TurnResult, error)
+	steer             func(text string) error
+	listTasks         func() []api.TaskInfo
+	stopTask          func(id string) (api.TaskInfo, error)
+	runningProcs      func(everywhere bool) ([]api.WorkspaceProcess, error)
+	stopProcIn        func(workspace string, id int) (api.ProcessInfo, error)
+	procOutputIn      func(workspace string, id int) (string, api.ProcessInfo, error)
+	takeNotices       func() []string
+	task              func(id string) (api.TaskInfo, []string, error)
+	pendingRequests   func() []api.TaskRequest
+	answerRequest     func(id string, d api.Decision, answer string) error
+	setModel          func(ref string) (string, error)
+	setAgent          func(name string) (api.AgentInfo, error)
+	setPermission     func(mode string) (string, error)
+	settings          func() api.Settings
+	modelErr          func() error
+	sandboxSummary    func() []string
+	projectSettings   func() api.ProjectSettings
+	trustProject      func(hash string, trusted bool) error
+	searchSkills      func(q string) []api.SkillInfo
+	listSkills        func() []api.SkillInfo
+	skill             func(name string) (api.SkillInfo, bool)
+	listEnvs          func() ([]api.Env, error)
+	removeEnv         func(key string) error
+	pruneEnvs         func() (api.PruneResult, error)
+	searchProvider    func() (string, error)
+	searchWeb         func(terms string) (api.WebSearch, error)
+	addPermission     func(effect, rule string, save api.Scope) (api.PermissionChange, error)
+	removePermission  func(rule string, save api.Scope) (api.PermissionChange, error)
+	modelSettings     func(ref string) (api.ModelSettingsInfo, error)
+	allModelSettings  func() map[string]config.ModelSettings
+	listModels        func(refresh bool) (api.ModelList, error)
+	updateSettings    func(ref string, reset bool, changes []api.Setting) (api.ModelSettingsChange, error)
 }
 
 func (s *stubBackend) ActiveSession() (api.SessionInfo, bool) {
@@ -261,6 +262,13 @@ func (s *stubBackend) ListStyles() []api.StyleInfo {
 		return s.listStyles()
 	}
 	return s.Backend.ListStyles()
+}
+
+func (s *stubBackend) ListPersonalities() []api.Personality {
+	if s.listPersonalities != nil {
+		return s.listPersonalities()
+	}
+	return s.Backend.ListPersonalities()
 }
 
 func (s *stubBackend) ListHooks() []api.HookInfo {

@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -62,6 +63,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdGoal(args, app)
 	case "style":
 		cmdStyle(ctx, args, app)
+	case "personality":
+		cmdPersonality(ctx, args, app)
 	case "fork":
 		cmdFork(ctx, args, app)
 	case "export":
@@ -472,6 +475,37 @@ func cmdStyle(ctx context.Context, args []string, app *App) {
 		fmt.Printf("%s%s %s%s%s\n", mark, s.Name, Dim, safe(s.Description), Reset)
 	}
 	fmt.Println()
+}
+
+// cmdPersonality lists the personalities, or switches the workspace to one
+// and keeps it as the workspace's (spec_064_personality PER-23).
+func cmdPersonality(ctx context.Context, args []string, app *App) {
+	if len(args) == 1 {
+		if _, err := app.Workspace.Set(ctx, "personality", args[0]); err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+			return
+		}
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("personality.set", "name", args[0]), Reset)
+		value := strings.ToLower(args[0])
+		if value == "default" {
+			value = ""
+		}
+		if path, err := config.SetValue(app.ConfigDir, app.Workspace.Dir(), "ui.personality", value); err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		} else {
+			fmt.Printf("%s%s%s\n", Dim, i18n.T("config.saved", "key", "ui.personality", "path", safe(path)), Reset)
+		}
+		return
+	}
+	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("personality.list"), Reset)
+	for _, p := range app.Workspace.ListPersonalities() {
+		mark := "  "
+		if p.Active {
+			mark = Green + "● " + Reset
+		}
+		fmt.Printf("%s%s %s%s%s\n", mark, p.Name, Dim, safe(p.Description), Reset)
+	}
+	fmt.Printf("  %s%s%s\n\n", Dim, i18n.T("personality.hint"), Reset)
 }
 
 // cmdHooks lists the hooks by event, with where each came from and its

@@ -24,7 +24,7 @@ import { Code, ConnectError, createRouterTransport, type ConnectRouter } from "@
 import { setTransport } from "../api";
 import { parseMessages } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
-import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
+import { agentProblems, builtinLimits, checkAnswer, configValueProblem, guardBuiltins, guardrailProblems, jobProblems, mcpProblem, personalityCheck, policyDefaults, providerProblem, ruleProblems, sessionSetting, setModelSetting, validProfileName, validSecretKey, withKeepalives, type ModelSettings } from "./fakeChecks";
 import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, UsageGroupSchema, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
@@ -33,6 +33,8 @@ import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb
 import { ConfigService, KeySource, MCPServerConfigSchema, type ApiProviderSettings, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { TerminalService } from "../gen/blitz/v1/terminal_pb";
+import { VoiceService } from "../gen/blitz/v1/voice_pb";
+import { fakeVoice, setFakeVoice } from "./fakeVoice";
 import { fakeTerminals } from "./fakeTerminal";
 import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, WorkspaceProcessSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type Connector, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
@@ -820,7 +822,7 @@ const field = (key: string, label: string, help: string, more: Record<string, un
 // Simplest first, as the service lists them (a descriptor's order).
 const fakeConnectorKinds = [
   { id: "sqlite", category: "databases", name: en("SQLite"), hint: en("A SQLite file. sqlite-vec is built in: vec0 tables and nearest-neighbour queries work."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("The file is opened read-only: SQLite refuses any write. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (? or $1…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name FROM recipes WHERE cuisine = ?", origin: "builtin",
-    fields: [field("database", "Database", "The file's path", { type: "path", required: true })], tools: [{ id: "execute_sql", writes: true, on: true, about: en("Runs any SQL the agent writes") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }] },
+    fields: [field("database", "Database", "The file's path", { type: "path", required: true })], tools: [{ id: "execute_sql", on: true, about: en("Runs any SQL the agent writes") }, { id: "list_tables", on: true, about: en("Lists the tables and their columns") }] },
   { id: "postgres", category: "databases", name: en("PostgreSQL"), hint: en("Any PostgreSQL server, local or hosted."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Every session is read-only: PostgreSQL refuses any write, whatever the SQL. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters ($1, $2…), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT name, total FROM orders WHERE customer = $1", origin: "builtin",
     fields: [field("host", "Host", "localhost, or the server's address", { required: true, defaultValue: "localhost" }), field("port", "Port", "5432 unless it's another", { required: true, defaultValue: "5432" }), field("database", "Database", "Its name", { required: true }), field("user", "User", "A user that can only read is safest", { required: true }), field("password", "Password", "", { type: "secret", required: true })], tools: pgTools },
   { id: "bigquery", category: "databases", name: en("BigQuery"), hint: en("BigQuery on Google Cloud. Signs in with your Google credentials (gcloud auth application-default login)."), backend: "toolbox", capabilities: allCaps, canReadOnly: true, readOnlyHint: en("Writes are blocked: only queries that read run. Tools that write aren't offered."), queriesHint: en("SQL you write once, with parameters (@name), offered as tools of their own. Safer than letting the agent write SQL."), queriesExample: "SELECT sku, SUM(qty) AS sold FROM sales.orders WHERE day = @day GROUP BY sku", origin: "builtin",
@@ -1038,6 +1040,31 @@ function fakeAccepted(provider: string) {
 
 // A sales table for the table viewer (ReadTable reads it below).
 const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
+
+// Personalities (spec_064_personality): the built-ins as the service has
+// them, the person's own, the person's default and each workspace's.
+type FakePersonality = { name: string; description: string; voice: string; source: string; text: string };
+const fakeBuiltinPersonalities: FakePersonality[] = [
+  { name: "default", description: "Blitz's own: clear, capable, neutral", voice: "", source: "built-in", text: "" },
+  { name: "calm", description: "Steady and reassuring, one step at a time", voice: "Vindemiatrix", source: "built-in", text: "Be calm and steady. Short sentences, one step at a time." },
+  { name: "cheerful", description: "Upbeat and a little playful; celebrates wins", voice: "Puck", source: "built-in", text: "Be cheerful and upbeat, a little playful. Celebrate wins." },
+  { name: "direct", description: "No pleasantries; the answer first, then the risk", voice: "Kore", source: "built-in", text: "Be direct. Lead with the answer, then the risk, then what to do." },
+  { name: "friendly", description: "Warm and encouraging, in plain words", voice: "Achird", source: "built-in", text: "Be warm and encouraging, in plain words." },
+  { name: "mentor", description: "Explains the why, one idea at a time", voice: "Sadaltager", source: "built-in", text: "Be a patient mentor: explain why, one idea at a time." },
+  { name: "reviewer", description: "Constructively sceptical; asks for evidence", voice: "Charon", source: "built-in", text: "Be a constructive sceptic, like a good code reviewer." },
+];
+const fakeOwnPersonalities = new Map<string, FakePersonality>([["coach", { name: "coach", description: "Cheers you on", voice: "Puck", source: "own", text: "Cheer the person on like a coach at the big game." }]]);
+let fakePersonalityDefault = "default";
+// About you ([profile]).
+const fakeProfile = { name: "", gender: "", pronouns: "" };
+const fakePersonalityOf = new Map<string, string>();
+const fakePersonalities = () => [...fakeBuiltinPersonalities.filter((p) => !fakeOwnPersonalities.has(p.name)), ...[...fakeOwnPersonalities.values()].sort((a, b) => a.name.localeCompare(b.name))];
+const fakePersonality = (name: string) => {
+  const p = fakePersonalities().find((x) => x.name === name.trim().toLowerCase());
+  if (!p) throw fakeInvalid(`no personality ${JSON.stringify(name)} (/personality lists them)`, "INVALID_SETTING");
+  return p;
+};
+const fakePersonalityIn = (workspace: string) => (fakePersonalities().some((p) => p.name === (fakePersonalityOf.get(workspace) ?? fakePersonalityDefault)) ? (fakePersonalityOf.get(workspace) ?? fakePersonalityDefault) : "default");
 
 // Browser profiles, and the one each workspace browses with.
 const fakeProfiles: { name: string; created: ReturnType<typeof now>; allowDomains: string[] }[] = [{ name: "work", created: now(), allowDomains: ["mail.example.com"] }];
@@ -2536,6 +2563,7 @@ export function installFake() {
           if (r.key === "effort") s.effort = r.value;
           if (r.key === "agency") s.agency = r.value;
           if (r.key === "style") s.style = r.value;
+          if (r.key === "personality") fakePersonalityOf.set(workspace, fakePersonality(r.value).name);
           return { key: r.key };
         },
         setPermissionMode: ({ workspace, mode }) => {
@@ -2562,6 +2590,19 @@ export function installFake() {
           else fakeModelSettings.delete(name);
           // Gemini takes no seed (the provider's: reported, still saved).
           return { model: fakeModelInfo(ref), unsupported: changes.filter((c) => c.key === "seed" && c.value).map((c) => c.key) };
+        },
+        // A sample answer that shows the personality (PER-30).
+        tryPersonality: ({ text }) => {
+          const why = text.trim() ? personalityCheck({ name: "try", description: "", voice: "", text }) : "";
+          if (why) throw fakeInvalid(why, "INVALID_SETTING");
+          const answer = /mentor|explain/i.test(text)
+            ? "Let's find it together: the error names the import that's missing. Check the module is in go.mod, then run the build again. Does that make sense?"
+            : /cheer|upbeat/i.test(text)
+              ? "No worries, that's an easy one! 🎉 Add the missing module to go.mod and run the build again."
+              : /direct/i.test(text)
+                ? "Add the missing module to go.mod. Then rebuild. If it still fails, the import path is wrong."
+                : "The error names the missing import. Add its module to go.mod (go get), then run the build again.";
+          return { answer, question: "The build failed on a missing import. What now?" };
         },
         listStyles: ({ workspace }) => ({
           styles: [
@@ -2832,6 +2873,25 @@ export function installFake() {
         trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
         getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        // Personalities (spec_064_personality PER-50), kept in the page.
+        listPersonalities: ({ workspace }) => ({
+          profile: { ...fakeProfile },
+          personalities: fakePersonalities().map((p) => ({ ...p, text: "", personDefault: p.name === fakePersonalityDefault, workspaceChoice: !!workspace && p.name === fakePersonalityIn(workspace) })),
+        }),
+        getPersonality: ({ name }) => ({ personality: { ...fakePersonality(name) } }),
+        savePersonality: ({ personality: p }) => {
+          if (!p) throw fakeInvalid("no personality");
+          const why = personalityCheck(p);
+          if (why) throw fakeInvalid(why, "INVALID_SETTING");
+          fakeOwnPersonalities.set(p.name, { name: p.name, description: p.description.trim(), voice: p.voice, source: "own", text: p.text.trim() });
+          return { change: { path: `~/.blitz/personalities/${p.name}.md`, problems: [] } };
+        },
+        deletePersonality: ({ name }) => {
+          const p = fakePersonality(name);
+          if (p.source !== "own") throw fakeInvalid("a built-in personality or the organization's can't be changed: duplicate it to make your own", "READ_ONLY");
+          fakeOwnPersonalities.delete(p.name);
+          return { change: { path: `~/.blitz/personalities/${p.name}.md`, problems: [] } };
+        },
         // Browser profiles (spec_049_browser_profiles), kept in the page.
         listBrowserProfiles: ({ workspace }) => ({ profiles: fakeProfiles.map((p) => ({ ...p })), workspaceProfile: fakeProfileOf.get(workspace) ?? "", show: "ask", open: "ask" }),
         createBrowserProfile: ({ name }) => {
@@ -3299,10 +3359,21 @@ export function installFake() {
           // Refused as the service refuses it (config.SetValue): a key it doesn't set this way, or a value not of its type.
           const why = configValueProblem(key, value);
           if (why) throw fakeInvalid(why);
+          if (setFakeVoice(workspace, key, value)) return change(workspace);
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
           if (key === "ui.task_alerts") fakeAlerts = value;
+          if (key.startsWith("profile.")) {
+            if (workspace) throw fakeInvalid(`${key} is the person's own setting: a workspace can't change it`);
+            if (value.length > 60 || /[\n\r]/.test(value)) throw fakeInvalid(`${key} is one line of at most 60 characters`);
+            fakeProfile[key.slice(8) as keyof typeof fakeProfile] = value;
+          }
+          if (key === "ui.personality") {
+            if (value) fakePersonality(value);
+            if (workspace) fakePersonalityOf.set(workspace, value || "default");
+            else fakePersonalityDefault = value || "default";
+          }
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
           if (key === "images.model" && workspace) state(workspace).settings.imageModel = value;
           if (key.startsWith("search.") && workspace) {
@@ -3407,6 +3478,7 @@ export function installFake() {
         },
       });
       service(TerminalService, fakeTerminals());
+      service(VoiceService, fakeVoice((workspace) => fakePersonalities().find((p) => p.name === fakePersonalityIn(workspace))?.voice ?? ""));
       service(FileService, {
         listDir: ({ path, showHidden }) => {
           const prefix = path ? path + "/" : "";

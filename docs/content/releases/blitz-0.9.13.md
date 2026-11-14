@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.13
-weight: 1
+weight: 2
 ---
 
 Blitz now speaks Bazel. Open a Bazel workspace and Go, TypeScript and Python get completion, hover, problems and go-to-definition, even when `go.mod`, `node_modules` and your Python packages live where Bazel puts them rather than beside your code. And the agent's commands finally reach your system's certificates, so `pip install` works in the sandbox.

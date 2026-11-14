@@ -282,6 +282,10 @@ func WithSecrets(expand func(text string) (string, []string)) Option {
 // WithInstructions appends text (e.g. project memory) to every agent's instructions.
 func WithInstructions(text string) Option { return func(e *Engine) { e.extraInstructions = text } }
 
+// WithPersonality gives the root agent of attended runs text after its
+// instructions (spec_064_personality PER-02): how it sounds to the person.
+func WithPersonality(text string) Option { return func(e *Engine) { e.personality = text } }
+
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
@@ -346,7 +350,10 @@ type Engine struct {
 	compactionCfg     *compaction.Config // the runner's, for Aside
 	active            string
 	extraInstructions string
-	streaming         bool
+	// personality is the root agent's in attended runs, after every other
+	// instruction ("": none).
+	personality string
+	streaming   bool
 }
 
 // EventHandler receives events (text tokens, function calls, function responses) from the runner.
@@ -455,6 +462,20 @@ func (e *Engine) SetInstructions(ctx context.Context, text string) error {
 	e.extraInstructions = text
 	if err := e.rebuildLocked(); err != nil {
 		e.extraInstructions = prev
+		return err
+	}
+	return nil
+}
+
+// SetPersonality replaces the root agent's personality (WithPersonality)
+// from the next turn; "" removes it.
+func (e *Engine) SetPersonality(ctx context.Context, text string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	prev := e.personality
+	e.personality = text
+	if err := e.rebuildLocked(); err != nil {
+		e.personality = prev
 		return err
 	}
 	return nil
@@ -1282,7 +1303,7 @@ func (e *Engine) rebuildLocked() error {
 		}
 		e.active = "blitz"
 	}
-	t, err := e.buildTreeLocked(e.active, runModel{})
+	t, err := e.buildTreeLocked(e.active, runModel{}, true)
 	if err != nil {
 		return err
 	}
@@ -1324,9 +1345,10 @@ type runModel struct {
 
 // buildTreeLocked builds a runner whose root is active, with every other
 // agent as a sub-agent. override (the zero value: none) replaces the
-// configured model (see modelInTreeLocked). It changes nothing in e, so
-// e.mu may be held for reading only.
-func (e *Engine) buildTreeLocked(active string, override runModel) (tree, error) {
+// configured model (see modelInTreeLocked). The root has the personality
+// when personal. It changes nothing in e, so e.mu may be held for reading
+// only.
+func (e *Engine) buildTreeLocked(active string, override runModel, personal bool) (tree, error) {
 	rootSpec, ok := e.agentReg.Get(active)
 	if !ok {
 		return tree{}, fmt.Errorf("agent '%s' not found", active)
@@ -1352,7 +1374,15 @@ func (e *Engine) buildTreeLocked(active string, override runModel) (tree, error)
 	// MCP servers choose their agents; by default only the primary agent.
 	llm := e.modelInTreeLocked(active, active, override)
 	t.models[active] = llm
-	rootAgent, err := e.newLLMAgent(rootSpec, llm, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true), e.toolReg.WorkflowTools()...)
+	cfg := e.agentConfig(e.toolReg, rootSpec, llm, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true), e.toolReg.WorkflowTools()...)
+	if p := e.personality; personal && p != "" {
+		base := cfg.InstructionProvider
+		cfg.InstructionProvider = func(c agent.ReadonlyContext) (string, error) {
+			s, err := base(c)
+			return s + p, err
+		}
+	}
+	rootAgent, err := llmagent.New(cfg)
 	if err != nil {
 		return tree{}, fmt.Errorf("failed to build root agent: %w", err)
 	}
@@ -1440,7 +1470,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	for _, o := range opts {
 		o(st)
 	}
-	r, agentName, modelName, err := e.runnerFor(st)
+	r, agentName, modelName, err := e.runnerFor(st, tools.Attended(ctx))
 	if err != nil {
 		return err
 	}
@@ -1516,17 +1546,20 @@ type pinner interface {
 // runnerFor returns the runner for a run and the root agent and model it
 // uses: the engine's own, or, when the run names an agent or a model, one
 // built for it alone (st.models then names each agent's model for pricing).
-func (e *Engine) runnerFor(st *runState) (*runner.Runner, string, string, error) {
+// An unattended run (attended false) never gets the personality
+// (spec_064_personality PER-02), so it gets a tree of its own when there's
+// one.
+func (e *Engine) runnerFor(st *runState, attended bool) (*runner.Runner, string, string, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if st.agent == "" && st.model == nil && st.conversationModel == nil {
+	if st.agent == "" && st.model == nil && st.conversationModel == nil && (attended || e.personality == "") {
 		if e.runner == nil {
 			return nil, "", "", fmt.Errorf("runner is not initialized")
 		}
 		return e.runner, e.active, e.modelForLocked(e.active).Name(), nil
 	}
 	active := cmp.Or(st.agent, e.active)
-	t, err := e.buildTreeLocked(active, e.runModelOf(st))
+	t, err := e.buildTreeLocked(active, e.runModelOf(st), attended)
 	if err != nil {
 		return nil, "", "", err
 	}

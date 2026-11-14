@@ -86,7 +86,7 @@ func cmdStatus(app *App) {
 // configKeys are the settings /config changes, with what --save writes.
 var configKeys = map[string]string{
 	"model": "blitz.default_model", "agent": "blitz.default_agent", "mode": "blitz.permission_mode",
-	"agency": "blitz.agency_level", "style": "ui.style", "effort": "", "locale": "ui.locale",
+	"agency": "blitz.agency_level", "style": "ui.style", "personality": "ui.personality", "effort": "", "locale": "ui.locale",
 }
 
 // cmdConfig shows the session's settings, or sets one, keeping it with

@@ -88,7 +88,7 @@ tools:
   - id: execute_sql
     type: postgres-execute-sql
     on: true
-    agent: "Run a SQL statement on {connection}."
+    agent: "Run a SQL statement on {connection}. Use it for this database rather than psql in the shell."
     about:
       en: "Runs any SQL the agent writes"
       es: "Ejecuta cualquier SQL que escriba el agente"

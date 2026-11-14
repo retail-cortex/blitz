@@ -115,6 +115,10 @@ type Prefs struct {
 	// (8–32; 13 by default) (spec_062_terminal TRM-25).
 	TerminalFont     string `json:"terminal_font,omitempty"`
 	TerminalFontSize int    `json:"terminal_font_size"`
+	// VoiceMic is the microphone voice uses, by the browser's device ID
+	// ("" for the system's): one computer's, so the window's, not the
+	// settings file's (spec_063_voice VOX-04).
+	VoiceMic string `json:"voice_mic,omitempty"`
 }
 
 // maxFontName caps the terminal font's name.
@@ -175,6 +179,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.TerminalFontSize < 8 || p.TerminalFontSize > 32 {
 		p.TerminalFontSize = 13
+	}
+	if len(p.VoiceMic) > maxFontName {
+		p.VoiceMic = ""
 	}
 	if p.TerminalFont = strings.TrimSpace(p.TerminalFont); len(p.TerminalFont) > maxFontName {
 		p.TerminalFont = ""

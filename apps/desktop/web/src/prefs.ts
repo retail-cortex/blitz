@@ -87,6 +87,8 @@ export interface Prefs {
   /** The terminal's font family ("": the bundled MesloLGS Nerd Font Mono) and size in pixels (8–32), spec_062 TRM-25. */
   terminal_font: string;
   terminal_font_size: number;
+  /** The microphone voice uses, by device ID ("": the system's), spec_063 VOX-04. */
+  voice_mic: string;
 }
 
 /** The most Markdown CSS kept for a theme, in UTF-16 units (the Go side caps bytes). */
@@ -123,6 +125,7 @@ export const defaultPrefs: Prefs = {
   markdown_css_dark: "",
   terminal_font: "",
   terminal_font_size: 13,
+  voice_mic: "",
 };
 
 // Saved CSS: a string, no longer than the cap.
@@ -182,6 +185,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     markdown_css_dark: css(r.markdown_css_dark),
     terminal_font: typeof r.terminal_font === "string" && r.terminal_font.trim().length <= 200 ? r.terminal_font.trim() : "",
     terminal_font_size: typeof r.terminal_font_size === "number" && r.terminal_font_size >= 8 && r.terminal_font_size <= 32 ? Math.round(r.terminal_font_size) : 13,
+    voice_mic: typeof r.voice_mic === "string" && r.voice_mic.length <= 200 ? r.voice_mic : "",
   };
 }
 

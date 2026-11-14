@@ -50,7 +50,9 @@ export type Entry =
   | { kind: "file"; uri: string; name: string; mime: string; size: number }
   // A ! command the user ran from the composer (WorkspaceService.RunShell):
   // its output as it comes, then how it ended. The agent never sees it.
-  | { kind: "shell"; id: string; command: string; output: string; running: boolean; code?: number; error?: string; elapsedMs?: number; truncated?: boolean };
+  | { kind: "shell"; id: string; command: string; output: string; running: boolean; code?: number; error?: string; elapsedMs?: number; truncated?: boolean }
+  // A line of a voice conversation, the person's or the voice's (spec_063_voice VOX-16, VOX-22).
+  | { kind: "spoken"; who: "person" | "voice"; text: string };
 
 const subKinds: Record<string, UserEntry["sub"]> = { steer: "steer", hook: "hook", plan: "plan" };
 
@@ -158,6 +160,7 @@ export function withTools(entries: Entry[], tools: SavedTool[]): Entry[] {
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {
     if (m.kind === "task") return { kind: "notice", text: m.text, tone: "info" }; // a background task that ended
+    if (m.kind === "spoken") return { kind: "spoken", who: m.role === "user" ? "person" : "voice", text: m.text };
     if (m.role !== "user") return { kind: "model", text: m.text, author: "", open: false };
     const sub = subKinds[m.kind];
     if (sub) return { kind: "user", text: m.text, sub };

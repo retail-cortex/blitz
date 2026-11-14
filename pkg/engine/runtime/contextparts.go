@@ -47,7 +47,7 @@ const (
 func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64) []api.ContextPart {
 	e.mu.RLock()
 	spec, ok := e.agentReg.Get(e.active)
-	extra := e.extraInstructions
+	extra := e.extraInstructions + e.personality
 	system := ""
 	if ok { // as the agent gets it: the session's agency, skills, images, diagrams
 		system = e.rootPrompt(spec) + e.imageInstruction(spec) + diagramInstruction

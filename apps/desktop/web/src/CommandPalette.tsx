@@ -20,6 +20,8 @@ import {
   mdiAutoFix,
   mdiCalendarClock,
   mdiFullscreen,
+  mdiMicrophoneOff,
+  mdiMicrophoneOutline,
   mdiCodeBraces,
   mdiCogOutline,
   mdiConsoleLine,
@@ -39,7 +41,10 @@ import {
 import { files, sessions, workspaces } from "./api";
 import { allCommands, listedCommands, paletteResults, shortcutLabel, searchesFiles, terminalShortcut, type CommandSpec, type PaletteItem } from "./commands";
 import { hideTerminals, showTerminals, termDrawer } from "./terminal/drawer";
-import { compose, findInFile, loadSession, openDocs, openFile, openTerminal, openWeb, searchWorkspace, showView, startSetup } from "./events";
+import { compose, findInFile, loadSession, openDocs, openFile, openTerminal, openWeb, searchWorkspace, showView, startSetup, talk } from "./events";
+import { endConversation, useConversation } from "./voice/voice";
+import { useVoiceSetup } from "./voice/useVoice";
+import { voiceShortcut } from "./voice/VoiceControls";
 import { loadAppDocs } from "./docs/load";
 import { findTerms, hitTarget, queryTerms } from "./search";
 import { fileIcon } from "./files/icons";
@@ -177,6 +182,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     [found, dir, line, column, onClose],
   );
 
+  const conversation = useConversation();
+  const voiceOn = useVoiceSetup(dir ?? "").enabled;
   const items = useMemo<PaletteItem[]>(() => {
     const done = (f: () => void) => () => {
       onClose();
@@ -217,6 +224,12 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         ...(canPreview() ? [{ group: t("desktop.palette.group.view"), label: t("desktop.web.open"), icon: mdiWeb, run: done(() => openWeb({ dir, url: "" })) }] : []),
         ...(prefs.advanced ? [{ group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) }] : []),
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.fullscreen"), detail: "F11", icon: mdiFullscreen, run: done(() => void toggleFullscreen().catch(() => {})) },
+        // Talking to Blitz (spec_063_voice VOX-21), with voice on.
+        ...(conversation
+          ? [{ group: t("desktop.palette.group.view"), label: t("desktop.voice.end"), detail: voiceShortcut, icon: mdiMicrophoneOff, run: done(endConversation) }]
+          : voiceOn
+            ? [{ group: t("desktop.palette.group.view"), label: t("desktop.voice.talk"), detail: voiceShortcut, icon: mdiMicrophoneOutline, run: done(() => talk({ dir })) }]
+            : []),
       );
       for (const c of chats) out.push({ group: t("desktop.palette.group.chats"), label: c.title, detail: c.detail, icon: mdiHistory, run: done(() => (showView({ dir, view: "chat" }), loadSession({ dir, id: c.id }))) });
     }
@@ -234,7 +247,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       ...(dir ? [{ group: t("desktop.palette.group.settings"), label: t("desktop.run_settings"), detail: displayName(openWorkspaces(prefs).find((w) => w.dir === dir) ?? { dir }), icon: mdiTuneVariant, run: done(() => onSettings("workspaces", dir)) }] : []),
     );
     return out;
-  }, [dir, custom, chats, docPages, prefs, update, onClose, onOpenWorkspace, onSettings]);
+  }, [dir, custom, chats, docPages, prefs, update, onClose, onOpenWorkspace, onSettings, conversation, voiceOn]);
 
   const shown = paletteResults(fileItems, items, query, textItems);
   useEffect(() => setPick(0), [query]);

@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/rrmcguinness/modenv/pkg/modenv"
@@ -831,4 +832,85 @@ func TestResolveXorSecret(t *testing.T) {
 	cfg.LLM.OpenAI.APIKey = modenv.EncryptSecret("sk-x")
 	resolveSecrets(cfg, &secrets.Memory{})
 	assert.Equal(t, "sk-x", cfg.LLM.OpenAI.APIKey)
+}
+
+// Settings › Voice's settings are checked, read back and the person's
+// alone (spec_063_voice VOX-04); ui.personality takes a personality's name
+// (spec_064_personality PER-20).
+func TestSetVoiceAndPersonality(t *testing.T) {
+	keysEnv(t)
+	for key, value := range map[string]string{
+		"voice.enabled": "true", "voice.model": "gemini/gemini-live-2.5-flash-native-audio", "voice.voice": "Puck",
+		"voice.listen": "hold", "voice.summaries": "always", "voice.idle_minutes": "12", "ui.personality": "mentor",
+	} {
+		_, err := SetValue("", "", key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, VoiceConfig{Enabled: true, Model: "gemini/gemini-live-2.5-flash-native-audio", Voice: "Puck", Listen: "hold", Summaries: "always", IdleMinutes: 12}, cfg.Voice)
+	assert.Equal(t, "mentor", cfg.UI.Personality)
+	assert.Equal(t, 12*time.Minute, cfg.Voice.Idle())
+
+	for name, tc := range map[string]struct{ workspace, key, value, want string }{
+		"a workspace's voice": {"ws", "voice.enabled", "true", "the person's own setting"},
+		"not gemini":          {"", "voice.model", "openai/gpt-realtime", "a Gemini Live model"},
+		"gemini alone":        {"", "voice.model", "gemini/", "a Gemini Live model"},
+		"not a voice":         {"", "voice.voice", "Bob", "one of Gemini's voices"},
+		"listen":              {"", "voice.listen", "always", "tap or hold"},
+		"summaries":           {"", "voice.summaries", "sometimes", "voice, always, off"},
+		"idle 0":              {"", "voice.idle_minutes", "0", "from 1 to 60"},
+		"idle 61":             {"", "voice.idle_minutes", "61", "from 1 to 60"},
+		"enabled":             {"", "voice.enabled", "yes", "true or false"},
+		"personality":         {"", "ui.personality", "My Mentor", "a personality's name"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ws := ""
+			if tc.workspace != "" {
+				ws = t.TempDir()
+			}
+			_, err := SetValue("", ws, tc.key, tc.value)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+// The voice's settings unset or out of range are their defaults.
+func TestVoiceDefaults(t *testing.T) {
+	for name, tc := range map[string]struct {
+		in                VoiceConfig
+		listen, summaries string
+		idle              time.Duration
+	}{
+		"unset":   {VoiceConfig{}, VoiceListenTap, VoiceSummaryVoice, 5 * time.Minute},
+		"set":     {VoiceConfig{Listen: "hold", Summaries: "off", IdleMinutes: 60}, VoiceListenHold, VoiceSummaryOff, time.Hour},
+		"unknown": {VoiceConfig{Listen: "shout", Summaries: "loud", IdleMinutes: 99}, VoiceListenTap, VoiceSummaryVoice, 5 * time.Minute},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.listen, tc.in.ListenMode())
+			assert.Equal(t, tc.summaries, tc.in.SummaryMode())
+			assert.Equal(t, tc.idle, tc.in.Idle())
+		})
+	}
+	assert.True(t, ValidPersonalityName("calm-2"))
+	assert.False(t, ValidPersonalityName("-calm"))
+	assert.Contains(t, GeminiVoices, DefaultVoice)
+}
+
+// About you is the person's, one short line each (PER-05).
+func TestSetProfile(t *testing.T) {
+	keysEnv(t)
+	for k, v := range map[string]string{"profile.name": "Ryan", "profile.gender": "male", "profile.pronouns": "he/him"} {
+		_, err := SetValue("", "", k, v)
+		require.NoError(t, err)
+	}
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, ProfileConfig{Name: "Ryan", Gender: "male", Pronouns: "he/him"}, cfg.Profile)
+	_, err = SetValue("", t.TempDir(), "profile.name", "x")
+	assert.ErrorContains(t, err, "the person's own setting")
+	_, err = SetValue("", "", "profile.name", strings.Repeat("x", 61))
+	assert.ErrorContains(t, err, "one line of at most 60")
+	_, err = SetValue("", "", "profile.gender", "a\nb")
+	assert.ErrorContains(t, err, "one line")
 }

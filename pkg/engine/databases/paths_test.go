@@ -19,6 +19,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -190,4 +191,68 @@ func TestEdges(t *testing.T) {
 	assert.Contains(t, text, "peek on shop.")
 
 	assert.Empty(t, Names([]string{filepath.Join(ws, "gone.yaml")}))
+}
+
+// An older read-only SQLite file, saved when execute_sql wasn't offered
+// read-only, gets it (DB-21): Studio reads it with it on, its own text
+// left as it is, and the agents get it, unasked, and it reads. One saved
+// since, with it switched off, keeps it off.
+func TestOlderFilesGetExecuteSQL(t *testing.T) {
+	ws := home(t)
+	data, err := os.ReadFile(recipes(t))
+	require.NoError(t, err)
+	write(t, filepath.Join(ws, "recipes.db"), string(data))
+	_, category, kinds := catalog(t)
+	older := `# kind: sqlite
+# A connection for Blitz's agents (spec_047_connectors), written by Studio.
+# ${NAME} is the Blitz secret NAME.
+kind: source
+name: recipes
+type: sqlite
+database: ./recipes.db
+readOnly: true
+---
+kind: tool
+name: recipes_list_tables
+type: sqlite-sql
+source: recipes
+description: List the tables in recipes, with their columns.
+statement: SELECT name, type, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name
+`
+	c := Backend{}.Parse(category, kinds, "recipes", older)
+	assert.False(t, c.Custom)
+	assert.ElementsMatch(t, []string{"execute_sql", "list_tables"}, c.Tools)
+	assert.Equal(t, older, c.Text, "the file is left as it is")
+
+	file := filepath.Join(connectors.WorkspaceDir(ws), "databases", "recipes.yaml")
+	write(t, file, older)
+	served := Backend{}.Serve(connectors.Serving{Category: category, Dirs: connectors.Dirs{Workspace: ws}, Local: []string{file}, Trusted: func(string) bool { return true }})
+	require.Len(t, served, 1)
+	assert.Contains(t, served[0].ReadOnlyTools, "recipes_execute_sql", "it runs unasked")
+	ctx := context.Background()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, Transport(served[0]), nil)
+	require.NoError(t, err)
+	defer cs.Close()
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "recipes_execute_sql", Arguments: map[string]any{"sql": "SELECT count(*) AS n FROM recipes"}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	got, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, older, string(got), "never rewritten on disk")
+
+	c.Tools = []string{"list_tables"}
+	newer, err := Backend{}.Render(category, kindOf(t, "sqlite"), c)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"list_tables"}, Backend{}.Parse(category, kinds, "recipes", newer).Tools, "switched off since: stays off")
+	_, ok := upgraded(category, kinds, "recipes", newer)
+	assert.False(t, ok)
+	_, ok = upgraded(category, kinds, "recipes", strings.Replace(older, "readOnly: true\n", "", 1))
+	assert.False(t, ok, "one that can write chose its tools")
+	_, ok = upgraded(category, kinds, "recipes", strings.Replace(older, "written by Studio.", "written by hand.", 1))
+	assert.False(t, ok, "one written by hand is the person's own")
+	up, ok := upgraded(category, kinds, "recipes", older)
+	require.True(t, ok)
+	_, ok = upgraded(category, kinds, "recipes", strings.Replace(up, toolsMark, "", 1))
+	assert.False(t, ok, "one that has them already needs nothing")
+	assert.Equal(t, map[string]string{file: up}, upgrades(category, kinds, []string{file, filepath.Join(ws, "missing.yaml")}), "a file it can't read is left to Toolbox")
 }

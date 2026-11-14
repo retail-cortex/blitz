@@ -22,6 +22,8 @@ import type { JsonObject } from "@bufbuild/protobuf";
 import {
   mdiAlertCircleOutline,
   mdiArrowUp,
+  mdiMicrophoneOutline,
+  mdiWaveform,
   mdiCheck,
   mdiCheckboxBlankOutline,
   mdiCheckboxMarked,
@@ -108,6 +110,7 @@ import {
   type AddWebDetail,
   type ComposeDetail,
   type LoadSessionDetail,
+  talkEvent,
 } from "./events";
 import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
 import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
@@ -133,6 +136,9 @@ import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summa
 import { copyRendered, copyText } from "./clipboard";
 import { useLoopsEndWith } from "./loops";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
+import { speakSummary, useVoice, useVoiceSetup } from "./voice/useVoice";
+import { VoiceBar, VoiceButton } from "./voice/VoiceControls";
+import { buttonState, useConversation, waitingOf, type ButtonState } from "./voice/voice";
 
 /** A background task's approval request or question, waiting for an answer. */
 type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
@@ -664,6 +670,82 @@ export function Conversation({
     await sessions.answer({ workspace: dir, requestId, answer: text }).catch(fail);
   };
 
+  // Talking to Blitz (spec_063_voice): the voice hands the work to this
+  // conversation, which runs it as typed; its lines join the conversation.
+  const voiceSetup = useVoiceSetup(dir);
+  const conversationNow = useConversation();
+  const myVoice = conversationNow?.dir === dir ? conversationNow : null;
+  const voice = useVoice(
+    dir,
+    session?.id ?? "",
+    prefs.voice_mic,
+    {
+      send: (text) => void submitRef.current(text),
+      stop: () => void stop(),
+      // The conversation's own request first, else a background task's or
+      // a sub-agent's (spec_063_voice VOX-13).
+      answer: (text) => {
+        if (pending?.kind === "question") return void answer(text);
+        const r = taskRequests.find((x) => x.question);
+        if (r) void answerTask(r, { text });
+      },
+      approve: (id, decision) => {
+        const d = decision === "once" ? Decision.ONCE : Decision.DENY;
+        if (pending?.kind === "approval" && pending.req.requestId === id) return void decide(d);
+        const r = taskRequests.find((x) => x.id === id && x.approval);
+        if (r) void answerTask(r, { decision: d });
+      },
+      spoken: (who, text) => setEntries((e) => [...e, { kind: "spoken", who, text }]),
+      error: (text) => snack(text, { error: true }),
+    },
+    waitingOf(pending, taskRequests[0]),
+  );
+  const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
+  const toggleVoice = () => (myVoice ? voice.end() : void voice.start());
+  // With summaries = "always", a turn that ends with no conversation open
+  // is summarised aloud, while this workspace is the one showing (VOX-17).
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    const ended = wasRunning.current && !running;
+    wasRunning.current = running;
+    if (ended && visible && voiceSetup.enabled && voiceSetup.summaries === "always" && !conversationNow && session?.id && !document.hidden) void speakSummary(dir, session.id);
+  }, [running, visible, voiceSetup.enabled, voiceSetup.summaries, conversationNow, session?.id, dir]);
+  // The command palette's Talk to Blitz (VOX-21).
+  useEffect(() => {
+    const f = (e: Event) => {
+      if ((e as CustomEvent<{ dir: string }>).detail.dir === dir && !myVoice && voiceState === "ready") void voice.start();
+    };
+    window.addEventListener(talkEvent, f);
+    return () => window.removeEventListener(talkEvent, f);
+  });
+  // ⌥⌘V starts and ends it; with hold to talk, holding it talks (VOX-21).
+  useEffect(() => {
+    if (!visible || voiceState === "hidden") return;
+    const isKey = (e: KeyboardEvent) => e.altKey && e.metaKey && e.code === "KeyV";
+    const down = (e: KeyboardEvent) => {
+      if (!isKey(e)) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      if (myVoice?.listen === "hold" && myVoice.phase === "open") voice.hold(true);
+      else if (voiceState !== "not_set_up" && voiceState !== "no_mic") toggleVoice();
+    };
+    // Released when any of its keys comes up: macOS sends no key-up for V
+    // while ⌘ is held, so ⌘'s or ⌥'s ends it too; and when the window
+    // loses the keys.
+    const up = (e: KeyboardEvent) => {
+      if (["KeyV", "MetaLeft", "MetaRight", "AltLeft", "AltRight"].includes(e.code) && myVoice?.listen === "hold") voice.hold(false);
+    };
+    const blur = () => myVoice?.listen === "hold" && voice.hold(false);
+    document.addEventListener("keydown", down);
+    document.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      document.removeEventListener("keydown", down);
+      document.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  });
+
   const newSession = async () => {
     try {
       show((await sessions.newSession({ workspace: dir })).session!);
@@ -919,6 +1001,7 @@ export function Conversation({
   const dock = (
     <div className="chat-column dock" ref={dockRef}>
       {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
+      {myVoice && <VoiceBar conv={myVoice} onMute={voice.mute} onEnd={voice.end} />}
       <Composer
         commands={commands}
         attachments={attachments}
@@ -934,6 +1017,7 @@ export function Conversation({
         dir={dir}
         onSubmit={submit}
         onStop={stop}
+        voice={<VoiceButton state={voiceState} hold={myVoice?.listen === "hold"} onToggle={toggleVoice} onHold={voice.hold} />}
       />
     </div>
   );
@@ -1270,6 +1354,16 @@ const EntryView = memo(function EntryView({
       return <Thought text={entry.text} open={entry.open} />;
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
+    case "spoken":
+      return (
+        <div className="notice info row spoken-line">
+          <Icon path={entry.who === "person" ? mdiMicrophoneOutline : mdiWaveform} size="sm" />
+          <span>
+            <strong>{t(entry.who === "person" ? "desktop.voice.bar.you" : "desktop.voice.bar.voice")}: </strong>
+            {entry.text}
+          </span>
+        </div>
+      );
     case "reflect":
     case "shell":
     case "file":
@@ -1960,6 +2054,7 @@ function Composer({
   dir,
   onSubmit,
   onStop,
+  voice,
 }: {
   commands: CommandSpec[];
   attachments: Attachment[];
@@ -1976,6 +2071,8 @@ function Composer({
   dir: string;
   onSubmit: (t: string) => void;
   onStop: () => void;
+  /** The microphone, beside Send (spec_063_voice VOX-20). */
+  voice?: ReactNode;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -2309,6 +2406,7 @@ function Composer({
         {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
         <span className="spacer" />
         <KeyHint />
+        {voice}
         {running && <IconButton title="" icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
         <IconButton title="" icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
       </div>

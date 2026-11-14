@@ -19,6 +19,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,9 +30,13 @@ import (
 type UIConfig struct {
 	// Style is the output style sessions start with: default, concise,
 	// explanatory, or one in ~/.blitz/styles.
-	Style    string `toml:"style"`
-	Markdown bool   `toml:"markdown"` // render model output as Markdown (TTY only)
-	Spinner  bool   `toml:"spinner"`  // show progress while waiting (TTY only)
+	Style string `toml:"style"`
+	// Personality is how the root agent sounds (spec_064_personality
+	// PER-20): default, a built-in (friendly, direct, mentor, cheerful,
+	// calm, reviewer), or one in ~/.blitz/personalities.
+	Personality string `toml:"personality"`
+	Markdown    bool   `toml:"markdown"` // render model output as Markdown (TTY only)
+	Spinner     bool   `toml:"spinner"`  // show progress while waiting (TTY only)
 	// TerminalTitle shows the session's name in the terminal window title (TTY only).
 	TerminalTitle bool   `toml:"terminal_title"`
 	HistoryFile   string `toml:"history_file"` // REPL input history
@@ -140,6 +145,80 @@ type AudioConfig struct {
 	// about ten minutes; Gemini's audio is uncompressed, about 3 MB a
 	// minute).
 	MaxChars int `toml:"max_chars"`
+}
+
+// VoiceConfig is talking to Blitz in the desktop app (spec_063_voice
+// VOX-04): a live conversation with a Gemini Live model. It's the
+// person's alone: a workspace's settings can't change it.
+type VoiceConfig struct {
+	// Enabled turns voice on; off (the default), nothing of it shows or
+	// runs (VOX-02).
+	Enabled bool `toml:"enabled"`
+	// Model is the Gemini Live model as "gemini/<model>"; empty is the
+	// newest the provider lists (VOX-06).
+	Model string `toml:"model"`
+	// Voice is one of Gemini's prebuilt voices (GeminiVoices); empty is
+	// the personality's, else DefaultVoice.
+	Voice string `toml:"voice"`
+	// Listen is "tap" (Gemini hears when you start and stop) or "hold"
+	// (only while the button is held).
+	Listen string `toml:"listen"`
+	// Summaries is when finished work is said aloud: "voice" (in a voice
+	// conversation), "always" or "off".
+	Summaries string `toml:"summaries"`
+	// IdleMinutes ends a quiet conversation (1 to 60; 0 is the default).
+	IdleMinutes int `toml:"idle_minutes"`
+}
+
+// The voice's defaults and choices.
+const (
+	DefaultVoice       = "Kore"
+	DefaultVoiceIdle   = 5
+	MaxVoiceIdle       = 60
+	VoiceListenTap     = "tap"
+	VoiceListenHold    = "hold"
+	VoiceSummaryVoice  = "voice"
+	VoiceSummaryAlways = "always"
+	VoiceSummaryOff    = "off"
+)
+
+// VoiceListens and VoiceSummaries are [voice] listen's and summaries'
+// values.
+var (
+	VoiceListens   = []string{VoiceListenTap, VoiceListenHold}
+	VoiceSummaries = []string{VoiceSummaryVoice, VoiceSummaryAlways, VoiceSummaryOff}
+)
+
+// GeminiVoices are Gemini's prebuilt voices, by the names its speech
+// configuration takes.
+var GeminiVoices = []string{
+	"Achernar", "Achird", "Algenib", "Algieba", "Alnilam", "Aoede", "Autonoe", "Callirrhoe", "Charon", "Despina",
+	"Enceladus", "Erinome", "Fenrir", "Gacrux", "Iapetus", "Kore", "Laomedeia", "Leda", "Orus", "Puck",
+	"Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager", "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zephyr", "Zubenelgenubi",
+}
+
+// ListenMode is listen, or tap when it's unset or unknown.
+func (v VoiceConfig) ListenMode() string {
+	if v.Listen == VoiceListenHold {
+		return v.Listen
+	}
+	return VoiceListenTap
+}
+
+// SummaryMode is summaries, or voice when it's unset or unknown.
+func (v VoiceConfig) SummaryMode() string {
+	if slices.Contains(VoiceSummaries, v.Summaries) {
+		return v.Summaries
+	}
+	return VoiceSummaryVoice
+}
+
+// Idle is how long a quiet conversation lasts.
+func (v VoiceConfig) Idle() time.Duration {
+	if v.IdleMinutes < 1 || v.IdleMinutes > MaxVoiceIdle {
+		return DefaultVoiceIdle * time.Minute
+	}
+	return time.Duration(v.IdleMinutes) * time.Minute
 }
 
 // DefaultAudioMaxChars is [audio] max_chars when it isn't set.
@@ -551,6 +630,10 @@ type MCPServerConfig struct {
 	// ${NAME}s it fills only from the workspace's own secrets, which Env
 	// holds apart from the rest (spec_047_connectors CON-09).
 	WorkspaceOnly []string `toml:"-"`
+	// FileTexts are an in-process server's files (of Args) read as these
+	// texts instead: an older connection file brought up to date
+	// (spec_046_databases DB-21), its own left as it is.
+	FileTexts map[string]string `toml:"-"`
 }
 
 // BrowserConfig controls the browser tool (spec_027_parity §5.2): a
@@ -878,3 +961,30 @@ const (
 	// DefaultWebTimeoutSeconds is web.timeout_seconds', and web search's.
 	DefaultWebTimeoutSeconds = 20
 )
+
+// MaxPersonalityName is how long a personality's name may be.
+const MaxPersonalityName = 40
+
+var personalityName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// ValidPersonalityName reports whether name can name a personality
+// (spec_064_personality PER-11): lower-case letters, digits and -, at most
+// MaxPersonalityName.
+func ValidPersonalityName(name string) bool {
+	return len(name) <= MaxPersonalityName && personalityName.MatchString(name)
+}
+
+// ProfileConfig is what the person tells Blitz about themselves
+// (spec_064_personality PER-05): how the agent and the voice address and
+// refer to them. The person's only; empty, they use gender-neutral words.
+type ProfileConfig struct {
+	// Name is what Blitz calls the person.
+	Name string `toml:"name"`
+	// Gender is the person's, as they put it; empty, it isn't assumed.
+	Gender string `toml:"gender"`
+	// Pronouns are the person's: "he/him", "she/her", "they/them", …
+	Pronouns string `toml:"pronouns"`
+}
+
+// MaxProfileField is how long each of the profile's fields may be.
+const MaxProfileField = 60

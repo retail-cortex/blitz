@@ -38,9 +38,12 @@ import {
   mdiTune,
 } from "@mdi/js";
 import { config, sessions, workspaces } from "./api";
+import { configChanged } from "./events";
 import { message, reason } from "./errors";
 import { language, t, tn } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
+import type { Personality } from "./gen/blitz/v1/config_pb";
+import { personalityDescription, personalityLabel } from "./personality/personality";
 import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule, ProjectSettings, SearchStatus, Style } from "./gen/blitz/v1/workspace_pb";
 import { checkModelRef } from "./models";
 import { ModelInput, useModelCatalog } from "./ModelInput";
@@ -161,6 +164,7 @@ export function WorkspaceSettingsForm({
   const [modelInfo, setModelInfo] = useState<ModelSettingsInfo>();
   const [locales, setLocales] = useState<LocaleInfo[]>([]);
   const [styles, setStyles] = useState<Style[]>([]);
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
   const [rules, setRules] = useState<PermissionRule[]>([]);
   const [searchStatus, setSearchStatus] = useState<SearchStatus>();
   const loadSearch = useCallback(() => {
@@ -185,6 +189,7 @@ export function WorkspaceSettingsForm({
         workspaces.listStyles({ workspace: dir }).catch(() => undefined),
       ]);
       setStyles(st?.styles ?? []);
+      config.listPersonalities({ workspace: dir }).then((r) => setPersonalities(r.personalities), () => {});
       setAgents(a.agents);
       setModels([...new Set([...a.agents.map((x) => x.pinnedModel).filter(Boolean), ...Object.keys(all.all)])]);
       setLocales(l.locales);
@@ -416,6 +421,7 @@ export function WorkspaceSettingsForm({
               </Field>
             </>
           )}
+          <PersonalityField dir={dir} list={personalities} act={act} />
           <Field label={t("desktop.rs.replies_in")}>
             {(id) => (
               <select id={id} className="select" value={settings?.locale ?? ""} onChange={(e) => act(() => workspaces.setLocale({ workspace: dir, input: e.target.value }), t("desktop.rs.language_changed"))}>
@@ -736,3 +742,39 @@ function NumberSetting({
   );
 }
 
+
+/**
+ * The workspace's personality (spec_064_personality PER-32): the person's
+ * default first ("" in the workspace's settings), then each one. Saved in
+ * the workspace's settings, so it applies at once and keeps.
+ */
+function PersonalityField({ dir, list, act }: { dir: string; list: Personality[]; act: (f: () => Promise<unknown>, done?: string) => Promise<void> }) {
+  const def = list.find((p) => p.personDefault);
+  const mine = list.find((p) => p.workspaceChoice);
+  const value = !mine || mine.name === def?.name ? "" : mine.name;
+  const shown = value ? mine : def;
+  if (list.length === 0) return null;
+  return (
+    <Field label={t("desktop.rs.personality")} supporting={shown ? personalityDescription(shown) : t("desktop.rs.personality.detail")}>
+      {(id) => (
+        <select
+          id={id}
+          className="select"
+          value={value}
+          onChange={(e) => {
+            const name = e.target.value;
+            const p = list.find((x) => x.name === (name || def?.name));
+            void act(() => config.setConfigValue({ workspace: dir, key: "ui.personality", value: name }).then(() => configChanged({ dir })), t("desktop.status.personality_set", { name: p ? personalityLabel(p) : name }));
+          }}
+        >
+          <option value="">{t("desktop.rs.personality.yours", { name: def ? personalityLabel(def) : "Blitz" })}</option>
+          {list.map((p) => (
+            <option key={p.name} value={p.name}>
+              {personalityLabel(p)}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}

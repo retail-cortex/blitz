@@ -42,9 +42,54 @@ var aboutRE = regexp.MustCompile(`(?m)^# about: (.*)$`)
 // doc is one YAML document of a connection file.
 type doc = map[string]any
 
+// toolsMark is in the header Render writes since a read-only SQLite file
+// offered execute_sql (DB-21): a file without it was saved when its
+// kind's addToOlder tools weren't offered read-only.
+const toolsMark = "# tools: chosen\n"
+
 // Parse reads a connection file's text into the form: its kind is the
 // one its comment names, else the first of kinds with its source's type.
+// An older file is read as it's brought up to date (upgraded).
 func (Backend) Parse(cat connectors.Category, kinds []connectors.Kind, name, text string) connectors.Connection {
+	if up, ok := upgraded(cat, kinds, name, text); ok {
+		c := parse(cat, kinds, name, up)
+		c.Text = text
+		return c
+	}
+	return parse(cat, kinds, name, text)
+}
+
+// studioMark is in the header of every file Studio writes.
+const studioMark = "written by Studio."
+
+// upgraded is an older connection file's text brought up to date (DB-21):
+// a read-only one Studio saved before toolsMark gets its kind's addToOlder tools
+// that new connections have, which it couldn't have had. ok is false when
+// it needs nothing.
+func upgraded(cat connectors.Category, kinds []connectors.Kind, name, text string) (string, bool) {
+	if strings.Contains(text, toolsMark) || !strings.Contains(text, studioMark) || connectors.KindOf(text) == "" {
+		return "", false // chosen since, or written by hand
+	}
+	c := parse(cat, kinds, name, text)
+	if c.Custom || !c.ReadOnly {
+		return "", false
+	}
+	// Not custom, so its kind is one of kinds.
+	k := &kinds[slices.IndexFunc(kinds, func(k connectors.Kind) bool { return k.ID == c.Kind })]
+	added := false
+	for _, t := range k.Tools {
+		if t.AddToOlder && t.On && !slices.Contains(c.Tools, t.ID) {
+			c.Tools, added = append(c.Tools, t.ID), true
+		}
+	}
+	if !added {
+		return "", false
+	}
+	up, err := Backend{}.Render(cat, k, c)
+	return up, err == nil
+}
+
+func parse(cat connectors.Category, kinds []connectors.Kind, name, text string) connectors.Connection {
 	c := connectors.Connection{Name: name, Category: cat.ID, Text: text, Settings: map[string]string{}}
 	docs, err := decode(text)
 	if err != nil {
@@ -290,7 +335,7 @@ func (Backend) Render(cat connectors.Category, kind *connectors.Kind, c connecto
 	}
 	var b bytes.Buffer
 	b.WriteString(connectors.KindComment(kind.ID))
-	b.WriteString("# A connection for Blitz's agents (spec_047_connectors), written by Studio.\n# ${NAME} is the Blitz secret NAME.\n")
+	b.WriteString("# A connection for Blitz's agents (spec_047_connectors), written by Studio.\n# ${NAME} is the Blitz secret NAME.\n" + toolsMark)
 	if d := strings.Join(strings.Fields(c.Description), " "); d != "" {
 		b.WriteString("# about: " + d + "\n")
 	}

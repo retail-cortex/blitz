@@ -19,8 +19,8 @@ import { allSections, homeOf, libraryTabs, menuIds, sectionGroups, sectionShown,
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
-    expect(settingsSections(false)).toEqual(["providers", "organization", "appearance", "connectors", "workspaces", "about"]);
-    expect(settingsSections(true)).toEqual(["providers", "organization", "appearance", "agents", "connectors", "browser", "workspaces", "permissions", "service", "logs", "about"]);
+    expect(settingsSections(false)).toEqual(["providers", "personality", "appearance", "voice", "connectors", "workspaces", "organization", "about"]);
+    expect(settingsSections(true)).toEqual(["providers", "personality", "appearance", "agents", "voice", "connectors", "browser", "workspaces", "permissions", "service", "organization", "logs", "about"]);
   });
 
   it.each([
@@ -62,10 +62,10 @@ describe("simple mode", () => {
 
   it("shows only the groups with a section shown", () => {
     expect(shownGroups(false).map((g) => [g.id, g.sections])).toEqual([
-      ["start", ["providers", "organization", "appearance"]],
-      ["setup", ["connectors"]],
+      ["start", ["providers", "personality", "appearance"]],
+      ["setup", ["voice", "connectors"]],
       ["access", ["workspaces"]],
-      ["system", ["about"]],
+      ["system", ["organization", "about"]],
     ]);
     expect(shownGroups(true).map((g) => g.id)).toEqual(["start", "setup", "access", "system"]);
   });

@@ -1,0 +1,166 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package blitz.v1;
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
+// VoiceService is talking to Blitz in the desktop app (spec_063_voice): a
+// live conversation with a Gemini Live model, whose voice agent hands work
+// to the window to run as a typed message. The conversation's audio and
+// events come on a stream; the person's audio and what the window shows
+// waiting go by unary calls, since a browser can't stream to the service.
+// Voice is the person's setting: off, every call but DescribeVoice is
+// refused.
+//
+// Every request names its workspace by absolute directory. Errors carry an
+// ErrorInfo detail: VOICE_OFF, VOICE_NOT_SET_UP, VOICE_MODEL, VOICE_BUSY,
+// UNKNOWN_VOICE.
+service VoiceService {
+  // Whether voice is on and set up, its settings and the live models
+  // (VOX-40, VOX-41).
+  rpc DescribeVoice(DescribeVoiceRequest) returns (DescribeVoiceResponse);
+  // Opens a conversation about a session and streams it until it ends
+  // (VOX-30): first started, then audio, transcripts, states and the
+  // window's work, then ended. The stream ending ends the conversation.
+  rpc Converse(ConverseRequest) returns (stream ConverseResponse);
+  // Sends the person's audio, when they start and stop speaking (hold),
+  // what the window shows waiting, or the end (VOX-30).
+  rpc SendVoice(SendVoiceRequest) returns (SendVoiceResponse);
+}
+
+// Request message for VoiceService.DescribeVoice.
+message DescribeVoiceRequest {
+  string workspace = 1;
+  // Whether to list the provider's live models (a call to Google).
+  bool list_models = 2;
+}
+
+// Response message for VoiceService.DescribeVoice.
+message DescribeVoiceResponse {
+  // [voice] as set (VOX-04).
+  bool enabled = 1;
+  string model = 2;
+  string voice = 3;
+  string listen = 4;
+  string summaries = 5;
+  int32 idle_minutes = 6;
+  // Why voice can't be used though it's on ("" when it can): no Google
+  // provider, credentials that don't work (VOX-03).
+  string not_set_up = 7;
+  // The model a conversation would use, and its API ("gemini" or
+  // "vertex").
+  string model_in_use = 8;
+  string backend = 9;
+  // Gemini's prebuilt voices.
+  repeated string voices = 10;
+  // The live models the provider lists, newest first, when asked.
+  repeated string models = 11;
+  // The workspace's personality's voice ("" for none).
+  string personality_voice = 12;
+  // Whether the organization's policy keeps voice off (VOX-52).
+  bool org_off = 13;
+}
+
+// Request message for VoiceService.Converse.
+message ConverseRequest {
+  string workspace = 1;
+  string session_id = 2;
+  // Speaks the session's last turn's summary and ends (summaries =
+  // "always" without a conversation open, VOX-17).
+  bool summary_only = 3;
+  // Says a short sample in this voice and ends (Settings › Voice's Play,
+  // VOX-41): one short live call.
+  string sample_voice = 4;
+}
+
+// Response message for VoiceService.Converse: one of its fields.
+message ConverseResponse {
+  // The conversation began: its ID for SendVoice, and how it listens.
+  VoiceStarted started = 1;
+  // The voice's audio, 16-bit mono PCM at 24 kHz.
+  bytes audio = 2;
+  // A piece of what the person said (heard) or the voice says (said);
+  // final ends the line.
+  VoiceText heard = 3;
+  VoiceText said = 4;
+  // "listening" or "speaking".
+  string state = 5;
+  // The person spoke over the voice: drop the audio not yet played.
+  bool interrupted = 6;
+  // The window's work (VOX-11): run a message as typed, steer the running
+  // turn, stop it, answer the question, or answer the approval showing.
+  string run_task = 7;
+  string steer = 8;
+  bool stop = 9;
+  string answer = 10;
+  VoiceApproval approve = 11;
+  // Something went wrong, in a sentence (VOX-24).
+  string error = 12;
+  // The conversation ended: closed, idle, goodbye, off, summary or
+  // error.
+  string ended = 13;
+}
+
+// VoiceStarted is a conversation's start.
+message VoiceStarted {
+  string id = 1;
+  string model = 2;
+  string voice = 3;
+  // "tap" or "hold".
+  string listen = 4;
+}
+
+// VoiceText is a piece of a transcript.
+message VoiceText {
+  string text = 1;
+  bool final = 2;
+}
+
+// VoiceApproval is the voice answering the approval showing (VOX-13).
+message VoiceApproval {
+  string id = 1;
+  // "once" or "deny".
+  string decision = 2;
+}
+
+// Request message for VoiceService.SendVoice: one of its fields.
+message SendVoiceRequest {
+  string workspace = 1;
+  // The conversation's ID, from started.
+  string id = 2;
+  // The person's audio, 16-bit mono PCM at 16 kHz.
+  bytes audio = 3;
+  // With listen = "hold": the person started (true) or stopped speaking.
+  optional bool speaking = 4;
+  // What the window shows waiting on the person, whole each time it
+  // changes.
+  VoiceWaiting waiting = 5;
+  // Ends the conversation.
+  bool end = 6;
+}
+
+// VoiceWaiting is what the window shows waiting on the person.
+message VoiceWaiting {
+  // The approval card showing ("" for none) and what it wants.
+  string approval_id = 1;
+  string approval = 2;
+  // A question the agent asked, with its options.
+  string question = 3;
+  repeated string options = 4;
+}
+
+// Response message for VoiceService.SendVoice.
+message SendVoiceResponse {}

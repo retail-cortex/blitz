@@ -191,6 +191,20 @@ type StyleInfo struct {
 	Active bool
 }
 
+// Personality is how the root agent sounds (spec_064_personality).
+type Personality struct {
+	Name, Description string
+	// Voice is the Gemini voice it speaks with in spec_063's voice
+	// conversations ("": the [voice] setting's).
+	Voice string
+	// Source is "built-in", "organization" or "own" (the person's file).
+	Source string
+	// Text is how it should sound; empty in lists.
+	Text string
+	// Active is whether the workspace uses it (in ListPersonalities).
+	Active bool
+}
+
 // UnknownSettingError reports a key /set doesn't know.
 type UnknownSettingError struct{ Key string }
 

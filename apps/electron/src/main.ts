@@ -87,6 +87,7 @@ import {
   type RunLink,
   type TasksLink,
   type Unsaved,
+  pagePermission,
 } from "./logic";
 
 app.setName("Blitz");
@@ -163,8 +164,14 @@ if (!app.requestSingleInstanceLock()) {
 /** Starts the host and opens the window on the page. */
 async function start() {
   // Only what the page needs: notifications, writing to the clipboard
-  // (copy), and full screen.
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(["notifications", "clipboard-sanitized-write", "fullscreen"].includes(permission)));
+  // (copy), full screen, and the microphone for talking to Blitz
+  // (pagePermission).
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, done, details) =>
+    done(pagePermission(permission, details.requestingUrl ?? "", origin, "mediaTypes" in details ? (details.mediaTypes ?? []) : [])),
+  );
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, requesting, details) =>
+    permission === "media" ? pagePermission(permission, requesting, origin, details.mediaType ? [details.mediaType] : ["audio"]) : true,
+  );
   // The page is served over HTTP/2, so its streams share one connection
   // (HTTP/1.1 allows six per host, and the page's open streams took them
   // all). That needs TLS: the page server's own certificate is trusted, in

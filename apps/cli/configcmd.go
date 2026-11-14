@@ -173,6 +173,7 @@ terminal_title = true   # show the session's name in the terminal window title
 diff_lines = 120
 locale    = "en-US"   # interface language; change with /locale (e.g. /locale es)
 # locales_dir = "~/.blitz/locales"   # extra or corrected translations (*.json)
+# personality = "mentor"   # how the agent sounds: friendly, direct, mentor, cheerful, calm, reviewer, or ~/.blitz/personalities/<name>.md
 
 [images]
 enabled       = true    # @shot.png, @paper.pdf, /attach, /paste, --image, view_image and view_document
@@ -187,6 +188,21 @@ page_size = "auto"   # export_pdf's paper: a4, letter, or auto (from the locale)
 # voice = "Kore"
 # speakers = [{ name = "Ana", voice = "Kore" }, { name = "Ben", voice = "Puck" }]   # a two-host overview
 max_chars = 9000   # about ten minutes
+
+[profile]
+# How Blitz addresses you and refers to you (Settings › Personality › About you); empty: gender-neutral words, never guessed.
+# name = "Sam"
+# gender = ""
+# pronouns = "they/them"
+
+[voice]
+# Talking to Blitz in the desktop app, with Google's Gemini Live (Settings › Voice sets these too).
+enabled = false   # off: no microphone, nothing sent to Google
+# model = "gemini/gemini-2.5-flash-native-audio-preview-09-2025"   # none: the newest live model listed
+# voice = "Puck"        # none: the personality's, else Kore
+# listen = "tap"        # or "hold": heard only while held
+# summaries = "voice"   # finished work said aloud: voice, always, off
+# idle_minutes = 5      # a quiet conversation ends after this long
 
 [memory]
 enabled = true

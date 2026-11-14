@@ -46,6 +46,7 @@ genrule(
         "session",
         "terminal",
         "turn",
+        "voice",
         "worker",
         "workspace",
     ]],

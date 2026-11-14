@@ -55,10 +55,38 @@ var trashIDs = regexp.MustCompile(`^[0-9]{14}-[0-9a-f]{8}$`)
 // service runs, after which the system's trash restores it.
 var systemTrashIDs = regexp.MustCompile(`^sys-[0-9a-f]{16}$`)
 
-// systemTrashed is where a deletion went in the system's trash, by ID.
+// systemTrashed is where a deletion went in the system's trash, by ID,
+// and the deletions (either trash's) that git's index had (FIL-61).
 type systemTrashed struct {
-	mu    sync.Mutex
-	where map[string]string
+	mu     sync.Mutex
+	where  map[string]string
+	staged map[string]bool
+}
+
+// unstageTrashed takes slash, just trashed under id, out of git's index,
+// remembering it was there for RestoreFile.
+func (w *Workspace) unstageTrashed(ctx context.Context, id, slash string) {
+	if len(w.unstageGone(ctx, slash)) == 0 {
+		return
+	}
+	w.trashed.mu.Lock()
+	if w.trashed.staged == nil {
+		w.trashed.staged = map[string]bool{}
+	}
+	w.trashed.staged[id] = true
+	w.trashed.mu.Unlock()
+}
+
+// restageRestored puts slash, restored from id, back in git's index when
+// it was there.
+func (w *Workspace) restageRestored(ctx context.Context, id, slash string) {
+	w.trashed.mu.Lock()
+	was := w.trashed.staged[id]
+	delete(w.trashed.staged, id)
+	w.trashed.mu.Unlock()
+	if was {
+		w.restage(ctx, slash)
+	}
 }
 
 // TrashFile moves p (a file or a folder) to the workspace's trash and
@@ -87,6 +115,7 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 			}
 			w.trashed.where[id] = where
 			w.trashed.mu.Unlock()
+			w.unstageTrashed(ctx, id, slash)
 			w.userEdited(slash, "deleted")
 			return id, nil
 		}
@@ -108,6 +137,7 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 		_ = w.files().UserRemove(ctx, filepath.FromSlash(path.Join(trashDir, id)))
 		return "", err
 	}
+	w.unstageTrashed(ctx, id, slash)
 	w.userEdited(slash, "deleted")
 	return id, nil
 }
@@ -141,6 +171,7 @@ func (w *Workspace) RestoreFile(ctx context.Context, id, p string) error {
 		w.trashed.mu.Lock()
 		delete(w.trashed.where, id)
 		w.trashed.mu.Unlock()
+		w.restageRestored(ctx, id, slash)
 		w.userEdited(slash, "restored")
 		return nil
 	}
@@ -152,6 +183,7 @@ func (w *Workspace) RestoreFile(ctx context.Context, id, p string) error {
 		return err
 	}
 	_ = w.files().UserRemove(ctx, filepath.FromSlash(path.Join(trashDir, id)))
+	w.restageRestored(ctx, id, slash)
 	w.userEdited(slash, "restored")
 	return nil
 }

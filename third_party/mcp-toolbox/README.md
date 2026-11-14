@@ -33,7 +33,11 @@ databases are left out.
      server itself) closes the sources open so far, and BigQuery closes
      its client and caches on its own early errors;
   8. a SQLite query returns at most `MaxRows` (1000) rows, the last one
-     saying so, rather than loading a whole table into memory.
+     saying so, rather than loading a whole table into memory;
+  9. the config parser fills `${NAME}` in the parsed YAML's values, not
+     its text, so a value's own YAML syntax stays inside it;
+  10. SQLite's `execute_sql` is marked read-only on a read-only source, as
+     Postgres's is, so it's offered there (the file refuses any write).
 
 To move to another release: `tools/update_toolbox.sh <version>`, then
 `bazel run //tools:tidy` and the tests. A patch that no longer applies is

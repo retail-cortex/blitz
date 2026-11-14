@@ -35,6 +35,26 @@ The **agency level** says how much the agent does before checking in with you:
 
 Set it with `--agency`, `BLITZ_AGENCY`, `/set agency=medium`, `blitz.agency_level`, or the desktop app's **Workspace settings** (**Settings › Workspaces**). Agency is separate from approvals: what may run without asking is the [permission mode and rules](safety.md). `/effort` (or `--effort`) sets how hard the model thinks.
 
+### Personality
+
+A **personality** changes how the agent you talk to sounds: warm, direct, a patient mentor, or one you write. It never changes what the agent may do, its rules, or the accuracy of what it says, and the agents it hands work to (the coder, workers, jobs, evals) stay neutral. It's separate from the output style (`/style`), which sets how much an answer says; the two combine.
+
+| Personality | Sounds |
+|---|---|
+| `default` | Blitz's own: clear, capable, neutral |
+| `friendly` | Warm and encouraging, in plain words |
+| `direct` | No pleasantries; the answer first, then the risk |
+| `mentor` | Explains the why, one idea at a time: for students and anyone new to the code |
+| `cheerful` | Upbeat and a little playful; celebrates wins |
+| `calm` | Steady and reassuring, one step at a time |
+| `reviewer` | Constructively sceptical; asks for evidence |
+
+- **Choose your default** in **Settings › Personality**, where **Try it** shows a sample answer before you pick. In the settings file it's `[ui] personality`.
+- **Choose one for a workspace** in its **Workspace settings**, from the status bar's agent menu, or with `/personality <name>` (in the app and the CLI). `/personality` lists them.
+- **Write your own**: **New personality** or **Duplicate** in Settings › Personality, or a Markdown file in `~/.blitz/personalities/<name>.md` (an optional `description` and `voice` in its frontmatter, then how it should sound, at most 2,000 characters). A project's settings can pick a personality by name but can't bring its own text.
+- **With [voice](voice.md)**, the voice speaks with the same personality, in its voice when it has one.
+- **About you**, at the top of Settings › Personality: your name, gender and pronouns, for how Blitz addresses you and refers to you, in writing and out loud (`[profile]` in the settings file). Left empty, Blitz uses gender-neutral words; it never guesses from your name or your voice.
+
 ## Built-in agents
 
 | Agent | For |

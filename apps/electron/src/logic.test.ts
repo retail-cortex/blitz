@@ -19,6 +19,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   absolutePaths,
+  pagePermission,
   agentAddressAllowed,
   agentRequestAllowed,
   agentRequestResolved,
@@ -636,4 +637,25 @@ describe("starting the host again", () => {
     [hostRestart.maxQuick, Math.min(hostRestart.baseMs * 2 ** (hostRestart.maxQuick - 1), hostRestart.maxMs)],
     [hostRestart.maxQuick + 1, undefined],
   ])("after %i quick exits waits %s ms", (n, want) => expect(restartDelay(n)).toBe(want));
+});
+
+// The page's permissions (spec_063_voice VOX-50): the microphone only, for
+// the page itself, never the camera.
+describe("pagePermission", () => {
+  const origin = "https://127.0.0.1:4321";
+  it.each([
+    { permission: "notifications", from: origin, media: [], want: true },
+    { permission: "clipboard-sanitized-write", from: "https://elsewhere.example", media: [], want: true },
+    { permission: "geolocation", from: origin, media: [], want: false },
+    { permission: "media", from: `${origin}/?w=1`, media: ["audio"], want: true },
+    { permission: "media", from: origin, media: ["audio", "video"], want: false },
+    { permission: "media", from: origin, media: ["video"], want: false },
+    { permission: "media", from: origin, media: [], want: false },
+    { permission: "media", from: "https://127.0.0.1:9999", media: ["audio"], want: false },
+  ])("$permission from $from with $media: $want", ({ permission, from, media, want }) => {
+    expect(pagePermission(permission, from, origin, media)).toBe(want);
+  });
+  it("refuses the microphone before the page is known", () => {
+    expect(pagePermission("media", "https://127.0.0.1:4321", "", ["audio"])).toBe(false);
+  });
 });
