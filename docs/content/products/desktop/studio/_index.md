@@ -11,7 +11,7 @@ Studio is in the menu bar once **Show advanced** is on (in Settings' title bar).
 
 ![Studio's Overview: the workspace's grade, its runs, eval coverage and what needs attention](../../../images/desktop/studio-overview.png)
 
-Studio only ever changes the workspace it's open in. What every workspace shares (your own agents and their evals, skills, connections, browser profiles and secrets) is in [Settings › Resources](../configure.md#resources), with the same tabs, and your global jobs in [Settings › Jobs](../configure.md#jobs).
+Studio only ever changes the workspace it's open in. What every workspace shares (your own agents and their evals, skills, connections and secrets) is in [Settings › Resources](../configure.md#resources), with the same tabs (and Browser, for the browser profiles every workspace uses), and your global jobs in [Settings › Jobs](../configure.md#jobs).
 
 ## The areas
 
@@ -25,7 +25,6 @@ Studio only ever changes the workspace it's open in. What every workspace shares
 | › › [Evals](evals.md) | Prompts with the answers you expect, to prove an agent still works after a change; each agent's row says how many cover it, one click away |
 | › [Skills](skills.md) | Recipes the agent follows for one kind of task, some with scripts |
 | › [Connectors](connectors.md) | Databases your agents can query, read-only unless you say otherwise, and MCP servers |
-| › Browser | The browser profile this workspace's agents browse with (**Use here**); the profiles themselves are made in Settings |
 | › [Secrets](secrets.md) | Tokens and passwords this workspace's prompts, instructions and servers can use, kept out of conversations and logs |
 | [Jobs](jobs.md) | Prompts or workflows that run on a schedule, unattended |
 | [Workflows](workflows.md) | Steps in order, each one's output the next one's input, built on a canvas or composed with AI |

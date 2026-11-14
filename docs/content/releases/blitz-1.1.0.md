@@ -3,7 +3,7 @@ title: Blitz 1.1.0
 weight: 1
 ---
 
-Know where everything lives. Settings is now everything every workspace shares, and each workspace's Studio is everything that's its own, its settings included. Both lay out your agents, skills, connectors, browser and secrets the same way, under **Resources**, so once you've found something in one, you know where it is in the other. Your own agents can finally be proven with evals too, and each agent shows its evals right on its row.
+Know where everything lives. Settings is now everything every workspace shares, and each workspace's Studio is everything that's its own, its settings included. Both lay out your agents, skills, connectors and secrets the same way, under **Resources**, so once you've found something in one, you know where it is in the other. Your own agents can finally be proven with evals too, and each agent shows its evals right on its row.
 
 ### Get started
 
@@ -15,14 +15,14 @@ Know where everything lives. Settings is now everything every workspace shares, 
 ### New
 
 - **One place for each thing.** Settings holds what every workspace shares; a workspace's Studio holds what's only its own, starting with its settings. No more wondering whether a workspace's model lives in Settings or in Studio.
-- **Resources, laid out the same everywhere.** Agents, Skills, Connectors, Browser and Secrets are tabs under **Resources**, in Settings for every workspace and in Studio for this one. MCP servers, and what they offer, sit under Connectors.
+- **Resources, laid out the same everywhere.** Agents, Skills, Connectors and Secrets are tabs under **Resources**, in Settings for every workspace and in Studio for this one; Settings also has Browser, for the browser profiles every workspace shares. MCP servers, and what they offer, sit under Connectors.
 - **Evals live with your agents.** Evals are now Agents' second tab, and every agent's row says how many evals cover it: one click opens them.
 - **Evals for your own agents and skills.** Draft, run and refine evals for the agents every workspace shares, from **Settings › Resources › Agents › Evals**. They run in a folder of their own, so they never touch a project.
 - **Pick which of your agents each workspace gets.** A workspace's Studio lists your own agents under its own, each with a switch: turn one off and that workspace no longer offers it, while every other workspace keeps it.
 - **Switch rules on and off.** Every rule in Studio › Rules has a switch, so you can pause a check without deleting it.
 - **Jobs where they belong.** Jobs sit right above Workflows in Studio, and have their own place in Settings.
 - **A shorter Settings.** Ten entries in four groups became seven: Providers (with your organization's sign-in), Personality (with Voice), Appearance, Resources, Jobs, Access (workspaces and permissions) and System (the service, its logs, and About).
-- **Choose a workspace's browser where its agents work.** Studio › Resources › Browser shows your browser profiles and which one this workspace uses; **Use here** switches it.
+- **Your gateway, your paths.** In a custom gateway, Gemini and Vertex AI paths no longer have to include the model or the method: send every call to one fixed path if that's how your gateway works. The ⓘ beside each path lists what it can fill in.
 - **More room to search.** The search bar now stretches across the top bar, and Help is a ? icon beside Settings.
 
 ### Good to know

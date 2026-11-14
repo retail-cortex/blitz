@@ -40,11 +40,11 @@ describe("Studio's entries", () => {
   });
 
   it("shows Resources' tabs under Resources, and knows every kind", () => {
-    for (const k of ["agents", "skills", "evals", "connectors", "browser", "secrets"] as const) expect(studioEntryOf(k)).toBe("resources");
+    for (const k of ["agents", "skills", "evals", "connectors", "secrets"] as const) expect(studioEntryOf(k)).toBe("resources");
     expect(studioEntryOf("workers")).toBe("workers");
     expect(studioEntryOf("workflows")).toBe("workflows");
     expect(isStudioKind("settings")).toBe(true);
-    expect(isStudioKind("browser")).toBe(true);
+    expect(isStudioKind("browser")).toBe(false); // browser profiles are Settings' alone
     expect(isStudioKind("library")).toBe(false);
   });
 });

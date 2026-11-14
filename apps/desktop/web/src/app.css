@@ -1622,3 +1622,6 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .shell-card .code-head code { font-family: var(--md-mono); font-size: 13px; min-width: 0; }
 .shell-card .shell-output { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
 .shell-card .shell-note { margin: 0 12px 8px; }
+/* A gateway path's fill-ins, in the ⓘ's tooltip (MDL-113). */
+.fills-tip { display: inline-flex; color: var(--md-on-surface-variant); cursor: help; border-radius: 50%; }
+.fills-tip:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 1px; }

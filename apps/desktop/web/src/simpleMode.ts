@@ -85,12 +85,21 @@ export function sectionShown(asked: SectionId, advanced: boolean): SectionId {
 }
 
 /**
+ * Studio's Resources tabs: Settings' but Browser, since browser profiles
+ * are every workspace's, made only in Settings (a workspace picks its
+ * profile in Studio › Settings).
+ */
+export const studioTabs = ["agents", "skills", "connectors", "secrets"] as const satisfies readonly ResourceTab[];
+/** A tab of Studio's Resources. */
+export type StudioTab = (typeof studioTabs)[number];
+
+/**
  * Studio's Resources tabs shown: every one with advanced settings; a
  * newcomer, who opens Studio only on its Settings (the Workspaces menu's
  * pencil, the status bar), sees the connectors, as Settings shows them.
  */
-export function studioResourceTabs(advanced: boolean): ResourceTab[] {
-  return resourceTabs.filter((s) => advanced || simpleSections.has(s));
+export function studioResourceTabs(advanced: boolean): StudioTab[] {
+  return studioTabs.filter((s) => advanced || simpleSections.has(s));
 }
 
 /** The top bar's menus, in order. */

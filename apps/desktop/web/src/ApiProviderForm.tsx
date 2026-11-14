@@ -15,10 +15,10 @@
  */
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
-import { mdiCloudDownloadOutline, mdiDeleteOutline, mdiPlus } from "@mdi/js";
+import { mdiCloudDownloadOutline, mdiDeleteOutline, mdiInformationOutline, mdiPlus } from "@mdi/js";
 import { defaultModelsPath, defaultPaths, gatewayAPIs, guessedAPI, isModelsURL, listedRows, newHeader, scriptLanguages, tokenPlaceholder, tokenValue, usesToken, type ApiForm, type ApiHeaderRow, type ApiModelRow } from "./apiForm";
 import { t } from "./i18n";
-import { Button, IconButton, Switch } from "@blitz/webui";
+import { Button, Icon, IconButton, Switch } from "@blitz/webui";
 
 /**
  * The api provider's fields in the provider card (DSK-61): its endpoint,
@@ -210,10 +210,18 @@ export function ApiProviderForm({
       {advanced && (
         <fieldset className="field single api-paths">
           <legend className="t-label">{t("desktop.keys.api.paths")}</legend>
-          <small className="muted">{t("desktop.keys.api.paths_hint", { model: "{model}", method: "{method}" })}</small>
-          {gatewayAPIs.map((a) => (
+          <small className="muted">{t("desktop.keys.api.paths_hint")}</small>
+          {gatewayAPIs.map((a) => {
+            // What the path can fill in, offered in a tooltip: none is required (MDL-113).
+            const fills = t(a === "gemini" || a === "vertex" ? "desktop.keys.api.fills_google" : "desktop.keys.api.fills", { model: "{model}", method: "{method}" });
+            return (
             <label key={a} className="field single">
-              <span className="t-body-sm">{t(`desktop.keys.api.api.${a}`)}</span>
+              <span className="row t-body-sm" style={{ gap: 4 }}>
+                {t(`desktop.keys.api.api.${a}`)}
+                <span className="fills-tip" role="img" tabIndex={0} title={fills} aria-label={fills}>
+                  <Icon path={mdiInformationOutline} size="sm" />
+                </span>
+              </span>
               <input
                 className="input mono"
                 value={form.paths[a] ?? ""}
@@ -224,7 +232,8 @@ export function ApiProviderForm({
                 onKeyDown={onEnter}
               />
             </label>
-          ))}
+            );
+          })}
         </fieldset>
       )}
       {/* Always present, so a screen reader announces problems as they come. */}

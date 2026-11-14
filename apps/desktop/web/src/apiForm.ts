@@ -176,7 +176,8 @@ export function apiFormProblems(f: ApiForm): string[] {
     const p = raw.trim();
     const google = api === "gemini" || api === "vertex";
     const fills = (p.match(/\{[^}]*\}/g) ?? []).every((x) => x === "{model}" || (google && x === "{method}"));
-    if (!p.startsWith("/") || /[?#\s]/.test(p) || p.includes(tokenPlaceholder) || !fills || (google && !p.includes("{method}"))) out.add("desktop.keys.api.problem.path");
+    // {model} and {method} may be used, never must (MDL-113).
+    if (!p.startsWith("/") || /[?#\s]/.test(p) || p.includes(tokenPlaceholder) || !fills) out.add("desktop.keys.api.problem.path");
   }
   return [...out];
 }

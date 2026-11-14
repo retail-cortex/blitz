@@ -128,7 +128,7 @@ var BlitzCommands = []BlitzCommand{
 	{Name: "open file", Summary: "Open a workspace file in Blitz's editor", Effect: EffectOpens, Phase: 2,
 		Args: []CommandArg{argPath, {Name: "line", Type: "integer", Description: "The line to show"}}},
 	{Name: "open studio", Summary: "Open a section of Studio", Effect: EffectOpens, Phase: 2,
-		Args: []CommandArg{{Name: "section", Type: "string", Description: "Which section", Required: true, Values: []string{"overview", "settings", "specs", "resources", "agents", "skills", "evals", "jobs", "connectors", "secrets", "browser", "workflows", "rules", "guardrails"}}}},
+		Args: []CommandArg{{Name: "section", Type: "string", Description: "Which section", Required: true, Values: []string{"overview", "settings", "specs", "resources", "agents", "skills", "evals", "jobs", "connectors", "secrets", "workflows", "rules", "guardrails"}}}},
 	{Name: "open settings", Summary: "Open a section of Settings", Effect: EffectOpens, Phase: 2,
 		Args: []CommandArg{{Name: "section", Type: "string", Description: "Which section", Required: true, Values: []string{"providers", "organization", "personality", "voice", "appearance", "agents", "skills", "evals", "connectors", "secrets", "browser", "workspaces", "permissions", "updates"}}}},
 	{Name: "open view", Summary: "Open one of Blitz's views", Effect: EffectOpens, Phase: 2,

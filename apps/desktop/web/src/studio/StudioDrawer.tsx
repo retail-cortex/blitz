@@ -17,7 +17,7 @@
 import { PublishDialog, useOrgAdmin } from "./PublishDialog";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiTextBoxCheckOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline, mdiBookshelf, mdiTuneVariant, mdiWeb } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiTextBoxCheckOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline, mdiBookshelf, mdiTuneVariant } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -30,8 +30,7 @@ import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, Segmented, Tabs, useSnackbar } from "@blitz/webui";
 import { GlobalAgents } from "./GlobalAgents";
 import { useAdvanced } from "../state";
-import { resourceTabs, studioResourceTabs, type ResourceTab } from "../simpleMode";
-import { BrowsersPane } from "./BrowsersPane";
+import { studioResourceTabs, studioTabs, type StudioTab } from "../simpleMode";
 import { SettingsPane } from "./SettingsPane";
 import { Drawer } from "@blitz/webui";
 import { useDiscardGuard } from "./paneParts";
@@ -58,13 +57,13 @@ import { OverviewPane } from "./OverviewPane";
 const studioEntries = ["overview", "settings", "specs", "resources", "workers", "workflows", "rules", "guardrails"] as const;
 /** An entry of Studio's side list. */
 export type StudioEntry = (typeof studioEntries)[number];
-/** What Studio can open on: an entry, one of Resources' tabs (agents, skills, connectors, browser, secrets), or the evals (Agents' second tab). */
-export type StudioKind = StudioEntry | ResourceTab | "evals";
+/** What Studio can open on: an entry, one of Resources' tabs (agents, skills, connectors, secrets), or the evals (Agents' second tab). */
+export type StudioKind = StudioEntry | StudioTab | "evals";
 /** Whether s names a kind of Studio's. */
-export const isStudioKind = (s: string): s is StudioKind => s === "evals" || (studioEntries as readonly string[]).includes(s) || (resourceTabs as readonly string[]).includes(s);
-const isResourceTab = (k: StudioKind): k is ResourceTab => (resourceTabs as readonly string[]).includes(k);
+export const isStudioKind = (s: string): s is StudioKind => s === "evals" || (studioEntries as readonly string[]).includes(s) || (studioTabs as readonly string[]).includes(s);
+const isResourceTab = (k: StudioKind): k is StudioTab => (studioTabs as readonly string[]).includes(k);
 /** The Resources tab a kind shows in: its own, the evals Agents'. */
-const resourceTabOf = (k: StudioKind): ResourceTab | undefined => (k === "evals" ? "agents" : isResourceTab(k) ? k : undefined);
+const resourceTabOf = (k: StudioKind): StudioTab | undefined => (k === "evals" ? "agents" : isResourceTab(k) ? k : undefined);
 /** The side list's entry a kind shows under: Resources for its tabs (and the evals). */
 export const studioEntryOf = (k: StudioKind): StudioEntry => (resourceTabOf(k) ? "resources" : (k as StudioEntry));
 /** Studio's entries in groups, a line between each (the menu's and the side list's): the workspace; what it has and what runs; what it follows. */
@@ -108,7 +107,6 @@ export const studioIcons: Record<StudioKind, string> = {
   workers: mdiCalendarClock,
   connectors: mdiConnection,
   secrets: mdiKeyVariant,
-  browser: mdiWeb,
   workflows: mdiSitemapOutline,
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
@@ -118,8 +116,8 @@ export const studioIcons: Record<StudioKind, string> = {
  * The workspace's Studio (spec_040_studio): everything that is this
  * workspace's, where Settings is every workspace's: its settings, and
  * what its .agents folder holds, each listed and edited here. Resources
- * has the same tabs as Settings › Resources: agents, skills, evals,
- * workers, connectors, secrets and browsers.
+ * has Settings › Resources' tabs but Browser (profiles are every
+ * workspace's): agents (with their evals), skills, connectors and secrets.
  */
 export function StudioDrawer({
   dir,
@@ -265,7 +263,6 @@ export function StudioDrawer({
             </div>
           )}
           {kind === "settings" && <SettingsPane workspace={dir} />}
-          {kind === "browser" && <BrowsersPane workspace={dir} />}
           {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} onStarted={refreshHealth} />}
           {kind === "agents" && (
             <AgentEditor

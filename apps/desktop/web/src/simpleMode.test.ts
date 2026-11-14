@@ -77,8 +77,9 @@ describe("simple mode", () => {
     expect(entryOf("logs")).toBe("system");
   });
 
-  it("gives Studio's Resources Settings' tabs: all of them with advanced, the connectors without", () => {
-    expect(studioResourceTabs(true)).toEqual([...resourceTabs]);
+  it("gives Studio's Resources Settings' tabs but Browser: all of them with advanced, the connectors without", () => {
+    expect(studioResourceTabs(true)).toEqual(["agents", "skills", "connectors", "secrets"]);
+    expect(resourceTabs).toContain("browser"); // Settings' alone: profiles are every workspace's
     expect(studioResourceTabs(false)).toEqual(["connectors"]);
   });
 });
