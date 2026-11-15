@@ -128,3 +128,32 @@ func TestStatementSchema(t *testing.T) {
 	_, err = Backend{}.ReadSchema(ctx, connectors.Env{}, &connectors.Kind{Schema: &connectors.SchemaSpec{Reader: "unknown"}}, connectors.Connection{})
 	assert.ErrorContains(t, err, `no schema reader "unknown"`)
 }
+
+// With allowed datasets, Toolbox lists them whole (project.dataset): each
+// is listed in its own project, another project's tables named in full,
+// the connection's own by dataset.table.
+func TestBigQuerySchemaAllowedDatasets(t *testing.T) {
+	ctx := context.Background()
+	var asked []string
+	tools := map[string]func(map[string]any) answer{
+		schemaTool + "_datasets": func(map[string]any) answer {
+			return answer{parts: []string{`["bigquery-public-data.thelook_ecommerce", "acme.sales"]`}}
+		},
+		schemaTool + "_tables": func(in map[string]any) answer {
+			asked = append(asked, in["project"].(string)+"/"+in["dataset"].(string))
+			return answer{parts: []string{`"users"`}}
+		},
+		schemaTool + "_table": func(in map[string]any) answer {
+			asked = append(asked, in["project"].(string)+"/"+in["dataset"].(string)+"/"+in["table"].(string))
+			return answer{parts: []string{`{"Schema": [{"Name": "id", "Type": "INTEGER"}]}`}}
+		},
+	}
+	tables, err := bigquerySchema(ctx, session(t, tools), "acme")
+	require.NoError(t, err)
+	var names []string
+	for _, tb := range tables {
+		names = append(names, tb.Name)
+	}
+	assert.Equal(t, []string{"bigquery-public-data.thelook_ecommerce.users", "sales.users"}, names)
+	assert.Equal(t, []string{"bigquery-public-data/thelook_ecommerce", "bigquery-public-data/thelook_ecommerce/users", "acme/sales", "acme/sales/users"}, asked)
+}
