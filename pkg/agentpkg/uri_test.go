@@ -127,7 +127,7 @@ func TestLockAndAssetErrors(t *testing.T) {
 	assert.Error(t, Lock{}.Write(filepath.Join(file, "blitz.lock")))
 	l, err := ReadLock(filepath.Join(dir, "empty.lock"))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "null.lock"), []byte(`{"version":"1"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "null.lock"), []byte(`{"version":"1","assets":null}`), 0o644))
 	l, err = ReadLock(filepath.Join(dir, "null.lock"))
 	require.NoError(t, err)
 	assert.NotNil(t, l.Assets)
