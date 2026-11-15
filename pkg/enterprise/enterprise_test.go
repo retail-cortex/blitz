@@ -1192,3 +1192,21 @@ func TestConnectorConsent(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, done)
 }
+
+// EN-75: SignedHTTP sends the person's access token, through the default
+// transport when the client's HTTP has none; signed out, nothing is sent.
+func TestSignedHTTP(t *testing.T) {
+	_, s, _, store, _ := setup(t)
+	ctx := context.Background()
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { auth = r.Header.Get("Authorization") }))
+	t.Cleanup(srv.Close)
+	c := New(s.URL, store, Options{HTTP: &http.Client{}})
+	_, err := c.SignedHTTP().Get(srv.URL)
+	require.Error(t, err, "signed out")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	res, err := c.SignedHTTP().Get(srv.URL)
+	require.NoError(t, err)
+	res.Body.Close()
+	assert.True(t, strings.HasPrefix(auth, "Bearer "), auth)
+}

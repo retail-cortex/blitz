@@ -42,20 +42,13 @@ type Provider struct {
 	// and the next look searches again (SK-95).
 	dirs   []string
 	stamps map[string]string
-	// locked are the folders whose skills the organization locks
-	// (spec_053 EN-31), and lockedBy the skills found in them, by name:
-	// a skill of a locked name from any other folder isn't used.
-	locked   map[string]bool
-	lockedBy map[string]string
 }
 
 // NewProvider initializes the skills provider with embedded built-in skills.
 func NewProvider() (*Provider, error) {
 	p := &Provider{
-		skills:   make(map[string]*Skill),
-		builtin:  make(map[string]bool),
-		locked:   make(map[string]bool),
-		lockedBy: make(map[string]string),
+		skills:  make(map[string]*Skill),
+		builtin: make(map[string]bool),
 	}
 
 	if err := p.loadEmbeddedSkills(); err != nil {
@@ -120,20 +113,6 @@ func LoadFolder(dir string) (*Skill, error) {
 	s.fsys, s.root, s.hostDir = os.DirFS(dir), ".", dir
 	s.scanBundle()
 	return s, nil
-}
-
-// Lock marks dirs as the organization's locked skill folders (spec_053
-// EN-31): a skill found in one wins over a skill of its name in any
-// other folder, whichever is searched first, and the clash is reported.
-// An empty dir is ignored. Call it before DiscoverExternal.
-func (p *Provider) Lock(dirs ...string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, d := range dirs {
-		if d != "" {
-			p.locked[d] = true
-		}
-	}
 }
 
 // DiscoverExternal scans search directories for SKILL.md files. External
@@ -248,7 +227,6 @@ func (p *Provider) rediscover(now map[string]string) error {
 			delete(p.skills, name)
 		}
 	}
-	clear(p.lockedBy)
 	err := p.discover(p.dirs)
 	p.stamps = now
 	return err
@@ -295,7 +273,6 @@ func (p *Provider) discover(dirs []string) error {
 			continue
 		}
 
-		locked := p.locked[dir] || p.locked[expandedDir]
 		// Reported rather than skipped silently: a typo in the front
 		// matter, or a folder that can't be read, shouldn't make a skill
 		// vanish without a word.
@@ -316,16 +293,6 @@ func (p *Provider) discover(dirs []string) error {
 			}
 			if skill.Name == "" {
 				return
-			}
-			if by, ok := p.lockedBy[skill.Name]; ok && !locked {
-				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization (%s); this one isn't used", path, skill.Name, by))
-				return
-			}
-			if old := p.skills[skill.Name]; old != nil && locked && p.lockedBy[skill.Name] == "" {
-				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization; %s isn't used", old.Path, skill.Name, path))
-			}
-			if locked {
-				p.lockedBy[skill.Name] = path
 			}
 			// Its resources, references and scripts, from its folder.
 			skillDir := filepath.Dir(path)

@@ -251,50 +251,6 @@ func TestProviderNoticesEditedSkills(t *testing.T) {
 	assert.Equal(t, "thirds", s.Description)
 }
 
-// An organization's locked skill wins over a skill of its name from any
-// other folder, searched before it (the project's) or after it (a
-// plugin's), and the clash is reported; a search again keeps it so
-// (spec_053 EN-31, N26 engine-sub-2#1).
-func TestLockedSkillWins(t *testing.T) {
-	skill := func(desc string) string { return "---\nname: deploy\ndescription: " + desc + "\n---\nDo it.\n" }
-	tests := []struct {
-		name   string
-		before bool // the other folder is searched before the locked one
-	}{
-		{"project before the locked folder", true},
-		{"plugin after the locked folder", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			locked, other := filepath.Join(root, "locked"), filepath.Join(root, "other")
-			writeSkill(t, locked, "deploy", skill("the organization's"), nil)
-			writeSkill(t, other, "deploy", skill("someone else's"), nil)
-			p, err := NewProvider()
-			require.NoError(t, err)
-			p.Lock(locked, "")
-			first, second := []string{locked}, []string{other}
-			if tc.before {
-				first, second = []string{other, locked}, nil
-			}
-			err = p.DiscoverExternal(first)
-			if len(second) > 0 {
-				require.NoError(t, err)
-				err = p.DiscoverExternal(second)
-			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "locked by your organization")
-			got, ok := p.Get("deploy")
-			require.True(t, ok)
-			assert.Equal(t, "the organization's", got.Description)
-
-			require.Error(t, p.Reload(), "a search again reports it again")
-			got, _ = p.Get("deploy")
-			assert.Equal(t, "the organization's", got.Description)
-		})
-	}
-}
-
 // Discovery skips the folders the stamp skips: a SKILL.md an npm package
 // ships in node_modules isn't a skill (N26 engine-sub-2#4).
 func TestDiscoverySkipsHeavyFolders(t *testing.T) {
