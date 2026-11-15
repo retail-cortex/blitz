@@ -277,6 +277,9 @@ type Service struct {
 	SharedTables  map[string][]map[string]any
 	SharedResults map[string]map[string]any
 	SharedAsked   []string
+	// SharedMCP serves each shared MCP connector's requests, by name,
+	// for a signed-in person (EN-75).
+	SharedMCP map[string]http.Handler
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -853,6 +856,19 @@ func NewService(t testing.TB, issuer string) *Service {
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": "not_allowed", "message": "your organization doesn't let you use " + r.PathValue("name") + " (the organization's policy decides it)", "decided_by": "the organization's policy"})
 		return false
 	}
+	mux.HandleFunc("/api/v1/mcp/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		h := s.SharedMCP[r.PathValue("name")]
+		s.Mu.Unlock()
+		if h == nil {
+			refuse(w, http.StatusNotFound, "not_found", "There's no such connector.")
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("GET /api/v1/databases/{name}/schema", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {
 			return

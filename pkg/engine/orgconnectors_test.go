@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -260,4 +261,44 @@ func TestOrgConnectorsAfterOpening(t *testing.T) {
 		names = append(names, s.Name)
 	}
 	assert.Contains(t, names, orgServer)
+}
+
+// EN-75: a shared MCP server's tools, through the organization's server
+// and the service, as <name>_<tool>; kept out of the Data menu.
+func TestOrgMCPConnectors(t *testing.T) {
+	secrets.SetDefault(&secrets.Memory{})
+	org := signedInOrg(t)
+	upstream := mcp.NewServer(&mcp.Implementation{Name: "hub", Version: "1"}, nil)
+	mcp.AddTool(upstream, &mcp.Tool{Name: "echo", Description: "Says it back"}, func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+		Text string `json:"text"`
+	}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "you said " + in.Text}}}, nil, nil
+	})
+	org.Mu.Lock()
+	org.Shared = append(org.Shared, map[string]any{"name": "hub", "kind": "mcp", "description": "The team hub"}, map[string]any{"name": "gone", "kind": "mcp"})
+	org.SharedMCP = map[string]http.Handler{"hub": mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return upstream }, &mcp.StreamableHTTPOptions{Stateless: true})}
+	org.Mu.Unlock()
+	ctx := context.Background()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, orgTransport(config.MCPServerConfig{URL: org.URL}), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cs.Close() })
+	tools, err := cs.ListTools(ctx, nil)
+	require.NoError(t, err)
+	var names []string
+	for _, tl := range tools.Tools {
+		names = append(names, tl.Name)
+	}
+	assert.ElementsMatch(t, []string{"shop_execute_sql", "shop_list_tables", "hub_echo"}, names, "one that can't be reached is left out")
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "hub_echo", Arguments: map[string]any{"text": "hi"}})
+	require.NoError(t, err)
+	assert.Equal(t, "you said hi", res.Content[0].(*mcp.TextContent).Text)
+
+	w := openTest(t)
+	w.cfg.Enterprise.URL = org.URL
+	w.cfg.Org = orgLayer()
+	conns, err := w.DataConnections(ctx)
+	require.NoError(t, err)
+	require.Len(t, conns, 1, "the database alone")
+	assert.Equal(t, "shop", conns[0].Name)
+	assert.Len(t, w.OrgConnections(ctx), 1)
 }

@@ -22,6 +22,9 @@ import (
 	"net/url"
 )
 
+// SharedMCP is a shared connector's kind when it's a remote MCP server.
+const SharedMCP = "mcp"
+
 // SharedConnector is one of the organization's shared connectors the
 // person's policy lets them use (spec_053 EN-70; the service's
 // spec_013_connectors CN-20): the service holds the connection and its
@@ -81,4 +84,36 @@ func (c *Client) SharedQuery(ctx context.Context, name, statement string, maxRow
 	var out json.RawMessage
 	err := c.signedCall(ctx, http.MethodPost, "/api/v1/databases/"+url.PathEscape(name)+"/query", map[string]any{"statement": statement, "max_rows": maxRows}, &out)
 	return out, err
+}
+
+// MCPEndpoint is the service's endpoint for the shared connector name
+// when it's a remote MCP server: MCP's streamable HTTP, through the
+// service, which adds the organization's token (the service's CN-51).
+func (c *Client) MCPEndpoint(name string) string {
+	return c.url + "/api/v1/mcp/" + url.PathEscape(name)
+}
+
+// SignedHTTP is an HTTP client whose requests carry the person's access
+// token, renewed as it needs to be.
+func (c *Client) SignedHTTP() *http.Client {
+	return &http.Client{Transport: signedTransport{c: c, base: c.hc.Transport}}
+}
+
+type signedTransport struct {
+	c    *Client
+	base http.RoundTripper
+}
+
+func (t signedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	token, err := t.c.AccessToken(req.Context())
+	if err != nil {
+		return nil, err
+	}
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+token)
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
 }

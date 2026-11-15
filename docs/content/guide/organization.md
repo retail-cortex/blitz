@@ -80,6 +80,8 @@ Your organization's admins can connect its databases once, in its console, for t
 
 Every query runs through your organization's service, as you, and its policy decides what you may do with each: which tables, whether you may change data, and how many rows come back. A query it doesn't allow is refused, saying who decided. Your organization keeps a log of the queries, with who asked. One of your own connections with the same name wins it.
 
+Your organization can share **MCP servers** the same way: its service holds their tokens, and their tools reach your agent as `org__<name>_<tool>`, each call made through the service as you and logged.
+
 ## Your organization's look and terms
 
 If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page, its menus, dialogs and notifications, the tray, the terminal's banner and help, and About, which ends with "Built on Blitz". Where Blitz speaks of itself as a program (its releases, its license, reinstalling it), it keeps its own name. They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.

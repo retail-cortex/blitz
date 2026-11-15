@@ -137,7 +137,19 @@ func (o *orgMCP) Connect(ctx context.Context) (mcp.Connection, error) {
 		return nil, fmt.Errorf("your organization's connectors: %w", err)
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: orgServer, Version: "1"}, nil)
+	var upstreams []*mcp.ClientSession
 	for _, sc := range list {
+		if sc.Kind == enterprise.SharedMCP {
+			// A remote MCP server through the service (EN-75): its tools,
+			// as <name>_<tool>, each call forwarded as the person.
+			cs, err := forwardMCP(ctx, server, client, sc.Name)
+			if err != nil {
+				slog.Warn("the organization's MCP server", "connector", sc.Name, "error", err)
+				continue
+			}
+			upstreams = append(upstreams, cs)
+			continue
+		}
 		about := sc.Description
 		if about == "" {
 			about = "a " + sc.Kind + " database"
@@ -172,10 +184,49 @@ func (o *orgMCP) Connect(ctx context.Context) (mcp.Connection, error) {
 			})
 	}
 	ct, st := mcp.NewInMemoryTransports()
-	if _, err := server.Connect(context.WithoutCancel(ctx), st, nil); err != nil {
+	ss, err := server.Connect(context.WithoutCancel(ctx), st, nil)
+	if err != nil {
 		return nil, err
 	}
+	if len(upstreams) > 0 {
+		// The remote servers' sessions end with this one.
+		go func() {
+			_ = ss.Wait()
+			for _, cs := range upstreams {
+				_ = cs.Close()
+			}
+		}()
+	}
 	return ct.Connect(ctx)
+}
+
+// forwardMCP adds the shared MCP connector name's tools to server, each
+// named <name>_<tool> and called through the service as the person.
+func forwardMCP(ctx context.Context, server *mcp.Server, client *enterprise.Client, name string) (*mcp.ClientSession, error) {
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "blitz", Version: "1"}, nil).Connect(context.WithoutCancel(ctx),
+		&mcp.StreamableClientTransport{Endpoint: client.MCPEndpoint(name), HTTPClient: client.SignedHTTP()}, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		_ = cs.Close()
+		return nil, err
+	}
+	for _, t := range res.Tools {
+		upstream := t.Name
+		tool := *t
+		tool.Name = name + "_" + upstream
+		tool.Description = fmt.Sprintf("Your organization's %s: %s", name, t.Description)
+		server.AddTool(&tool, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: upstream, Arguments: req.Params.Arguments})
+			if err != nil {
+				return toolError(err), nil
+			}
+			return out, nil
+		})
+	}
+	return cs, nil
 }
 
 // toolError is err as a tool's answer the agent reads: a refusal of the
@@ -230,8 +281,8 @@ type sharedCache struct {
 func (w *Workspace) orgDataConnections(ctx context.Context, own []api.DataConnection) []api.DataConnection {
 	var out []api.DataConnection
 	for _, sc := range w.orgShared(ctx) {
-		if slices.ContainsFunc(own, func(c api.DataConnection) bool { return c.Name == sc.Name }) {
-			continue
+		if sc.Kind == enterprise.SharedMCP || slices.ContainsFunc(own, func(c api.DataConnection) bool { return c.Name == sc.Name }) {
+			continue // an MCP server's are tools, not a database's (EN-75)
 		}
 		out = append(out, api.DataConnection{Name: sc.Name, Kind: sc.Kind, ReadOnly: sc.ReadOnly, On: true, Trusted: true, Org: true})
 	}
@@ -312,6 +363,9 @@ func (w *Workspace) orgSchemaText(ctx context.Context, name string) string {
 func (w *Workspace) OrgConnections(ctx context.Context) []connectors.Connection {
 	var out []connectors.Connection
 	for _, sc := range w.orgShared(ctx) {
+		if sc.Kind == enterprise.SharedMCP {
+			continue // its tools are the organization server's (EN-75)
+		}
 		out = append(out, connectors.Connection{Name: sc.Name, Category: dataCategory, Scope: connectors.ScopeOrgShared, Kind: sc.Kind,
 			Description: sc.Description, ReadOnly: sc.ReadOnly, Tools: []string{"execute_sql", "list_tables"}, Trusted: true, On: true})
 	}
