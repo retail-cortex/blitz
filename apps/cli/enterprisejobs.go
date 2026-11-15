@@ -577,6 +577,49 @@ func newEnterpriseRefreshCommand() *cobra.Command {
 	}
 }
 
+// newEnterpriseConsentCommand is blitz enterprise consent: whether the
+// organization's connectors that query as the person may, and where to
+// allow it; --revoke forgets it (EN-76).
+func newEnterpriseConsentCommand() *cobra.Command {
+	var revoke bool
+	cmd := &cobra.Command{
+		Use:   "consent",
+		Short: "Let your organization's connectors that query as you do so, with your Google account (or --revoke)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if revoke {
+				if err := s.RevokeConnectorConsent(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Fprintln(out, i18n.T("org.consent_revoked"))
+				return nil
+			}
+			c, err := s.ConnectorConsent(cmd.Context())
+			if err != nil {
+				return err
+			}
+			switch {
+			case len(c.Connectors) == 0:
+				fmt.Fprintln(out, i18n.T("org.consent_none"))
+			case c.Consented:
+				fmt.Fprintln(out, i18n.T("org.consent_done", "connectors", strings.Join(c.Connectors, ", ")))
+			case c.Url == "":
+				fmt.Fprintln(out, i18n.T("org.consent_unavailable"))
+			default:
+				fmt.Fprintln(out, i18n.T("org.consent_open", "connectors", strings.Join(c.Connectors, ", "), "url", c.Url))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&revoke, "revoke", false, "forget your consent: those connectors ask again")
+	return cmd
+}
+
 // policyDecided is who decided a setting, as a line says it.
 func policyDecided(p *pb.PolicySetting) string {
 	by := i18n.T("org.decided_" + cmp.Or(p.Level, "global"))

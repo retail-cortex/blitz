@@ -206,6 +206,11 @@ service ConfigService {
   // than waiting for the service to announce a change (spec_053 EN-38a;
   // NOT_CONNECTED, NOT_SIGNED_IN).
   rpc RefreshEnterprise(RefreshEnterpriseRequest) returns (RefreshEnterpriseResponse);
+  // Whether the person's organization has connectors that query as each
+  // person, whether they've allowed it, and where (spec_053 EN-76).
+  rpc GetConnectorConsent(GetConnectorConsentRequest) returns (GetConnectorConsentResponse);
+  // Forgets the person's consent: those connectors ask again (EN-76).
+  rpc RevokeConnectorConsent(RevokeConnectorConsentRequest) returns (RevokeConnectorConsentResponse);
   // Connects to the organization's service at an address, after checking
   // it's one, or disconnects with "", signing out first (INVALID_ADDRESS,
   // UNREACHABLE).
@@ -1477,6 +1482,24 @@ message GetEnterpriseRequest {
 message GetEnterpriseResponse {
   EnterpriseState state = 1;
 }
+
+// Request message for ConfigService.GetConnectorConsent.
+message GetConnectorConsentRequest {}
+
+// Response message for ConfigService.GetConnectorConsent.
+message GetConnectorConsentResponse {
+  // Connectors the person may use query as them (none: nothing to allow).
+  repeated string connectors = 1;
+  bool consented = 2;
+  // Where they allow it (Google's consent).
+  string url = 3;
+}
+
+// Request message for ConfigService.RevokeConnectorConsent.
+message RevokeConnectorConsentRequest {}
+
+// Response message for ConfigService.RevokeConnectorConsent.
+message RevokeConnectorConsentResponse {}
 
 // Request message for ConfigService.RefreshEnterprise.
 message RefreshEnterpriseRequest {}

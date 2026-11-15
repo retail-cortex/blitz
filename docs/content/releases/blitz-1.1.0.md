@@ -26,6 +26,7 @@ Know where everything lives. Settings is now everything every workspace shares, 
 - **Ollama at work.** When your organization allows it, keep using Ollama on your computer, or another provider of your own, alongside its models: Settings › Providers lists just the ones it allows, with the models it allows of each, and the model menu offers only those.
 - **Your organization's databases, without the passwords.** When your organization connects a database in its console, it's there for you in the Data menu, with `@db:` and for the agent, under your organization's rules for which tables you may use. Nobody hands out credentials.
 - **Your organization's jobs and tools.** Jobs your organization runs for itself appear in Settings › Jobs, with Run now when it lets you; MCP servers it shares give your agent their tools without anyone handing out a token.
+- **Your data, as you.** A shared BigQuery connection can query with your own Google account: allow it once in Settings › Providers › Organization, and you see what your own access lets you see.
 - **Your organization's policy, explained.** Settings › Providers › Organization › **Your policy** shows everything your organization decides for you, and who decided each: everyone, your group, or an admin just for you. When something's refused, Blitz says who decided, so you know whom to ask.
 - **More room to search.** The search bar now stretches across the top bar, and Help is a ? icon beside Settings.
 

@@ -174,3 +174,19 @@ func TestQueryUserAgent(t *testing.T) {
 		assert.NotContains(t, err.Error(), "user agent")
 	}
 }
+
+// A BigQuery source that queries as each caller (useClientOAuth) needs
+// their token; given one, it's the caller's client that's made.
+func TestQueryAsCaller(t *testing.T) {
+	cfg, err := Load(context.Background(), []string{writeConfig(t, "kind: source\nname: wh\ntype: bigquery\nproject: blitz-test\nuseClientOAuth: true\n")}, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = Query(ctx, cfg, "wh", "SELECT 1", QueryOptions{MaxRows: 1})
+	assert.ErrorContains(t, err, "needs their access token")
+	_, err = Query(ctx, cfg, "wh", "SELECT 1", QueryOptions{MaxRows: 1, AccessToken: "not-a-real-token"})
+	if err != nil {
+		assert.NotContains(t, err.Error(), "needs their access token")
+		assert.NotContains(t, err.Error(), "user agent")
+	}
+}

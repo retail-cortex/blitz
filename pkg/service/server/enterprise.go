@@ -300,6 +300,49 @@ func (h configService) RefreshEnterprise(ctx context.Context, _ req[pb.RefreshEn
 	return ok(&pb.RefreshEnterpriseResponse{State: h.s.enterpriseState(ctx, c, false), Changed: changed})
 }
 
+// GetConnectorConsent says which shared connectors query as the person,
+// whether they've allowed it, and where (EN-76).
+func (h configService) GetConnectorConsent(ctx context.Context, _ req[pb.GetConnectorConsentRequest]) (*connect.Response[pb.GetConnectorConsentResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.SharedConnectors(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	out := &pb.GetConnectorConsentResponse{}
+	for _, sc := range list {
+		if sc.Auth == enterprise.SharedAsPerson {
+			out.Connectors = append(out.Connectors, sc.Name)
+		}
+	}
+	if len(out.Connectors) == 0 {
+		return ok(out)
+	}
+	u, done, err := c.ConnectorConsent(ctx)
+	if errors.Is(err, enterprise.ErrNoConsent) {
+		return ok(out)
+	}
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	out.Url, out.Consented = u, done
+	return ok(out)
+}
+
+// RevokeConnectorConsent forgets the person's consent (EN-76).
+func (h configService) RevokeConnectorConsent(ctx context.Context, _ req[pb.RevokeConnectorConsentRequest]) (*connect.Response[pb.RevokeConnectorConsentResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.RevokeConnectorConsent(ctx); err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.RevokeConnectorConsentResponse{})
+}
+
 func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEnterpriseRequest]) (*connect.Response[pb.ConnectEnterpriseResponse], error) {
 	if config.Managed() {
 		return nil, apiError(connect.CodeFailedPrecondition, "MANAGED", config.ErrManaged)

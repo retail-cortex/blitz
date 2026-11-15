@@ -485,6 +485,12 @@ func TestEnterprisePolicyLoop(t *testing.T) {
 	_, err = c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
 	_, info = errorReason(t, err)
 	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
+	_, err = c.RevokeConnectorConsent(ctx, connect.NewRequest(&pb.RevokeConnectorConsentRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
 }
 
 // The organization's shared connectors over the API (EN-72): listed with
@@ -559,6 +565,30 @@ func TestOrgSharedConnectors(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, data.Msg.Connections, 1)
 	assert.True(t, data.Msg.Connections[0].Org)
+
+	// EN-76: none queries as the person, then one does.
+	consent, err := c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, consent.Msg.Connectors)
+	org.Mu.Lock()
+	org.Shared = append(org.Shared, map[string]any{"name": "warehouse", "kind": "bigquery", "auth": "person", "max_rows": 100})
+	org.Mu.Unlock()
+	consent, err = c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"warehouse"}, consent.Msg.Connectors)
+	assert.Empty(t, consent.Msg.Url, "a service that can't")
+	org.Mu.Lock()
+	org.ConsentURL, org.Consented = "https://accounts.google.com/x", true
+	org.Mu.Unlock()
+	consent, err = c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "https://accounts.google.com/x", consent.Msg.Url)
+	assert.True(t, consent.Msg.Consented)
+	_, err = c.RevokeConnectorConsent(ctx, connect.NewRequest(&pb.RevokeConnectorConsentRequest{}))
+	require.NoError(t, err)
+	consent, err = c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	require.NoError(t, err)
+	assert.False(t, consent.Msg.Consented)
 }
 
 // The catalog is fetched again while its stream is up but silent: soon

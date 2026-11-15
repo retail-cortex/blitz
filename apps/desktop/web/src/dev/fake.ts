@@ -3076,6 +3076,9 @@ export function installFake() {
         // The organization's service: any https address connects, as Acme
         // Assist; signing in takes a moment in the "browser".
         getEnterprise: () => ({ state: fakeOrgState(true) }),
+        // Connectors that query as the person (EN-76): ?org&signedin; not allowed yet.
+        getConnectorConsent: () => (fakeOrg.signedIn ? { connectors: ["warehouse"], consented: false, url: "https://accounts.google.com/o/oauth2/auth?fake" } : { connectors: [] }),
+        revokeConnectorConsent: () => ({}),
         // Fetching the policy now (EN-38a): ?org&signedin; nothing changed.
         refreshEnterprise: async () => {
           await sleep(500);

@@ -242,6 +242,24 @@ func (s *Settings) RefreshOrganization(ctx context.Context) (bool, error) {
 	return res.Msg.Changed, nil
 }
 
+// ConnectorConsent is which shared connectors query as the person,
+// whether they've allowed it, and where (ConfigService.GetConnectorConsent,
+// spec_053 EN-76).
+func (s *Settings) ConnectorConsent(ctx context.Context) (*pb.GetConnectorConsentResponse, error) {
+	res, err := s.c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}
+
+// RevokeConnectorConsent forgets the person's consent
+// (ConfigService.RevokeConnectorConsent).
+func (s *Settings) RevokeConnectorConsent(ctx context.Context) error {
+	_, err := s.c.RevokeConnectorConsent(ctx, connect.NewRequest(&pb.RevokeConnectorConsentRequest{}))
+	return fromAPI(err)
+}
+
 // Policy is the person's effective policy from their organization, each
 // setting with who decided it (EnterpriseState.policy, spec_053 EN-39).
 func (s *Settings) Policy(ctx context.Context) ([]*pb.PolicySetting, error) {

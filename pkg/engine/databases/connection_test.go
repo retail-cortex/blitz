@@ -201,3 +201,20 @@ func TestBigQueryIDs(t *testing.T) {
 	assert.Empty(t, Backend{}.Check(&connectors.Kind{ID: "postgres", Source: "postgres"}, connectors.Connection{Settings: map[string]string{"project": "Not An ID"}}))
 	assert.Empty(t, Backend{}.Check(nil, connectors.Connection{}))
 }
+
+// A BigQuery connection that queries as each caller says so to Toolbox
+// (useClientOAuth); another kind never does.
+func TestRenderClientOAuth(t *testing.T) {
+	cat := connectors.Category{ID: "databases", SecretPrefix: "DB"}
+	bq := &connectors.Kind{ID: "bigquery", Source: "bigquery", Fields: []connectors.Field{{Key: "project"}}}
+	text, err := Backend{}.Render(cat, bq, connectors.Connection{Name: "wh", Settings: map[string]string{"project": "retail-cortex"}, ClientOAuth: true})
+	require.NoError(t, err)
+	assert.Contains(t, text, "useClientOAuth: \"true\"")
+	text, err = Backend{}.Render(cat, bq, connectors.Connection{Name: "wh", Settings: map[string]string{"project": "retail-cortex"}})
+	require.NoError(t, err)
+	assert.NotContains(t, text, "useClientOAuth")
+	pg := &connectors.Kind{ID: "postgres", Source: "postgres"}
+	text, err = Backend{}.Render(cat, pg, connectors.Connection{Name: "db", ClientOAuth: true})
+	require.NoError(t, err)
+	assert.NotContains(t, text, "useClientOAuth")
+}

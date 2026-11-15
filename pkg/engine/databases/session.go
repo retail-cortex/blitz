@@ -361,7 +361,7 @@ func (Backend) Query(ctx context.Context, env connectors.Env, k *connectors.Kind
 	if err != nil {
 		return datatable.Table{}, maskTyped(env.Values, err)
 	}
-	r, err := embed.Query(ctx, cfg, c.Name, run.Statement, embed.QueryOptions{Params: run.Params, MaxRows: run.MaxRows, MaxBytes: run.MaxBytes, Billed: run.Billed})
+	r, err := embed.Query(ctx, cfg, c.Name, run.Statement, embed.QueryOptions{Params: run.Params, MaxRows: run.MaxRows, MaxBytes: run.MaxBytes, Billed: run.Billed, AccessToken: run.AccessToken})
 	if err != nil {
 		return datatable.Table{}, maskTyped(env.Values, err)
 	}

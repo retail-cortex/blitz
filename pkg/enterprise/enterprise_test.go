@@ -1167,3 +1167,28 @@ func TestSharedConnectors(t *testing.T) {
 	_, err = c.SharedQuery(ctx, "shop", "select nope", 0)
 	assert.ErrorContains(t, err, "relation does not exist")
 }
+
+// EN-76: where the person consents to connectors querying as them, and
+// forgetting it; a service that can't says so.
+func TestConnectorConsent(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	_, _, err := c.ConnectorConsent(ctx)
+	assert.Error(t, err, "not signed in")
+	assert.Error(t, c.RevokeConnectorConsent(ctx))
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	_, _, err = c.ConnectorConsent(ctx)
+	assert.ErrorIs(t, err, ErrNoConsent)
+
+	s.ConsentURL, s.Consented = "https://accounts.google.com/o/oauth2/auth?x", true
+	u, done, err := c.ConnectorConsent(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, s.ConsentURL, u)
+	assert.True(t, done)
+
+	require.NoError(t, c.RevokeConnectorConsent(ctx))
+	_, done, err = c.ConnectorConsent(ctx)
+	require.NoError(t, err)
+	assert.False(t, done)
+}

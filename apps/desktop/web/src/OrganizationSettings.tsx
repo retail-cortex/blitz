@@ -29,6 +29,7 @@ import { configChanged } from "./events";
 import type { EnterpriseState } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { OrgPolicyCard } from "./OrgPolicy";
+import { ConnectorConsentCard } from "./ConnectorConsent";
 import { OrgNoticesCard } from "./OrgNotices";
 import { signInToOrg } from "./orgBranding";
 import { Button, Field, Icon, useSnackbar } from "@blitz/webui";
@@ -178,6 +179,7 @@ export function OrganizationSettings() {
         </div>
       )}
       {error && <p className="error-text t-body-sm">{error}</p>}
+      {state?.signedIn && <ConnectorConsentCard />}
       {state?.signedIn && (
         <OrgPolicyCard
           settings={state.policy}

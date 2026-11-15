@@ -280,6 +280,11 @@ type Service struct {
 	// SharedMCP serves each shared MCP connector's requests, by name,
 	// for a signed-in person (EN-75).
 	SharedMCP map[string]http.Handler
+	// ConsentURL is where the person consents to connectors querying as
+	// them (404, as from a service that can't, when empty); Consented
+	// whether they have (EN-76). DELETE clears it.
+	ConsentURL string
+	Consented  bool
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -856,6 +861,27 @@ func NewService(t testing.TB, issuer string) *Service {
 		_ = json.NewEncoder(w).Encode(map[string]string{"code": "not_allowed", "message": "your organization doesn't let you use " + r.PathValue("name") + " (the organization's policy decides it)", "decided_by": "the organization's policy"})
 		return false
 	}
+	mux.HandleFunc("GET /api/v1/connectors/consent", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.ConsentURL == "" {
+			refuse(w, http.StatusNotFound, "not_available", "This service can't query as each person.")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"url": s.ConsentURL, "consented": s.Consented})
+	})
+	mux.HandleFunc("DELETE /api/v1/connectors/consent", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		s.Consented = false
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("/api/v1/mcp/{name}", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {
 			return

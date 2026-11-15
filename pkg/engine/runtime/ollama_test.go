@@ -206,3 +206,16 @@ func TestOllamaAutoNameDoesntWaitForTheList(t *testing.T) {
 	close(release)
 	<-done
 }
+
+// EN-35: Ollama with no model named picks among those the organization's
+// policy allows, when signed in to one.
+func TestOllamaAutoPolicy(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Enterprise.URL = "https://blitz.acme.com"
+	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"ollama": {Allowed: true, Models: []string{"llama3*"}}}
+	m, err := buildProviderModel(context.Background(), cfg, "ollama", "")
+	require.NoError(t, err)
+	a, ok := m.(*ollamaAuto)
+	require.True(t, ok, "%T", m)
+	assert.Equal(t, []string{"llama3*"}, a.allowed)
+}

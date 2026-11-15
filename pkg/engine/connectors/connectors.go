@@ -300,6 +300,10 @@ type Connection struct {
 	Settings map[string]string
 	// ReadOnly connections can't change what they're connected to.
 	ReadOnly bool
+	// ClientOAuth connections query as each caller, with their own access
+	// token (QueryRun.AccessToken): BigQuery's, for blitz-enterprise's
+	// connectors that query as each person (its CN-60).
+	ClientOAuth bool
 	// Tools are the ready-made tools switched on, by ID.
 	Tools   []string
 	Queries []Query

@@ -66,6 +66,9 @@ type QueryOptions struct {
 	MaxRows  int
 	MaxBytes int
 	Billed   func(bytes int64) error
+	// AccessToken is the caller's own, for a source that queries as each
+	// caller (BigQuery's useClientOAuth): the query runs as them.
+	AccessToken string
 }
 
 // Query runs statement on cfg's source, read-only when the source is, and

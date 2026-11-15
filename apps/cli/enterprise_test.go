@@ -556,6 +556,10 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	ws := t.TempDir()
 	_, err := runCLI(t, "enterprise", "policy", "-d", ws)
 	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "consent")
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "consent", "--revoke")
+	assert.Error(t, err, "not connected")
 	_, err = runCLI(t, "enterprise", "connect", org.URL)
 	require.NoError(t, err)
 	out, err := runCLI(t, "enterprise", "policy", "-d", ws)
@@ -585,6 +589,37 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	require.NoError(t, err, "catalog, as before")
 	assert.NotContains(t, out, "connectors.own", "the rules alone")
 	assert.Contains(t, out, "rule/style")
+
+	// Connectors that query as the person (EN-76).
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "None of your organization's connectors")
+	org.Mu.Lock()
+	org.Shared = []map[string]any{{"name": "warehouse", "kind": "bigquery", "auth": "person", "max_rows": 100}}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "can't query as each person")
+	org.Mu.Lock()
+	org.ConsentURL = "https://accounts.google.com/x"
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "warehouse query as you")
+	assert.Contains(t, out, "https://accounts.google.com/x")
+	org.Mu.Lock()
+	org.Consented = true
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "You've allowed warehouse")
+	out, err = runCLI(t, "enterprise", "consent", "--revoke")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Forgotten")
+	org.Mu.Lock()
+	assert.False(t, org.Consented)
+	org.Shared = nil
+	org.Mu.Unlock()
 
 	// How one hears of one's jobs' runs (JB-31).
 	out, err = runCLI(t, "enterprise", "notices")

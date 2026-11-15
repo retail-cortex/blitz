@@ -40,6 +40,37 @@ type SharedConnector struct {
 	// none.
 	Tables  []string `json:"tables,omitempty"`
 	MaxRows int      `json:"max_rows"`
+	// Auth is person when it queries as them, with their Google consent
+	// (EN-76; the service's CN-60).
+	Auth string `json:"auth,omitempty"`
+}
+
+// SharedAsPerson is a shared connector's auth when it queries as each
+// person.
+const SharedAsPerson = "person"
+
+// ErrNoConsent is a service that can't query as each person (another
+// sign-in provider, or one before it).
+var ErrNoConsent = errors.New("your organization's service can't query as each person")
+
+// ConnectorConsent is where the person lets connectors query as them,
+// with their Google account, and whether they have (EN-76).
+func (c *Client) ConnectorConsent(ctx context.Context) (string, bool, error) {
+	var out struct {
+		URL       string `json:"url"`
+		Consented bool   `json:"consented"`
+	}
+	err := c.signedCall(ctx, http.MethodGet, "/api/v1/connectors/consent", nil, &out)
+	if ref, ok := errors.AsType[*Refusal](err); ok && ref.Status == http.StatusNotFound {
+		return "", false, ErrNoConsent
+	}
+	return out.URL, out.Consented, err
+}
+
+// RevokeConnectorConsent forgets the person's consent: those connectors
+// ask again.
+func (c *Client) RevokeConnectorConsent(ctx context.Context) error {
+	return c.signedCall(ctx, http.MethodDelete, "/api/v1/connectors/consent", nil, nil)
 }
 
 // SharedTable is one of a shared connector's tables they may use.

@@ -82,6 +82,8 @@ Every query runs through your organization's service, as you, and its policy dec
 
 Your organization can share **MCP servers** the same way: its service holds their tokens, and their tools reach your agent as `org__<name>_<tool>`, each call made through the service as you and logged.
 
+Some shared BigQuery connections **query as you**, with your own Google account, so you see exactly what your own access allows. Allow it once: Settings › Providers › Organization › **Data as you** › **Allow with Google** (or `blitz enterprise consent`), and revoke it there whenever you like.
+
 ## Your organization's look and terms
 
 If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page, its menus, dialogs and notifications, the tray, the terminal's banner and help, and About, which ends with "Built on Blitz". Where Blitz speaks of itself as a program (its releases, its license, reinstalling it), it keeps its own name. They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	bigqueryds "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/bigquery"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools"
 	bqutil "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/tools/bigquery/bigquerycommon"
 )
 
@@ -34,10 +35,17 @@ import (
 // opts.Billed the bytes it will read before it runs, and reads its result
 // with the schema's types, descriptions and modes.
 func queryBigQuery(ctx context.Context, s *bigqueryds.Source, statement string, opts QueryOptions) (Result, error) {
-	if s.UseClientAuthorization() {
-		return Result{}, errors.New("this BigQuery connection uses each caller's own sign-in: query it through its tools")
-	}
 	client, rest := s.BigQueryClient(), s.BigQueryRestService()
+	if s.UseClientAuthorization() {
+		// As the caller, with their own token (blitz-enterprise CN-60).
+		if opts.AccessToken == "" {
+			return Result{}, errors.New("this BigQuery connection queries as each caller: it needs their access token")
+		}
+		var err error
+		if client, rest, err = s.RetrieveClientAndService(tools.AccessToken("Bearer " + opts.AccessToken)); err != nil {
+			return Result{}, err
+		}
+	}
 	var connProps []*bigqueryapi.ConnectionProperty
 	var session *bigqueryds.Session
 	if s.BigQueryWriteMode() == bigqueryds.WriteModeProtected {

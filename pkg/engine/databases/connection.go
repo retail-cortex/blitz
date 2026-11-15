@@ -305,6 +305,9 @@ func (Backend) Render(cat connectors.Category, kind *connectors.Kind, c connecto
 	}
 	var docs []*yaml.Node
 	src := mapping("kind", "source", "name", c.Name, "type", kind.Source)
+	if c.ClientOAuth && kind.Source == "bigquery" {
+		add(src, "useClientOAuth", "true") // as each caller, with their token
+	}
 	for _, f := range kind.Fields {
 		v := strings.TrimSpace(c.Settings[f.Key])
 		switch {
