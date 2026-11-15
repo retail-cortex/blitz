@@ -34,7 +34,7 @@ func (r *Remote) DataConnections(ctx context.Context) ([]api.DataConnection, err
 	}
 	out := make([]api.DataConnection, len(res.Msg.Connections))
 	for i, c := range res.Msg.Connections {
-		dc := api.DataConnection{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: c.Problem}
+		dc := api.DataConnection{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: c.Problem, Org: c.Org}
 		for _, q := range c.Queries {
 			dc.Queries = append(dc.Queries, api.DataQueryInfo{Name: q.Name, Description: q.Description, Params: q.Params})
 		}

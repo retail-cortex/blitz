@@ -331,6 +331,9 @@ const (
 	// layers (spec_053 EN-30): read-only here.
 	ScopeOrgLocked  = config.ConnectorScopeOrgLocked
 	ScopeOrgDefault = config.ConnectorScopeOrgDefault
+	// ScopeOrgShared is one of the organization's shared connectors,
+	// which its service runs (spec_053 EN-72).
+	ScopeOrgShared = config.ConnectorScopeOrgShared
 )
 
 // Origins of descriptors.

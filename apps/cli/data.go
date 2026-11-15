@@ -191,6 +191,7 @@ type dataConnectionJSON struct {
 	Name     string          `json:"name"`
 	Kind     string          `json:"kind"`
 	ReadOnly bool            `json:"read_only"`
+	Org      bool            `json:"org,omitempty"`
 	On       bool            `json:"on"`
 	Trusted  bool            `json:"trusted"`
 	Problem  string          `json:"problem,omitempty"`
@@ -206,7 +207,7 @@ type dataQueryJSON struct {
 func dataConnectionsJSON(conns []api.DataConnection) []dataConnectionJSON {
 	out := make([]dataConnectionJSON, len(conns))
 	for i, c := range conns {
-		out[i] = dataConnectionJSON{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: c.Problem, Queries: []dataQueryJSON{}}
+		out[i] = dataConnectionJSON{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, Org: c.Org, On: c.On, Trusted: c.Trusted, Problem: c.Problem, Queries: []dataQueryJSON{}}
 		for _, q := range c.Queries {
 			out[i].Queries = append(out[i].Queries, dataQueryJSON{Name: q.Name, Description: q.Description, Params: append([]string{}, q.Params...)})
 		}

@@ -18,7 +18,13 @@ go_library(
     name = "datatable",
     srcs = ["datatable.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/datatable",
-    visibility = ["//pkg:__subpackages__"],
+    visibility = [
+        # blitz-enterprise's shared connectors run Blitz's databases on
+        # its service (its spec_013_connectors; the root module's package
+        # when Blitz is built as its dependency).
+        "@@//internal/connectors:__pkg__",
+        "//pkg:__subpackages__",
+    ],
 )
 
 go_test(

@@ -455,6 +455,80 @@ func TestEnterprisePolicyLoop(t *testing.T) {
 	assert.Equal(t, []string{"llama3*"}, st.OwnProviders[0].Models)
 }
 
+// The organization's shared connectors over the API (EN-72): listed with
+// the workspace's connections in the organization's scope, and a query on
+// one run by its service; saved queries refused.
+func TestOrgSharedConnectors(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	// The workspace opens with the organization's settings, as blitzd's
+	// own opener loads them.
+	cl, s := serve(t, func(cfg *config.Config) {
+		if loaded, err := config.Load(""); err == nil {
+			cfg.Enterprise, cfg.Org = loaded.Enterprise, loaded.Org
+		}
+	})
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Catalog = map[string]enterprisetest.CatalogFile{}
+	org.Policy = map[string]any{
+		"schema":  2,
+		"policy":  map[string]any{"refresh": "1h"},
+		"explain": map[string]any{"connectors.shared.shop.use": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
+	}
+	org.Shared = []map[string]any{{"name": "shop", "kind": "postgres", "description": "Orders", "read_only": true, "max_rows": 100}}
+	org.SharedResults = map[string]map[string]any{"select id from orders": {"columns": []map[string]any{{"name": "id"}}, "rows": [][]any{{1}}, "total": 1}}
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+	require.Eventually(t, func() bool {
+		cfg, err := config.Load("")
+		return err == nil && cfg.Org.Explain["connectors.shared.shop.use"].Level == "group"
+	}, 5*time.Second, 20*time.Millisecond)
+
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	var shop *pb.Connector
+	require.Eventually(t, func() bool {
+		list, err := cl.workspaces.ListConnectors(ctx, connect.NewRequest(&pb.ListConnectorsRequest{Workspace: dir}))
+		if err != nil {
+			return false
+		}
+		for _, m := range list.Msg.Connections {
+			if m.Name == "shop" {
+				shop = m
+			}
+		}
+		return shop != nil
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Equal(t, "org-shared", shop.Scope)
+	assert.True(t, shop.ReadOnly)
+
+	run, err := cl.workspaces.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: shop, Statement: "select id from orders"}))
+	require.NoError(t, err)
+	require.Empty(t, run.Msg.Problem)
+	assert.Equal(t, int32(1), run.Msg.Table.Total)
+	run, err = cl.workspaces.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: shop, Query: "saved"}))
+	require.NoError(t, err)
+	assert.Contains(t, run.Msg.Problem, "without saved queries")
+	run, err = cl.workspaces.RunConnectorQuery(ctx, connect.NewRequest(&pb.RunConnectorQueryRequest{Workspace: dir, Connection: shop, Statement: "select nope"}))
+	require.NoError(t, err)
+	assert.Contains(t, run.Msg.Problem, "relation does not exist")
+	data, err := cl.workspaces.ListDataConnections(ctx, connect.NewRequest(&pb.ListDataConnectionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, data.Msg.Connections, 1)
+	assert.True(t, data.Msg.Connections[0].Org)
+}
+
 // The catalog is fetched again while its stream is up but silent: soon
 // while Blitz has none (and so no policy, and the organization's models
 // wait), then at the policy's refresh. A service that answered 404 at

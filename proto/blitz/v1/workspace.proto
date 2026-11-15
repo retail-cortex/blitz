@@ -4683,6 +4683,9 @@ message DataConnection {
   // Why it can't be read ("" when it can).
   string problem = 6;
   repeated DataQueryInfo queries = 7;
+  // One of the organization's shared connectors, which its service runs
+  // (spec_053 EN-72).
+  bool org = 8;
 }
 
 // Response message for WorkspaceService.ListDataConnections.

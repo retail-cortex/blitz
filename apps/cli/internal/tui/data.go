@@ -52,6 +52,9 @@ func PrintDataConnections(out io.Writer, conns []api.DataConnection) {
 		if c.Kind != "" {
 			notes = append(notes, c.Kind)
 		}
+		if c.Org {
+			notes = append(notes, i18n.T("data.org"))
+		}
 		if c.ReadOnly {
 			notes = append(notes, i18n.T("data.read_only"))
 		}

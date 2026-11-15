@@ -275,6 +275,10 @@ func (h workspaceService) ListConnectors(ctx context.Context, r req[pb.ListConne
 		st := w.ConnectorState(c)
 		return st.State, st.Error, st.Tools
 	})
+	// The organization's shared connectors (spec_053 EN-72).
+	for _, c := range w.OrgConnections(ctx) {
+		conns = append(conns, connectorMsg(w.ConnectorSet().Dirs(), w.ConnectorSet().Catalog(), c))
+	}
 	return ok(&pb.ListConnectorsResponse{
 		Categories: cats, Kinds: kinds, Connections: conns,
 		WorkspaceDir: connectors.WorkspaceDir(w.Dir()), GlobalDir: connectors.GlobalDir(w.Config().Dir),
@@ -384,6 +388,21 @@ func (h workspaceService) RunConnectorQuery(ctx context.Context, r req[pb.RunCon
 		}
 		return ok(&pb.RunConnectorQueryResponse{Table: apiTableMsg(t)})
 	}
+	if r.Msg.Connection.GetScope() == connectors.ScopeOrgShared {
+		// The organization's: its service runs it (spec_053 EN-72).
+		if run.Query != "" || len(run.Params) > 0 {
+			return ok(&pb.RunConnectorQueryResponse{Problem: "your organization's connectors take a statement, without saved queries or parameters"})
+		}
+		t, err := w.RunOrgQuery(ctx, r.Msg.Connection.GetName(), run.Statement, run.MaxRows)
+		if err != nil {
+			return ok(&pb.RunConnectorQueryResponse{Problem: redact.Mask(err.Error())})
+		}
+		table, err := dataTableMsg(t)
+		if err != nil {
+			return nil, err
+		}
+		return ok(&pb.RunConnectorQueryResponse{Table: table})
+	}
 	t, err := w.RunConnectorQuery(ctx, connectorOf(r.Msg.Connection), r.Msg.SecretValues, run)
 	if err != nil {
 		return ok(&pb.RunConnectorQueryResponse{Problem: redact.Mask(err.Error())})
@@ -453,7 +472,7 @@ func (h workspaceService) ListDataConnections(ctx context.Context, r req[pb.List
 	}
 	out := &pb.ListDataConnectionsResponse{}
 	for _, c := range conns {
-		dc := &pb.DataConnection{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: redact.Mask(c.Problem)}
+		dc := &pb.DataConnection{Name: c.Name, Kind: c.Kind, ReadOnly: c.ReadOnly, On: c.On, Trusted: c.Trusted, Problem: redact.Mask(c.Problem), Org: c.Org}
 		for _, q := range c.Queries {
 			dc.Queries = append(dc.Queries, &pb.DataQueryInfo{Name: q.Name, Description: q.Description, Params: q.Params})
 		}

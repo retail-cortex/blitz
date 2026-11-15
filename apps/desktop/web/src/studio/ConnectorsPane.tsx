@@ -452,14 +452,15 @@ export function ConnectorsPane({ workspace, onDirty, extra, connect }: { workspa
 /**
  * A connection in the list: its kind, scope, trust, read-only or not,
  * tools and description; its switch in Studio. The organization's (spec_053
- * EN-30) don't open, being its Admins' to change, and a locked one has no
- * switch.
+ * EN-30, EN-72) don't open, being its Admins' to change, and a locked or
+ * shared one has no switch.
  */
 function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connector; kind: ConnectorKind | undefined; icon: string; studio: boolean; onOpen: () => void; onEnable: (on: boolean) => void }) {
   const lang = language();
   const distrusted = c.scope === "workspace" && !c.trusted;
-  const org = c.scope === "org-locked" || c.scope === "org-default";
-  const where = org ? t(c.scope === "org-locked" ? "desktop.connectors.org_locked" : "desktop.connectors.org_default") : studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "";
+  // The organization's: its catalog's, or a shared connector its service runs (EN-72).
+  const org = c.scope === "org-locked" || c.scope === "org-default" || c.scope === "org-shared";
+  const where = org ? t(c.scope === "org-locked" ? "desktop.connectors.org_locked" : c.scope === "org-shared" ? "desktop.connectors.org_shared" : "desktop.connectors.org_default") : studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "";
   const detail = [
     c.enabled ? "" : t("desktop.connectors.off_here"),
     c.custom || !kind ? t("desktop.connectors.custom") : textIn(kind.name, lang),
@@ -480,7 +481,7 @@ function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connect
           <small className={`ellipsis ${c.problem ? "error-text" : ""}`}>{c.problem || detail}</small>
         </span>
       </button>
-      {studio && c.scope !== "org-locked" && (
+      {studio && c.scope !== "org-locked" && c.scope !== "org-shared" && (
         <span className="trailing">
           <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={onEnable} />
         </span>

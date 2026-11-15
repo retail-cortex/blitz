@@ -34,6 +34,9 @@ type DataConnection struct {
 	// Problem is why it can't be read ("" when it can).
 	Problem string
 	Queries []DataQueryInfo
+	// Org says it's one of the organization's shared connectors, which its
+	// service runs (spec_053 EN-72).
+	Org bool
 }
 
 // Usable reports whether a chat or the CLI may query c: on, trusted and

@@ -24,6 +24,7 @@ Know where everything lives. Settings is now everything every workspace shares, 
 - **A shorter Settings.** Ten entries in four groups became seven: Providers (with your organization's sign-in), Personality (with Voice), Appearance, Resources, Jobs, Access (workspaces and permissions) and System (the service, its logs, and About).
 - **Your gateway, your paths.** In a custom gateway, Gemini and Vertex AI paths no longer have to include the model or the method: send every call to one fixed path if that's how your gateway works. The ⓘ beside each path lists what it can fill in.
 - **Ollama at work.** When your organization allows it, keep using Ollama on your computer, or another provider of your own, alongside its models: Settings › Providers lists just the ones it allows, with the models it allows of each, and the model menu offers only those.
+- **Your organization's databases, without the passwords.** When your organization connects a database in its console, it's there for you in the Data menu, with `@db:` and for the agent, under your organization's rules for which tables you may use. Nobody hands out credentials.
 - **Your organization's policy, explained.** Settings › Providers › Organization › **Your policy** shows everything your organization decides for you, and who decided each: everyone, your group, or an admin just for you. When something's refused, Blitz says who decided, so you know whom to ask.
 - **More room to search.** The search bar now stretches across the top bar, and Help is a ? icon beside Settings.
 

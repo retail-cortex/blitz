@@ -70,6 +70,16 @@ Your organization's admins set its policy in its admin console: for everyone, fo
 
 A service from before this policy keeps sending its catalog's policy, which applies to everyone the same way.
 
+## Your organization's databases
+
+Your organization's admins can connect its databases once, in its console, for the people its policy allows: its service holds the connection and its passwords, so you never need credentials of your own. The ones you may use show up beside your own connections:
+
+- **In Studio › Resources › Connectors**, marked as your organization's, run by its service. You can't open or switch them off: your admins change them.
+- **In the Data menu and with `@db:`**, like any database: ask for what you need, or write SQL. `blitz data` lists them too, marked "your organization's", and `blitz data query <name> "<SQL>"` runs one.
+- **For the agent**, as `org__<name>_execute_sql` and `org__<name>_list_tables`.
+
+Every query runs through your organization's service, as you, and its policy decides what you may do with each: which tables, whether you may change data, and how many rows come back. A query it doesn't allow is refused, saying who decided. Your organization keeps a log of the queries, with who asked. One of your own connections with the same name wins it.
+
 ## Your organization's look and terms
 
 If your organization has its own name, logo and colours, Blitz wears them: in the window's title, the top bar, the welcome page, its menus, dialogs and notifications, the tray, the terminal's banner and help, and About, which ends with "Built on Blitz". Where Blitz speaks of itself as a program (its releases, its license, reinstalling it), it keeps its own name. They're kept on your computer, so Blitz looks the same offline, and they follow changes your admins make within about ten minutes.

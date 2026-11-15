@@ -47,6 +47,10 @@ const (
 	// way to it. Neither is the person's to change.
 	ConnectorScopeOrgLocked  = "org-locked"
 	ConnectorScopeOrgDefault = "org-default"
+	// ConnectorScopeOrgShared is one of the organization's shared
+	// connectors (spec_053 EN-72): its service holds it and runs the
+	// person's queries; it has no file here.
+	ConnectorScopeOrgShared = "org-shared"
 )
 
 // connectorNameRE is a connection's (or a query's) name; Studio's slugName

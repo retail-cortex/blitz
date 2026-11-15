@@ -205,7 +205,7 @@ func TestOrgPolicyProviders(t *testing.T) {
 	}}
 	assert.Equal(t, "the policy for Data, Ops", o.Why("connectors.own"))
 	assert.Equal(t, "the policy an admin set for you", o.Why("mcp.own"))
-	assert.Equal(t, "the organization's policy (its default)", o.Why("tools.shell_commands"))
+	assert.Equal(t, "the organization's default policy", o.Why("tools.shell_commands"))
 	assert.Equal(t, "the organization's policy", o.Why("sharing.link"), "the service didn't say")
 }
 

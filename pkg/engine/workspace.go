@@ -133,6 +133,8 @@ type Workspace struct {
 	uploads      map[string]*upload // files being uploaded (UploadFile), by id
 	browsers     browserHub         // the desktop windows hosting the agent's browser
 	cfg          *config.Config
+	// shared keeps the organization's shared connectors (EN-72).
+	shared sharedCache
 	// cfgMu guards what changes in cfg once it's open (reloads and
 	// setters write it through setSettings), reply and mcpLive; readers
 	// that hand the settings on take a copy (settings).

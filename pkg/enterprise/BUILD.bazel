@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "branding.go",
         "catalog.go",
+        "connectors.go",
         "enterprise.go",
         "jobs.go",
         "models.go",

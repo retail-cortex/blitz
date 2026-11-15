@@ -266,11 +266,15 @@ type Service struct {
 	Usage map[string]any
 	// Notices are the person's notice settings (JB-31).
 	Notices map[string]any
-	// Reviews are the catalog's reviews (POST makes one, open, with each
-	// file kept in Published); NotAdmin refuses them as to a member.
-	Reviews   []map[string]any
-	Published map[string]string
-	NotAdmin  bool
+	// Shared are the shared connectors the person may use (404, as from
+	// a service before them, when nil); SharedTables each one's tables;
+	// SharedResults the tables statements answer (any other fails as the
+	// database would); SharedAsked each query asked, "<name>: <SQL>". One
+	// not in Shared is refused, as the policy refuses it.
+	Shared        []map[string]any
+	SharedTables  map[string][]map[string]any
+	SharedResults map[string]map[string]any
+	SharedAsked   []string
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -814,59 +818,64 @@ func NewService(t testing.TB, issuer string) *Service {
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
 		}
 	})
-	admin := func(w http.ResponseWriter, r *http.Request) bool {
+	// The organization's shared connectors (spec_053 EN-70 to EN-74).
+	mux.HandleFunc("GET /api/v1/connectors", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {
-			return false
+			return
 		}
-		if s.NotAdmin {
-			refuse(w, http.StatusForbidden, "forbidden", "That's for the organization's Admins.")
-			return false
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.Shared == nil {
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
+			return
 		}
-		return true
+		_ = json.NewEncoder(w).Encode(map[string]any{"connectors": s.Shared})
+	})
+	// sharedOne says whether the connector the path names is one the
+	// person may use, refusing it as the policy does when not; s.Mu held.
+	sharedOne := func(w http.ResponseWriter, r *http.Request) bool {
+		for _, c := range s.Shared {
+			if c["name"] == r.PathValue("name") {
+				return true
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"code": "not_allowed", "message": "your organization doesn't let you use " + r.PathValue("name") + " (the organization's policy decides it)", "decided_by": "the organization's policy"})
+		return false
 	}
-	mux.HandleFunc("POST /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) {
+	mux.HandleFunc("GET /api/v1/databases/{name}/schema", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if !sharedOne(w, r) {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"tables": s.SharedTables[r.PathValue("name")]})
+	})
+	mux.HandleFunc("POST /api/v1/databases/{name}/query", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if !sharedOne(w, r) {
 			return
 		}
 		var in struct {
-			Title string
-			Files []struct{ Path, Content string }
+			Statement string `json:"statement"`
+			MaxRows   int    `json:"max_rows"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || len(in.Files) == 0 {
-			refuse(w, http.StatusBadRequest, "bad_request", "Publish from 1 to 200 files.")
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.SharedAsked = append(s.SharedAsked, r.PathValue("name")+": "+in.Statement)
+		t, ok := s.SharedResults[in.Statement]
+		if !ok {
+			refuse(w, http.StatusUnprocessableEntity, "query_failed", "ERROR: relation does not exist")
 			return
 		}
-		s.Mu.Lock()
-		defer s.Mu.Unlock()
-		if s.Published == nil {
-			s.Published = map[string]string{}
-		}
-		var paths []string
-		for _, f := range in.Files {
-			s.Published[f.Path] = f.Content
-			paths = append(paths, f.Path)
-		}
-		sort.Strings(paths)
-		s.n++
-		rev := map[string]any{"id": fmt.Sprintf("rev-%d", s.n), "title": in.Title, "by_email": "ana@acme.com", "branch": "publish/ana/x",
-			"paths": paths, "problems": []string{}, "state": "open", "created": time.Now()}
-		s.Reviews = append([]map[string]any{rev}, s.Reviews...)
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(rev)
-	})
-	mux.HandleFunc("GET /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) {
-			return
-		}
-		s.Mu.Lock()
-		defer s.Mu.Unlock()
-		out := []map[string]any{}
-		for _, rev := range s.Reviews {
-			if st := r.URL.Query().Get("state"); st == "" || rev["state"] == st {
-				out = append(out, rev)
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"reviews": out})
+		_ = json.NewEncoder(w).Encode(t)
 	})
 	mux.HandleFunc("GET /api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

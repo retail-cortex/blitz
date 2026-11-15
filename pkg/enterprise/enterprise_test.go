@@ -19,6 +19,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1103,4 +1104,42 @@ func TestUnwritable(t *testing.T) {
 	_, _, err = c.RefreshCatalog(ctx, filepath.Join(file, "dir"))
 	assert.Error(t, err)
 	assert.Error(t, writeFile(filepath.Join(file, "dir"), "x", []byte("x")))
+}
+
+// EN-70 to EN-72: the shared connectors the person may use, a schema, a
+// query's table as the service sends it, and the policy's refusal.
+func TestSharedConnectors(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	list, err := c.SharedConnectors(ctx)
+	require.NoError(t, err, "a service before them: none")
+	assert.Empty(t, list)
+
+	s.Shared = []map[string]any{{"name": "shop", "kind": "postgres", "description": "Orders", "read_only": true, "tables": []string{"public.orders*"}, "max_rows": 100}}
+	s.SharedTables = map[string][]map[string]any{"shop": {{"name": "public.orders", "columns": []map[string]any{{"name": "id", "type": "integer"}}}}}
+	s.SharedResults = map[string]map[string]any{"select id from orders": {"columns": []map[string]any{{"name": "id"}}, "rows": [][]any{{1}, {2}}, "total": 2}}
+	list, err = c.SharedConnectors(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []SharedConnector{{Name: "shop", Kind: "postgres", Description: "Orders", ReadOnly: true, Tables: []string{"public.orders*"}, MaxRows: 100}}, list)
+
+	tables, err := c.SharedSchema(ctx, "shop")
+	require.NoError(t, err)
+	require.Len(t, tables, 1)
+	assert.Equal(t, "public.orders", tables[0].Name)
+	assert.Equal(t, "integer", tables[0].Columns[0].Type)
+
+	raw, err := c.SharedQuery(ctx, "shop", "select id from orders", 10)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"columns":[{"name":"id"}],"rows":[[1],[2]],"total":2}`, string(raw))
+	assert.Equal(t, []string{"shop: select id from orders"}, s.SharedAsked)
+
+	_, err = c.SharedQuery(ctx, "crm", "select 1", 0)
+	ref, ok := errors.AsType[*Refusal](err)
+	require.True(t, ok)
+	assert.Equal(t, 403, ref.Status)
+	assert.Contains(t, ref.Message, "the organization's policy decides it")
+	_, err = c.SharedQuery(ctx, "shop", "select nope", 0)
+	assert.ErrorContains(t, err, "relation does not exist")
 }

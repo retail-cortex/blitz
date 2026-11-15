@@ -110,7 +110,7 @@ func (o OrgLayer) Why(path string) string {
 	case "person":
 		return "the policy an admin set for you"
 	case "default":
-		return "the organization's policy (its default)"
+		return "the organization's default policy"
 	}
 	return "the organization's policy"
 }
