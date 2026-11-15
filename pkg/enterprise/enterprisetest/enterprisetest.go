@@ -210,8 +210,10 @@ type Service struct {
 	// it, when nil): the person's policy, why, rules and guardrails.
 	Policy      map[string]any
 	PolicyCalls int
-	Announce    chan int
-	FileCalls   int
+	// PolicyRefused answers /api/v1/policy with this status (0: none).
+	PolicyRefused int
+	Announce      chan int
+	FileCalls     int
 	// Workspaces are the organization's workspaces, by handle, each a bare
 	// repository in repos served through Git's smart HTTP at /git/, which
 	// takes the access token as the password, as the service's proxy does.
@@ -503,6 +505,10 @@ func NewService(t testing.TB, issuer string) *Service {
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
 		s.PolicyCalls++
+		if s.PolicyRefused != 0 {
+			refuse(w, s.PolicyRefused, "refused", "Not for you.")
+			return
+		}
 		if s.Policy == nil {
 			refuse(w, http.StatusNotFound, "not_found", "Not here.")
 			return

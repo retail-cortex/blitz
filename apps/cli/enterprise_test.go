@@ -539,8 +539,9 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
 	org.Catalog = map[string]enterprisetest.CatalogFile{
-		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
-		"rules/style.md":     {Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."},
+		"agents/reviewer.md":   {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
+		"rules/style.md":       {Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."},
+		"guardrails/no-pii.md": {Kind: "guardrail", Name: "no-pii", Lock: "locked", Groups: []string{"eng"}, Data: "---\nstage: output\n---\nNo personal data."},
 	}
 	org.Policy = map[string]any{
 		"schema": 2,
@@ -569,6 +570,7 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	assert.Contains(t, out, "connectors.own = true  (your group (Data))")
 	assert.Contains(t, out, "mcp.own = false  (your organization, locked)")
 	assert.Contains(t, out, "rule/style (the policy an admin set for you decides it)")
+	assert.Contains(t, out, "guardrail/no-pii, for eng", "a service's catalog item the policy doesn't explain")
 	assert.NotContains(t, out, "reviewer", "the catalog's agents don't come to Blitz")
 	out, err = runCLI(t, "enterprise", "catalog", "-d", ws, "--kind", "rule")
 	require.NoError(t, err, "catalog, as before")

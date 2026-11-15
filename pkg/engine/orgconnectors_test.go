@@ -17,6 +17,7 @@ package engine
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -167,4 +168,69 @@ func TestOrgConnectorsData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, conns, 1)
 	assert.False(t, conns[0].Org)
+}
+
+// EN-74: the service out of reach: the last list stands, and what asks
+// it says why; nothing connected, nothing asked. A connector with no
+// description that may write says so to the agent.
+func TestOrgConnectorsUnreachable(t *testing.T) {
+	secrets.SetDefault(&secrets.Memory{})
+	org := signedInOrg(t)
+	org.Shared = append(org.Shared, map[string]any{"name": "crm", "kind": "postgres", "read_only": false, "max_rows": 10})
+	w := openTest(t)
+	ctx := context.Background()
+
+	_, err := w.RunOrgQuery(ctx, "shop", "select 1", 0)
+	assert.ErrorContains(t, err, "not connected to an organization")
+	assert.Empty(t, w.orgShared(ctx))
+
+	w.cfg.Enterprise.URL = org.URL
+	w.cfg.Org = orgLayer()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, orgTransport(config.MCPServerConfig{URL: org.URL}), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cs.Close() })
+	tools, err := cs.ListTools(ctx, nil)
+	require.NoError(t, err)
+	var about string
+	for _, tl := range tools.Tools {
+		if tl.Name == "crm_execute_sql" {
+			about = tl.Description
+		}
+	}
+	assert.Contains(t, about, "(a postgres database")
+	assert.Contains(t, about, "it may change data")
+	require.Len(t, w.orgShared(ctx), 2, "kept")
+
+	org.Close()
+	assert.Len(t, w.orgShared(ctx), 2, "the last list, within its time")
+	w.shared.at = time.Time{}
+	assert.Len(t, w.orgShared(ctx), 2, "the last list, the service out of reach")
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "shop_list_tables", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	_, err = w.RunOrgQuery(ctx, "shop", "select 1", 0)
+	assert.Error(t, err)
+	_, err = w.orgTables(ctx, "shop")
+	assert.Error(t, err)
+	_, err = w.RunDataQuery(ctx, api.DataQuery{Connection: "shop", Statement: "select 1"})
+	assert.Error(t, err)
+	assert.Contains(t, w.orgSchemaText(ctx, "shop"), "Its schema couldn't be read")
+	_, err = mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, orgTransport(config.MCPServerConfig{URL: org.URL}), nil)
+	assert.ErrorContains(t, err, "your organization's connectors")
+}
+
+// A service address that can't be one, or a policy that allows none:
+// nothing listed, and what asks says why.
+func TestOrgConnectorsBadAddress(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	w.cfg.Enterprise.URL = "https://blitz.acme.com"
+	assert.Empty(t, w.orgShared(ctx), "the policy allows none")
+	w.cfg.Enterprise.URL = "not an address"
+	w.cfg.Org = orgLayer()
+	assert.Empty(t, w.orgShared(ctx))
+	_, err := w.RunOrgQuery(ctx, "shop", "select 1", 0)
+	assert.ErrorContains(t, err, "[enterprise] url")
+	_, err = w.orgTables(ctx, "shop")
+	assert.ErrorContains(t, err, "[enterprise] url")
 }

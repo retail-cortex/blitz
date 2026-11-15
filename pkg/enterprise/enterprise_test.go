@@ -966,6 +966,30 @@ func TestPolicy(t *testing.T) {
 		assert.ErrorContains(t, err, "can't be a file")
 		assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"), "the last kept")
 	})
+	t.Run("refused: says so, the last kept", func(t *testing.T) {
+		s.PolicyRefused = http.StatusForbidden
+		defer func() { s.PolicyRefused = 0 }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		ref, ok := errors.AsType[*Refusal](err)
+		require.True(t, ok, "%v", err)
+		assert.Equal(t, "Not for you.", ref.Message)
+		assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"))
+	})
+	t.Run("signed out by the service: renewed next time", func(t *testing.T) {
+		s.PolicyRefused = http.StatusUnauthorized
+		defer func() { s.PolicyRefused = 0 }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		ref, ok := errors.AsType[*Refusal](err)
+		require.True(t, ok, "%v", err)
+		assert.Equal(t, http.StatusUnauthorized, ref.Status)
+	})
+	t.Run("a folder that can't be written", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{{"kind": "rule", "name": "other", "body": "x"}}
+		file := filepath.Join(t.TempDir(), "a-file")
+		require.NoError(t, os.WriteFile(file, nil, 0o600))
+		_, err := c.RefreshPolicy(ctx, file)
+		assert.Error(t, err)
+	})
 	t.Run("forged: refused, the last kept", func(t *testing.T) {
 		s.Policy["rules"] = []map[string]any{}
 		s.Forged = true
