@@ -302,6 +302,15 @@ func (w *Workspace) auditGuardrail(ctx context.Context, g gates.Guardrail, decis
 // fails is the verdict). Past guardMaxParts it can't be judged: an error,
 // which a guardrail that blocks treats as a refusal.
 func (w *Workspace) judgeGuardrail(ctx context.Context, g gates.Guardrail, subject string) (gates.Verdict, error) {
+	// Its deterministic checks first, on the whole of it (spec_041 GT-42):
+	// a catch is the verdict, without the judge; a guardrail of those
+	// alone passes when they catch nothing.
+	if v, caught := gates.Deterministic(g, subject); caught {
+		return v, nil
+	}
+	if !g.NeedsJudge() {
+		return gates.Verdict{Pass: true, Check: "deterministic"}, nil
+	}
 	parts := guardParts(w.secretRedactor().String(subject))
 	if len(parts) > guardMaxParts {
 		return gates.Verdict{}, fmt.Errorf("%d KiB is too long to judge (the most is about %d KiB)", len(subject)>>10, guardMaxParts*(guardSubjectLimit-guardPartOverlap)>>10)

@@ -237,6 +237,10 @@ func Gates(rules []Rule, when, agent string) []Rule {
 type Verdict struct {
 	Pass   bool
 	Reason string
+	// Score is how surely it's broken, 0 to 1 (a guardrail's judge, or 1
+	// for a deterministic catch); Check which check decided (GT-44).
+	Score float64
+	Check string
 }
 
 // Asker asks a model: an instruction and a prompt, its reply's text.
@@ -274,17 +278,24 @@ func parseVerdict(text string) (Verdict, error) {
 		return Verdict{}, fmt.Errorf("the judge's answer isn't JSON: %q", text)
 	}
 	var v struct {
-		Verdict string `json:"verdict"`
-		Reason  string `json:"reason"`
+		Verdict string   `json:"verdict"`
+		Reason  string   `json:"reason"`
+		Score   *float64 `json:"score"`
 	}
 	if err := json.Unmarshal([]byte(text[i:j+1]), &v); err != nil {
 		return Verdict{}, fmt.Errorf("the judge's answer isn't JSON: %w", err)
 	}
+	score := func(def float64) float64 {
+		if v.Score == nil || *v.Score < 0 || *v.Score > 1 {
+			return def
+		}
+		return *v.Score
+	}
 	switch strings.ToLower(strings.TrimSpace(v.Verdict)) {
 	case "pass":
-		return Verdict{Pass: true, Reason: strings.TrimSpace(v.Reason)}, nil
+		return Verdict{Pass: true, Reason: strings.TrimSpace(v.Reason), Score: score(0)}, nil
 	case "fail":
-		return Verdict{Reason: strings.TrimSpace(v.Reason)}, nil
+		return Verdict{Reason: strings.TrimSpace(v.Reason), Score: score(1)}, nil
 	}
 	return Verdict{}, fmt.Errorf("the judge answered %q, not pass or fail", v.Verdict)
 }

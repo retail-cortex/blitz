@@ -17,6 +17,7 @@ package gates
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -128,8 +129,26 @@ type Guardrail struct {
 	PII    bool
 	Judge  bool
 	Limits Limits
-	// Text is a custom guardrail's check, in plain English.
+	// Text is a custom guardrail's check, in plain English, for the judge.
 	Text string
+	// Check is a custom guardrail's checks (GT-41): judge (the default),
+	// regex, keywords, max_length, json_schema, pii; the deterministic
+	// ones run first, and the judge only when they catch nothing.
+	Check []string
+	// Patterns (regex) and Words (keywords, CaseSensitive or not) are what
+	// they look for; MinMatches how many make a catch (1).
+	Patterns      []string
+	Words         []string
+	CaseSensitive bool
+	MinMatches    int
+	// MaxLength is max_length's most characters; Schema json_schema's
+	// schema, as JSON.
+	MaxLength int
+	Schema    string
+	// Threshold is the judge's score (0 to 1, how surely the guardrail is
+	// broken) at which it acts; 0: the judge's own pass or fail.
+	Threshold float64
+	compiled  []*regexp.Regexp
 	// Off is a guardrail switched off (enabled: false): it checks nothing.
 	Off     bool
 	Problem string
@@ -206,6 +225,32 @@ type guardMeta struct {
 		Commands        []string `yaml:"commands"`
 	} `yaml:"limits"`
 	Enabled *bool `yaml:"enabled"`
+	// The checks (GT-41): one or a list.
+	Check         checkList `yaml:"check"`
+	Patterns      []string  `yaml:"patterns"`
+	Words         []string  `yaml:"words"`
+	CaseSensitive bool      `yaml:"case_sensitive"`
+	MinMatches    int       `yaml:"min_matches"`
+	MaxLength     int       `yaml:"max_length"`
+	Schema        any       `yaml:"schema"`
+	Threshold     float64   `yaml:"threshold"`
+}
+
+// checkList is check: as one name or a list.
+type checkList []string
+
+// UnmarshalYAML reads check: judge or check: [regex, judge].
+func (c *checkList) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		*c = checkList{n.Value}
+		return nil
+	}
+	var l []string
+	if err := n.Decode(&l); err != nil {
+		return err
+	}
+	*c = l
+	return nil
 }
 
 // ParseGuardrail reads a guardrail file; what doesn't hold is its
@@ -222,6 +267,21 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 		}
 	}
 	g.Builtin, g.Stage, g.Action = lower(m.Builtin), lower(m.Stage), lower(m.Action)
+	if s, ok := stageAliases[g.Stage]; ok {
+		g.Stage = s // before_model is input, and so on (GT-40)
+	}
+	for _, c := range m.Check {
+		g.Check = append(g.Check, lower(c))
+	}
+	g.Patterns, g.Words, g.CaseSensitive, g.MinMatches, g.MaxLength, g.Threshold = m.Patterns, m.Words, m.CaseSensitive, m.MinMatches, m.MaxLength, m.Threshold
+	if m.Schema != nil {
+		b, err := json.Marshal(normalizeYAML(m.Schema))
+		if err != nil {
+			g.Problem = "schema: " + err.Error()
+			return g
+		}
+		g.Schema = string(b)
+	}
 	g.Agents, g.Tools, g.Description, g.PII = m.Agents, m.Tools, m.Description, m.PII
 	g.Judge = m.Judge != nil && *m.Judge
 	l := m.Limits
@@ -295,7 +355,7 @@ func lower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 // guardKeys are a guardrail file's settings, with the catalog's lock and
 // groups (spec_053 EN-31) and a name, which Blitz doesn't read.
-var guardKeys = []string{"builtin", "stage", "action", "agents", "tools", "description", "pii", "judge", "limits", "enabled", "lock", "groups", "name"}
+var guardKeys = []string{"builtin", "stage", "action", "agents", "tools", "description", "pii", "judge", "limits", "enabled", "check", "patterns", "words", "case_sensitive", "min_matches", "max_length", "schema", "threshold", "lock", "groups", "name"}
 
 // unknownKeys is the problem of a guardrail file with a setting Blitz
 // doesn't know, at the top or under limits: ("" for none): a misspelt
@@ -352,16 +412,13 @@ func checkGuardrail(g *Guardrail) string {
 	switch g.Stage {
 	case StageInput, StageToolResult, StageOutput, StageAction:
 	default:
-		return fmt.Sprintf("stage %q: input, tool_result, output or action", g.Stage)
+		return fmt.Sprintf("stage %q: before_model (input), after_model (output), before_tool (action) or after_tool (tool_result)", g.Stage)
 	}
 	g.Action = cmp.Or(g.Action, Block)
 	if g.Action != Block && g.Action != Warn {
 		return fmt.Sprintf("action %q: block or warn (redact is the secrets guardrail's)", g.Action)
 	}
-	if strings.TrimSpace(g.Text) == "" {
-		return "the guardrail is empty: say what to catch"
-	}
-	return ""
+	return checkChecks(g)
 }
 
 // GuardsAgent reports whether g guards the named agent (none listed:
@@ -731,7 +788,7 @@ func rmParts(args []string) []string {
 }
 
 // guardInstruction is the judge's brief for a custom guardrail.
-const guardInstruction = `You are a safety check for an AI agent. Judge only the guardrail given, against the content given. Fail when the content breaks the guardrail; when it doesn't apply, it passes. Reply with JSON alone: {"verdict": "pass" or "fail", "reason": "one or two sentences: what was caught, or why it's fine"}.`
+const guardInstruction = `You are a safety check for an AI agent. Judge only the guardrail given, against the content given. Fail when the content breaks the guardrail; when it doesn't apply, it passes. Reply with JSON alone: {"verdict": "pass" or "fail", "score": how surely the content breaks the guardrail, from 0 (surely not) to 1 (surely), "reason": "one or two sentences: what was caught, or why it's fine"}.`
 
 // stageSubject names what each stage's guardrails judge, for the judge.
 var stageSubject = map[string]string{
@@ -748,7 +805,13 @@ func JudgeGuardrail(ctx context.Context, ask Asker, g Guardrail, subject string)
 	if err != nil {
 		return Verdict{}, err
 	}
-	return parseVerdict(text)
+	v, err := parseVerdict(text)
+	v.Check = CheckJudge
+	if err == nil && g.Threshold > 0 {
+		// Its score against the threshold, not the judge's word (GT-43).
+		v.Pass = v.Score < g.Threshold
+	}
+	return v, err
 }
 
 // injectionInstruction is the judge's brief when the injection guardrail
@@ -994,4 +1057,27 @@ func Describe(g Guardrail) string {
 		line("enabled: false (switched off: it checks nothing)")
 	}
 	return w.String()
+}
+
+// normalizeYAML is v as JSON holds it: YAML's maps with keys of any kind
+// made maps of strings.
+func normalizeYAML(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, e := range x {
+			x[k] = normalizeYAML(e)
+		}
+		return x
+	case map[any]any:
+		out := map[string]any{}
+		for k, e := range x {
+			out[fmt.Sprint(k)] = normalizeYAML(e)
+		}
+		return out
+	case []any:
+		for i, e := range x {
+			x[i] = normalizeYAML(e)
+		}
+	}
+	return v
 }

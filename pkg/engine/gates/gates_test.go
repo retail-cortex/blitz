@@ -102,7 +102,7 @@ func TestJudge(t *testing.T) {
 	}
 	v, err := Judge(context.Background(), ask("```json\n{\"verdict\": \"fail\", \"reason\": \"No tests named.\"}\n```", nil), rule, "Done.")
 	require.NoError(t, err)
-	assert.Equal(t, Verdict{Reason: "No tests named."}, v)
+	assert.Equal(t, Verdict{Reason: "No tests named.", Score: 1}, v, "a fail without a score: surely broken")
 	assert.Contains(t, got, "The agent's answer, and the files it changed:\nDone.")
 	assert.Contains(t, got, "The rule (tests):\nThe answer says how it was tested.")
 
