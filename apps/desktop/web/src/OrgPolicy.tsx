@@ -16,6 +16,9 @@
 
 import type { PolicySetting } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
+import { useState } from "react";
+import { mdiRefresh } from "@mdi/js";
+import { Button } from "@blitz/webui";
 
 /** Lists whose emptiness means every one (every kind, every model). */
 const everyWhenEmpty = (path: string) => path === "connectors.kinds" || /^models\.own\.[^.]+\.models$/.test(path);
@@ -56,13 +59,21 @@ export function policyDecided(s: PolicySetting): string {
  * (the organization's, a group's, one an admin set for them), read-only:
  * admins change it in the console.
  */
-export function OrgPolicyCard({ settings }: { settings: PolicySetting[] }) {
+export function OrgPolicyCard({ settings, onRefresh }: { settings: PolicySetting[]; onRefresh?: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
   if (settings.length === 0) return null;
   const custom = settings.filter((s) => s.level !== "default").length;
   return (
     <details className="card stack org-policy">
       <summary className="t-title-sm">{t("desktop.org.policy.title", { n: custom })}</summary>
-      <p className="t-body-sm muted">{t("desktop.org.policy.about")}</p>
+      <div className="row" style={{ gap: 8 }}>
+        <p className="t-body-sm muted spacer">{t("desktop.org.policy.about")}</p>
+        {onRefresh && (
+          <Button small icon={mdiRefresh} disabled={busy} onClick={() => (setBusy(true), void onRefresh().finally(() => setBusy(false)))} title={t("desktop.org.policy.refresh_hint")}>
+            {t("desktop.org.policy.refresh")}
+          </Button>
+        )}
+      </div>
       <table className="org-policy-table">
         <thead>
           <tr>

@@ -202,6 +202,10 @@ service ConfigService {
   // signed in to it (spec_053_enterprise EN-10 to EN-14); with check, it
   // asks the service too, to say whether it's reached.
   rpc GetEnterprise(GetEnterpriseRequest) returns (GetEnterpriseResponse);
+  // Fetches the organization's catalog and the person's policy now, rather
+  // than waiting for the service to announce a change (spec_053 EN-38a;
+  // NOT_CONNECTED, NOT_SIGNED_IN).
+  rpc RefreshEnterprise(RefreshEnterpriseRequest) returns (RefreshEnterpriseResponse);
   // Connects to the organization's service at an address, after checking
   // it's one, or disconnects with "", signing out first (INVALID_ADDRESS,
   // UNREACHABLE).
@@ -1472,6 +1476,16 @@ message GetEnterpriseRequest {
 // Response message for ConfigService.GetEnterprise.
 message GetEnterpriseResponse {
   EnterpriseState state = 1;
+}
+
+// Request message for ConfigService.RefreshEnterprise.
+message RefreshEnterpriseRequest {}
+
+// Response message for ConfigService.RefreshEnterprise.
+message RefreshEnterpriseResponse {
+  EnterpriseState state = 1;
+  // Something changed: the catalog or the policy.
+  bool changed = 2;
 }
 
 // Request message for ConfigService.ConnectEnterprise.

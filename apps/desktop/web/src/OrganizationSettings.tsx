@@ -178,7 +178,21 @@ export function OrganizationSettings() {
         </div>
       )}
       {error && <p className="error-text t-body-sm">{error}</p>}
-      {state?.signedIn && <OrgPolicyCard settings={state.policy} />}
+      {state?.signedIn && (
+        <OrgPolicyCard
+          settings={state.policy}
+          onRefresh={async () => {
+            // Now, rather than at the next change the service announces (EN-38a).
+            try {
+              const r = await config.refreshEnterprise({});
+              if (r.state) setState(r.state);
+              snack(t(r.changed ? "desktop.org.policy.refreshed" : "desktop.org.policy.refreshed_same"));
+            } catch (e) {
+              snack(message(e), { error: true });
+            }
+          }}
+        />
+      )}
       {state?.signedIn && <OrgNoticesCard key={state.email} />}
     </div>
   );

@@ -551,6 +551,32 @@ admin console. --kind rule or guardrail lists those alone.`,
 	return cmd
 }
 
+// newEnterpriseRefreshCommand is blitz enterprise refresh: the
+// organization's catalog and the person's policy fetched now (EN-38a).
+func newEnterpriseRefreshCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refresh",
+		Short: "Fetch your organization's policy and catalog now, rather than waiting for the next change",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			changed, err := s.RefreshOrganization(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if changed {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.refreshed"))
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.refreshed_same"))
+			}
+			return nil
+		},
+	}
+}
+
 // policyDecided is who decided a setting, as a line says it.
 func policyDecided(p *pb.PolicySetting) string {
 	by := i18n.T("org.decided_" + cmp.Or(p.Level, "global"))

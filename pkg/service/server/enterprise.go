@@ -53,6 +53,9 @@ type enterpriseConn struct {
 	stop func()
 	kick chan struct{}
 	done chan struct{}
+	// refreshMu makes one fetch of the catalog and the policy at a time:
+	// the loop's and RefreshEnterprise's write the same files.
+	refreshMu sync.Mutex
 	// retry is how long the loop waits after the stream fails, before
 	// asking again; idle, how often it looks for a sign-in (tests shorten
 	// them).
@@ -142,21 +145,7 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 			return true
 		}
 		refresh := func() time.Duration {
-			m, changed, err := c.RefreshCatalog(ctx, dir)
-			if err != nil && ctx.Err() == nil {
-				slog.Warn("the organization's catalog", "error", err)
-			}
-			// The person's own policy, with why each setting is what it is
-			// and their rules and guardrails (EN-38), from a service that
-			// serves one; the catalog's stands from one that doesn't.
-			polChanged, err := c.RefreshPolicy(ctx, dir)
-			if err != nil && !errors.Is(err, enterprise.ErrNoPolicyAPI) && ctx.Err() == nil {
-				slog.Warn("the organization's policy", "error", err)
-			}
-			changed = changed || polChanged
-			if changed {
-				configService{s}.changed(ctx, "", "")
-			}
+			m, _, _ := s.refreshOrg(ctx, c, dir)
 			// Without a catalog there's no policy, and the organization's
 			// models wait for one: asked for again soon.
 			if m == nil {
@@ -192,6 +181,34 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 			}
 		}
 	}()
+}
+
+// refreshOrg fetches the organization's catalog and the person's own
+// policy into dir (EN-32, EN-38), one fetch at a time, and tells the open
+// workspaces when either changed. Its error is the catalog's or the
+// policy's, logged too.
+func (s *Server) refreshOrg(ctx context.Context, c *enterprise.Client, dir string) (*enterprise.Manifest, bool, error) {
+	s.ent.refreshMu.Lock()
+	defer s.ent.refreshMu.Unlock()
+	m, changed, catErr := c.RefreshCatalog(ctx, dir)
+	if catErr != nil && ctx.Err() == nil {
+		slog.Warn("the organization's catalog", "error", catErr)
+	}
+	// The person's own policy, with why each setting is what it is and
+	// their rules and guardrails (EN-38), from a service that serves one;
+	// the catalog's stands from one that doesn't.
+	polChanged, polErr := c.RefreshPolicy(ctx, dir)
+	if errors.Is(polErr, enterprise.ErrNoPolicyAPI) {
+		polErr = nil
+	}
+	if polErr != nil && ctx.Err() == nil {
+		slog.Warn("the organization's policy", "error", polErr)
+	}
+	changed = changed || polChanged
+	if changed {
+		configService{s}.changed(ctx, "", "")
+	}
+	return m, changed, errors.Join(catErr, polErr)
 }
 
 // stopCatalog ends the catalog's loop, if one runs, and waits for it.
@@ -265,6 +282,22 @@ func (h configService) GetEnterprise(ctx context.Context, r req[pb.GetEnterprise
 		return nil, invalid(err)
 	}
 	return ok(&pb.GetEnterpriseResponse{State: h.s.enterpriseState(ctx, c, r.Msg.Check)})
+}
+
+// RefreshEnterprise fetches the catalog and the policy now (EN-38a).
+func (h configService) RefreshEnterprise(ctx context.Context, _ req[pb.RefreshEnterpriseRequest]) (*connect.Response[pb.RefreshEnterpriseResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	if !c.Status().SignedIn {
+		return nil, apiError(connect.CodeUnauthenticated, "NOT_SIGNED_IN", errors.New("sign in to your organization's service first"))
+	}
+	_, changed, err := h.s.refreshOrg(ctx, c, h.s.brandingDir(c))
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.RefreshEnterpriseResponse{State: h.s.enterpriseState(ctx, c, false), Changed: changed})
 }
 
 func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEnterpriseRequest]) (*connect.Response[pb.ConnectEnterpriseResponse], error) {

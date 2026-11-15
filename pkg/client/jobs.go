@@ -231,6 +231,17 @@ func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgI
 	return res.Msg, nil
 }
 
+// RefreshOrganization fetches the organization's catalog and the
+// person's policy now, saying whether either changed
+// (ConfigService.RefreshEnterprise, spec_053 EN-38a).
+func (s *Settings) RefreshOrganization(ctx context.Context) (bool, error) {
+	res, err := s.c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	if err != nil {
+		return false, fromAPI(err)
+	}
+	return res.Msg.Changed, nil
+}
+
 // Policy is the person's effective policy from their organization, each
 // setting with who decided it (EnterpriseState.policy, spec_053 EN-39).
 func (s *Settings) Policy(ctx context.Context) ([]*pb.PolicySetting, error) {

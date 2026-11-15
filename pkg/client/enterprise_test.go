@@ -129,6 +129,7 @@ func TestOrganizationUnreachable(t *testing.T) {
 		"OrgUsage":             func() error { _, err := c.OrgUsage(ctx); return err },
 		"OrgItems":             func() error { _, err := c.OrgItems(ctx, "/x", ""); return err },
 		"Policy":               func() error { _, err := c.Policy(ctx); return err },
+		"RefreshOrganization":  func() error { _, err := c.RefreshOrganization(ctx); return err },
 		"ListModels":           func() error { _, err := c.ListModels(ctx, "/x"); return err },
 		"OrgNotices":           func() error { _, err := c.OrgNotices(ctx); return err },
 		"SetOrgNotices":        func() error { _, err := c.SetOrgNotices(ctx, &pb.OrgNotices{}); return err },

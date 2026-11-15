@@ -453,6 +453,38 @@ func TestEnterprisePolicyLoop(t *testing.T) {
 	require.Len(t, st.OwnProviders, 1)
 	assert.Equal(t, "ollama", st.OwnProviders[0].Provider)
 	assert.Equal(t, []string{"llama3*"}, st.OwnProviders[0].Models)
+
+	// Fetched now, on asking (EN-38a): a change, then none.
+	org.Mu.Lock()
+	org.Policy["explain"].(map[string]any)["mcp.own"] = map[string]any{"value": true, "level": "person", "by": []string{"ana@acme.com"}}
+	org.Mu.Unlock()
+	res, err := c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	require.NoError(t, err)
+	assert.True(t, res.Msg.Changed)
+	assert.Len(t, res.Msg.State.Policy, 3)
+	res, err = c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	require.NoError(t, err)
+	assert.False(t, res.Msg.Changed)
+	org.Mu.Lock()
+	org.PolicyRefused = http.StatusForbidden
+	org.Mu.Unlock()
+	_, err = c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "REFUSED", info.Reason, "the service's refusal")
+	org.Mu.Lock()
+	org.PolicyRefused = 0
+	org.Mu.Unlock()
+
+	_, err = c.EnterpriseSignOut(ctx, connect.NewRequest(&pb.EnterpriseSignOutRequest{}))
+	require.NoError(t, err)
+	_, err = c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{}))
+	require.NoError(t, err)
+	_, err = c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_CONNECTED", info.Reason)
 }
 
 // The organization's shared connectors over the API (EN-72): listed with

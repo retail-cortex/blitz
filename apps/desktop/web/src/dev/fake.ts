@@ -3076,6 +3076,11 @@ export function installFake() {
         // The organization's service: any https address connects, as Acme
         // Assist; signing in takes a moment in the "browser".
         getEnterprise: () => ({ state: fakeOrgState(true) }),
+        // Fetching the policy now (EN-38a): ?org&signedin; nothing changed.
+        refreshEnterprise: async () => {
+          await sleep(500);
+          return { state: fakeOrgState(true), changed: false };
+        },
         connectEnterprise: ({ url }) => {
           if (url && !url.startsWith("https://")) throw new ConnectError("the organization's service is reached over https", Code.InvalidArgument);
           fakeOrg.url = url.replace(/\/$/, "");

@@ -252,15 +252,46 @@ func (Backend) SourceTypes(text string) ([]string, error) {
 	return out, nil
 }
 
-// Check lists what Toolbox would refuse: a custom file that isn't YAML.
+// Check lists what Toolbox would refuse: a custom file that isn't YAML;
+// a BigQuery project that isn't a project ID, or an allowed dataset that
+// isn't dataset or project.dataset (BigQuery's refusal came only when a
+// query ran: "Invalid project ID 'retail-cortex.'").
 func (Backend) Check(k *connectors.Kind, c connectors.Connection) []string {
 	if c.Custom {
 		if _, err := decode(c.Text); err != nil {
 			return []string{"the YAML: " + err.Error()}
 		}
+		return nil
 	}
-	return nil
+	if k == nil || k.Source != "bigquery" {
+		return nil
+	}
+	var problems []string
+	if p := c.Settings["project"]; p != "" && !strings.HasPrefix(p, "${") && !projectID.MatchString(p) {
+		problems = append(problems, fmt.Sprintf("project %q isn't a Google Cloud project ID: 6 to 30 lowercase letters, digits or hyphens, starting with a letter (no spaces or dots)", p))
+	}
+	for _, d := range strings.Split(c.Settings["allowedDatasets"], ",") {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		proj, ds, qualified := strings.Cut(d, ".")
+		if !qualified {
+			proj, ds = "", d
+		}
+		if (qualified && !projectID.MatchString(proj)) || !datasetID.MatchString(ds) || len(ds) > 1024 {
+			problems = append(problems, fmt.Sprintf("dataset %q: a dataset's name, or project.dataset for another project's (bigquery-public-data.thelook_ecommerce)", d))
+		}
+	}
+	return problems
 }
+
+// projectID is a Google Cloud project ID, a domain-scoped one too
+// (example.com:project).
+var projectID = regexp.MustCompile(`^([a-z0-9.-]+:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$`)
+
+// datasetID is a BigQuery dataset's name.
+var datasetID = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // Render writes c as Toolbox YAML: its source, then its ready-made tools
 // and queries. A secret field always names its secret.
