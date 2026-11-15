@@ -976,6 +976,20 @@ const fakeWorkers: FakeWorker[] = [
 
 // The organization's rules and guardrails the person's policy applies
 // (EN-34, EN-39).
+// The person's submissions to share (EN-95), in the fake.
+const fakeSubmissions: { id: bigint; kind: string; name: string; note: string; state: string; verdicts: { check: string; score: number; passed: boolean; reason: string; findings: string[] }[]; reason: string; publishedVersion: string }[] = [
+  {
+    id: 1n,
+    kind: "skill",
+    name: "fetch",
+    note: "",
+    state: "rejected",
+    verdicts: [{ check: "security", score: 0.1, passed: false, reason: "it calls curl, which the rubric forbids", findings: ["skills/fetch/scripts/get.sh calls the network"] }],
+    reason: "security: it calls curl, which the rubric forbids",
+    publishedVersion: "",
+  },
+];
+
 const fakeOrgItems = [
   { kind: "agent", name: "reviewer", path: "", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy", version: "2.1.0", state: "required", on: true, description: "Reviews pull requests", locks: ["skill sql-review 2.0.0"] },
   { kind: "agent", name: "analyst", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the policy for Data", version: "1.0.3", state: "available", on: false, description: "Answers questions from the warehouse", locks: [] },
@@ -3192,6 +3206,22 @@ export function installFake() {
           it.on = on;
           return { item: it };
         },
+        // Your own assets and what you shared (EN-93, EN-95): ?org&signedin.
+        syncOwnItems: () => ({ sent: ["skill/tone"], received: [], removed: [], conflicts: [], skipped: {} }),
+        shareOwnItem: ({ kind, name, note }) => {
+          const s = { id: BigInt(fakeSubmissions.length + 1), kind, name, note, state: "judging", verdicts: [], reason: "", publishedVersion: "" };
+          fakeSubmissions.unshift(s);
+          return { submission: s };
+        },
+        listSubmissions: () => ({
+          submissions: fakeOrg.signedIn ? fakeSubmissions : [],
+          own: [
+            { kind: "skill", name: "tone", skipped: "" },
+            { kind: "agent", name: "reviewer", skipped: "" },
+            { kind: "skill", name: "Big Notes", skipped: "its name isn't lowercase letters, digits and single hyphens or underscores" },
+          ],
+          contribute: ["skill"],
+        }),
         listOrgItems: ({ kind }) => ({
           version: 7,
           items: fakeOrg.signedIn ? fakeOrgItems.filter((i) => !kind || i.kind === kind) : [],

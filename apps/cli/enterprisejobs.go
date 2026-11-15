@@ -18,9 +18,11 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -616,7 +618,118 @@ alone.`,
 			},
 		})
 	}
+	cmd.AddCommand(newItemsSyncCommand(), newItemsShareCommand(), newItemsSubmissionsCommand())
 	return cmd
+}
+
+// newItemsSyncCommand is blitz enterprise items sync: the person's own
+// agents, skills, workflows, rules and guardrails synced with the
+// organization now (spec_053 EN-93).
+func newItemsSyncCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "sync",
+		Short: "Sync your own agents, skills, workflows, rules and guardrails (~/.blitz) with your organization now",
+		Long: `Syncs your own agents, skills, workflows, rules and guardrails (in
+~/.blitz) with your organization's service, both ways, as Blitz does each
+time it fetches your policy: what you changed here is sent, what you
+changed on another computer is brought here, and what you removed on one
+is removed on the other. Changed on both, this computer's wins and the
+other's is kept in ~/.blitz/conflicts. Your organization's admins can read
+them; its policy says which kinds it keeps.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			rep, err := s.SyncOwnItems(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, i18n.T("org.items_synced", "sent", len(rep.Sent), "received", len(rep.Received), "removed", len(rep.Removed)))
+			for _, k := range rep.Conflicts {
+				fmt.Fprintln(out, i18n.T("org.items_conflict", "item", k))
+			}
+			for _, k := range slices.Sorted(maps.Keys(rep.Skipped)) {
+				fmt.Fprintln(out, i18n.T("org.items_skipped", "item", k, "why", rep.Skipped[k]))
+			}
+			return nil
+		},
+	}
+}
+
+// newItemsShareCommand is blitz enterprise items share: one of the
+// person's own assets submitted to share with the organization (EN-95).
+func newItemsShareCommand() *cobra.Command {
+	var note string
+	cmd := &cobra.Command{
+		Use:   "share <kind>/<name>",
+		Short: "Submit one of your own agents, skills, workflows, rules or guardrails to share with your organization",
+		Long: `Submits one of your own assets (in ~/.blitz) to your organization's
+library. Its evaluator judges it (its checks, with its model): accepted,
+it's published as yours and offered to the groups your organization
+chooses; rejected, you're told why. Your organization takes submissions of
+a kind only when its policy lets you and it has an evaluator for it.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			kind, name, found := strings.Cut(args[0], "/")
+			if !found || kind == "" || name == "" {
+				return fmt.Errorf("%s", i18n.T("org.item_arg"))
+			}
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			sub, err := s.ShareOwnItem(cmd.Context(), kind, name, note)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.item_shared", "kind", sub.Kind, "name", sub.Name))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&note, "note", "", "What it's for, for whoever reviews it")
+	return cmd
+}
+
+// newItemsSubmissionsCommand is blitz enterprise items submissions: the
+// person's submissions and what their evaluators found (EN-95).
+func newItemsSubmissionsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "submissions",
+		Short: "What you submitted to share with your organization, and what its evaluators found",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := s.ListSubmissions(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(res.Submissions) == 0 {
+				fmt.Fprintln(out, i18n.T("org.submissions_none"))
+			}
+			for _, sub := range res.Submissions {
+				line := i18n.T("org.submission_line", "kind", sub.Kind, "name", sub.Name, "state", i18n.T("org.submission_state."+sub.State), "when", sub.CreatedAt.AsTime().Local().Format("2006-01-02 15:04"))
+				if sub.PublishedVersion != "" {
+					line += " · " + sub.PublishedVersion
+				}
+				fmt.Fprintln(out, line)
+				if sub.Reason != "" {
+					fmt.Fprintln(out, "    "+sub.Reason)
+				}
+				for _, v := range sub.Verdicts {
+					mark := map[bool]string{true: "✓", false: "✗"}[v.Passed]
+					fmt.Fprintf(out, "    %s %s %.2f: %s\n", mark, v.Check, v.Score, v.Reason)
+				}
+			}
+			return nil
+		},
+	}
 }
 
 // newEnterpriseRefreshCommand is blitz enterprise refresh: the

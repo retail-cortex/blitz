@@ -331,3 +331,33 @@ func (s *Settings) WatchServiceRuns(ctx context.Context, on func([]GoingServiceR
 	}
 	return fromAPI(stream.Err())
 }
+
+// SyncOwnItems syncs the person's own assets with the organization now
+// (ConfigService.SyncOwnItems, spec_053 EN-93).
+func (s *Settings) SyncOwnItems(ctx context.Context) (*pb.SyncOwnItemsResponse, error) {
+	res, err := s.c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}
+
+// ShareOwnItem submits one of the person's own assets to share with the
+// organization (ConfigService.ShareOwnItem, EN-95).
+func (s *Settings) ShareOwnItem(ctx context.Context, kind, name, note string) (*pb.Submission, error) {
+	res, err := s.c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: kind, Name: name, Note: note}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Submission, nil
+}
+
+// ListSubmissions is the person's submissions, their own assets and the
+// kinds the organization takes (ConfigService.ListSubmissions, EN-95).
+func (s *Settings) ListSubmissions(ctx context.Context) (*pb.ListSubmissionsResponse, error) {
+	res, err := s.c.ListSubmissions(ctx, connect.NewRequest(&pb.ListSubmissionsRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}

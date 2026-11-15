@@ -181,7 +181,7 @@ func TestReasonsAreListed(t *testing.T) {
 	// The reasons made as the service runs: a run's end, a refusal passed
 	// on from the organization's service, and a Connect code's name.
 	slices.Sort(dynamic)
-	assert.Equal(t, []string{"enterprise.go:enterpriseError", "scheduler.go:start", "server.go:toAPI", "server.go:withReason", "worker.go:runMsg"}, slices.Compact(dynamic),
+	assert.Equal(t, []string{"enterprise.go:enterpriseError", "orgitems.go:ShareOwnItem", "scheduler.go:start", "server.go:toAPI", "server.go:withReason", "worker.go:runMsg"}, slices.Compact(dynamic),
 		"a reason made as the service runs: describe it in SVC-30, then add it here")
 	for _, status := range []api.RunStatus{api.RunFailed, api.RunLimited, api.RunSkipped, api.RunStopped} {
 		assert.Contains(t, text, "`RUN_"+strings.ToUpper(string(status))+"`", "a run's end")

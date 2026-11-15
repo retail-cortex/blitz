@@ -47,6 +47,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/jobspec"
 	"github.com/retail-cortex/blitz/pkg/urn"
 )
@@ -285,11 +286,28 @@ type Service struct {
 	// receipts the person's git hooks' workflows sent (EN-92).
 	SharedAPIs map[string]http.Handler
 	Receipts   []map[string]any
+	// Personal are the person's own assets the service keeps, by
+	// "kind/name" (404, as from a service before them, when nil);
+	// PersonalAllowed the kinds it keeps (EN-93). Reported are the runs
+	// Blitz reported (EN-94); Submissions what the person submitted to share,
+	// the newest first, and ShareRefusal the code a submission is refused
+	// with ("": taken, judging) (EN-95).
+	Personal        map[string]*PersonalAsset
+	PersonalAllowed map[string]bool
+	Reported        []map[string]any
+	Submissions     []map[string]any
+	ShareRefusal    string
 	// ConsentURL is where the person consents to connectors querying as
 	// them (404, as from a service that can't, when empty); Consented
 	// whether they have (EN-76). DELETE clears it.
 	ConsentURL string
 	Consented  bool
+}
+
+// PersonalAsset is one of the person's own assets as the fake keeps it.
+type PersonalAsset struct {
+	Revision int
+	Files    map[string]string
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -945,6 +963,138 @@ func NewService(t testing.TB, issuer string) *Service {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/" + r.PathValue("path")
 		h.ServeHTTP(w, r2)
+	})
+	// personal is a signed-in person's call to a service that keeps their
+	// assets, with s.Mu held after it (unlock when true).
+	personal := func(w http.ResponseWriter, r *http.Request) bool {
+		if !signedIn(w, r) {
+			return false
+		}
+		s.Mu.Lock()
+		if s.Personal == nil {
+			s.Mu.Unlock()
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
+			return false
+		}
+		return true
+	}
+	asset := func(key string, a *PersonalAsset, files bool) map[string]any {
+		kind, name, _ := strings.Cut(key, "/")
+		out := map[string]any{"kind": kind, "name": name, "revision": a.Revision, "sha256": agentpkg.Digest(a.Files), "changed_at": time.Now()}
+		if files {
+			out["files"] = a.Files
+		}
+		return out
+	}
+	mux.HandleFunc("GET /api/v1/me/library", func(w http.ResponseWriter, r *http.Request) {
+		if !personal(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		items := []map[string]any{}
+		for k, a := range s.Personal {
+			items = append(items, asset(k, a, false))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "allowed": s.PersonalAllowed})
+	})
+	mux.HandleFunc("/api/v1/me/library/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !personal(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		key := r.PathValue("kind") + "/" + r.PathValue("name")
+		a := s.Personal[key]
+		switch r.Method {
+		case http.MethodGet:
+			if a == nil {
+				refuse(w, http.StatusNotFound, "not_found", "No such asset.")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(asset(key, a, true))
+		case http.MethodPut:
+			var in struct {
+				Files map[string]string `json:"files"`
+				Base  int               `json:"base"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				refuse(w, http.StatusBadRequest, "bad_request", err.Error())
+				return
+			}
+			if !s.PersonalAllowed[r.PathValue("kind")] {
+				refuse(w, http.StatusForbidden, "personal_off", "Not kept.")
+				return
+			}
+			if r.PathValue("name") == "unreadable" || len(in.Files) == 0 {
+				refuse(w, http.StatusUnprocessableEntity, "invalid", "It doesn't read.")
+				return
+			}
+			cur := 0
+			if a != nil {
+				cur = a.Revision
+			}
+			if cur != in.Base {
+				refuse(w, http.StatusConflict, "conflict", "changed elsewhere")
+				return
+			}
+			s.Personal[key] = &PersonalAsset{Revision: cur + 1, Files: in.Files}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(asset(key, s.Personal[key], false))
+		case http.MethodDelete:
+			if a == nil {
+				refuse(w, http.StatusNotFound, "not_found", "No such asset.")
+				return
+			}
+			if r.URL.Query().Get("base") != strconv.Itoa(a.Revision) {
+				refuse(w, http.StatusConflict, "conflict", "changed elsewhere")
+				return
+			}
+			delete(s.Personal, key)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	mux.HandleFunc("POST /api/v1/me/runs", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var run map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&run)
+		s.Mu.Lock()
+		s.Reported = append(s.Reported, run)
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/v1/me/library/{kind}/{name}/share", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var in struct {
+			Files map[string]string `json:"files"`
+			Note  string            `json:"note"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.ShareRefusal != "" {
+			refuse(w, http.StatusConflict, s.ShareRefusal, "Refused: "+s.ShareRefusal)
+			return
+		}
+		sub := map[string]any{"id": len(s.Submissions) + 1, "kind": r.PathValue("kind"), "name": r.PathValue("name"), "note": in.Note, "state": "judging", "verdicts": []any{},
+			"reason": "", "created_at": time.Now(), "files": len(in.Files)}
+		s.Submissions = append([]map[string]any{sub}, s.Submissions...)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(sub)
+	})
+	mux.HandleFunc("GET /api/v1/me/submissions", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"submissions": append([]map[string]any{}, s.Submissions...)})
 	})
 	mux.HandleFunc("POST /api/v1/me/receipts", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

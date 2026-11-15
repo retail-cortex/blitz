@@ -74,6 +74,14 @@ Your organization's admins set its policy in its admin console: for everyone, fo
 
 A service from before this policy keeps sending its catalog's policy, which applies to everyone the same way.
 
+## Yours, with your organization
+
+Your own agents, skills, workflows, rules and guardrails (in `~/.blitz`) sync with your organization's service, so they follow you to every computer you sign in on: Blitz sends what you change and brings in what you changed elsewhere each time it fetches your policy, and `blitz enterprise items sync` (or **Sync now** in Settings › Organization) does it at once. Removed on one computer, it's removed on the others. Changed on two before they synced, the one you're at wins and the other's is kept in `~/.blitz/conflicts` for you to compare. Your organization's admins can read them (never change them), and its policy says which kinds it keeps; a skill with a file that isn't text, or a linked skill folder, stays on this computer.
+
+When your organization takes them, **Share** one with everyone (Settings › Organization, or `blitz enterprise items share skill/<name>`). Its evaluator judges it, with the checks and model your admins chose: accepted, it's published in the library as yours for the groups they chose; rejected, you're told why, in Blitz (`blitz enterprise items submissions`) and by your notices. Fix it and share it again. A kind with no evaluator takes no submissions.
+
+Your workflow and eval runs are reported to your organization too, so its admins see what ran and what it cost.
+
 ## Your organization's databases
 
 Your organization's admins can connect its databases once, in its console, for the people its policy allows: its service holds the connection and its passwords, so you never need credentials of your own. The ones you may use show up beside your own connections:

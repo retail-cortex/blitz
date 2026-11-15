@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -56,6 +57,8 @@ type enterpriseConn struct {
 	// refreshMu makes one fetch of the catalog and the policy at a time:
 	// the loop's and RefreshEnterprise's write the same files.
 	refreshMu sync.Mutex
+	// personalMu makes one sync of the person's own assets at a time.
+	personalMu sync.Mutex
 	// retry is how long the loop waits after the stream fails, before
 	// asking again; idle, how often it looks for a sign-in (tests shorten
 	// them).
@@ -208,7 +211,34 @@ func (s *Server) refreshOrg(ctx context.Context, c *enterprise.Client, dir strin
 	if changed {
 		configService{s}.changed(ctx, "", "")
 	}
+	if polErr == nil && c.Status().SignedIn {
+		go s.syncPersonal(context.WithoutCancel(ctx), c, dir)
+	}
 	return m, changed, errors.Join(catErr, polErr)
+}
+
+// syncPersonal syncs the person's own assets under ~/.blitz with the
+// organization's service (spec_053 EN-93), one sync at a time, and tells
+// the open workspaces when it brought any in.
+func (s *Server) syncPersonal(ctx context.Context, c *enterprise.Client, dir string) {
+	if !s.ent.personalMu.TryLock() {
+		return // one is going: it reads the same
+	}
+	defer s.ent.personalMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	rep, err := enterprise.SyncPersonal(ctx, c, config.ConfigDir(s.configDir), filepath.Join(dir, "personal.json"))
+	if err != nil && !errors.Is(err, enterprise.ErrNoPolicyAPI) && ctx.Err() == nil {
+		if ref, ok := errors.AsType[*enterprise.Refusal](err); !ok || ref.Status != http.StatusNotFound {
+			slog.Warn("syncing your own agents, skills and workflows with your organization", "error", err)
+		}
+	}
+	if len(rep.Sent)+len(rep.Received)+len(rep.Removed)+len(rep.Conflicts) > 0 {
+		slog.Info("your own agents, skills and workflows synced with your organization", "sent", rep.Sent, "received", rep.Received, "removed", rep.Removed, "conflicts", rep.Conflicts)
+	}
+	if len(rep.Received)+len(rep.Removed) > 0 {
+		configService{s}.changed(ctx, "", "")
+	}
 }
 
 // stopCatalog ends the catalog's loop, if one runs, and waits for it.

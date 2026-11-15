@@ -734,3 +734,65 @@ func TestEnterpriseItemsCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, out, "workflow/notes")
 }
+
+// EN-93, EN-95: blitz enterprise items sync sends the person's own assets;
+// share submits one, which submissions lists; one they don't have, or
+// that the organization refuses, says why.
+func TestEnterpriseOwnItemsCommands(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	home := isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Policy = map[string]any{"schema": 2, "policy": map[string]any{"refresh": "1h"}, "rules": []any{}, "guardrails": []any{},
+		"explain": map[string]any{"library.contribute.skills": map[string]any{"value": true, "level": "global"}}}
+	org.Personal, org.PersonalAllowed = map[string]*enterprisetest.PersonalAsset{}, map[string]bool{"skill": true}
+	skill := filepath.Join(home, ".blitz", "skills", "tone", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	require.NoError(t, os.WriteFile(skill, []byte("---\nname: tone\ndescription: Our tone\n---\nBe kind.\n"), 0o644))
+	_, err := runCLI(t, "enterprise", "items", "sync")
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+
+	out, err := runCLI(t, "enterprise", "items", "sync")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Synced with your organization")
+	require.Eventually(t, func() bool {
+		org.Mu.Lock()
+		defer org.Mu.Unlock()
+		return org.Personal["skill/tone"] != nil
+	}, 5*time.Second, 20*time.Millisecond, "sent, by this sync or the one after the policy")
+
+	out, err = runCLI(t, "enterprise", "items", "share", "skill/tone", "--note", "for the team")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Submitted skill/tone")
+	out, err = runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "skill/tone · being judged")
+	org.Mu.Lock()
+	org.Submissions = append([]map[string]any{{"id": 9, "kind": "skill", "name": "tone", "state": "rejected", "reason": "security: it calls curl", "created_at": time.Now(), "decided_at": time.Now(),
+		"verdicts": []map[string]any{{"check": "audit", "score": 1, "passed": true, "reason": "reads well"}, {"check": "security", "score": 0.1, "passed": false, "reason": "it calls curl"}}},
+		{"id": 8, "kind": "agent", "name": "helper", "state": "accepted", "published_version": "1.0.0", "created_at": time.Now(), "verdicts": []any{}}}, org.Submissions...)
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "skill/tone · rejected")
+	assert.Contains(t, out, "    security: it calls curl")
+	assert.Contains(t, out, "✓ audit 1.00: reads well")
+	assert.Contains(t, out, "✗ security 0.10: it calls curl")
+	assert.Contains(t, out, "agent/helper · accepted")
+	assert.Contains(t, out, " · 1.0.0")
+
+	_, err = runCLI(t, "enterprise", "items", "share", "skill/nope")
+	assert.ErrorContains(t, err, "you have no skill/nope of your own")
+	_, err = runCLI(t, "enterprise", "items", "share", "tone")
+	assert.ErrorContains(t, err, "kind/name")
+	org.Mu.Lock()
+	org.ShareRefusal = "no_evaluator"
+	org.Mu.Unlock()
+	_, err = runCLI(t, "enterprise", "items", "share", "skill/tone")
+	assert.ErrorContains(t, err, "no_evaluator")
+}

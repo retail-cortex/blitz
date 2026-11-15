@@ -313,6 +313,19 @@ service ConfigService {
   // person (EN-83), then fetches their policy again (FAILED_PRECONDITION
   // REQUIRED for a required one).
   rpc SetOrgItem(SetOrgItemRequest) returns (SetOrgItemResponse);
+  // Syncs the person's own agents, skills, workflows, rules and guardrails
+  // (~/.blitz) with the organization's service now (EN-93): what it sent,
+  // fetched, removed, the conflicts, and what it skipped and why.
+  rpc SyncOwnItems(SyncOwnItemsRequest) returns (SyncOwnItemsResponse);
+  // Submits one of the person's own assets to share with the organization
+  // (EN-95), judged by its evaluator: FAILED_PRECONDITION with the
+  // service's code (CONTRIBUTE_OFF, NO_EVALUATOR, NAME_TAKEN,
+  // SUBMISSION_OPEN, INVALID) when it isn't taken; NOT_FOUND for none of
+  // that name.
+  rpc ShareOwnItem(ShareOwnItemRequest) returns (ShareOwnItemResponse);
+  // The person's submissions, their own assets that can be shared, and
+  // the kinds the organization takes submissions of (EN-95).
+  rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -2047,6 +2060,77 @@ message OrgItem {
   string description = 11;
   // What it locks to, "skill sql-review 1.0.0" (EN-82).
   repeated string locks = 12;
+}
+
+// Request message for ConfigService.SyncOwnItems.
+message SyncOwnItemsRequest {}
+
+// Response message for ConfigService.SyncOwnItems: each by "kind/name".
+message SyncOwnItemsResponse {
+  repeated string sent = 1;
+  repeated string received = 2;
+  repeated string removed = 3;
+  // Changed here and on another computer: this one's kept and sent, the
+  // other's saved under ~/.blitz/conflicts.
+  repeated string conflicts = 4;
+  // What can't sync, and why.
+  map<string, string> skipped = 5;
+}
+
+// One check of an evaluator's on a submission.
+message SubmissionVerdict {
+  string check = 1;
+  double score = 2;
+  bool passed = 3;
+  string reason = 4;
+  repeated string findings = 5;
+}
+
+// One of the person's assets submitted to share (EN-95).
+message Submission {
+  int64 id = 1;
+  string kind = 2;
+  string name = 3;
+  string note = 4;
+  // judging, rejected, held (for an admin), accepted or error.
+  string state = 5;
+  repeated SubmissionVerdict verdicts = 6;
+  string reason = 7;
+  string published_version = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp decided_at = 10;
+}
+
+// Request message for ConfigService.ShareOwnItem.
+message ShareOwnItemRequest {
+  string kind = 1;
+  string name = 2;
+  string note = 3;
+}
+
+// Response message for ConfigService.ShareOwnItem.
+message ShareOwnItemResponse {
+  Submission submission = 1;
+}
+
+// One of the person's own assets (~/.blitz).
+message OwnItem {
+  string kind = 1;
+  string name = 2;
+  // Why it can't sync or be shared ("" when it can).
+  string skipped = 3;
+}
+
+// Request message for ConfigService.ListSubmissions.
+message ListSubmissionsRequest {}
+
+// Response message for ConfigService.ListSubmissions.
+message ListSubmissionsResponse {
+  repeated Submission submissions = 1;
+  repeated OwnItem own = 2;
+  // The kinds the organization takes submissions of (its policy's
+  // library.contribute.<kind>s).
+  repeated string contribute = 3;
 }
 
 // Request message for ConfigService.SetOrgItem.

@@ -32,6 +32,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
@@ -160,6 +161,15 @@ func (w *Workspace) RunEval(ctx context.Context, name string, o api.EvalOptions)
 func (w *Workspace) recordEval(run api.EvalRun) error {
 	if err := w.evalRuns.Append(run); err != nil {
 		w.warn("recording the eval run: " + err.Error())
+	}
+	if run.Status != api.EvalRunning {
+		ended := run.Started.Add(run.Duration)
+		summary := run.Error
+		if summary == "" {
+			summary = fmt.Sprintf("%d results", len(run.Results))
+		}
+		w.reportRun(enterprise.RunReport{Kind: "eval", Name: run.Eval, Status: string(run.Status), Workspace: filepath.Base(w.Dir()),
+			StartedAt: run.Started, EndedAt: &ended, CostUSD: run.CostUSD, Summary: summary})
 	}
 	return nil
 }

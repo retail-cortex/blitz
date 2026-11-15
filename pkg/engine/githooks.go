@@ -288,3 +288,42 @@ func (w *Workspace) installOrgHooks() {
 		slog.Info("your organization's git hooks installed", "workspace", w.Dir(), "hooks", strings.Join(done, ", "))
 	}
 }
+
+// reportFlowRun tells the organization of a workflow run that ended
+// (EN-94).
+func (w *Workspace) reportFlowRun(r FlowReceipt) {
+	ended := r.Ended
+	summary := r.Error
+	if summary == "" {
+		summary = r.Output
+	}
+	w.reportRun(enterprise.RunReport{Kind: "workflow", Name: r.Workflow, Status: r.Status, Workspace: filepath.Base(r.Workspace),
+		StartedAt: r.Started, EndedAt: &ended, CostUSD: r.Usage.CostUSD, Summary: truncateText(summary, 2000)})
+}
+
+// reportRun sends r to the organization's service in the background, when
+// Blitz is connected to one (EN-94): one that can't be sent is logged, as
+// the run is the person's either way.
+func (w *Workspace) reportRun(r enterprise.RunReport) {
+	u := w.settings().Enterprise.URL
+	if u == "" || reportRuns == nil {
+		return
+	}
+	reportRuns(u, r)
+}
+
+// reportRuns sends a run report to the service at u (a variable, so tests
+// see what's sent and wait for it).
+var reportRuns = func(u string, r enterprise.RunReport) {
+	go func() {
+		client, err := orgClient(u)
+		if err != nil || !client.Status().SignedIn {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := client.ReportRun(ctx, r); err != nil {
+			slog.Debug("telling your organization of a run", "run", r.Name, "error", err)
+		}
+	}()
+}

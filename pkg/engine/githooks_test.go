@@ -23,7 +23,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 )
 
 // reviewAPI is an organization's code review API: a diff holding
@@ -283,4 +286,53 @@ func TestOrgVersion(t *testing.T) {
 	assert.Empty(t, w.orgVersion(flows.Flow{Name: "review", Path: filepath.Join(w.Dir(), "review"+flows.Suffix)}))
 	assert.Equal(t, "ab…", truncateText("abc", 2))
 	assert.Equal(t, "abc", truncateText("abc", 3))
+}
+
+// EN-94: a workflow's and an eval's runs are reported to the organization
+// when they end, connected to one; not without one. The report reaches
+// the service as the person.
+func TestReportRuns(t *testing.T) {
+	var mu sync.Mutex
+	var got []enterprise.RunReport
+	was := reportRuns
+	reportRuns = func(_ string, r enterprise.RunReport) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, r)
+	}
+	t.Cleanup(func() { reportRuns = was })
+	w, _ := openTestWith(t, func(c *config.Config) { c.Enterprise.URL = "https://blitz.acme.com" })
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "notes.md"), []byte("hi"), 0o644))
+	writeFlow(t, w, "notes", "nodes: [{id: a, type: read_file, path: notes.md}]\n")
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "/notes", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(w.Dir(), ".agents", "evals"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), ".agents", "evals", "sums.md"), []byte("| ID | Prompt | Output | Type |\n|-|-|-|-|\n| a | 2+2? | 4 | exact |\n"), 0o644))
+	_, _ = w.RunEval(context.Background(), "sums", api.EvalOptions{})
+	mu.Lock()
+	require.Len(t, got, 2, "%v", got)
+	assert.Equal(t, "workflow", got[0].Kind)
+	assert.Equal(t, "notes", got[0].Name)
+	assert.Equal(t, RunDone, got[0].Status)
+	assert.Equal(t, filepath.Base(w.Dir()), got[0].Workspace)
+	assert.Equal(t, "eval", got[1].Kind)
+	assert.Equal(t, "sums", got[1].Name)
+	mu.Unlock()
+
+	// Without an organization: none.
+	w2, _ := openTestWith(t, nil)
+	writeFlow(t, w2, "empty", "nodes: [{id: a, type: timer, wait: 1ms}]\n")
+	_, _ = w2.Run(context.Background(), newSession(t, w2).ID, api.Turn{Text: "/empty", Command: true}, func(api.Event) {})
+	mu.Lock()
+	assert.Len(t, got, 2)
+	mu.Unlock()
+
+	// The real one reaches the service.
+	org := signedInOrg(t)
+	was(org.URL, enterprise.RunReport{Kind: "workflow", Name: "brief", Status: "succeeded", StartedAt: time.Now()})
+	require.Eventually(t, func() bool {
+		org.Mu.Lock()
+		defer org.Mu.Unlock()
+		return len(org.Reported) == 1
+	}, 5*time.Second, 10*time.Millisecond)
 }

@@ -159,7 +159,7 @@ Your organization's required workflows that run on a hook install it themselves 
 
 ## The file
 
-A workflow is `.agents/workflows/<name>.flow.yaml`, versioned with the project, beside the [Markdown commands](extending.md#custom-commands) in the same folder (a workflow wins a name clash):
+A workflow is `.agents/workflows/<name>.flow.yaml` (or `~/.blitz/workflows/<name>.flow.yaml` for one of your own in every workspace), versioned with the project, beside the [Markdown commands](extending.md#custom-commands) in the same folder (a workflow wins a name clash):
 
 ```yaml
 description: A one-page brief from the notes and the web

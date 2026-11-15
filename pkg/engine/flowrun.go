@@ -60,14 +60,19 @@ func (w *Workspace) Workflows() []flows.Flow {
 	return w.withDataProblems(withCallProblems(w.loadFlows()))
 }
 
+// UserWorkflowsDir holds the person's own workflows, for every workspace
+// (~/.blitz/workflows).
+func UserWorkflowsDir() string { return filepath.Join(config.ConfigDir(""), "workflows") }
+
 // loadFlows are the workspace's workflows with the organization's
-// (spec_053 EN-80): its available ones the person switched on, which the
-// workspace's own of a name replace, and its required ones, which nothing
-// replaces.
+// (spec_053 EN-80) and the person's own (~/.blitz/workflows, for every
+// workspace, EN-93): the organization's available ones the person
+// switched on, which their own and the workspace's of a name replace, and
+// its required ones, which nothing replaces.
 func (w *Workspace) loadFlows() []flows.Flow {
 	org := w.settings().Org
 	byName := map[string]flows.Flow{}
-	for _, dir := range []string{org.ItemDir(config.OrgAvailable, "workflows"), w.ProjectWorkflowsDir(), org.ItemDir(config.OrgRequired, "workflows")} {
+	for _, dir := range []string{org.ItemDir(config.OrgAvailable, "workflows"), UserWorkflowsDir(), w.ProjectWorkflowsDir(), org.ItemDir(config.OrgRequired, "workflows")} {
 		if dir == "" {
 			continue
 		}
