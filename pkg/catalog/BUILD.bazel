@@ -26,6 +26,8 @@ go_library(
         "//pkg/config",
         "//pkg/engine/agents",
         "//pkg/engine/commands",
+        "//pkg/engine/evals",
+        "//pkg/engine/flows",
         "//pkg/engine/gates",
         "//pkg/engine/skills",
         "//pkg/redact",

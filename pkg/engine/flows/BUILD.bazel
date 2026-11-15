@@ -23,8 +23,11 @@ go_library(
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/flows",
     visibility = [
-        # The engine and the service (//tools:check_deps checks libraries).
+        # The engine and the service (//tools:check_deps checks libraries),
+        # and pkg/catalog, which checks an organization's files as the
+        # engine reads them (spec_053_enterprise EN-30).
         "//apps/service:__subpackages__",
+        "//pkg/catalog:__pkg__",
         "//pkg/service:__subpackages__",
         "//pkg/engine:__subpackages__",
     ],

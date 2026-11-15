@@ -229,6 +229,10 @@ func TestParseMarkdownSpecRejects(t *testing.T) {
 		"a name with spaces": {"---\nname: My Reviewer\n---\nbody", "lowercase"},
 		// #5: invoke_agent would refuse it on every call.
 		"isolation without background": {"---\nname: x\nisolation: worktree\n---\nbody", "needs background"},
+		// AG-45: the skills it needs, by version range.
+		"a skill's bad range": {"---\nname: x\nskills: [sql-review@^1]\n---\nbody", "version range"},
+		"a skill's bad name":  {"---\nname: x\nskills: [SQL Review]\n---\nbody", "skills:"},
+		"a skill named twice": {"---\nname: x\nskills: [a, a@1.x]\n---\nbody", "named twice"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -277,4 +281,21 @@ func TestInterpolatePromptLevels(t *testing.T) {
 			assert.NotContains(t, got, "{", "double-brace placeholder leaves no stray braces")
 		})
 	}
+}
+
+// AG-45: an agent names the skills it needs, each by a version range.
+func TestAgentSkills(t *testing.T) {
+	spec, err := ParseMarkdownSpec([]byte("---\nname: reviewer\nskills:\n  - sql-review@1.x\n  - {name: pii-scrub, version: 2.3.0}\n  - tone\n---\nReview it.\n"))
+	require.NoError(t, err)
+	require.Len(t, spec.Skills, 3)
+	assert.Equal(t, "sql-review", spec.Skills[0].Name)
+	assert.Equal(t, "1.x", spec.Skills[0].Version)
+	assert.Equal(t, "2.3.0", spec.Skills[1].Version)
+	assert.Equal(t, "", spec.Skills[2].Version)
+	out, err := spec.Marshal()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "skills:\n    - sql-review@1.x\n    - pii-scrub@2.3.0\n    - tone\n")
+	again, err := ParseMarkdownSpec(out)
+	require.NoError(t, err)
+	assert.Equal(t, spec.Skills, again.Skills)
 }

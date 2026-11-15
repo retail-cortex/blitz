@@ -37,6 +37,7 @@ go_library(
         "//pkg/pageserver:__pkg__",
     ],
     deps = [
+        "//pkg/agentpkg",
         "//pkg/api",
         "//pkg/config",
         "//pkg/engine/agents/builtin",
