@@ -42,13 +42,24 @@ type Provider struct {
 	// and the next look searches again (SK-95).
 	dirs   []string
 	stamps map[string]string
+	// locked are the folders whose skills the organization locks
+	// (spec_053 EN-81), and lockedBy the skills found in them, by name:
+	// a skill of a locked name from any other folder isn't used.
+	locked   map[string]bool
+	lockedBy map[string]string
+	// versions are each agent's own versions of its skills, by folder
+	// (SetVersions), and byDir each such folder's skill, loaded once.
+	versions func(agent string) map[string]string
+	byDir    map[string]*Skill
 }
 
 // NewProvider initializes the skills provider with embedded built-in skills.
 func NewProvider() (*Provider, error) {
 	p := &Provider{
-		skills:  make(map[string]*Skill),
-		builtin: make(map[string]bool),
+		skills:   make(map[string]*Skill),
+		builtin:  make(map[string]bool),
+		locked:   make(map[string]bool),
+		lockedBy: make(map[string]string),
 	}
 
 	if err := p.loadEmbeddedSkills(); err != nil {
@@ -113,6 +124,20 @@ func LoadFolder(dir string) (*Skill, error) {
 	s.fsys, s.root, s.hostDir = os.DirFS(dir), ".", dir
 	s.scanBundle()
 	return s, nil
+}
+
+// Lock marks dirs as the organization's locked skill folders (spec_053
+// EN-81): a skill found in one wins over a skill of its name in any
+// other folder, whichever is searched first, and the clash is reported.
+// An empty dir is ignored. Call it before DiscoverExternal.
+func (p *Provider) Lock(dirs ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, d := range dirs {
+		if d != "" {
+			p.locked[d] = true
+		}
+	}
 }
 
 // DiscoverExternal scans search directories for SKILL.md files. External
@@ -227,6 +252,7 @@ func (p *Provider) rediscover(now map[string]string) error {
 			delete(p.skills, name)
 		}
 	}
+	clear(p.lockedBy)
 	err := p.discover(p.dirs)
 	p.stamps = now
 	return err
@@ -273,6 +299,7 @@ func (p *Provider) discover(dirs []string) error {
 			continue
 		}
 
+		locked := p.locked[dir] || p.locked[expandedDir]
 		// Reported rather than skipped silently: a typo in the front
 		// matter, or a folder that can't be read, shouldn't make a skill
 		// vanish without a word.
@@ -293,6 +320,16 @@ func (p *Provider) discover(dirs []string) error {
 			}
 			if skill.Name == "" {
 				return
+			}
+			if by, ok := p.lockedBy[skill.Name]; ok && !locked {
+				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization (%s); this one isn't used", path, skill.Name, by))
+				return
+			}
+			if old := p.skills[skill.Name]; old != nil && locked && p.lockedBy[skill.Name] == "" {
+				errs = append(errs, fmt.Errorf("%s: skill %q is locked by your organization; %s isn't used", old.Path, skill.Name, path))
+			}
+			if locked {
+				p.lockedBy[skill.Name] = path
 			}
 			// Its resources, references and scripts, from its folder.
 			skillDir := filepath.Dir(path)
@@ -370,4 +407,66 @@ func (p *Provider) Get(name string) (*Skill, bool) {
 
 	s, ok := p.skills[name]
 	return s, ok
+}
+
+// SetVersions gives the provider each agent's own versions of its skills
+// (spec_053 EN-82): versions(agent) is, by skill name, the folder of the
+// version that agent was published with, or nil for none. Called once,
+// before the provider's first use by an agent.
+func (p *Provider) SetVersions(versions func(agent string) map[string]string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.versions = versions
+}
+
+// GetFor is the skill name as agent runs it: its own version when the
+// organization published it with one (EN-82), else the provider's.
+func (p *Provider) GetFor(agent, name string) (*Skill, bool) {
+	if s, ok := p.versionOf(agent, name); ok {
+		return s, true
+	}
+	return p.Get(name)
+}
+
+// ListFor is every skill as agent runs it: the provider's, with each its
+// own version replaces.
+func (p *Provider) ListFor(agent string) []*Skill {
+	all := p.List()
+	for i, s := range all {
+		if v, ok := p.versionOf(agent, s.Name); ok {
+			all[i] = v
+		}
+	}
+	return all
+}
+
+// versionOf is agent's own version of the skill name, loaded once a folder.
+func (p *Provider) versionOf(agent, name string) (*Skill, bool) {
+	p.mu.RLock()
+	versions := p.versions
+	p.mu.RUnlock()
+	if versions == nil || agent == "" {
+		return nil, false
+	}
+	dir := versions(agent)[name]
+	if dir == "" {
+		return nil, false
+	}
+	p.mu.RLock()
+	s, ok := p.byDir[dir]
+	p.mu.RUnlock()
+	if ok {
+		return s, s != nil
+	}
+	s, err := LoadFolder(dir)
+	if err != nil || s.Name != name {
+		s = nil // the provider's own, then
+	}
+	p.mu.Lock()
+	if p.byDir == nil {
+		p.byDir = map[string]*Skill{}
+	}
+	p.byDir[dir] = s
+	p.mu.Unlock()
+	return s, s != nil
 }

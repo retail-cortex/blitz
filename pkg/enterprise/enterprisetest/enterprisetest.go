@@ -509,6 +509,37 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		_, _ = w.Write(env)
 	})
+	// The person's choice of an available library asset (the service's
+	// spec_014_library LB-22): it switches the item in Policy["items"].
+	mux.HandleFunc("PUT /api/v1/me/items/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var in struct {
+			On *bool `json:"on"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.On == nil {
+			refuse(w, http.StatusBadRequest, "bad_request", "Send on.")
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		items, _ := s.Policy["items"].([]map[string]any)
+		for _, it := range items {
+			if it["kind"] != r.PathValue("kind") || it["name"] != r.PathValue("name") || it["state"] == "dependency" {
+				continue
+			}
+			if it["state"] == "required" {
+				refuse(w, http.StatusConflict, "required", "Your organization requires it: it can't be switched off.")
+				return
+			}
+			it["on"] = *in.On
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(it)
+			return
+		}
+		refuse(w, http.StatusNotFound, "not_found", "Your organization offers no such asset.")
+	})
 	mux.HandleFunc("GET /api/v1/policy", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {
 			return

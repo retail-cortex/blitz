@@ -1283,7 +1283,7 @@ func (e *Engine) skillIndex(agent string) string {
 		return ""
 	}
 	var sb strings.Builder
-	for _, s := range e.skillProv.List() {
+	for _, s := range e.skillProv.ListFor(agent) { // its own versions (EN-82)
 		if s.OfferedTo(agent) { // agents: offers it to others only
 			fmt.Fprintf(&sb, "- **%s**: %s%s\n", s.Name, s.Description, skills.TriggerHint(s.TriggerPhrases))
 		}

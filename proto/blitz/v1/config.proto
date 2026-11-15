@@ -309,6 +309,10 @@ service ConfigService {
   // (EN-34, EN-39): the ones their policy switches on, each locked and
   // with who decided it.
   rpc ListOrgItems(ListOrgItemsRequest) returns (ListOrgItemsResponse);
+  // Switches one of the organization's available assets on or off for the
+  // person (EN-83), then fetches their policy again (FAILED_PRECONDITION
+  // REQUIRED for a required one).
+  rpc SetOrgItem(SetOrgItemRequest) returns (SetOrgItemResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -2017,9 +2021,10 @@ message GetOrgUsageResponse {
   bool prompt_logs = 5;
 }
 
-// One of the organization's rules or guardrails.
+// One of the organization's rules or guardrails, or (EN-80) one of its
+// library's agents, skills and workflows.
 message OrgItem {
-  // rule or guardrail.
+  // agent, skill, workflow, rule or guardrail.
   string kind = 1;
   string name = 2;
   // Its path in the catalog.
@@ -2032,6 +2037,28 @@ message OrgItem {
   // Who decided it applies (EN-39): "the policy for Data"; "" from a
   // service before the policy.
   string decided_by = 7;
+  // The version the organization offers (EN-80).
+  string version = 8;
+  // required (always on, locked) or available (the person switches it
+  // on or off).
+  string state = 9;
+  // Whether the person has it.
+  bool on = 10;
+  string description = 11;
+  // What it locks to, "skill sql-review 1.0.0" (EN-82).
+  repeated string locks = 12;
+}
+
+// Request message for ConfigService.SetOrgItem.
+message SetOrgItemRequest {
+  string kind = 1;
+  string name = 2;
+  bool on = 3;
+}
+
+// Response message for ConfigService.SetOrgItem.
+message SetOrgItemResponse {
+  OrgItem item = 1;
 }
 
 // Request message for ConfigService.ListOrgItems.

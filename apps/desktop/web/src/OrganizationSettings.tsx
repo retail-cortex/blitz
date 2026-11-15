@@ -31,6 +31,7 @@ import { t } from "./i18n";
 import { OrgPolicyCard } from "./OrgPolicy";
 import { ConnectorConsentCard } from "./ConnectorConsent";
 import { OrgNoticesCard } from "./OrgNotices";
+import { OrgItems } from "./studio/OrgItems";
 import { signInToOrg } from "./orgBranding";
 import { Button, Field, Icon, useSnackbar } from "@blitz/webui";
 
@@ -194,6 +195,11 @@ export function OrganizationSettings() {
             }
           }}
         />
+      )}
+      {state?.signedIn && (
+        <div className="card stack">
+          <OrgItems key={state.email} title={t("desktop.orgitems.library")} />
+        </div>
       )}
       {state?.signedIn && <OrgNoticesCard key={state.email} />}
     </div>

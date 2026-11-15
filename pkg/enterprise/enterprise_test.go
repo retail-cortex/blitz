@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -1209,4 +1210,95 @@ func TestSignedHTTP(t *testing.T) {
 	require.NoError(t, err)
 	res.Body.Close()
 	assert.True(t, strings.HasPrefix(auth, "Bearer "), auth)
+}
+
+// EN-80, EN-82, EN-83: the library's assets the person has, laid out by
+// state, each skill's versions side by side, the index of what's offered;
+// an asset whose files aren't its own, or don't match its digest, refused;
+// an available one switched on, a required one not off.
+func TestPolicyItems(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	agentFiles := map[string]string{"agents/reviewer.md": "---\nname: reviewer\nskills: [sql-review@1.x]\n---\nReview."}
+	v1 := map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: v1\n---\nOne.", "skills/sql-review/scripts/a.sh": "echo 1"}
+	v2 := map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: v2\n---\nTwo."}
+	flow := map[string]string{"workflows/notes.flow.yaml": "nodes: [{id: a, type: read_file, path: x.md}]\n"}
+	item := func(kind, name, version, state string, on bool, files map[string]string, deps ...map[string]any) map[string]any {
+		it := map[string]any{"kind": kind, "name": name, "version": version, "sha256": agentpkg.Digest(files), "state": state, "on": on, "deps": deps}
+		if on {
+			it["files"] = files
+		}
+		return it
+	}
+	items := []map[string]any{
+		item("agent", "reviewer", "1.0.0", "required", true, agentFiles, map[string]any{"kind": "skill", "name": "sql-review", "range": "1.x", "resolved": "1.0.0"}),
+		item("skill", "sql-review", "1.0.0", "dependency", true, v1),
+		item("skill", "sql-review", "2.0.0", "available", true, v2),
+		item("workflow", "notes", "1.0.0", "available", false, flow),
+	}
+	s.Policy = map[string]any{"schema": 2, "policy": map[string]any{"refresh": "5m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}, "items": items,
+		"expires": time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)}
+	_, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	pol := filepath.Join(dir, "policy")
+	assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"))
+	assert.FileExists(t, filepath.Join(pol, "available", "skills", "sql-review", "SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(pol, "available", "skills", "sql-review", "scripts", "a.sh"), "2.0.0's files alone")
+	assert.FileExists(t, filepath.Join(pol, "versions", "skills", "sql-review@1.0.0", "scripts", "a.sh"))
+	assert.FileExists(t, filepath.Join(pol, "versions", "skills", "sql-review@2.0.0", "SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(pol, "available", "workflows", "notes.flow.yaml"), "available and off: not laid out")
+	org := config.OrgLayer{PolicyDir: pol}
+	assets := org.Assets()
+	require.Len(t, assets, 4)
+	assert.Equal(t, "1.0.0", assets[0].Deps[0].Resolved)
+	assert.Equal(t, filepath.Join(pol, "required", "agents"), org.ItemDir(config.OrgRequired, "agents"))
+	assert.Equal(t, filepath.Join(pol, "versions", "skills", "sql-review@1.0.0"), org.VersionDir("sql-review", "1.0.0"))
+
+	// Switched on, it comes with the next policy.
+	a, err := c.SetItem(ctx, "workflow", "notes", true)
+	require.NoError(t, err)
+	assert.True(t, a.On)
+	items[3]["files"] = flow
+	_, err = c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(pol, "available", "workflows", "notes.flow.yaml"))
+	_, err = c.SetItem(ctx, "agent", "reviewer", false)
+	ref, ok := errors.AsType[*Refusal](err)
+	require.True(t, ok, "%v", err)
+	assert.Equal(t, "required", ref.Code)
+
+	t.Run("files that aren't its digest's", func(t *testing.T) {
+		items[0]["sha256"] = "0000"
+		defer func() { items[0]["sha256"] = agentpkg.Digest(agentFiles) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "doesn't match its digest")
+		assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"), "the last kept")
+	})
+	t.Run("a file that isn't its own", func(t *testing.T) {
+		bad := map[string]string{"skills/sql-review/SKILL.md": "x", "agents/evil.md": "x"}
+		items[2]["files"], items[2]["sha256"] = bad, agentpkg.Digest(bad)
+		defer func() { items[2]["files"], items[2]["sha256"] = v2, agentpkg.Digest(v2) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "isn't its own")
+	})
+	t.Run("files that can't be laid out", func(t *testing.T) {
+		clash := map[string]string{"skills/sql-review/SKILL.md": "x", "skills/sql-review/SKILL.md/more": "y"}
+		items[2]["files"], items[2]["sha256"] = clash, agentpkg.Digest(clash)
+		defer func() { items[2]["files"], items[2]["sha256"] = v2, agentpkg.Digest(v2) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.Error(t, err)
+		assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"), "the last kept")
+	})
+	t.Run("a name that can't be a file", func(t *testing.T) {
+		evil := map[string]string{"agents/../x.md": "x"}
+		items[0]["name"], items[0]["files"], items[0]["sha256"] = "../x", evil, agentpkg.Digest(evil)
+		defer func() {
+			items[0]["name"], items[0]["files"], items[0]["sha256"] = "reviewer", agentFiles, agentpkg.Digest(agentFiles)
+		}()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "can't be a file")
+	})
 }

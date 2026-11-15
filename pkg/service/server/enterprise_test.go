@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
@@ -1535,6 +1536,11 @@ func TestShareWithOrganization(t *testing.T) {
 // The organization's rules and guardrails the person works under (EN-34,
 // EN-39): only those, each with who decided it when the policy says;
 // none of its agents or skills.
+var (
+	reviewerFiles = map[string]string{"agents/reviewer.md": "---\nname: reviewer\n---\nReview."}
+	toneFiles     = map[string]string{"skills/tone/SKILL.md": "---\nname: tone\ndescription: Tone\n---\nBe kind."}
+)
+
 func TestOrgItems(t *testing.T) {
 	t.Cleanup(http.DefaultClient.CloseIdleConnections)
 	_, s := serve(t, nil)
@@ -1553,6 +1559,14 @@ func TestOrgItems(t *testing.T) {
 		"policy":  map[string]any{"refresh": "1h"},
 		"explain": map[string]any{"rules.style": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
 		"rules":   []map[string]any{{"kind": "rule", "name": "style", "body": "Use Go."}},
+		// The library's (EN-80): a required agent, an available skill.
+		"items": []map[string]any{
+			{"kind": "agent", "name": "reviewer", "version": "1.0.0", "sha256": agentpkg.Digest(reviewerFiles), "state": "required", "on": true, "files": reviewerFiles,
+				"deps": []any{map[string]any{"kind": "skill", "name": "tone", "range": "2.x", "resolved": "2.0.0"}, map[string]any{"kind": "skill", "name": "builtin", "range": ""}}},
+			// A rule the library lists, laid out from the policy's rules: listed once.
+			{"kind": "rule", "name": "style", "version": "1.1.0", "sha256": "", "state": "required", "on": true, "deps": []any{}},
+			{"kind": "skill", "name": "tone", "version": "2.0.0", "sha256": agentpkg.Digest(toneFiles), "state": "available", "on": false, "files": toneFiles, "description": "Tone", "deps": []any{}},
+		},
 	}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
@@ -1570,6 +1584,9 @@ func TestOrgItems(t *testing.T) {
 	_, err = c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
 	require.NoError(t, err)
 	assert.Empty(t, list("").Items, "no catalog yet")
+	_, err = c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: "skill", Name: "tone", On: true}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_SIGNED_IN", info.Reason, "connected, not signed in")
 
 	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
 	require.NoError(t, err)
@@ -1577,25 +1594,44 @@ func TestOrgItems(t *testing.T) {
 	}
 	require.NoError(t, stream.Err())
 	_ = stream.Close()
-	require.Eventually(t, func() bool { return len(list("").Items) == 2 }, 5*time.Second, 20*time.Millisecond)
-	require.Eventually(t, func() bool { return list("rule").Items[0].DecidedBy != "" }, 5*time.Second, 20*time.Millisecond, "once the policy's fetched")
+	require.Eventually(t, func() bool { return len(list("").Items) == 3 }, 5*time.Second, 20*time.Millisecond)
 
 	all := list("")
-	assert.Equal(t, []string{"guardrails/no-pii.md", "rules/style.md"}, []string{all.Items[0].Path, all.Items[1].Path})
-	assert.Empty(t, all.Items[0].DecidedBy, "the policy doesn't say")
+	var names []string
+	for _, it := range all.Items {
+		names = append(names, it.Kind+"/"+it.Name+" "+it.State)
+	}
+	assert.Equal(t, []string{"agent/reviewer required", "rule/style required", "skill/tone available"}, names, "the retired catalog's items aren't listed")
 	rules := list("rule")
 	require.Len(t, rules.Items, 1)
 	assert.Equal(t, "the policy for Data", rules.Items[0].DecidedBy)
 	assert.Equal(t, "locked", rules.Items[0].Lock)
+	assert.Equal(t, "locked", all.Items[0].Lock)
+	assert.Equal(t, []string{"skill tone 2.0.0"}, all.Items[0].Locks, "what it locks to; a built-in skill isn't")
+	assert.Equal(t, "1.1.0", rules.Items[0].Version, "the library's, not the policy folder's copy")
+	assert.Equal(t, "default", all.Items[2].Lock)
+	assert.False(t, all.Items[2].On)
+
+	// Switched on (EN-83): kept by the service, the policy fetched again.
+	set, err := c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: "skill", Name: "tone", On: true}))
+	require.NoError(t, err)
+	assert.True(t, set.Msg.Item.On)
+	assert.True(t, list("skill").Items[0].On)
+	_, err = c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: "agent", Name: "reviewer", On: false}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "REQUIRED", info.Reason)
+	_, err = c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: "skill", Name: "nope", On: true}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
 
 	// How the person hears of their jobs' runs (JB-31).
 	notices, err := c.GetOrgNotices(ctx, connect.NewRequest(&pb.GetOrgNoticesRequest{}))
 	require.NoError(t, err)
 	assert.True(t, notices.Msg.Notices.Email)
-	set, err := c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: &pb.OrgNotices{Webhook: "https://hooks.example/x", EveryRun: true}}))
+	setN, err := c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: &pb.OrgNotices{Webhook: "https://hooks.example/x", EveryRun: true}}))
 	require.NoError(t, err)
-	assert.Equal(t, "https://hooks.example/x", set.Msg.Notices.Webhook)
-	assert.False(t, set.Msg.Notices.Email)
+	assert.Equal(t, "https://hooks.example/x", setN.Msg.Notices.Webhook)
+	assert.False(t, setN.Msg.Notices.Email)
 	_, err = c.SetOrgNotices(ctx, connect.NewRequest(&pb.SetOrgNoticesRequest{Notices: &pb.OrgNotices{Webhook: "http://x"}}))
 	assert.Error(t, err)
 }

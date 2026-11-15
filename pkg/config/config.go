@@ -1137,8 +1137,13 @@ func IsWorkspaceRelative(p string) bool {
 // workspace-relative entries resolved against workspace (the working
 // directory if ""). A project's skills load as prompt text; their scripts
 // run only once the project is trusted (spec_031_project_config).
+//
+// The organization's skills (spec_053 EN-80) come first and last: the
+// available ones the person switched on before theirs, so their own of a
+// name wins; the required ones after, locked (the engine's Lock), so
+// nothing replaces them.
 func (c *Config) SkillSearchPaths(workspace string) []string {
-	return resolvePaths(c.Skills.Paths, workspace)
+	return c.Org.around("skills", resolvePaths(c.Skills.Paths, workspace))
 }
 
 // UserAgentsDir holds the user's own agents, for every workspace.
@@ -1156,8 +1161,10 @@ const ProjectScriptsDir = ".agents/scripts"
 
 // AgentSearchPaths returns directories to scan for user-defined agents,
 // resolved like SkillSearchPaths: the user's, then the workspace's.
+//
+// The organization's agents come first and last, as its skills do.
 func (c *Config) AgentSearchPaths(workspace string) []string {
-	return resolvePaths([]string{UserAgentsDir, ProjectAgentsDir}, workspace)
+	return c.Org.around("agents", resolvePaths([]string{UserAgentsDir, ProjectAgentsDir}, workspace))
 }
 
 func resolvePaths(paths []string, workspace string) []string {

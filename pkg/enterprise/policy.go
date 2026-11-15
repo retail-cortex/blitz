@@ -21,11 +21,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -38,6 +42,14 @@ type PolicyEntry struct {
 	SHA256 string `json:"sha256"`
 }
 
+// PolicyItem is one of the library's assets as the service delivers it
+// (its spec_014_library LB-21): what the person's Blitz lays out (EN-80),
+// its files when they have it.
+type PolicyItem struct {
+	config.OrgAsset
+	Files map[string]string `json:"files,omitempty"`
+}
+
 // PolicyEnvelope is what the service signs at /api/v1/policy (its
 // spec_012_policy PO-20): the person's effective policy, why each setting
 // is what it is, their rules and guardrails, and until when it holds.
@@ -47,7 +59,10 @@ type PolicyEnvelope struct {
 	Explain    map[string]config.PolicyDecision `json:"explain"`
 	Rules      []PolicyEntry                    `json:"rules"`
 	Guardrails []PolicyEntry                    `json:"guardrails"`
-	Expires    time.Time                        `json:"expires"`
+	// Items are the library's assets it offers them (EN-80); none from a
+	// service before the library.
+	Items   []PolicyItem `json:"items"`
+	Expires time.Time    `json:"expires"`
 }
 
 // ErrNoPolicyAPI means the service predates /api/v1/policy: the policy
@@ -161,6 +176,9 @@ func layOutPolicy(dir string, env PolicyEnvelope) error {
 			}
 		}
 	}
+	if err := layOutItems(next, env.Items); err != nil {
+		return err
+	}
 	old := filepath.Join(dir, policyDir+".old")
 	_ = os.RemoveAll(old)
 	cur := filepath.Join(dir, policyDir)
@@ -173,4 +191,78 @@ func layOutPolicy(dir string, env PolicyEnvelope) error {
 		return err
 	}
 	return os.RemoveAll(old)
+}
+
+// itemRoot is where an asset of kind named name keeps its files, as a
+// workspace's .agents folder lays it out: its file, or its folder.
+func itemRoot(kind, name string) (string, bool) {
+	switch kind {
+	case "agent":
+		return "agents/" + name + ".md", false
+	case "skill":
+		return "skills/" + name + "/", true
+	case "workflow":
+		return "workflows/" + name + ".flow.yaml", false
+	}
+	return "", false
+}
+
+// layOutItems writes the library's assets the person has into next
+// (EN-80): each under available/ or required/ as its state is, and each
+// skill's version (theirs, and every one an asset of theirs locks to)
+// under versions/skills/<name>@<version>/ (EN-82); and items.json, what's
+// offered. Rules and guardrails are laid out from the envelope's own
+// lists. An asset's files must be its own (an agent's one file, a skill's
+// folder) and match its digest, or nothing is laid out.
+func layOutItems(next string, items []PolicyItem) error {
+	index := make([]config.OrgAsset, 0, len(items))
+	for _, it := range items {
+		index = append(index, it.OrgAsset)
+		root, folder := itemRoot(it.Kind, it.Name)
+		if !it.On || root == "" {
+			continue
+		}
+		if !entryName.MatchString(it.Name) || len(it.Name) > 64 {
+			return fmt.Errorf("the organization offers a %s that can't be a file: %q", it.Kind, it.Name)
+		}
+		if got := agentpkg.Digest(it.Files); got != it.SHA256 {
+			return fmt.Errorf("the organization's %s %s %s doesn't match its digest", it.Kind, it.Name, it.Version)
+		}
+		for p, text := range it.Files {
+			clean := path.Clean(p)
+			if clean != p || strings.Contains(p, "..") || (folder && !strings.HasPrefix(p, root)) || (!folder && p != root) {
+				return fmt.Errorf("the organization's %s %s has a file that isn't its own: %q", it.Kind, it.Name, p)
+			}
+			var dests []string
+			if it.State == config.OrgAvailable || it.State == config.OrgRequired {
+				dests = append(dests, filepath.Join(next, it.State, filepath.FromSlash(p)))
+			}
+			if it.Kind == "skill" {
+				dests = append(dests, filepath.Join(next, config.OrgVersions, "skills", it.Name+"@"+it.Version, filepath.FromSlash(strings.TrimPrefix(p, root))))
+			}
+			for _, d := range dests {
+				if err := os.MkdirAll(filepath.Dir(d), 0o700); err != nil {
+					return err
+				}
+				if err := os.WriteFile(d, []byte(text), 0o600); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	b, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(next, config.OrgItemsFile), b, 0o600)
+}
+
+// SetItem switches one of the library's available assets on or off for
+// the person (EN-83; the service's spec_014_library LB-22): kind is agent,
+// skill, workflow, rule or guardrail. A required one can't be switched off
+// (a Refusal, required).
+func (c *Client) SetItem(ctx context.Context, kind, name string, on bool) (config.OrgAsset, error) {
+	var out config.OrgAsset
+	err := c.signedCall(ctx, http.MethodPut, "/api/v1/me/items/"+url.PathEscape(kind)+"/"+url.PathEscape(name), map[string]any{"on": on}, &out)
+	return out, err
 }

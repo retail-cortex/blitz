@@ -16,45 +16,112 @@ package server
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"connectrpc.com/connect"
 
-	"github.com/retail-cortex/blitz/pkg/catalog"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// ListOrgItems are the organization's rules and guardrails the person
-// works under (spec_053 EN-34, EN-39), as this computer keeps them: from
-// a service with the policy, those it switches on for them, each locked,
-// with who decided it; from one before, its catalog's.
+// orgItem is an asset the organization offers, as the window lists it
+// (EN-80): required ones locked, available ones the person's to switch.
+func orgItem(org config.OrgLayer, a config.OrgAsset) *pb.OrgItem {
+	it := &pb.OrgItem{Kind: a.Kind, Name: a.Name, Version: a.Version, State: a.State, On: a.On, Description: a.Description, Lock: "default"}
+	if a.State == config.OrgRequired {
+		it.Lock = "locked"
+	}
+	if path := a.Kind + "s." + a.Name; org.Explain[path].Level != "" {
+		it.DecidedBy = org.Why(path)
+	}
+	for _, d := range a.Deps {
+		if d.Resolved != "" {
+			it.Locks = append(it.Locks, d.Kind+" "+d.Name+" "+d.Resolved)
+		}
+	}
+	return it
+}
+
+// ListOrgItems are the organization's assets the person is offered
+// (spec_053 EN-80): its agents, skills, workflows, rules and guardrails,
+// required (locked) or available (theirs to switch on), with the version,
+// whether they have it and who decided it; and from a service before the
+// library, the rules and guardrails their policy switches on, each locked.
 func (h configService) ListOrgItems(_ context.Context, r req[pb.ListOrgItemsRequest]) (*connect.Response[pb.ListOrgItemsResponse], error) {
+	if _, _, err := h.s.orgClient(); err != nil {
+		return nil, err
+	}
+	out := &pb.ListOrgItemsResponse{}
+	cfg, err := config.Load(h.s.configDir)
+	if err != nil || cfg.Org.PolicyDir == "" {
+		return ok(out)
+	}
+	org := cfg.Org
+	listed := map[string]bool{}
+	for _, a := range org.Assets() {
+		if a.State == "dependency" || (r.Msg.Kind != "" && a.Kind != r.Msg.Kind) {
+			continue
+		}
+		listed[a.Kind+"/"+a.Name] = true
+		out.Items = append(out.Items, orgItem(org, a))
+	}
+	// The policy's rules and guardrails the library doesn't list (a
+	// service before it): each applies, locked.
+	for _, kind := range []string{"rule", "guardrail"} {
+		if r.Msg.Kind != "" && r.Msg.Kind != kind {
+			continue
+		}
+		entries, _ := os.ReadDir(filepath.Join(org.PolicyDir, kind+"s"))
+		for _, e := range entries {
+			name := strings.TrimSuffix(e.Name(), ".md")
+			if listed[kind+"/"+name] {
+				continue
+			}
+			it := &pb.OrgItem{Kind: kind, Name: name, Path: kind + "s/" + e.Name(), Lock: "locked", State: config.OrgRequired, On: true}
+			if path := kind + "s." + name; org.Explain[path].Level != "" {
+				it.DecidedBy = org.Why(path)
+			}
+			out.Items = append(out.Items, it)
+		}
+	}
+	sort.Slice(out.Items, func(i, j int) bool {
+		return out.Items[i].Kind+"/"+out.Items[i].Name < out.Items[j].Kind+"/"+out.Items[j].Name
+	})
+	return ok(out)
+}
+
+// SetOrgItem switches one of the organization's available assets on or
+// off for the person (EN-83), then fetches their policy again, so it
+// arrives (or goes) at once; the service keeps the choice, so it follows
+// them to every computer.
+func (h configService) SetOrgItem(ctx context.Context, r req[pb.SetOrgItemRequest]) (*connect.Response[pb.SetOrgItemResponse], error) {
 	c, _, err := h.s.orgClient()
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListOrgItemsResponse{}
-	m := enterprise.LoadCatalog(h.s.brandingDir(c))
-	if m == nil {
-		return ok(out)
+	if !c.Status().SignedIn {
+		return nil, apiError(connect.CodeUnauthenticated, "NOT_SIGNED_IN", errors.New("sign in to your organization's service first"))
 	}
-	out.Version = int32(m.Version)
+	a, err := c.SetItem(ctx, r.Msg.GetKind(), r.Msg.GetName(), r.Msg.GetOn())
+	if err != nil {
+		var ref *enterprise.Refusal
+		if errors.As(err, &ref) && ref.Status == http.StatusConflict && ref.Code == "required" {
+			return nil, apiError(connect.CodeFailedPrecondition, "REQUIRED", err)
+		}
+		return nil, enterpriseError(err)
+	}
+	if _, _, err := h.s.refreshOrg(ctx, c, h.s.brandingDir(c)); err != nil {
+		return nil, enterpriseError(err)
+	}
 	var org config.OrgLayer
 	if cfg, err := config.Load(h.s.configDir); err == nil {
 		org = cfg.Org
 	}
-	for _, f := range m.Files {
-		if (f.Kind != catalog.Rule && f.Kind != catalog.Guardrail) || (r.Msg.Kind != "" && f.Kind != r.Msg.Kind) {
-			continue
-		}
-		it := &pb.OrgItem{Kind: f.Kind, Name: f.Name, Path: f.Path, Lock: f.Lock, Groups: f.Groups}
-		if path := f.Kind + "s." + f.Name; org.Explain[path].Level != "" {
-			it.DecidedBy = org.Why(path)
-		}
-		out.Items = append(out.Items, it)
-	}
-	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Path < out.Items[j].Path })
-	return ok(out)
+	return ok(&pb.SetOrgItemResponse{Item: orgItem(org, a)})
 }

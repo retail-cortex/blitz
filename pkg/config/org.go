@@ -65,6 +65,8 @@ func (o OrgLayer) LockOf(path string) string {
 	switch {
 	case !o.Active() || path == "":
 		return ""
+	case o.PolicyDir != "" && strings.HasPrefix(path, filepath.Join(o.PolicyDir, OrgAvailable)+string(filepath.Separator)):
+		return "default" // an available asset the person switched on (EN-80)
 	case strings.HasPrefix(path, o.Locked+string(filepath.Separator)),
 		o.PolicyDir != "" && strings.HasPrefix(path, o.PolicyDir+string(filepath.Separator)):
 		return "locked"
@@ -72,6 +74,87 @@ func (o OrgLayer) LockOf(path string) string {
 		return "default"
 	}
 	return ""
+}
+
+// The library's assets as they're laid out in PolicyDir (EN-80): the
+// available ones the person switched on, and the required ones, each as a
+// workspace's .agents folder (agents/, skills/, workflows/); every version
+// an asset locks to under versions/ (versions/skills/<name>@<version>/);
+// and items.json, what the organization offers them.
+const (
+	OrgAvailable = "available"
+	OrgRequired  = "required"
+	OrgVersions  = "versions"
+	OrgItemsFile = "items.json"
+)
+
+// ItemDir is where the organization's assets of sub ("agents") are laid
+// out in state (OrgAvailable or OrgRequired); "" without an organization.
+func (o OrgLayer) ItemDir(state, sub string) string {
+	if o.PolicyDir == "" {
+		return ""
+	}
+	return filepath.Join(o.PolicyDir, state, sub)
+}
+
+// VersionDir is where version of the skill name is laid out (EN-82); ""
+// without an organization.
+func (o OrgLayer) VersionDir(name, version string) string {
+	if o.PolicyDir == "" {
+		return ""
+	}
+	return filepath.Join(o.PolicyDir, OrgVersions, "skills", name+"@"+version)
+}
+
+// around is dirs with the organization's available assets of sub before
+// them and its required ones after (EN-80); dirs alone without one.
+func (o OrgLayer) around(sub string, dirs []string) []string {
+	if o.PolicyDir == "" {
+		return dirs
+	}
+	out := append([]string{o.ItemDir(OrgAvailable, sub)}, dirs...)
+	return append(out, o.ItemDir(OrgRequired, sub))
+}
+
+// OrgAsset is one of the library's assets as the organization offers it
+// to the person (the service's spec_014_library LB-21): its version, its
+// state (required, available, or dependency: a version another locks to),
+// whether they have it, and the versions it locks to.
+type OrgAsset struct {
+	Kind        string   `json:"kind"`
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	SHA256      string   `json:"sha256"`
+	Description string   `json:"description,omitempty"`
+	State       string   `json:"state"`
+	On          bool     `json:"on"`
+	Deps        []OrgDep `json:"deps"`
+}
+
+// OrgDep is what an asset locks to.
+type OrgDep struct {
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	Range    string `json:"range"`
+	Resolved string `json:"resolved,omitempty"`
+}
+
+// Assets are what the organization offers the person, as last fetched
+// (EN-80); none without an organization or before a service that offers
+// them.
+func (o OrgLayer) Assets() []OrgAsset {
+	if o.PolicyDir == "" {
+		return nil
+	}
+	b, err := os.ReadFile(filepath.Join(o.PolicyDir, OrgItemsFile))
+	if err != nil {
+		return nil
+	}
+	var out []OrgAsset
+	if json.Unmarshal(b, &out) != nil {
+		return nil
+	}
+	return out
 }
 
 // PluginsOff reports whether the person's own plugins (installed, from a

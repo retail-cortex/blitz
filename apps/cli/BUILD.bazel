@@ -170,6 +170,7 @@ go_test(
     tags = ["no-sandbox"],
     deps = [
         "//pkg/activity",
+        "//pkg/agentpkg",
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",

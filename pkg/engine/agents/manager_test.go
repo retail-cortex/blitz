@@ -81,6 +81,54 @@ func TestLoadExternalAgentsReportsUnreadable(t *testing.T) {
 	assert.True(t, ok, "the readable spec still loads")
 }
 
+// TestLockedAgentsKeepTheirNames checks that an agent of the
+// organization's locked folder isn't replaced by a later folder's, such
+// as a plugin's, and that the clash is reported (N26 pkg-small-2 #1).
+func TestLockedAgentsKeepTheirNames(t *testing.T) {
+	root := t.TempDir()
+	user, locked, plugin := filepath.Join(root, "user"), filepath.Join(root, "org", "locked", "agents"), filepath.Join(root, "plugin")
+	writeAgent(t, user, "reviewer.md", "reviewer", "Mine")
+	writeAgent(t, locked, "reviewer.md", "reviewer", "Locked")
+	writeAgent(t, plugin, "reviewer.md", "reviewer", "Plugin")
+	writeAgent(t, plugin, "helper.md", "helper", "Plugin helper")
+	cases := []struct {
+		name  string
+		lock  bool
+		want  string
+		clash bool
+	}{
+		{"locked", true, "Locked", true},
+		{"not locked: the later folder wins", false, "Plugin", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reg, err := NewRegistry()
+			require.NoError(t, err)
+			if c.lock {
+				reg.Lock(locked)
+			}
+			require.NoError(t, reg.LoadExternalAgents(user, locked))
+			err = reg.LoadExternalAgents(plugin) // the plugins come later
+			spec, _ := reg.Get("reviewer")
+			assert.Equal(t, c.want, spec.DisplayName)
+			_, ok := reg.Get("helper")
+			assert.True(t, ok, "a new name still loads")
+			if !c.clash {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, "locked")
+
+			// A reload keeps the locked one too.
+			reg.Invalidate()
+			_, err = reg.Refresh()
+			assert.ErrorContains(t, err, "locked")
+			spec, _ = reg.Get("reviewer")
+			assert.Equal(t, "Locked", spec.DisplayName)
+		})
+	}
+}
+
 // TestDuplicateNamesInOneFolder checks that two files of one name in one
 // folder are reported, at load and in the listing (N26 engine-sub-1 #6).
 func TestDuplicateNamesInOneFolder(t *testing.T) {

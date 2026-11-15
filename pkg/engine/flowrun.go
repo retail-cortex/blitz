@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
@@ -56,7 +57,30 @@ func (w *Workspace) ProjectWorkflowsDir() string {
 // a loop of workflows calling each other, or calling one that isn't there,
 // or with a Data step that can't run here, has that as its problem.
 func (w *Workspace) Workflows() []flows.Flow {
-	return w.withDataProblems(withCallProblems(flows.Load(w.ProjectWorkflowsDir())))
+	return w.withDataProblems(withCallProblems(w.loadFlows()))
+}
+
+// loadFlows are the workspace's workflows with the organization's
+// (spec_053 EN-80): its available ones the person switched on, which the
+// workspace's own of a name replace, and its required ones, which nothing
+// replaces.
+func (w *Workspace) loadFlows() []flows.Flow {
+	org := w.settings().Org
+	byName := map[string]flows.Flow{}
+	for _, dir := range []string{org.ItemDir(config.OrgAvailable, "workflows"), w.ProjectWorkflowsDir(), org.ItemDir(config.OrgRequired, "workflows")} {
+		if dir == "" {
+			continue
+		}
+		for _, f := range flows.Load(dir) {
+			byName[f.Name] = f
+		}
+	}
+	out := make([]flows.Flow, 0, len(byName))
+	for _, f := range byName {
+		out = append(out, f)
+	}
+	slices.SortFunc(out, func(a, b flows.Flow) int { return strings.Compare(a.Name, b.Name) })
+	return out
 }
 
 // withCallProblems is all with each workflow's calls checked against the
@@ -91,7 +115,7 @@ func (w *Workspace) jobWorkflow(wk *workers.Worker) (flows.Flow, bool) {
 		return flows.Flow{}, false
 	}
 	f := flows.Parse(wk.Flow, wk.FlowFile.Path, wk.FlowFile.Data)
-	all := flows.Load(w.ProjectWorkflowsDir())
+	all := w.loadFlows()
 	if i := slices.IndexFunc(all, func(o flows.Flow) bool { return o.Name == f.Name }); i >= 0 {
 		all[i] = f
 	} else {
@@ -221,7 +245,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 	}
 	var list []*skills.Skill
 	for _, s := range n.Skills {
-		if sk, ok := w.skills.Get(s); ok {
+		if sk, ok := w.skills.GetFor(n.Agent, s); ok { // the step's agent's own version (EN-82)
 			list = append(list, sk)
 		}
 	}

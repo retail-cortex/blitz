@@ -254,3 +254,30 @@ func TestAddMCPServer(t *testing.T) {
 		assert.Equal(t, []ProjectItem{{File: ".mcp.json", Kind: ProjectMCP, Key: "db", Reason: ReasonOrgPolicy}}, p.Ignored)
 	})
 }
+
+// EN-80, EN-82: where the organization's library's assets are laid out,
+// the folders around the person's and the workspace's, and what it offers.
+func TestOrgAssetsLayout(t *testing.T) {
+	var none OrgLayer
+	assert.Empty(t, none.ItemDir(OrgRequired, "agents"))
+	assert.Empty(t, none.VersionDir("x", "1.0.0"))
+	assert.Nil(t, none.Assets())
+	assert.Equal(t, []string{"a", "b"}, none.around("agents", []string{"a", "b"}))
+
+	pol := t.TempDir()
+	o := OrgLayer{PolicyDir: pol}
+	assert.Equal(t, []string{filepath.Join(pol, "available", "skills"), "mine", filepath.Join(pol, "required", "skills")}, o.around("skills", []string{"mine"}))
+	assert.Equal(t, "default", o.LockOf(filepath.Join(pol, "available", "agents", "a.md")), "an available asset gives way")
+	assert.Equal(t, "locked", o.LockOf(filepath.Join(pol, "required", "agents", "a.md")))
+	assert.Nil(t, o.Assets(), "nothing fetched yet")
+	require.NoError(t, os.WriteFile(filepath.Join(pol, OrgItemsFile), []byte("not json"), 0o600))
+	assert.Nil(t, o.Assets(), "damaged: none")
+	require.NoError(t, os.WriteFile(filepath.Join(pol, OrgItemsFile), []byte(`[{"kind":"skill","name":"tone","version":"1.0.0","state":"available","on":true,"deps":[]}]`), 0o600))
+	assert.Equal(t, []OrgAsset{{Kind: "skill", Name: "tone", Version: "1.0.0", State: "available", On: true, Deps: []OrgDep{}}}, o.Assets())
+
+	cfg := DefaultConfig()
+	cfg.Org = o
+	paths := cfg.AgentSearchPaths(t.TempDir())
+	assert.Equal(t, filepath.Join(pol, "available", "agents"), paths[0])
+	assert.Equal(t, filepath.Join(pol, "required", "agents"), paths[len(paths)-1])
+}

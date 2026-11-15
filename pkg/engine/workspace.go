@@ -147,11 +147,14 @@ type Workspace struct {
 	guards   guarding   // each turn's guardrails (spec_041_gates)
 	agents   *agents.Registry
 	skills   *skills.Provider
-	tools    *tools.Registry
-	engine   *runtime.Engine
-	storage  *session.Storage
-	audit    *audit.Logger
-	memory   memory.Loaded
+	// orgVersions are the organization's agents' own skill versions
+	// (spec_053 EN-82).
+	orgVersions orgVersions
+	tools       *tools.Registry
+	engine      *runtime.Engine
+	storage     *session.Storage
+	audit       *audit.Logger
+	memory      memory.Loaded
 	// memoryStamp is what the instruction files and rules held when last
 	// loaded (memory.Stamp); memoryMu guards reloading them.
 	memoryStamp string
@@ -313,6 +316,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.agents.Hide(func(from, name string) bool {
 		return filepath.Clean(from) == userAgents && agentScope(cfg).Off(dir)[name]
 	})
+	// The organization's required agents and skills: nothing of their
+	// names replaces them (spec_053 EN-81).
+	if d := cfg.Org.ItemDir(config.OrgRequired, "agents"); d != "" {
+		w.agents.Lock(d)
+	}
 	if err := w.agents.LoadExternalAgents(cfg.AgentSearchPaths(dir)...); err != nil {
 		o.Warn(err.Error())
 	}
@@ -334,6 +342,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.agents.SwitchOff(off)
 		w.skills.SwitchOff(off)
 	}
+	w.skills.Lock(cfg.Org.ItemDir(config.OrgRequired, "skills"))
+	w.skills.SetVersions(w.skillVersions)
 	if cfg.Skills.Enabled {
 		if err := w.skills.DiscoverExternal(cfg.SkillSearchPaths(dir)); err != nil {
 			o.Warn(err.Error())

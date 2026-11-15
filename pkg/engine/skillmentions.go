@@ -37,7 +37,7 @@ func (w *Workspace) skillMentions(text, agent string) []*skills.Skill {
 			continue
 		}
 		seen[name] = true
-		if s, ok := w.skills.Get(name); ok && s.OfferedTo(agent) {
+		if s, ok := w.skills.GetFor(agent, name); ok && s.OfferedTo(agent) {
 			out = append(out, s)
 		}
 	}

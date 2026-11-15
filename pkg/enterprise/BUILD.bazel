@@ -33,6 +33,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/enterprise",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/agentpkg",
         "//pkg/config",
         "//pkg/i18n",
         "//pkg/secrets",
@@ -52,6 +53,7 @@ go_test(
     ],
     embed = [":enterprise"],
     deps = [
+        "//pkg/agentpkg",
         "//pkg/config",
         "//pkg/enterprise/enterprisetest",
         "//pkg/i18n",

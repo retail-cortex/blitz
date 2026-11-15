@@ -220,15 +220,25 @@ func (s *Settings) OrgUsage(ctx context.Context) (OrgUsage, error) {
 	return res.Msg, nil
 }
 
-// OrgItems are the organization's rules and guardrails the person works
-// under, of one kind or both, with who decided each
-// (ConfigService.ListOrgItems).
+// OrgItems are the organization's assets the person is offered (its
+// agents, skills, workflows, rules and guardrails; EN-80), of one kind or
+// every one, with who decided each (ConfigService.ListOrgItems).
 func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgItemsResponse, error) {
 	res, err := s.c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: dir, Kind: kind}))
 	if err != nil {
 		return nil, fromAPI(err)
 	}
 	return res.Msg, nil
+}
+
+// SetOrgItem switches one of the organization's available assets on or
+// off for the person (ConfigService.SetOrgItem, spec_053 EN-83).
+func (s *Settings) SetOrgItem(ctx context.Context, kind, name string, on bool) (*pb.OrgItem, error) {
+	res, err := s.c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: kind, Name: name, On: on}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Item, nil
 }
 
 // RefreshOrganization fetches the organization's catalog and the

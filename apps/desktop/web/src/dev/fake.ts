@@ -977,9 +977,13 @@ const fakeWorkers: FakeWorker[] = [
 // The organization's rules and guardrails the person's policy applies
 // (EN-34, EN-39).
 const fakeOrgItems = [
-  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy (locked)" },
-  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy for Data" },
-  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy an admin set for you" },
+  { kind: "agent", name: "reviewer", path: "", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy", version: "2.1.0", state: "required", on: true, description: "Reviews pull requests", locks: ["skill sql-review 2.0.0"] },
+  { kind: "agent", name: "analyst", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the policy for Data", version: "1.0.3", state: "available", on: false, description: "Answers questions from the warehouse", locks: [] },
+  { kind: "skill", name: "sql-review", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the policy for Data", version: "2.0.0", state: "available", on: true, description: "Reviews SQL for safety and cost", locks: [] },
+  { kind: "workflow", name: "release-notes", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the organization's policy", version: "1.2.0", state: "available", on: false, description: "Drafts release notes from merged PRs", locks: [] },
+  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy (locked)", version: "1.0.0", state: "required", on: true, description: "", locks: [] },
+  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy for Data", version: "1.1.0", state: "required", on: true, description: "", locks: [] },
+  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy an admin set for you", version: "1.0.0", state: "required", on: true, description: "", locks: [] },
 ];
 const fakeNotices = { email: true, webhook: "", everyRun: false, emailAvailable: true };
 // The organization's workspaces the person has a role in.
@@ -3182,6 +3186,12 @@ export function installFake() {
           return { notices: fakeNotices };
         },
         // The organization's rules and guardrails in Studio's lists (EN-34, EN-39): ?org&signedin.
+        setOrgItem: ({ kind, name, on }) => {
+          const it = fakeOrgItems.find((i) => i.kind === kind && i.name === name);
+          if (!it || it.state !== "available") throw new Error("Your organization requires it: it can't be switched off.");
+          it.on = on;
+          return { item: it };
+        },
         listOrgItems: ({ kind }) => ({
           version: 7,
           items: fakeOrg.signedIn ? fakeOrgItems.filter((i) => !kind || i.kind === kind) : [],

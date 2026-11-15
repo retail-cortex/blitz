@@ -251,6 +251,50 @@ func TestProviderNoticesEditedSkills(t *testing.T) {
 	assert.Equal(t, "thirds", s.Description)
 }
 
+// An organization's locked skill wins over a skill of its name from any
+// other folder, searched before it (the project's) or after it (a
+// plugin's), and the clash is reported; a search again keeps it so
+// (spec_053 EN-31, N26 engine-sub-2#1).
+func TestLockedSkillWins(t *testing.T) {
+	skill := func(desc string) string { return "---\nname: deploy\ndescription: " + desc + "\n---\nDo it.\n" }
+	tests := []struct {
+		name   string
+		before bool // the other folder is searched before the locked one
+	}{
+		{"project before the locked folder", true},
+		{"plugin after the locked folder", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			locked, other := filepath.Join(root, "locked"), filepath.Join(root, "other")
+			writeSkill(t, locked, "deploy", skill("the organization's"), nil)
+			writeSkill(t, other, "deploy", skill("someone else's"), nil)
+			p, err := NewProvider()
+			require.NoError(t, err)
+			p.Lock(locked, "")
+			first, second := []string{locked}, []string{other}
+			if tc.before {
+				first, second = []string{other, locked}, nil
+			}
+			err = p.DiscoverExternal(first)
+			if len(second) > 0 {
+				require.NoError(t, err)
+				err = p.DiscoverExternal(second)
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "locked by your organization")
+			got, ok := p.Get("deploy")
+			require.True(t, ok)
+			assert.Equal(t, "the organization's", got.Description)
+
+			require.Error(t, p.Reload(), "a search again reports it again")
+			got, _ = p.Get("deploy")
+			assert.Equal(t, "the organization's", got.Description)
+		})
+	}
+}
+
 // Discovery skips the folders the stamp skips: a SKILL.md an npm package
 // ships in node_modules isn't a skill (N26 engine-sub-2#4).
 func TestDiscoverySkipsHeavyFolders(t *testing.T) {
@@ -301,4 +345,42 @@ func TestBrokenBuiltinFails(t *testing.T) {
 	require.Error(t, err)
 	require.NoError(t, p.loadBuiltins(fstest.MapFS{"ok/SKILL.md": {Data: []byte("---\nname: ok\ndescription: d\n---\n")}}))
 	assert.True(t, p.builtin["ok"])
+}
+
+// spec_053 EN-82: an agent's own version of a skill, else the provider's;
+// a version folder that doesn't hold the skill falls back, once.
+func TestProviderVersions(t *testing.T) {
+	root := t.TempDir()
+	write := func(dir, name, desc string) string {
+		d := filepath.Join(root, dir)
+		require.NoError(t, os.MkdirAll(d, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(d, "SKILL.md"), []byte("---\nname: "+name+"\ndescription: "+desc+"\n---\n"+desc), 0o644))
+		return d
+	}
+	write("skills/tone", "tone", "current")
+	old := write("versions/tone@1.0.0", "tone", "old")
+	wrong := write("versions/other@1.0.0", "other", "not tone")
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{filepath.Join(root, "skills")}))
+	calls := 0
+	p.SetVersions(func(agent string) map[string]string {
+		calls++
+		return map[string]map[string]string{"a": {"tone": old}, "b": {"tone": wrong}}[agent]
+	})
+	s, ok := p.GetFor("a", "tone")
+	require.True(t, ok)
+	assert.Equal(t, "old", s.Description)
+	s, _ = p.GetFor("b", "tone")
+	assert.Equal(t, "current", s.Description, "a folder that isn't the skill's: the provider's")
+	s, _ = p.GetFor("b", "tone")
+	assert.Equal(t, "current", s.Description, "and remembered")
+	s, _ = p.GetFor("", "tone")
+	assert.Equal(t, "current", s.Description)
+	for _, s := range p.ListFor("a") {
+		if s.Name == "tone" {
+			assert.Equal(t, "old", s.Description)
+		}
+	}
+	assert.Positive(t, calls)
 }

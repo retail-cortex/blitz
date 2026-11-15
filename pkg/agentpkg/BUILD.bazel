@@ -18,6 +18,7 @@ go_library(
     name = "agentpkg",
     srcs = [
         "dep.go",
+        "digest.go",
         "version.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/agentpkg",

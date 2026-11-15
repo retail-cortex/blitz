@@ -551,6 +551,74 @@ admin console. --kind rule or guardrail lists those alone.`,
 	return cmd
 }
 
+// newEnterpriseItemsCommand is blitz enterprise items: the organization's
+// agents, skills, workflows, rules and guardrails offered to the person,
+// required or available, and switching an available one on or off
+// (spec_053 EN-80, EN-83).
+func newEnterpriseItemsCommand() *cobra.Command {
+	var kind string
+	cmd := &cobra.Command{
+		Use:   "items",
+		Short: "Your organization's agents, skills, workflows, rules and guardrails: what it requires, and what you can switch on",
+		Long: `Lists what your organization offers you from its library: each agent,
+skill, workflow, rule and guardrail, its version, and whether it's required
+(always on) or available (yours to switch on), and whether you have it.
+"enable" and "disable" switch an available one; your choice follows you to
+every computer. --kind agent, skill, workflow, rule or guardrail lists those
+alone.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := s.OrgItems(cmd.Context(), "", kind)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(res.Items) == 0 {
+				fmt.Fprintln(out, i18n.T("org.items_none"))
+				return nil
+			}
+			for _, it := range res.Items {
+				state := i18n.T("org.item_required")
+				if it.State != "required" {
+					state = i18n.T(map[bool]string{true: "org.item_on", false: "org.item_off"}[it.On])
+				}
+				fmt.Fprintln(out, i18n.T("org.item_line", "kind", it.Kind, "name", it.Name, "version", it.Version, "state", state, "description", it.Description))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&kind, "kind", "", "agent, skill, workflow, rule or guardrail")
+	for _, on := range []bool{true, false} {
+		use := map[bool]string{true: "enable", false: "disable"}[on]
+		cmd.AddCommand(&cobra.Command{
+			Use:   use + " <kind>/<name>",
+			Short: map[bool]string{true: "Switch on one of your organization's available items", false: "Switch off one of your organization's available items"}[on],
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				kind, name, found := strings.Cut(args[0], "/")
+				if !found || kind == "" || name == "" {
+					return fmt.Errorf("%s", i18n.T("org.item_arg"))
+				}
+				s, err := orgSettings(cmd)
+				if err != nil {
+					return err
+				}
+				it, err := s.SetOrgItem(cmd.Context(), kind, name, on)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T(map[bool]string{true: "org.item_enabled", false: "org.item_disabled"}[on], "kind", it.Kind, "name", it.Name, "version", it.Version))
+				return nil
+			},
+		})
+	}
+	return cmd
+}
+
 // newEnterpriseRefreshCommand is blitz enterprise refresh: the
 // organization's catalog and the person's policy fetched now (EN-38a).
 func newEnterpriseRefreshCommand() *cobra.Command {

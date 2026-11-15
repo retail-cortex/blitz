@@ -83,6 +83,7 @@ import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
 import { entryOf, sectionShown, shownEntries, shownTabs, tabOf, type EntryId, type SectionId } from "./simpleMode";
 import { EvalsPane } from "./studio/EvalsPane";
+import { OrgItems } from "./studio/OrgItems";
 import { useHomeWorkspace } from "./homeWorkspace";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "@blitz/webui";
@@ -226,15 +227,23 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
               </div>
             )}
             {section === "agents" && (
-              <UserAgents
-                onEvals={(agent) => {
-                  setEvalsFor(agent);
-                  pick("evals");
-                }}
-              />
+              <>
+                <UserAgents
+                  onEvals={(agent) => {
+                    setEvalsFor(agent);
+                    pick("evals");
+                  }}
+                />
+                <OrgItems kind="agent" />
+              </>
             )}
             {section === "evals" && <GlobalEvals onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
-            {section === "skills" && <SkillSettings />}
+            {section === "skills" && (
+              <>
+                <SkillSettings />
+                <OrgItems kind="skill" />
+              </>
+            )}
             {section === "workers" && <WorkersSettings onLeave={onClose} worker={scope} />}
             {section === "browser" && <BrowserSettings />}
             {section === "personality" && <PersonalitySettings voiceOn={voiceOn} />}

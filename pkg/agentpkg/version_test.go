@@ -125,3 +125,12 @@ func TestDep(t *testing.T) {
 	assert.Error(t, Dep{Name: "ok", Version: "^1"}.Check())
 	assert.Error(t, yaml.Unmarshal([]byte("[{name: [x]}]"), &deps))
 }
+
+// PK-05: a version's digest is its files', in path order.
+func TestDigest(t *testing.T) {
+	a := Digest(map[string]string{"skills/x/SKILL.md": "x", "skills/x/a.sh": "a"})
+	assert.Len(t, a, 64)
+	assert.Equal(t, a, Digest(map[string]string{"skills/x/a.sh": "a", "skills/x/SKILL.md": "x"}))
+	assert.NotEqual(t, a, Digest(map[string]string{"skills/x/SKILL.md": "x", "skills/x/a.sh": "b"}))
+	assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Digest(nil), "nothing's digest")
+}

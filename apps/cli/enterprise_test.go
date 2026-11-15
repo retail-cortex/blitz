@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -574,7 +575,7 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	assert.Contains(t, out, "connectors.own = true  (your group (Data))")
 	assert.Contains(t, out, "mcp.own = false  (your organization, locked)")
 	assert.Contains(t, out, "rule/style (the policy an admin set for you decides it)")
-	assert.Contains(t, out, "guardrail/no-pii, for eng", "a service's catalog item the policy doesn't explain")
+	assert.NotContains(t, out, "guardrail/no-pii", "the retired catalog's items aren't the policy's")
 	out, err = runCLI(t, "enterprise", "refresh")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ Fetched: nothing changed.")
@@ -588,7 +589,7 @@ func TestEnterprisePolicyCommand(t *testing.T) {
 	out, err = runCLI(t, "enterprise", "catalog", "-d", ws, "--kind", "rule")
 	require.NoError(t, err, "catalog, as before")
 	assert.NotContains(t, out, "connectors.own", "the rules alone")
-	assert.Contains(t, out, "rule/style")
+	assert.Contains(t, out, "applies no rules or guardrails", "the policy's rules gone, the retired catalog's don't stand in")
 
 	// Connectors that query as the person (EN-76).
 	out, err = runCLI(t, "enterprise", "consent")
@@ -686,4 +687,50 @@ func TestPrintOrgSync(t *testing.T) {
 			assert.Equal(t, tt.want, b.String())
 		})
 	}
+}
+
+// EN-80, EN-83: blitz enterprise items lists what the organization's
+// library offers, and switches an available one on and off; a required one
+// stays on.
+func TestEnterpriseItemsCommand(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	agentFiles := map[string]string{"agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews\n---\nReview."}
+	flow := map[string]string{"workflows/notes.flow.yaml": "nodes: [{id: a, type: read_file, path: x.md}]\n"}
+	org.Policy = map[string]any{
+		"schema": 2, "policy": map[string]any{"refresh": "1h"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{},
+		"items": []map[string]any{
+			{"kind": "agent", "name": "reviewer", "version": "1.2.0", "sha256": agentpkg.Digest(agentFiles), "state": "required", "on": true, "description": "Reviews", "files": agentFiles, "deps": []any{}},
+			{"kind": "workflow", "name": "notes", "version": "1.0.0", "sha256": agentpkg.Digest(flow), "state": "available", "on": false, "description": "Takes notes", "files": flow, "deps": []any{}},
+		},
+	}
+	_, err := runCLI(t, "enterprise", "items")
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+	var out string
+	require.Eventually(t, func() bool {
+		out, err = runCLI(t, "enterprise", "items")
+		return err == nil && strings.Contains(out, "agent/reviewer")
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Contains(t, out, "agent/reviewer 1.2.0  required  Reviews")
+	assert.Contains(t, out, "workflow/notes 1.0.0  available, off  Takes notes")
+	out, err = runCLI(t, "enterprise", "items", "enable", "workflow/notes")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ On: workflow notes 1.0.0")
+	_, err = runCLI(t, "enterprise", "items", "disable", "agent/reviewer")
+	assert.ErrorContains(t, err, "requires it")
+	_, err = runCLI(t, "enterprise", "items", "enable", "notes")
+	assert.ErrorContains(t, err, "kind/name")
+	out, err = runCLI(t, "enterprise", "items", "disable", "workflow/notes")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ Off: workflow notes")
+	out, err = runCLI(t, "enterprise", "items", "--kind", "agent")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "workflow/notes")
 }
