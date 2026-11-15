@@ -234,3 +234,30 @@ func TestOrgConnectorsBadAddress(t *testing.T) {
 	_, err = w.orgTables(ctx, "shop")
 	assert.ErrorContains(t, err, "[enterprise] url")
 }
+
+// A policy fetched after the workspace opened reaches it with the next
+// settings reload: its shared connectors are listed, and the
+// organization's server joins the MCP servers (EN-71, EN-72).
+func TestOrgConnectorsAfterOpening(t *testing.T) {
+	secrets.SetDefault(&secrets.Memory{})
+	org := signedInOrg(t)
+	w := openTest(t)
+	ctx := context.Background()
+	w.cfg.Enterprise.URL = org.URL
+	conns, err := w.DataConnections(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, conns, "the policy allows none yet")
+
+	cfg := w.settings()
+	cfg.Org = orgLayer()
+	require.NoError(t, w.ReloadMCP(ctx, cfg))
+	conns, err = w.DataConnections(ctx)
+	require.NoError(t, err)
+	require.Len(t, conns, 1)
+	assert.True(t, conns[0].Org)
+	names := []string{}
+	for _, s := range w.liveMCP() {
+		names = append(names, s.Name)
+	}
+	assert.Contains(t, names, orgServer)
+}
