@@ -200,13 +200,17 @@ type Node struct {
 	// Query, Headers, Body (text) or JSON (a value: string values take
 	// templates) and Auth the request's. An A2A call's message is its
 	// instructions (its input when none); Headers go with its requests.
-	URL     string `yaml:"url,omitempty"`
-	Method  string `yaml:"method,omitempty"`
-	Query   []Pair `yaml:"query,omitempty"`
-	Headers []Pair `yaml:"headers,omitempty"`
-	Body    string `yaml:"body,omitempty"`
-	JSON    any    `yaml:"json,omitempty"`
-	Auth    *Auth  `yaml:"auth,omitempty"`
+	URL string `yaml:"url,omitempty"`
+	// Connector is an organization's API connector an API step calls
+	// (WF-31): its URL is then a path under the connector, the call made
+	// through the organization's service, with its token, as the person.
+	Connector string `yaml:"connector,omitempty"`
+	Method    string `yaml:"method,omitempty"`
+	Query     []Pair `yaml:"query,omitempty"`
+	Headers   []Pair `yaml:"headers,omitempty"`
+	Body      string `yaml:"body,omitempty"`
+	JSON      any    `yaml:"json,omitempty"`
+	Auth      *Auth  `yaml:"auth,omitempty"`
 	// Connection is the connection a data step queries (one of the
 	// workspace's databases); SavedQuery one of its queries, its
 	// parameters Arguments (by name), or SQL a statement, its parameters
@@ -286,11 +290,29 @@ type Flow struct {
 	Description string `yaml:"description,omitempty"`
 	// Mode is the permission mode its steps run in (WF-21): auto when
 	// empty, and never looser than the workspace's.
-	Mode    string `yaml:"mode,omitempty"`
-	Nodes   []Node `yaml:"nodes"`
-	Edges   []Edge `yaml:"edges,omitempty"`
-	Problem string `yaml:"-"`
+	Mode string `yaml:"mode,omitempty"`
+	// Triggers are what runs it besides /name (WF-30): manual (the
+	// default), schedule (a job's), git.pre_commit and git.pre_push (its
+	// workspace's git hooks: a commit or push it fails is stopped).
+	Triggers []string `yaml:"triggers,omitempty"`
+	Nodes    []Node   `yaml:"nodes"`
+	Edges    []Edge   `yaml:"edges,omitempty"`
+	Problem  string   `yaml:"-"`
 }
+
+// The triggers (WF-30).
+const (
+	TriggerManual    = "manual"
+	TriggerSchedule  = "schedule"
+	TriggerPreCommit = "git.pre_commit"
+	TriggerPrePush   = "git.pre_push"
+)
+
+// Triggers are every trigger.
+var Triggers = []string{TriggerManual, TriggerSchedule, TriggerPreCommit, TriggerPrePush}
+
+// RunsOn reports whether f runs on trigger.
+func (f Flow) RunsOn(trigger string) bool { return slices.Contains(f.Triggers, trigger) }
 
 // Modes are the permission modes a workflow can run in, auto first (the
 // default). Plan isn't one: a workflow carries its steps out.
@@ -380,6 +402,11 @@ func check(f Flow) []problem {
 	if m, err := api.ParsePermissionMode(f.Mode); err != nil || !slices.Contains(Modes, m) {
 		add(fmt.Sprintf("mode %q: one of auto, accept-edits, default, dont-ask or bypass", f.Mode))
 	}
+	for _, tr := range f.Triggers {
+		if !slices.Contains(Triggers, tr) {
+			add(fmt.Sprintf("trigger %q: %s", tr, strings.Join(Triggers, ", ")))
+		}
+	}
 	ids := map[string]bool{}
 	for i, n := range f.Nodes {
 		where := fmt.Sprintf("step %d", i+1)
@@ -412,7 +439,7 @@ func check(f Flow) []problem {
 			draft(where + ": say how long it waits or until when")
 		case n.Type == MCPCall && (n.Server == "" || n.Tool == ""):
 			draft(where + ": name the MCP server and its tool")
-		case (n.Type == APICall || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
+		case (n.Type == APICall && n.Connector == "" || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
 			draft(where + ": give the URL")
 		case n.Type == Script && (n.Skill == "" || n.ScriptName == ""):
 			draft(where + ": name the skill and its script")

@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "enterprise",
     srcs = [
+        "apis.go",
         "branding.go",
         "catalog.go",
         "connectors.go",
@@ -46,6 +47,7 @@ go_test(
     name = "enterprise_test",
     size = "small",
     srcs = [
+        "apis_test.go",
         "enterprise_test.go",
         "files_test.go",
         "jobs_test.go",

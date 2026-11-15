@@ -280,6 +280,11 @@ type Service struct {
 	// SharedMCP serves each shared MCP connector's requests, by name,
 	// for a signed-in person (EN-75).
 	SharedMCP map[string]http.Handler
+	// SharedAPIs serve each API connector's calls, by name, each request
+	// with its path the one under the connector (EN-91); Receipts are the
+	// receipts the person's git hooks' workflows sent (EN-92).
+	SharedAPIs map[string]http.Handler
+	Receipts   []map[string]any
 	// ConsentURL is where the person consents to connectors querying as
 	// them (404, as from a service that can't, when empty); Consented
 	// whether they have (EN-76). DELETE clears it.
@@ -925,6 +930,35 @@ func NewService(t testing.TB, issuer string) *Service {
 			return
 		}
 		h.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/api/v1/apis/{name}/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		h := s.SharedAPIs[r.PathValue("name")]
+		s.Mu.Unlock()
+		if h == nil {
+			refuse(w, http.StatusNotFound, "not_found", "There's no such connector.")
+			return
+		}
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/" + r.PathValue("path")
+		h.ServeHTTP(w, r2)
+	})
+	mux.HandleFunc("POST /api/v1/me/receipts", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var rec map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+			refuse(w, http.StatusBadRequest, "invalid", err.Error())
+			return
+		}
+		s.Mu.Lock()
+		s.Receipts = append(s.Receipts, rec)
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /api/v1/databases/{name}/schema", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

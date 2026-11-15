@@ -125,3 +125,30 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	require.NoError(t, unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: dir, Name: "brief"}))
 	assert.Equal(t, "WORKFLOW_NOT_FOUND", reason(t, unary(w.DeleteWorkflow, &pb.DeleteWorkflowRequest{Workspace: dir, Name: "brief"})))
 }
+
+// WF-30, WF-31, WF-32: a workflow's triggers and an API step's
+// organization connector survive a save; RunGitHook runs the workflows
+// on a hook (here one with no organization: it fails), and refuses a hook
+// none can run on.
+func TestRunGitHookOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	w := c.workspaces
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	flow := &pb.WorkflowFile{Name: "review", Triggers: []string{"git.pre_commit"}, Nodes: []*pb.FlowNode{{Id: "check", Type: "api_call", Connector: "review", Method: "POST", Url: "/check"}}}
+	saved, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: flow}))
+	require.NoError(t, err)
+	require.Empty(t, saved.Msg.Problems)
+	assert.Equal(t, []string{"git.pre_commit"}, saved.Msg.Workflow.Triggers)
+	assert.Equal(t, "review", saved.Msg.Workflow.Nodes[0].Connector)
+
+	res, err := w.RunGitHook(ctx, connect.NewRequest(&pb.RunGitHookRequest{Workspace: dir, Event: "pre-commit", Input: "+ x"}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Results, 1)
+	got := res.Msg.Results[0]
+	assert.Equal(t, "review", got.Workflow)
+	assert.False(t, got.Passed)
+	assert.Contains(t, got.Error, "isn't connected to an organization")
+
+	assert.Equal(t, "UNKNOWN_HOOK", reason(t, unary(w.RunGitHook, &pb.RunGitHookRequest{Workspace: dir, Event: "post-merge"})))
+}

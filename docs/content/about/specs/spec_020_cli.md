@@ -45,6 +45,7 @@ weight: 20
 | `blitz security [fix-apparmor] \| scan-secrets [--staged] [file…] \| install-hook [dir]` | The OS sandbox's state, and the secrets checks |
 | `blitz search <terms> [--in …] [--json] [--status] [--reindex]` | Workspace search |
 | `blitz eval <name> \| --skill <skill>` | Run an eval |
+| `blitz hook run <pre-commit\|pre-push>` | Run the workflows on a git hook on the changes; exit 1 when one fails (spec_043 WF-32) |
 | `blitz config set-key \| keys \| secure-key \| remove-key <provider>`, `blitz config set-auth <provider> <api_key\|adc\|oauth>`, `blitz config permissions [allow\|ask\|deny\|remove <rule>] \| check <rule> [sample] \| defaults on\|off\|inherit` | API keys, how a provider signs in, and the saved permission rules (`--workspace`: the workspace's own) |
 | `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
 

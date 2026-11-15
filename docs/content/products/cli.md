@@ -99,6 +99,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([providers](../guide/providers.md)) |
 | `blitz eval <name>` | [Runs an eval](../guide/evals.md): each case on its agents, scored; exits 1 when it fails, for CI (`--case`, `--json`) |
+| `blitz hook run <pre-commit\|pre-push>` | [Runs the workflows on a git hook](../guide/workflows.md#running-before-a-commit-or-push), on the changes; exits 1 when one fails, which stops the commit or push |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
 | `blitz data list`, `blitz data query <connection> ["<sql>"]` | [The workspace's databases](../guide/databases.md#in-the-terminal): lists them and their saved queries; runs SQL or a saved query (`--query`) read-only and prints the table (`--params`, `--max-rows`, `--json`, `--csv`) |
 | `blitz jobs …` | Lists, enables, runs, undoes and shows the history of [jobs](../guide/workers.md) |

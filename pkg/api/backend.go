@@ -176,6 +176,9 @@ type Backend interface {
 	// RunEval runs the workspace's eval name (spec_042_evals) and records
 	// the run.
 	RunEval(ctx context.Context, name string, o EvalOptions) (EvalRun, error)
+	// RunGitHook runs the workflows that run on the git hook event
+	// (pre-commit, pre-push) on input, the changes (spec_043 WF-32).
+	RunGitHook(ctx context.Context, event, input string) ([]HookResult, error)
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)

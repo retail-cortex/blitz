@@ -58,6 +58,16 @@ A **Call an MCP tool** step names one of the workspace's [MCP servers](mcp.md), 
 
 Calls reach the network as `web_fetch` does: only when the web is on, public addresses only (unless `web.allow_private`), and you're asked before a new host, unless it's in `web.allow_domains` or a permission rule allows it.
 
+Connected to an [organization](organization.md), a step can call one of **its API connectors** instead: choose it as the step's **Organization connector** (`connector:` in the file), and the URL becomes a path under it. The call goes through your organization's service as you, which adds the connector's token (you never see it) and logs the call; it needs no approval, and the web setting doesn't apply.
+
+```yaml
+- id: review
+  type: api_call
+  connector: code-review
+  method: POST
+  url: /check
+```
+
 ## Querying a database
 
 A **Data** step runs a query on one of the workspace's database connections ([Studio › Resources › Connectors](databases.md)): one of the connection's saved queries, or SQL written in the step. **Describe it** and **Draft the SQL** write the SQL from the connection's schema for you to review; the step then runs that SQL every time, not a new draft. Values that change go into the **parameters** (`?`, `$1` or `@name`, as the database takes them), which take templates such as `{{ input }}`. The SQL itself never takes templates, so another step's answer can't change the query.
@@ -136,6 +146,17 @@ The workspace's mode is the limit. If you restrict a workspace to *Ask*, its wor
 
 A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [job](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. A scheduled run may do what the workflow's steps do, as they are when it runs, without asking: write the files its save steps save (a path with `{{…}}` in it: its folder, never the whole workspace, your home folder or anything outside the workspace), reach the hosts its calls call, use its MCP steps' tools, run its Data steps' writes and browse for its browser steps; the schedule lists them. Anything else it may do, and its limits, are the job's, in **Studio › Jobs**.
 
+## Running before a commit or push
+
+A workflow's **Runs on** (its settings) can add **before each commit** (`git.pre_commit`) and **before each push** (`git.pre_push`). Then `blitz hook run pre-commit` (or `pre-push`), run from the repository's git hook, runs each such workflow on the changes (the staged diff, or the commits being pushed), unattended, and prints a ✓ or ✗ for each with why; one that fails stops the commit or push. Add it to your hook yourself:
+
+```sh
+#!/bin/sh
+exec blitz hook run pre-commit
+```
+
+Your organization's required workflows that run on a hook install it themselves in each repository you open: a hook you had runs first (it's kept beside it as `pre-commit.local`). A repository that keeps its hooks in its own files (`core.hooksPath`) is left alone, and Blitz tells you to add the line above. What each run found goes to your organization too, so the team can see that every commit was reviewed.
+
 ## The file
 
 A workflow is `.agents/workflows/<name>.flow.yaml`, versioned with the project, beside the [Markdown commands](extending.md#custom-commands) in the same folder (a workflow wins a name clash):
@@ -143,6 +164,7 @@ A workflow is `.agents/workflows/<name>.flow.yaml`, versioned with the project, 
 ```yaml
 description: A one-page brief from the notes and the web
 mode: accept-edits   # leave it out for auto
+triggers: [schedule] # besides /name: schedule, git.pre_commit, git.pre_push
 nodes:
   - {id: notes, type: read_file, title: Read the notes, path: notes/topic.md, position: {x: 0, y: 0}}
   - {id: look-up, type: browser, title: Look it up, instructions: Find the latest figures., position: {x: 0, y: 160}}

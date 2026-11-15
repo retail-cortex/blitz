@@ -194,6 +194,7 @@ func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
 	// since the workspace opened says which shared connectors the
 	// organization's server offers (spec_053 EN-71).
 	w.setSettings(func(c *config.Config) { c.Enterprise, c.Org = cfg.Enterprise, cfg.Org })
+	w.installOrgHooks() // its required workflows' git hooks (EN-90)
 	w.shared.Lock()
 	w.shared.at = time.Time{} // asked again
 	w.shared.Unlock()

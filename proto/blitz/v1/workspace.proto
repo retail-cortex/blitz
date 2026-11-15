@@ -312,6 +312,10 @@ service WorkspaceService {
   // Stops a running workflow run, wherever it was started (a chat, the
   // background, a worker); RUN_NOT_FOUND when it isn't running.
   rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
+  // Runs the workflows that run on a git hook (spec_043 WF-32): each on
+  // the changes, unattended; their results, each sent to the organization
+  // as a receipt. UNKNOWN_HOOK for an event no workflow runs on.
+  rpc RunGitHook(RunGitHookRequest) returns (RunGitHookResponse);
 
   // The workspace dashboard (spec_044_health): the facts about its items
   // and runs, each item's latest verdict, and the scores.
@@ -3767,6 +3771,10 @@ message FlowNode {
   bool allow_writes = 44;
   // The most a billed query (BigQuery) may cost, in dollars (0: $1).
   double max_cost = 45;
+  // An API call to one of the organization's API connectors (WF-31): its
+  // url is then a path under it, called through the organization's
+  // service as the person.
+  string connector = 46;
 }
 
 // A paused workflow run's task: a human task's form waiting for an
@@ -3912,6 +3920,9 @@ message WorkflowFile {
   // (flows.SchedulePermissions, WF-20): its scheduled runs get these as
   // the workflow is when they run. Read only.
   repeated string schedule_permissions = 8;
+  // What runs it besides /name (WF-30): manual, schedule, git.pre_commit,
+  // git.pre_push.
+  repeated string triggers = 9;
 }
 
 // Request message for WorkspaceService.ListWorkflows.
@@ -4081,6 +4092,32 @@ message StopWorkflowRunRequest {
 
 // Response message for WorkspaceService.StopWorkflowRun.
 message StopWorkflowRunResponse {}
+
+// Request message for WorkspaceService.RunGitHook.
+message RunGitHookRequest {
+  string workspace = 1;
+  // The git hook: pre-commit or pre-push.
+  string event = 2;
+  // The changes: the staged diff, or what's pushed.
+  string input = 3;
+}
+
+// What one workflow a git hook ran found (spec_043 WF-32).
+message HookResult {
+  string workflow = 1;
+  // The organization's version of it ("" for the workspace's own).
+  string version = 2;
+  bool passed = 3;
+  // Its last message.
+  string output = 4;
+  // Why it failed.
+  string error = 5;
+}
+
+// Response message for WorkspaceService.RunGitHook.
+message RunGitHookResponse {
+  repeated HookResult results = 1;
+}
 
 // A workspace's dashboard (spec_044_health).
 message WorkspaceHealth {

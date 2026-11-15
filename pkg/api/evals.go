@@ -125,3 +125,17 @@ type EvalOptions struct {
 	OnStart  func(EvalRun)
 	OnResult func(EvalResult)
 }
+
+// ErrUnknownHook is a git hook no workflow can run on (spec_043 WF-32).
+var ErrUnknownHook = errors.New("no workflow runs on that git hook: pre-commit or pre-push")
+
+// HookResult is what a workflow a git hook ran found (spec_043 WF-32):
+// whether it passed, its last message, why it failed; Version is the
+// organization's version of it ("" for the workspace's own).
+type HookResult struct {
+	Workflow string `json:"workflow"`
+	Version  string `json:"version,omitempty"`
+	Passed   bool   `json:"passed"`
+	Output   string `json:"output,omitempty"`
+	Error    string `json:"error,omitempty"`
+}

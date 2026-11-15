@@ -63,6 +63,7 @@ var sentinels = map[string]error{
 	"WORKSPACE_BUSY":           api.ErrWorkspaceBusy,
 	"UNKNOWN_WORKER":           api.ErrUnknownWorker,
 	"EVAL_NOT_FOUND":           api.ErrUnknownEval,
+	"UNKNOWN_HOOK":             api.ErrUnknownHook,
 	"EVAL_NOT_RUNNABLE":        api.ErrEvalNotRunnable,
 	"WORKER_EXISTS":            api.ErrWorkerExists,
 	"SANDBOX_UNAVAILABLE":      api.ErrSandboxUnavailable,

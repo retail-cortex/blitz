@@ -535,6 +535,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.openSearch(ctx)
 	w.holdLocalAuto() // APR-14c: a local model doesn't review its own actions
 	opened = true
+	w.installOrgHooks() // its organization's required workflows' git hooks (EN-90)
 	return w, nil
 }
 
