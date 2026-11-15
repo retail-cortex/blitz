@@ -4925,6 +4925,7 @@
     "desktop.error.reason.SECRETS_FOUND": "Se encontraron secretos, así que no se envió.",
     "desktop.error.reason.SECRETS_UNCHECKED": "No se pudo comprobar si tenía secretos, así que no se envió.",
     "desktop.error.reason.REQUIRED": "Tu organización lo exige: no se puede desactivar.",
+    "desktop.error.reason.CATALOG_REMOVED": "El catálogo de tu organización está retirado: su biblioteca llega con tu política, y Compartir le ofrece lo tuyo.",
     "desktop.error.reason.UNKNOWN_HOOK": "Ningún flujo de trabajo se ejecuta en ese hook de git: pre-commit o pre-push.",
     "desktop.error.reason.SPEC_NOT_READY": "La especificación tiene errores o preguntas abiertas; apruébala de todos modos o corrígelos primero.",
     "desktop.error.reason.PICTURE_NOT_FOUND": "Esa imagen o sesión ya no está.",

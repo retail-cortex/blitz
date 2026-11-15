@@ -229,3 +229,30 @@ func submissionMsg(s enterprise.Submission) *pb.Submission {
 	}
 	return m
 }
+
+// errCatalogRemoved answers the retired organization catalog's calls
+// (spec_053 EN-97): kept in the API so an older client's call fails
+// plainly.
+func errCatalogRemoved() error {
+	return apiError(connect.CodeUnimplemented, "CATALOG_REMOVED", errors.New("your organization's catalog is retired: its library comes with your policy, and Share offers yours to it"))
+}
+
+// ListPublishable is the retired catalog's: CATALOG_REMOVED.
+func (h configService) ListPublishable(context.Context, req[pb.ListPublishableRequest]) (*connect.Response[pb.ListPublishableResponse], error) {
+	return nil, errCatalogRemoved()
+}
+
+// PublishToOrganization is the retired catalog's: CATALOG_REMOVED.
+func (h configService) PublishToOrganization(context.Context, req[pb.PublishToOrganizationRequest]) (*connect.Response[pb.PublishToOrganizationResponse], error) {
+	return nil, errCatalogRemoved()
+}
+
+// ListCatalogReviews is the retired catalog's: CATALOG_REMOVED.
+func (h configService) ListCatalogReviews(context.Context, req[pb.ListCatalogReviewsRequest]) (*connect.Response[pb.ListCatalogReviewsResponse], error) {
+	return nil, errCatalogRemoved()
+}
+
+// CopyOrgItem is the retired catalog's: CATALOG_REMOVED.
+func (h configService) CopyOrgItem(context.Context, req[pb.CopyOrgItemRequest]) (*connect.Response[pb.CopyOrgItemResponse], error) {
+	return nil, errCatalogRemoved()
+}

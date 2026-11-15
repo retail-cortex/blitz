@@ -313,6 +313,16 @@ service ConfigService {
   // person (EN-83), then fetches their policy again (FAILED_PRECONDITION
   // REQUIRED for a required one).
   rpc SetOrgItem(SetOrgItemRequest) returns (SetOrgItemResponse);
+  // Retired: the organization's catalog is gone (spec_053 EN-97);
+  // UNIMPLEMENTED CATALOG_REMOVED. Its library is shared with ShareOwnItem.
+  rpc ListPublishable(ListPublishableRequest) returns (ListPublishableResponse) {}
+  // Retired: as ListPublishable.
+  rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse) {}
+  // Retired: as ListPublishable.
+  rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse) {}
+  // Retired: as ListPublishable; the organization's items come with the
+  // person's policy (ListOrgItems).
+  rpc CopyOrgItem(CopyOrgItemRequest) returns (CopyOrgItemResponse) {}
   // Syncs the person's own agents, skills, workflows, rules and guardrails
   // (~/.blitz) with the organization's service now (EN-93): what it sent,
   // fetched, removed, the conflicts, and what it skipped and why.
@@ -2192,4 +2202,94 @@ message SetOrgNoticesResponse {
 message ProviderModelList {
   string provider = 1;
   repeated string models = 2;
+}
+
+// The retired organization catalog's publishing and copying (spec_053
+// EN-31, EN-36, EN-97), kept so older clients' calls fail plainly: the
+// service answers each with UNIMPLEMENTED CATALOG_REMOVED. Nothing sends
+// them.
+
+// An item in a workspace that can be published to the catalog.
+message PublishableItem {
+  // agent, skill, rule, guardrail, command or connector.
+  string kind = 1;
+  string name = 2;
+  // Its path in the catalog (and in the workspace's .agents folder).
+  string path = 3;
+  // What the catalog would refuse ("" none).
+  repeated string problems = 4;
+  // How it applies now: locked or default, and its groups.
+  string lock = 5;
+  repeated string groups = 6;
+}
+
+// Request message for ConfigService.ListPublishable.
+message ListPublishableRequest {
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListPublishable.
+message ListPublishableResponse {
+  repeated PublishableItem items = 1;
+}
+
+// An item to publish, and how it's to apply.
+message PublishItem {
+  string kind = 1;
+  string name = 2;
+  // locked or default ("" is default).
+  string lock = 3;
+  // Who it's for; everyone when none.
+  repeated string groups = 4;
+}
+
+// A change to the catalog, waiting for an Admin (its author too) or answered.
+message CatalogReview {
+  string id = 1;
+  string title = 2;
+  string by_email = 3;
+  repeated string paths = 4;
+  repeated string problems = 5;
+  // open, approved or rejected.
+  string state = 6;
+  string note = 7;
+  // The version it went out in, once approved (0 before).
+  int32 version = 8;
+  google.protobuf.Timestamp created = 9;
+}
+
+// Request message for ConfigService.PublishToOrganization.
+message PublishToOrganizationRequest {
+  string workspace = 1;
+  repeated PublishItem items = 2;
+  string title = 3;
+}
+
+// Response message for ConfigService.PublishToOrganization.
+message PublishToOrganizationResponse {
+  CatalogReview review = 1;
+}
+
+// Request message for ConfigService.ListCatalogReviews.
+message ListCatalogReviewsRequest {
+  // open, approved, rejected, or "" for all.
+  string state = 1;
+}
+
+// Response message for ConfigService.ListCatalogReviews.
+message ListCatalogReviewsResponse {
+  repeated CatalogReview reviews = 1;
+}
+
+// Request message for ConfigService.CopyOrgItem.
+message CopyOrgItemRequest {
+  string workspace = 1;
+  string kind = 2;
+  string name = 3;
+}
+
+// Response message for ConfigService.CopyOrgItem.
+message CopyOrgItemResponse {
+  // The files written, in the workspace.
+  repeated string paths = 1;
 }

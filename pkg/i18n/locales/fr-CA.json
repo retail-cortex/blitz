@@ -4925,6 +4925,7 @@
     "desktop.error.reason.SECRETS_FOUND": "Des secrets ont été trouvés, donc rien n'a été envoyé.",
     "desktop.error.reason.SECRETS_UNCHECKED": "Impossible d'y chercher des secrets, donc rien n'a été envoyé.",
     "desktop.error.reason.REQUIRED": "Votre organisation l'exige : il ne peut pas être désactivé.",
+    "desktop.error.reason.CATALOG_REMOVED": "Le catalogue de votre organisation est retiré : sa bibliothèque vient avec votre politique, et Partager lui offre les vôtres.",
     "desktop.error.reason.UNKNOWN_HOOK": "Aucun flux de travail ne s'exécute sur ce hook git : pre-commit ou pre-push.",
     "desktop.error.reason.SPEC_NOT_READY": "La spécification a des erreurs ou des questions ouvertes ; approuvez-la quand même, ou corrigez-les d'abord.",
     "desktop.error.reason.PICTURE_NOT_FOUND": "Cette image ou cette session n'est plus là.",

@@ -1773,3 +1773,32 @@ func TestOwnItems(t *testing.T) {
 	_, err = c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
 	assert.Error(t, err)
 }
+
+// EN-97: the retired catalog's calls, kept deprecated, fail plainly.
+func TestCatalogCallsRemoved(t *testing.T) {
+	c, _ := serveEvery(t, nil)
+	ctx := context.Background()
+	cfg := c.config
+	for name, call := range map[string]func() error{
+		"ListPublishable": func() error {
+			_, err := cfg.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{}))
+			return err
+		},
+		"PublishToOrganization": func() error {
+			_, err := cfg.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{}))
+			return err
+		},
+		"ListCatalogReviews": func() error {
+			_, err := cfg.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{}))
+			return err
+		},
+		"CopyOrgItem": func() error {
+			_, err := cfg.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{}))
+			return err
+		},
+	} {
+		err := call()
+		assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err), name)
+		assert.Equal(t, "CATALOG_REMOVED", reason(t, err), name)
+	}
+}

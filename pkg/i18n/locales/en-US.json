@@ -4925,6 +4925,7 @@
     "desktop.error.reason.SECRETS_FOUND": "Secrets were found, so it wasn't sent.",
     "desktop.error.reason.SECRETS_UNCHECKED": "It couldn't be checked for secrets, so it wasn't sent.",
     "desktop.error.reason.REQUIRED": "Your organization requires it: it can't be switched off.",
+    "desktop.error.reason.CATALOG_REMOVED": "Your organization's catalog is retired: its library comes with your policy, and Share offers yours to it.",
     "desktop.error.reason.UNKNOWN_HOOK": "No workflow runs on that git hook: pre-commit or pre-push.",
     "desktop.error.reason.SPEC_NOT_READY": "The spec has errors or open questions; approve it anyway, or fix them first.",
     "desktop.error.reason.PICTURE_NOT_FOUND": "That picture or session isn't there any more.",
