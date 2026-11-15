@@ -886,8 +886,12 @@ func TestCatalog(t *testing.T) {
 	assert.DirExists(t, filepath.Join(dir, "catalog"))
 
 	// A service that retired its catalog: the kept one goes, quietly; then
-	// nothing more to say.
+	// nothing more to say. A folder it can't be removed from says so.
 	s.CatalogRemoved = true
+	require.NoError(t, os.Chmod(dir, 0o500))
+	_, _, err = c.RefreshCatalog(ctx, dir)
+	assert.Error(t, err, "can't remove it")
+	require.NoError(t, os.Chmod(dir, 0o700))
 	kept, changed, err = c.RefreshCatalog(ctx, dir)
 	require.NoError(t, err)
 	assert.True(t, changed)

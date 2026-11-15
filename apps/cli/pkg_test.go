@@ -100,13 +100,13 @@ func TestPkgCommand(t *testing.T) {
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
 	org.RegistryToken = "blitzreg_ci"
-	org.Registry = map[string]enterprisetest.RegistryAsset{"skill/sql-review": {Version: "1.4.2", Description: "Reviews SQL", Files: map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: Reviews SQL\n---\nReview.\n"}}}
+	org.Registry = map[string]enterprisetest.RegistryAsset{"skill/sql-review": {Version: "1.4.2", Description: "Reviews SQL", Tags: []string{"sql"}, Lifecycle: "deprecated", Files: map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: Reviews SQL\n---\nReview.\n"}}}
 	t.Setenv("BLITZ_REGISTRY_TOKEN", "blitzreg_ci")
 	_, err = runCLI(t, "-d", ws, "pkg", "search")
 	assert.ErrorContains(t, err, "--registry")
 	out, err = runCLI(t, "-d", ws, "pkg", "search", "sql", "--registry", org.URL)
 	require.NoError(t, err)
-	assert.Contains(t, out, "skill/sql-review 1.4.2  Reviews SQL")
+	assert.Contains(t, out, "skill/sql-review 1.4.2  Reviews SQL  (deprecated) #sql")
 	out, err = runCLI(t, "-d", ws, "pkg", "search", "nothing-like-it", "--registry", org.URL)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Nothing in your organization's registry matches")

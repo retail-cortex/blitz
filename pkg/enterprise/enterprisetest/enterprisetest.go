@@ -319,6 +319,8 @@ type RegistryAsset struct {
 	Version     string
 	Description string
 	Files       map[string]string
+	Tags        []string
+	Lifecycle   string
 }
 
 // PersonalAsset is one of the person's own assets as the fake keeps it.
@@ -1143,7 +1145,8 @@ func NewService(t testing.TB, issuer string) *Service {
 			if (kind != "" && k != kind) || !strings.Contains(strings.ToLower(name+" "+a.Description), q) {
 				continue
 			}
-			out = append(out, map[string]any{"kind": k, "name": name, "version": a.Version, "description": a.Description, "state": "available", "uri": "blitz://" + strings.TrimPrefix(s.URL, "http://") + "/" + key + "@" + a.Version})
+			out = append(out, map[string]any{"kind": k, "name": name, "version": a.Version, "description": a.Description, "state": "available", "uri": "blitz://" + strings.TrimPrefix(s.URL, "http://") + "/" + key + "@" + a.Version,
+				"tags": a.Tags, "lifecycle": a.Lifecycle})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"assets": out})
