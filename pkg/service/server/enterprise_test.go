@@ -961,7 +961,8 @@ func TestServiceJobs(t *testing.T) {
 	set := "urn:blitz:artifacts:" + ws + ":" + job + ":" + run
 	org.Mu.Lock()
 	org.ServiceJobs = []enterprisetest.ServiceJob{{ID: job, URN: "urn:blitz:jobs:" + job, Workspace: "plans", Name: "digest", Schedule: "Daily at 6 AM", Enabled: true},
-		{ID: "other", Workspace: "q4", Name: "digest"}}
+		{ID: "other", Workspace: "q4", Name: "digest"},
+		{ID: "oj1", Workspace: "organization", Name: "weekly", Description: "The week's orders", Organization: true}}
 	org.ServiceRuns = map[string][]enterprisetest.ServiceRun{job: {{ID: run, Status: "succeeded", Trigger: "schedule", Branch: "blitz/jobs/digest/" + run, Artifacts: set, Output: "Done."}}}
 	org.Files = map[string][]enterprisetest.File{set: {
 		{URN: set + "/events.jsonl", Title: "events.jsonl", Size: 10},
@@ -1114,8 +1115,11 @@ func TestServiceJobs(t *testing.T) {
 
 	jobs, err := c.ListServiceJobs(ctx, connect.NewRequest(&pb.ListServiceJobsRequest{}))
 	require.NoError(t, err)
-	require.Len(t, jobs.Msg.Jobs, 2)
+	require.Len(t, jobs.Msg.Jobs, 3)
 	assert.Equal(t, plans, jobs.Msg.Jobs[0].Dir)
+	assert.True(t, jobs.Msg.Jobs[2].Organization, "the organization's own (EN-45)")
+	assert.Empty(t, jobs.Msg.Jobs[2].Dir, "in no clone of the person's")
+	assert.Equal(t, "The week's orders", jobs.Msg.Jobs[2].Description)
 	waiting, err := c.ListServiceApprovals(ctx, connect.NewRequest(&pb.ListServiceApprovalsRequest{}))
 	require.NoError(t, err)
 	require.Len(t, waiting.Msg.Runs, 1)

@@ -297,12 +297,15 @@ type RunChange struct {
 
 // ServiceJob is a job the service runs, as GET /api/v1/jobs answers it.
 type ServiceJob struct {
-	ID        string `json:"id"`
-	URN       string `json:"urn"`
-	Workspace string `json:"workspace"`
-	Name      string `json:"name"`
-	Schedule  string `json:"schedule"`
-	Enabled   bool   `json:"enabled"`
+	// Organization: one of the organization's own jobs (EN-45).
+	Organization bool   `json:"organization,omitempty"`
+	Description  string `json:"description,omitempty"`
+	ID           string `json:"id"`
+	URN          string `json:"urn"`
+	Workspace    string `json:"workspace"`
+	Name         string `json:"name"`
+	Schedule     string `json:"schedule"`
+	Enabled      bool   `json:"enabled"`
 	// NextRun is when it runs next (nil: not scheduled).
 	NextRun *time.Time `json:"next_run,omitempty"`
 }

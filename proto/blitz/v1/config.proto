@@ -1717,6 +1717,10 @@ message ServiceJob {
   // Its workspace's handle, and where it's cloned on this computer.
   string workspace = 7;
   string dir = 8;
+  string description = 9;
+  // One of the organization's own jobs (spec_053 EN-45): in no workspace of
+  // the person's, seen and run as its policy allows.
+  bool organization = 10;
 }
 
 // One of a service job's runs.

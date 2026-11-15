@@ -24,6 +24,7 @@ import { showView } from "./events";
 import { language, t } from "./i18n";
 import { WorkerState, type WorkerPolicySettings, type WorkerRun, type WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
 import { WorkerLimits } from "./WorkerLimits";
+import { OrgJobsCard } from "./OrgJobsCard";
 import { displayName, openWorkspace } from "./prefs";
 import { runDetail } from "./runningWorkers";
 import { useApp } from "./state";
@@ -113,6 +114,7 @@ export function WorkersSettings({ onLeave, worker = "" }: { onLeave: () => void;
           <WorkersPane dir={home} global onLeave={onLeave} intent={intent} />
         </div>
       )}
+      <OrgJobsCard />
 
       {running.length > 0 && (
         <section className="stack" style={{ gap: 8 }}>

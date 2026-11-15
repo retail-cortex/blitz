@@ -3224,6 +3224,12 @@ export function installFake() {
           fakeServicePushed.add(name);
           return { job: { found: true, job: { ...fakeServiceJob, name }, runs: [] } };
         },
+        // The organization's jobs the policy lets the person see (EN-45): ?org&signedin.
+        listServiceJobs: () => ({
+          jobs: fakeOrg.signedIn
+            ? [{ id: "oj1", urn: "urn:blitz:jobs:oj1", name: "weekly-digest", description: "The week's orders, summed up", schedule: "Mondays at 8:00", enabled: true, workspace: "organization", dir: "", organization: true, nextRun: timestampFromDate(new Date(Date.now() + 36 * 3600e3)) }]
+            : [],
+        }),
         runServiceJob: () => {
           const run = { id: `run-${Date.now()}`, trigger: "now", status: "running", costUsd: 0, created: now(), artifacts: `${fakeServiceSet}:${Date.now()}` };
           fakeServiceRuns.unshift(run as (typeof fakeServiceRuns)[number]);
