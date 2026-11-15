@@ -34,6 +34,29 @@ type RegistryAsset struct {
 	State       string `json:"state,omitempty"`
 	On          bool   `json:"on,omitempty"`
 	URI         string `json:"uri"`
+	// Tags are its own; Lifecycle is deprecated or obsolete, with why
+	// (Note); Snippet its words around what matched (the service's RG-14).
+	Tags      []string `json:"tags,omitempty"`
+	Lifecycle string   `json:"lifecycle,omitempty"`
+	Note      string   `json:"lifecycle_note,omitempty"`
+	Snippet   string   `json:"snippet,omitempty"`
+}
+
+// Label is how a's life and tags read beside its name: "(deprecated:
+// why) #tag", "" for none.
+func (a RegistryAsset) Label() string {
+	var parts []string
+	if a.Lifecycle != "" {
+		l := a.Lifecycle
+		if a.Note != "" {
+			l += ": " + a.Note
+		}
+		parts = append(parts, "("+l+")")
+	}
+	for _, t := range a.Tags {
+		parts = append(parts, "#"+t)
+	}
+	return strings.Join(parts, " ")
 }
 
 // RegistrySearch searches the organization's registry as the person

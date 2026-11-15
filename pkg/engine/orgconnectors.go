@@ -448,7 +448,14 @@ func libraryText(found []enterprise.RegistryAsset) string {
 		case a.State == "available":
 			state = "available, off: blitz enterprise items enable " + a.Kind + "/" + a.Name
 		}
-		fmt.Fprintf(&b, "%s/%s %s (%s): %s\n", a.Kind, a.Name, a.Version, state, a.Description)
+		if a.Lifecycle == "obsolete" {
+			state = "obsolete: not in use"
+		}
+		fmt.Fprintf(&b, "%s/%s %s (%s): %s", a.Kind, a.Name, a.Version, state, a.Description)
+		if l := a.Label(); l != "" {
+			b.WriteString(" " + l)
+		}
+		b.WriteString("\n")
 	}
 	return b.String()
 }

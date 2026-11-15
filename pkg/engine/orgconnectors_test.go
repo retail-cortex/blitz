@@ -129,8 +129,10 @@ func TestOrgConnectorsTools(t *testing.T) {
 	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "search_library", Arguments: map[string]any{"query": "nothing"}})
 	require.NoError(t, err)
 	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "Nothing")
-	assert.Equal(t, "a/b 1 (required, you have it): x\nc/d 1 (available, on): y\n",
-		libraryText([]enterprise.RegistryAsset{{Kind: "a", Name: "b", Version: "1", State: "required", Description: "x"}, {Kind: "c", Name: "d", Version: "1", State: "available", On: true, Description: "y"}}))
+	assert.Equal(t, "a/b 1 (required, you have it): x\nc/d 1 (available, on): y (deprecated: use e) #sql\ne/f 1 (obsolete: not in use): z (obsolete)\n",
+		libraryText([]enterprise.RegistryAsset{{Kind: "a", Name: "b", Version: "1", State: "required", Description: "x"},
+			{Kind: "c", Name: "d", Version: "1", State: "available", On: true, Description: "y", Lifecycle: "deprecated", Note: "use e", Tags: []string{"sql"}},
+			{Kind: "e", Name: "f", Version: "1", Description: "z", Lifecycle: "obsolete"}}))
 }
 
 // EN-96: with the organization's library and no shared connectors, the

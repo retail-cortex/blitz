@@ -298,7 +298,11 @@ func newPkgSearchCommand(reg func(*cobra.Command) (*enterprise.Registry, error))
 				fmt.Fprintln(out, i18n.T("pkg.found_none"))
 			}
 			for _, a := range found {
-				fmt.Fprintf(out, "%s/%s %s  %s\n    %s\n", a.Kind, a.Name, a.Version, a.Description, a.URI)
+				line := fmt.Sprintf("%s/%s %s  %s", a.Kind, a.Name, a.Version, a.Description)
+				if l := a.Label(); l != "" {
+					line += "  " + l
+				}
+				fmt.Fprintf(out, "%s\n    %s\n", line, a.URI)
 			}
 			return nil
 		},
