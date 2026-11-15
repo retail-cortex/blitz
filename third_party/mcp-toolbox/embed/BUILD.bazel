@@ -96,6 +96,7 @@ go_test(
     deps = [
         "//third_party/mcp-toolbox/internal/sources/bigquery",
         "//third_party/mcp-toolbox/internal/sources/sqlite",
+        "//third_party/mcp-toolbox/internal/util",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_ncruces_go_sqlite3//:go-sqlite3",
         "@com_github_stretchr_testify//assert",
