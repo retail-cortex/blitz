@@ -177,8 +177,21 @@ func newPkgValidateCommand(g *globalFlags) *cobra.Command {
 		Short: "Check the workspace's assets as Blitz reads them, and what's worth fixing; exits 1 on a problem",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root := pkgRoot(g)
-			found := packages.Validate(root)
+			cfg, err := loadConfig(g)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			// The engine's parsers check them, in the service.
+			b, _, _, err := openBackend(ctx, cfg, backendOptions{trustProject: g.trustProject, flags: g}, func(s string) { fmt.Fprintln(cmd.ErrOrStderr(), s) })
+			if err != nil {
+				return err
+			}
+			defer b.Close()
+			found, err := b.ValidateAssets(ctx)
+			if err != nil {
+				return err
+			}
 			out := cmd.OutOrStdout()
 			if asJSON {
 				enc := json.NewEncoder(out)

@@ -38,7 +38,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/retail-cortex/blitz/pkg/agentpkg"
-	"github.com/retail-cortex/blitz/pkg/catalog"
 )
 
 // Kinds are every kind of asset, in the order they're listed.
@@ -55,11 +54,17 @@ type Finding struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// Check is how Validate checks a file as Blitz reads it (the engine's
+// parsers, pkg/catalog, which the service has and the CLI doesn't): whether
+// it checks that file at all, and what's wrong with it.
+type Check func(path string, data []byte) (checked bool, problems []string)
+
 // Validate checks every asset under root (PK-14, Castor's audit): each
-// file as Blitz reads it (pkg/catalog), and what's worth fixing: no
-// description, a relative link to a file the asset hasn't. The assets
-// that can't be read are problems too.
-func Validate(root string) []Finding {
+// file check reads (a skill's scripts and references are its own, not
+// read one by one), and what's worth fixing: no description, a relative
+// link to a file the asset hasn't. The assets that can't be read are
+// problems too.
+func Validate(root string, check Check) []Finding {
 	assets, skipped := agentpkg.ReadAssets(root, Kinds...)
 	var out []Finding
 	for key, why := range skipped {
@@ -69,12 +74,12 @@ func Validate(root string) []Finding {
 		kind, name, _ := strings.Cut(key, "/")
 		f := Finding{Key: key}
 		for _, p := range slices.Sorted(mapKeys(files)) {
-			// A skill's scripts and references are its own, not read one by one.
-			if kind == "skill" && p != agentpkg.MainFile(kind, name) && !isCatalogFile(p) {
-				continue
+			if check == nil {
+				break
 			}
-			_, probs := catalog.Check(p, []byte(files[p]))
-			f.Problems = append(f.Problems, probs...)
+			if ok, probs := check(p, []byte(files[p])); ok {
+				f.Problems = append(f.Problems, probs...)
+			}
 		}
 		f.Warnings = Warnings(kind, name, files)
 		if len(f.Problems)+len(f.Warnings) > 0 {
@@ -83,13 +88,6 @@ func Validate(root string) []Finding {
 	}
 	slices.SortFunc(out, func(a, b Finding) int { return strings.Compare(a.Key, b.Key) })
 	return out
-}
-
-// isCatalogFile is whether the catalog reads p (a skill's scripts and
-// references are the skill's, not checked one by one).
-func isCatalogFile(p string) bool {
-	k, _, ok := catalog.Of(p)
-	return ok && k != catalog.SkillFile
 }
 
 // linkRE is a Markdown link's target.

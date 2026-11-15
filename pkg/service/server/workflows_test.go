@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -152,4 +153,20 @@ func TestRunGitHookOverTheAPI(t *testing.T) {
 
 	assert.Equal(t, "UNKNOWN_HOOK", reason(t, unary(w.RunGitHook, &pb.RunGitHookRequest{Workspace: dir, Event: "post-merge"})))
 	assert.Equal(t, "INVALID_WORKSPACE", reason(t, unary(w.RunGitHook, &pb.RunGitHookRequest{Workspace: "relative", Event: "pre-commit"})))
+}
+
+// PK-14: the workspace's assets checked over the API.
+func TestValidateAssetsOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	p := filepath.Join(dir, ".agents", "agents", "writer.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte("---\nname: writer\n---\nWrite.\n"), 0o644))
+	res, err := c.workspaces.ValidateAssets(ctx, connect.NewRequest(&pb.ValidateAssetsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Findings, 1)
+	assert.Equal(t, "agent/writer", res.Msg.Findings[0].Asset)
+	assert.Contains(t, res.Msg.Findings[0].Warnings[0], "no description")
+	assert.Equal(t, "INVALID_WORKSPACE", reason(t, unary(c.workspaces.ValidateAssets, &pb.ValidateAssetsRequest{Workspace: "relative"})))
 }

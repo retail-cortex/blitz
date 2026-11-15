@@ -212,3 +212,17 @@ func (h workspaceService) RunGitHook(ctx context.Context, r req[pb.RunGitHookReq
 	}
 	return ok(out)
 }
+
+// ValidateAssets checks the workspace's assets (spec_065 PK-14).
+func (h workspaceService) ValidateAssets(ctx context.Context, r req[pb.ValidateAssetsRequest]) (*connect.Response[pb.ValidateAssetsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	found, _ := w.ValidateAssets(ctx) // the engine's checks report, never fail
+	out := &pb.ValidateAssetsResponse{}
+	for _, f := range found {
+		out.Findings = append(out.Findings, &pb.AssetFinding{Asset: f.Key, Problems: f.Problems, Warnings: f.Warnings})
+	}
+	return ok(out)
+}

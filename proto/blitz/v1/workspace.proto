@@ -316,6 +316,9 @@ service WorkspaceService {
   // the changes, unattended; their results, each sent to the organization
   // as a receipt. UNKNOWN_HOOK for an event no workflow runs on.
   rpc RunGitHook(RunGitHookRequest) returns (RunGitHookResponse);
+  // Checks the workspace's assets (.agents) as Blitz reads them, and
+  // what's worth fixing (spec_065 PK-14), for `blitz pkg validate`.
+  rpc ValidateAssets(ValidateAssetsRequest) returns (ValidateAssetsResponse);
 
   // The workspace dashboard (spec_044_health): the facts about its items
   // and runs, each item's latest verdict, and the scores.
@@ -4117,6 +4120,24 @@ message HookResult {
 // Response message for WorkspaceService.RunGitHook.
 message RunGitHookResponse {
   repeated HookResult results = 1;
+}
+
+// Request message for WorkspaceService.ValidateAssets.
+message ValidateAssetsRequest {
+  string workspace = 1;
+}
+
+// What checking one of the workspace's assets found.
+message AssetFinding {
+  // kind/name.
+  string asset = 1;
+  repeated string problems = 2;
+  repeated string warnings = 3;
+}
+
+// Response message for WorkspaceService.ValidateAssets.
+message ValidateAssetsResponse {
+  repeated AssetFinding findings = 1;
 }
 
 // A workspace's dashboard (spec_044_health).

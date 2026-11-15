@@ -135,6 +135,8 @@ func TestPkgCommand(t *testing.T) {
 	t.Setenv("BLITZ_REGISTRY_TOKEN", "")
 	_, err = runCLI(t, "enterprise", "connect", org.URL)
 	require.NoError(t, err)
+	_, err = runCLI(t, "-d", ws, "pkg", "search", "review")
+	assert.ErrorContains(t, err, "No registry", "connected, not signed in")
 	_, err = runCLI(t, "enterprise", "login")
 	require.NoError(t, err)
 	out, err = runCLI(t, "-d", ws, "pkg", "search", "review")
@@ -151,8 +153,15 @@ func TestPkgRegistryErrors(t *testing.T) {
 	assert.Error(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[[[ not toml"), 0o600))
-	_, err = runCLI(t, "pkg", "search")
-	assert.Error(t, err, "a broken settings file")
+	for _, args := range [][]string{{"search"}, {"validate"}, {"add", "blitz://blitz.acme.com/skill/x"}} {
+		_, err = runCLI(t, append([]string{"pkg"}, args...)...)
+		assert.Error(t, err, "a broken settings file: %v", args)
+	}
+	ws := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, ".agents"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, ".agents", "blitz.lock"), []byte("{nope"), 0o644))
+	_, err = runCLI(t, "-d", ws, "pkg", "verify")
+	assert.Error(t, err, "a lockfile that doesn't read")
 	_, err = runCLI(t, "-d", t.TempDir(), "hook", "run", "pre-commit")
 	assert.Error(t, err, "not a repository")
 }

@@ -132,6 +132,7 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"Steer":                func() error { return r.Steer(ctx, "s", "x") },
 		"RunEval":              func() error { _, err := r.RunEval(ctx, "x", api.EvalOptions{}); return err },
 		"RunGitHook":           func() error { _, err := r.RunGitHook(ctx, "pre-commit", ""); return err },
+		"ValidateAssets":       func() error { _, err := r.ValidateAssets(ctx); return err },
 		"OpenSession":          func() error { _, _, err := r.OpenSession("", false); return err },
 		"ListSessions":         func() error { _, err := r.ListSessions(true); return err },
 		"NewSession":           func() error { _, err := r.NewSession(); return err },

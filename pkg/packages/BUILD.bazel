@@ -21,7 +21,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/agentpkg",
-        "//pkg/catalog",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

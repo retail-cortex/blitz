@@ -126,6 +126,15 @@ type EvalOptions struct {
 	OnResult func(EvalResult)
 }
 
+// AssetFinding is what checking one of the workspace's assets found
+// (spec_065 PK-14): problems keep Blitz from reading it; warnings are
+// worth fixing.
+type AssetFinding struct {
+	Key      string   `json:"asset"`
+	Problems []string `json:"problems,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+}
+
 // ErrUnknownHook is a git hook no workflow can run on (spec_043 WF-32).
 var ErrUnknownHook = errors.New("no workflow runs on that git hook: pre-commit or pre-push")
 

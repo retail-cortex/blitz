@@ -1094,6 +1094,20 @@ func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (a
 	return api.EvalRun{}, errors.New(i18n.T("attached.eval_unfinished"))
 }
 
+// ValidateAssets checks the workspace's assets
+// (WorkspaceService.ValidateAssets, spec_065 PK-14).
+func (r *Remote) ValidateAssets(ctx context.Context) ([]api.AssetFinding, error) {
+	res, err := r.workspaces.ValidateAssets(ctx, connect.NewRequest(&pb.ValidateAssetsRequest{Workspace: r.dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	out := make([]api.AssetFinding, 0, len(res.Msg.Findings))
+	for _, f := range res.Msg.Findings {
+		out = append(out, api.AssetFinding{Key: f.Asset, Problems: f.Problems, Warnings: f.Warnings})
+	}
+	return out, nil
+}
+
 // RunGitHook runs the workflows that run on the git hook event on input
 // (WorkspaceService.RunGitHook, spec_043 WF-32).
 func (r *Remote) RunGitHook(ctx context.Context, event, input string) ([]api.HookResult, error) {

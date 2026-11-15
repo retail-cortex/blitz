@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -178,7 +179,20 @@ func TestCompileAndValidate(t *testing.T) {
 	write(t, root, "skills/Bad Name/SKILL.md", "x")
 	write(t, root, "agents/.draft.md", "hidden: not an asset")
 
-	found := Validate(root)
+	// A checker as the engine's is: a step type it doesn't know is a
+	// problem; a skill's own files aren't read.
+	check := func(p string, data []byte) (bool, []string) {
+		if strings.Contains(p, "/references/") {
+			return false, nil
+		}
+		if strings.Contains(string(data), "type: nope") {
+			return true, []string{p + ": a step type Blitz hasn't"}
+		}
+		return true, nil
+	}
+	found := Validate(root, check)
+	assert.Empty(t, Validate(t.TempDir(), nil), "nothing there")
+	assert.Len(t, Validate(root, nil), len(Validate(root, func(string, []byte) (bool, []string) { return true, nil })), "no checker: the warnings alone")
 	by := map[string]Finding{}
 	for _, f := range found {
 		by[f.Key] = f
