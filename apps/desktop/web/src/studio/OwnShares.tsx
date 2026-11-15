@@ -96,7 +96,7 @@ export function OwnShares() {
   };
   const can = shareable(data.own, data.contribute);
   return (
-    <section className="stack rule-section org-items" style={{ gap: 4 }}>
+    <section className="card stack rule-section org-items" style={{ gap: 4 }}>
       <div className="row">
         <span className="t-title-sm spacer">{t("desktop.ownshares.title")}</span>
         <Button small variant="text" disabled={busy} onClick={() => void sync()}>

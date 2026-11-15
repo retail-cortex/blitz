@@ -24,6 +24,13 @@ import { policyDecided, policyLabel, policyValue } from "./OrgPolicy";
 describe("organization policy", () => {
   it("names settings, a provider's and a rule's included", () => {
     expect(policyLabel("connectors.own")).toBe("Connections of your own");
+    expect(policyLabel("skills.sql-review")).toBe("Skill: sql-review");
+    expect(policyLabel("rules.style")).toBe("Rule: style");
+    expect(policyLabel("library.personal.skills")).toBe("Your own skills sync with your organization");
+    expect(policyLabel("library.contribute.groups")).toBe("Groups a shared one is offered to");
+    expect(policyLabel("jobs.digest.run")).toBe("Job digest: you run it");
+    expect(policyLabel("connectors.shared.wh.use")).toBe("Connector wh: you use it");
+    expect(policyValue("skills.x", '"available"')).toBe("Available: yours to switch on");
     expect(policyLabel("models.own.ollama.allowed")).toBe("Ollama on your computer");
     expect(policyLabel("models.own.ollama.models")).toBe("Ollama on your computer: models allowed");
     expect(policyLabel("rules.tested")).toContain("tested");

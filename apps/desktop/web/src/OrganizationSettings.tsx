@@ -199,14 +199,10 @@ export function OrganizationSettings() {
       )}
       {state?.signedIn && (
         <div className="card stack">
-          <OrgItems key={state.email} title={t("desktop.orgitems.library")} />
+          <OrgItems key={state.email} title={t("desktop.orgitems.library")} empty={t("desktop.orgitems.library_empty")} />
         </div>
       )}
-      {state?.signedIn && (
-        <div className="card stack">
-          <OwnShares key={state.email} />
-        </div>
-      )}
+      {state?.signedIn && <OwnShares key={state.email} />}
       {state?.signedIn && <OrgNoticesCard key={state.email} />}
     </div>
   );

@@ -204,9 +204,12 @@ type Service struct {
 	// file's lock and contents, under CatalogPolicy; CatalogExpiry is what
 	// it says the catalog's expiry is. Announce publishes a version on the
 	// watch stream.
-	Catalog       map[string]CatalogFile
-	CatalogPolicy map[string]any
-	CatalogExpiry time.Time
+	Catalog map[string]CatalogFile
+	// CatalogRemoved answers the catalog as a service that retired it
+	// does (404 catalog_removed).
+	CatalogRemoved bool
+	CatalogPolicy  map[string]any
+	CatalogExpiry  time.Time
 	// Policy is what /api/v1/policy serves (404, as from a service before
 	// it, when nil): the person's policy, why, rules and guardrails.
 	Policy      map[string]any
@@ -516,6 +519,10 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
+		if s.CatalogRemoved {
+			refuse(w, http.StatusNotFound, "catalog_removed", "The organization's catalog is gone.")
+			return
+		}
 		if s.Catalog == nil {
 			refuse(w, http.StatusNotFound, "not_found", "The organization hasn't published a catalog yet.")
 			return

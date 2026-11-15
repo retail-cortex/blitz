@@ -27,8 +27,14 @@ const everyWhenEmpty = (path: string) => path === "connectors.kinds" || /^models
 export function policyLabel(path: string): string {
   const own = /^models\.own\.([^.]+)\.(allowed|models)$/.exec(path);
   if (own) return t(`desktop.org.policy.own_${own[2]}`, { provider: t(`desktop.org.policy.provider.${own[1]}`) });
-  const item = /^(rules|guardrails)\.(.+)$/.exec(path);
-  if (item) return t(`desktop.org.policy.${item[1] === "rules" ? "rule" : "guardrail"}`, { name: item[2] });
+  const item = /^(agents|skills|workflows|rules|guardrails)\.([^.]+)$/.exec(path);
+  if (item) return t(`desktop.org.policy.item.${item[1]}`, { name: item[2] });
+  const lib = /^library\.(personal|contribute)\.(agents|skills|workflows|rules|guardrails)$/.exec(path);
+  if (lib) return t(`desktop.org.policy.library_${lib[1]}`, { kind: t(`desktop.org.policy.kinds.${lib[2]}`) });
+  const job = /^jobs\.([^.]+)\.(see|run|approve)$/.exec(path);
+  if (job) return t(`desktop.org.policy.job_${job[2]}`, { name: job[1] });
+  const shared = /^connectors\.shared\.([^.]+)\.(use|tables|write|max_rows)$/.exec(path);
+  if (shared) return t(`desktop.org.policy.shared_${shared[2]}`, { name: shared[1] });
   return t(`desktop.org.policy.field.${path}`);
 }
 
@@ -43,6 +49,7 @@ export function policyValue(path: string, valueJson: string): string {
   if (typeof v === "boolean") return t(v ? "desktop.org.policy.on" : "desktop.org.policy.off");
   if (Array.isArray(v)) return v.length ? v.join(", ") : t(everyWhenEmpty(path) ? "desktop.org.policy.every" : "desktop.org.policy.none");
   if (v === null || v === undefined) return "—";
+  if (typeof v === "string" && ["off", "available", "required"].includes(v)) return t(`desktop.org.policy.state.${v}`);
   return String(v);
 }
 

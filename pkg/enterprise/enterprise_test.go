@@ -885,6 +885,20 @@ func TestCatalog(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, PolicyFile))
 	assert.DirExists(t, filepath.Join(dir, "catalog"))
 
+	// A service that retired its catalog: the kept one goes, quietly; then
+	// nothing more to say.
+	s.CatalogRemoved = true
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.Nil(t, kept)
+	assert.Nil(t, LoadCatalog(dir))
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	assert.Nil(t, kept)
+	s.CatalogRemoved = false
+
 	// A signed manifest with nothing in it withdraws the catalog.
 	s.Catalog = map[string]enterprisetest.CatalogFile{}
 	m, changed, err = c.RefreshCatalog(ctx, dir)

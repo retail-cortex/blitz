@@ -152,11 +152,16 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 		// says the same. The kept catalog and its policy stay; only a
 		// signed manifest changes them (EN-33), an empty one to none.
 		kept := LoadCatalog(dir)
+		var r struct{ Code, Message string }
+		_ = json.Unmarshal(data, &r)
+		if r.Code == CatalogRemoved {
+			// The service retired its catalog (its policy comes from
+			// /api/v1/policy, EN-38): one kept from before goes, quietly.
+			return nil, kept != nil, dropCatalog(dir, kept != nil)
+		}
 		if kept == nil {
 			return nil, false, nil
 		}
-		var r struct{ Code, Message string }
-		_ = json.Unmarshal(data, &r)
 		return kept, false, &Refusal{Status: res.StatusCode, Code: r.Code, Message: r.Message}
 	case http.StatusOK:
 	default:
@@ -261,6 +266,27 @@ func (c *Client) fetchFiles(ctx context.Context, token, dir string, files []Cata
 
 // layOut builds the layers for m from the kept files beside the old ones,
 // then swaps them in.
+// CatalogRemoved is the code a service whose catalog is retired answers
+// /api/v1/catalog with.
+const CatalogRemoved = "catalog_removed"
+
+// dropCatalog removes a catalog kept from before (kept), its files laid
+// out, the manifest and its tag.
+func dropCatalog(dir string, kept bool) error {
+	if !kept {
+		return nil
+	}
+	if err := layOut(dir, Manifest{}); err != nil {
+		return err
+	}
+	for _, f := range []string{catalogFile, catalogETag} {
+		if err := os.Remove(filepath.Join(dir, f)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func layOut(dir string, m Manifest) error {
 	next := filepath.Join(dir, layersDir+".next")
 	if err := os.RemoveAll(next); err != nil {

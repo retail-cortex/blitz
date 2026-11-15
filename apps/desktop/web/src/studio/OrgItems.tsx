@@ -43,7 +43,7 @@ export function subtitle(it: Pick<OrgItem, "version" | "state" | "on" | "decided
  * the library in the organization's console. Shows nothing without an
  * organization.
  */
-export function OrgItems({ kind, title }: { kind?: OrgKind; title?: string }) {
+export function OrgItems({ kind, title, empty }: { kind?: OrgKind; title?: string; empty?: string }) {
   const [items, setItems] = useState<OrgItem[]>([]);
   const [busy, setBusy] = useState("");
   const snack = useSnackbar();
@@ -58,7 +58,17 @@ export function OrgItems({ kind, title }: { kind?: OrgKind; title?: string }) {
   useEffect(() => {
     void load();
   }, [load]);
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    if (!empty) return null;
+    // Where the library has its own card (Settings › Organization): say
+    // why it's empty, rather than draw an empty card.
+    return (
+      <section className="stack rule-section org-items" style={{ gap: 4 }}>
+        <span className="t-title-sm">{title ?? t("desktop.orgitems.title")}</span>
+        <span className="t-body-sm muted">{empty}</span>
+      </section>
+    );
+  }
   const set = async (it: OrgItem, on: boolean) => {
     setBusy(`${it.kind}/${it.name}`);
     try {
