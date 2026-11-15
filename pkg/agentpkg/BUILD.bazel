@@ -19,6 +19,9 @@ go_library(
     srcs = [
         "dep.go",
         "digest.go",
+        "files.go",
+        "lock.go",
+        "uri.go",
         "version.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/agentpkg",
@@ -29,7 +32,10 @@ go_library(
 go_test(
     name = "agentpkg_test",
     size = "small",
-    srcs = ["version_test.go"],
+    srcs = [
+        "uri_test.go",
+        "version_test.go",
+    ],
     embed = [":agentpkg"],
     deps = [
         "@com_github_stretchr_testify//assert",

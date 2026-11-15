@@ -17,6 +17,8 @@ package engine
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -81,7 +83,7 @@ func TestOrgConnectorsServer(t *testing.T) {
 	assert.Equal(t, orgServer, s.InProcess)
 	assert.Equal(t, orgPrefix, s.Prefix)
 	assert.Equal(t, []string{"*"}, s.Agents)
-	assert.Equal(t, []string{"crm_list_tables", "shop_list_tables", "shop_execute_sql"}, s.ReadOnlyTools)
+	assert.Equal(t, []string{"search_library", "crm_list_tables", "shop_list_tables", "shop_execute_sql"}, s.ReadOnlyTools)
 	before := s.Fingerprint
 	cfg.Org.Explain["connectors.shared.shop.write"] = config.PolicyDecision{Value: true}
 	assert.NotEqual(t, before, withOrgConnectors(cfg, nil)[0].Fingerprint, "what's allowed changed: restarted")
@@ -101,7 +103,7 @@ func TestOrgConnectorsTools(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names = append(names, tl.Name)
 	}
-	assert.ElementsMatch(t, []string{"shop_execute_sql", "shop_list_tables"}, names)
+	assert.ElementsMatch(t, []string{"search_library", "shop_execute_sql", "shop_list_tables"}, names)
 
 	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "shop_execute_sql", Arguments: map[string]any{"sql": "select id from orders"}})
 	require.NoError(t, err)
@@ -116,6 +118,32 @@ func TestOrgConnectorsTools(t *testing.T) {
 
 	_, err = mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, orgTransport(config.MCPServerConfig{URL: "not a url"}), nil)
 	assert.Error(t, err)
+
+	// EN-96: the organization's library, searched.
+	org.Mu.Lock()
+	org.Registry = map[string]enterprisetest.RegistryAsset{"skill/sql-review": {Version: "2.0.0", Description: "Reviews SQL"}}
+	org.Mu.Unlock()
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "search_library", Arguments: map[string]any{"query": "sql"}})
+	require.NoError(t, err)
+	assert.Equal(t, "skill/sql-review 2.0.0 (available, off: blitz enterprise items enable skill/sql-review): Reviews SQL\n", res.Content[0].(*mcp.TextContent).Text)
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "search_library", Arguments: map[string]any{"query": "nothing"}})
+	require.NoError(t, err)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "Nothing")
+	assert.Equal(t, "a/b 1 (required, you have it): x\nc/d 1 (available, on): y\n",
+		libraryText([]enterprise.RegistryAsset{{Kind: "a", Name: "b", Version: "1", State: "required", Description: "x"}, {Kind: "c", Name: "d", Version: "1", State: "available", On: true, Description: "y"}}))
+}
+
+// EN-96: with the organization's library and no shared connectors, the
+// organization's server is offered for search_library alone.
+func TestOrgServerForTheLibrary(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Enterprise.URL = "https://blitz.acme.com"
+	cfg.Org.PolicyDir = t.TempDir()
+	assert.Empty(t, withOrgConnectors(cfg, nil), "no library")
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.Org.PolicyDir, config.OrgItemsFile), []byte(`[{"kind":"skill","name":"x","version":"1.0.0","state":"available"}]`), 0o644))
+	got := withOrgConnectors(cfg, nil)
+	require.Len(t, got, 1)
+	assert.Equal(t, []string{"search_library"}, got[0].ReadOnlyTools)
 }
 
 // EN-72, EN-73: Studio, the Data menu and @db: mentions list the shared
@@ -288,7 +316,7 @@ func TestOrgMCPConnectors(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names = append(names, tl.Name)
 	}
-	assert.ElementsMatch(t, []string{"shop_execute_sql", "shop_list_tables", "hub_echo"}, names, "one that can't be reached is left out")
+	assert.ElementsMatch(t, []string{"search_library", "shop_execute_sql", "shop_list_tables", "hub_echo"}, names, "one that can't be reached is left out")
 	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "hub_echo", Arguments: map[string]any{"text": "hi"}})
 	require.NoError(t, err)
 	assert.Equal(t, "you said hi", res.Content[0].(*mcp.TextContent).Text)

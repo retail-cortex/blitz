@@ -19,17 +19,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/agentpkg"
 )
@@ -153,126 +150,15 @@ func (c *Client) Submissions(ctx context.Context) ([]Submission, error) {
 // with its folder under ~/.blitz.
 var PersonalKinds = map[string]string{"agent": "agents", "skill": "skills", "workflow": "workflows", "rule": "rules", "guardrail": "guardrails"}
 
-// personalName is a name the service takes.
-var personalName = regexp.MustCompile(`^[a-z0-9]+([-_][a-z0-9]+)*$`)
-
-// The most of an asset the service keeps (its LB-04).
-const (
-	maxPersonalFile  = 1 << 20
-	maxPersonalTotal = 5 << 20
-	maxPersonalFiles = 200
-)
-
 // PersonalFiles are the person's own assets under root (~/.blitz), by
 // "kind/name", each its files by path under root; skipped are those that
-// can't sync, and why.
+// can't sync, and why (agentpkg.ReadAssets).
 func PersonalFiles(root string) (map[string]map[string]string, map[string]string) {
-	out, skipped := map[string]map[string]string{}, map[string]string{}
-	for kind, dir := range PersonalKinds {
-		entries, err := os.ReadDir(filepath.Join(root, dir))
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			name, ok := personalItemName(kind, e)
-			if !ok {
-				continue
-			}
-			key := kind + "/" + name
-			if !personalName.MatchString(name) || len(name) > 64 {
-				skipped[key] = "its name isn't lowercase letters, digits and single hyphens or underscores"
-				continue
-			}
-			files, why := readPersonal(root, kind, dir, name)
-			if why != "" {
-				skipped[key] = why
-				continue
-			}
-			out[key] = files
-		}
+	kinds := make([]string, 0, len(PersonalKinds))
+	for k := range PersonalKinds {
+		kinds = append(kinds, k)
 	}
-	return out, skipped
-}
-
-// personalItemName is the asset e is in a kind's folder, if it is one.
-func personalItemName(kind string, e fs.DirEntry) (string, bool) {
-	n := e.Name()
-	if strings.HasPrefix(n, ".") {
-		return "", false
-	}
-	switch kind {
-	case "skill":
-		return n, e.IsDir()
-	case "workflow":
-		name, ok := strings.CutSuffix(n, ".flow.yaml")
-		return name, ok && !e.IsDir()
-	}
-	name, ok := strings.CutSuffix(n, ".md")
-	return name, ok && !e.IsDir()
-}
-
-// readPersonal is an asset's files, or why it can't sync.
-func readPersonal(root, kind, dir, name string) (map[string]string, string) {
-	files := map[string]string{}
-	add := func(rel string) string {
-		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
-		switch {
-		case err != nil:
-			return err.Error()
-		case len(b) > maxPersonalFile:
-			return rel + " is over 1 MB"
-		case !utf8.Valid(b):
-			return rel + " isn't text"
-		}
-		files[rel] = string(b)
-		return ""
-	}
-	switch kind {
-	case "skill":
-		base := filepath.Join(root, dir, name)
-		var why string
-		err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if strings.HasPrefix(d.Name(), ".") && p != base {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.IsDir() || !d.Type().IsRegular() {
-				return nil
-			}
-			rel, _ := filepath.Rel(root, p)
-			if why = add(filepath.ToSlash(rel)); why != "" {
-				return fs.SkipAll
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err.Error()
-		}
-		if why != "" {
-			return nil, why
-		}
-	case "workflow":
-		if why := add(dir + "/" + name + ".flow.yaml"); why != "" {
-			return nil, why
-		}
-	default:
-		if why := add(dir + "/" + name + ".md"); why != "" {
-			return nil, why
-		}
-	}
-	total := 0
-	for _, t := range files {
-		total += len(t)
-	}
-	if total > maxPersonalTotal || len(files) > maxPersonalFiles {
-		return nil, "it's over 5 MB or 200 files"
-	}
-	return files, ""
+	return agentpkg.ReadAssets(root, kinds...)
 }
 
 // SyncReport is what a sync of the person's own assets did (EN-93), by
@@ -444,53 +330,11 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 // writePersonal writes an asset's files under root, replacing what it
 // had: only its own paths (an agent's one file, a skill's folder).
 func writePersonal(root, kind, name string, files map[string]string) error {
-	dir := PersonalKinds[kind]
-	own := func(p string) bool {
-		if strings.Contains(p, "..") || strings.HasPrefix(p, "/") || strings.Contains(p, "\\") {
-			return false
-		}
-		switch kind {
-		case "skill":
-			return strings.HasPrefix(p, dir+"/"+name+"/")
-		case "workflow":
-			return p == dir+"/"+name+".flow.yaml"
-		}
-		return p == dir+"/"+name+".md"
-	}
-	for p := range files {
-		if !own(p) {
-			return fmt.Errorf("%s isn't one of %s's files", p, name)
-		}
-	}
-	if err := removePersonal(root, kind, name); err != nil {
-		return err
-	}
-	for p, text := range files {
-		path := filepath.Join(root, filepath.FromSlash(p))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
-			return err
-		}
+	if err := agentpkg.WriteAsset(root, kind, name, files); err != nil {
+		return fmt.Errorf("%w: not one of %s's files", err, name)
 	}
 	return nil
 }
 
 // removePersonal removes an asset's files under root.
-func removePersonal(root, kind, name string) error {
-	dir := filepath.Join(root, PersonalKinds[kind])
-	var err error
-	switch kind {
-	case "skill":
-		err = os.RemoveAll(filepath.Join(dir, name))
-	case "workflow":
-		err = os.Remove(filepath.Join(dir, name+".flow.yaml"))
-	default:
-		err = os.Remove(filepath.Join(dir, name+".md"))
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	return err
-}
+func removePersonal(root, kind, name string) error { return agentpkg.RemoveAsset(root, kind, name) }

@@ -27,6 +27,7 @@ go_library(
         "personal.go",
         "policy.go",
         "reach.go",
+        "registry.go",
         "run.go",
         "signin.go",
         "usage.go",
@@ -54,6 +55,7 @@ go_test(
         "jobs_test.go",
         "personal_test.go",
         "reach_test.go",
+        "registry_test.go",
     ],
     embed = [":enterprise"],
     deps = [

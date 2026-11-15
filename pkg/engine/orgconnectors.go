@@ -89,10 +89,12 @@ func withOrgConnectors(cfg *config.Config, servers []config.MCPServerConfig) []c
 		return servers
 	}
 	names, write := sharedAllowed(cfg.Org)
-	if len(names) == 0 {
+	// With the organization's library too: its search_library (EN-96).
+	if len(names) == 0 && len(cfg.Org.Assets()) == 0 {
 		return servers
 	}
 	c := config.MCPServerConfig{Name: orgServer, Prefix: orgPrefix, InProcess: orgServer, URL: cfg.Enterprise.URL, Args: names, Agents: []string{"*"}}
+	c.ReadOnlyTools = append(c.ReadOnlyTools, "search_library")
 	h := sha256.New()
 	for _, n := range names {
 		fmt.Fprintf(h, "%s:%v;", n, write[n])
@@ -137,6 +139,20 @@ func (o *orgMCP) Connect(ctx context.Context) (mcp.Connection, error) {
 		return nil, fmt.Errorf("your organization's connectors: %w", err)
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: orgServer, Version: "1"}, nil)
+	// The organization's library (EN-96): what it offers the person, found
+	// by words, so an agent can suggest switching one on.
+	mcp.AddTool(server, &mcp.Tool{Name: "search_library",
+		Description: "Searches your organization's library: the agents, skills, workflows, rules and guardrails it offers you, by words in their names and descriptions, each with its version, whether it's required or available, and whether you have it. One that's available and off is switched on in Settings › Organization, or with `blitz enterprise items enable <kind>/<name>`."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
+			Query string `json:"query" jsonschema:"words to look for; empty lists every one"`
+			Kind  string `json:"kind,omitempty" jsonschema:"agent, skill, workflow, rule or guardrail; empty for any"`
+		}) (*mcp.CallToolResult, any, error) {
+			found, err := client.RegistrySearch(ctx, in.Query, in.Kind)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: libraryText(found)}}}, nil, nil
+		})
 	var upstreams []*mcp.ClientSession
 	for _, sc := range list {
 		if sc.Kind == enterprise.SharedMCP {
@@ -414,4 +430,25 @@ func (w *Workspace) orgTables(ctx context.Context, name string) ([]connectors.Ta
 		out = append(out, ct)
 	}
 	return out, nil
+}
+
+// libraryText is what search_library found, a line each.
+func libraryText(found []enterprise.RegistryAsset) string {
+	if len(found) == 0 {
+		return "Nothing in your organization's library matches."
+	}
+	var b strings.Builder
+	for _, a := range found {
+		state := a.State
+		switch {
+		case a.State == "required":
+			state = "required, you have it"
+		case a.On:
+			state = "available, on"
+		case a.State == "available":
+			state = "available, off: blitz enterprise items enable " + a.Kind + "/" + a.Name
+		}
+		fmt.Fprintf(&b, "%s/%s %s (%s): %s\n", a.Kind, a.Name, a.Version, state, a.Description)
+	}
+	return b.String()
 }

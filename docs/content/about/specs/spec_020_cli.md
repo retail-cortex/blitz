@@ -47,6 +47,7 @@ weight: 20
 | `blitz eval <name> \| --skill <skill>` | Run an eval |
 | `blitz hook run <pre-commit\|pre-push>` | Run the workflows on a git hook on the changes; exit 1 when one fails (spec_043 WF-32) |
 | `blitz enterprise items sync \| share <kind>/<name> \| submissions` | Sync your own assets with your organization, submit one to share, list your submissions (spec_053 EN-93, EN-95) |
+| `blitz pkg add \| verify \| validate \| compile \| list \| search \| publish` | The workspace's assets as packages (spec_065 PK-12 to PK-16) |
 | `blitz config set-key \| keys \| secure-key \| remove-key <provider>`, `blitz config set-auth <provider> <api_key\|adc\|oauth>`, `blitz config permissions [allow\|ask\|deny\|remove <rule>] \| check <rule> [sample] \| defaults on\|off\|inherit` | API keys, how a provider signs in, and the saved permission rules (`--workspace`: the workspace's own) |
 | `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
 

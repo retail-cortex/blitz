@@ -297,11 +297,25 @@ type Service struct {
 	Reported        []map[string]any
 	Submissions     []map[string]any
 	ShareRefusal    string
+	// Registry are the published assets its registry serves, by
+	// "kind/name", each one version (EN-96, PK-16); RegistryToken a
+	// registry token it takes besides a person's sign-in; Published what
+	// was published to it.
+	Registry      map[string]RegistryAsset
+	RegistryToken string
+	Published     []map[string]any
 	// ConsentURL is where the person consents to connectors querying as
 	// them (404, as from a service that can't, when empty); Consented
 	// whether they have (EN-76). DELETE clears it.
 	ConsentURL string
 	Consented  bool
+}
+
+// RegistryAsset is a published asset the fake's registry serves.
+type RegistryAsset struct {
+	Version     string
+	Description string
+	Files       map[string]string
 }
 
 // PersonalAsset is one of the person's own assets as the fake keeps it.
@@ -1095,6 +1109,60 @@ func NewService(t testing.TB, issuer string) *Service {
 		defer s.Mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"submissions": append([]map[string]any{}, s.Submissions...)})
+	})
+	registryCaller := func(w http.ResponseWriter, r *http.Request) bool {
+		s.Mu.Lock()
+		tok := s.RegistryToken
+		s.Mu.Unlock()
+		if tok != "" && r.Header.Get("Authorization") == "Bearer "+tok {
+			return true
+		}
+		return signedIn(w, r)
+	}
+	mux.HandleFunc("GET /api/v1/registry/search", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		q, kind := strings.ToLower(r.URL.Query().Get("q")), r.URL.Query().Get("kind")
+		out := []map[string]any{}
+		for key, a := range s.Registry {
+			k, name, _ := strings.Cut(key, "/")
+			if (kind != "" && k != kind) || !strings.Contains(strings.ToLower(name+" "+a.Description), q) {
+				continue
+			}
+			out = append(out, map[string]any{"kind": k, "name": name, "version": a.Version, "description": a.Description, "state": "available", "uri": "blitz://" + strings.TrimPrefix(s.URL, "http://") + "/" + key + "@" + a.Version})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"assets": out})
+	})
+	mux.HandleFunc("GET /api/v1/registry/{kind}/{name}/{range}", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		a, ok := s.Registry[r.PathValue("kind")+"/"+r.PathValue("name")]
+		s.Mu.Unlock()
+		if !ok {
+			refuse(w, http.StatusNotFound, "not_found", "The registry has no such asset for you.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": a.Version, "files": a.Files, "sha256": agentpkg.Digest(a.Files)})
+	})
+	mux.HandleFunc("POST /api/v1/registry/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		in["kind"], in["name"] = r.PathValue("kind"), r.PathValue("name")
+		s.Mu.Lock()
+		s.Published = append(s.Published, in)
+		s.Mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0.0", "uri": "blitz://x/" + r.PathValue("kind") + "/" + r.PathValue("name") + "@1.0.0"})
 	})
 	mux.HandleFunc("POST /api/v1/me/receipts", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

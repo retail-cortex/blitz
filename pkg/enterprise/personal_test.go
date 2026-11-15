@@ -147,7 +147,7 @@ func TestSyncPersonal(t *testing.T) {
 			st.change()
 			rep, err := SyncPersonal(ctx, c, root, state)
 			if st.name == "a file that isn't the asset's" {
-				assert.ErrorContains(t, err, "isn't one of evil's files")
+				assert.ErrorContains(t, err, "not one of evil's files")
 			} else {
 				require.NoError(t, err)
 			}
