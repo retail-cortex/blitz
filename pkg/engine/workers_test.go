@@ -796,3 +796,38 @@ func TestPreviewSchedule(t *testing.T) {
 		})
 	}
 }
+
+// WK-75: a worker that names evals runs every case of each; its run's
+// output is the results, as JSON; a case that fails is a result, not a
+// failed run; an eval that isn't there fails it.
+func TestWorkerRunsEvals(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools, text("4"), text("5"))
+	writeEval(t, w, "sums", "| ID | Prompt | Output | Output type | Scope |\n|-|-|-|-|-|\n| two | What's 2+2? | 4 | Exact | Fail |\n| three | What's 2+3? | 6 | Exact | Fail |\n")
+	addWorker(t, w, "check", "---\nschedule: daily at 6 AM\nevals: [sums]\n---\n")
+	enable(t, w, "check")
+	var last string
+	run, err := w.RunWorker(context.Background(), "check", RunOptions{Manual: true, OnEvent: func(e api.Event) {
+		if e.Text != nil && !e.Text.Partial {
+			last = e.Text.Text
+		}
+	}})
+	require.NoError(t, err)
+	assert.Equal(t, api.RunSucceeded, run.Status, "%+v", run)
+	var out EvalsOutput
+	require.NoError(t, json.Unmarshal([]byte(last), &out), last)
+	require.Len(t, out.Evals, 1)
+	assert.Equal(t, api.EvalFailed, out.Evals[0].Status)
+	require.Len(t, out.Evals[0].Results, 2)
+	assert.Equal(t, api.EvalPass, out.Evals[0].Results[0].Status)
+	assert.Equal(t, api.EvalFail, out.Evals[0].Results[1].Status)
+
+	addWorker(t, w, "missing", "---\nschedule: daily at 6 AM\nevals: [nope]\n---\n")
+	enable(t, w, "missing")
+	run, _ = w.RunWorker(context.Background(), "missing", RunOptions{Manual: true})
+	assert.Equal(t, api.RunFailed, run.Status)
+	assert.Contains(t, run.Error, "eval nope")
+
+	addWorker(t, w, "badname", "---\nschedule: daily at 6 AM\nevals: [Bad Name]\n---\n")
+	_, err = w.EnableWorker("badname", "x")
+	assert.Error(t, err)
+}

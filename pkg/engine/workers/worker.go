@@ -51,6 +51,7 @@ type frontmatter struct {
 	Agent       string     `yaml:"agent"`
 	Model       string     `yaml:"model"`
 	Workflow    string     `yaml:"workflow"`
+	Evals       []string   `yaml:"evals"`
 	Permissions []string   `yaml:"permissions"`
 	Limits      api.Limits `yaml:"limits"`
 	Overlap     string     `yaml:"overlap"`
@@ -94,6 +95,10 @@ type Worker struct {
 	// Flow is a workflow (spec_043_workflows WF-17) the worker runs, its
 	// prompt the workflow's input.
 	Flow string
+	// Evals are the evals the worker runs instead (spec_023 WK-75): each
+	// one's every case, the results its run's output, as JSON (an
+	// organization's library runs its evals so, on its service).
+	Evals []string
 	// FlowFile is Flow's file as Hash covers it, read once with it (nil
 	// when the worker runs no workflow or its file is missing): a run
 	// takes the workflow's steps, and the permissions they grant, from
@@ -139,7 +144,7 @@ func Load(dir, flowsDir string) (*Worker, error) {
 	w := &Worker{
 		Name: filepath.Base(dir), Description: strings.TrimSpace(f.Description), Dir: dir, Path: path,
 		Agent: f.Agent, Model: f.Model, Limits: f.Limits, Overlap: f.Overlap, CatchUp: f.CatchUp,
-		Prompt: strings.TrimSpace(string(body)), Flow: strings.TrimSpace(f.Workflow),
+		Prompt: strings.TrimSpace(string(body)), Flow: strings.TrimSpace(f.Workflow), Evals: f.Evals,
 	}
 	var problems []string
 	if !validName.MatchString(w.Name) {
@@ -148,8 +153,13 @@ func Load(dir, flowsDir string) (*Worker, error) {
 	if f.Name != "" && f.Name != w.Name {
 		problems = append(problems, fmt.Sprintf("name %q doesn't match the directory %q", f.Name, w.Name))
 	}
-	if w.Prompt == "" && w.Flow == "" {
+	if w.Prompt == "" && w.Flow == "" && len(w.Evals) == 0 {
 		problems = append(problems, "the workflow (the text after the frontmatter) is empty")
+	}
+	for _, e := range w.Evals {
+		if !validName.MatchString(e) {
+			problems = append(problems, fmt.Sprintf("evals: %q isn't an eval's name", e))
+		}
 	}
 	if w.Schedule, err = ParseSchedule(f.Schedule, f.Timezone); err != nil {
 		problems = append(problems, err.Error())
