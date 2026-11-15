@@ -1040,6 +1040,10 @@ func NewService(t testing.TB, issuer string) *Service {
 				refuse(w, http.StatusForbidden, "personal_off", "Not kept.")
 				return
 			}
+			if r.PathValue("name") == "unwritable" {
+				refuse(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+				return
+			}
 			if r.PathValue("name") == "unreadable" || len(in.Files) == 0 {
 				refuse(w, http.StatusUnprocessableEntity, "invalid", "It doesn't read.")
 				return
@@ -1162,6 +1166,11 @@ func NewService(t testing.TB, issuer string) *Service {
 		s.Published = append(s.Published, in)
 		s.Mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		if r.PathValue("name") == "tested" { // one evals test: published once they pass
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"evaluating": map[string]any{"id": "run-1", "state": "queued"}})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0.0", "uri": "blitz://x/" + r.PathValue("kind") + "/" + r.PathValue("name") + "@1.0.0"})
 	})
 	mux.HandleFunc("POST /api/v1/me/receipts", func(w http.ResponseWriter, r *http.Request) {

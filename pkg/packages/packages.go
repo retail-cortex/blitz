@@ -69,9 +69,12 @@ func Validate(root string) []Finding {
 		kind, name, _ := strings.Cut(key, "/")
 		f := Finding{Key: key}
 		for _, p := range slices.Sorted(mapKeys(files)) {
-			if _, probs := catalog.Check(p, []byte(files[p])); len(probs) > 0 && (kind != "skill" || p == agentpkg.MainFile(kind, name) || isCatalogFile(p)) {
-				f.Problems = append(f.Problems, probs...)
+			// A skill's scripts and references are its own, not read one by one.
+			if kind == "skill" && p != agentpkg.MainFile(kind, name) && !isCatalogFile(p) {
+				continue
 			}
+			_, probs := catalog.Check(p, []byte(files[p]))
+			f.Problems = append(f.Problems, probs...)
 		}
 		f.Warnings = Warnings(kind, name, files)
 		if len(f.Problems)+len(f.Warnings) > 0 {
@@ -194,26 +197,22 @@ func Compile(root string, castor bool) ([]string, error) {
 				"path": "skills/" + name, "source_uri": a.SourceURI, "sha256_hash": a.SHA256, "references": refs(files, "skills/"+name+"/references/"), "examples": refs(files, "skills/"+name+"/examples/")}
 		}
 	}
+	files := map[string]any{agentpkg.ManifestFile: m}
+	if castor {
+		files["skills_manifest.json"] = skills
+	}
 	var wrote []string
-	write := func(name string, v any) error {
-		b, err := json.MarshalIndent(v, "", "  ")
-		if err != nil {
-			return err
+	for _, name := range []string{agentpkg.ManifestFile, "skills_manifest.json"} {
+		v, ok := files[name]
+		if !ok {
+			continue
 		}
+		b, _ := json.MarshalIndent(v, "", "  ") // maps of strings: always JSON
 		p := filepath.Join(root, name)
 		if err := os.WriteFile(p, append(b, '\n'), 0o644); err != nil {
-			return err
-		}
-		wrote = append(wrote, p)
-		return nil
-	}
-	if err := write(agentpkg.ManifestFile, m); err != nil {
-		return nil, err
-	}
-	if castor {
-		if err := write("skills_manifest.json", skills); err != nil {
 			return wrote, err
 		}
+		wrote = append(wrote, p)
 	}
 	return wrote, nil
 }
@@ -497,7 +496,7 @@ func copyDir(src, dst string) error {
 
 // fetchGitHub downloads u's repository at its ref into a new folder (its
 // archive, as codeload.github.com serves it), and says where.
-func fetchGitHub(ctx context.Context, u agentpkg.URI, o Options) (string, error) {
+func fetchGitHub(ctx context.Context, u agentpkg.URI, o Options) (dir string, err error) {
 	base := cmpOr(o.GitHubBase, "https://codeload.github.com")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(base, "/")+"/"+u.Target+"/tar.gz/"+u.Ref, nil)
 	if err != nil {
@@ -518,48 +517,50 @@ func fetchGitHub(ctx context.Context, u agentpkg.URI, o Options) (string, error)
 	if res.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("github://%s@%s: GitHub answered %s", u.Target, u.Ref, res.Status)
 	}
-	dir, err := os.MkdirTemp("", "blitz-pkg-")
-	if err != nil {
+	if dir, err = os.MkdirTemp("", "blitz-pkg-"); err != nil {
 		return "", err
 	}
-	zr, err := gzip.NewReader(io.LimitReader(res.Body, 200<<20))
+	defer func() {
+		if err != nil {
+			os.RemoveAll(dir)
+			dir = ""
+		}
+	}()
+	return dir, untar(res.Body, dir)
+}
+
+// untar writes a GitHub archive's files into dir: each under the
+// archive's one folder (repo-ref/), only plain files, none outside dir.
+func untar(r io.Reader, dir string) error {
+	zr, err := gzip.NewReader(io.LimitReader(r, 200<<20))
 	if err != nil {
-		os.RemoveAll(dir)
-		return "", err
+		return err
 	}
 	tr := tar.NewReader(zr)
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			break
+			return nil
 		}
 		if err != nil {
-			os.RemoveAll(dir)
-			return "", err
+			return err
 		}
-		// The archive's files are under one folder, repo-ref/.
 		_, rel, ok := strings.Cut(h.Name, "/")
 		if !ok || rel == "" || strings.Contains(rel, "..") || h.Typeflag != tar.TypeReg {
 			continue
 		}
+		b, err := io.ReadAll(io.LimitReader(tr, agentpkg.MaxFile+1))
+		if err != nil {
+			return err
+		}
 		target := filepath.Join(dir, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			os.RemoveAll(dir)
-			return "", err
+			return err
 		}
-		f, err := os.Create(target)
-		if err != nil {
-			os.RemoveAll(dir)
-			return "", err
-		}
-		_, err = io.Copy(f, io.LimitReader(tr, agentpkg.MaxFile+1))
-		f.Close()
-		if err != nil {
-			os.RemoveAll(dir)
-			return "", err
+		if err := os.WriteFile(target, b, 0o644); err != nil {
+			return err
 		}
 	}
-	return dir, nil
 }
 
 func mapKeys[V any](m map[string]V) func(func(string) bool) {

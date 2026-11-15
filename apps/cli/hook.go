@@ -78,35 +78,37 @@ func runHook(cmd *cobra.Command, g *globalFlags, event string) error {
 	}
 	defer b.Close()
 	results, err := b.RunGitHook(ctx, event, input)
-	if errors.Is(err, api.ErrUnknownHook) {
-		return withCode(exitUsage, err)
-	}
 	if err != nil {
 		return err
 	}
-	out := cmd.ErrOrStderr() // a hook's output is read on stderr
+	if failed := printHookResults(cmd.ErrOrStderr(), results); failed > 0 {
+		return withCode(exitFailure, errors.New(i18n.T("hook.failed", "event", event, "count", failed)))
+	}
+	return nil
+}
+
+// printHookResults prints each workflow's ✓ or ✗ (on stderr, which git
+// shows) with why, and says how many failed.
+func printHookResults(out io.Writer, results []api.HookResult) int {
 	failed := 0
 	for _, r := range results {
 		name := r.Workflow
 		if r.Version != "" {
 			name += "@" + r.Version
 		}
-		if r.Passed {
-			fmt.Fprintln(out, "✓ "+name)
-		} else {
+		mark := "✓ "
+		if !r.Passed {
 			failed++
-			fmt.Fprintln(out, "✗ "+name)
+			mark = "✗ "
 		}
+		fmt.Fprintln(out, mark+name)
 		for _, line := range []string{r.Error, r.Output} {
 			if line = strings.TrimSpace(line); line != "" {
 				fmt.Fprintln(out, "    "+strings.ReplaceAll(line, "\n", "\n    "))
 			}
 		}
 	}
-	if failed > 0 {
-		return withCode(exitFailure, errors.New(i18n.T("hook.failed", "event", event, "count", failed)))
-	}
-	return nil
+	return failed
 }
 
 // hookInput is what event's workflows run on: the staged diff for a

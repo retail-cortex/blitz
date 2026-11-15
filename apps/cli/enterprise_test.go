@@ -750,16 +750,31 @@ func TestEnterpriseOwnItemsCommands(t *testing.T) {
 	skill := filepath.Join(home, ".blitz", "skills", "tone", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
 	require.NoError(t, os.WriteFile(skill, []byte("---\nname: tone\ndescription: Our tone\n---\nBe kind.\n"), 0o644))
-	_, err := runCLI(t, "enterprise", "items", "sync")
-	assert.Error(t, err, "not connected")
-	_, err = runCLI(t, "enterprise", "connect", org.URL)
+	big := filepath.Join(home, ".blitz", "skills", "Big Notes", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(big), 0o755))
+	require.NoError(t, os.WriteFile(big, []byte("x"), 0o644))
+	// Changed on another computer too: a conflict on the first sync.
+	org.Personal["skill/tone"] = &enterprisetest.PersonalAsset{Revision: 1, Files: map[string]string{"skills/tone/SKILL.md": "---\nname: tone\n---\nTheirs.\n"}}
+	for _, args := range [][]string{{"sync"}, {"share", "skill/tone"}, {"submissions"}} {
+		_, err := runCLI(t, append([]string{"enterprise", "items"}, args...)...)
+		assert.Error(t, err, "not connected: %v", args)
+	}
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
 	require.NoError(t, err)
 	_, err = runCLI(t, "enterprise", "login")
 	require.NoError(t, err)
 
-	out, err := runCLI(t, "enterprise", "items", "sync")
+	out, err := runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "haven't submitted anything")
+	org.Mu.Lock()
+	org.Personal["skill/tone"].Revision = 2 // changed again elsewhere: a conflict whichever sync is first
+	org.Personal["skill/tone"].Files["skills/tone/SKILL.md"] = "---\nname: tone\n---\nTheirs, again.\n"
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "items", "sync")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Synced with your organization")
+	assert.Contains(t, out, "skill/Big Notes isn't synced")
 	require.Eventually(t, func() bool {
 		org.Mu.Lock()
 		defer org.Mu.Unlock()

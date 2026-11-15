@@ -1662,3 +1662,114 @@ func TestManagedOrganization(t *testing.T) {
 		assert.Equal(t, "MANAGED", info.Reason, u)
 	}
 }
+
+// EN-93, EN-95: the person's own assets synced and shared through the
+// service: not before signing in; one brought in from another computer
+// tells the workspaces; one that can't sync is listed with why; one they
+// haven't, or one that can't be read, isn't shared; the service's
+// refusal passes its code on.
+func TestOwnItems(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	s.ent.retry, s.ent.idle = 50*time.Millisecond, 50*time.Millisecond
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Policy = map[string]any{"schema": 2, "policy": map[string]any{"refresh": "1h"}, "rules": []any{}, "guardrails": []any{},
+		"explain": map[string]any{"library.contribute.skills": map[string]any{"value": true, "level": "global"}}}
+	org.Personal = map[string]*enterprisetest.PersonalAsset{"agent/helper": {Revision: 1, Files: map[string]string{"agents/helper.md": "---\nname: helper\n---\nHelp."}}}
+	org.PersonalAllowed = map[string]bool{"skill": true, "agent": true}
+	home := config.ConfigDir(s.configDir)
+	for rel, text := range map[string]string{"skills/tone/SKILL.md": "---\nname: tone\n---\nT.", "skills/Big Notes/SKILL.md": "x"} {
+		p := filepath.Join(home, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(text), 0o644))
+	}
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	_, err := c.ConnectEnterprise(ctx, connect.NewRequest(&pb.ConnectEnterpriseRequest{Url: org.URL}))
+	require.NoError(t, err)
+	for _, call := range []func() error{
+		func() error { _, err := c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{})); return err },
+		func() error {
+			_, err := c.ListSubmissions(ctx, connect.NewRequest(&pb.ListSubmissionsRequest{}))
+			return err
+		},
+		func() error {
+			_, err := c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "tone"}))
+			return err
+		},
+	} {
+		_, info := errorReason(t, call())
+		assert.Equal(t, "NOT_SIGNED_IN", info.Reason)
+	}
+	stream, err := c.EnterpriseSignIn(ctx, connect.NewRequest(&pb.EnterpriseSignInRequest{Device: true}))
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	_ = stream.Close()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(filepath.Join(home, "agents", "helper.md"))
+		return err == nil
+	}, 5*time.Second, 20*time.Millisecond, "brought in by the sync after the policy")
+	res, err := c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
+	require.NoError(t, err)
+	assert.Contains(t, res.Msg.Skipped, "skill/Big Notes")
+
+	subs, err := c.ListSubmissions(ctx, connect.NewRequest(&pb.ListSubmissionsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"skill"}, subs.Msg.Contribute)
+	var skipped string
+	for _, o := range subs.Msg.Own {
+		if o.Name == "Big Notes" {
+			skipped = o.Skipped
+		}
+	}
+	assert.Contains(t, skipped, "its name")
+
+	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "Big Notes"}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "INVALID_ARGUMENT", info.Reason)
+	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "nope"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_FOUND", info.Reason)
+	sub, err := c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "tone", Note: "ours"}))
+	require.NoError(t, err)
+	assert.Equal(t, "judging", sub.Msg.Submission.State)
+	org.Mu.Lock()
+	org.Submissions[0]["decided_at"] = time.Now()
+	org.Submissions[0]["verdicts"] = []map[string]any{{"check": "audit", "score": 1, "passed": true, "reason": "ok"}}
+	org.ShareRefusal = "name_taken"
+	org.Mu.Unlock()
+	subs, err = c.ListSubmissions(ctx, connect.NewRequest(&pb.ListSubmissionsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, subs.Msg.Submissions, 1)
+	assert.NotNil(t, subs.Msg.Submissions[0].DecidedAt)
+	assert.Len(t, subs.Msg.Submissions[0].Verdicts, 1)
+	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "tone"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NAME_TAKEN", info.Reason)
+
+	// Brought in now, from another computer; then a service that stops
+	// keeping them.
+	org.Mu.Lock()
+	org.Personal["agent/writer"] = &enterprisetest.PersonalAsset{Revision: 1, Files: map[string]string{"agents/writer.md": "---\nname: writer\n---\nWrite."}}
+	org.Mu.Unlock()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(filepath.Join(home, "agents", "writer.md"))
+		if err == nil {
+			return true
+		}
+		_, _ = c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
+		return false
+	}, 5*time.Second, 20*time.Millisecond)
+	org.Mu.Lock()
+	org.Personal = nil
+	org.Mu.Unlock()
+	_, err = c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
+	assert.Error(t, err)
+}

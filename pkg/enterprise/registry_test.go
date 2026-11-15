@@ -68,4 +68,8 @@ func TestRegistryClient(t *testing.T) {
 	assert.Empty(t, found)
 	_, err = (&Registry{URL: s.URL, Token: "blitzreg_wrong"}).Search(ctx, "", "")
 	assert.Error(t, err)
+	_, _, err = (&Registry{URL: "not a url", Token: "t"}).Fetch(ctx, host, "skill", "tone", "")
+	assert.ErrorContains(t, err, "your registry is not a url")
+	_, err = c.CallAPI(ctx, "x", "BAD METHOD", "/", "", nil, nil)
+	assert.Error(t, err)
 }

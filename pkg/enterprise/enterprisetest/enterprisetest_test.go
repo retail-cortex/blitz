@@ -128,3 +128,57 @@ func TestStrictJobs(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, do(c.method, c.path, c.body, true), c.path)
 	}
 }
+
+// The library's fakes refuse as the service would: no access token, a
+// service before them, an asset not there, a kind not kept, a body that
+// doesn't read, an old revision.
+func TestStrictLibrary(t *testing.T) {
+	p := NewProvider(t)
+	s := NewService(t, p.URL)
+	s.Mu.Lock()
+	s.Access["tok"] = "session"
+	s.Mu.Unlock()
+	call := func(method, path, token, body string) int {
+		req, err := http.NewRequest(method, s.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		res.Body.Close()
+		return res.StatusCode
+	}
+	for _, r := range []struct{ method, path string }{
+		{"GET", "/api/v1/me/library"}, {"GET", "/api/v1/me/library/skill/x"}, {"POST", "/api/v1/me/runs"},
+		{"POST", "/api/v1/me/library/skill/x/share"}, {"GET", "/api/v1/me/submissions"}, {"POST", "/api/v1/me/receipts"},
+		{"GET", "/api/v1/registry/search"}, {"GET", "/api/v1/registry/skill/x/1.x"}, {"POST", "/api/v1/registry/skill/x"}, {"GET", "/api/v1/apis/x/y"},
+	} {
+		assert.Equal(t, http.StatusUnauthorized, call(r.method, r.path, "", ""), r.path)
+	}
+	assert.Equal(t, http.StatusNotFound, call("GET", "/api/v1/me/library", "tok", ""), "a service before them")
+	s.Mu.Lock()
+	s.Personal, s.PersonalAllowed = map[string]*PersonalAsset{}, map[string]bool{"skill": true}
+	s.Mu.Unlock()
+	tests := []struct {
+		name, method, path, body string
+		code                     int
+	}{
+		{"not there", "GET", "/api/v1/me/library/skill/x", "", http.StatusNotFound},
+		{"a body that doesn't read", "PUT", "/api/v1/me/library/skill/x", "{nope", http.StatusBadRequest},
+		{"a kind not kept", "PUT", "/api/v1/me/library/rule/x", `{"files": {"rules/x.md": "x"}}`, http.StatusForbidden},
+		{"kept", "PUT", "/api/v1/me/library/skill/x", `{"files": {"skills/x/SKILL.md": "x"}, "base": 0}`, http.StatusOK},
+		{"from an old revision", "PUT", "/api/v1/me/library/skill/x", `{"files": {"skills/x/SKILL.md": "y"}, "base": 0}`, http.StatusConflict},
+		{"removed from an old one", "DELETE", "/api/v1/me/library/skill/x?base=0", "", http.StatusConflict},
+		{"removed", "DELETE", "/api/v1/me/library/skill/x?base=1", "", http.StatusNoContent},
+		{"removed again", "DELETE", "/api/v1/me/library/skill/x?base=1", "", http.StatusNotFound},
+		{"a receipt that doesn't read", "POST", "/api/v1/me/receipts", "{nope", http.StatusBadRequest},
+		{"no such API connector", "GET", "/api/v1/apis/x/y", "", http.StatusNotFound},
+		{"not in the registry", "GET", "/api/v1/registry/skill/x/1.x", "", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.code, call(tt.method, tt.path, "tok", tt.body))
+		})
+	}
+}

@@ -155,6 +155,20 @@ func TestSyncPersonal(t *testing.T) {
 		})
 	}
 
+	// Removed on both sides: forgotten.
+	require.NoError(t, os.RemoveAll(filepath.Join(root, "skills", "t")))
+	s.Mu.Lock()
+	delete(s.Personal, "skill/t")
+	s.Mu.Unlock()
+	_, err = SyncPersonal(ctx, c, root, state)
+	assert.Error(t, err, "agent/evil still doesn't write")
+
+	// The service fails one: said, the rest synced.
+	write(t, root, "agents/unwritable.md", "---\nname: unwritable\n---\nU.")
+	_, err = SyncPersonal(ctx, c, root, state)
+	assert.ErrorContains(t, err, "agent/unwritable")
+	require.NoError(t, os.Remove(filepath.Join(root, "agents", "unwritable.md")))
+
 	// From an old revision: changed elsewhere.
 	_, err = c.PutPersonal(ctx, "agent", "a", map[string]string{"agents/a.md": "x"}, 1)
 	assert.ErrorIs(t, err, ErrChangedElsewhere)

@@ -94,12 +94,13 @@ func pkgRegistry(g *globalFlags, registryURL string) (*enterprise.Registry, erro
 	return &enterprise.Registry{Client: c}, nil
 }
 
-func pkgRoot(g *globalFlags) (string, error) {
-	ws, err := orgWorkspace(g)
-	if err != nil {
-		return "", err
+// pkgRoot is the workspace's assets folder: -d's, else this folder's.
+func pkgRoot(g *globalFlags) string {
+	ws := g.dir
+	if ws == "" {
+		ws = "."
 	}
-	return packages.Root(ws), nil
+	return packages.Root(ws)
 }
 
 func newPkgAddCommand(g *globalFlags, reg func(*cobra.Command) (*enterprise.Registry, error)) *cobra.Command {
@@ -110,10 +111,7 @@ func newPkgAddCommand(g *globalFlags, reg func(*cobra.Command) (*enterprise.Regi
 		Short: "Add a package to the workspace: blitz://, github:// or a folder",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			o := packages.Options{Kind: kind, Force: force, GitHubToken: os.Getenv("GITHUB_TOKEN"), GitHubBase: os.Getenv("BLITZ_GITHUB_ARCHIVES")}
 			if strings.HasPrefix(args[0], "blitz://") {
 				r, err := reg(cmd)
@@ -146,10 +144,7 @@ func newPkgVerifyCommand(g *globalFlags) *cobra.Command {
 		Short: "Check the packages the workspace added are as they were added (.agents/blitz.lock); exits 1 when one isn't",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			results, err := packages.Verify(root)
 			if err != nil {
 				return err
@@ -182,10 +177,7 @@ func newPkgValidateCommand(g *globalFlags) *cobra.Command {
 		Short: "Check the workspace's assets as Blitz reads them, and what's worth fixing; exits 1 on a problem",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			found := packages.Validate(root)
 			out := cmd.OutOrStdout()
 			if asJSON {
@@ -228,10 +220,7 @@ func newPkgCompileCommand(g *globalFlags) *cobra.Command {
 		Short: "Compile the workspace's assets into .agents/agents_manifest.json (and Castor's skills_manifest.json with --castor)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			wrote, err := packages.Compile(root, castor)
 			for _, p := range wrote {
 				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("pkg.wrote", "path", p))
@@ -249,10 +238,7 @@ func newPkgListCommand(g *globalFlags) *cobra.Command {
 		Short: "List the workspace's assets, and where each package came from",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			lock, err := agentpkg.ReadLock(filepath.Join(root, agentpkg.LockFile))
 			if err != nil {
 				return err
@@ -332,10 +318,7 @@ func newPkgPublishCommand(g *globalFlags, reg func(*cobra.Command) (*enterprise.
 			if !ok || kind == "" || name == "" {
 				return withCode(exitUsage, errors.New(i18n.T("org.item_arg")))
 			}
-			root, err := pkgRoot(g)
-			if err != nil {
-				return err
-			}
+			root := pkgRoot(g)
 			files, why := agentpkg.ReadAsset(root, kind, name)
 			if why != "" {
 				return fmt.Errorf("%s: %s", args[0], why)

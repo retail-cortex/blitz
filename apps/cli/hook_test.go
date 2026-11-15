@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,4 +105,12 @@ func TestHookInput(t *testing.T) {
 	assert.ErrorContains(t, err, "git diff --cached")
 	_, err = hookInput(context.Background(), dir, "pre-push", strings.NewReader("refs/heads/main nothere refs/heads/main "+strings.Repeat("1", 40)+"\n"))
 	assert.Error(t, err, "a commit git doesn't know")
+}
+
+// What a hook prints: each workflow, its organization version, why.
+func TestPrintHookResults(t *testing.T) {
+	var b strings.Builder
+	n := printHookResults(&b, []api.HookResult{{Workflow: "review", Version: "1.2.0", Passed: false, Error: "a secret\nin main.go"}, {Workflow: "notes", Passed: true, Output: "ok"}})
+	assert.Equal(t, 1, n)
+	assert.Equal(t, "✗ review@1.2.0\n    a secret\n    in main.go\n✓ notes\n    ok\n", b.String())
 }

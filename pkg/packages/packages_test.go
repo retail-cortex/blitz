@@ -170,12 +170,13 @@ func TestAddAndVerify(t *testing.T) {
 func TestCompileAndValidate(t *testing.T) {
 	ws := t.TempDir()
 	root := Root(ws)
-	write(t, root, "skills/tone/SKILL.md", "---\nname: tone\ndescription: Our tone\n---\nBe kind. See [the style](references/style.md) and [gone](references/gone.md).\n")
+	write(t, root, "skills/tone/SKILL.md", "---\nname: tone\ndescription: Our tone\n---\nBe kind. See [the style](references/style.md), [gone](references/gone.md) and [the web](https://example.com).\n")
 	write(t, root, "skills/tone/references/style.md", "Short.")
 	write(t, root, "agents/writer.md", "---\nname: writer\nskills: [tone@1.x]\n---\nWrite.\n")
 	write(t, root, "workflows/brief.flow.yaml", "description: A brief\nnodes: [{id: a, type: nope}]\n")
 	write(t, root, "evals/cases.md", "| ID | Prompt | Output |\n|---|---|---|\n| a | b | c |\n")
 	write(t, root, "skills/Bad Name/SKILL.md", "x")
+	write(t, root, "agents/.draft.md", "hidden: not an asset")
 
 	found := Validate(root)
 	by := map[string]Finding{}
@@ -210,4 +211,107 @@ func TestCompileAndValidate(t *testing.T) {
 	head, body := frontMatter("---\nunclosed")
 	assert.Empty(t, head)
 	assert.Equal(t, "---\nunclosed", body)
+}
+
+// What a folder or file holds, and what isn't an asset: a folder laid out
+// as .agents, a folder of skills, a file of the kind its folder names,
+// and the refusals.
+func TestFromFolder(t *testing.T) {
+	ctx := context.Background()
+	src := t.TempDir()
+	write(t, src, "layout/rules/brief.md", "Be brief.")
+	write(t, src, "layout/evals/cases.md", "| ID |")
+	write(t, src, "many/a/SKILL.md", "---\nname: a\n---\nA.")
+	write(t, src, "many/b/SKILL.md", "---\nname: b\n---\nB.")
+	write(t, src, "many/notes.txt", "not a skill")
+	write(t, src, "guardrails/pii.md", "No PII.")
+	write(t, src, "Bad Name.md", "x")
+	write(t, src, "notes.txt", "x")
+	write(t, src, "empty/readme.txt", "x")
+	write(t, src, "broken/skills/Bad Name/SKILL.md", "x")
+	tests := []struct {
+		path, kind string
+		want       []string
+		err        string
+	}{
+		{filepath.Join(src, "layout"), "", []string{"eval/cases", "rule/brief"}, ""},
+		{filepath.Join(src, "many"), "", []string{"skill/a", "skill/b"}, ""},
+		{filepath.Join(src, "guardrails", "pii.md"), "", []string{"guardrail/pii"}, ""},
+		{filepath.Join(src, "guardrails", "pii.md"), "rule", []string{"rule/pii"}, ""},
+		{filepath.Join(src, "guardrails", "pii.md"), "skill", nil, "--kind"},
+		{filepath.Join(src, "Bad Name.md"), "", nil, "isn't a name"},
+		{filepath.Join(src, "notes.txt"), "", nil, "isn't an asset"},
+		{filepath.Join(src, "empty"), "", nil, "holds no agent"},
+		{filepath.Join(src, "broken"), "", nil, "Bad Name"},
+		{filepath.Join(src, "nope"), "", nil, "no such file"},
+	}
+	for _, tt := range tests {
+		t.Run(filepath.Base(tt.path)+tt.kind, func(t *testing.T) {
+			added, err := Add(ctx, Root(t.TempDir()), tt.path, Options{Kind: tt.kind})
+			if tt.err != "" {
+				assert.ErrorContains(t, err, tt.err)
+				return
+			}
+			require.NoError(t, err)
+			var keys []string
+			for _, e := range added {
+				keys = append(keys, e.Kind+"/"+e.Name)
+			}
+			assert.Equal(t, tt.want, keys)
+		})
+	}
+}
+
+// A GitHub archive that isn't one, or holds a path out of its folder: the
+// first refused, the second's path left out.
+func TestFetchGitHub(t *testing.T) {
+	ctx := context.Background()
+	var body []byte
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(body) }))
+	defer gh.Close()
+	o := Options{GitHubBase: gh.URL}
+	body = []byte("not a gzip")
+	_, err := Add(ctx, Root(t.TempDir()), "github://acme/skills", o)
+	assert.Error(t, err)
+	body = archive(t, map[string]string{"../evil/SKILL.md": "x", "tone/SKILL.md": "---\nname: tone\n---\nT."})
+	added, err := Add(ctx, Root(t.TempDir()), "github://acme/skills", o)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	assert.Equal(t, "tone", added[0].Name)
+	_, err = Add(ctx, Root(t.TempDir()), "github://acme/skills", Options{GitHubBase: "http://127.0.0.1:1"})
+	assert.Error(t, err, "nothing answers")
+	_, err = Add(ctx, Root(t.TempDir()), "", o)
+	assert.Error(t, err)
+}
+
+// A lockfile that doesn't read stops Add, Verify and Compile; an assets
+// folder that can't be written stops Add.
+func TestBrokenLock(t *testing.T) {
+	ctx := context.Background()
+	root := Root(t.TempDir())
+	write(t, root, agentpkg.LockFile, "{nope")
+	_, err := Add(ctx, root, "x", Options{})
+	assert.Error(t, err)
+	_, err = Verify(root)
+	assert.Error(t, err)
+	_, err = Compile(root, false)
+	assert.Error(t, err)
+	src := t.TempDir()
+	write(t, src, "agents/a.md", "---\nname: a\n---\nA.")
+	ro := Root(t.TempDir())
+	write(t, ro, "agents/.keep", "")
+	require.NoError(t, os.Chmod(filepath.Join(ro, "agents"), 0o500))
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(ro, "agents"), 0o755) })
+	_, err = Add(ctx, ro, filepath.Join(src, "agents", "a.md"), Options{})
+	assert.Error(t, err, "can't write")
+}
+
+// A manifest that can't be written says so.
+func TestCompileUnwritable(t *testing.T) {
+	root := Root(t.TempDir())
+	write(t, root, "agents/a.md", "---\nname: a\n---\nA.")
+	require.NoError(t, os.Chmod(root, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+	_, err := Compile(root, true)
+	assert.Error(t, err)
 }

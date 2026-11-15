@@ -228,6 +228,15 @@ func TestInstallOrgHooks(t *testing.T) {
 	own := "#!/bin/sh\necho mine\n"
 	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte(own), 0o755))
 
+	w.installOrgHooks() // installed, and logged
+	done, err = w.InstallOrgHooks(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, done, "installed already")
+	require.NoError(t, os.Remove(filepath.Join(hooks, "pre-push")))
+	b0, err := os.ReadFile(filepath.Join(hooks, "pre-commit.local"))
+	require.NoError(t, err)
+	require.NoError(t, os.Rename(filepath.Join(hooks, "pre-commit.local"), filepath.Join(hooks, "pre-commit")))
+	require.Equal(t, own, string(b0))
 	done, err = w.InstallOrgHooks(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"pre-commit", "pre-push"}, done)
@@ -335,4 +344,90 @@ func TestReportRuns(t *testing.T) {
 		defer org.Mu.Unlock()
 		return len(org.Reported) == 1
 	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// WF-31: an organization API step sends its JSON or text body and its
+// headers; a response over what a step keeps fails it, as an unreachable
+// service does.
+func TestFlowOrgAPIBodies(t *testing.T) {
+	org := signedInOrg(t)
+	var mu sync.Mutex
+	var seen []string
+	org.Mu.Lock()
+	org.SharedAPIs = map[string]http.Handler{"echo": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		seen = append(seen, r.Header.Get("Content-Type")+" "+r.Header.Get("Accept")+" "+string(b))
+		mu.Unlock()
+		if r.URL.Path == "/big" {
+			_, _ = w.Write([]byte(strings.Repeat("a", flowResponseLimit+1)))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	})}
+	org.Mu.Unlock()
+	tests := []struct {
+		name, flow, err, saw string
+	}{
+		{"JSON", "nodes: [{id: a, type: api_call, connector: echo, method: POST, url: /j, json: {diff: \"{{ input }}\"}}]\n", "", `application/json  {"diff":"x"}`},
+		{"text and a header", "nodes: [{id: a, type: api_call, connector: echo, method: POST, url: /t, body: \"hi {{ input }}\", headers: [{name: Accept, value: text/plain}]}]\n", "", " text/plain hi x"},
+		{"too much", "nodes: [{id: a, type: api_call, connector: echo, url: /big}]\n", "more than 256 KiB", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, _ := openTestWith(t, func(c *config.Config) { c.Enterprise.URL = org.URL })
+			writeFlow(t, w, "call", tt.flow)
+			mu.Lock()
+			seen = nil
+			mu.Unlock()
+			_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "/call x", Command: true}, func(api.Event) {})
+			if tt.err != "" {
+				assert.ErrorContains(t, err, tt.err)
+				return
+			}
+			require.NoError(t, err)
+			mu.Lock()
+			assert.Equal(t, []string{tt.saw}, seen)
+			mu.Unlock()
+		})
+	}
+	bad, _ := openTestWith(t, func(c *config.Config) { c.Enterprise.URL = "::not a url" })
+	writeFlow(t, bad, "call", "nodes: [{id: a, type: api_call, connector: echo}]\n")
+	_, err := bad.Run(context.Background(), newSession(t, bad).ID, api.Turn{Text: "/call", Command: true}, func(api.Event) {})
+	assert.Error(t, err, "an address that doesn't read")
+	w, _ := openTestWith(t, func(c *config.Config) { c.Enterprise.URL = "http://127.0.0.1:1" })
+	writeFlow(t, w, "call", "nodes: [{id: a, type: api_call, connector: echo}]\n")
+	_, err = w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "/call", Command: true}, func(api.Event) {})
+	assert.Error(t, err, "nothing answers")
+}
+
+// A receipt the organization can't take is said, not a failure of the
+// hook; a run's report to a service that isn't signed in is dropped.
+func TestReceiptUnreachable(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Enterprise.URL = "http://127.0.0.1:1" })
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "notes.md"), []byte("hi"), 0o644))
+	writeFlow(t, w, "notes", "triggers: [git.pre_push]\nnodes: [{id: a, type: read_file, path: notes.md}]\n")
+	got, err := w.RunGitHook(context.Background(), "pre-push", "")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.True(t, got[0].Passed)
+	reportRuns("http://127.0.0.1:1", enterprise.RunReport{Kind: "workflow", Name: "x"})
+}
+
+// A repository whose hooks folder can't be made: said.
+func TestInstallOrgHooksUnwritable(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	policy := t.TempDir()
+	req := filepath.Join(policy, config.OrgRequired, "workflows")
+	require.NoError(t, os.MkdirAll(req, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(req, "review"+flows.Suffix), []byte(reviewFlow), 0o644))
+	w.setSettings(func(c *config.Config) { c.Org.PolicyDir = policy })
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "README.md"), []byte("hi\n"), 0o644))
+	gitRepo(t, w.Dir())
+	hooks := filepath.Join(w.Dir(), ".git", "hooks")
+	require.NoError(t, os.RemoveAll(hooks))
+	require.NoError(t, os.WriteFile(hooks, []byte("not a folder"), 0o644))
+	_, err := w.InstallOrgHooks(context.Background())
+	assert.Error(t, err)
 }

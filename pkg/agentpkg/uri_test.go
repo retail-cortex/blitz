@@ -16,6 +16,7 @@ package agentpkg
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -112,4 +113,35 @@ func TestAssetsAndLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("{nope"), 0o644))
 	_, err = ReadLock(path)
 	assert.Error(t, err)
+}
+
+// A lockfile that's a folder doesn't read; one under a file can't be
+// written; an asset whose folder is a file can't be written; a skill over
+// the files allowed isn't read.
+func TestLockAndAssetErrors(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ReadLock(dir)
+	assert.Error(t, err)
+	file := filepath.Join(dir, "f")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+	assert.Error(t, Lock{}.Write(filepath.Join(file, "blitz.lock")))
+	l, err := ReadLock(filepath.Join(dir, "empty.lock"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "null.lock"), []byte(`{"version":"1"}`), 0o644))
+	l, err = ReadLock(filepath.Join(dir, "null.lock"))
+	require.NoError(t, err)
+	assert.NotNil(t, l.Assets)
+	assert.Error(t, WriteAsset(file, "agent", "a", map[string]string{"agents/a.md": "x"}), "its root is a file")
+	root := t.TempDir()
+	for i := 0; i <= MaxFiles; i++ {
+		p := filepath.Join(root, "skills", "many", "f"+strconv.Itoa(i)+".md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "skills", "many", "SKILL.md"), []byte("S"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "skills", "many", ".git", "objects"), 0o755))
+	_, why := ReadAsset(root, "skill", "many")
+	assert.Contains(t, why, "200 files")
+	_, skipped := ReadAssets(root, "skill")
+	assert.Contains(t, skipped, "skill/many")
 }

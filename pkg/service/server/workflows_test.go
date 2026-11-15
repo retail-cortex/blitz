@@ -151,4 +151,5 @@ func TestRunGitHookOverTheAPI(t *testing.T) {
 	assert.Contains(t, got.Error, "isn't connected to an organization")
 
 	assert.Equal(t, "UNKNOWN_HOOK", reason(t, unary(w.RunGitHook, &pb.RunGitHookRequest{Workspace: dir, Event: "post-merge"})))
+	assert.Equal(t, "INVALID_WORKSPACE", reason(t, unary(w.RunGitHook, &pb.RunGitHookRequest{Workspace: "relative", Event: "pre-commit"})))
 }
