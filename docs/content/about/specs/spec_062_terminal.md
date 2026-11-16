@@ -35,7 +35,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
 
 ## 3. The API
 
-`TerminalService` (`terminal.proto`), every request naming its workspace by absolute directory. A browser can't send a stream (Connect over HTTP), so output comes on a server stream and input goes by unary calls. The same API works for the remote service (spec_053), and a later bidirectional stream would replace only the writes.
+`TerminalService` (`terminal.proto`), every request naming its workspace by absolute directory. A browser can't send a stream (Connect over HTTP), so output comes on a server stream and input goes by unary calls. The same API works for the remote service, and a later bidirectional stream would replace only the writes.
 
 - **TRM-10** `OpenTerminal(workspace, dir, cols, rows)` starts a terminal and answers its `TerminalInfo`: id, folder, shell, when it started, and whether it has exited, with what code.
 - **TRM-11** `ResizeTerminal(id, cols, rows)` sets its size (the PTY's window size, SIGWINCH to the shell). Zero or more than 1,000 is refused (`INVALID_ARGUMENT`).

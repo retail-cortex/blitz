@@ -46,7 +46,7 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
 
   The voices are Gemini's names for them; a model that doesn't offer one uses `[voice] voice`.
 - **PER-11** **The person's own.** Custom personalities are `~/.blitz/personalities/<name>.md`: frontmatter `description` and `voice` (both optional), the body the text. The name is lower case letters, digits and `-`, at most 40 characters, and one of the person's wins over a built-in of its name (so `friendly` can be made the person's own). They're read when listed and when a session starts, so a file edited by hand applies from the next turn.
-- **PER-12** **Organizations.** An organization's catalog (spec_053 EN-30) may bring personalities (`personalities/<name>.md`) as defaults, listed as the organization's, read only. Whether a policy can lock one is spec_053's (VOX-90's question too).
+- **PER-12** **Organizations.** An organization's catalog may bring personalities (`personalities/<name>.md`) as defaults, listed as the organization's, read only. Whether a policy can lock one is VOX-90's question.
 
 ## 4. Choosing one
 
