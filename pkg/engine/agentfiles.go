@@ -16,11 +16,14 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
@@ -28,6 +31,44 @@ import (
 // ProjectAgentsDir is the folder of the workspace's own agents.
 func (w *Workspace) ProjectAgentsDir() string {
 	return filepath.Join(w.Dir(), config.ProjectAgentsDir)
+}
+
+// ErrAgentInUse means a global agent can't be switched off in a
+// workspace whose agent it is: choose another one there first.
+var ErrAgentInUse = errors.New("it's this workspace's agent: choose another one first")
+
+// agentScope is the store of the global agents the person turned off,
+// by workspace (STU-15).
+func agentScope(cfg *config.Config) *config.ConnectorScope {
+	return config.OpenAgentScope(settingsDir(cfg))
+}
+
+// AgentsOffHere are the global agents switched off in this workspace, by
+// name.
+func (w *Workspace) AgentsOffHere() map[string]bool { return agentScope(w.cfg).Off(w.Dir()) }
+
+// SetAgentOn turns one of the user's global agents (~/.blitz/agents) on
+// or off in this workspace (spec_040_studio STU-15): one that's off
+// isn't loaded here, so no conversation, eval or job here offers it,
+// while its file stays and every other workspace keeps it. The
+// workspace's own agent can't be switched off (ErrAgentInUse), nor a
+// name that isn't a global agent's (api.UnknownAgentError).
+func (w *Workspace) SetAgentOn(ctx context.Context, name string, on bool) error {
+	files, err := agents.ListFiles(config.UserAgentsDir, w.agents.IsBuiltin)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(files, func(f agents.File) bool { return f.Spec != nil && f.Spec.Name == name }) {
+		return &api.UnknownAgentError{Name: name}
+	}
+	if !on && w.engine.ActiveAgent() == name {
+		return ErrAgentInUse
+	}
+	if err := agentScope(w.cfg).Set(w.Dir(), name, on); err != nil {
+		return err
+	}
+	w.agents.Invalidate()
+	return w.refreshAgents(ctx)
 }
 
 // RefreshAgents loads the agents again if a file in their folders was

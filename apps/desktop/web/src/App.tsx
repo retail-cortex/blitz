@@ -209,7 +209,23 @@ function Shell() {
   // The Settings dialog, open on a section, and for the settings file a
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string; connect?: string } | null>(null);
-  const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
+  // A workspace's own settings are its Studio › Settings (STU-12): asked
+  // for (the Workspaces menu's pencil, the status bar, the palette, an
+  // older link), the workspace is shown with Studio open on them.
+  const showSettings = useCallback(
+    (at: { section: Section; scope?: string; connect?: string }) => {
+      if (at.section === "workspaces" && at.scope) {
+        const dir = at.scope;
+        setSettingsAt(null);
+        update((p) => openWorkspace(p, dir));
+        showView({ dir, view: "studio", studio: "settings" });
+        return;
+      }
+      setSettingsAt(at);
+    },
+    [update],
+  );
+  const openSettings = useCallback((section: Section, scope?: string) => showSettings({ section, scope }), [showSettings]);
   // The user docs (Help, the palette, /docs), open on a page.
   const [docsAt, setDocsAt] = useState<DocsAt | null>(null);
   useEffect(() => {
@@ -221,11 +237,11 @@ function Shell() {
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<{ section: Section; scope?: string; connect?: string }>).detail;
-      setSettingsAt({ section: d.section, scope: d.scope, connect: d.connect });
+      showSettings({ section: d.section, scope: d.scope, connect: d.connect });
     };
     window.addEventListener(openSettingsEvent, f);
     return () => window.removeEventListener(openSettingsEvent, f);
-  }, []);
+  }, [showSettings]);
   // macOS's app menu: its words in the window's language, and its About
   // Blitz and Settings… (DSK-101).
   useEffect(() => {
@@ -313,7 +329,7 @@ function Shell() {
   useEffect(() => onNotificationOpen((dir) => (dir ? update((p) => openWorkspace(p, dir)) : showTasks())), [update]);
   // A blitz://open link opens its folder with the prompt filled in, not
   // sent; blitz://workers (the tray's) opens it on its workers, or
-  // Settings › Workers for the global ones; blitz://processes (the tray's)
+  // Settings › Jobs for the global ones; blitz://processes (the tray's)
   // shows the Processes view, in its folder or the one shown.
   const activeDir = useRef("");
   activeDir.current = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
@@ -327,7 +343,7 @@ function Shell() {
           showView({ dir, view: "processes", process: link.process, processIn: dir });
           return;
         }
-        // The global workers' (the home workspace's) are in Settings › Workers.
+        // The global workers' (the home workspace's) are in Settings › Jobs.
         if (link.view === "workers" && link.dir === (await globalHome())) {
           setSettingsAt({ section: "workers", scope: link.worker });
           return;
@@ -367,7 +383,7 @@ function Shell() {
   // Unsaved files are discarded, and a turn running here stopped, only
   // once the user agrees.
   const [unsavedClose, setUnsavedClose] = useState<string | null>(null);
-  // The license dialog, from Settings › About or /license.
+  // The license dialog, from Settings › System › About or /license.
   const [license, setLicense] = useState<LicenseText | null>(null);
   useEffect(() => {
     const f = (e: Event) => setLicense((e as CustomEvent<{ which: LicenseText }>).detail.which);

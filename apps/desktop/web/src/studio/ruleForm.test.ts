@@ -25,14 +25,21 @@ describe("the rule form", () => {
   it("reads a gate and writes back only a gate's fields", () => {
     const f = formFromRule(rule({ name: "tested", when: "after_agent", action: "revise", order: 20, agents: ["qa"], paths: ["*.go"] }));
     expect(f).toMatchObject({ name: "tested", when: "after_agent", action: "revise", order: 20, agents: ["qa"] });
-    expect(specFromForm(f)).toEqual({ name: "tested", description: "", when: "after_agent", action: "revise", order: 20, agents: ["qa"], paths: [], text: "x" });
+    expect(specFromForm(f)).toEqual({ name: "tested", description: "", when: "after_agent", action: "revise", order: 20, agents: ["qa"], paths: [], text: "x", off: false });
+  });
+
+  it("keeps a rule's switch: off reads and writes back as off (STU-16)", () => {
+    const f = formFromRule(create(RuleFileSchema, { name: "quiet", text: "x", off: true }));
+    expect(f.off).toBe(true);
+    expect(specFromForm(f).off).toBe(true);
+    expect(sameRuleForm(f, { ...f, off: false })).toBe(false);
   });
 
   it("reads an instruction rule, its paths typed comma-separated", () => {
     const f = formFromRule(rule({ name: "style", paths: ["*.go", "cmd/**"], action: "" }));
     expect(f.when).toBe("");
     expect(f.paths).toBe("*.go, cmd/**");
-    expect(specFromForm({ ...f, action: "block", order: 5, agents: ["x"] })).toEqual({ name: "style", description: "", when: "", action: "", order: 0, agents: [], paths: ["*.go", "cmd/**"], text: "x" });
+    expect(specFromForm({ ...f, action: "block", order: 5, agents: ["x"] })).toEqual({ name: "style", description: "", when: "", action: "", order: 0, agents: [], paths: ["*.go", "cmd/**"], text: "x", off: false });
   });
 
   it("tells unsaved changes, names, lists, moves and the next order", () => {

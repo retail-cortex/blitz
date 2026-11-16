@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// The OS sandbox on Linux, where the page can fix it: Settings › Service's
+// The OS sandbox on Linux, where the page can fix it: Settings › System › Service's
 // row, and the notice a workspace shows when it didn't open because the
 // sandbox is required and isn't working (SANDBOX_UNAVAILABLE). Fixing it
 // installs an AppArmor profile for bubblewrap with the system's password

@@ -62,7 +62,7 @@ func (w *Workspace) workerPolicy() config.WorkerPolicy {
 	return w.cfg.Workers.Policy
 }
 
-// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Workers'
+// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Jobs'
 // limits) from the next listing or run (WK-63); a run going keeps the
 // limits it started with.
 func (w *Workspace) ReloadWorkerPolicy(cfg *config.Config) {
@@ -573,6 +573,10 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	}
 	switch {
 	case runErr != nil:
+	case len(wk.Evals) > 0:
+		// Its evals, each case (spec_023 WK-75): the results, as JSON, are
+		// its output; cases that fail are results, not a failed run.
+		runErr = w.runWorkerEvals(runCtx, wk.Evals, on)
 	case wk.Flow != "":
 		// A workflow (WF-17): its steps run under the worker's permissions,
 		// in its run's chat, the prompt as its input.
@@ -742,4 +746,36 @@ func newRunID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b)
+}
+
+// EvalsOutput is a worker's evals' results as its run's output (WK-75).
+type EvalsOutput struct {
+	Evals []api.EvalRun `json:"evals"`
+}
+
+// maxEvalText bounds each case's prompt, expected and output in the
+// results.
+const maxEvalText = 4 << 10
+
+// runWorkerEvals runs each eval named, every case, and says the results
+// as the run's last message, JSON; an eval that can't run is an error.
+func (w *Workspace) runWorkerEvals(ctx context.Context, names []string, on func(api.Event)) error {
+	out := EvalsOutput{Evals: []api.EvalRun{}}
+	for _, name := range names {
+		run, err := w.RunEval(ctx, name, api.EvalOptions{})
+		if err != nil {
+			return fmt.Errorf("eval %s: %w", name, err)
+		}
+		for i := range run.Results {
+			r := &run.Results[i]
+			r.Prompt, r.Expected, r.Output = textutil.TruncateUTF8(r.Prompt, maxEvalText), textutil.TruncateUTF8(r.Expected, maxEvalText), textutil.TruncateUTF8(r.Output, maxEvalText)
+		}
+		out.Evals = append(out.Evals, run)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return err
+	}
+	on(api.Event{Text: &api.Text{Text: string(b)}})
+	return nil
 }

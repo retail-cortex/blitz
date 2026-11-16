@@ -25,8 +25,8 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// MCP servers for the desktop app's Settings › Connectors › MCP servers,
-// Studio › Connectors and the tray (spec_009_mcp MCP-45..MCP-50): the
+// MCP servers for the desktop app's Settings › Resources › Connectors › MCP servers,
+// Studio › Resources › Connectors and the tray (spec_009_mcp MCP-45..MCP-50): the
 // global settings' [[mcp.servers]] and a workspace's own, edited as
 // `blitz mcp` does, and applied to open workspaces at once.
 

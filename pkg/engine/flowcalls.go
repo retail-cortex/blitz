@@ -188,6 +188,9 @@ func (w *Workspace) apiStep(ctx context.Context, n flows.Node, input string) (fl
 		q.Set(a.Name, sec.text(a.Value))
 	}
 	u.RawQuery = q.Encode()
+	if n.Connector != "" {
+		return w.orgAPIStep(ctx, n, method, u, input, sec)
+	}
 	shown := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 	if err := w.approveNetwork(ctx, "api_call", method+" "+shown, u); err != nil {
 		return flows.Result{}, err
@@ -389,4 +392,59 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 	}
 	text := w.secretRedactor().String(reply.String())
 	return flows.Result{Text: text, Data: flows.DataOf(text)}, nil
+}
+
+// orgAPIStep makes an API step's request to one of the organization's API
+// connectors (WF-31): the step's URL a path under it, through the
+// organization's service as the person, which adds its token and logs
+// the call; answered as any API step (a status of 400 or more fails it).
+// The organization's own service needs no approval: the person signed in
+// to it.
+func (w *Workspace) orgAPIStep(ctx context.Context, n flows.Node, method string, u *url.URL, input string, sec stepSecrets) (flows.Result, error) {
+	cfg := w.settings()
+	if cfg.Enterprise.URL == "" {
+		return flows.Result{}, fmt.Errorf("the step calls your organization's %s, but this Blitz isn't connected to an organization", n.Connector)
+	}
+	client, err := orgClient(cfg.Enterprise.URL)
+	if err != nil {
+		return flows.Result{}, err
+	}
+	header := http.Header{}
+	var body []byte
+	switch {
+	case n.JSON != nil:
+		if body, err = json.Marshal(sec.value(n.JSON)); err != nil {
+			return flows.Result{}, fmt.Errorf("the JSON: %w", err)
+		}
+		header.Set("Content-Type", "application/json")
+	case n.Body != "":
+		body = []byte(sec.text(n.Body))
+	case method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch:
+		body = []byte(input)
+	}
+	for _, p := range n.Headers {
+		header.Set(p.Name, sec.text(p.Value))
+	}
+	shown := n.Connector + "/" + strings.TrimLeft(u.Path, "/")
+	resp, err := client.CallAPI(ctx, n.Connector, method, u.Path, u.RawQuery, body, header)
+	if err != nil {
+		return flows.Result{}, fmt.Errorf("%s %s: %w", method, shown, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, flowResponseLimit+1))
+	if err != nil {
+		return flows.Result{}, fmt.Errorf("reading the response: %w", err)
+	}
+	if len(data) > flowResponseLimit {
+		return flows.Result{}, fmt.Errorf("%s %s answered with more than %d KiB, the most a step keeps", method, shown, flowResponseLimit>>10)
+	}
+	text := w.secretRedactor().String(string(data))
+	var parsed any = text
+	if d := flows.DataOf(text); d != nil {
+		parsed = d
+	}
+	if resp.StatusCode >= 400 {
+		return flows.Result{}, fmt.Errorf("%s %s answered %s: %s", method, shown, resp.Status, textutil.Ellipsize(text, 600))
+	}
+	return flows.Result{Text: text, Data: map[string]any{"status": resp.StatusCode, "headers": map[string]any{"content-type": resp.Header.Get("Content-Type")}, "body": parsed}}, nil
 }

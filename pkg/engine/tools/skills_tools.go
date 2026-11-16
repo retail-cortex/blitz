@@ -61,9 +61,15 @@ func NewListSkillsTool(provider *skills.Provider) (tool.Tool, error) {
 
 			var matched []*skills.Skill
 			if input.Query == "" {
-				matched = provider.List()
+				matched = provider.ListFor(callerAgent(ctx))
 			} else {
-				matched = provider.Search(input.Query)
+				// Each as the caller runs it: its own version (EN-82).
+				for _, s := range provider.Search(input.Query) {
+					if v, ok := provider.GetFor(callerAgent(ctx), s.Name); ok {
+						s = v
+					}
+					matched = append(matched, s)
+				}
 			}
 
 			summaries := make([]SkillSummary, 0, len(matched))
@@ -233,7 +239,7 @@ const maxMembers = 16
 // covers comes back as an error, without its content (the skill named in
 // the call is refused before, by ToolDenied).
 func activate(provider *skills.Provider, policy config.SkillPolicy, rules *PermissionRules, name, agent string, seen map[string]bool) ActivateSkillOutput {
-	skill, ok := provider.Get(name)
+	skill, ok := provider.GetFor(agent, name) // its own version (EN-82)
 	if !ok || skill == nil {
 		return ActivateSkillOutput{SkillName: name, Error: fmt.Sprintf("skill '%s' not found; use list_or_search_skills to see available skills", name)}
 	}
@@ -305,7 +311,7 @@ func NewReadSkillFileTool(provider *skills.Provider) (tool.Tool, error) {
 			if provider == nil {
 				return ReadSkillFileOutput{Error: "skills provider not initialized"}, nil
 			}
-			skill, ok := provider.Get(in.SkillName)
+			skill, ok := provider.GetFor(callerAgent(ctx), in.SkillName)
 			if !ok || !offered(skill, callerAgent(ctx)) {
 				return ReadSkillFileOutput{Error: fmt.Sprintf("skill '%s' not found", in.SkillName)}, nil
 			}

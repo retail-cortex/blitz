@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,14 +52,18 @@ func TestOllamaAuto(t *testing.T) {
 		name    string
 		ids     []string
 		listErr error
-		want    string // the model used, or the error
+		allowed []string // the organization's patterns (EN-35)
+		want    string   // the model used, or the error
 	}{
-		{"the first it has", []string{"qwen2.5-coder:7b", "gemma3:12b"}, nil, "qwen2.5-coder:7b"},
-		{"none pulled", nil, nil, "has no models: pull one"},
-		{"not running", nil, errors.New("connection refused"), "open the Ollama app or run `ollama serve`"},
+		{"the first it has", []string{"qwen2.5-coder:7b", "gemma3:12b"}, nil, nil, "qwen2.5-coder:7b"},
+		{"the first the organization allows", []string{"qwen2.5-coder:7b", "gemma3:12b"}, nil, []string{"gemma3*"}, "gemma3:12b"},
+		{"none it allows", []string{"qwen2.5-coder:7b"}, nil, []string{"llama3*"}, "none of Ollama's models at http://localhost:11434/v1 is one your organization allows (llama3*)"},
+		{"none pulled", nil, nil, nil, "has no models: pull one"},
+		{"not running", nil, errors.New("connection refused"), nil, "open the Ollama app or run `ollama serve`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := newOllamaAuto("ollama", "http://localhost:11434/v1", nil, true)
+			a.allowed = tc.allowed
 			assert.Equal(t, "ollama", a.Name(), "before the first call")
 			a.list = func(context.Context) ([]string, error) { return tc.ids, tc.listErr }
 			a.build = func(_ context.Context, name string) (model.LLM, error) {
@@ -73,7 +78,7 @@ func TestOllamaAuto(t *testing.T) {
 				}
 				got = append(got, resp.Content.Parts[0].Text)
 			}
-			if len(tc.ids) == 0 {
+			if len(tc.ids) == 0 || strings.HasPrefix(tc.name, "none") {
 				assert.ErrorContains(t, err, tc.want)
 				return
 			}
@@ -200,4 +205,17 @@ func TestOllamaAutoNameDoesntWaitForTheList(t *testing.T) {
 	}
 	close(release)
 	<-done
+}
+
+// EN-35: Ollama with no model named picks among those the organization's
+// policy allows, when signed in to one.
+func TestOllamaAutoPolicy(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Enterprise.URL = "https://blitz.acme.com"
+	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"ollama": {Allowed: true, Models: []string{"llama3*"}}}
+	m, err := buildProviderModel(context.Background(), cfg, "ollama", "")
+	require.NoError(t, err)
+	a, ok := m.(*ollamaAuto)
+	require.True(t, ok, "%T", m)
+	assert.Equal(t, []string{"llama3*"}, a.allowed)
 }

@@ -50,7 +50,7 @@ export function addProblem(key: string, list: readonly { key: string }[]): strin
 
 /**
  * The user's secrets in a scope (spec_039_secrets): the global ones
- * (Settings › Library › Secrets, workspace "") or a workspace's own (its settings).
+ * (Settings › Resources › Secrets, workspace "") or a workspace's own (its settings).
  * Names are listed; a value is only ever written (added, or replaced),
  * kept in the system's keychain, and named as {secrets:key}.
  */

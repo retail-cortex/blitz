@@ -19,6 +19,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -883,6 +885,24 @@ func TestCatalog(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, PolicyFile))
 	assert.DirExists(t, filepath.Join(dir, "catalog"))
 
+	// A service that retired its catalog: the kept one goes, quietly; then
+	// nothing more to say. A folder it can't be removed from says so.
+	s.CatalogRemoved = true
+	require.NoError(t, os.Chmod(dir, 0o500))
+	_, _, err = c.RefreshCatalog(ctx, dir)
+	assert.Error(t, err, "can't remove it")
+	require.NoError(t, os.Chmod(dir, 0o700))
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.Nil(t, kept)
+	assert.Nil(t, LoadCatalog(dir))
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	assert.Nil(t, kept)
+	s.CatalogRemoved = false
+
 	// A signed manifest with nothing in it withdraws the catalog.
 	s.Catalog = map[string]enterprisetest.CatalogFile{}
 	m, changed, err = c.RefreshCatalog(ctx, dir)
@@ -908,6 +928,96 @@ func TestCatalog(t *testing.T) {
 // changed on disk isn't read, an access token the service no longer takes
 // is refused (and renewed next time), a file the service won't give stops
 // the version, and the stream refused says so.
+// EN-38, EN-39: the person's own policy from /api/v1/policy, with why,
+// and their rules and guardrails laid out; the catalog's policy.json no
+// longer overwrites it; a service before it (404) leaves the catalog's.
+func TestPolicy(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	_, err := c.RefreshPolicy(ctx, dir)
+	assert.ErrorIs(t, err, ErrNoPolicyAPI, "a service before /api/v1/policy")
+
+	s.Policy = map[string]any{
+		"schema":     2,
+		"policy":     map[string]any{"refresh": "5m", "connectors": map[string]any{"own": true}, "models": map[string]any{"own": map[string]any{"ollama": map[string]any{"allowed": true, "models": []string{"llama3*"}}}}},
+		"explain":    map[string]any{"connectors.own": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
+		"rules":      []map[string]any{{"kind": "rule", "name": "tested", "body": "Say how it was tested."}},
+		"guardrails": []map[string]any{{"kind": "guardrail", "name": "no-pii", "body": "---\nstage: output\n---\nNo personal data."}},
+		"expires":    time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC),
+	}
+	changed, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	raw, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	require.NoError(t, err)
+	var st struct {
+		Policy  config.OrgPolicy
+		Explain map[string]config.PolicyDecision
+	}
+	require.NoError(t, json.Unmarshal(raw, &st))
+	assert.True(t, st.Policy.Connectors.Own)
+	ok, models := st.Policy.OwnProvider("ollama")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"llama3*"}, models)
+	assert.Equal(t, []string{"Data"}, st.Explain["connectors.own"].By)
+	assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"))
+	assert.FileExists(t, filepath.Join(dir, "policy", "guardrails", "no-pii.md"))
+
+	changed, err = c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed, "unchanged: 304")
+
+	// A catalog version now leaves the policy's policy.json as it is.
+	s.Catalog = map[string]enterprisetest.CatalogFile{"rules/style.md": {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."}}
+	s.CatalogPolicy = map[string]any{"connectors": map[string]any{"own": false}}
+	_, _, err = c.RefreshCatalog(ctx, dir)
+	require.NoError(t, err)
+	again, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	require.NoError(t, err)
+	assert.Equal(t, string(raw), string(again))
+
+	t.Run("a rule named to leave its folder is refused", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{{"kind": "rule", "name": "../evil", "body": "x"}}
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "can't be a file")
+		assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"), "the last kept")
+	})
+	t.Run("refused: says so, the last kept", func(t *testing.T) {
+		s.PolicyRefused = http.StatusForbidden
+		defer func() { s.PolicyRefused = 0 }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		ref, ok := errors.AsType[*Refusal](err)
+		require.True(t, ok, "%v", err)
+		assert.Equal(t, "Not for you.", ref.Message)
+		assert.FileExists(t, filepath.Join(dir, "policy", "rules", "tested.md"))
+	})
+	t.Run("signed out by the service: renewed next time", func(t *testing.T) {
+		s.PolicyRefused = http.StatusUnauthorized
+		defer func() { s.PolicyRefused = 0 }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		ref, ok := errors.AsType[*Refusal](err)
+		require.True(t, ok, "%v", err)
+		assert.Equal(t, http.StatusUnauthorized, ref.Status)
+	})
+	t.Run("a folder that can't be written", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{{"kind": "rule", "name": "other", "body": "x"}}
+		file := filepath.Join(t.TempDir(), "a-file")
+		require.NoError(t, os.WriteFile(file, nil, 0o600))
+		_, err := c.RefreshPolicy(ctx, file)
+		assert.Error(t, err)
+	})
+	t.Run("forged: refused, the last kept", func(t *testing.T) {
+		s.Policy["rules"] = []map[string]any{}
+		s.Forged = true
+		defer func() { s.Forged = false }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorIs(t, err, ErrSignature)
+	})
+}
+
 func TestCatalogFailures(t *testing.T) {
 	_, s, c, _, _ := setup(t)
 	ctx := context.Background()
@@ -1037,4 +1147,176 @@ func TestUnwritable(t *testing.T) {
 	_, _, err = c.RefreshCatalog(ctx, filepath.Join(file, "dir"))
 	assert.Error(t, err)
 	assert.Error(t, writeFile(filepath.Join(file, "dir"), "x", []byte("x")))
+}
+
+// EN-70 to EN-72: the shared connectors the person may use, a schema, a
+// query's table as the service sends it, and the policy's refusal.
+func TestSharedConnectors(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	list, err := c.SharedConnectors(ctx)
+	require.NoError(t, err, "a service before them: none")
+	assert.Empty(t, list)
+
+	s.Shared = []map[string]any{{"name": "shop", "kind": "postgres", "description": "Orders", "read_only": true, "tables": []string{"public.orders*"}, "max_rows": 100}}
+	s.SharedTables = map[string][]map[string]any{"shop": {{"name": "public.orders", "columns": []map[string]any{{"name": "id", "type": "integer"}}}}}
+	s.SharedResults = map[string]map[string]any{"select id from orders": {"columns": []map[string]any{{"name": "id"}}, "rows": [][]any{{1}, {2}}, "total": 2}}
+	list, err = c.SharedConnectors(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []SharedConnector{{Name: "shop", Kind: "postgres", Description: "Orders", ReadOnly: true, Tables: []string{"public.orders*"}, MaxRows: 100}}, list)
+
+	tables, err := c.SharedSchema(ctx, "shop")
+	require.NoError(t, err)
+	require.Len(t, tables, 1)
+	assert.Equal(t, "public.orders", tables[0].Name)
+	assert.Equal(t, "integer", tables[0].Columns[0].Type)
+
+	raw, err := c.SharedQuery(ctx, "shop", "select id from orders", 10)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"columns":[{"name":"id"}],"rows":[[1],[2]],"total":2}`, string(raw))
+	assert.Equal(t, []string{"shop: select id from orders"}, s.SharedAsked)
+
+	_, err = c.SharedQuery(ctx, "crm", "select 1", 0)
+	ref, ok := errors.AsType[*Refusal](err)
+	require.True(t, ok)
+	assert.Equal(t, 403, ref.Status)
+	assert.Contains(t, ref.Message, "the organization's policy decides it")
+	_, err = c.SharedQuery(ctx, "shop", "select nope", 0)
+	assert.ErrorContains(t, err, "relation does not exist")
+}
+
+// EN-76: where the person consents to connectors querying as them, and
+// forgetting it; a service that can't says so.
+func TestConnectorConsent(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	_, _, err := c.ConnectorConsent(ctx)
+	assert.Error(t, err, "not signed in")
+	assert.Error(t, c.RevokeConnectorConsent(ctx))
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	_, _, err = c.ConnectorConsent(ctx)
+	assert.ErrorIs(t, err, ErrNoConsent)
+
+	s.ConsentURL, s.Consented = "https://accounts.google.com/o/oauth2/auth?x", true
+	u, done, err := c.ConnectorConsent(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, s.ConsentURL, u)
+	assert.True(t, done)
+
+	require.NoError(t, c.RevokeConnectorConsent(ctx))
+	_, done, err = c.ConnectorConsent(ctx)
+	require.NoError(t, err)
+	assert.False(t, done)
+}
+
+// EN-75: SignedHTTP sends the person's access token, through the default
+// transport when the client's HTTP has none; signed out, nothing is sent.
+func TestSignedHTTP(t *testing.T) {
+	_, s, _, store, _ := setup(t)
+	ctx := context.Background()
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { auth = r.Header.Get("Authorization") }))
+	t.Cleanup(srv.Close)
+	c := New(s.URL, store, Options{HTTP: &http.Client{}})
+	_, err := c.SignedHTTP().Get(srv.URL)
+	require.Error(t, err, "signed out")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	res, err := c.SignedHTTP().Get(srv.URL)
+	require.NoError(t, err)
+	res.Body.Close()
+	assert.True(t, strings.HasPrefix(auth, "Bearer "), auth)
+}
+
+// EN-80, EN-82, EN-83: the library's assets the person has, laid out by
+// state, each skill's versions side by side, the index of what's offered;
+// an asset whose files aren't its own, or don't match its digest, refused;
+// an available one switched on, a required one not off.
+func TestPolicyItems(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+
+	agentFiles := map[string]string{"agents/reviewer.md": "---\nname: reviewer\nskills: [sql-review@1.x]\n---\nReview."}
+	v1 := map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: v1\n---\nOne.", "skills/sql-review/scripts/a.sh": "echo 1"}
+	v2 := map[string]string{"skills/sql-review/SKILL.md": "---\nname: sql-review\ndescription: v2\n---\nTwo."}
+	flow := map[string]string{"workflows/notes.flow.yaml": "nodes: [{id: a, type: read_file, path: x.md}]\n"}
+	item := func(kind, name, version, state string, on bool, files map[string]string, deps ...map[string]any) map[string]any {
+		it := map[string]any{"kind": kind, "name": name, "version": version, "sha256": agentpkg.Digest(files), "state": state, "on": on, "deps": deps}
+		if on {
+			it["files"] = files
+		}
+		return it
+	}
+	items := []map[string]any{
+		item("agent", "reviewer", "1.0.0", "required", true, agentFiles, map[string]any{"kind": "skill", "name": "sql-review", "range": "1.x", "resolved": "1.0.0"}),
+		item("skill", "sql-review", "1.0.0", "dependency", true, v1),
+		item("skill", "sql-review", "2.0.0", "available", true, v2),
+		item("workflow", "notes", "1.0.0", "available", false, flow),
+	}
+	s.Policy = map[string]any{"schema": 2, "policy": map[string]any{"refresh": "5m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}, "items": items,
+		"expires": time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)}
+	_, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	pol := filepath.Join(dir, "policy")
+	assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"))
+	assert.FileExists(t, filepath.Join(pol, "available", "skills", "sql-review", "SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(pol, "available", "skills", "sql-review", "scripts", "a.sh"), "2.0.0's files alone")
+	assert.FileExists(t, filepath.Join(pol, "versions", "skills", "sql-review@1.0.0", "scripts", "a.sh"))
+	assert.FileExists(t, filepath.Join(pol, "versions", "skills", "sql-review@2.0.0", "SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(pol, "available", "workflows", "notes.flow.yaml"), "available and off: not laid out")
+	org := config.OrgLayer{PolicyDir: pol}
+	assets := org.Assets()
+	require.Len(t, assets, 4)
+	assert.Equal(t, "1.0.0", assets[0].Deps[0].Resolved)
+	assert.Equal(t, filepath.Join(pol, "required", "agents"), org.ItemDir(config.OrgRequired, "agents"))
+	assert.Equal(t, filepath.Join(pol, "versions", "skills", "sql-review@1.0.0"), org.VersionDir("sql-review", "1.0.0"))
+
+	// Switched on, it comes with the next policy.
+	a, err := c.SetItem(ctx, "workflow", "notes", true)
+	require.NoError(t, err)
+	assert.True(t, a.On)
+	items[3]["files"] = flow
+	_, err = c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(pol, "available", "workflows", "notes.flow.yaml"))
+	_, err = c.SetItem(ctx, "agent", "reviewer", false)
+	ref, ok := errors.AsType[*Refusal](err)
+	require.True(t, ok, "%v", err)
+	assert.Equal(t, "required", ref.Code)
+
+	t.Run("files that aren't its digest's", func(t *testing.T) {
+		items[0]["sha256"] = "0000"
+		defer func() { items[0]["sha256"] = agentpkg.Digest(agentFiles) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "doesn't match its digest")
+		assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"), "the last kept")
+	})
+	t.Run("a file that isn't its own", func(t *testing.T) {
+		bad := map[string]string{"skills/sql-review/SKILL.md": "x", "agents/evil.md": "x"}
+		items[2]["files"], items[2]["sha256"] = bad, agentpkg.Digest(bad)
+		defer func() { items[2]["files"], items[2]["sha256"] = v2, agentpkg.Digest(v2) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "isn't its own")
+	})
+	t.Run("files that can't be laid out", func(t *testing.T) {
+		clash := map[string]string{"skills/sql-review/SKILL.md": "x", "skills/sql-review/SKILL.md/more": "y"}
+		items[2]["files"], items[2]["sha256"] = clash, agentpkg.Digest(clash)
+		defer func() { items[2]["files"], items[2]["sha256"] = v2, agentpkg.Digest(v2) }()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.Error(t, err)
+		assert.FileExists(t, filepath.Join(pol, "required", "agents", "reviewer.md"), "the last kept")
+	})
+	t.Run("a name that can't be a file", func(t *testing.T) {
+		evil := map[string]string{"agents/../x.md": "x"}
+		items[0]["name"], items[0]["files"], items[0]["sha256"] = "../x", evil, agentpkg.Digest(evil)
+		defer func() {
+			items[0]["name"], items[0]["files"], items[0]["sha256"] = "reviewer", agentFiles, agentpkg.Digest(agentFiles)
+		}()
+		_, err := c.RefreshPolicy(ctx, dir)
+		assert.ErrorContains(t, err, "can't be a file")
+	})
 }

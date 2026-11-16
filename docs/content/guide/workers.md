@@ -30,7 +30,7 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 | Runs | **Its prompt, as a turn**, or a [workflow](workflows.md) to run |
 | Prompt (or **Its input** for a workflow) | What it does on each run, as you'd type it in the chat; **Rewrite with AI** tightens it |
 | May do without asking | A rule per thing it may do, each a kind (shell, write, delete, web, MCP) and what it covers (below); none: read only |
-| Model calls a run, Cost a run (USD), Time a run | Empty for the defaults (50 calls, $1, 30 minutes); a cap set in Settings › Library › Jobs shows under each, and a value over it is marked |
+| Model calls a run, Cost a run (USD), Time a run | Empty for the defaults (50 calls, $1, 30 minutes); a cap set in Settings › Jobs shows under each, and a value over it is marked |
 | Missed runs | Skip, or Run once |
 
 In an organization workspace the form also has **Runs on** (this computer or your organization's service), and for the service **When it needs more** and **Its changes** ([Organizations](organization.md)).
@@ -93,7 +93,7 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 `[workers.policy]` in your settings governs every job: which kinds of permission are allowed at all, the limits a job that sets none gets (50 calls, $1, 30 minutes), an optional cap on what one may ask for (`max_turns`, `max_cost_usd`, `max_timeout`; none by default since v0.8.4, so a job may set more than the defaults), and how many runs at once across workspaces (`max_concurrent`, 2).
 
-A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Library › Jobs**, or the guardrail's file.
+A job's limits cover its whole run, every model call and every step of a `workflow` job. The workspace's [limits guardrail](extending.md) still applies to each turn too (200 model calls and $10 unless `.agents/guardrails/limits.md` sets others), so a job that sets more than that needs the guardrail raised as well. A run stopped at a limit ends **limited**, and its error says which limit stopped it and where to change it: the job's `limits:`, the jobs' defaults or cap in **Settings › Jobs**, or the guardrail's file.
 
 ## Enabling, editing and running
 
@@ -103,7 +103,7 @@ A job's limits cover its whole run, every model call and every step of a `workfl
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz jobs run <name>`, runs an enabled job at once and shows what it does.
 - **Two at once?** The same job never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** **Studio › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Library › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
+- **Stop a run:** **Studio › Jobs** lists the workspace's runs going now under **Running now**, and **Settings › Jobs** every workspace's. Click **Stop**, or use **Stop** in the job's run list or `blitz jobs stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz jobs undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
@@ -120,11 +120,11 @@ A job's limits cover its whole run, every model call and every step of a `workfl
 
 Some work belongs to no project: a morning news digest, tidying your downloads. A **global job** is saved in `~/.blitz/workers/<name>/WORKER.md` and runs in a folder of its own, `~/.blitz/home`, made the first time it's needed. Everything else is the same: review and enable, schedules, permissions, runs.
 
-**Desktop:** **Settings › Library › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
+**Desktop:** **Settings › Jobs**, then **New job** in the Global jobs box. **Terminal:** write the file, then `blitz jobs enable <name> --dir ~/.blitz/home`.
 
 ## Limits for every job
 
-**Settings › Library › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
+**Settings › Jobs › Limits for every job** sets what jobs get and may do, in your global settings (`[workers.policy]`):
 
 | Setting | What it does |
 |---|---|
@@ -136,7 +136,7 @@ A change applies from each job's next run.
 
 ## Every workspace's jobs
 
-The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Library › Jobs** lists every workspace with jobs on record, so none runs unseen:
+The service runs a workspace's enabled jobs whether or not the app has that workspace open. **Settings › Jobs** lists every workspace with jobs on record, so none runs unseen:
 
 - **Not in your workspaces:** **Add and open** brings it back into the app, on its jobs.
 - **Folder missing:** the folder was moved or deleted, so its jobs don't run. **Forget** disables them and stops the service looking for the folder; nothing on disk is touched.

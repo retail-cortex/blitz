@@ -86,7 +86,7 @@ func enterpriseProvider(ctx context.Context, cfg *config.Config, name string) (*
 	case cfg.Org.Problem == "" && cfg.Org.Expired(time.Now()):
 		return nil, enterprise.Model{}, fmt.Errorf("your organization's catalog is out of date (it expired %s): its models wait until Blitz reaches %s again", cfg.Org.Expires.Local().Format(time.DateTime), c.URL())
 	case !st.SignedIn:
-		return nil, enterprise.Model{}, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Organization, or blitz enterprise login", c.URL())
+		return nil, enterprise.Model{}, fmt.Errorf("sign in to your organization (%s) to use its models: Settings › Providers › Organization, or blitz enterprise login", c.URL())
 	}
 	// The workspace opens on this: a service that doesn't answer leaves
 	// it without the organization's models (EN-37), never waiting long.

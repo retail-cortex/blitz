@@ -17,7 +17,7 @@ The list has three groups:
 - **After the agent**: each judges the agent's answer and the files it changed, in this order, before the turn ends.
 - **Instructions**: not checked; they go to the agent as instructions, always or for the files they name.
 
-Each rule shows what happens when it fails and what it's for. Drag a rule by its handle, or use its arrows, to change the order. A rule from another folder, such as `.claude/rules`, is read here and edited there.
+Each rule shows what happens when it fails and what it's for. Drag a rule by its handle, or use its arrows, to change the order. A rule from another folder, such as `.claude/rules`, is read here and edited there. Each rule of this workspace has a switch: off, it checks and says nothing, and its row says **Off**. The switch writes `enabled: false` in the rule's file, so it's the project's choice, committed with the rule; on again takes it out.
 
 ## Make a rule
 

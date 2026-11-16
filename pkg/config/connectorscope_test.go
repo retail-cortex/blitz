@@ -89,3 +89,13 @@ func TestConnectorFiles(t *testing.T) {
 	assert.Equal(t, "global/databases/shop", ConnectorKey(ConnectorScopeGlobal, "databases", "shop"))
 	assert.Equal(t, filepath.Join("/w", ".agents", "connectors"), WorkspaceConnectorsDir("/w"))
 }
+
+// The global agents' choices are a store of their own (STU-15), apart
+// from the connections'.
+func TestAgentScope(t *testing.T) {
+	settings, a := t.TempDir(), t.TempDir()
+	require.NoError(t, OpenAgentScope(settings).Set(a, "helper", false))
+	assert.Equal(t, map[string]bool{"helper": true}, OpenAgentScope(settings).Off(a))
+	assert.Empty(t, OpenConnectorScope(settings).Off(a), "the connections' store is another file")
+	assert.FileExists(t, filepath.Join(settings, "agent-scope.json"))
+}

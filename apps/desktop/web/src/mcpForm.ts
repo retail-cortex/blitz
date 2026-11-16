@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Settings › Connectors › MCP servers (spec_009_mcp MCP-46): the form for one server,
+// Settings › Resources › Connectors › MCP servers (spec_009_mcp MCP-46): the form for one server,
 // to and from MCPServerConfig, and the list as the page shows it. The
 // service withholds env and header values (a secret's name aside): such a
 // value shows empty, and saved empty it keeps what's saved.

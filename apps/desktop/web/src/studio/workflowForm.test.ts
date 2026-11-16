@@ -91,6 +91,14 @@ describe("the workflow canvas", () => {
     expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("exclusive", [], 0, 0), retryAttempts: "3", timeout: "1m" }] }).nodes[0]).toMatchObject({ retryAttempts: 0, timeout: "" });
   });
 
+  it("keeps a workflow's triggers and an API step's organization connector (WF-30, WF-31)", () => {
+    const api = { ...newStep("api_call", [], 0, 0), url: "/check", connector: " review " };
+    const spec = specFromForm({ ...emptyWorkflowForm, triggers: ["git.pre_commit"], steps: [api, { ...newStep("mcp_call", [api], 0, 0), connector: "ignored" }] });
+    expect(spec.triggers).toEqual(["git.pre_commit"]);
+    expect(spec.nodes[0]).toMatchObject({ connector: "review", url: "/check" });
+    expect(spec.nodes[1]).toMatchObject({ connector: "" });
+  });
+
   it("keeps each call's own settings", () => {
     const api = { ...newStep("api_call", [], 0, 0), url: " https://api.example.com/x ", method: "POST", query: [{ name: "q", value: "1" }, { name: " ", value: "x" }], bodyKind: "json" as const, body: '{"n": 1}', server: "ignored", auth: { ...noAuth, type: "oauth2" as const, tokenUrl: "https://a/t", clientId: "id", clientSecret: "{secrets:s}", scopes: "read write", token: "ignored" } };
     expect(specFromForm({ ...emptyWorkflowForm, steps: [api] }).nodes[0]).toMatchObject({ url: "https://api.example.com/x", method: "POST", query: [{ name: "q", value: "1" }], jsonBody: '{"n": 1}', body: "", server: "", auth: { type: "oauth2", scopes: ["read", "write"], token: "" } });

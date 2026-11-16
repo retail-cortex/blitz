@@ -38,6 +38,12 @@ type ServiceJob struct {
 	Enabled   bool       `json:"enabled"`
 	NextRun   *time.Time `json:"next_run"`
 	LastRun   *time.Time `json:"last_run"`
+	// Description says what it does.
+	Description string `json:"description"`
+	// Organization: one of the organization's own jobs, which its admins
+	// write and its policy lets the person see, run or answer (the
+	// service's spec_009_jobs JB-72), in no workspace of theirs.
+	Organization bool `json:"organization"`
 }
 
 // ServiceRun is one of a service job's runs.

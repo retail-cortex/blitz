@@ -346,3 +346,41 @@ func TestBrokenBuiltinFails(t *testing.T) {
 	require.NoError(t, p.loadBuiltins(fstest.MapFS{"ok/SKILL.md": {Data: []byte("---\nname: ok\ndescription: d\n---\n")}}))
 	assert.True(t, p.builtin["ok"])
 }
+
+// spec_053 EN-82: an agent's own version of a skill, else the provider's;
+// a version folder that doesn't hold the skill falls back, once.
+func TestProviderVersions(t *testing.T) {
+	root := t.TempDir()
+	write := func(dir, name, desc string) string {
+		d := filepath.Join(root, dir)
+		require.NoError(t, os.MkdirAll(d, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(d, "SKILL.md"), []byte("---\nname: "+name+"\ndescription: "+desc+"\n---\n"+desc), 0o644))
+		return d
+	}
+	write("skills/tone", "tone", "current")
+	old := write("versions/tone@1.0.0", "tone", "old")
+	wrong := write("versions/other@1.0.0", "other", "not tone")
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{filepath.Join(root, "skills")}))
+	calls := 0
+	p.SetVersions(func(agent string) map[string]string {
+		calls++
+		return map[string]map[string]string{"a": {"tone": old}, "b": {"tone": wrong}}[agent]
+	})
+	s, ok := p.GetFor("a", "tone")
+	require.True(t, ok)
+	assert.Equal(t, "old", s.Description)
+	s, _ = p.GetFor("b", "tone")
+	assert.Equal(t, "current", s.Description, "a folder that isn't the skill's: the provider's")
+	s, _ = p.GetFor("b", "tone")
+	assert.Equal(t, "current", s.Description, "and remembered")
+	s, _ = p.GetFor("", "tone")
+	assert.Equal(t, "current", s.Description)
+	for _, s := range p.ListFor("a") {
+		if s.Name == "tone" {
+			assert.Equal(t, "old", s.Description)
+		}
+	}
+	assert.Positive(t, calls)
+}

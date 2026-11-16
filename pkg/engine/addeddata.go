@@ -98,6 +98,10 @@ func chatConnection(conns []connectors.Connection, name string) (connectors.Conn
 func (w *Workspace) schemaText(ctx context.Context, conns []connectors.Connection, name string) string {
 	c, err := chatConnection(conns, name)
 	if err != nil {
+		// One of the organization's shared connectors (EN-73).
+		if text := w.orgSchemaText(ctx, name); text != "" {
+			return text
+		}
 		return err.Error()
 	}
 	var b strings.Builder

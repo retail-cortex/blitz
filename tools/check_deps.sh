@@ -55,6 +55,15 @@ libs='kind("go_library", %s)'
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/pagehost/...))') intersect //pkg/engine/..."
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'
+	# Outside this repository, only blitz-enterprise's shared connectors
+	# reach engine libraries (its spec_013_connectors).
+	if outside="$(grep -rn --include=BUILD.bazel '"@@//' pkg/engine | grep -v '"@@//internal/connectors:__pkg__"')"; then
+		echo "✗ engine libraries are visible outside this repository only to blitz-enterprise's internal/connectors:" >&2
+		sed 's/^/    /' <<<"$outside" >&2
+		failed=1
+	else
+		echo "✓ engine libraries are visible outside this repository only to blitz-enterprise's internal/connectors"
+	fi
 	# The enterprise service builds on this repository, never the other
 	# way (spec_053_enterprise EN-04).
 	if enterprise="$(grep -rl --include='*.go' 'github.com/retail-cortex/blitz-enterprise' apps pkg tools build 2>/dev/null)"; then

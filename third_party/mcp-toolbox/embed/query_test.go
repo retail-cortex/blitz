@@ -27,6 +27,7 @@ import (
 	bigqueryrestapi "google.golang.org/api/bigquery/v2"
 
 	bigqueryds "github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/sources/bigquery"
+	"github.com/retail-cortex/blitz/third_party/mcp-toolbox/internal/util"
 )
 
 // shop is a SQLite file with typed columns.
@@ -152,4 +153,40 @@ func TestBigQueryParts(t *testing.T) {
 	assert.NoError(t, bigQueryWriteMode(bigqueryds.WriteModeProtected, job("CREATE_TABLE", "_session"), sess))
 	assert.Error(t, bigQueryWriteMode(bigqueryds.WriteModeProtected, job("INSERT", "sales"), sess))
 	assert.NoError(t, bigQueryWriteMode(bigqueryds.WriteModeAllowed, job("DELETE", ""), nil))
+}
+
+// A BigQuery source opened for one query gets the user agent its client
+// needs, as Start's do: without it, every query failed with "unable to
+// retrieve user agent". Here no credentials are found instead, or it
+// connects; either way not that.
+func TestQueryUserAgent(t *testing.T) {
+	ua, err := util.UserAgentFromContext(withUserAgent(context.Background()))
+	require.NoError(t, err)
+	assert.Contains(t, ua, "blitz (mcp-toolbox ")
+
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "none.json"))
+	cfg, err := Load(context.Background(), []string{writeConfig(t, "kind: source\nname: wh\ntype: bigquery\nproject: blitz-test\n")}, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = Query(ctx, cfg, "wh", "SELECT 1", QueryOptions{MaxRows: 1})
+	if err != nil {
+		assert.NotContains(t, err.Error(), "user agent")
+	}
+}
+
+// A BigQuery source that queries as each caller (useClientOAuth) needs
+// their token; given one, it's the caller's client that's made.
+func TestQueryAsCaller(t *testing.T) {
+	cfg, err := Load(context.Background(), []string{writeConfig(t, "kind: source\nname: wh\ntype: bigquery\nproject: blitz-test\nuseClientOAuth: true\n")}, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = Query(ctx, cfg, "wh", "SELECT 1", QueryOptions{MaxRows: 1})
+	assert.ErrorContains(t, err, "needs their access token")
+	_, err = Query(ctx, cfg, "wh", "SELECT 1", QueryOptions{MaxRows: 1, AccessToken: "not-a-real-token"})
+	if err != nil {
+		assert.NotContains(t, err.Error(), "needs their access token")
+		assert.NotContains(t, err.Error(), "user agent")
+	}
 }

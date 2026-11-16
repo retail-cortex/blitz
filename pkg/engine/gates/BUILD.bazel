@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "gates",
     srcs = [
+        "checks.go",
         "gates.go",
         "guardrails.go",
     ],
@@ -36,6 +37,7 @@ go_library(
         "//pkg/engine/frontmatter",
         "//pkg/redact",
         "//pkg/textutil",
+        "@com_github_google_jsonschema_go//jsonschema",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
@@ -43,6 +45,7 @@ go_library(
 go_test(
     name = "gates_test",
     srcs = [
+        "checks_test.go",
         "errors_test.go",
         "gates_test.go",
         "guardrails_test.go",

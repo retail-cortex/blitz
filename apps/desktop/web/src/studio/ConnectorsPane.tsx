@@ -64,10 +64,10 @@ type DialogOpen = "delete" | "promote" | "build" | null;
 /**
  * The connectors the agents reach (spec_047_connectors), by category
  * (Databases, served by MCP Toolbox for Databases inside Blitz). With a
- * workspace it's Studio › Connectors: the workspace's connections, which
+ * workspace it's Studio › Resources › Connectors: the workspace's connections, which
  * it changes and can make global, and the global ones, shown as they are
  * with a switch turning each on or off here (CON-17). Without one it's
- * Settings › Connectors: the global connections, changed there alone
+ * Settings › Resources › Connectors: the global connections, changed there alone
  * (CON-18). A connection's form (ConnectorFields) slides in over the
  * list, with Test and Read the tables as its kind can. A new one is
  * tested as it's saved (Save anyway when it fails) and stays open, for
@@ -452,14 +452,15 @@ export function ConnectorsPane({ workspace, onDirty, extra, connect }: { workspa
 /**
  * A connection in the list: its kind, scope, trust, read-only or not,
  * tools and description; its switch in Studio. The organization's (spec_053
- * EN-30) don't open, being its Admins' to change, and a locked one has no
- * switch.
+ * EN-30, EN-72) don't open, being its Admins' to change, and a locked or
+ * shared one has no switch.
  */
 function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connector; kind: ConnectorKind | undefined; icon: string; studio: boolean; onOpen: () => void; onEnable: (on: boolean) => void }) {
   const lang = language();
   const distrusted = c.scope === "workspace" && !c.trusted;
-  const org = c.scope === "org-locked" || c.scope === "org-default";
-  const where = org ? t(c.scope === "org-locked" ? "desktop.connectors.org_locked" : "desktop.connectors.org_default") : studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "";
+  // The organization's: its catalog's, or a shared connector its service runs (EN-72).
+  const org = c.scope === "org-locked" || c.scope === "org-default" || c.scope === "org-shared";
+  const where = org ? t(c.scope === "org-locked" ? "desktop.connectors.org_locked" : c.scope === "org-shared" ? "desktop.connectors.org_shared" : "desktop.connectors.org_default") : studio ? (c.scope === "global" ? t("desktop.connectors.everywhere") : t("desktop.connectors.here")) : "";
   const detail = [
     c.enabled ? "" : t("desktop.connectors.off_here"),
     c.custom || !kind ? t("desktop.connectors.custom") : textIn(kind.name, lang),
@@ -480,7 +481,7 @@ function ConnectionRow({ c, kind, icon, studio, onOpen, onEnable }: { c: Connect
           <small className={`ellipsis ${c.problem ? "error-text" : ""}`}>{c.problem || detail}</small>
         </span>
       </button>
-      {studio && c.scope !== "org-locked" && (
+      {studio && c.scope !== "org-locked" && c.scope !== "org-shared" && (
         <span className="trailing">
           <Switch label={t("desktop.connectors.enable", { name: c.name })} checked={c.enabled} onChange={onEnable} />
         </span>

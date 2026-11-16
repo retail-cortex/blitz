@@ -47,7 +47,7 @@ import (
 // from the turn's facts, collected here as the turn runs (VOX-17).
 
 // ErrVoiceOff is voice used while [voice] enabled is false (VOX-02).
-var ErrVoiceOff = errors.New("voice is off: turn it on in Settings › Voice")
+var ErrVoiceOff = errors.New("voice is off: turn it on in Settings › Personality › Voice")
 
 // VoiceEvent is what a voice conversation tells the window (VOX-30).
 type VoiceEvent struct {

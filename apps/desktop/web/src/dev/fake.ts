@@ -64,6 +64,21 @@ function fakeOrgState(checked: boolean) {
     reachable: checked,
     // ?managed: device management set it (EN-10).
     managed: fakeParam("managed"),
+    // The person's effective policy and why (EN-35, EN-39): Ollama with
+    // llama3* for the Data group, connections locked off.
+    ...(fakeOrg.signedIn
+      ? {
+          policy: [
+            { path: "connectors.own", valueJson: "false", level: "global", by: [], locked: true },
+            { path: "mcp.own", valueJson: "false", level: "default", by: [], locked: false },
+            { path: "models.own.ollama.allowed", valueJson: "true", level: "group", by: ["Data"], locked: false },
+            { path: "models.own.ollama.models", valueJson: '["llama3*"]', level: "group", by: ["Data"], locked: false },
+            { path: "rules.tested", valueJson: "true", level: "person", by: ["ana@acme.com"], locked: false },
+            { path: "tools.shell_commands", valueJson: "true", level: "default", by: [], locked: false },
+          ],
+          ownProviders: [{ provider: "ollama", models: ["llama3*"] }],
+        }
+      : {}),
   };
 }
 const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };
@@ -636,7 +651,7 @@ const fakeLimits = (w: { maxTurns: number; maxCostUsd: number; timeout: string }
 const fakeGlobal: FakeWorker[] = [
   { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
 ];
-// Other workspaces with workers on record (Settings › Workers): one not
+// Other workspaces with workers on record (Settings › Jobs): one not
 // in the app's workspaces, one whose folder is gone.
 const fakeElsewhere = [
   { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
@@ -959,21 +974,32 @@ const fakeWorkers: FakeWorker[] = [
   },
 ];
 
-// The catalog's reviews (EN-36).
-const fakeOrgItems = [
-  { kind: "agent", name: "brand-voice", path: "agents/brand-voice.md", lock: "locked", groups: [], overridden: false },
-  { kind: "agent", name: "analyst", path: "agents/analyst.md", lock: "default", groups: ["sales"], overridden: false },
-  { kind: "skill", name: "quarterly-report", path: "skills/quarterly-report/SKILL.md", lock: "default", groups: [], overridden: false },
-  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false },
-  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "default", groups: [], overridden: false },
-  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: ["eng", "sales"], overridden: false },
-];
-const fakeNotices = { email: true, webhook: "", everyRun: false, emailAvailable: true };
-const fakeReviews: { id: string; title: string; byEmail: string; paths: string[]; problems: string[]; state: string; note: string; version: number; created: ReturnType<typeof now> }[] = [
-  { id: "rev-1", title: "Publish agent writer", byEmail: "ana@acme.com", paths: ["agents/writer.md"], problems: [], state: "approved", note: "", version: 7, created: timestampFromDate(new Date(Date.now() - 50 * 3600e3)) },
-  { id: "rev-2", title: "Publish rule short-answers", byEmail: "bo@acme.com", paths: ["rules/short-answers.md"], problems: [], state: "rejected", note: "Too strict for support.", version: 0, created: timestampFromDate(new Date(Date.now() - 120 * 3600e3)) },
+// The organization's rules and guardrails the person's policy applies
+// (EN-34, EN-39).
+// The person's submissions to share (EN-95), in the fake.
+const fakeSubmissions: { id: bigint; kind: string; name: string; note: string; state: string; verdicts: { check: string; score: number; passed: boolean; reason: string; findings: string[] }[]; reason: string; publishedVersion: string }[] = [
+  {
+    id: 1n,
+    kind: "skill",
+    name: "fetch",
+    note: "",
+    state: "rejected",
+    verdicts: [{ check: "security", score: 0.1, passed: false, reason: "it calls curl, which the rubric forbids", findings: ["skills/fetch/scripts/get.sh calls the network"] }],
+    reason: "security: it calls curl, which the rubric forbids",
+    publishedVersion: "",
+  },
 ];
 
+const fakeOrgItems = [
+  { kind: "agent", name: "reviewer", path: "", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy", version: "2.1.0", state: "required", on: true, description: "Reviews pull requests", locks: ["skill sql-review 2.0.0"] },
+  { kind: "agent", name: "analyst", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the policy for Data", version: "1.0.3", state: "available", on: false, description: "Answers questions from the warehouse", locks: [] },
+  { kind: "skill", name: "sql-review", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the policy for Data", version: "2.0.0", state: "available", on: true, description: "Reviews SQL for safety and cost", locks: [] },
+  { kind: "workflow", name: "release-notes", path: "", lock: "default", groups: [], overridden: false, decidedBy: "the organization's policy", version: "1.2.0", state: "available", on: false, description: "Drafts release notes from merged PRs", locks: [] },
+  { kind: "rule", name: "no-customer-data", path: "rules/no-customer-data.md", lock: "locked", groups: [], overridden: false, decidedBy: "the organization's policy (locked)", version: "1.0.0", state: "required", on: true, description: "", locks: [] },
+  { kind: "rule", name: "house-style", path: "rules/house-style.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy for Data", version: "1.1.0", state: "required", on: true, description: "", locks: [] },
+  { kind: "guardrail", name: "pii", path: "guardrails/pii.md", lock: "locked", groups: [], overridden: false, decidedBy: "the policy an admin set for you", version: "1.0.0", state: "required", on: true, description: "", locks: [] },
+];
+const fakeNotices = { email: true, webhook: "", everyRun: false, emailAvailable: true };
 // The organization's workspaces the person has a role in.
 const fakeOrgWorkspaces: { handle: string; name: string; role: string; sync: boolean; dir: string; cloned: boolean }[] = [
   { handle: "plans", name: "Plans", role: "editor", sync: true, dir: "/home/me/Blitz/Acme Assist/plans", cloned: true },
@@ -1200,9 +1226,11 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 // The user's secrets' names, by scope ("" global).
 const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
 
-// Settings › Connectors › MCP servers: the global servers, edited in place.
+// Settings › Resources › Connectors › MCP servers: the global servers, edited in place.
 // Each workspace's own MCP servers, and the global ones it turned off.
 const fakeWorkspaceMCP = new Map<string, MCPServerConfig[]>();
+// The global agents switched off, by workspace (STU-15).
+const fakeAgentsOff = new Map<string, Set<string>>();
 const fakeMCPOff = new Map<string, Set<string>>();
 function workspaceMCP(workspace: string): MCPServerConfig[] {
   let list = fakeWorkspaceMCP.get(workspace);
@@ -2240,7 +2268,7 @@ export function installFake() {
           fakeFlows.splice(i, 1);
           return {};
         },
-        // Studio › Evals: two evals, their runs, and a run streamed case by case.
+        // Studio › Resources › Agents › Evals: two evals, their runs, and a run streamed case by case.
         listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
         saveEval: ({ workspace, previousName, eval: spec }) => {
           const e = spec!;
@@ -2331,7 +2359,7 @@ export function installFake() {
           if (guardrail?.builtin === "prompt_injection") return /ignore|you are now/i.test(sample) ? { pass: false, reason: "it contains text aimed at the agent" } : { pass: true, reason: "Nothing in it looks aimed at the agent." };
           return /delete|-D|drop/i.test(sample) ? { pass: false, reason: "It deletes a branch." } : { pass: true, reason: "Nothing here is deleted." };
         },
-        // Studio › Connectors.
+        // Studio › Resources › Connectors.
         listConnectors: ({ workspace }) => ({
           categories: [
             {
@@ -2413,7 +2441,7 @@ export function installFake() {
           const problems = ruleProblems(r);
           if (problems.length) return { problems };
           const i = fakeRules.findIndex((x) => x.name === previousName);
-          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text };
+          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text, off: r.off };
           if (i >= 0) fakeRules[i] = next;
           else fakeRules.push(next);
           return { rule: fakeRuleList(workspace).find((x) => x.name === r.name) };
@@ -2432,7 +2460,7 @@ export function installFake() {
           return {};
         },
         tryRule: async ({ sample }) => (await new Promise((r) => setTimeout(r, 700)), /test/i.test(sample) ? { pass: true, reason: "It names the tests it ran." } : { pass: false, reason: "It doesn't say how the change was tested." }),
-        // Studio › Skills: the workspace's own skills, their files, copies.
+        // Studio › Resources › Skills: the workspace's own skills, their files, copies.
         getSkillFile: ({ workspace, name }) => {
           const x = fakeProjectSkills.find((k) => k.name === name);
           if (x) return { file: fakeSkillFile(workspace, x) };
@@ -2537,7 +2565,17 @@ export function installFake() {
         },
         listAgentFiles: ({ workspace, scope }) => {
           const dir = agentFolder(workspace, scope);
-          return { dir, files: [...fakeAgentFiles.get(dir)!.values()].sort((a, b) => (a.path ?? "").localeCompare(b.path ?? "")) };
+          // The global agents asked for with a workspace say which are off there (STU-15).
+          const off = workspace && scope === AgentScope.USER ? (fakeAgentsOff.get(workspace) ?? new Set<string>()) : new Set<string>();
+          const files = [...fakeAgentFiles.get(dir)!.values()].map((f) => ({ ...f, offHere: off.has(f.agent?.name ?? "") }));
+          return { dir, files: files.sort((a, b) => (a.path ?? "").localeCompare(b.path ?? "")) };
+        },
+        setAgentEnabled: ({ workspace, name, enabled }) => {
+          const off = fakeAgentsOff.get(workspace) ?? new Set<string>();
+          if (enabled) off.delete(name);
+          else off.add(name);
+          fakeAgentsOff.set(workspace, off);
+          return {};
         },
         saveAgentFile: ({ workspace, scope, previousName, agent }) => saveAgent(workspace, scope, previousName, agent!),
         // The active agent's tools, or with all every tool an agent can be given.
@@ -2949,7 +2987,7 @@ export function installFake() {
                 path: mcpPath(workspace),
               }
             : { servers: fakeMCP.map((m) => ({ ...m, scope: "global" })), path: mcpPath("") },
-        // Settings › Connectors: the global connections.
+        // Settings › Resources › Connectors: the global connections.
         listGlobalConnectors: () => ({
           categories: [{ ...fakeConnectorCategory, workspaceDir: "", state: "", toolCount: 0 }],
           kinds: fakeConnectorKinds,
@@ -3056,6 +3094,14 @@ export function installFake() {
         // The organization's service: any https address connects, as Acme
         // Assist; signing in takes a moment in the "browser".
         getEnterprise: () => ({ state: fakeOrgState(true) }),
+        // Connectors that query as the person (EN-76): ?org&signedin; not allowed yet.
+        getConnectorConsent: () => (fakeOrg.signedIn ? { connectors: ["warehouse"], consented: false, url: "https://accounts.google.com/o/oauth2/auth?fake" } : { connectors: [] }),
+        revokeConnectorConsent: () => ({}),
+        // Fetching the policy now (EN-38a): ?org&signedin; nothing changed.
+        refreshEnterprise: async () => {
+          await sleep(500);
+          return { state: fakeOrgState(true), changed: false };
+        },
         connectEnterprise: ({ url }) => {
           if (url && !url.startsWith("https://")) throw new ConnectError("the organization's service is reached over https", Code.InvalidArgument);
           fakeOrg.url = url.replace(/\/$/, "");
@@ -3145,22 +3191,6 @@ export function installFake() {
           }
         },
         // The person's usage and limits (EN-24): ?budget nearly spent.
-        // Publish to organization (EN-36): ?admin is one of its Admins.
-        listPublishable: () => ({
-          items: [
-            { kind: "agent", name: "reviewer", path: "agents/reviewer.md", problems: [], lock: "default", groups: [] },
-            { kind: "skill", name: "release-notes", path: "skills/release-notes/SKILL.md", problems: [], lock: "default", groups: [] },
-            { kind: "rule", name: "no-secrets", path: "rules/no-secrets.md", problems: [], lock: "locked", groups: ["eng"] },
-            { kind: "agent", name: "draft", path: "agents/draft.md", problems: ["agents/draft.md: the front matter needs a description"], lock: "default", groups: [] },
-          ],
-        }),
-        publishToOrganization: async ({ items, title }) => {
-          await sleep(700);
-          const review = { id: `rev-${Date.now()}`, title: title || `Publish ${items.map((i) => `${i.kind} ${i.name}`).join(", ")}`, byEmail: "ana@acme.com", paths: items.map((i) => `${i.kind}s/${i.name}.md`), problems: [], state: "open", note: "", version: 0, created: now() };
-          fakeReviews.unshift(review);
-          return { review };
-        },
-        listCatalogReviews: () => ({ reviews: fakeReviews }),
         // Job notices (JB-31): ?org&signedin.
         getOrgNotices: () => ({ notices: fakeNotices }),
         setOrgNotices: async ({ notices }) => {
@@ -3169,18 +3199,33 @@ export function installFake() {
           Object.assign(fakeNotices, notices);
           return { notices: fakeNotices };
         },
-        // The organization's items in Studio's lists (EN-34): ?org&signedin.
+        // The organization's rules and guardrails in Studio's lists (EN-34, EN-39): ?org&signedin.
+        setOrgItem: ({ kind, name, on }) => {
+          const it = fakeOrgItems.find((i) => i.kind === kind && i.name === name);
+          if (!it || it.state !== "available") throw new Error("Your organization requires it: it can't be switched off.");
+          it.on = on;
+          return { item: it };
+        },
+        // Your own assets and what you shared (EN-93, EN-95): ?org&signedin.
+        syncOwnItems: () => ({ sent: ["skill/tone"], received: [], removed: [], conflicts: [], skipped: {} }),
+        shareOwnItem: ({ kind, name, note }) => {
+          const s = { id: BigInt(fakeSubmissions.length + 1), kind, name, note, state: "judging", verdicts: [], reason: "", publishedVersion: "" };
+          fakeSubmissions.unshift(s);
+          return { submission: s };
+        },
+        listSubmissions: () => ({
+          submissions: fakeOrg.signedIn ? fakeSubmissions : [],
+          own: [
+            { kind: "skill", name: "tone", skipped: "" },
+            { kind: "agent", name: "reviewer", skipped: "" },
+            { kind: "skill", name: "Big Notes", skipped: "its name isn't lowercase letters, digits and single hyphens or underscores" },
+          ],
+          contribute: ["skill"],
+        }),
         listOrgItems: ({ kind }) => ({
           version: 7,
           items: fakeOrg.signedIn ? fakeOrgItems.filter((i) => !kind || i.kind === kind) : [],
         }),
-        copyOrgItem: async ({ kind, name }) => {
-          await sleep(400);
-          const it = fakeOrgItems.find((i) => i.kind === kind && i.name === name);
-          if (!it || it.lock === "locked") throw new ConnectError(`the organization's ${kind} ${name} is locked: its Admins change it, through a review`, Code.FailedPrecondition);
-          it.overridden = true;
-          return { paths: [`.agents/${it.path}`] };
-        },
         getOrgUsage: () => ({
           today: [
             { model: "claude-sonnet-5-5", requests: 42n, inputTokens: 380_000n, outputTokens: 41_000n, costUsd: 1.84 },
@@ -3222,6 +3267,12 @@ export function installFake() {
           fakeServicePushed.add(name);
           return { job: { found: true, job: { ...fakeServiceJob, name }, runs: [] } };
         },
+        // The organization's jobs the policy lets the person see (EN-45): ?org&signedin.
+        listServiceJobs: () => ({
+          jobs: fakeOrg.signedIn
+            ? [{ id: "oj1", urn: "urn:blitz:jobs:oj1", name: "weekly-digest", description: "The week's orders, summed up", schedule: "Mondays at 8:00", enabled: true, workspace: "organization", dir: "", organization: true, nextRun: timestampFromDate(new Date(Date.now() + 36 * 3600e3)) }]
+            : [],
+        }),
         runServiceJob: () => {
           const run = { id: `run-${Date.now()}`, trigger: "now", status: "running", costUsd: 0, created: now(), artifacts: `${fakeServiceSet}:${Date.now()}` };
           fakeServiceRuns.unshift(run as (typeof fakeServiceRuns)[number]);
@@ -3386,7 +3437,7 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
-          // Settings › Library › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
+          // Settings › Jobs' limits; empty puts back the shipped value (WK-63, WK-73).
           if (key === "workers.policy.allow")
             fakePolicy.allow = value
               ? value

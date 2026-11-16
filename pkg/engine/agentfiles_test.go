@@ -137,3 +137,33 @@ func TestBlitzRoutesToGlobalAndWorkspaceAgents(t *testing.T) {
 		}
 	}
 }
+
+// A global agent switched off in a workspace (STU-15) isn't offered
+// there, and is again once switched back on; the workspace's own agent,
+// or a name that's no global agent's, can't be switched off.
+func TestGlobalAgentOffHere(t *testing.T) {
+	ctx := context.Background()
+	w, _ := openTestWith(t, func(*config.Config) {
+		dir := config.ExpandHome(config.UserAgentsDir)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "helper.md"), []byte("---\nname: helper\ndescription: Helps\ntools: []\n---\nYou help.\n"), 0o644))
+	})
+	offered := func() bool {
+		return slices.ContainsFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "helper" })
+	}
+	require.True(t, offered())
+
+	require.NoError(t, w.SetAgentOn(ctx, "helper", false))
+	assert.False(t, offered(), "off here")
+	assert.True(t, w.AgentsOffHere()["helper"])
+
+	require.NoError(t, w.SetAgentOn(ctx, "helper", true))
+	assert.True(t, offered(), "on again")
+	assert.Empty(t, w.AgentsOffHere())
+
+	var unknown *api.UnknownAgentError
+	assert.ErrorAs(t, w.SetAgentOn(ctx, "nobody", false), &unknown)
+	_, err := w.SetAgent(ctx, "helper")
+	require.NoError(t, err)
+	assert.ErrorIs(t, w.SetAgentOn(ctx, "helper", false), ErrAgentInUse)
+}

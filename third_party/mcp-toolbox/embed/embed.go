@@ -300,6 +300,13 @@ func (s *Session) Close() error {
 	return s.err
 }
 
+// withUserAgent is ctx with the user agent Toolbox's sources name Blitz
+// by; some can't start without one (BigQuery's client: "unable to
+// retrieve user agent").
+func withUserAgent(ctx context.Context) context.Context {
+	return util.WithUserAgent(ctx, "blitz (mcp-toolbox "+Version+")")
+}
+
 // Start initializes cfg's sources (connecting to each: a database that
 // can't be reached is the error) and tools, and serves them as MCP over
 // the returned Session, until Close or ctx is done. Toolbox's log goes to
@@ -314,7 +321,7 @@ func Start(ctx context.Context, cfg Config, logOut io.Writer) (*Session, error) 
 	}
 	ctx, stop := context.WithCancel(ctx)
 	ctx = util.WithLogger(ctx, logger)
-	ctx = util.WithUserAgent(ctx, "blitz (mcp-toolbox "+Version+")")
+	ctx = withUserAgent(ctx)
 	inst, err := telemetry.CreateTelemetryInstrumentation(Version)
 	if err != nil {
 		stop()

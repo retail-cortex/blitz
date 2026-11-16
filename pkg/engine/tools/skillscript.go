@@ -124,7 +124,13 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		out.Error = fmt.Sprintf(format, a...)
 		return out
 	}
-	skill, ok := s.provider.Get(in.Skill)
+	var caller string
+	if ac, ok := ctx.(agent.Context); ok {
+		caller = callerAgent(ac)
+	}
+	// The caller's own version of the skill, when the organization
+	// published it with one (spec_053 EN-82).
+	skill, ok := s.provider.GetFor(caller, in.Skill)
 	if !ok {
 		return fail("no skill named %q", in.Skill)
 	}
@@ -181,7 +187,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	switch {
 	case ev.NeedsReview:
 		if err := s.hooks.Approve(ctx, api.ApprovalRequest{Tool: "run_skill_script", Kind: api.ActionCommand, MustAsk: true,
-			Detail: detail + ": its scripts are new or changed since they were reviewed (trust them in Studio › Skills)"}); err != nil {
+			Detail: detail + ": its scripts are new or changed since they were reviewed (trust them in Studio › Resources › Skills)"}); err != nil {
 			return fail("%v", err)
 		}
 	case ev.Bypass:

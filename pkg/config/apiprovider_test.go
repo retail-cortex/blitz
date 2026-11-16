@@ -69,7 +69,8 @@ func TestAPIConfigCheck(t *testing.T) {
 		"token in a path":       {func(a *APIConfig) { a.Paths = map[string]string{GatewayResponses: "/" + TokenPlaceholder} }, "can't use {{TOKEN_SCRIPT}}"},
 		"unknown fill-in":       {func(a *APIConfig) { a.Paths = map[string]string{GatewayChatCompletions: "/{deployment}/chat"} }, "{deployment} isn't something Blitz fills in ({model})"},
 		"method beyond Google":  {func(a *APIConfig) { a.Paths = map[string]string{GatewayMessages: "/{method}"} }, "{method} isn't something Blitz fills in ({model})"},
-		"Google without method": {func(a *APIConfig) { a.Paths = map[string]string{GatewayGemini: "/models/{model}"} }, "paths.gemini needs {method}"},
+		"Google without method": {func(a *APIConfig) { a.Paths = map[string]string{GatewayGemini: "/models/{model}"} }, ""},
+		"Google, a fixed path":  {func(a *APIConfig) { a.Paths = map[string]string{GatewayVertex: "/gemini/generate"} }, ""},
 		"relative models path":  {func(a *APIConfig) { a.ModelsPath = "models" }, "models_path \"models\" must start with / (a path under base_url) or be an http or https URL"},
 		// Another server's list, with its own headers (MDL-115).
 		"models URL":                {func(a *APIConfig) { a.ModelsPath = "https://catalog.example.com/v1/models?k=" + TokenPlaceholder }, ""},

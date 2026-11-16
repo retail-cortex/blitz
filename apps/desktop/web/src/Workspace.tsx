@@ -100,7 +100,7 @@ export function Workspace({
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
-  // Showing the workers (Studio › Workers) sees their failed runs (BL-WK-11).
+  // Showing the workers (Studio › Jobs) sees their failed runs (BL-WK-11).
   const seeWorkers = useCallback(() => update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) })), [dir, update]);
   useEffect(() => publishStatus(dir, { settings }), [dir, settings]);
 

@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
@@ -56,6 +57,12 @@ type AgentMetadata struct {
 	MaxTokens      *int     `yaml:"max_tokens,omitempty"`
 	Effort         string   `yaml:"effort,omitempty"`
 	ThinkingBudget *int     `yaml:"thinking_budget,omitempty"`
+
+	// Skills are the skills it needs, each by a version range ("name",
+	// "name@1.x", or {name, version}; AG-45): an organization's library
+	// resolves them when it's published, and runs it with the versions they
+	// resolved to (spec_065_packages PK-03).
+	Skills []agentpkg.Dep `yaml:"skills,omitempty"`
 
 	// Lock and Groups are how an organization's catalog applies the
 	// agent (spec_053 EN-30); read by the catalog, accepted here.
@@ -115,6 +122,16 @@ func (m AgentMetadata) Check() error {
 		if _, err := config.ParseEffort(m.Effort); err != nil {
 			return fmt.Errorf("effort: %w", err)
 		}
+	}
+	seen := map[string]bool{}
+	for _, d := range m.Skills {
+		if err := d.Check(); err != nil {
+			return fmt.Errorf("skills: %w", err)
+		}
+		if seen[d.Name] {
+			return fmt.Errorf("skills: %s named twice", d.Name)
+		}
+		seen[d.Name] = true
 	}
 	return nil
 }

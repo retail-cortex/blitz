@@ -151,6 +151,9 @@ type liveReceipt struct {
 	cancel  context.CancelFunc
 	// meters are the running steps' (by ID): what their calls spent so far.
 	meters map[string]*stepMeter
+	// report tells the organization of the run when it ends (EN-94; nil:
+	// nobody).
+	report func(FlowReceipt)
 }
 
 // liveRuns are the runs this process is running, by run ID: a receipt on
@@ -162,7 +165,7 @@ var liveRuns sync.Map // string → *liveReceipt
 func (w *Workspace) beginReceipt(r *flowRun, origin string, cancel context.CancelFunc) *liveReceipt {
 	dir := FlowReceiptsDir(w.cfg.Session.StorageDir)
 	path := filepath.Join(dir, r.runID+".json")
-	lr := &liveReceipt{path: path, cancel: cancel, meters: map[string]*stepMeter{}}
+	lr := &liveReceipt{path: path, cancel: cancel, meters: map[string]*stepMeter{}, report: w.reportFlowRun}
 	now := time.Now()
 	if old, err := readReceipt(path); err == nil {
 		lr.r = old
@@ -388,9 +391,12 @@ func (lr *liveReceipt) end(status, output string, err error) {
 	lr.meters = map[string]*stepMeter{}
 	lr.eventLocked(ReceiptEvent{At: now, Kind: "run", Text: text, Error: err != nil})
 	lr.saveLocked()
-	run := lr.r.Run
+	run, done := lr.r.Run, lr.r
 	lr.mu.Unlock()
 	liveRuns.CompareAndDelete(run, lr)
+	if status != RunWaiting && lr.report != nil {
+		lr.report(done)
+	}
 }
 
 // beat writes a running receipt now and then, until done closes.

@@ -38,6 +38,7 @@ func IsOrg(scope string) bool { return scope == ScopeOrgLocked || scope == Scope
 type orgRules struct {
 	active bool
 	policy config.OrgPolicy
+	layer  config.OrgLayer // for who decided a refusal (EN-39)
 	cat    Catalog
 	c      Category
 	locked map[string]bool   // the organization's locked connections' names
@@ -47,7 +48,7 @@ type orgRules struct {
 // rulesFor is the organization's rules for c's connections in d.
 func rulesFor(d Dirs, cat Catalog, c Category) orgRules {
 	o := config.OrgLayerFor(d.Prefix)
-	r := orgRules{active: o.Active(), policy: o.Policy, cat: cat, c: c, locked: map[string]bool{}, own: map[string]string{}}
+	r := orgRules{active: o.Active(), policy: o.Policy, layer: o, cat: cat, c: c, locked: map[string]bool{}, own: map[string]string{}}
 	if !r.active {
 		return r
 	}
@@ -91,7 +92,7 @@ func (r orgRules) personal(name, text string) string {
 	case r.locked[name]:
 		return "your organization's locked connection of this name takes its place"
 	case !r.policy.Connectors.Own:
-		return "your organization doesn't allow connections of your own"
+		return fmt.Sprintf("your organization doesn't allow connections of your own (%s decides it: an admin can allow it in the console's Policies)", r.layer.Why("connectors.own"))
 	}
 	return r.kindRefusal(text)
 }
@@ -112,7 +113,7 @@ func (r orgRules) kindRefusal(text string) string {
 		types, err = l.SourceTypes(text)
 	}
 	if err != nil || len(types) == 0 {
-		return fmt.Sprintf("your organization allows only %s connections, and what this file connects to can't be told", strings.Join(allowed, ", "))
+		return fmt.Sprintf("your organization allows only %s connections (%s decides it), and what this file connects to can't be told", strings.Join(allowed, ", "), r.layer.Why("connectors.kinds"))
 	}
 	kinds := r.cat.KindsOf(r.c.ID, "")
 	for _, t := range types {
@@ -123,7 +124,7 @@ func (r orgRules) kindRefusal(text string) string {
 		if i := slices.IndexFunc(kinds, func(k Kind) bool { return k.Source == t }); i >= 0 {
 			name = kinds[i].ID
 		}
-		return fmt.Sprintf("your organization doesn't allow %s connections", name)
+		return fmt.Sprintf("your organization doesn't allow %s connections (%s decides it)", name, r.layer.Why("connectors.kinds"))
 	}
 	return ""
 }

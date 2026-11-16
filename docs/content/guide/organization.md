@@ -37,13 +37,13 @@ url = "https://blitz.acme.com"
 workspaces_dir = "/Users/Shared/Acme"   # optional: where the organization's workspaces are cloned
 ```
 
-Blitz is then connected to that organization from the start, and Settings › Organization and `blitz enterprise status` say it's set by device management: it can't be changed or disconnected there. Each person still signs in as themselves. To try a file before sending it out, name it in `BLITZ_MANAGED_SETTINGS`.
+Blitz is then connected to that organization from the start, and Settings › Providers › Organization and `blitz enterprise status` say it's set by device management: it can't be changed or disconnected there. Each person still signs in as themselves. To try a file before sending it out, name it in `BLITZ_MANAGED_SETTINGS`.
 
 The desktop app, the CLI and the tray share one sign-in: the Blitz service on your computer keeps it. Your sign-in lasts as long as your organization allows (often a working day); Blitz renews it on its own until then, and asks you to sign in again after.
 
 ## What changes while you're connected
 
-- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Under the choice, Blitz says what that model can do (tools, images, thinking, how much it reads at once) and its price; `blitz models` lists the same. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back.
+- **The models are your organization's.** Settings › Providers shows your organization as the one provider: choose the default model there from the ones it offers you, or leave it to your organization's default. Under the choice, Blitz says what that model can do (tools, images, thinking, how much it reads at once) and its price; `blitz models` lists the same. Workspaces and agents can name one of them too (`enterprise/<model>`). A model your settings name that it doesn't offer gives way to its default. Your own keys and providers are set aside, not removed: disconnect and they're back. Those your organization's policy lets you keep (Ollama on your computer, say) stay below its models, under **Your own providers**, with the models it allows of each.
 - **Its limits apply.** Your organization may cap what you spend, a day or a month, and how fast you can send requests.
 - **What you send goes to it.** Your requests to models go through your organization's service, which may keep a record of them under its policies. In one of your organization's workspaces, each request says which, so its guardrails and limits apply. Ask your admins what they keep.
 - **Signed out, the models wait.** A workspace tells you to sign in rather than falling back to your own keys.
@@ -52,13 +52,49 @@ A workspace's settings can't connect Blitz to an organization, or change which o
 
 ## Your organization's agents, rules and policy
 
-If your organization publishes a catalog, Blitz works under it: its agents, skills, commands, rules, guardrails, MCP servers and connections join yours. Each is either a **default**, which your own or a workspace's of the same name replaces, or **locked**, which applies over them. A plugin's agent can't take a locked agent's name either: it's reported and left out. Blitz fetches it when you sign in, follows changes as your admins publish them, and keeps it for offline work until it expires; past that, the organization's models wait until Blitz reaches it again.
+Your organization keeps a **library** of agents, skills, workflows, rules and guardrails, each versioned and tested by its evals before it's published. Its admins decide, in its admin console, which of them apply to whom (everyone, some groups, or one person) and how: **required** (you have it, locked) or **available** (yours to switch on). Blitz gets yours with your policy (below) when you sign in, follows changes as your admins make them, and keeps them for offline work until they expire; past that, the organization's models wait until Blitz reaches it again.
+
+A required agent, skill, rule or guardrail is locked: a file of yours or a workspace's of the same name doesn't replace it. An available one you switch on comes before your own, so a file of yours of that name wins. Each of the organization's agents runs the skill versions it was published with, beside your own. Your choices are kept by your organization, so they follow you to every computer. Its connections and MCP servers still come with its catalog, if it has one.
+
+Its required workflows that run before a commit or push install that [git hook](workflows.md#running-before-a-commit-or-push) in each repository you open, and its workflows can call its [API connectors](workflows.md#calling-services).
 
 When your organization's service doesn't answer (it's down, or you're offline), Blitz works on without it, signed in or not: your workspaces open and their files, the editor, Git and the terminal work as ever, and the agent waits for the organization's models, saying the service can't be reached. Blitz gives up on a service that doesn't answer within seconds, then stops asking for half a minute at a time, so nothing waits on it.
 
-Studio's Agents, Skills, Rules and Guardrails lists end with **From your organization**: what the catalog gives this workspace, each marked locked or default and with the groups it's for. A locked one is changed by your organization's Admins, through a review. A default one has **Copy to this workspace**, which puts it in `.agents` for you to change; the workspace's copy then takes its place. From the terminal, `blitz enterprise catalog` lists them and `blitz enterprise catalog copy rule/house-style` copies one.
+**Settings › Organization** shows your organization's library, and Settings › Agents and Skills, and Studio's Rules and Guardrails, end with **From your organization**: each required one locked and saying who decided it (your organization, a group of yours by name, or an admin for you alone), each available one with a switch. From the terminal, `blitz enterprise items` lists them and `blitz enterprise items enable skill/<name>` (or `disable`) switches one; `blitz enterprise policy` lists your policy.
 
 Its policy may also switch off Blitz's own built-in agents, skills or guardrails (never the agent your sessions start with), turn off tools for every agent, your own `!` commands, your own MCP servers or connections (or the kinds of connection it doesn't list, judged by what a file connects to, not by its `# kind:` comment), or your own model providers. Where it turns off your own MCP servers, that includes those a trusted project or a plugin brings. It may also turn off your own [plugins](extending.md#plugins), whether installed, from a marketplace or a folder: then none of their skills, agents, commands, hooks or MCP servers loads, a workspace says "your organization turns off your own plugins", and so does `blitz plugin list`. Until Blitz has your organization's policy (before your first sign-in), or if its copy is damaged, nothing of your own (plugins included) is allowed and the organization's models wait; Blitz says so when it starts. Studio's Connectors marks the organization's connections, and says why one of yours isn't used. Where it allows your own providers, name one with its prefix (`anthropic/claude-…`) to use it; bare model names are your organization's.
+
+### Your policy
+
+Your organization's admins set its policy in its admin console: for everyone, for groups, and for one person. Blitz gets **yours**, the result for you, when you sign in and again whenever an admin changes it. **Settings › Providers › Organization › Your policy** lists every setting, its value for you, and who decided it: the default, your organization, your group (by name), or an admin for you alone, and whether it's locked. You can't change it there; ask your admins.
+
+- **Your own providers, one by one.** The policy may allow some of your own providers and not others, and only some of their models: Ollama with `llama3*`, for example. Settings › Providers then offers just those; the model menu and `blitz models` list only the models it allows; and a model it doesn't allow is refused, saying which ones it does. With no model chosen, Ollama uses the first one you've pulled that it allows.
+- **Every refusal says who decided.** "Your organization doesn't allow connections of your own (the policy for Data decides it…)" tells you which level to ask about.
+- **Its rules and guardrails apply to you** before a workspace's and your own, as a locked catalog's do.
+
+A service from before this policy keeps sending its catalog's policy, which applies to everyone the same way.
+
+## Yours, with your organization
+
+Your own agents, skills, workflows, rules and guardrails (in `~/.blitz`) sync with your organization's service, so they follow you to every computer you sign in on: Blitz sends what you change and brings in what you changed elsewhere each time it fetches your policy, and `blitz enterprise items sync` (or **Sync now** in Settings › Organization) does it at once. Removed on one computer, it's removed on the others. Changed on two before they synced, the one you're at wins and the other's is kept in `~/.blitz/conflicts` for you to compare. Your organization's admins can read them (never change them), and its policy says which kinds it keeps; a skill with a file that isn't text, or a linked skill folder, stays on this computer.
+
+When your organization takes them, **Share** one with everyone (Settings › Organization, or `blitz enterprise items share skill/<name>`). Its evaluator judges it, with the checks and model your admins chose: accepted, it's published in the library as yours for the groups they chose; rejected, you're told why, in Blitz (`blitz enterprise items submissions`) and by your notices. Fix it and share it again. A kind with no evaluator takes no submissions.
+
+Your workflow and eval runs are reported to your organization too, so its admins see what ran and what it cost.
+
+## Your organization's databases
+
+Your organization's admins can connect its databases once, in its console, for the people its policy allows: its service holds the connection and its passwords, so you never need credentials of your own. The ones you may use show up beside your own connections:
+
+- **In Studio › Resources › Connectors**, marked as your organization's, run by its service. You can't open or switch them off: your admins change them.
+- **In the Data menu and with `@db:`**, like any database: ask for what you need, or write SQL. `blitz data` lists them too, marked "your organization's", and `blitz data query <name> "<SQL>"` runs one.
+- **For the agent**, as `org__<name>_execute_sql` and `org__<name>_list_tables`.
+
+Every query runs through your organization's service, as you, and its policy decides what you may do with each: which tables, whether you may change data, and how many rows come back. A query it doesn't allow is refused, saying who decided. Your organization keeps a log of the queries, with who asked. One of your own connections with the same name wins it.
+
+Your organization can share **MCP servers** the same way: its service holds their tokens, and their tools reach your agent as `org__<name>_<tool>`, each call made through the service as you and logged.
+
+Some shared BigQuery connections **query as you**, with your own Google account, so you see exactly what your own access allows. Allow it once: Settings › Providers › Organization › **Data as you** › **Allow with Google** (or `blitz enterprise consent`), and revoke it there whenever you like.
 
 ## Your organization's look and terms
 
@@ -70,13 +106,9 @@ If your organization has terms, Blitz shows them before anything else when you s
 
 Settings › Providers & keys shows **Your usage** of your organization's models, today and this month, by model; each budget and token quota that applies to you, with what's left and when it starts again; and the models' rate limits. If your organization keeps full logs of what's sent to its models, and yours are among them, it says so. When you reach a limit, Blitz says which one and when it resets, rather than calling it a model failure. From the terminal: `blitz enterprise usage`.
 
-## Publishing to your organization
-
-If you're one of your organization's Admins, Studio's **Publish to organization…** (the cloud button at the top) sends the workspace's agents, skills, rules, guardrails, commands and connectors to its catalog. Choose each one, say whether it's **Locked** (nobody changes or switches it off) or a **Default** (a workspace or person may), and which groups it's for. They go as one review: an Admin approves it in the admin console's **Catalog › Reviews** (you may approve your own; the audit log says so), and everyone's Blitz gets them with the next version. Anything the catalog would refuse is marked before you send it. From the terminal: `blitz enterprise publish` lists what can go; `blitz enterprise publish agent/writer --lock locked --groups sales` sends it; `blitz enterprise reviews` shows how they stand.
-
 ## Job notices
 
-When a job of yours runs on your organization's service, Settings › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to turn them on, `--email=false`, `--webhook ""` and `--every-run=false` to turn them off. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
+When a job of yours runs on your organization's service, Settings › Providers › Organization's **Job notices** says how you hear of it: by email, by a webhook of yours (a Slack or Teams incoming webhook shows the notice as it is), or both; for a failure and a run waiting for your answer, or **Every run**. From the terminal: `blitz enterprise notices`, with `--email`, `--webhook <address>` and `--every-run` to turn them on, `--email=false`, `--webhook ""` and `--every-run=false` to turn them off. The status bar, Studio › Jobs and the tray show runs waiting for your answer too.
 
 ## Your organization's workspaces
 
@@ -98,7 +130,7 @@ git config --global credential.https://blitz.acme.com.helper "!blitz git-credent
 
 ## Disconnect
 
-Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.
+Settings › Providers › Organization › **Disconnect**, or `blitz enterprise disconnect`: you're signed out, and Blitz uses your own providers again. `blitz enterprise logout` signs out but stays connected.
 
 ## When something's wrong
 
@@ -106,7 +138,7 @@ Settings › Organization › **Disconnect**, or `blitz enterprise disconnect`: 
 
 | What you see | What to do |
 |---|---|
-| "Sign in to your organization … to use its models" | Sign in: Settings › Organization, or `blitz enterprise login` |
+| "Sign in to your organization … to use its models" | Sign in: Settings › Providers › Organization, or `blitz enterprise login` |
 | "… isn't answering" | Check your network or VPN; **Retry** |
 | "… offers you no models" | Ask your admins for access to a model |
 | "Accept the organization's terms" | Your organization changed its terms: accept them where it asks, or in a terminal with `blitz enterprise terms` |

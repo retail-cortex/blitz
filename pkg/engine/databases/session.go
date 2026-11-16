@@ -186,18 +186,29 @@ func bigquerySchema(ctx context.Context, cs *mcp.ClientSession, project string) 
 	}
 	var tables []connectors.Table
 	var problems []string
-	for _, ds := range datasets {
-		ids, err := strs(schemaTool+"_tables", map[string]any{"project": project, "dataset": ds})
+	for _, entry := range datasets {
+		// Allowed datasets come back whole, project.dataset (another
+		// project's too: bigquery-public-data.thelook_ecommerce); the
+		// rest by name, in the connection's project. Another project's
+		// tables are named in full, as a query names them.
+		proj, ds, prefix := project, entry, ""
+		if p, d, ok := strings.Cut(entry, "."); ok {
+			proj, ds = p, d
+			if p != project {
+				prefix = p + "."
+			}
+		}
+		ids, err := strs(schemaTool+"_tables", map[string]any{"project": proj, "dataset": ds})
 		if err != nil {
-			problems = append(problems, ds+": "+err.Error())
+			problems = append(problems, entry+": "+err.Error())
 			continue
 		}
 		for _, id := range ids {
 			if len(tables) >= MaxSchemaTables {
 				return tables, nil
 			}
-			parts, isErr, err := call(ctx, cs, schemaTool+"_table", map[string]any{"project": project, "dataset": ds, "table": id})
-			t := connectors.Table{Name: ds + "." + id}
+			parts, isErr, err := call(ctx, cs, schemaTool+"_table", map[string]any{"project": proj, "dataset": ds, "table": id})
+			t := connectors.Table{Name: prefix + ds + "." + id}
 			if err == nil && !isErr && len(parts) > 0 {
 				t.About, t.Columns = tableInfo(parts[0])
 			}
@@ -350,7 +361,7 @@ func (Backend) Query(ctx context.Context, env connectors.Env, k *connectors.Kind
 	if err != nil {
 		return datatable.Table{}, maskTyped(env.Values, err)
 	}
-	r, err := embed.Query(ctx, cfg, c.Name, run.Statement, embed.QueryOptions{Params: run.Params, MaxRows: run.MaxRows, MaxBytes: run.MaxBytes, Billed: run.Billed})
+	r, err := embed.Query(ctx, cfg, c.Name, run.Statement, embed.QueryOptions{Params: run.Params, MaxRows: run.MaxRows, MaxBytes: run.MaxBytes, Billed: run.Billed, AccessToken: run.AccessToken})
 	if err != nil {
 		return datatable.Table{}, maskTyped(env.Values, err)
 	}

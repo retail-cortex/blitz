@@ -66,6 +66,9 @@ type QueryOptions struct {
 	MaxRows  int
 	MaxBytes int
 	Billed   func(bytes int64) error
+	// AccessToken is the caller's own, for a source that queries as each
+	// caller (BigQuery's useClientOAuth): the query runs as them.
+	AccessToken string
 }
 
 // Query runs statement on cfg's source, read-only when the source is, and
@@ -80,6 +83,9 @@ func Query(ctx context.Context, cfg Config, source, statement string, opts Query
 	if sourceReadOnly(sc) && !ReadsOnly(statement) {
 		return Result{}, ErrWrites
 	}
+	// Its source as Start opens them, its user agent too (BigQuery's
+	// client needs one).
+	ctx = withUserAgent(ctx)
 	src, err := sc.Initialize(ctx, noop.NewTracerProvider().Tracer("blitz"))
 	if err != nil {
 		return Result{}, err

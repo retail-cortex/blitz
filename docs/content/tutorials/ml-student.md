@@ -178,7 +178,7 @@ An audio overview is two hosts talking a topic through: a script the model write
 
 First, **set a speech model**:
 
-- **Desktop:** **Settings › Workspaces**, this workspace's settings, **Agent and model › Speech model**: `gemini/gemini-2.5-flash-preview-tts` (with a Gemini key), or `openai/gpt-4o-mini-tts`.
+- **Desktop:** **Studio › Settings**, this workspace's settings, **Agent and model › Speech model**: `gemini/gemini-2.5-flash-preview-tts` (with a Gemini key), or `openai/gpt-4o-mini-tts`.
 - **Settings file:**
 
   ```toml

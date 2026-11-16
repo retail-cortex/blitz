@@ -86,7 +86,7 @@ The workspace's own ring says **Not judged yet**. Leave it for now; you'll grade
 
 ## 3. An agent that reviews, and changes nothing
 
-**Studio › Agents** lists the four. Open **Search & Performance Reviewer**. Its form shows the description, the instructions, its tools and, under **Advanced**, its permission mode. The file behind it, `.agents/agents/search-perf-reviewer.md`, begins:
+**Studio › Resources › Agents** lists the four. Open **Search & Performance Reviewer**. Its form shows the description, the instructions, its tools and, under **Advanced**, its permission mode. The file behind it, `.agents/agents/search-perf-reviewer.md`, begins:
 
 ```markdown
 ---
@@ -113,7 +113,7 @@ Its instructions also name the spec IDs it checks against (`SRCH-01`–`SRCH-06`
 
 Instructions drift. A model update, a tidy-up of the prompt or a new skill can quietly break an agent that worked last week. An **eval** catches that: a table of prompts, each with the answer you expect, run on the agent whenever it changes.
 
-**Studio › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
+**Studio › Resources › Agents › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
 
 | ID | Prompt | Output (expected) | Type | Threshold | Scope |
 |---|---|---|---|---|---|
@@ -139,7 +139,7 @@ More in [Evals](../guide/evals.md).
 
 A skill is a recipe the agent follows for one kind of task. Most are instructions, but some steps are better as code: they're exact, quick and cost no tokens. Shopping lists are one. `SHOP-02` says `1 cup flour` + `2 cups flour` must become `3 cups flour`, and arithmetic is a script's job, not a model's.
 
-**Studio › Skills** › **search-and-shopping-aggregation** › **Scripts** › new script, Python. Name it `normalize.py` and write (or describe it and use **Redraft** to have the model write it):
+**Studio › Resources › Skills** › **search-and-shopping-aggregation** › **Scripts** › new script, Python. Name it `normalize.py` and write (or describe it and use **Redraft** to have the model write it):
 
 ```python
 """normalize.py: shopping list lines, summed by canonical ingredient (SHOP-02)."""
@@ -185,9 +185,9 @@ Back on **General**, add the agents it's offered to (`search-perf-reviewer`), so
 
 The workflow in step 9 calls the staging server, which needs a token. A token pasted into a prompt or a file ends up in transcripts, logs and git. A **secret** stays in your OS keychain and is named instead: `{secrets:staging_token}`.
 
-**Studio › Secrets** › add one: name `staging_token`, then the value. The list shows each secret's name (as you'd write it) and when it was set, never the value. **Replace** sets a new value without showing the old one.
+**Studio › Resources › Secrets** › add one: name `staging_token`, then the value. The list shows each secret's name (as you'd write it) and when it was set, never the value. **Replace** sets a new value without showing the old one.
 
-`{secrets:staging_token}` now works in prompts, agent instructions, MCP server settings and workflow steps. The value goes in only as the model or the service is called. The transcript, the audit log and the workflow file keep the placeholder, and if a model ever echoes the value back, it's shown masked. A workspace's secrets are its own. **Settings › Library › Secrets** holds global ones for every workspace, and the workspace's own wins a name clash.
+`{secrets:staging_token}` now works in prompts, agent instructions, MCP server settings and workflow steps. The value goes in only as the model or the service is called. The transcript, the audit log and the workflow file keep the placeholder, and if a model ever echoes the value back, it's shown masked. A workspace's secrets are its own. **Settings › Resources › Secrets** holds global ones for every workspace, and the workspace's own wins a name clash.
 
 ## 7. Rules: the work's quality
 

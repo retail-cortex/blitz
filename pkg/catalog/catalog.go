@@ -26,6 +26,10 @@
 //	skills/<name>/SKILL.md    a skill, and its other files beside it
 //	guardrails/<name>.md      a guardrail
 //	commands/<name>.md        a slash command
+//	workflows/<name>.flow.yaml  a workflow
+//	evals/<name>.md           an eval (the cases an agent or skill is
+//	                          checked against; an organization's stay on
+//	                          its service)
 //	mcp/<name>.toml           an MCP server: [mcp.servers]'s fields, with
 //	                          secrets as {secrets:<name>}, never values
 //	connectors/…/<name>.yaml  a connector's descriptor or connection, its
@@ -47,6 +51,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/commands"
+	"github.com/retail-cortex/blitz/pkg/engine/evals"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/redact"
@@ -61,6 +67,8 @@ const (
 	SkillFile = "skill_file" // a file in a skill's folder beside SKILL.md
 	Guardrail = "guardrail"
 	Command   = "command"
+	Workflow  = "workflow"
+	Eval      = "eval"
 	MCP       = "mcp"
 	Connector = "connector"
 )
@@ -124,6 +132,10 @@ func Of(p string) (kind, name string, ok bool) {
 		return Guardrail, stem, true
 	case parts[0] == "commands" && path.Ext(base) == ".md":
 		return Command, stem, true
+	case parts[0] == "workflows" && strings.HasSuffix(base, flows.Suffix):
+		return Workflow, strings.TrimSuffix(base, flows.Suffix), true
+	case parts[0] == "evals" && path.Ext(base) == ".md":
+		return Eval, stem, true
 	case parts[0] == "mcp" && path.Ext(base) == ".toml":
 		return MCP, stem, true
 	case parts[0] == "connectors" && (path.Ext(base) == ".yaml" || path.Ext(base) == ".yml"):
@@ -156,7 +168,7 @@ func frontMatter(data []byte) []byte {
 func Check(p string, data []byte) (Item, []string) {
 	kind, name, ok := Of(p)
 	if !ok {
-		return Item{}, []string{p + ": not a catalog item (agents/, rules/, skills/, guardrails/, commands/, mcp/, connectors/)"}
+		return Item{}, []string{p + ": not a catalog item (agents/, rules/, skills/, guardrails/, commands/, workflows/, evals/, mcp/, connectors/)"}
 	}
 	it := Item{Kind: kind, Name: name, Path: p, Lock: Default}
 	var problems []string
@@ -220,6 +232,14 @@ func Check(p string, data []byte) (Item, []string) {
 	case Command:
 		if _, err := commands.Parse(name, "organization", p, data); err != nil {
 			bad("%v", err)
+		}
+	case Workflow:
+		if f := flows.Parse(name, p, data); f.Problem != "" {
+			bad("%s", f.Problem)
+		}
+	case Eval:
+		if e := evals.Parse(name, p, data); e.Problem != "" {
+			bad("%s", e.Problem)
 		}
 	case Skill:
 		s, err := skills.ParseSkillMD(data, p)

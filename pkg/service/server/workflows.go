@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -29,7 +30,7 @@ import (
 // Studio's workflows (spec_043_workflows).
 
 func workflowMsg(f flows.Flow) *pb.WorkflowFile {
-	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode, SchedulePermissions: flows.SchedulePermissions(f)}
+	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode, SchedulePermissions: flows.SchedulePermissions(f), Triggers: f.Triggers}
 	for _, n := range f.Nodes {
 		pn := &pb.FlowNode{Id: n.ID, Type: n.Type, Title: n.Title, X: n.Position.X, Y: n.Position.Y, Agent: n.Agent, Skills: n.Skills,
 			Instructions: n.Instructions, Rules: n.Rules, Skill: n.Skill, Script: n.ScriptName, Args: n.Args, Path: n.Path, Timeout: n.Timeout}
@@ -39,7 +40,7 @@ func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 		if n.Retry != nil {
 			pn.RetryAttempts, pn.RetryDelay = int32(n.Retry.Attempts), n.Retry.Delay
 		}
-		pn.Server, pn.Tool, pn.Url, pn.Method, pn.Body = n.Server, n.Tool, n.URL, n.Method, n.Body
+		pn.Server, pn.Tool, pn.Url, pn.Method, pn.Body, pn.Connector = n.Server, n.Tool, n.URL, n.Method, n.Body, n.Connector
 		pn.ArgumentsJson, pn.JsonBody = jsonText(n.Arguments), jsonText(n.JSON)
 		pn.Workflow, pn.ForEach, pn.Concurrency = n.Workflow, n.ForEach, int32(n.Concurrency)
 		pn.Wait, pn.Until = n.Wait, n.Until
@@ -88,7 +89,7 @@ func jsonText(v any) string {
 
 // workflowOf is a workflow from the canvas, or what's wrong with its JSON.
 func workflowOf(m *pb.WorkflowFile) (flows.Flow, []string) {
-	f := flows.Flow{Name: m.GetName(), Description: m.GetDescription(), Mode: m.GetMode()}
+	f := flows.Flow{Name: m.GetName(), Description: m.GetDescription(), Mode: m.GetMode(), Triggers: m.GetTriggers()}
 	var probs []string
 	for _, n := range m.GetNodes() {
 		fn := flows.Node{ID: n.GetId(), Type: n.GetType(), Title: n.GetTitle(), Position: flows.Position{X: n.GetX(), Y: n.GetY()}, Agent: n.GetAgent(), Skills: n.GetSkills(),
@@ -99,7 +100,7 @@ func workflowOf(m *pb.WorkflowFile) (flows.Flow, []string) {
 		if n.GetRetryAttempts() > 1 {
 			fn.Retry = &flows.Retry{Attempts: int(n.GetRetryAttempts()), Delay: n.GetRetryDelay()}
 		}
-		fn.Server, fn.Tool, fn.URL, fn.Method, fn.Body = n.GetServer(), n.GetTool(), n.GetUrl(), n.GetMethod(), n.GetBody()
+		fn.Server, fn.Tool, fn.URL, fn.Method, fn.Body, fn.Connector = n.GetServer(), n.GetTool(), n.GetUrl(), n.GetMethod(), n.GetBody(), n.GetConnector()
 		fn.Workflow, fn.ForEach, fn.Concurrency = n.GetWorkflow(), n.GetForEach(), int(n.GetConcurrency())
 		fn.Wait, fn.Until = n.GetWait(), n.GetUntil()
 		fn.Connection, fn.SavedQuery, fn.SQL, fn.Describe, fn.Output = n.GetConnection(), n.GetSavedQuery(), n.GetSql(), n.GetDescribe(), n.GetOutput()
@@ -189,4 +190,39 @@ func (h workspaceService) DeleteWorkflow(ctx context.Context, r req[pb.DeleteWor
 		return nil, apiError(connect.CodeNotFound, "WORKFLOW_NOT_FOUND", err)
 	}
 	return ok(&pb.DeleteWorkflowResponse{})
+}
+
+// RunGitHook runs the workflows that run on a git hook (spec_043 WF-32),
+// for `blitz hook run`: UNKNOWN_HOOK for an event none can run on.
+func (h workspaceService) RunGitHook(ctx context.Context, r req[pb.RunGitHookRequest]) (*connect.Response[pb.RunGitHookResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	results, err := w.RunGitHook(ctx, r.Msg.Event, r.Msg.Input)
+	if errors.Is(err, engine.ErrUnknownHook) {
+		return nil, apiError(connect.CodeInvalidArgument, "UNKNOWN_HOOK", err, "event", r.Msg.Event)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.RunGitHookResponse{}
+	for _, x := range results {
+		out.Results = append(out.Results, &pb.HookResult{Workflow: x.Workflow, Version: x.Version, Passed: x.Passed, Output: x.Output, Error: x.Error})
+	}
+	return ok(out)
+}
+
+// ValidateAssets checks the workspace's assets (spec_065 PK-14).
+func (h workspaceService) ValidateAssets(ctx context.Context, r req[pb.ValidateAssetsRequest]) (*connect.Response[pb.ValidateAssetsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	found, _ := w.ValidateAssets(ctx) // the engine's checks report, never fail
+	out := &pb.ValidateAssetsResponse{}
+	for _, f := range found {
+		out.Findings = append(out.Findings, &pb.AssetFinding{Asset: f.Key, Problems: f.Problems, Warnings: f.Warnings})
+	}
+	return ok(out)
 }

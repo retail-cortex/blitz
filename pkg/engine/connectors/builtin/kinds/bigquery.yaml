@@ -54,9 +54,9 @@ fields:
       es: "Conjuntos de datos"
       fr-CA: "Ensembles de données"
     help:
-      en: "Only these, comma-separated (empty: every one)"
-      es: "Solo estos, separados por comas (vacío: todos)"
-      fr-CA: "Seulement ceux-ci, séparés par des virgules (vide : tous)"
+      en: "Only these, comma-separated (empty: every one). A name alone is in the project above; another project's is project.dataset, such as bigquery-public-data.thelook_ecommerce"
+      es: "Solo estos, separados por comas (vacío: todos). Un nombre solo es del proyecto de arriba; el de otro proyecto es proyecto.conjunto, como bigquery-public-data.thelook_ecommerce"
+      fr-CA: "Seulement ceux-ci, séparés par des virgules (vide : tous). Un nom seul est du projet ci-dessus; celui d'un autre projet est projet.ensemble, comme bigquery-public-data.thelook_ecommerce"
   - key: maximumBytesBilled
     type: number
     label:

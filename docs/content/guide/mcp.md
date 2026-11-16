@@ -7,7 +7,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) lets the agent use
 
 Spec: [MCP](../about/specs/spec_009_mcp.md).
 
-For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has one built in, set up in **Studio › Connectors**. See [Databases](databases.md) and [Connectors](connectors.md).
+For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has one built in, set up in **Studio › Resources › Connectors**. See [Databases](databases.md) and [Connectors](connectors.md).
 
 ## Add a server
 
@@ -24,7 +24,7 @@ blitz mcp add docs https://mcp.example.com/mcp --header "X-Team:core"
 blitz mcp login docs
 ```
 
-`--prefix gh` names its tools `gh__create_issue`; `--agents "*"` offers them to every agent (the default is the main agent only). The running service picks up a new server when it restarts: `blitz service restart`, or **Settings › Service** in the desktop app.
+`--prefix gh` names its tools `gh__create_issue`; `--agents "*"` offers them to every agent (the default is the main agent only). The running service picks up a new server when it restarts: `blitz service restart`, or **Settings › System › Service** in the desktop app.
 
 | Command | Does |
 |---|---|
@@ -37,7 +37,7 @@ blitz mcp login docs
 | `blitz mcp … --workspace` (`-w`) | Any of the above for this workspace's own servers (`--dir`, else the current directory): `list -w` shows every server it runs with its scope, `disable -w` on a global one turns it off here alone |
 | `blitz mcp make-global <name>` | Moves one of this workspace's servers to the global settings, for every workspace |
 
-In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Connectors › MCP servers**, and a workspace's own in **Studio › Connectors** ([one workspace's servers](#one-workspaces-servers)). The app's form has every setting below but `disabled` (that's the switch); it never shows the environment and header values you've saved (a `{secrets:…}` name aside): leave one empty to keep it.
+In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`. In the app, add your global servers in **Settings › Resources › Connectors › MCP servers**, and a workspace's own in **Studio › Resources › Connectors** ([one workspace's servers](#one-workspaces-servers)). The app's form has every setting below but `disabled` (that's the switch); it never shows the environment and header values you've saved (a `{secrets:…}` name aside): leave one empty to keep it.
 
 ## In the settings file
 
@@ -66,7 +66,7 @@ Each server needs a unique `name` and exactly one of `command` or `url`; otherwi
 
 ## One workspace's servers
 
-A server only one project needs (its staging database, its design files) belongs to that workspace, not to every one. In the desktop app, open **Studio › Connectors**: under **MCP servers** you'll find every server the workspace runs, each saying whose it is.
+A server only one project needs (its staging database, its design files) belongs to that workspace, not to every one. In the desktop app, open **Studio › Resources › Connectors**: under **MCP servers** you'll find every server the workspace runs, each saying whose it is.
 
 - **This workspace**: its own. **+** adds one; edit, remove it, or **Make global** to move it to your global settings for every workspace.
 - **Every workspace**: your global servers, shown as they are. The switch turns one off **in this workspace only**; the gear edits it in Settings. Studio never changes what other workspaces run.
@@ -126,6 +126,6 @@ The rule names the server and the tool as the agent sees it (with its prefix, if
 
 - **Startup:** stdio servers start the first time their tools are needed, not when the workspace opens. A crashed one starts again on the next call.
 - **Failures:** after two failures in a row its tools pause for 15 seconds, then longer each time (up to 5 minutes), and come back by themselves. A tool call that runs past `timeout_seconds` fails.
-- **Where to look:** a server going unavailable, being paused and coming back shows in the conversation where it happened. Everything else is in the service's log (**Settings › Logs** in the desktop app): look for `mcp server … unavailable`, `keeps failing` or `needs signing in again: blitz mcp login …`.
+- **Where to look:** a server going unavailable, being paused and coming back shows in the conversation where it happened. Everything else is in the service's log (**Settings › System › Logs** in the desktop app): look for `mcp server … unavailable`, `keeps failing` or `needs signing in again: blitz mcp login …`.
 - **Names:** a tool named like one of Blitz's own is skipped, and when two servers offer the same name the first wins; a `prefix` fixes both.
 - **Checks:** `blitz doctor` says whether each server's command is on the PATH; `blitz doctor --online` connects and lists its tools.

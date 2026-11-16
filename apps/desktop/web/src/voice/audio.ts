@@ -48,7 +48,7 @@ export async function micPermission(): Promise<"granted" | "denied" | "prompt" |
   }
 }
 
-/** The system's microphones, for Settings › Voice (their names show once the page may use one). */
+/** The system's microphones, for Settings › Personality › Voice (their names show once the page may use one). */
 export async function microphones(): Promise<{ id: string; label: string }[]> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();

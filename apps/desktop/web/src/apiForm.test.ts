@@ -90,13 +90,15 @@ describe("the api form", () => {
   it("refuses a model twice and paths the service would", () => {
     const twice = { ...fine, models: [{ model: "m", api: "responses" }, { model: " m ", api: "messages" }] };
     expect(apiFormProblems(twice)).toEqual(["desktop.keys.api.problem.model_twice"]);
-    const bad: Record<string, string>[] = [{ responses: "responses" }, { responses: "/r?x=1" }, { chat_completions: "/{deployment}/chat" }, { messages: "/{method}" }, { gemini: "/models/{model}" }, { responses: `/${tokenPlaceholder}` }];
+    const bad: Record<string, string>[] = [{ responses: "responses" }, { responses: "/r?x=1" }, { chat_completions: "/{deployment}/chat" }, { messages: "/{method}" }, { responses: `/${tokenPlaceholder}` }];
     for (const paths of bad) {
       expect(apiFormProblems({ ...fine, paths }), JSON.stringify(paths)).toEqual(["desktop.keys.api.problem.path"]);
     }
     expect(apiFormProblems({ ...fine, modelsPath: "models" })).toEqual(["desktop.keys.api.problem.path"]);
     expect(apiFormProblems({ ...fine, listsModels: false, modelsPath: "models" }), "a path not used isn't checked").toEqual([]);
     expect(apiFormProblems({ ...fine, paths: { vertex: "/v1/projects/p/locations/global/publishers/google/models/{model}:{method}", chat_completions: "/v1/chat/completions" } })).toEqual([]);
+    // Google's fill-ins are offered, not required (MDL-113).
+    expect(apiFormProblems({ ...fine, paths: { gemini: "/models/{model}", vertex: "/google/generate" } })).toEqual([]);
   });
 
   // Issue #111 (spec_015_models MDL-115): another server's list, with its own headers.

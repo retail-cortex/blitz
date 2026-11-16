@@ -3,17 +3,17 @@ title: Connectors
 weight: 85
 ---
 
-**Studio › Connectors** connects your agents to your data. Point Blitz at a PostgreSQL, AlloyDB, SQLite or BigQuery database and the workspace's agents can list its tables, run queries and answer questions from it: "which products sold best last month?" with no exports pasted into the chat and no SQL written by hand. Connections are read-only unless you say otherwise, and passwords stay in your keychain.
+**Studio › Resources › Connectors** connects your agents to your data. Point Blitz at a PostgreSQL, AlloyDB, SQLite or BigQuery database and the workspace's agents can list its tables, run queries and answer questions from it: "which products sold best last month?" with no exports pasted into the chat and no SQL written by hand. Connections are read-only unless you say otherwise, and passwords stay in your keychain.
 
 This page walks through connecting a PostgreSQL database called `shop`, then giving the agents a query of their own.
 
 ## Open it
 
-Choose **Studio › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar. Without it, add connections for every workspace in **Settings › Connectors**, the same way; **Connect a database…** in the chat box's database menu and `/connect` open it too.
+Choose **Studio › Resources › Connectors**. Studio's menu shows once **Show advanced** is on, in Settings' title bar. Without it, add connections for every workspace in **Settings › Resources › Connectors**, the same way; **Connect a database…** in the chat box's database menu and `/connect` open it too.
 
-![Studio › Connectors: two of this workspace's databases, and a global one switched off here](../../../../images/desktop/connectors-list.png)
+![Studio › Resources › Connectors: two of this workspace's databases, and a global one switched off here](../../../../images/desktop/connectors-list.png)
 
-The list shows every database this workspace can reach: its own, saved in `.agents/connectors/databases`, and your global ones from **Settings › Connectors**, which are there in every workspace. Each line says its kind, whose it is (**This workspace** or **Every workspace**), whether it's read-only, and how many tools it gives the agents. The switch turns a connection off in this workspace only, so its agents leave that data alone; the line above the list says how many tools the agents are offered now.
+The list shows every database this workspace can reach: its own, saved in `.agents/connectors/databases`, and your global ones from **Settings › Resources › Connectors**, which are there in every workspace. Each line says its kind, whose it is (**This workspace** or **Every workspace**), whether it's read-only, and how many tools it gives the agents. The switch turns a connection off in this workspace only, so its agents leave that data alone; the line above the list says how many tools the agents are offered now.
 
 A connection that came with the project, one you didn't save yourself, is marked **Not trusted yet**: its tools ask before each use until you open it and save it.
 
@@ -86,6 +86,6 @@ Below the databases, **MCP servers** lists every server this workspace's agents 
 
 ## For every workspace
 
-To connect a database once for all your workspaces, add it in **Settings › Connectors** instead, the same way. It's saved in `~/.blitz/connectors/databases`, and each workspace can still switch it off here. Studio never changes a global connection.
+To connect a database once for all your workspaces, add it in **Settings › Resources › Connectors** instead, the same way. It's saved in `~/.blitz/connectors/databases`, and each workspace can still switch it off here. Studio never changes a global connection.
 
 More: [Databases](../../../guide/databases.md) (every kind's settings, SQLite with vectors, the files) and [Connectors](../../../guide/connectors.md) (adding your own kinds).

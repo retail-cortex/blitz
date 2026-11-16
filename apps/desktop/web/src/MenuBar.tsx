@@ -29,6 +29,7 @@ import {
   mdiFolderSyncOutline,
   mdiFolderOutline,
   mdiGit,
+  mdiHelpCircleOutline,
   mdiHistory,
   mdiInformationOutline,
   mdiLightningBolt,
@@ -47,7 +48,7 @@ import { docSections } from "./docs/sections";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import type { Section } from "./SettingsDrawer";
-import { studioGroups, studioIcons, type StudioKind } from "./studio/StudioDrawer";
+import { studioEntryOf, studioGroups, studioIcons, type StudioKind } from "./studio/StudioDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -74,12 +75,12 @@ export function Brand() {
 /**
  * The top bar's menus, from the left edge of the center panel: Workspaces
  * (open one, switch, edit its settings, close), Changes (the session's or
- * git's), Studio (a button: the workspace's agents, skills, workers and
- * the rest, in one drawer), Help; at the right, the
- * search (the command palette) and Settings (the global settings, an icon).
- * What they open shows over the editor, in a dialog. Without a workspace
- * (the welcome screen) only Workspaces, Help, the search and Settings
- * remain.
+ * git's) and Studio (everything that is the workspace's, in one
+ * drawer); then the search (the command palette), filling the room up to
+ * the icons at the right: a web page, Help (a menu) and Settings (every
+ * workspace's). What they open shows over the editor, in a dialog.
+ * Without a workspace (the welcome screen) only Workspaces, the search,
+ * Help and Settings remain.
  */
 export function MenuBar({
   dir = "",
@@ -125,15 +126,16 @@ export function MenuBar({
   const failures = useWorkerFailures();
   const failed = dir ? (failures[dir] ?? 0) : 0;
 
-  // Studio: its kinds, as the drawer lists them (icons only there), a
-  // failed worker run noted on Workers; Close Studio while it's open.
+  // Studio: its entries, as the drawer lists them, a failed job run
+  // noted on Jobs; Close Studio while it's open.
+  const studioOn = studioKind ? studioEntryOf(studioKind) : null;
   const studio: MenuEntry[] = [
     ...studioGroups.flatMap((group, i): MenuEntry[] => [
       ...(i > 0 ? (["divider"] as MenuEntry[]) : []),
       ...group.map((k) => ({
         label: t(`desktop.studio.${k}`),
         icon: studioIcons[k],
-        on: studioKind === k,
+        on: studioOn === k,
         detail: k === "workers" && failed > 0 ? tn("desktop.switcher.failed_runs", failed) : undefined,
         onSelect: () => onStudio?.(k),
       })),
@@ -197,7 +199,7 @@ export function MenuBar({
         on: w.dir === prefs.active,
         onSelect: () => update((p) => openWorkspace(p, w.dir)),
         actions: [
-          // Its settings: Settings › Workspaces, on it.
+          // Its settings: its Studio › Settings (App opens it there).
           { icon: mdiPencilOutline, label: t("desktop.menu.workspaces.edit", { name: displayName(w) }), onSelect: () => onSettings("workspaces", w.dir) },
           { icon: mdiClose, label: t("desktop.switcher.close", { name: displayName(w) }), onSelect: () => onCloseWorkspace(w.dir) },
         ],
@@ -273,11 +275,12 @@ export function MenuBar({
           {menus.includes("studio") && <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.studio")} dot={failed > 0} {...p} />} items={studio} />}
         </>
       )}
-      <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.menu.help")} {...p} />} items={help} />
-      <span className="spacer" />
+      {/* The search fills the room from the menus to the icons. */}
       <ToolbarSearch onClick={onSearch} />
       {/* A web page in the editor (EL-102), from anywhere: the editor's own button shows only with a file open. */}
       {dir && canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} onClick={() => openWeb({ dir, url: "" })} />}
+      {/* Help: the guide, its sections, setup and About, behind an icon between the browser's and Settings'. */}
+      <Menu className="menubar-menu menubar-help" trigger={(p) => <IconButton icon={mdiHelpCircleOutline} label={t("desktop.menu.help")} {...p} />} items={help} />
       <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("providers")} />
     </nav>
   );

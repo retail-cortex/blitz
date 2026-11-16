@@ -910,6 +910,9 @@ export function WorkflowsPane({
                     )}
                     {step.type === "api_call" && (
                       <>
+                        <Field label={t("desktop.flows.connector")} supporting={t("desktop.flows.connector_hint")}>
+                          {(id) => <input id={id} className="input mono" value={step.connector} placeholder={t("desktop.flows.connector_placeholder")} onChange={(e) => setStep(step.id, { connector: e.target.value })} />}
+                        </Field>
                         <div className="row flow-method" style={{ gap: 6 }}>
                           <select className="select" aria-label={t("desktop.flows.method")} value={step.method} onChange={(e) => setStep(step.id, { method: e.target.value })}>
                             {methods.map((m) => (
@@ -1092,6 +1095,18 @@ export function WorkflowsPane({
                     </Field>
                     <Field label={t("desktop.rules.description")}>{(id) => <input id={id} className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
                     <FlowModeField value={form.mode} workspaceMode={workspaceMode} onChange={(mode) => setForm((f) => ({ ...f, mode }))} />
+                    <Field label={t("desktop.flows.triggers")} supporting={t("desktop.flows.triggers_hint")}>
+                      {(id) => (
+                        <MultiSelect
+                          id={id}
+                          label={t("desktop.flows.triggers")}
+                          none={t("desktop.flows.trigger.manual")}
+                          options={flowTriggers.map((tr) => ({ value: tr, detail: t(`desktop.flows.trigger.${tr}`) }))}
+                          chosen={form.triggers}
+                          onChange={(v) => setForm((f) => ({ ...f, triggers: v }))}
+                        />
+                      )}
+                    </Field>
                     <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} permissions={file?.schedulePermissions ?? []} needsInput={startsOnInput(form)} />
                     <span className="t-body-sm muted">{t("desktop.flows.canvas_hint")}</span>
                   </div>
@@ -1344,6 +1359,9 @@ function HumanTaskFields({ step, workspace, onChange }: { step: StepForm; worksp
 }
 
 /** A workflow's permission mode, and what the workspace's mode makes of it: a looser one is held back (WF-21). */
+/** The triggers a workflow can run on besides /name (WF-30). */
+const flowTriggers = ["schedule", "git.pre_commit", "git.pre_push"];
+
 function FlowModeField({ value, workspaceMode, onChange }: { value: string; workspaceMode: string; onChange: (mode: string) => void }) {
   const held = looser(value, workspaceMode);
   return (

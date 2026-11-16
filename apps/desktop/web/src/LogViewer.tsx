@@ -29,7 +29,7 @@ import { Button, Dialog, IconButton, Segmented, useSnackbar } from "@blitz/webui
 type Level = "" | "info" | "warn" | "error";
 
 /**
- * The service's log (Settings › Logs): a day's records, newest first, by
+ * The service's log (Settings › System › Logs): a day's records, newest first, by
  * level and text, and the folder they're in; a past day's can be deleted. What an error the user saw
  * said, and around it, in a few seconds.
  */

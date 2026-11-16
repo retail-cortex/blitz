@@ -37,10 +37,12 @@ export interface RuleForm {
   agents: string[];
   paths: string;
   text: string;
+  /** Switched off (enabled: false): it checks and says nothing (STU-16). */
+  off: boolean;
 }
 
 /** A new rule's form: a before-agent gate that warns. */
-export const emptyRuleForm: RuleForm = { name: "", description: "", when: "before_agent", action: "warn", order: 0, agents: [], paths: "", text: "" };
+export const emptyRuleForm: RuleForm = { name: "", description: "", when: "before_agent", action: "warn", order: 0, agents: [], paths: "", text: "", off: false };
 
 /** Whether when is one the form offers. */
 export const knownWhen = (when: string): when is RuleWhen => when === "" || when === "before_agent" || when === "after_agent";
@@ -53,7 +55,7 @@ export const knownAction = (action: string): action is RuleAction => action === 
  * problem again instead of rewriting a gate as an instruction rule.
  */
 export function formFromRule(r: RuleFile): RuleForm {
-  return { name: r.name, description: r.description, when: r.when, action: r.action || "warn", order: r.order, agents: [...r.agents], paths: r.paths.join(", "), text: r.text };
+  return { name: r.name, description: r.description, when: r.when, action: r.action || "warn", order: r.order, agents: [...r.agents], paths: r.paths.join(", "), text: r.text, off: r.off };
 }
 
 /** The form as SaveRule takes it. */
@@ -72,6 +74,7 @@ export function specFromForm(f: RuleForm) {
           .map((p) => p.trim())
           .filter(Boolean),
     text: f.text,
+    off: f.off,
   };
 }
 

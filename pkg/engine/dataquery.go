@@ -30,7 +30,7 @@ import (
 // DataConnections are the workspace's database connections and their
 // saved queries, by name, one of each name (the workspace's over a global
 // one), as a chat finds them (spec_059_data DAT-45).
-func (w *Workspace) DataConnections(context.Context) ([]api.DataConnection, error) {
+func (w *Workspace) DataConnections(ctx context.Context) ([]api.DataConnection, error) {
 	conns := w.Connectors()
 	var out []api.DataConnection
 	seen := map[string]bool{}
@@ -50,6 +50,8 @@ func (w *Workspace) DataConnections(context.Context) ([]api.DataConnection, erro
 		}
 		out = append(out, dc)
 	}
+	// The organization's shared connectors (EN-72).
+	out = append(out, w.orgDataConnections(ctx, out)...)
 	slices.SortFunc(out, func(a, b api.DataConnection) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
 }
@@ -66,6 +68,13 @@ func (w *Workspace) RunDataQuery(ctx context.Context, q api.DataQuery) (api.Data
 	}
 	c, err := chatConnection(w.Connectors(), q.Connection)
 	if err != nil {
+		// One of the organization's shared connectors (EN-72).
+		if dt, ok, oerr := w.orgDataQuery(ctx, q); ok {
+			if oerr != nil {
+				return api.DataTable{}, errors.New(w.secretRedactor().String(oerr.Error()))
+			}
+			return dt, nil
+		}
 		return api.DataTable{}, err
 	}
 	t, err := w.RunConnectorQuery(ctx, c, nil, connectors.QueryRun{Query: q.Query, Named: q.Named, Statement: q.Statement, Params: q.Params,

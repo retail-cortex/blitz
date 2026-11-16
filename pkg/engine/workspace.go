@@ -133,6 +133,8 @@ type Workspace struct {
 	uploads      map[string]*upload // files being uploaded (UploadFile), by id
 	browsers     browserHub         // the desktop windows hosting the agent's browser
 	cfg          *config.Config
+	// shared keeps the organization's shared connectors (EN-72).
+	shared sharedCache
 	// cfgMu guards what changes in cfg once it's open (reloads and
 	// setters write it through setSettings), reply and mcpLive; readers
 	// that hand the settings on take a copy (settings).
@@ -145,11 +147,14 @@ type Workspace struct {
 	guards   guarding   // each turn's guardrails (spec_041_gates)
 	agents   *agents.Registry
 	skills   *skills.Provider
-	tools    *tools.Registry
-	engine   *runtime.Engine
-	storage  *session.Storage
-	audit    *audit.Logger
-	memory   memory.Loaded
+	// orgVersions are the organization's agents' own skill versions
+	// (spec_053 EN-82).
+	orgVersions orgVersions
+	tools       *tools.Registry
+	engine      *runtime.Engine
+	storage     *session.Storage
+	audit       *audit.Logger
+	memory      memory.Loaded
 	// memoryStamp is what the instruction files and rules held when last
 	// loaded (memory.Stamp); memoryMu guards reloading them.
 	memoryStamp string
@@ -306,9 +311,15 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if w.agents, err = agents.NewRegistry(); err != nil {
 		return nil, fmt.Errorf("failed to load agent registry: %w", err)
 	}
-	if cfg.Org.Locked != "" {
-		// Its locked agents keep their names over plugins' (EN-31).
-		w.agents.Lock(filepath.Join(cfg.Org.Locked, "agents"))
+	// The global agents switched off here aren't loaded (STU-15).
+	userAgents := filepath.Clean(config.ExpandHome(config.UserAgentsDir))
+	w.agents.Hide(func(from, name string) bool {
+		return filepath.Clean(from) == userAgents && agentScope(cfg).Off(dir)[name]
+	})
+	// The organization's required agents and skills: nothing of their
+	// names replaces them (spec_053 EN-81).
+	if d := cfg.Org.ItemDir(config.OrgRequired, "agents"); d != "" {
+		w.agents.Lock(d)
 	}
 	if err := w.agents.LoadExternalAgents(cfg.AgentSearchPaths(dir)...); err != nil {
 		o.Warn(err.Error())
@@ -331,12 +342,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.agents.SwitchOff(off)
 		w.skills.SwitchOff(off)
 	}
+	w.skills.Lock(cfg.Org.ItemDir(config.OrgRequired, "skills"))
+	w.skills.SetVersions(w.skillVersions)
 	if cfg.Skills.Enabled {
-		// The organization's locked skills win over any other of their
-		// name, a plugin's (loaded later) included (spec_053 EN-31).
-		if cfg.Org.Locked != "" {
-			w.skills.Lock(filepath.Join(cfg.Org.Locked, "skills"))
-		}
 		if err := w.skills.DiscoverExternal(cfg.SkillSearchPaths(dir)); err != nil {
 			o.Warn(err.Error())
 		}
@@ -527,6 +535,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.openSearch(ctx)
 	w.holdLocalAuto() // APR-14c: a local model doesn't review its own actions
 	opened = true
+	w.installOrgHooks() // its organization's required workflows' git hooks (EN-90)
 	return w, nil
 }
 

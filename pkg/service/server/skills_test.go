@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Settings › Skills over the API: add a registry, search it, install,
+// Settings › Resources › Skills over the API: add a registry, search it, install,
 // update and uninstall, and remove it.
 func TestSkillRegistriesOverTheAPI(t *testing.T) {
 	keys := &secrets.Memory{}

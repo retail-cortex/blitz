@@ -3,13 +3,13 @@ title: Skills
 weight: 40
 ---
 
-**Studio › Skills** is where you write the workspace's skills: recipes the agent follows for one kind of task, such as writing release notes or adding an API endpoint. A skill can be instructions alone, combine other skills, or carry scripts for steps that are better as code. The agent picks a skill up when a request matches what it's for.
+**Studio › Resources › Skills** is where you write the workspace's skills: recipes the agent follows for one kind of task, such as writing release notes or adding an API endpoint. A skill can be instructions alone, combine other skills, or carry scripts for steps that are better as code. The agent picks a skill up when a request matches what it's for.
 
 ## Open it
 
-Choose **Studio › Skills**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
+Choose **Studio › Resources › Skills**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
 
-![Studio › Skills: the workspace's skills in .agents/skills](../../../../images/desktop/studio-skills.png)
+![Studio › Resources › Skills: the workspace's skills in .agents/skills](../../../../images/desktop/studio-skills.png)
 
 The list shows the skills in `.agents/skills`, each with its kind (simple, combining skills, with scripts) and what it's for. A skill whose scripts you haven't reviewed says **Scripts to review**.
 

@@ -9,7 +9,7 @@ Databases are the first of Blitz's [connectors](connectors.md). Spec: [databases
 
 ## Connect one
 
-In the desktop app, open **Studio › Connectors** for one this workspace has (saved in `.agents/connectors/databases`, so you can commit it for your team), or **Settings › Connectors** for one every workspace has (`~/.blitz/connectors/databases`), and press **+** by **Databases**. Any workspace can switch a global one off ([what each workspace can reach](connectors.md#choose-what-each-workspace-can-reach)).
+In the desktop app, open **Studio › Resources › Connectors** for one this workspace has (saved in `.agents/connectors/databases`, so you can commit it for your team), or **Settings › Resources › Connectors** for one every workspace has (`~/.blitz/connectors/databases`), and press **+** by **Databases**. Any workspace can switch a global one off ([what each workspace can reach](connectors.md#choose-what-each-workspace-can-reach)).
 
 1. Give it a **name** (`shop`) and say **what it holds** ("The shop's orders and customers"). The agents read that to know when to use it.
 2. Choose the **kind** and fill in its settings:

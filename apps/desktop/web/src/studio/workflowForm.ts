@@ -65,6 +65,8 @@ export interface StepForm {
   tool: string;
   argumentsJson: string;
   url: string;
+  /** An organization's API connector the call goes through (WF-31): url is then a path under it. */
+  connector: string;
   method: string;
   query: PairForm[];
   headers: PairForm[];
@@ -152,12 +154,14 @@ export interface WorkflowForm {
   description: string;
   /** The permission mode its steps run in (WF-21): auto unless chosen. */
   mode: string;
+  /** What runs it besides /name (WF-30): schedule, git.pre_commit, git.pre_push. */
+  triggers: string[];
   steps: StepForm[];
   links: LinkForm[];
 }
 
 /** A new, empty workflow. */
-export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", mode: "auto", steps: [], links: [] };
+export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", mode: "auto", triggers: [], steps: [], links: [] };
 
 const asType = (t: string): StepType => ((stepTypes as readonly string[]).includes(t) ? (t as StepType) : "agent");
 
@@ -184,6 +188,7 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
     name: w.name,
     description: w.description,
     mode: w.mode || "auto",
+    triggers: [...(w.triggers ?? [])],
     steps: w.nodes.map((n) => ({
       id: n.id,
       type: asType(n.type),
@@ -206,6 +211,7 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
       tool: n.tool,
       argumentsJson: n.argumentsJson,
       url: n.url,
+      connector: n.connector ?? "",
       method: n.method || "GET",
       query: n.query.map((p) => ({ name: p.name, value: p.value })),
       headers: n.headers.map((p) => ({ name: p.name, value: p.value })),
@@ -259,6 +265,7 @@ export function specFromForm(f: WorkflowForm) {
     description: f.description.trim(),
     // auto is a workflow's own default: the file doesn't say it.
     mode: f.mode === "auto" ? "" : f.mode,
+    triggers: f.triggers,
     nodes: f.steps.map((s) => {
       const agent = agentTypes.includes(s.type);
       return {
@@ -283,6 +290,7 @@ export function specFromForm(f: WorkflowForm) {
         tool: s.type === "mcp_call" ? s.tool.trim() : "",
         argumentsJson: s.type === "mcp_call" ? s.argumentsJson.trim() : s.type === "data" && s.dataFrom === "saved" && Object.keys(s.dataArgs).length ? JSON.stringify(s.dataArgs) : "",
         url: s.type === "api_call" || s.type === "a2a_call" ? s.url.trim() : "",
+        connector: s.type === "api_call" ? s.connector.trim() : "",
         method: s.type === "api_call" && s.method !== "GET" ? s.method : "",
         query: s.type === "api_call" ? s.query.filter((p) => p.name.trim()) : [],
         headers: s.type === "api_call" || s.type === "a2a_call" ? s.headers.filter((p) => p.name.trim()) : [],
@@ -380,6 +388,7 @@ export function newStep(type: StepType, steps: StepForm[], x: number, y: number)
     tool: "",
     argumentsJson: "",
     url: "",
+    connector: "",
     method: "GET",
     query: [],
     headers: [],
@@ -474,10 +483,10 @@ export type Template = (typeof templates)[number];
 
 /** A template's steps and links, run in mode; text fills in its titles and instructions. */
 export function fromTemplate(tpl: Template, text: (key: string) => string, mode = "auto"): WorkflowForm {
-  return { ...template(tpl, text), mode };
+  return { ...template(tpl, text), mode, triggers: [] };
 }
 
-function template(tpl: Template, text: (key: string) => string): Omit<WorkflowForm, "mode"> {
+function template(tpl: Template, text: (key: string) => string): Omit<WorkflowForm, "mode" | "triggers"> {
   switch (tpl) {
     case "brief":
       return {

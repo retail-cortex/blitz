@@ -102,7 +102,7 @@ func TestJudge(t *testing.T) {
 	}
 	v, err := Judge(context.Background(), ask("```json\n{\"verdict\": \"fail\", \"reason\": \"No tests named.\"}\n```", nil), rule, "Done.")
 	require.NoError(t, err)
-	assert.Equal(t, Verdict{Reason: "No tests named."}, v)
+	assert.Equal(t, Verdict{Reason: "No tests named.", Score: 1}, v, "a fail without a score: surely broken")
 	assert.Contains(t, got, "The agent's answer, and the files it changed:\nDone.")
 	assert.Contains(t, got, "The rule (tests):\nThe answer says how it was tested.")
 
@@ -160,4 +160,37 @@ func TestSaveReorderDelete(t *testing.T) {
 	require.NoError(t, Delete(dir, "a"))
 	assert.ErrorIs(t, Delete(dir, "a"), ErrUnknown)
 	assert.ErrorIs(t, Delete(dir, "../x"), ErrUnknown)
+}
+
+// A rule switched off (enabled: false, STU-16) loads, says so, and gates
+// nothing; Save writes the switch and takes it out again when it's on.
+func TestRuleOff(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "tests.md", "---\nwhen: after_agent\nenabled: false\n---\nSay how it was tested.")
+	rules := Load(dir)
+	require.Len(t, rules, 1)
+	assert.True(t, rules[0].Off)
+	assert.Empty(t, Gates(rules, AfterAgent, "blitz"), "an off gate doesn't run")
+
+	spec := Spec{Name: "tests", When: AfterAgent, Action: Warn, Text: "Say how it was tested."}
+	tests := []struct {
+		name string
+		off  bool
+		want string
+	}{
+		{"on", false, "---\nwhen: after_agent\naction: warn\n---\n\nSay how it was tested.\n"},
+		{"off", true, "---\nwhen: after_agent\naction: warn\nenabled: false\n---\n\nSay how it was tested.\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := spec
+			s.Off = tt.off
+			p, probs, err := Save(dir, s, "tests")
+			require.NoError(t, err)
+			require.Empty(t, probs)
+			data, _ := os.ReadFile(p)
+			assert.Equal(t, tt.want, string(data))
+			assert.Equal(t, tt.off, Load(dir)[0].Off)
+		})
+	}
 }

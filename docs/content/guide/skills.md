@@ -41,7 +41,7 @@ A skill is one of four kinds, from what its folder holds:
 
 Keys Blitz doesn't know are ignored at the top level, so skills written for other tools load, but a misspelt key inside `execution_hints`, `scripts` or `compiled_reference`, or a top-level key one letter off Blitz's (`agent: [reviewer]`), is a problem shown with the skill, and its scripts don't run until it's fixed. The front matter ends at a line that is only `---`. When two folders hold a skill of the same name, the workspace's wins over yours, and a skill your organization locks wins over both, and over a plugin's (you're told).
 
-**Desktop:** **Studio › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
+**Desktop:** **Studio › Resources › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
 
 **In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does. `/skill-name` also holds the turn to the skill's tools (`allowed-tools`) when it names some, as a command's do; `\skill-name` and a skill the agent picks itself don't.
 
@@ -75,7 +75,7 @@ From a terminal or CI, `blitz eval --skill release-notes` runs them, and fails w
 
 A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a job's run is refused.
 
-- **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
+- **Desktop:** installing a registry skill with scripts opens the review; Studio › Resources › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
 - Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.
 
 ## Skills from a registry
@@ -91,7 +91,7 @@ blitz skills update                                 # every skill whose registry
 blitz skills uninstall lit-review
 ```
 
-In a session, `/skills search` also lists what your registries offer, and `/skills install <registry>/<name>` installs one. In the desktop app it's **Settings › Library › Skills** (with the advanced settings shown): add a registry, find skills, install them for you or the open workspace, update and uninstall. Open conversations can use a new skill at once, with no restart.
+In a session, `/skills search` also lists what your registries offer, and `/skills install <registry>/<name>` installs one. In the desktop app it's **Settings › Resources › Skills** (with the advanced settings shown): add a registry, find skills, install them for you or the open workspace, update and uninstall. Open conversations can use a new skill at once, with no restart.
 
 | Command | Does |
 |---|---|

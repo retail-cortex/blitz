@@ -81,14 +81,28 @@ const summary = (run: Pick<EvalRun, "counts" | "results">) => {
 const scoreText = (r: EvalResult) => (r.status === "error" ? "" : r.type === "near" ? `${r.score.toFixed(2)} / ${r.threshold.toFixed(2)}` : t(r.score ? "desktop.evals.matched" : "desktop.evals.no_match"));
 
 /**
- * The workspace's evals (Studio › Evals, spec_042_evals): each listed with
+ * The workspace's evals (Studio › Resources › Agents › Evals, spec_042_evals): each listed with
  * its last run, and run from the list. An eval's form slides in over the
  * list with three tabs: its cases (each a row that opens into its editor:
  * the prompt, the output expected, exact or near and the threshold, and
  * what a failure means), its settings (agents, skills, how near cases are
  * scored, what cases may reach), and its runs, live as they're scored.
  */
-export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspace: string; onDirty?: (dirty: boolean) => void; forAgent?: string; onHandled?: () => void }) {
+export function EvalsPane({
+  workspace,
+  global = false,
+  onDirty,
+  forAgent,
+  onHandled,
+}: {
+  workspace: string;
+  /** The global evals (Settings › Resources › Agents › Evals): saved in ~/.blitz/evals, run in the home workspace (EV-40). */
+  global?: boolean;
+  onDirty?: (dirty: boolean) => void;
+  forAgent?: string;
+  onHandled?: () => void;
+}) {
+  const folder = global ? "~/.blitz/evals" : ".agents/evals";
   const snack = useSnackbar();
   const [list, setList] = useState<EvalFile[]>([]);
   const [error, setError] = useState("");
@@ -321,7 +335,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
           <span className="t-title-sm spacer">{t("desktop.evals.title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.evals.new")} small onClick={() => showForm("", { ...emptyEvalForm, cases: [newCase([])] })} />
         </div>
-        <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/evals" })}</p>
+        <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: folder })}</p>
         <p className="t-body-sm muted">{t("desktop.evals.intro")}</p>
         {error && (
           <div className="card error row small-card">
@@ -595,7 +609,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
             )}
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={file?.path}>
-                {t("desktop.agents.where", { path: file?.path || `.agents/evals/${form.name.trim() || "…"}.md` })}
+                {t("desktop.agents.where", { path: file?.path || `${folder}/${form.name.trim() || "…"}.md` })}
               </span>
               {file && (
                 <Button danger icon={mdiDeleteOutline} disabled={running} onClick={() => setDeleting(true)}>

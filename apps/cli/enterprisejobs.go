@@ -15,11 +15,14 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -492,129 +495,35 @@ func rateText(r *pb.OrgRateLimit) string {
 	return strings.Join(parts, ", ")
 }
 
-// newEnterprisePublishCommand is blitz enterprise publish: a workspace's
-// items to the organization's catalog, as a review (spec_053 EN-36).
-func newEnterprisePublishCommand(g *globalFlags) *cobra.Command {
-	var lock, title string
-	var groups []string
-	cmd := &cobra.Command{
-		Use:   "publish [<kind>/<name>...]",
-		Short: "Publish a workspace's agents, skills, rules… to your organization's catalog, for an Admin (you too) to approve",
-		Long: `Publishes items from a workspace's .agents folder (agent/<name>, skill/<name>,
-rule/<name>, guardrail/<name>, command/<name>, connector/<name>) to your
-organization's catalog as a review: an Admin (you too) approves it in the admin
-console, and the next version carries it. With none named, lists what
-can be published and how each applies now. For the organization's Admins.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := orgSettings(cmd)
-			if err != nil {
-				return err
-			}
-			abs, err := orgWorkspace(g)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if len(args) == 0 {
-				items, err := s.Publishable(cmd.Context(), abs)
-				if err != nil {
-					return err
-				}
-				if len(items) == 0 {
-					fmt.Fprintln(out, i18n.T("org.publish_none"))
-				}
-				for _, it := range items {
-					line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
-					if len(it.Groups) > 0 {
-						line += i18n.T("org.item_for", "groups", strings.Join(it.Groups, ", "))
-					}
-					fmt.Fprintln(out, line+")")
-					for _, p := range it.Problems {
-						fmt.Fprintln(out, "    ! "+p)
-					}
-				}
-				return nil
-			}
-			var items []*pb.PublishItem
-			for _, a := range args {
-				kind, name, ok := strings.Cut(a, "/")
-				if !ok {
-					return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", a))
-				}
-				items = append(items, &pb.PublishItem{Kind: kind, Name: name, Lock: lock, Groups: groups})
-			}
-			rv, err := s.PublishToOrganization(cmd.Context(), abs, title, items)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(out, i18n.T("org.published", "title", rv.Title, "paths", strings.Join(rv.Paths, ", ")))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&lock, "lock", "default", "locked (nobody changes or switches it off) or default (a workspace or person may)")
-	cmd.Flags().StringSliceVar(&groups, "groups", nil, "who it's for (everyone when none)")
-	cmd.Flags().StringVar(&title, "title", "", "the review's title (default: what's published)")
-	return cmd
-}
-
-// newEnterpriseReviewsCommand is blitz enterprise reviews: the catalog's
-// reviews (EN-36).
-func newEnterpriseReviewsCommand() *cobra.Command {
-	var state string
-	cmd := &cobra.Command{
-		Use:   "reviews",
-		Short: "Changes to your organization's catalog: waiting, approved or rejected",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := orgSettings(cmd)
-			if err != nil {
-				return err
-			}
-			list, err := s.CatalogReviews(cmd.Context(), state)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if len(list) == 0 {
-				fmt.Fprintln(out, i18n.T("org.reviews_none"))
-			}
-			for _, rv := range list {
-				status := rv.State
-				if rv.State == "approved" && rv.Version > 0 {
-					status = i18n.T("org.review_published", "version", rv.Version)
-				}
-				fmt.Fprintln(out, i18n.T("org.review_line", "id", rv.Id, "status", status, "email", rv.ByEmail, "title", rv.Title))
-				for _, p := range rv.Problems {
-					fmt.Fprintln(out, "    ! "+p)
-				}
-				if rv.Note != "" {
-					fmt.Fprintln(out, "    "+rv.Note)
-				}
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&state, "state", "", "open, approved or rejected")
-	return cmd
-}
-
-// newEnterpriseCatalogCommand is blitz enterprise catalog: the
-// organization's items a workspace gets, and copying a default one in to
-// change (spec_053 EN-34).
-func newEnterpriseCatalogCommand(g *globalFlags) *cobra.Command {
+// newEnterprisePolicyCommand is blitz enterprise policy: the person's
+// effective policy, each setting with who decided it, and the rules and
+// guardrails it applies to them (spec_053 EN-39); "catalog" as before.
+func newEnterprisePolicyCommand(g *globalFlags) *cobra.Command {
 	var kind string
 	cmd := &cobra.Command{
-		Use:   "catalog",
-		Short: "The agents, skills, rules… your organization gives this workspace",
-		Long: `Lists the organization's catalog items this workspace gets, each locked
-(its Admins change it, through a review) or default (the workspace may
-have its own instead: "blitz enterprise catalog copy <kind>/<name>"
-copies it into .agents to change).`,
+		Use:     "policy",
+		Aliases: []string{"catalog"},
+		Short:   "What your organization's policy lets you do, who decided each setting, and its rules and guardrails for you",
+		Long: `Lists your organization's policy as it applies to you: each setting, its
+value, and who decided it (the default, your organization, one of your
+groups, or an admin for you alone), locked or not; then the rules and
+guardrails it applies to you. Your organization's admins change it in its
+admin console. --kind rule or guardrail lists those alone.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
+			}
+			out := cmd.OutOrStdout()
+			if kind == "" {
+				settings, err := s.Policy(cmd.Context())
+				if err != nil {
+					return err
+				}
+				for _, p := range settings {
+					fmt.Fprintln(out, i18n.T("org.policy_line", "path", p.Path, "value", p.ValueJson, "by", policyDecided(p)))
+				}
 			}
 			abs, err := orgWorkspace(g)
 			if err != nil {
@@ -624,54 +533,284 @@ copies it into .agents to change).`,
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
 			if len(res.Items) == 0 {
 				fmt.Fprintln(out, i18n.T("org.catalog_none"))
 				return nil
 			}
-			fmt.Fprintln(out, i18n.T("org.catalog_version", "version", res.Version))
 			for _, it := range res.Items {
-				line := fmt.Sprintf("%s/%s  (%s", it.Kind, it.Name, it.Lock)
-				if len(it.Groups) > 0 {
+				line := it.Kind + "/" + it.Name
+				if it.DecidedBy != "" {
+					line += i18n.T("org.item_decided", "by", it.DecidedBy)
+				} else if len(it.Groups) > 0 {
 					line += i18n.T("org.item_for", "groups", strings.Join(it.Groups, ", "))
-				}
-				line += ")"
-				if it.Overridden {
-					line += i18n.T("org.item_overridden")
 				}
 				fmt.Fprintln(out, line)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "one kind: agent, skill, rule, guardrail, command, mcp or connector")
-	copyCmd := &cobra.Command{
-		Use:   "copy <kind>/<name>",
-		Short: "Copy one of the organization's default items into this workspace, to change there",
-		Args:  cobra.ExactArgs(1),
+	cmd.Flags().StringVar(&kind, "kind", "", "rule or guardrail")
+	return cmd
+}
+
+// newEnterpriseItemsCommand is blitz enterprise items: the organization's
+// agents, skills, workflows, rules and guardrails offered to the person,
+// required or available, and switching an available one on or off
+// (spec_053 EN-80, EN-83).
+func newEnterpriseItemsCommand() *cobra.Command {
+	var kind string
+	cmd := &cobra.Command{
+		Use:   "items",
+		Short: "Your organization's agents, skills, workflows, rules and guardrails: what it requires, and what you can switch on",
+		Long: `Lists what your organization offers you from its library: each agent,
+skill, workflow, rule and guardrail, its version, and whether it's required
+(always on) or available (yours to switch on), and whether you have it.
+"enable" and "disable" switch an available one; your choice follows you to
+every computer. --kind agent, skill, workflow, rule or guardrail lists those
+alone.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := s.OrgItems(cmd.Context(), "", kind)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(res.Items) == 0 {
+				fmt.Fprintln(out, i18n.T("org.items_none"))
+				return nil
+			}
+			for _, it := range res.Items {
+				state := i18n.T("org.item_required")
+				if it.State != "required" {
+					state = i18n.T(map[bool]string{true: "org.item_on", false: "org.item_off"}[it.On])
+				}
+				fmt.Fprintln(out, i18n.T("org.item_line", "kind", it.Kind, "name", it.Name, "version", it.Version, "state", state, "description", it.Description))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&kind, "kind", "", "agent, skill, workflow, rule or guardrail")
+	for _, on := range []bool{true, false} {
+		use := map[bool]string{true: "enable", false: "disable"}[on]
+		cmd.AddCommand(&cobra.Command{
+			Use:   use + " <kind>/<name>",
+			Short: map[bool]string{true: "Switch on one of your organization's available items", false: "Switch off one of your organization's available items"}[on],
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				kind, name, found := strings.Cut(args[0], "/")
+				if !found || kind == "" || name == "" {
+					return fmt.Errorf("%s", i18n.T("org.item_arg"))
+				}
+				s, err := orgSettings(cmd)
+				if err != nil {
+					return err
+				}
+				it, err := s.SetOrgItem(cmd.Context(), kind, name, on)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T(map[bool]string{true: "org.item_enabled", false: "org.item_disabled"}[on], "kind", it.Kind, "name", it.Name, "version", it.Version))
+				return nil
+			},
+		})
+	}
+	cmd.AddCommand(newItemsSyncCommand(), newItemsShareCommand(), newItemsSubmissionsCommand())
+	return cmd
+}
+
+// newItemsSyncCommand is blitz enterprise items sync: the person's own
+// agents, skills, workflows, rules and guardrails synced with the
+// organization now (spec_053 EN-93).
+func newItemsSyncCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "sync",
+		Short: "Sync your own agents, skills, workflows, rules and guardrails (~/.blitz) with your organization now",
+		Long: `Syncs your own agents, skills, workflows, rules and guardrails (in
+~/.blitz) with your organization's service, both ways, as Blitz does each
+time it fetches your policy: what you changed here is sent, what you
+changed on another computer is brought here, and what you removed on one
+is removed on the other. Changed on both, this computer's wins and the
+other's is kept in ~/.blitz/conflicts. Your organization's admins can read
+them; its policy says which kinds it keeps.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			rep, err := s.SyncOwnItems(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, i18n.T("org.items_synced", "sent", len(rep.Sent), "received", len(rep.Received), "removed", len(rep.Removed)))
+			for _, k := range rep.Conflicts {
+				fmt.Fprintln(out, i18n.T("org.items_conflict", "item", k))
+			}
+			for _, k := range slices.Sorted(maps.Keys(rep.Skipped)) {
+				fmt.Fprintln(out, i18n.T("org.items_skipped", "item", k, "why", rep.Skipped[k]))
+			}
+			return nil
+		},
+	}
+}
+
+// newItemsShareCommand is blitz enterprise items share: one of the
+// person's own assets submitted to share with the organization (EN-95).
+func newItemsShareCommand() *cobra.Command {
+	var note string
+	cmd := &cobra.Command{
+		Use:   "share <kind>/<name>",
+		Short: "Submit one of your own agents, skills, workflows, rules or guardrails to share with your organization",
+		Long: `Submits one of your own assets (in ~/.blitz) to your organization's
+library. Its evaluator judges it (its checks, with its model): accepted,
+it's published as yours and offered to the groups your organization
+chooses; rejected, you're told why. Your organization takes submissions of
+a kind only when its policy lets you and it has an evaluator for it.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			k, name, ok := strings.Cut(args[0], "/")
-			if !ok {
-				return withCode(exitUsage, fmt.Errorf("%q: name it as <kind>/<name>, like agent/writer", args[0]))
+			kind, name, found := strings.Cut(args[0], "/")
+			if !found || kind == "" || name == "" {
+				return fmt.Errorf("%s", i18n.T("org.item_arg"))
 			}
 			s, err := orgSettings(cmd)
 			if err != nil {
 				return err
 			}
-			abs, err := orgWorkspace(g)
+			sub, err := s.ShareOwnItem(cmd.Context(), kind, name, note)
 			if err != nil {
 				return err
 			}
-			paths, err := s.CopyOrgItem(cmd.Context(), abs, k, name)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.catalog_copied", "paths", strings.Join(paths, ", ")))
+			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.item_shared", "kind", sub.Kind, "name", sub.Name))
 			return nil
 		},
 	}
-	cmd.AddCommand(copyCmd)
+	cmd.Flags().StringVar(&note, "note", "", "What it's for, for whoever reviews it")
 	return cmd
+}
+
+// newItemsSubmissionsCommand is blitz enterprise items submissions: the
+// person's submissions and what their evaluators found (EN-95).
+func newItemsSubmissionsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "submissions",
+		Short: "What you submitted to share with your organization, and what its evaluators found",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := s.ListSubmissions(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(res.Submissions) == 0 {
+				fmt.Fprintln(out, i18n.T("org.submissions_none"))
+			}
+			for _, sub := range res.Submissions {
+				line := i18n.T("org.submission_line", "kind", sub.Kind, "name", sub.Name, "state", i18n.T("org.submission_state."+sub.State), "when", sub.CreatedAt.AsTime().Local().Format("2006-01-02 15:04"))
+				if sub.PublishedVersion != "" {
+					line += " · " + sub.PublishedVersion
+				}
+				fmt.Fprintln(out, line)
+				if sub.Reason != "" {
+					fmt.Fprintln(out, "    "+sub.Reason)
+				}
+				for _, v := range sub.Verdicts {
+					mark := map[bool]string{true: "✓", false: "✗"}[v.Passed]
+					fmt.Fprintf(out, "    %s %s %.2f: %s\n", mark, v.Check, v.Score, v.Reason)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// newEnterpriseRefreshCommand is blitz enterprise refresh: the
+// organization's catalog and the person's policy fetched now (EN-38a).
+func newEnterpriseRefreshCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refresh",
+		Short: "Fetch your organization's policy and catalog now, rather than waiting for the next change",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			changed, err := s.RefreshOrganization(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if changed {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.refreshed"))
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("org.refreshed_same"))
+			}
+			return nil
+		},
+	}
+}
+
+// newEnterpriseConsentCommand is blitz enterprise consent: whether the
+// organization's connectors that query as the person may, and where to
+// allow it; --revoke forgets it (EN-76).
+func newEnterpriseConsentCommand() *cobra.Command {
+	var revoke bool
+	cmd := &cobra.Command{
+		Use:   "consent",
+		Short: "Let your organization's connectors that query as you do so, with your Google account (or --revoke)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := orgSettings(cmd)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if revoke {
+				if err := s.RevokeConnectorConsent(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Fprintln(out, i18n.T("org.consent_revoked"))
+				return nil
+			}
+			c, err := s.ConnectorConsent(cmd.Context())
+			if err != nil {
+				return err
+			}
+			switch {
+			case len(c.Connectors) == 0:
+				fmt.Fprintln(out, i18n.T("org.consent_none"))
+			case c.Consented:
+				fmt.Fprintln(out, i18n.T("org.consent_done", "connectors", strings.Join(c.Connectors, ", ")))
+			case c.Url == "":
+				fmt.Fprintln(out, i18n.T("org.consent_unavailable"))
+			default:
+				fmt.Fprintln(out, i18n.T("org.consent_open", "connectors", strings.Join(c.Connectors, ", "), "url", c.Url))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&revoke, "revoke", false, "forget your consent: those connectors ask again")
+	return cmd
+}
+
+// policyDecided is who decided a setting, as a line says it.
+func policyDecided(p *pb.PolicySetting) string {
+	by := i18n.T("org.decided_" + cmp.Or(p.Level, "global"))
+	if p.Level == "group" || p.Level == "person" {
+		by += " (" + strings.Join(p.By, ", ") + ")"
+	}
+	if p.Locked {
+		by += i18n.T("org.decided_locked")
+	}
+	return by
 }
 
 // newEnterpriseNoticesCommand is blitz enterprise notices: how the person

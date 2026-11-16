@@ -40,7 +40,7 @@ args = ["@acme/db-mcp"]
 
 When a project's settings (`.blitz/settings.toml`) need trust, the REPL lists what they would do and asks **[t]rust, [d]on't trust, [s]how the files**; the desktop app shows the same in a dialog. Your answer is kept in `~/.blitz/trust.json` for that exact content: if the settings change, or a script their hooks or MCP servers run, or a project skill's scripts, Blitz asks again. Until then those settings stay off, and the rest applies.
 
-- `/trust` (REPL), `blitz trust [dir]` and Settings › Workspaces › **Project settings** show what applies, what waits and what was ignored, and change the decision; `blitz trust --revoke` forgets it.
+- `/trust` (REPL), `blitz trust [dir]` and Studio › Settings › **Project settings** show what applies, what waits and what was ignored, and change the decision; `blitz trust --revoke` forgets it.
 - With nobody to ask (`blitz exec`, a pipe), settings that need trust stay off; `--trust-project` trusts them for that run only.
 - `blitz doctor` lists the project's settings and anything ignored.
 - `blitz.trust_workspace` and `--trust-workspace` are deprecated since v0.2.0: the project's agents and skills now load without them, and they trust the project's settings for each run without recording it.

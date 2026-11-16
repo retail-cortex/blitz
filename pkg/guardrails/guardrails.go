@@ -89,6 +89,10 @@ type Finding struct {
 	Guardrail string `json:"guardrail"`
 	Action    string `json:"action"` // block, warn, redact or pass
 	Reason    string `json:"reason,omitempty"`
+	// Score is how surely it was broken (0 to 1) and Check which check
+	// decided (spec_041 GT-44): a custom guardrail's.
+	Score float64 `json:"score,omitempty"`
+	Check string  `json:"check,omitempty"`
 }
 
 // Set is the guardrails one request runs under.
@@ -130,12 +134,12 @@ func (s Set) Input(text string) (string, bool, []Finding) {
 		}
 		switch g.Action {
 		case Block:
-			return "", true, append(fs, Finding{g.Name, Block, "a secret in what was sent"})
+			return "", true, append(fs, Finding{Guardrail: g.Name, Action: Block, Reason: "a secret in what was sent"})
 		case Redact:
 			text = masked
-			fs = append(fs, Finding{g.Name, Redact, "a secret in what was sent"})
+			fs = append(fs, Finding{Guardrail: g.Name, Action: Redact, Reason: "a secret in what was sent"})
 		default:
-			fs = append(fs, Finding{g.Name, Warn, "a secret in what was sent"})
+			fs = append(fs, Finding{Guardrail: g.Name, Action: Warn, Reason: "a secret in what was sent"})
 		}
 	}
 	return text, false, fs
@@ -152,7 +156,8 @@ func (s Set) ToolResult(ctx context.Context, tool string, external bool, text st
 		if !g.Checks(tool, external) {
 			continue
 		}
-		var reason string
+		var reason, check string
+		var score float64
 		if g.Builtin == Injection {
 			phrase := gates.Injection(out)
 			if phrase == "" {
@@ -160,44 +165,78 @@ func (s Set) ToolResult(ctx context.Context, tool string, external bool, text st
 			}
 			if g.Judge && s.Ask != nil {
 				if v, err := gates.ConfirmInjection(ctx, s.Ask, s.Redactor.String(out)); err == nil && v.Pass {
-					fs = append(fs, Finding{g.Name, "pass", v.Reason})
+					fs = append(fs, Finding{Guardrail: g.Name, Action: "pass", Reason: v.Reason})
 					continue // quoted, not aimed at the agent
 				}
 			}
 			reason = fmt.Sprintf("instructions aimed at the agent: %q", phrase)
 		} else {
-			pass, why := s.judge(ctx, g, out)
-			if pass {
+			v := s.judge(ctx, g, out)
+			if v.Pass {
 				continue
 			}
-			reason = why
+			reason, score, check = v.Reason, v.Score, v.Check
 		}
 		switch {
 		case g.Action == Redact && g.Builtin == Injection:
 			out, _ = gates.RedactInjection(out)
-			fs = append(fs, Finding{g.Name, Redact, reason})
+			fs = append(fs, Finding{g.Name, Redact, reason, score, check})
 		case g.Action == Block:
-			fs = append(fs, Finding{g.Name, Block, reason})
+			fs = append(fs, Finding{g.Name, Block, reason, score, check})
 			return fmt.Sprintf("[withheld by the %s guardrail: %s]", g.Name, reason), true, fs
 		default:
-			fs = append(fs, Finding{g.Name, Warn, reason})
+			fs = append(fs, Finding{g.Name, Warn, reason, score, check})
 		}
 	}
 	return out, false, fs
 }
 
-// judge is whether text passes custom guardrail g, and why not. One that
-// can't be judged doesn't pass: a blocking one refuses, a warning one
-// says it couldn't check (GT-25).
-func (s Set) judge(ctx context.Context, g Guardrail, text string) (bool, string) {
-	if s.Ask == nil {
-		return false, "it can't be judged here"
-	}
-	v, err := gates.JudgeGuardrail(ctx, s.Ask, g, s.Redactor.String(text))
+// judge is custom guardrail g's verdict on text (GT-42): its
+// deterministic checks, then the judge when it asks one. One that can't
+// be judged doesn't pass: a blocking one refuses, a warning one says it
+// couldn't check (GT-25).
+func (s Set) judge(ctx context.Context, g Guardrail, text string) gates.Verdict {
+	v, err := gates.Evaluate(ctx, s.Ask, g, s.Redactor.String(text))
 	if err != nil {
-		return false, "it couldn't be judged: " + err.Error()
+		if err == gates.ErrNoJudge {
+			return gates.Verdict{Reason: "it can't be judged here", Check: gates.CheckJudge}
+		}
+		return gates.Verdict{Reason: "it couldn't be judged: " + err.Error(), Check: gates.CheckJudge}
 	}
-	return v.Pass, v.Reason
+	return v
+}
+
+// custom runs the custom guardrails of stage on text (GT-45): the first
+// that blocks is the refusal, the rest warn.
+func (s Set) custom(ctx context.Context, stage, text string, streamed bool) (refusal string, fs []Finding) {
+	for _, g := range s.active(stage) {
+		if g.Builtin != "" || (streamed && g.Streamable()) {
+			continue
+		}
+		v := s.judge(ctx, g, text)
+		if v.Pass {
+			continue
+		}
+		if g.Action == Block {
+			return fmt.Sprintf("The %s guardrail refused it: %s.", g.Name, v.Reason), append(fs, Finding{g.Name, Block, v.Reason, v.Score, v.Check})
+		}
+		fs = append(fs, Finding{g.Name, Warn, v.Reason, v.Score, v.Check})
+	}
+	return "", fs
+}
+
+// Prompt checks what the client sends the model against the custom
+// before_model (input) guardrails (GT-45): a refusal when one that
+// blocks catches it.
+func (s Set) Prompt(ctx context.Context, text string) (refusal string, fs []Finding) {
+	return s.custom(ctx, gates.StageInput, text, false)
+}
+
+// Answer checks the model's whole answer against the custom after_model
+// (output) guardrails (GT-45). streamed leaves out those an Output
+// already ran on the answer piece by piece (Streamable).
+func (s Set) Answer(ctx context.Context, text string, streamed bool) (refusal string, fs []Finding) {
+	return s.custom(ctx, StageOutput, text, streamed)
 }
 
 // ToolCall checks a tool call the model makes before the client sees it:
@@ -210,7 +249,8 @@ func (s Set) ToolCall(ctx context.Context, tool string, args map[string]any, ext
 		if !g.Checks(tool, external) {
 			continue
 		}
-		var why string
+		var why, check string
+		var score float64
 		if g.Builtin == LimitsID {
 			l := g.Limits
 			switch {
@@ -225,18 +265,18 @@ func (s Set) ToolCall(ctx context.Context, tool string, args map[string]any, ext
 			}
 		} else {
 			data, _ := json.Marshal(args)
-			if pass, reason := s.judge(ctx, g, fmt.Sprintf("Tool %s with arguments %s", tool, data)); !pass {
-				why = reason
+			if v := s.judge(ctx, g, fmt.Sprintf("Tool %s with arguments %s", tool, data)); !v.Pass {
+				why, score, check = v.Reason, v.Score, v.Check
 			}
 		}
 		if why == "" {
 			continue
 		}
 		if g.Builtin == LimitsID || g.Action == Block {
-			fs = append(fs, Finding{g.Name, Block, why})
+			fs = append(fs, Finding{g.Name, Block, why, score, check})
 			return fmt.Sprintf("The %s guardrail refused %s: %s.", g.Name, tool, why), fs
 		}
-		fs = append(fs, Finding{g.Name, Warn, why})
+		fs = append(fs, Finding{g.Name, Warn, why, score, check})
 	}
 	return "", fs
 }

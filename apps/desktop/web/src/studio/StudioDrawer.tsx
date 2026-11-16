@@ -14,10 +14,8 @@
  * limitations under the License.
  */
 
-import { PublishDialog, useOrgAdmin } from "./PublishDialog";
-import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiViewDashboardOutline, mdiTextBoxCheckOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCloudUploadOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiViewDashboardOutline, mdiTextBoxCheckOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiConnection, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline, mdiBookshelf, mdiTuneVariant } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -27,7 +25,11 @@ import { AgentScope } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { McpSettings } from "../McpSettings";
 import { SecretsEditor } from "../SecretsEditor";
-import { Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { Icon, IconButton, Segmented, Tabs, useSnackbar } from "@blitz/webui";
+import { GlobalAgents } from "./GlobalAgents";
+import { useAdvanced } from "../state";
+import { studioResourceTabs, studioTabs, type StudioTab } from "../simpleMode";
+import { SettingsPane } from "./SettingsPane";
 import { Drawer } from "@blitz/webui";
 import { useDiscardGuard } from "./paneParts";
 import { ConnectorsPane } from "./ConnectorsPane";
@@ -44,19 +46,44 @@ import { cost } from "../workflowRuns";
 import { OverviewPane } from "./OverviewPane";
 
 /**
- * The kinds Studio holds (spec_040_studio), after the Overview of them all
- * (spec_044_health) and the project's specification (STU-90), in the
- * order an agent is built: the agent and the
- * evals that prove it, what it follows (skills, rules, guardrails), what
- * runs (workflows, workers), and what it reaches (connectors, secrets).
+ * Studio's side list (spec_040_studio STU-02): the Overview of it all
+ * (spec_044_health), the workspace's own Settings (STU-12) and its
+ * specification (STU-90); its Resources, then what runs, simple to
+ * complex (Jobs, Workflows); and what its agents follow (rules,
+ * guardrails).
  */
-const studioKinds = ["overview", "specs", "agents", "evals", "skills", "rules", "guardrails", "workers", "workflows", "connectors", "secrets"] as const;
-/** A kind of item in Studio. */
-export type StudioKind = (typeof studioKinds)[number];
+const studioEntries = ["overview", "settings", "specs", "resources", "workers", "workflows", "rules", "guardrails"] as const;
+/** An entry of Studio's side list. */
+export type StudioEntry = (typeof studioEntries)[number];
+/** What Studio can open on: an entry, one of Resources' tabs (agents, skills, connectors, secrets), or the evals (Agents' second tab). */
+export type StudioKind = StudioEntry | StudioTab | "evals";
 /** Whether s names a kind of Studio's. */
-export const isStudioKind = (s: string): s is StudioKind => (studioKinds as readonly string[]).includes(s);
-/** Studio's kinds in groups, a line between each (the menu's and the side list's): the dashboard; the agent and what proves it; what it follows; what runs, simple to complex (jobs, then workflows); what it reaches (connectors, secrets). */
-export const studioGroups: readonly (readonly StudioKind[])[] = [["overview", "specs"], ["agents", "evals", "skills"], ["rules", "guardrails"], ["workers", "workflows"], ["connectors", "secrets"]];
+export const isStudioKind = (s: string): s is StudioKind => s === "evals" || (studioEntries as readonly string[]).includes(s) || (studioTabs as readonly string[]).includes(s);
+const isResourceTab = (k: StudioKind): k is StudioTab => (studioTabs as readonly string[]).includes(k);
+/** The Resources tab a kind shows in: its own, the evals Agents'. */
+const resourceTabOf = (k: StudioKind): StudioTab | undefined => (k === "evals" ? "agents" : isResourceTab(k) ? k : undefined);
+/** The side list's entry a kind shows under: Resources for its tabs (and the evals). */
+export const studioEntryOf = (k: StudioKind): StudioEntry => (resourceTabOf(k) ? "resources" : (k as StudioEntry));
+/** Studio's entries in groups, a line between each (the menu's and the side list's): the workspace; what it has and what runs; what it follows. */
+export const studioGroups: readonly (readonly StudioEntry[])[] = [["overview", "settings", "specs"], ["resources", "workers", "workflows"], ["rules", "guardrails"]];
+
+/**
+ * The entries shown: all of them with advanced settings; a newcomer, who
+ * opens Studio from the Workspaces menu's pencil or the status bar, gets
+ * the workspace's Settings and its Resources (simpleMode.ts).
+ */
+export function studioEntriesShown(advanced: boolean): StudioEntry[] {
+  return advanced ? [...studioEntries] : ["settings", "resources"];
+}
+
+/** The kind to show for one asked for: Resources is its first tab shown; one hidden, the workspace's Settings. */
+export function studioKindShown(asked: StudioKind, advanced: boolean): StudioKind {
+  const tabs = studioResourceTabs(advanced);
+  if (asked === "resources") return tabs[0] ?? "settings";
+  const tab = resourceTabOf(asked);
+  if (tab) return tabs.includes(tab) ? asked : "settings";
+  return studioEntriesShown(advanced).includes(asked as StudioEntry) ? asked : "settings";
+}
 
 /** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
 export interface StudioOpen {
@@ -69,23 +96,26 @@ export interface StudioOpen {
 /** Each kind's icon. */
 export const studioIcons: Record<StudioKind, string> = {
   overview: mdiViewDashboardOutline,
+  settings: mdiTuneVariant,
   specs: mdiTextBoxCheckOutline,
+  resources: mdiBookshelf,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
-  workflows: mdiSitemapOutline,
-  workers: mdiCalendarClock,
   evals: mdiFlaskOutline,
-  rules: mdiScaleBalance,
-  guardrails: mdiShieldLockOutline,
+  workers: mdiCalendarClock,
   connectors: mdiConnection,
   secrets: mdiKeyVariant,
+  workflows: mdiSitemapOutline,
+  rules: mdiScaleBalance,
+  guardrails: mdiShieldLockOutline,
 };
 
 /**
- * The workspace's Studio (spec_040_studio): what its .agents folder
- * holds, kind by kind, each listed and edited here: agents, skills,
- * workflows, evals, rules, guardrails, the connectors its agents use, and
- * its own secrets.
+ * The workspace's Studio (spec_040_studio): everything that is this
+ * workspace's, where Settings is every workspace's: its settings, and
+ * what its .agents folder holds, each listed and edited here. Resources
+ * has Settings › Resources' tabs but Browser (profiles are every
+ * workspace's): agents (with their evals), skills, connectors and secrets.
  */
 export function StudioDrawer({
   dir,
@@ -107,10 +137,14 @@ export function StudioDrawer({
   onKind?: (kind: StudioKind) => void;
 }) {
   const snack = useSnackbar();
-  const [kind, setKind] = useState<StudioKind>(initial.kind);
+  const advanced = useAdvanced();
+  const [requested, setKind] = useState<StudioKind>(initial.kind);
+  const kind = studioKindShown(requested, advanced);
+  const entry = studioEntryOf(kind);
+  const tabs = studioResourceTabs(advanced);
   // Whether the kind's form holds unsaved changes: closing asks first.
   const [dirty, setDirty] = useState(false);
-  // The agent Studio › Evals opens for (from an agent's form).
+  // The agent Studio › Resources › Agents › Evals opens for (from an agent's form).
   const [evalsFor, setEvalsFor] = useState("");
   // Showing the workers sees their failed runs (BL-WK-11).
   useEffect(() => {
@@ -121,7 +155,7 @@ export function StudioDrawer({
   const choose = (k: StudioKind) => {
     setDirty(false);
     setCompact(false);
-    setKind(k);
+    setKind(studioKindShown(k, advanced));
   };
   // Picking another kind with a form's changes unsaved asks first.
   const { leave, discard } = useDiscardGuard(dirty);
@@ -131,7 +165,7 @@ export function StudioDrawer({
   useEffect(() => {
     if (!ask || ask.n === menuAsked.current) return;
     menuAsked.current = ask.n;
-    if (ask.kind !== kind) choose(ask.kind);
+    if (studioKindShown(ask.kind, advanced) !== kind) choose(ask.kind);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ask?.n]);
   // Asked again for a workflow's run while open (the status bar, an
@@ -180,9 +214,6 @@ export function StudioDrawer({
       snack(message(e), { error: true });
     }
   };
-  // An Admin publishes the workspace's items to the organization (EN-36).
-  const orgAdmin = useOrgAdmin();
-  const [publishing, setPublishing] = useState(false);
   return (
     <Drawer
       title={t("desktop.studio")}
@@ -192,27 +223,37 @@ export function StudioDrawer({
       dirty={dirty}
       closeRequest={closeRequest}
       headerActions={
-        <>
-          {orgAdmin.admin && <IconButton icon={mdiCloudUploadOutline} label={t("desktop.publish.open")} onClick={() => setPublishing(true)} />}
-          <IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />
-        </>
+<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />
       }
     >
-      {publishing && createPortal(<PublishDialog dir={dir} org={orgAdmin.org} onClose={() => setPublishing(false)} />, document.body)}
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {studioGroups.map((group, i) => [
-            i > 0 && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
-            ...group.map((k) => (
-              <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => (k === kind ? undefined : leave(() => choose(k)))}>
-                <Icon path={studioIcons[k]} />
-                <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
-              </button>
-            )),
-          ])}
+          {studioGroups.map((group, i) => {
+            const shown = group.filter((e) => studioEntriesShown(advanced).includes(e));
+            return [
+              i > 0 && shown.length > 0 && advanced && <span key={`line-${i}`} className="studio-nav-line" aria-hidden="true" />,
+              ...shown.map((e) => (
+                <button key={e} role="tab" aria-selected={e === entry} data-autofocus={e === entry ? "" : undefined} className={`list-item ${e === entry ? "active" : ""}`} title={t(`desktop.studio.${e}`)} onClick={() => (e === entry ? undefined : leave(() => choose(e)))}>
+                  <Icon path={studioIcons[e]} />
+                  <span className="settings-nav-label">{t(`desktop.studio.${e}`)}</span>
+                </button>
+              )),
+            ];
+          })}
         </div>
         <GradesContext.Provider value={grades}>
-        <div className="settings-pane" key={listed}>
+        <div className={`settings-pane ${entry === "resources" ? "studio-resources" : ""}`} key={listed}>
+          {/* Resources' tabs, the same as Settings › Resources'. */}
+          {entry === "resources" && tabs.length > 1 && (
+            <Tabs label={t("desktop.studio.resources")} value={resourceTabOf(kind) ?? "agents"} tabs={tabs.map((k) => ({ value: k, label: t(`desktop.studio.${k}`), icon: studioIcons[k] }))} onChange={(k) => leave(() => choose(k))} />
+          )}
+          {/* Agents' two tabs: the agents, and the evals that prove them (STU-13). */}
+          {(kind === "agents" || kind === "evals") && (
+            <div className="row agents-switch">
+              <Segmented small label={t("desktop.studio.agents")} value={kind} options={[{ value: "agents", label: t("desktop.studio.agents"), icon: studioIcons.agents }, { value: "evals", label: t("desktop.studio.evals"), icon: studioIcons.evals }]} onChange={(k) => leave(() => choose(k))} />
+            </div>
+          )}
+          {kind === "settings" && <SettingsPane workspace={dir} />}
           {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} onStarted={refreshHealth} />}
           {kind === "agents" && (
             <AgentEditor
@@ -225,6 +266,7 @@ export function StudioDrawer({
                 setEvalsFor(agent);
                 choose("evals");
               }}
+              listFooter={<GlobalAgents workspace={dir} />}
             />
           )}
           {kind === "specs" && <SpecsPane workspace={dir} onDirty={setDirty} onLeave={onClose} />}
@@ -248,7 +290,7 @@ export function StudioDrawer({
         </div>
         </GradesContext.Provider>
       </div>
-      {discard(t(`desktop.studio.${kind}`))}
+      {discard(t(`desktop.studio.${entry}`))}
     </Drawer>
   );
 }

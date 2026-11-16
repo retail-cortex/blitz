@@ -15,6 +15,7 @@
 package guardrails
 
 import (
+	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -157,9 +158,25 @@ func keyStart(s string) int {
 }
 
 // check is text masked as the secrets guardrails say; one that blocks
-// replaces the rest of the answer.
+// replaces the rest of the answer. A custom after_model guardrail of
+// pieces-only checks (regex, keywords, pii) runs on it too (GT-45), and
+// one that blocks withholds the rest; the others run on the whole answer
+// (Answer).
 func (o *Output) check(text string) string {
 	for _, g := range o.set.active(StageOutput) {
+		if g.Builtin == "" && g.Streamable() {
+			v, caught := gates.Deterministic(g, text)
+			if !caught {
+				continue
+			}
+			if g.Action == Block {
+				o.withheld = true
+				o.found(Finding{Guardrail: g.Name, Action: Block, Reason: v.Reason, Score: v.Score, Check: v.Check})
+				return "[the rest of this answer was withheld by the " + g.Name + " guardrail]"
+			}
+			o.found(Finding{Guardrail: g.Name, Action: Warn, Reason: v.Reason, Score: v.Score, Check: v.Check})
+			continue
+		}
 		if g.Builtin != Secrets {
 			continue
 		}
@@ -170,13 +187,13 @@ func (o *Output) check(text string) string {
 		switch g.Action {
 		case Redact:
 			text = masked
-			o.found(Finding{g.Name, Redact, "a secret in the answer"})
+			o.found(Finding{Guardrail: g.Name, Action: Redact, Reason: "a secret in the answer"})
 		case Block:
 			o.withheld = true
-			o.found(Finding{g.Name, Block, "a secret in the answer"})
+			o.found(Finding{Guardrail: g.Name, Action: Block, Reason: "a secret in the answer"})
 			return "[the rest of this answer was withheld by the " + g.Name + " guardrail]"
 		default:
-			o.found(Finding{g.Name, Warn, "a secret in the answer"})
+			o.found(Finding{Guardrail: g.Name, Action: Warn, Reason: "a secret in the answer"})
 		}
 	}
 	return text

@@ -206,7 +206,7 @@ func (u *Updater) Downloads() Downloads {
 }
 
 // PruneDownloads removes the downloaded releases but the keep newest,
-// never the one staged to install (EL-90a; Settings › About's Clean up
+// never the one staged to install (EL-90a; Settings › System › About's Clean up
 // keeps none but that), and says what's left. While one downloads, it
 // removes none.
 func (u *Updater) PruneDownloads(keep int) (Downloads, error) {

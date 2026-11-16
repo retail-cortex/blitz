@@ -220,37 +220,9 @@ func (s *Settings) OrgUsage(ctx context.Context) (OrgUsage, error) {
 	return res.Msg, nil
 }
 
-// Publishable are the workspace's items that can be published to the
-// organization's catalog (ConfigService.ListPublishable).
-func (s *Settings) Publishable(ctx context.Context, dir string) ([]*pb.PublishableItem, error) {
-	res, err := s.c.ListPublishable(ctx, connect.NewRequest(&pb.ListPublishableRequest{Workspace: dir}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Items, nil
-}
-
-// PublishToOrganization sends items to the catalog as a review
-// (ConfigService.PublishToOrganization).
-func (s *Settings) PublishToOrganization(ctx context.Context, dir, title string, items []*pb.PublishItem) (*pb.CatalogReview, error) {
-	res, err := s.c.PublishToOrganization(ctx, connect.NewRequest(&pb.PublishToOrganizationRequest{Workspace: dir, Title: title, Items: items}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Review, nil
-}
-
-// CatalogReviews are the catalog's reviews (ConfigService.ListCatalogReviews).
-func (s *Settings) CatalogReviews(ctx context.Context, state string) ([]*pb.CatalogReview, error) {
-	res, err := s.c.ListCatalogReviews(ctx, connect.NewRequest(&pb.ListCatalogReviewsRequest{State: state}))
-	if err != nil {
-		return nil, fromAPI(err)
-	}
-	return res.Msg.Reviews, nil
-}
-
-// OrgItems are the organization's catalog items for a workspace, of one
-// kind or every one (ConfigService.ListOrgItems).
+// OrgItems are the organization's assets the person is offered (its
+// agents, skills, workflows, rules and guardrails; EN-80), of one kind or
+// every one, with who decided each (ConfigService.ListOrgItems).
 func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgItemsResponse, error) {
 	res, err := s.c.ListOrgItems(ctx, connect.NewRequest(&pb.ListOrgItemsRequest{Workspace: dir, Kind: kind}))
 	if err != nil {
@@ -259,14 +231,53 @@ func (s *Settings) OrgItems(ctx context.Context, dir, kind string) (*pb.ListOrgI
 	return res.Msg, nil
 }
 
-// CopyOrgItem copies one of the organization's default items into the
-// workspace's .agents folder (ConfigService.CopyOrgItem).
-func (s *Settings) CopyOrgItem(ctx context.Context, dir, kind, name string) ([]string, error) {
-	res, err := s.c.CopyOrgItem(ctx, connect.NewRequest(&pb.CopyOrgItemRequest{Workspace: dir, Kind: kind, Name: name}))
+// SetOrgItem switches one of the organization's available assets on or
+// off for the person (ConfigService.SetOrgItem, spec_053 EN-83).
+func (s *Settings) SetOrgItem(ctx context.Context, kind, name string, on bool) (*pb.OrgItem, error) {
+	res, err := s.c.SetOrgItem(ctx, connect.NewRequest(&pb.SetOrgItemRequest{Kind: kind, Name: name, On: on}))
 	if err != nil {
 		return nil, fromAPI(err)
 	}
-	return res.Msg.Paths, nil
+	return res.Msg.Item, nil
+}
+
+// RefreshOrganization fetches the organization's catalog and the
+// person's policy now, saying whether either changed
+// (ConfigService.RefreshEnterprise, spec_053 EN-38a).
+func (s *Settings) RefreshOrganization(ctx context.Context) (bool, error) {
+	res, err := s.c.RefreshEnterprise(ctx, connect.NewRequest(&pb.RefreshEnterpriseRequest{}))
+	if err != nil {
+		return false, fromAPI(err)
+	}
+	return res.Msg.Changed, nil
+}
+
+// ConnectorConsent is which shared connectors query as the person,
+// whether they've allowed it, and where (ConfigService.GetConnectorConsent,
+// spec_053 EN-76).
+func (s *Settings) ConnectorConsent(ctx context.Context) (*pb.GetConnectorConsentResponse, error) {
+	res, err := s.c.GetConnectorConsent(ctx, connect.NewRequest(&pb.GetConnectorConsentRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}
+
+// RevokeConnectorConsent forgets the person's consent
+// (ConfigService.RevokeConnectorConsent).
+func (s *Settings) RevokeConnectorConsent(ctx context.Context) error {
+	_, err := s.c.RevokeConnectorConsent(ctx, connect.NewRequest(&pb.RevokeConnectorConsentRequest{}))
+	return fromAPI(err)
+}
+
+// Policy is the person's effective policy from their organization, each
+// setting with who decided it (EnterpriseState.policy, spec_053 EN-39).
+func (s *Settings) Policy(ctx context.Context) ([]*pb.PolicySetting, error) {
+	res, err := s.c.GetEnterprise(ctx, connect.NewRequest(&pb.GetEnterpriseRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.State.GetPolicy(), nil
 }
 
 // OrgNotices are how the person hears of their jobs' runs on the
@@ -319,4 +330,34 @@ func (s *Settings) WatchServiceRuns(ctx context.Context, on func([]GoingServiceR
 		return nil
 	}
 	return fromAPI(stream.Err())
+}
+
+// SyncOwnItems syncs the person's own assets with the organization now
+// (ConfigService.SyncOwnItems, spec_053 EN-93).
+func (s *Settings) SyncOwnItems(ctx context.Context) (*pb.SyncOwnItemsResponse, error) {
+	res, err := s.c.SyncOwnItems(ctx, connect.NewRequest(&pb.SyncOwnItemsRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
+}
+
+// ShareOwnItem submits one of the person's own assets to share with the
+// organization (ConfigService.ShareOwnItem, EN-95).
+func (s *Settings) ShareOwnItem(ctx context.Context, kind, name, note string) (*pb.Submission, error) {
+	res, err := s.c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: kind, Name: name, Note: note}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Submission, nil
+}
+
+// ListSubmissions is the person's submissions, their own assets and the
+// kinds the organization takes (ConfigService.ListSubmissions, EN-95).
+func (s *Settings) ListSubmissions(ctx context.Context) (*pb.ListSubmissionsResponse, error) {
+	res, err := s.c.ListSubmissions(ctx, connect.NewRequest(&pb.ListSubmissionsRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg, nil
 }

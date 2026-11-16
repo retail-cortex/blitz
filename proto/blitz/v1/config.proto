@@ -202,6 +202,15 @@ service ConfigService {
   // signed in to it (spec_053_enterprise EN-10 to EN-14); with check, it
   // asks the service too, to say whether it's reached.
   rpc GetEnterprise(GetEnterpriseRequest) returns (GetEnterpriseResponse);
+  // Fetches the organization's catalog and the person's policy now, rather
+  // than waiting for the service to announce a change (spec_053 EN-38a;
+  // NOT_CONNECTED, NOT_SIGNED_IN).
+  rpc RefreshEnterprise(RefreshEnterpriseRequest) returns (RefreshEnterpriseResponse);
+  // Whether the person's organization has connectors that query as each
+  // person, whether they've allowed it, and where (spec_053 EN-76).
+  rpc GetConnectorConsent(GetConnectorConsentRequest) returns (GetConnectorConsentResponse);
+  // Forgets the person's consent: those connectors ask again (EN-76).
+  rpc RevokeConnectorConsent(RevokeConnectorConsentRequest) returns (RevokeConnectorConsentResponse);
   // Connects to the organization's service at an address, after checking
   // it's one, or disconnects with "", signing out first (INVALID_ADDRESS,
   // UNREACHABLE).
@@ -296,25 +305,37 @@ service ConfigService {
   rpc GetOrgNotices(GetOrgNoticesRequest) returns (GetOrgNoticesResponse);
   // Keeps how the person hears of their jobs' runs (JB-31).
   rpc SetOrgNotices(SetOrgNoticesRequest) returns (SetOrgNoticesResponse);
-  // The workspace's items that can be published to the organization's
-  // catalog (EN-36): its .agents folder's agents, skills, rules,
-  // guardrails, commands and connectors, each with how it applies now and
-  // what the catalog would refuse.
-  rpc ListPublishable(ListPublishableRequest) returns (ListPublishableResponse);
-  // Publishes items to the organization's catalog as a review another
-  // Admin approves (EN-36; an Admin's; FAILED_PRECONDITION PROBLEMS when
-  // the catalog would refuse one).
-  rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse);
-  // The catalog's reviews, the newest first (an Admin's).
-  rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse);
-  // The organization's catalog items this person gets (EN-34): each with
-  // its lock and groups, and whether the workspace has its own of that
-  // name (which a default gives way to).
+  // The organization's rules and guardrails the person works under
+  // (EN-34, EN-39): the ones their policy switches on, each locked and
+  // with who decided it.
   rpc ListOrgItems(ListOrgItemsRequest) returns (ListOrgItemsResponse);
-  // Copies one of the organization's default items into the workspace's
-  // .agents folder, to change there (EN-34; FAILED_PRECONDITION LOCKED for
-  // a locked one, ALREADY_EXISTS when the workspace has its own).
-  rpc CopyOrgItem(CopyOrgItemRequest) returns (CopyOrgItemResponse);
+  // Switches one of the organization's available assets on or off for the
+  // person (EN-83), then fetches their policy again (FAILED_PRECONDITION
+  // REQUIRED for a required one).
+  rpc SetOrgItem(SetOrgItemRequest) returns (SetOrgItemResponse);
+  // Retired: the organization's catalog is gone (spec_053 EN-97);
+  // UNIMPLEMENTED CATALOG_REMOVED. Its library is shared with ShareOwnItem.
+  rpc ListPublishable(ListPublishableRequest) returns (ListPublishableResponse) {}
+  // Retired: as ListPublishable.
+  rpc PublishToOrganization(PublishToOrganizationRequest) returns (PublishToOrganizationResponse) {}
+  // Retired: as ListPublishable.
+  rpc ListCatalogReviews(ListCatalogReviewsRequest) returns (ListCatalogReviewsResponse) {}
+  // Retired: as ListPublishable; the organization's items come with the
+  // person's policy (ListOrgItems).
+  rpc CopyOrgItem(CopyOrgItemRequest) returns (CopyOrgItemResponse) {}
+  // Syncs the person's own agents, skills, workflows, rules and guardrails
+  // (~/.blitz) with the organization's service now (EN-93): what it sent,
+  // fetched, removed, the conflicts, and what it skipped and why.
+  rpc SyncOwnItems(SyncOwnItemsRequest) returns (SyncOwnItemsResponse);
+  // Submits one of the person's own assets to share with the organization
+  // (EN-95), judged by its evaluator: FAILED_PRECONDITION with the
+  // service's code (CONTRIBUTE_OFF, NO_EVALUATOR, NAME_TAKEN,
+  // SUBMISSION_OPEN, INVALID) when it isn't taken; NOT_FOUND for none of
+  // that name.
+  rpc ShareOwnItem(ShareOwnItemRequest) returns (ShareOwnItemResponse);
+  // The person's submissions, their own assets that can be shared, and
+  // the kinds the organization takes submissions of (EN-95).
+  rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse);
   // Approves or denies what a paused run asks for, with a note; the run
   // goes on (FAILED_PRECONDITION ANSWERED when it isn't waiting any more).
   rpc AnswerServiceRun(AnswerServiceRunRequest) returns (AnswerServiceRunResponse);
@@ -1448,6 +1469,35 @@ message EnterpriseState {
   // The machine-wide settings set the organization (EN-10): the person
   // can't change or disconnect it.
   bool managed = 14;
+  // The person's effective policy (EN-39): each setting, and which level
+  // of the organization's policy decided it. Empty without one, or from a
+  // service before /api/v1/policy.
+  repeated PolicySetting policy = 15;
+  // The providers the policy lets the person use themselves, each with
+  // the models it allows (EN-35).
+  repeated OwnProviderPolicy own_providers = 16;
+}
+
+// One setting of the person's effective policy and why (EN-39).
+message PolicySetting {
+  // Its path, such as "connectors.own" or "models.own.ollama.models".
+  string path = 1;
+  // Its value, as JSON.
+  string value_json = 2;
+  // The level that decided it: default, global, group or person.
+  string level = 3;
+  // Who: the groups' names, or the person's email.
+  repeated string by = 4;
+  // Whether the organization locked it.
+  bool locked = 5;
+}
+
+// A provider the organization lets the person use themselves (EN-35).
+message OwnProviderPolicy {
+  // Blitz's name for it, such as "ollama".
+  string provider = 1;
+  // The models allowed, as patterns ("llama3*"); every model when none.
+  repeated string models = 2;
 }
 
 // Request message for ConfigService.GetEnterprise.
@@ -1458,6 +1508,34 @@ message GetEnterpriseRequest {
 // Response message for ConfigService.GetEnterprise.
 message GetEnterpriseResponse {
   EnterpriseState state = 1;
+}
+
+// Request message for ConfigService.GetConnectorConsent.
+message GetConnectorConsentRequest {}
+
+// Response message for ConfigService.GetConnectorConsent.
+message GetConnectorConsentResponse {
+  // Connectors the person may use query as them (none: nothing to allow).
+  repeated string connectors = 1;
+  bool consented = 2;
+  // Where they allow it (Google's consent).
+  string url = 3;
+}
+
+// Request message for ConfigService.RevokeConnectorConsent.
+message RevokeConnectorConsentRequest {}
+
+// Response message for ConfigService.RevokeConnectorConsent.
+message RevokeConnectorConsentResponse {}
+
+// Request message for ConfigService.RefreshEnterprise.
+message RefreshEnterpriseRequest {}
+
+// Response message for ConfigService.RefreshEnterprise.
+message RefreshEnterpriseResponse {
+  EnterpriseState state = 1;
+  // Something changed: the catalog or the policy.
+  bool changed = 2;
 }
 
 // Request message for ConfigService.ConnectEnterprise.
@@ -1689,6 +1767,10 @@ message ServiceJob {
   // Its workspace's handle, and where it's cloned on this computer.
   string workspace = 7;
   string dir = 8;
+  string description = 9;
+  // One of the organization's own jobs (spec_053 EN-45): in no workspace of
+  // the person's, seen and run as its policy allows.
+  bool organization = 10;
 }
 
 // One of a service job's runs.
@@ -1962,6 +2044,171 @@ message GetOrgUsageResponse {
   bool prompt_logs = 5;
 }
 
+// One of the organization's rules or guardrails, or (EN-80) one of its
+// library's agents, skills and workflows.
+message OrgItem {
+  // agent, skill, workflow, rule or guardrail.
+  string kind = 1;
+  string name = 2;
+  // Its path in the catalog.
+  string path = 3;
+  // locked or default.
+  string lock = 4;
+  repeated string groups = 5;
+  // The workspace has its own of this name (a default gives way to it).
+  bool overridden = 6;
+  // Who decided it applies (EN-39): "the policy for Data"; "" from a
+  // service before the policy.
+  string decided_by = 7;
+  // The version the organization offers (EN-80).
+  string version = 8;
+  // required (always on, locked) or available (the person switches it
+  // on or off).
+  string state = 9;
+  // Whether the person has it.
+  bool on = 10;
+  string description = 11;
+  // What it locks to, "skill sql-review 1.0.0" (EN-82).
+  repeated string locks = 12;
+}
+
+// Request message for ConfigService.SyncOwnItems.
+message SyncOwnItemsRequest {}
+
+// Response message for ConfigService.SyncOwnItems: each by "kind/name".
+message SyncOwnItemsResponse {
+  repeated string sent = 1;
+  repeated string received = 2;
+  repeated string removed = 3;
+  // Changed here and on another computer: this one's kept and sent, the
+  // other's saved under ~/.blitz/conflicts.
+  repeated string conflicts = 4;
+  // What can't sync, and why.
+  map<string, string> skipped = 5;
+}
+
+// One check of an evaluator's on a submission.
+message SubmissionVerdict {
+  string check = 1;
+  double score = 2;
+  bool passed = 3;
+  string reason = 4;
+  repeated string findings = 5;
+}
+
+// One of the person's assets submitted to share (EN-95).
+message Submission {
+  int64 id = 1;
+  string kind = 2;
+  string name = 3;
+  string note = 4;
+  // judging, rejected, held (for an admin), accepted or error.
+  string state = 5;
+  repeated SubmissionVerdict verdicts = 6;
+  string reason = 7;
+  string published_version = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp decided_at = 10;
+}
+
+// Request message for ConfigService.ShareOwnItem.
+message ShareOwnItemRequest {
+  string kind = 1;
+  string name = 2;
+  string note = 3;
+}
+
+// Response message for ConfigService.ShareOwnItem.
+message ShareOwnItemResponse {
+  Submission submission = 1;
+}
+
+// One of the person's own assets (~/.blitz).
+message OwnItem {
+  string kind = 1;
+  string name = 2;
+  // Why it can't sync or be shared ("" when it can).
+  string skipped = 3;
+}
+
+// Request message for ConfigService.ListSubmissions.
+message ListSubmissionsRequest {}
+
+// Response message for ConfigService.ListSubmissions.
+message ListSubmissionsResponse {
+  repeated Submission submissions = 1;
+  repeated OwnItem own = 2;
+  // The kinds the organization takes submissions of (its policy's
+  // library.contribute.<kind>s).
+  repeated string contribute = 3;
+}
+
+// Request message for ConfigService.SetOrgItem.
+message SetOrgItemRequest {
+  string kind = 1;
+  string name = 2;
+  bool on = 3;
+}
+
+// Response message for ConfigService.SetOrgItem.
+message SetOrgItemResponse {
+  OrgItem item = 1;
+}
+
+// Request message for ConfigService.ListOrgItems.
+message ListOrgItemsRequest {
+  string workspace = 1;
+  // One kind ("" for every one).
+  string kind = 2;
+}
+
+// Response message for ConfigService.ListOrgItems.
+message ListOrgItemsResponse {
+  repeated OrgItem items = 1;
+  // The catalog's version ("" before the first).
+  int32 version = 2;
+}
+
+// How the person hears of their jobs' runs on the organization's service.
+message OrgNotices {
+  // By email (when the service sends email: email_available).
+  bool email = 1;
+  // An https address the notices are POSTed to ("": none).
+  string webhook = 2;
+  // Every run's end, not only failures and runs waiting for an answer.
+  bool every_run = 3;
+  bool email_available = 4;
+}
+
+// Request message for ConfigService.GetOrgNotices.
+message GetOrgNoticesRequest {}
+
+// Response message for ConfigService.GetOrgNotices.
+message GetOrgNoticesResponse {
+  OrgNotices notices = 1;
+}
+
+// Request message for ConfigService.SetOrgNotices.
+message SetOrgNoticesRequest {
+  OrgNotices notices = 1;
+}
+
+// Response message for ConfigService.SetOrgNotices.
+message SetOrgNoticesResponse {
+  OrgNotices notices = 1;
+}
+
+// A provider's models for the menus (spec_061_models MOD-42).
+message ProviderModelList {
+  string provider = 1;
+  repeated string models = 2;
+}
+
+// The retired organization catalog's publishing and copying (spec_053
+// EN-31, EN-36, EN-97), kept so older clients' calls fail plainly: the
+// service answers each with UNIMPLEMENTED CATALOG_REMOVED. Nothing sends
+// them.
+
 // An item in a workspace that can be published to the catalog.
 message PublishableItem {
   // agent, skill, rule, guardrail, command or connector.
@@ -2034,34 +2281,6 @@ message ListCatalogReviewsResponse {
   repeated CatalogReview reviews = 1;
 }
 
-// One of the organization's catalog items.
-message OrgItem {
-  // agent, skill, rule, guardrail, command, mcp or connector.
-  string kind = 1;
-  string name = 2;
-  // Its path in the catalog.
-  string path = 3;
-  // locked or default.
-  string lock = 4;
-  repeated string groups = 5;
-  // The workspace has its own of this name (a default gives way to it).
-  bool overridden = 6;
-}
-
-// Request message for ConfigService.ListOrgItems.
-message ListOrgItemsRequest {
-  string workspace = 1;
-  // One kind ("" for every one).
-  string kind = 2;
-}
-
-// Response message for ConfigService.ListOrgItems.
-message ListOrgItemsResponse {
-  repeated OrgItem items = 1;
-  // The catalog's version ("" before the first).
-  int32 version = 2;
-}
-
 // Request message for ConfigService.CopyOrgItem.
 message CopyOrgItemRequest {
   string workspace = 1;
@@ -2073,39 +2292,4 @@ message CopyOrgItemRequest {
 message CopyOrgItemResponse {
   // The files written, in the workspace.
   repeated string paths = 1;
-}
-
-// How the person hears of their jobs' runs on the organization's service.
-message OrgNotices {
-  // By email (when the service sends email: email_available).
-  bool email = 1;
-  // An https address the notices are POSTed to ("": none).
-  string webhook = 2;
-  // Every run's end, not only failures and runs waiting for an answer.
-  bool every_run = 3;
-  bool email_available = 4;
-}
-
-// Request message for ConfigService.GetOrgNotices.
-message GetOrgNoticesRequest {}
-
-// Response message for ConfigService.GetOrgNotices.
-message GetOrgNoticesResponse {
-  OrgNotices notices = 1;
-}
-
-// Request message for ConfigService.SetOrgNotices.
-message SetOrgNoticesRequest {
-  OrgNotices notices = 1;
-}
-
-// Response message for ConfigService.SetOrgNotices.
-message SetOrgNoticesResponse {
-  OrgNotices notices = 1;
-}
-
-// A provider's models for the menus (spec_061_models MOD-42).
-message ProviderModelList {
-  string provider = 1;
-  repeated string models = 2;
 }

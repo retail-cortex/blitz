@@ -25,7 +25,7 @@ import { Drawer } from "@blitz/webui";
 /**
  * Blitz's license terms (spec_030_release_readiness RR-05): the NOTICE,
  * the Apache License and the third-party notices, as the app embeds them.
- * Opened from Settings › About and by /license.
+ * Opened from Settings › System › About and by /license.
  */
 export function LicenseDrawer({ initial, onClose }: { initial: LicenseText; onClose: () => void }) {
   const [which, setWhich] = useState<LicenseText>(initial);

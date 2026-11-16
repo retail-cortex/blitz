@@ -165,7 +165,7 @@ func TestWorkspaceRules(t *testing.T) {
 	withJudge(t, w, "fail: it's rude")
 	v, err := w.JudgeRule(context.Background(), gates.Rule{Name: "x", When: gates.BeforeAgent, Text: "Be polite."}, "do it now")
 	require.NoError(t, err)
-	assert.Equal(t, gates.Verdict{Reason: "it's rude"}, v)
+	assert.Equal(t, gates.Verdict{Reason: "it's rude", Score: 1}, v)
 
 	require.NoError(t, w.DeleteRule("a"))
 	assert.Error(t, w.DeleteRule("a"))

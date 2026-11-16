@@ -38,8 +38,8 @@ go_library(
         "mcp.go",
         "models.go",
         "orgfolders.go",
+        "orgitems.go",
         "orgjobs.go",
-        "orgpublish.go",
         "orgshare.go",
         "orgsync.go",
         "orgworkspaces.go",
@@ -72,7 +72,6 @@ go_library(
     deps = [
         "//pkg/activity",
         "//pkg/api",
-        "//pkg/catalog",
         "//pkg/config",
         "//pkg/docx",
         "//pkg/engine",
@@ -170,6 +169,7 @@ go_test(
     deps = [
         "//pkg/a2ui",
         "//pkg/activity",
+        "//pkg/agentpkg",
         "//pkg/api",
         "//pkg/config",
         "//pkg/config/configtest",

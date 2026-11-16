@@ -44,7 +44,7 @@ export function setEffort(dir: string, value: string) {
 /**
  * Applies a permission mode to the workspace and keeps it as the
  * workspace's own, so new chats and the workspace after a restart open in
- * it (spec_005 APR-14): the status bar's menu and Settings › Workspaces
+ * it (spec_005 APR-14): the status bar's menu and Studio › Settings
  * both pick a mode this way. The service applies it first and refuses a
  * mode it can't (bypass without the OS sandbox); then nothing is kept.
  * Returns the mode's canonical name.

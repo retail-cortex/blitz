@@ -42,6 +42,12 @@ func UserWorkersDir(prefixDir string) string {
 	return filepath.Join(ConfigDir(prefixDir), "workers")
 }
 
+// UserEvalsDir holds the user's global evals, ~/.blitz/evals/<name>.md:
+// the evals of the global agents and skills, run in the home workspace.
+func UserEvalsDir(prefixDir string) string {
+	return filepath.Join(ConfigDir(prefixDir), "evals")
+}
+
 // IsHomeWorkspace reports whether dir is the home workspace, symlinks
 // resolved.
 func IsHomeWorkspace(prefixDir, dir string) bool {

@@ -15,72 +15,90 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiContentCopy, mdiDomain, mdiLockOutline } from "@mdi/js";
+import { mdiLockOutline } from "@mdi/js";
 import { config } from "../api";
-import { message } from "../errors";
 import type { OrgItem } from "../gen/blitz/v1/config_pb";
 import { t } from "../i18n";
-import { Button, Icon, useSnackbar } from "@blitz/webui";
+import { Icon, Switch, useSnackbar } from "@blitz/webui";
+
+/** OrgKind is a kind of asset the organization's library offers. */
+export type OrgKind = "agent" | "skill" | "workflow" | "rule" | "guardrail";
+
+/** subtitle is what a row says under an item's name: its version, and why it's there or whose it is to switch. */
+export function subtitle(it: Pick<OrgItem, "version" | "state" | "on" | "decidedBy" | "groups">): string {
+  const parts: string[] = [];
+  if (it.version) parts.push(t("desktop.orgitems.version", { version: it.version }));
+  if (it.state === "available") parts.push(t(it.on ? "desktop.orgitems.available_on" : "desktop.orgitems.available_off"));
+  else if (it.decidedBy) parts.push(t("desktop.orgitems.decided", { by: it.decidedBy }));
+  else if (it.groups.length) parts.push(t("desktop.orgitems.for", { groups: it.groups.join(", ") }));
+  else parts.push(t("desktop.orgitems.locked"));
+  return parts.join(" · ");
+}
 
 /**
- * From your organization (spec_053 EN-34): the catalog's items of one kind
- * this workspace gets, under the workspace's own in a Studio list. A
- * locked one says its Admins change it, through a review; a default one
- * can be copied into the workspace to change there, and once it is, says
- * the workspace's own takes its place. Shows nothing without a catalog.
+ * From your organization (spec_053 EN-34, EN-39, EN-80, EN-83): what the
+ * person's organization offers them from its library, of one kind or every
+ * kind: each required one locked, saying who decided it; each available one
+ * with a switch, which follows them to every computer. Its admins change
+ * the library in the organization's console. Shows nothing without an
+ * organization.
  */
-export function OrgItems({ workspace, kind, onCopied }: { workspace: string; kind: string; onCopied?: () => void }) {
-  const snack = useSnackbar();
+export function OrgItems({ kind, title, empty }: { kind?: OrgKind; title?: string; empty?: string }) {
   const [items, setItems] = useState<OrgItem[]>([]);
-  const [copying, setCopying] = useState("");
-  const load = useCallback(() => {
-    config.listOrgItems({ workspace, kind }).then(
-      (r) => setItems(r.items),
-      () => setItems([]),
-    );
-  }, [workspace, kind]);
-  useEffect(load, [load]);
+  const [busy, setBusy] = useState("");
+  const snack = useSnackbar();
+  const load = useCallback(
+    () =>
+      config.listOrgItems({ kind: kind ?? "" }).then(
+        (r) => setItems(r.items),
+        () => setItems([]),
+      ),
+    [kind],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
   if (items.length === 0) {
-    return null;
+    if (!empty) return null;
+    // Where the library has its own card (Settings › Organization): say
+    // why it's empty, rather than draw an empty card.
+    return (
+      <section className="stack rule-section org-items" style={{ gap: 4 }}>
+        <span className="t-title-sm">{title ?? t("desktop.orgitems.title")}</span>
+        <span className="t-body-sm muted">{empty}</span>
+      </section>
+    );
   }
-  const copy = async (it: OrgItem) => {
-    setCopying(it.name);
+  const set = async (it: OrgItem, on: boolean) => {
+    setBusy(`${it.kind}/${it.name}`);
     try {
-      await config.copyOrgItem({ workspace, kind: it.kind, name: it.name });
-      snack(t("desktop.orgitems.copied", { name: it.name }));
-      load();
-      onCopied?.();
+      await config.setOrgItem({ kind: it.kind, name: it.name, on });
+      snack(t(on ? "desktop.orgitems.switched_on" : "desktop.orgitems.switched_off", { name: it.name }));
+      await load();
     } catch (e) {
-      snack(message(e), { error: true });
+      snack(t("desktop.orgitems.failed", { error: e instanceof Error ? e.message : String(e) }), { error: true });
     } finally {
-      setCopying("");
+      setBusy("");
     }
   };
   return (
     <section className="stack rule-section org-items" style={{ gap: 4 }}>
-      <span className="t-title-sm">{t("desktop.orgitems.title")}</span>
+      <span className="t-title-sm">{title ?? t("desktop.orgitems.title")}</span>
       <span className="t-body-sm muted">{t("desktop.orgitems.hint")}</span>
       <div className="list">
-        {items.map((it) => {
-          const locked = it.lock === "locked";
-          const note = locked ? t("desktop.orgitems.locked") : it.overridden ? t("desktop.orgitems.overridden") : t("desktop.orgitems.default");
-          return (
-            <div key={it.path} className="list-item" title={it.path}>
-              <Icon path={locked ? mdiLockOutline : mdiDomain} />
-              <span className="lines spacer">
-                <span className="ellipsis">{it.name}</span>
-                <small className="ellipsis">{[note, it.groups.length ? t("desktop.orgitems.for", { groups: it.groups.join(", ") }) : ""].filter(Boolean).join(" · ")}</small>
-              </span>
-              {!locked && !it.overridden && (
-                <span className="trailing">
-                  <Button small icon={mdiContentCopy} disabled={copying !== ""} onClick={() => void copy(it)} title={t("desktop.orgitems.copy_hint")}>
-                    {t("desktop.orgitems.copy")}
-                  </Button>
-                </span>
-              )}
-            </div>
-          );
-        })}
+        {items.map((it) => (
+          <div key={`${it.kind}/${it.name}`} className="list-item" title={it.description || it.path}>
+            {it.state === "available" ? (
+              <Switch label={t("desktop.orgitems.switch", { name: it.name })} checked={it.on} disabled={busy !== ""} onChange={(on) => void set(it, on)} />
+            ) : (
+              <Icon path={mdiLockOutline} />
+            )}
+            <span className="lines spacer">
+              <span className="ellipsis">{kind ? it.name : `${t(`desktop.orgitems.kind.${it.kind}`)} · ${it.name}`}</span>
+              <small className="ellipsis">{subtitle(it)}</small>
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );

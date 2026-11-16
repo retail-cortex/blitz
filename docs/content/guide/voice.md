@@ -10,7 +10,7 @@ Talk to Blitz in the desktop app. Say what you want done, and the voice hands it
 ## Get started
 
 1. Set up Gemini in **Settings › Providers**, with an API key or Vertex AI. Voice uses Gemini even when your agent runs on another provider.
-2. Turn on **Settings › Voice**.
+2. Turn on **Settings › Personality › Voice**.
 3. Click the microphone in the chat bar (or press ⌥⌘V) and talk. The first time, macOS asks whether Blitz may use the microphone.
 
 ## Talking
@@ -25,7 +25,7 @@ Talk to Blitz in the desktop app. Say what you want done, and the voice hands it
 
 While the microphone is open, the bar above the chat box shows what's heard and said, with **Mute** and **Stop talking**, and the status bar shows a red **Listening** that ends it from any view. What you said and what the voice answered stay in the conversation, in writing.
 
-## Settings › Voice
+## Settings › Personality › Voice
 
 | Setting | What it does |
 |---|---|

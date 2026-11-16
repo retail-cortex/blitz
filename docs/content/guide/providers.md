@@ -267,7 +267,7 @@ X-Team        = "platform"
 "*"                 = "chat_completions"  # any other: OpenAI-compatible
 ```
 
-**Where each API goes.** Under `base_url`, Responses requests go to `/responses`, Chat Completions to `/chat/completions`, Gemini's to `/models/{model}:{method}` and Vertex AI's to `/publishers/google/models/{model}:{method}`; Claude's go to `/responses` too, where gateways that pass each request on by its model take them. `[llm.api.paths]` moves any of them; `{model}` is the model's name as it is (a `/` in it stays a `/` in the path), and `{method}` Google's `generateContent` or `streamGenerateContent`:
+**Where each API goes.** Under `base_url`, Responses requests go to `/responses`, Chat Completions to `/chat/completions`, Gemini's to `/models/{model}:{method}` and Vertex AI's to `/publishers/google/models/{model}:{method}`; Claude's go to `/responses` too, where gateways that pass each request on by its model take them. `[llm.api.paths]` moves any of them. A path can use `{model}`, the model's name as it is (a `/` in it stays a `/` in the path), and for Gemini and Vertex AI `{method}`, Google's `generateContent` or `streamGenerateContent`; neither is required, so a gateway that takes every Gemini call at one fixed path works too. In the desktop app, the ⓘ beside each path lists what it can use:
 
 ```toml
 [llm.api.paths]

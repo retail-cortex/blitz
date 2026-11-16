@@ -300,6 +300,10 @@ type Connection struct {
 	Settings map[string]string
 	// ReadOnly connections can't change what they're connected to.
 	ReadOnly bool
+	// ClientOAuth connections query as each caller, with their own access
+	// token (QueryRun.AccessToken): BigQuery's, for blitz-enterprise's
+	// connectors that query as each person (its CN-60).
+	ClientOAuth bool
 	// Tools are the ready-made tools switched on, by ID.
 	Tools   []string
 	Queries []Query
@@ -331,6 +335,9 @@ const (
 	// layers (spec_053 EN-30): read-only here.
 	ScopeOrgLocked  = config.ConnectorScopeOrgLocked
 	ScopeOrgDefault = config.ConnectorScopeOrgDefault
+	// ScopeOrgShared is one of the organization's shared connectors,
+	// which its service runs (spec_053 EN-72).
+	ScopeOrgShared = config.ConnectorScopeOrgShared
 )
 
 // Origins of descriptors.

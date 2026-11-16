@@ -72,16 +72,20 @@ Reply with JSON only, no fences: {"name": "<tool name>", "description": "<what i
 // problem; so is a model that fails.
 func (w *Workspace) DraftConnectorQuery(ctx context.Context, c connectors.Connection, values map[string]string, request string) (QueryDraft, error) {
 	cfg := w.settings()
+	schema, key := func(ctx context.Context) ([]connectors.Table, error) { return w.ReadConnectorSchema(ctx, c, values) }, schemaKey(w.Dir(), c, values)
+	if c.Scope == connectors.ScopeOrgShared {
+		// The organization's: the tables its service lets the person use
+		// (EN-72).
+		schema, key = func(ctx context.Context) ([]connectors.Table, error) { return w.orgTables(ctx, c.Name) }, "org-shared:"+cfg.Enterprise.URL+":"+c.Name
+	}
 	return draftQuery(ctx, queryBuilder{
-		cfg:     cfg,
-		catalog: w.ConnectorCatalog(),
-		model:   func(ctx context.Context) (model.LLM, error) { return suggestionsLLM(ctx, cfg, w.newModel) },
-		redact:  SecretRedactor(cfg).String,
-		skill:   func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
-		schema: func(ctx context.Context) ([]connectors.Table, error) {
-			return w.ReadConnectorSchema(ctx, c, values)
-		},
-		schemaKey: schemaKey(w.Dir(), c, values),
+		cfg:       cfg,
+		catalog:   w.ConnectorCatalog(),
+		model:     func(ctx context.Context) (model.LLM, error) { return suggestionsLLM(ctx, cfg, w.newModel) },
+		redact:    SecretRedactor(cfg).String,
+		skill:     func() (*skills.Skill, bool) { return w.skills.Get(SQLSkill) },
+		schema:    schema,
+		schemaKey: key,
 	}, c, request)
 }
 

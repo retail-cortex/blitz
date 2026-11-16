@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Settings › Organization (spec_053_enterprise EN-10 to EN-13): the
+// Settings › Providers › Organization (spec_053_enterprise EN-10 to EN-13): the
 // organization's Blitz service this computer connects to, and the
 // sign-in to it, kept by the service (ConfigService.GetEnterprise,
 // ConnectEnterprise, EnterpriseSignIn, EnterpriseSignOut). The sign-in
@@ -28,7 +28,11 @@ import { message } from "./errors";
 import { configChanged } from "./events";
 import type { EnterpriseState } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
+import { OrgPolicyCard } from "./OrgPolicy";
+import { ConnectorConsentCard } from "./ConnectorConsent";
 import { OrgNoticesCard } from "./OrgNotices";
+import { OrgItems } from "./studio/OrgItems";
+import { OwnShares } from "./studio/OwnShares";
 import { signInToOrg } from "./orgBranding";
 import { Button, Field, Icon, useSnackbar } from "@blitz/webui";
 
@@ -177,6 +181,28 @@ export function OrganizationSettings() {
         </div>
       )}
       {error && <p className="error-text t-body-sm">{error}</p>}
+      {state?.signedIn && <ConnectorConsentCard />}
+      {state?.signedIn && (
+        <OrgPolicyCard
+          settings={state.policy}
+          onRefresh={async () => {
+            // Now, rather than at the next change the service announces (EN-38a).
+            try {
+              const r = await config.refreshEnterprise({});
+              if (r.state) setState(r.state);
+              snack(t(r.changed ? "desktop.org.policy.refreshed" : "desktop.org.policy.refreshed_same"));
+            } catch (e) {
+              snack(message(e), { error: true });
+            }
+          }}
+        />
+      )}
+      {state?.signedIn && (
+        <div className="card stack">
+          <OrgItems key={state.email} title={t("desktop.orgitems.library")} empty={t("desktop.orgitems.library_empty")} />
+        </div>
+      )}
+      {state?.signedIn && <OwnShares key={state.email} />}
       {state?.signedIn && <OrgNoticesCard key={state.email} />}
     </div>
   );

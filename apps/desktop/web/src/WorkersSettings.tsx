@@ -24,6 +24,7 @@ import { showView } from "./events";
 import { language, t } from "./i18n";
 import { WorkerState, type WorkerPolicySettings, type WorkerRun, type WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
 import { WorkerLimits } from "./WorkerLimits";
+import { OrgJobsCard } from "./OrgJobsCard";
 import { displayName, openWorkspace } from "./prefs";
 import { runDetail } from "./runningWorkers";
 import { useApp } from "./state";
@@ -37,7 +38,7 @@ import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webu
 const overviewPollMs = 10000;
 
 /**
- * Settings › Library › Jobs (spec_023_workers WK-60–WK-63, spec_040
+ * Settings › Jobs (spec_023_workers WK-60–WK-63, spec_040
  * STU-03): the global jobs, saved in ~/.blitz/workers and run in the home
  * workspace, listed and edited as Studio lists a workspace's; the limits
  * on every job (WK-63); the job runs going now, in every workspace; and every workspace the service has workers on record
@@ -113,6 +114,7 @@ export function WorkersSettings({ onLeave, worker = "" }: { onLeave: () => void;
           <WorkersPane dir={home} global onLeave={onLeave} intent={intent} />
         </div>
       )}
+      <OrgJobsCard />
 
       {running.length > 0 && (
         <section className="stack" style={{ gap: 8 }}>

@@ -67,7 +67,7 @@ func TestInput(t *testing.T) {
 	out, refused, fs := Set{All: Defaults()}.Input(text)
 	assert.False(t, refused)
 	assert.Equal(t, "deploy with [REDACTED] please", out)
-	assert.Equal(t, []Finding{{Secrets, Redact, "a secret in what was sent"}}, fs)
+	assert.Equal(t, []Finding{{Guardrail: Secrets, Action: Redact, Reason: "a secret in what was sent"}}, fs)
 
 	_, refused, _ = Set{All: with(Secrets, func(g *Guardrail) { g.Action = Block })}.Input(text)
 	assert.True(t, refused)
@@ -262,7 +262,7 @@ func TestOutput(t *testing.T) {
 		got := stream(o, answer, n)
 		assert.NotContains(t, got, awsKey, "pieces of %d", n)
 		assert.Equal(t, strings.Replace(answer, awsKey, "[REDACTED]", 1), got, "pieces of %d", n)
-		assert.Equal(t, []Finding{{Secrets, Redact, "a secret in the answer"}}, o.Findings())
+		assert.Equal(t, []Finding{{Guardrail: Secrets, Action: Redact, Reason: "a secret in the answer"}}, o.Findings())
 	}
 
 	o := Set{All: Defaults()}.Output()
@@ -293,4 +293,60 @@ func TestOutput(t *testing.T) {
 	o = Set{All: Defaults()}.Output()
 	accents := strings.Repeat("é", 200) + " " + strings.Repeat("ü", 200)
 	assert.Equal(t, accents, stream(o, accents, 5), "never cut inside a character")
+}
+
+// spec_041 GT-45: custom before_model and after_model guardrails at a
+// gateway: the request's, the whole answer's, and while streaming those
+// that can check it piece by piece.
+func TestCustomPromptAndAnswer(t *testing.T) {
+	ctx := context.Background()
+	ticket := Parse("tickets", []byte("---\nstage: before_model\naction: block\ncheck: regex\npatterns: ['ACME-\\d+']\n---\n"))
+	short := Parse("short", []byte("---\nstage: after_model\naction: warn\ncheck: max_length\nmax_length: 10\n---\n"))
+	words := Parse("words", []byte("---\nstage: after_model\naction: block\ncheck: keywords\nwords: [internal-only]\n---\n"))
+	tone := Parse("tone", []byte("---\nstage: after_model\naction: warn\nthreshold: 0.5\n---\nBe polite.\n"))
+	for _, g := range []Guardrail{ticket, short, words, tone} {
+		require.Empty(t, g.Problem, g.Name)
+	}
+	asked := 0
+	s := Set{All: []Guardrail{ticket, short, words, tone}, Ask: func(context.Context, string, string) (string, error) {
+		asked++
+		return `{"verdict":"fail","score":0.7,"reason":"rude"}`, nil
+	}}
+
+	refusal, fs := s.Prompt(ctx, "about ACME-42")
+	assert.Contains(t, refusal, "The tickets guardrail refused it")
+	assert.Equal(t, []Finding{{Guardrail: "tickets", Action: Block, Reason: `it matches 1 time(s), "ACME-42" first`, Score: 1, Check: "regex"}}, fs)
+	refusal, fs = s.Prompt(ctx, "about nothing")
+	assert.Empty(t, refusal)
+	assert.Empty(t, fs)
+
+	refusal, fs = s.Answer(ctx, "a long, rude answer", false)
+	assert.Empty(t, refusal, "warnings alone")
+	require.Len(t, fs, 2)
+	assert.Equal(t, "max_length", fs[0].Check)
+	assert.Equal(t, Finding{Guardrail: "tone", Action: Warn, Reason: "rude", Score: 0.7, Check: "judge"}, fs[1])
+	assert.Equal(t, 1, asked)
+	refusal, _ = s.Answer(ctx, "internal-only", false)
+	assert.Contains(t, refusal, "words")
+	_, fs = s.Answer(ctx, "internal-only and long", true)
+	for _, f := range fs {
+		assert.NotEqual(t, "words", f.Guardrail, "streamed: its pieces were checked already")
+	}
+
+	o := s.Output()
+	out := o.Write("fine so far, ") + o.Write("but this is internal-only stuff") + o.Flush()
+	assert.Contains(t, out, "withheld by the words guardrail")
+	assert.Equal(t, "words", o.Findings()[0].Guardrail)
+	warnOnly := Parse("warned", []byte("---\nstage: after_model\naction: warn\ncheck: pii\n---\n"))
+	o = Set{All: []Guardrail{warnOnly}}.Output()
+	out = o.Write("mail ana@example.com please") + o.Flush()
+	assert.Contains(t, out, "ana@example.com", "a warning lets it through")
+	assert.Equal(t, "pii", o.Findings()[0].Check)
+
+	noJudge := Set{All: []Guardrail{tone}}
+	_, fs = noJudge.Answer(ctx, "x", false)
+	assert.Equal(t, "it can't be judged here", fs[0].Reason)
+	broken := Set{All: []Guardrail{tone}, Ask: func(context.Context, string, string) (string, error) { return "", errors.New("down") }}
+	_, fs = broken.Answer(ctx, "x", false)
+	assert.Contains(t, fs[0].Reason, "it couldn't be judged")
 }

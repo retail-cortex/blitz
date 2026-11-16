@@ -21,6 +21,7 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"google.golang.org/adk/v2/model"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
@@ -48,6 +50,9 @@ type ollamaAuto struct {
 	// replace them.
 	list  func(ctx context.Context) ([]string, error)
 	build func(ctx context.Context, name string) (model.LLM, error)
+	// allowed are the organization's patterns for the models it may
+	// pick (every one when none, EN-35).
+	allowed []string
 }
 
 func newOllamaAuto(key, baseURL string, opts []option.RequestOption, coreTools bool) *ollamaAuto {
@@ -97,6 +102,10 @@ func (a *ollamaAuto) resolve(ctx context.Context) (model.LLM, error) {
 	}
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("ollama at %s has no models: pull one (`ollama pull qwen3:1.7b`), then choose it in Settings › Providers", a.baseURL)
+	}
+	ids = slices.DeleteFunc(ids, func(id string) bool { return !config.ModelAllowed(id, a.allowed) })
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("%w: none of Ollama's models at %s is one your organization allows (%s): pull one of those", ErrModelNotAllowed, a.baseURL, strings.Join(a.allowed, ", "))
 	}
 	m, err := a.build(ctx, ids[0])
 	if err != nil {

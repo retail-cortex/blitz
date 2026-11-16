@@ -26,11 +26,13 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
@@ -49,8 +51,18 @@ var (
 	evalCaseTimeout  = evalTimeout + evalScoreTimeout + time.Minute
 )
 
-// ProjectEvalsDir is where the workspace's evals are: .agents/evals.
-func (w *Workspace) ProjectEvalsDir() string { return filepath.Join(w.Dir(), ".agents", "evals") }
+// ProjectEvalsDir is where the workspace's evals are: .agents/evals, or
+// for the home workspace the user's global evals (~/.blitz/evals), as its
+// jobs are the global jobs (spec_042_evals EV-40).
+func (w *Workspace) ProjectEvalsDir() string { return evalsDir(w.Dir()) }
+
+// evalsDir is the evals folder of the workspace at dir.
+func evalsDir(dir string) string {
+	if config.IsHomeWorkspace("", dir) {
+		return config.UserEvalsDir("")
+	}
+	return filepath.Join(dir, ".agents", "evals")
+}
 
 // Evals are the workspace's evals, read afresh, by name.
 func (w *Workspace) Evals() []evals.Eval { return evals.Load(w.ProjectEvalsDir()) }
@@ -149,6 +161,15 @@ func (w *Workspace) RunEval(ctx context.Context, name string, o api.EvalOptions)
 func (w *Workspace) recordEval(run api.EvalRun) error {
 	if err := w.evalRuns.Append(run); err != nil {
 		w.warn("recording the eval run: " + err.Error())
+	}
+	if run.Status != api.EvalRunning {
+		ended := run.Started.Add(run.Duration)
+		summary := run.Error
+		if summary == "" {
+			summary = fmt.Sprintf("%d results", len(run.Results))
+		}
+		w.reportRun(enterprise.RunReport{Kind: "eval", Name: run.Eval, Status: string(run.Status), Workspace: filepath.Base(w.Dir()),
+			StartedAt: run.Started, EndedAt: &ended, CostUSD: run.CostUSD, Summary: summary})
 	}
 	return nil
 }

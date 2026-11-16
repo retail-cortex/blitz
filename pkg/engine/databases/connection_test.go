@@ -164,3 +164,57 @@ func TestRenderReadOnlyLeavesOutWrites(t *testing.T) {
 		})
 	}
 }
+
+// A BigQuery project must be a project ID, and each allowed dataset a
+// dataset's name or project.dataset; a ${NAME} is checked where it's
+// filled; other kinds and custom files aren't these checks'.
+func TestBigQueryIDs(t *testing.T) {
+	k := &connectors.Kind{ID: "bigquery", Source: "bigquery"}
+	check := func(settings map[string]string) []string {
+		return Backend{}.Check(k, connectors.Connection{Settings: settings})
+	}
+	tests := []struct {
+		name     string
+		settings map[string]string
+		want     string
+	}{
+		{"fine", map[string]string{"project": "retail-cortex", "allowedDatasets": "sales, bigquery-public-data.thelook_ecommerce"}, ""},
+		{"domain-scoped", map[string]string{"project": "example.com:analytics"}, ""},
+		{"a secret's", map[string]string{"project": "${DB_WH_PROJECT}"}, ""},
+		{"a trailing dot", map[string]string{"project": "retail-cortex."}, `project "retail-cortex." isn't a Google Cloud project ID`},
+		{"upper case", map[string]string{"project": "Retail-Cortex"}, "isn't a Google Cloud project ID"},
+		{"too short", map[string]string{"project": "rc"}, "isn't a Google Cloud project ID"},
+		{"a dataset with a space", map[string]string{"project": "retail-cortex", "allowedDatasets": "bad name"}, `dataset "bad name"`},
+		{"three parts", map[string]string{"project": "retail-cortex", "allowedDatasets": "a.b.c"}, `dataset "a.b.c"`},
+		{"another project's malformed", map[string]string{"project": "retail-cortex", "allowedDatasets": "Bad.sales"}, `dataset "Bad.sales"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.Join(check(tt.settings), "; ")
+			if tt.want == "" {
+				assert.Empty(t, got)
+			} else {
+				assert.Contains(t, got, tt.want)
+			}
+		})
+	}
+	assert.Empty(t, Backend{}.Check(&connectors.Kind{ID: "postgres", Source: "postgres"}, connectors.Connection{Settings: map[string]string{"project": "Not An ID"}}))
+	assert.Empty(t, Backend{}.Check(nil, connectors.Connection{}))
+}
+
+// A BigQuery connection that queries as each caller says so to Toolbox
+// (useClientOAuth); another kind never does.
+func TestRenderClientOAuth(t *testing.T) {
+	cat := connectors.Category{ID: "databases", SecretPrefix: "DB"}
+	bq := &connectors.Kind{ID: "bigquery", Source: "bigquery", Fields: []connectors.Field{{Key: "project"}}}
+	text, err := Backend{}.Render(cat, bq, connectors.Connection{Name: "wh", Settings: map[string]string{"project": "retail-cortex"}, ClientOAuth: true})
+	require.NoError(t, err)
+	assert.Contains(t, text, "useClientOAuth: \"true\"")
+	text, err = Backend{}.Render(cat, bq, connectors.Connection{Name: "wh", Settings: map[string]string{"project": "retail-cortex"}})
+	require.NoError(t, err)
+	assert.NotContains(t, text, "useClientOAuth")
+	pg := &connectors.Kind{ID: "postgres", Source: "postgres"}
+	text, err = Backend{}.Render(cat, pg, connectors.Connection{Name: "db", ClientOAuth: true})
+	require.NoError(t, err)
+	assert.NotContains(t, text, "useClientOAuth")
+}

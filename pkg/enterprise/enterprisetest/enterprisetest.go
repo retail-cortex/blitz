@@ -47,6 +47,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/jobspec"
 	"github.com/retail-cortex/blitz/pkg/urn"
 )
@@ -203,9 +204,18 @@ type Service struct {
 	// file's lock and contents, under CatalogPolicy; CatalogExpiry is what
 	// it says the catalog's expiry is. Announce publishes a version on the
 	// watch stream.
-	Catalog       map[string]CatalogFile
-	CatalogPolicy map[string]any
-	CatalogExpiry time.Time
+	Catalog map[string]CatalogFile
+	// CatalogRemoved answers the catalog as a service that retired it
+	// does (404 catalog_removed).
+	CatalogRemoved bool
+	CatalogPolicy  map[string]any
+	CatalogExpiry  time.Time
+	// Policy is what /api/v1/policy serves (404, as from a service before
+	// it, when nil): the person's policy, why, rules and guardrails.
+	Policy      map[string]any
+	PolicyCalls int
+	// PolicyRefused answers /api/v1/policy with this status (0: none).
+	PolicyRefused int
 	Announce      chan int
 	FileCalls     int
 	// Workspaces are the organization's workspaces, by handle, each a bare
@@ -262,11 +272,61 @@ type Service struct {
 	Usage map[string]any
 	// Notices are the person's notice settings (JB-31).
 	Notices map[string]any
-	// Reviews are the catalog's reviews (POST makes one, open, with each
-	// file kept in Published); NotAdmin refuses them as to a member.
-	Reviews   []map[string]any
-	Published map[string]string
-	NotAdmin  bool
+	// Shared are the shared connectors the person may use (404, as from
+	// a service before them, when nil); SharedTables each one's tables;
+	// SharedResults the tables statements answer (any other fails as the
+	// database would); SharedAsked each query asked, "<name>: <SQL>". One
+	// not in Shared is refused, as the policy refuses it.
+	Shared        []map[string]any
+	SharedTables  map[string][]map[string]any
+	SharedResults map[string]map[string]any
+	SharedAsked   []string
+	// SharedMCP serves each shared MCP connector's requests, by name,
+	// for a signed-in person (EN-75).
+	SharedMCP map[string]http.Handler
+	// SharedAPIs serve each API connector's calls, by name, each request
+	// with its path the one under the connector (EN-91); Receipts are the
+	// receipts the person's git hooks' workflows sent (EN-92).
+	SharedAPIs map[string]http.Handler
+	Receipts   []map[string]any
+	// Personal are the person's own assets the service keeps, by
+	// "kind/name" (404, as from a service before them, when nil);
+	// PersonalAllowed the kinds it keeps (EN-93). Reported are the runs
+	// Blitz reported (EN-94); Submissions what the person submitted to share,
+	// the newest first, and ShareRefusal the code a submission is refused
+	// with ("": taken, judging) (EN-95).
+	Personal        map[string]*PersonalAsset
+	PersonalAllowed map[string]bool
+	Reported        []map[string]any
+	Submissions     []map[string]any
+	ShareRefusal    string
+	// Registry are the published assets its registry serves, by
+	// "kind/name", each one version (EN-96, PK-16); RegistryToken a
+	// registry token it takes besides a person's sign-in; Published what
+	// was published to it.
+	Registry      map[string]RegistryAsset
+	RegistryToken string
+	Published     []map[string]any
+	// ConsentURL is where the person consents to connectors querying as
+	// them (404, as from a service that can't, when empty); Consented
+	// whether they have (EN-76). DELETE clears it.
+	ConsentURL string
+	Consented  bool
+}
+
+// RegistryAsset is a published asset the fake's registry serves.
+type RegistryAsset struct {
+	Version     string
+	Description string
+	Files       map[string]string
+	Tags        []string
+	Lifecycle   string
+}
+
+// PersonalAsset is one of the person's own assets as the fake keeps it.
+type PersonalAsset struct {
+	Revision int
+	Files    map[string]string
 }
 
 // GoingRun is a run going now, with its job and workspace.
@@ -287,12 +347,15 @@ type RunChange struct {
 
 // ServiceJob is a job the service runs, as GET /api/v1/jobs answers it.
 type ServiceJob struct {
-	ID        string `json:"id"`
-	URN       string `json:"urn"`
-	Workspace string `json:"workspace"`
-	Name      string `json:"name"`
-	Schedule  string `json:"schedule"`
-	Enabled   bool   `json:"enabled"`
+	// Organization: one of the organization's own jobs (EN-45).
+	Organization bool   `json:"organization,omitempty"`
+	Description  string `json:"description,omitempty"`
+	ID           string `json:"id"`
+	URN          string `json:"urn"`
+	Workspace    string `json:"workspace"`
+	Name         string `json:"name"`
+	Schedule     string `json:"schedule"`
+	Enabled      bool   `json:"enabled"`
 	// NextRun is when it runs next (nil: not scheduled).
 	NextRun *time.Time `json:"next_run,omitempty"`
 }
@@ -458,6 +521,10 @@ func NewService(t testing.TB, issuer string) *Service {
 		}
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
+		if s.CatalogRemoved {
+			refuse(w, http.StatusNotFound, "catalog_removed", "The organization's catalog is gone.")
+			return
+		}
 		if s.Catalog == nil {
 			refuse(w, http.StatusNotFound, "not_found", "The organization hasn't published a catalog yet.")
 			return
@@ -479,6 +546,66 @@ func NewService(t testing.TB, issuer string) *Service {
 			_, key, _ = ed25519.GenerateKey(nil)
 		}
 		env := seal(s.KeyID, key, m)
+		sum := sha256.Sum256(env)
+		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = w.Write(env)
+	})
+	// The person's choice of an available library asset (the service's
+	// spec_014_library LB-22): it switches the item in Policy["items"].
+	mux.HandleFunc("PUT /api/v1/me/items/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var in struct {
+			On *bool `json:"on"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.On == nil {
+			refuse(w, http.StatusBadRequest, "bad_request", "Send on.")
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		items, _ := s.Policy["items"].([]map[string]any)
+		for _, it := range items {
+			if it["kind"] != r.PathValue("kind") || it["name"] != r.PathValue("name") || it["state"] == "dependency" {
+				continue
+			}
+			if it["state"] == "required" {
+				refuse(w, http.StatusConflict, "required", "Your organization requires it: it can't be switched off.")
+				return
+			}
+			it["on"] = *in.On
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(it)
+			return
+		}
+		refuse(w, http.StatusNotFound, "not_found", "Your organization offers no such asset.")
+	})
+	mux.HandleFunc("GET /api/v1/policy", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		s.PolicyCalls++
+		if s.PolicyRefused != 0 {
+			refuse(w, s.PolicyRefused, "refused", "Not for you.")
+			return
+		}
+		if s.Policy == nil {
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
+			return
+		}
+		key := s.Key
+		if s.Forged {
+			_, key, _ = ed25519.GenerateKey(nil)
+		}
+		env := seal(s.KeyID, key, s.Policy)
 		sum := sha256.Sum256(env)
 		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
 		w.Header().Set("ETag", etag)
@@ -785,59 +912,323 @@ func NewService(t testing.TB, issuer string) *Service {
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": append([]GoingRun{}, s.Going...)})
 		}
 	})
-	admin := func(w http.ResponseWriter, r *http.Request) bool {
+	// The organization's shared connectors (spec_053 EN-70 to EN-74).
+	mux.HandleFunc("GET /api/v1/connectors", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.Shared == nil {
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"connectors": s.Shared})
+	})
+	// sharedOne says whether the connector the path names is one the
+	// person may use, refusing it as the policy does when not; s.Mu held.
+	sharedOne := func(w http.ResponseWriter, r *http.Request) bool {
+		for _, c := range s.Shared {
+			if c["name"] == r.PathValue("name") {
+				return true
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"code": "not_allowed", "message": "your organization doesn't let you use " + r.PathValue("name") + " (the organization's policy decides it)", "decided_by": "the organization's policy"})
+		return false
+	}
+	mux.HandleFunc("GET /api/v1/connectors/consent", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if s.ConsentURL == "" {
+			refuse(w, http.StatusNotFound, "not_available", "This service can't query as each person.")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"url": s.ConsentURL, "consented": s.Consented})
+	})
+	mux.HandleFunc("DELETE /api/v1/connectors/consent", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		s.Consented = false
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/api/v1/mcp/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		h := s.SharedMCP[r.PathValue("name")]
+		s.Mu.Unlock()
+		if h == nil {
+			refuse(w, http.StatusNotFound, "not_found", "There's no such connector.")
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/api/v1/apis/{name}/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		h := s.SharedAPIs[r.PathValue("name")]
+		s.Mu.Unlock()
+		if h == nil {
+			refuse(w, http.StatusNotFound, "not_found", "There's no such connector.")
+			return
+		}
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/" + r.PathValue("path")
+		h.ServeHTTP(w, r2)
+	})
+	// personal is a signed-in person's call to a service that keeps their
+	// assets, with s.Mu held after it (unlock when true).
+	personal := func(w http.ResponseWriter, r *http.Request) bool {
 		if !signedIn(w, r) {
 			return false
 		}
-		if s.NotAdmin {
-			refuse(w, http.StatusForbidden, "forbidden", "That's for the organization's Admins.")
+		s.Mu.Lock()
+		if s.Personal == nil {
+			s.Mu.Unlock()
+			refuse(w, http.StatusNotFound, "not_found", "Not here.")
 			return false
 		}
 		return true
 	}
-	mux.HandleFunc("POST /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) {
+	asset := func(key string, a *PersonalAsset, files bool) map[string]any {
+		kind, name, _ := strings.Cut(key, "/")
+		out := map[string]any{"kind": kind, "name": name, "revision": a.Revision, "sha256": agentpkg.Digest(a.Files), "changed_at": time.Now()}
+		if files {
+			out["files"] = a.Files
+		}
+		return out
+	}
+	mux.HandleFunc("GET /api/v1/me/library", func(w http.ResponseWriter, r *http.Request) {
+		if !personal(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		items := []map[string]any{}
+		for k, a := range s.Personal {
+			items = append(items, asset(k, a, false))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "allowed": s.PersonalAllowed})
+	})
+	mux.HandleFunc("/api/v1/me/library/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !personal(w, r) {
+			return
+		}
+		defer s.Mu.Unlock()
+		key := r.PathValue("kind") + "/" + r.PathValue("name")
+		a := s.Personal[key]
+		switch r.Method {
+		case http.MethodGet:
+			if a == nil {
+				refuse(w, http.StatusNotFound, "not_found", "No such asset.")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(asset(key, a, true))
+		case http.MethodPut:
+			var in struct {
+				Files map[string]string `json:"files"`
+				Base  int               `json:"base"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				refuse(w, http.StatusBadRequest, "bad_request", err.Error())
+				return
+			}
+			if !s.PersonalAllowed[r.PathValue("kind")] {
+				refuse(w, http.StatusForbidden, "personal_off", "Not kept.")
+				return
+			}
+			if r.PathValue("name") == "unwritable" {
+				refuse(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+				return
+			}
+			if r.PathValue("name") == "unreadable" || len(in.Files) == 0 {
+				refuse(w, http.StatusUnprocessableEntity, "invalid", "It doesn't read.")
+				return
+			}
+			cur := 0
+			if a != nil {
+				cur = a.Revision
+			}
+			if cur != in.Base {
+				refuse(w, http.StatusConflict, "conflict", "changed elsewhere")
+				return
+			}
+			s.Personal[key] = &PersonalAsset{Revision: cur + 1, Files: in.Files}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(asset(key, s.Personal[key], false))
+		case http.MethodDelete:
+			if a == nil {
+				refuse(w, http.StatusNotFound, "not_found", "No such asset.")
+				return
+			}
+			if r.URL.Query().Get("base") != strconv.Itoa(a.Revision) {
+				refuse(w, http.StatusConflict, "conflict", "changed elsewhere")
+				return
+			}
+			delete(s.Personal, key)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	mux.HandleFunc("POST /api/v1/me/runs", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var run map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&run)
+		s.Mu.Lock()
+		s.Reported = append(s.Reported, run)
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/v1/me/library/{kind}/{name}/share", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
 			return
 		}
 		var in struct {
-			Title string
-			Files []struct{ Path, Content string }
+			Files map[string]string `json:"files"`
+			Note  string            `json:"note"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || len(in.Files) == 0 {
-			refuse(w, http.StatusBadRequest, "bad_request", "Publish from 1 to 200 files.")
-			return
-		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
-		if s.Published == nil {
-			s.Published = map[string]string{}
+		if s.ShareRefusal != "" {
+			refuse(w, http.StatusConflict, s.ShareRefusal, "Refused: "+s.ShareRefusal)
+			return
 		}
-		var paths []string
-		for _, f := range in.Files {
-			s.Published[f.Path] = f.Content
-			paths = append(paths, f.Path)
-		}
-		sort.Strings(paths)
-		s.n++
-		rev := map[string]any{"id": fmt.Sprintf("rev-%d", s.n), "title": in.Title, "by_email": "ana@acme.com", "branch": "publish/ana/x",
-			"paths": paths, "problems": []string{}, "state": "open", "created": time.Now()}
-		s.Reviews = append([]map[string]any{rev}, s.Reviews...)
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(rev)
+		sub := map[string]any{"id": len(s.Submissions) + 1, "kind": r.PathValue("kind"), "name": r.PathValue("name"), "note": in.Note, "state": "judging", "verdicts": []any{},
+			"reason": "", "created_at": time.Now(), "files": len(in.Files)}
+		s.Submissions = append([]map[string]any{sub}, s.Submissions...)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(sub)
 	})
-	mux.HandleFunc("GET /api/v1/admin/catalog/reviews", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) {
+	mux.HandleFunc("GET /api/v1/me/submissions", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
 			return
 		}
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
-		out := []map[string]any{}
-		for _, rev := range s.Reviews {
-			if st := r.URL.Query().Get("state"); st == "" || rev["state"] == st {
-				out = append(out, rev)
-			}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"submissions": append([]map[string]any{}, s.Submissions...)})
+	})
+	registryCaller := func(w http.ResponseWriter, r *http.Request) bool {
+		s.Mu.Lock()
+		tok := s.RegistryToken
+		s.Mu.Unlock()
+		if tok != "" && r.Header.Get("Authorization") == "Bearer "+tok {
+			return true
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"reviews": out})
+		return signedIn(w, r)
+	}
+	mux.HandleFunc("GET /api/v1/registry/search", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		q, kind := strings.ToLower(r.URL.Query().Get("q")), r.URL.Query().Get("kind")
+		out := []map[string]any{}
+		for key, a := range s.Registry {
+			k, name, _ := strings.Cut(key, "/")
+			if (kind != "" && k != kind) || !strings.Contains(strings.ToLower(name+" "+a.Description), q) {
+				continue
+			}
+			out = append(out, map[string]any{"kind": k, "name": name, "version": a.Version, "description": a.Description, "state": "available", "uri": "blitz://" + strings.TrimPrefix(s.URL, "http://") + "/" + key + "@" + a.Version,
+				"tags": a.Tags, "lifecycle": a.Lifecycle})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"assets": out})
+	})
+	mux.HandleFunc("GET /api/v1/registry/{kind}/{name}/{range}", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		a, ok := s.Registry[r.PathValue("kind")+"/"+r.PathValue("name")]
+		s.Mu.Unlock()
+		if !ok {
+			refuse(w, http.StatusNotFound, "not_found", "The registry has no such asset for you.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": a.Version, "files": a.Files, "sha256": agentpkg.Digest(a.Files)})
+	})
+	mux.HandleFunc("POST /api/v1/registry/{kind}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !registryCaller(w, r) {
+			return
+		}
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		in["kind"], in["name"] = r.PathValue("kind"), r.PathValue("name")
+		s.Mu.Lock()
+		s.Published = append(s.Published, in)
+		s.Mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.PathValue("name") == "tested" { // one evals test: published once they pass
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"evaluating": map[string]any{"id": "run-1", "state": "queued"}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0.0", "uri": "blitz://x/" + r.PathValue("kind") + "/" + r.PathValue("name") + "@1.0.0"})
+	})
+	mux.HandleFunc("POST /api/v1/me/receipts", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		var rec map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+			refuse(w, http.StatusBadRequest, "invalid", err.Error())
+			return
+		}
+		s.Mu.Lock()
+		s.Receipts = append(s.Receipts, rec)
+		s.Mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /api/v1/databases/{name}/schema", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if !sharedOne(w, r) {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"tables": s.SharedTables[r.PathValue("name")]})
+	})
+	mux.HandleFunc("POST /api/v1/databases/{name}/query", func(w http.ResponseWriter, r *http.Request) {
+		if !signedIn(w, r) {
+			return
+		}
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		if !sharedOne(w, r) {
+			return
+		}
+		var in struct {
+			Statement string `json:"statement"`
+			MaxRows   int    `json:"max_rows"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.SharedAsked = append(s.SharedAsked, r.PathValue("name")+": "+in.Statement)
+		t, ok := s.SharedResults[in.Statement]
+		if !ok {
+			refuse(w, http.StatusUnprocessableEntity, "query_failed", "ERROR: relation does not exist")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(t)
 	})
 	mux.HandleFunc("GET /api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
 		if !signedIn(w, r) {

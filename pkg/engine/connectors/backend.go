@@ -119,6 +119,9 @@ type QueryRun struct {
 	MaxBytes  int
 	ReadOnly  bool
 	Billed    func(bytes int64) error
+	// AccessToken is the caller's own, for a connection that queries as
+	// each caller (ClientOAuth).
+	AccessToken string
 }
 
 // The limits of a query's result unless a run sets them.

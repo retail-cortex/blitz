@@ -17,9 +17,13 @@ package server
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +54,11 @@ type enterpriseConn struct {
 	stop func()
 	kick chan struct{}
 	done chan struct{}
+	// refreshMu makes one fetch of the catalog and the policy at a time:
+	// the loop's and RefreshEnterprise's write the same files.
+	refreshMu sync.Mutex
+	// personalMu makes one sync of the person's own assets at a time.
+	personalMu sync.Mutex
 	// retry is how long the loop waits after the stream fails, before
 	// asking again; idle, how often it looks for a sign-in (tests shorten
 	// them).
@@ -139,13 +148,7 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 			return true
 		}
 		refresh := func() time.Duration {
-			m, changed, err := c.RefreshCatalog(ctx, dir)
-			if err != nil && ctx.Err() == nil {
-				slog.Warn("the organization's catalog", "error", err)
-			}
-			if changed {
-				configService{s}.changed(ctx, "", "")
-			}
+			m, _, _ := s.refreshOrg(ctx, c, dir)
 			// Without a catalog there's no policy, and the organization's
 			// models wait for one: asked for again soon.
 			if m == nil {
@@ -183,6 +186,61 @@ func (s *Server) startCatalog(c *enterprise.Client) {
 	}()
 }
 
+// refreshOrg fetches the organization's catalog and the person's own
+// policy into dir (EN-32, EN-38), one fetch at a time, and tells the open
+// workspaces when either changed. Its error is the catalog's or the
+// policy's, logged too.
+func (s *Server) refreshOrg(ctx context.Context, c *enterprise.Client, dir string) (*enterprise.Manifest, bool, error) {
+	s.ent.refreshMu.Lock()
+	defer s.ent.refreshMu.Unlock()
+	m, changed, catErr := c.RefreshCatalog(ctx, dir)
+	if catErr != nil && ctx.Err() == nil {
+		slog.Warn("the organization's catalog", "error", catErr)
+	}
+	// The person's own policy, with why each setting is what it is and
+	// their rules and guardrails (EN-38), from a service that serves one;
+	// the catalog's stands from one that doesn't.
+	polChanged, polErr := c.RefreshPolicy(ctx, dir)
+	if errors.Is(polErr, enterprise.ErrNoPolicyAPI) {
+		polErr = nil
+	}
+	if polErr != nil && ctx.Err() == nil {
+		slog.Warn("the organization's policy", "error", polErr)
+	}
+	changed = changed || polChanged
+	if changed {
+		configService{s}.changed(ctx, "", "")
+	}
+	if polErr == nil && c.Status().SignedIn {
+		go s.syncPersonal(context.WithoutCancel(ctx), c, dir)
+	}
+	return m, changed, errors.Join(catErr, polErr)
+}
+
+// syncPersonal syncs the person's own assets under ~/.blitz with the
+// organization's service (spec_053 EN-93), one sync at a time, and tells
+// the open workspaces when it brought any in.
+func (s *Server) syncPersonal(ctx context.Context, c *enterprise.Client, dir string) {
+	if !s.ent.personalMu.TryLock() {
+		return // one is going: it reads the same
+	}
+	defer s.ent.personalMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	rep, err := enterprise.SyncPersonal(ctx, c, config.ConfigDir(s.configDir), filepath.Join(dir, "personal.json"))
+	if err != nil && !errors.Is(err, enterprise.ErrNoPolicyAPI) && ctx.Err() == nil {
+		if ref, ok := errors.AsType[*enterprise.Refusal](err); !ok || ref.Status != http.StatusNotFound {
+			slog.Warn("syncing your own agents, skills and workflows with your organization", "error", err)
+		}
+	}
+	if len(rep.Sent)+len(rep.Received)+len(rep.Removed)+len(rep.Conflicts) > 0 {
+		slog.Info("your own agents, skills and workflows synced with your organization", "sent", rep.Sent, "received", rep.Received, "removed", rep.Removed, "conflicts", rep.Conflicts)
+	}
+	if len(rep.Received)+len(rep.Removed) > 0 {
+		configService{s}.changed(ctx, "", "")
+	}
+}
+
 // stopCatalog ends the catalog's loop, if one runs, and waits for it.
 // Called with mu held.
 func (e *enterpriseConn) stopCatalog() {
@@ -216,6 +274,9 @@ func (s *Server) enterpriseState(ctx context.Context, c *enterprise.Client, chec
 	}
 	st := c.Status()
 	out := &pb.EnterpriseState{Url: st.URL, SignedIn: st.SignedIn, TermsVersion: st.Terms, Managed: config.Managed()}
+	if cfg, err := config.Load(s.configDir); err == nil && cfg.Org.Active() {
+		out.Policy, out.OwnProviders = policyState(cfg.Org)
+	}
 	info := st.Info
 	if check {
 		cctx, cancel := context.WithTimeout(ctx, discoverTimeout)
@@ -251,6 +312,65 @@ func (h configService) GetEnterprise(ctx context.Context, r req[pb.GetEnterprise
 		return nil, invalid(err)
 	}
 	return ok(&pb.GetEnterpriseResponse{State: h.s.enterpriseState(ctx, c, r.Msg.Check)})
+}
+
+// RefreshEnterprise fetches the catalog and the policy now (EN-38a).
+func (h configService) RefreshEnterprise(ctx context.Context, _ req[pb.RefreshEnterpriseRequest]) (*connect.Response[pb.RefreshEnterpriseResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	if !c.Status().SignedIn {
+		return nil, apiError(connect.CodeUnauthenticated, "NOT_SIGNED_IN", errors.New("sign in to your organization's service first"))
+	}
+	_, changed, err := h.s.refreshOrg(ctx, c, h.s.brandingDir(c))
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.RefreshEnterpriseResponse{State: h.s.enterpriseState(ctx, c, false), Changed: changed})
+}
+
+// GetConnectorConsent says which shared connectors query as the person,
+// whether they've allowed it, and where (EN-76).
+func (h configService) GetConnectorConsent(ctx context.Context, _ req[pb.GetConnectorConsentRequest]) (*connect.Response[pb.GetConnectorConsentResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.SharedConnectors(ctx)
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	out := &pb.GetConnectorConsentResponse{}
+	for _, sc := range list {
+		if sc.Auth == enterprise.SharedAsPerson {
+			out.Connectors = append(out.Connectors, sc.Name)
+		}
+	}
+	if len(out.Connectors) == 0 {
+		return ok(out)
+	}
+	u, done, err := c.ConnectorConsent(ctx)
+	if errors.Is(err, enterprise.ErrNoConsent) {
+		return ok(out)
+	}
+	if err != nil {
+		return nil, enterpriseError(err)
+	}
+	out.Url, out.Consented = u, done
+	return ok(out)
+}
+
+// RevokeConnectorConsent forgets the person's consent (EN-76).
+func (h configService) RevokeConnectorConsent(ctx context.Context, _ req[pb.RevokeConnectorConsentRequest]) (*connect.Response[pb.RevokeConnectorConsentResponse], error) {
+	c, _, err := h.s.orgClient()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.RevokeConnectorConsent(ctx); err != nil {
+		return nil, enterpriseError(err)
+	}
+	return ok(&pb.RevokeConnectorConsentResponse{})
 }
 
 func (h configService) ConnectEnterprise(ctx context.Context, r req[pb.ConnectEnterpriseRequest]) (*connect.Response[pb.ConnectEnterpriseResponse], error) {
@@ -454,4 +574,22 @@ func enterpriseError(err error) error {
 	default:
 		return apiError(connect.CodeUnavailable, "UNREACHABLE", err)
 	}
+}
+
+// policyState is the person's effective policy and the providers it lets
+// them use, as the window shows them (EN-35, EN-39).
+func policyState(o config.OrgLayer) ([]*pb.PolicySetting, []*pb.OwnProviderPolicy) {
+	var settings []*pb.PolicySetting
+	for _, path := range slices.Sorted(maps.Keys(o.Explain)) {
+		d := o.Explain[path]
+		v, _ := json.Marshal(d.Value)
+		settings = append(settings, &pb.PolicySetting{Path: path, ValueJson: string(v), Level: d.Level, By: d.By, Locked: d.Locked})
+	}
+	var own []*pb.OwnProviderPolicy
+	for _, p := range config.Providers {
+		if ok, models := o.Policy.OwnProvider(p); ok {
+			own = append(own, &pb.OwnProviderPolicy{Provider: p, Models: models})
+		}
+	}
+	return settings, own
 }

@@ -73,6 +73,10 @@ service WorkspaceService {
   rpc SaveAgentFile(SaveAgentFileRequest) returns (SaveAgentFileResponse);
   // Deletes an agent's file (UNKNOWN_AGENT).
   rpc DeleteAgentFile(DeleteAgentFileRequest) returns (DeleteAgentFileResponse);
+  // Turns one of the user's global agents on or off in a workspace
+  // (spec_040_studio STU-15; UNKNOWN_AGENT, or FAILED_PRECONDITION for
+  // the workspace's own agent).
+  rpc SetAgentEnabled(SetAgentEnabledRequest) returns (SetAgentEnabledResponse);
   // Returns the model the active agent runs on.
   rpc GetModel(GetModelRequest) returns (GetModelResponse);
   // Switches every unpinned agent to a model.
@@ -308,6 +312,13 @@ service WorkspaceService {
   // Stops a running workflow run, wherever it was started (a chat, the
   // background, a worker); RUN_NOT_FOUND when it isn't running.
   rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
+  // Runs the workflows that run on a git hook (spec_043 WF-32): each on
+  // the changes, unattended; their results, each sent to the organization
+  // as a receipt. UNKNOWN_HOOK for an event no workflow runs on.
+  rpc RunGitHook(RunGitHookRequest) returns (RunGitHookResponse);
+  // Checks the workspace's assets (.agents) as Blitz reads them, and
+  // what's worth fixing (spec_065 PK-14), for `blitz pkg validate`.
+  rpc ValidateAssets(ValidateAssetsRequest) returns (ValidateAssetsResponse);
 
   // The workspace dashboard (spec_044_health): the facts about its items
   // and runs, each item's latest verdict, and the scores.
@@ -869,6 +880,9 @@ message AgentFile {
   AgentDefinition agent = 2;
   // Why it doesn't load ("" when it does).
   string problem = 3;
+  // A global agent switched off in the workspace ListAgentFiles named
+  // (STU-15): it isn't loaded there.
+  bool off_here = 4;
 }
 
 // Request message for WorkspaceService.ListAgentFiles.
@@ -915,6 +929,17 @@ message DeleteAgentFileRequest {
 
 // Response message for WorkspaceService.DeleteAgentFile.
 message DeleteAgentFileResponse {}
+
+// Request message for WorkspaceService.SetAgentEnabled.
+message SetAgentEnabledRequest {
+  string workspace = 1;
+  // A global agent's name (one in ~/.blitz/agents).
+  string name = 2;
+  bool enabled = 3;
+}
+
+// Response message for WorkspaceService.SetAgentEnabled.
+message SetAgentEnabledResponse {}
 
 // Request message for WorkspaceService.GetModel.
 message GetModelRequest {
@@ -3282,6 +3307,9 @@ message RuleFile {
   string problem = 10;
   // In .agents/rules: Studio may change it.
   bool editable = 11;
+  // Switched off (enabled: false in its front matter, STU-16): it
+  // checks and says nothing.
+  bool off = 12;
 }
 
 // What Studio's rule form edits.
@@ -3294,6 +3322,8 @@ message RuleSpec {
   string description = 6;
   repeated string paths = 7;
   string text = 8;
+  // Switched off: enabled: false (STU-16).
+  bool off = 9;
 }
 
 // Request message for WorkspaceService.ListRules.
@@ -3744,6 +3774,10 @@ message FlowNode {
   bool allow_writes = 44;
   // The most a billed query (BigQuery) may cost, in dollars (0: $1).
   double max_cost = 45;
+  // An API call to one of the organization's API connectors (WF-31): its
+  // url is then a path under it, called through the organization's
+  // service as the person.
+  string connector = 46;
 }
 
 // A paused workflow run's task: a human task's form waiting for an
@@ -3889,6 +3923,9 @@ message WorkflowFile {
   // (flows.SchedulePermissions, WF-20): its scheduled runs get these as
   // the workflow is when they run. Read only.
   repeated string schedule_permissions = 8;
+  // What runs it besides /name (WF-30): manual, schedule, git.pre_commit,
+  // git.pre_push.
+  repeated string triggers = 9;
 }
 
 // Request message for WorkspaceService.ListWorkflows.
@@ -4058,6 +4095,50 @@ message StopWorkflowRunRequest {
 
 // Response message for WorkspaceService.StopWorkflowRun.
 message StopWorkflowRunResponse {}
+
+// Request message for WorkspaceService.RunGitHook.
+message RunGitHookRequest {
+  string workspace = 1;
+  // The git hook: pre-commit or pre-push.
+  string event = 2;
+  // The changes: the staged diff, or what's pushed.
+  string input = 3;
+}
+
+// What one workflow a git hook ran found (spec_043 WF-32).
+message HookResult {
+  string workflow = 1;
+  // The organization's version of it ("" for the workspace's own).
+  string version = 2;
+  bool passed = 3;
+  // Its last message.
+  string output = 4;
+  // Why it failed.
+  string error = 5;
+}
+
+// Response message for WorkspaceService.RunGitHook.
+message RunGitHookResponse {
+  repeated HookResult results = 1;
+}
+
+// Request message for WorkspaceService.ValidateAssets.
+message ValidateAssetsRequest {
+  string workspace = 1;
+}
+
+// What checking one of the workspace's assets found.
+message AssetFinding {
+  // kind/name.
+  string asset = 1;
+  repeated string problems = 2;
+  repeated string warnings = 3;
+}
+
+// Response message for WorkspaceService.ValidateAssets.
+message ValidateAssetsResponse {
+  repeated AssetFinding findings = 1;
+}
 
 // A workspace's dashboard (spec_044_health).
 message WorkspaceHealth {
@@ -4660,6 +4741,9 @@ message DataConnection {
   // Why it can't be read ("" when it can).
   string problem = 6;
   repeated DataQueryInfo queries = 7;
+  // One of the organization's shared connectors, which its service runs
+  // (spec_053 EN-72).
+  bool org = 8;
 }
 
 // Response message for WorkspaceService.ListDataConnections.

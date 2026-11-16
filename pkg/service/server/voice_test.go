@@ -198,7 +198,7 @@ func TestVoiceEventProto(t *testing.T) {
 	assert.Nil(t, voiceEventProto(engine.VoiceEvent{Kind: "nope"}))
 }
 
-// Settings › Voice's description lists the live models and the model in
+// Settings › Personality › Voice's description lists the live models and the model in
 // use (VOX-41); a sample needs one of Gemini's voices; each error has its
 // reason (VOX-31).
 func TestVoiceDescribeAndReasons(t *testing.T) {

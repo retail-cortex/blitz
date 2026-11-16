@@ -93,7 +93,7 @@ export function WorkerChip({ state }: { state: WorkerState }) {
 }
 
 /**
- * A worker's read view (Studio › Workers): what it does and may do, its
+ * A worker's read view (Studio › Jobs): what it does and may do, its
  * runs, and Run, Enable or Disable, Edit and Delete.
  */
 export function WorkerView({

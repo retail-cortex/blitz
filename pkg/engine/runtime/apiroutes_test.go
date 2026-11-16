@@ -63,6 +63,12 @@ func TestAPIProviderRoutes(t *testing.T) {
 			c.APIs = map[string]string{"*": config.GatewayVertex}
 			c.Paths = map[string]string{config.GatewayVertex: "/v1/projects/p1/locations/global/publishers/google/models/{model}:{method}"}
 		}, "/gw/v1/projects/p1/locations/global/publishers/google/models/gemini-3-pro:generateContent", "gemini", "contents"},
+		"gemini, a fixed path": {"gemini-3-pro", gwGeminiText, func(c *config.APIConfig) {
+			c.Paths = map[string]string{config.GatewayGemini: "/google/generate"}
+		}, "/gw/google/generate", "gemini", "contents"},
+		"gemini, the model alone": {"gemini-3-pro", gwGeminiText, func(c *config.APIConfig) {
+			c.Paths = map[string]string{config.GatewayGemini: "/google/{model}"}
+		}, "/gw/google/gemini-3-pro", "gemini", "contents"},
 		"responses, elsewhere": {"gpt-6-luna", gwText, func(c *config.APIConfig) {
 			c.Paths = map[string]string{config.GatewayResponses: "/openai/v1/responses"}
 		},

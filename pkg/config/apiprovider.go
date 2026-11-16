@@ -68,7 +68,7 @@ var GatewayAPIs = []string{GatewayResponses, GatewayChatCompletions, GatewayMess
 // base_url when [llm.api.paths] doesn't say (MDL-113). Claude's go where
 // the others' do, as gateways that route by the request's model take them;
 // {model} is the model's name and {method} Google's (generateContent, or
-// streamGenerateContent).
+// streamGenerateContent); a path may use them, or not.
 var DefaultGatewayPaths = map[string]string{
 	GatewayResponses:       "/responses",
 	GatewayChatCompletions: "/chat/completions",
@@ -295,9 +295,8 @@ func (a APIConfig) checkRoutes() error {
 				return fmt.Errorf("[llm.api] paths.%s: %s isn't something Blitz fills in (%s)", api, ph, map[bool]string{true: "{model}, {method}", false: "{model}"}[google])
 			}
 		}
-		if google && !strings.Contains(path, "{method}") {
-			return fmt.Errorf("[llm.api] paths.%s needs {method}: Google's API says by it whether the reply streams", api)
-		}
+		// {model} and {method} are offered, never required: a gateway
+		// may route Google's calls by a fixed path (MDL-113).
 	}
 	switch {
 	case a.ModelsPath == "" || a.ModelsPath == NoModelsList:

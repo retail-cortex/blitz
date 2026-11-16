@@ -129,3 +129,31 @@ func TestStamp(t *testing.T) {
 	}
 	assert.Empty(t, Stamp(t.TempDir(), config.MemoryConfig{}, Loaded{}), "memory off")
 }
+
+// A rule's front matter: its paths, whether it's a gate, and whether
+// it's switched off (enabled: false, spec_040_studio STU-16), so an off
+// instruction rule never reaches the prompt.
+func TestSplitRule(t *testing.T) {
+	tests := []struct {
+		name  string
+		text  string
+		paths []string
+		gate  bool
+		off   bool
+	}{
+		{"no front matter", "Be brief.", nil, false, false},
+		{"scoped", "---\npaths: \"*.go\"\n---\nGo style.", []string{"*.go"}, false, false},
+		{"a gate", "---\nwhen: after_agent\n---\nCheck it.", nil, true, false},
+		{"switched off", "---\nenabled: false\n---\nBe brief.", nil, false, true},
+		{"switched on", "---\nenabled: true\n---\nBe brief.", nil, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths, gate, off, _, err := splitRule(tt.text)
+			require.NoError(t, err)
+			assert.Equal(t, tt.paths, paths)
+			assert.Equal(t, tt.gate, gate)
+			assert.Equal(t, tt.off, off)
+		})
+	}
+}

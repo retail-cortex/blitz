@@ -297,7 +297,7 @@ export function filesTouched(detail: { dir: string }) {
   window.dispatchEvent(new CustomEvent(filesTouchedEvent, { detail }));
 }
 
-// Show the license dialog (Settings › About, or /license), on one of its texts.
+// Show the license dialog (Settings › System › About, or /license), on one of its texts.
 export const showLicenseEvent = "blitz:show-license";
 /** Opens the Licenses dialog on one of its texts. */
 export function showLicense(detail: { which: "notice" | "full" | "third-party" }) {

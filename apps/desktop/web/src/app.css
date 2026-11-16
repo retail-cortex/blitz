@@ -165,7 +165,8 @@
 .menubar-badge { margin-left: 2px; background: var(--md-primary); color: var(--md-on-primary); }
 .menubar-badge.waiting { background: var(--md-error); color: var(--md-on-error); }
 .menubar-dot { flex: none; width: 7px; height: 7px; margin-left: 2px; border-radius: 50%; background: var(--md-error); }
-.menubar .toolbar-search { margin: 0 4px 0 8px; flex: 0 1 auto; min-width: 40px; }
+/* The search fills the room between the menus and the icons at the right. */
+.menubar .toolbar-search { margin: 0 4px 0 8px; flex: 1 1 auto; width: auto; min-width: 40px; }
 .menubar-menu { min-width: 260px; max-width: min(420px, calc(100vw - 32px)); }
 .studio-menu { min-width: 220px; max-width: min(320px, calc(100vw - 32px)); }
 .title-edit { opacity: 0; color: var(--md-on-surface-variant); transition: opacity 0.1s; }
@@ -594,8 +595,6 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-drawer .settings { gap: 32px; }
 .settings-drawer .settings-nav { width: 220px; position: sticky; top: 0; align-self: flex-start; }
 /* A group's heading in Settings' side list (Getting started, Global setup…). */
-.settings-nav-group { padding: 12px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
-.settings-nav-group:first-child { padding-top: 0; }
 /* A form reads best at a measure: the settings, a worker's form and the
    licenses keep to one, centered in the sheet; Changes, History and the
    guide take its whole width. */
@@ -619,8 +618,6 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
   .settings-drawer .settings-nav-label { display: none; }
   /* Icons only: a group's heading is a thin rule between the groups. */
-  .settings-drawer .settings-nav-group { height: 1px; padding: 0; margin: 8px 10px; overflow: hidden; color: transparent; background: var(--md-outline-variant); }
-  .settings-drawer .settings-nav-group:first-child { display: none; }
 }
 .setting { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .setting > .stack { flex: 1; min-width: 200px; }
@@ -952,6 +949,12 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .studio-secrets-body { padding-inline: 12px 4px; }
 /* A list pane's intro and group headings line up with its title (12px in, as .side-head). */
 .slide-list > p.t-body-sm:not(.agent-dir), .slide-list > section > :is(.t-title-sm, .t-body-sm, p) { margin-inline: 12px 4px; }
+/* Studio's global agents: their heading row in line with the list's title, and one switched off here dimmed. */
+.global-agents > .row { margin-inline: 12px 4px; }
+.list-item.is-off .lines { opacity: 0.6; }
+/* Studio's Settings and Browsers: their intro, error and list in line with the title, as the list panes'. */
+.studio-settings { display: flex; flex-direction: column; gap: 8px; }
+:is(.studio-settings, .studio-browsers) > :is(p, .list, .ws-settings-embedded) { margin: 0 4px 0 12px; }
 .agent-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .agent-form .field .input, .agent-form .field .select { width: 100%; }
 .agent-form .field .input.slider-value { width: 76px; }
@@ -1238,6 +1241,11 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .studio-drawer > .body { overflow: hidden; }
 .studio-drawer .settings { height: 100%; min-height: 0; gap: 24px; }
 .studio-drawer .settings-pane { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+/* Resources: its tabs on top, the tab's pane in the rest of the height (not all of it). */
+.studio-drawer .settings-pane.studio-resources > :is(.tabs, .agents-switch) { flex: none; }
+.studio-drawer .settings-pane.studio-resources > :not(.tabs, .agents-switch) { flex: 1; min-height: 0; height: auto; }
+/* Agents' two tabs (Agents, Evals), under Resources' tabs, in Studio and Settings. */
+.agents-switch { padding: 12px 12px 4px; }
 /* The editor answers to its pane, not the window: in a narrow pane (the
    Agents view beside a wide chat, Settings on a small screen) the list
    goes above the form, and then the form's pairs become one column. */
@@ -1614,3 +1622,11 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .shell-card .code-head code { font-family: var(--md-mono); font-size: 13px; min-width: 0; }
 .shell-card .shell-output { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
 .shell-card .shell-note { margin: 0 12px 8px; }
+/* A gateway path's fill-ins, in the ⓘ's tooltip (MDL-113). */
+.fills-tip { display: inline-flex; color: var(--md-on-surface-variant); cursor: help; border-radius: 50%; }
+.fills-tip:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 1px; }
+/* Your policy (EN-39): the organization's settings for the person, and who decided each. */
+.org-policy > summary { cursor: pointer; }
+.org-policy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.org-policy-table th { text-align: left; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--md-outline-variant); }
+.org-policy-table td { padding: 6px 8px; border-bottom: 1px solid var(--md-outline-variant); vertical-align: top; }

@@ -190,6 +190,14 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 // restart, disabled and removed ones stop, and the agents are built
 // again so the next turn offers what's there now.
 func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
+	// The organization and its policy first: the person's policy fetched
+	// since the workspace opened says which shared connectors the
+	// organization's server offers (spec_053 EN-71).
+	w.setSettings(func(c *config.Config) { c.Enterprise, c.Org = cfg.Enterprise, cfg.Org })
+	w.installOrgHooks() // its required workflows' git hooks (EN-90)
+	w.shared.Lock()
+	w.shared.at = time.Time{} // asked again
+	w.shared.Unlock()
 	return w.applyMCP(ctx, cfg.MCP)
 }
 

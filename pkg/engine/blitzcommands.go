@@ -321,7 +321,7 @@ func (w *Workspace) cmdConnectorSave(ctx context.Context, c api.BlitzCommand, ar
 		}
 	}
 	out := map[string]any{"saved": rel, "trusted": true, "on": true,
-		"next": fmt.Sprintf("The agents have its tools from the next turn, and @db:%s works in the next message; Studio › Connectors shows it.", name)}
+		"next": fmt.Sprintf("The agents have its tools from the next turn, and @db:%s works in the next message; Studio › Resources › Connectors shows it.", name)}
 	if len(dropped) > 0 {
 		out["note"] = "secret fields aren't taken as arguments: " + strings.Join(dropped, ", ") + " were asked of the person or left as they were"
 	}
@@ -348,7 +348,7 @@ func (w *Workspace) askSecret(ctx context.Context, key, what string) (string, er
 		return "", fmt.Errorf("%s is needed", key)
 	}
 	if !tools.Attended(ctx) {
-		return "", errors.New("a secret is needed, and nobody is here to type it: set it in Studio › Secrets")
+		return "", errors.New("a secret is needed, and nobody is here to type it: set it in Studio › Resources › Secrets")
 	}
 	v, err := w.tools.Hooks().AskUser(api.WithSecretAnswer(ctx), "Type the "+what+" (it's kept as a Blitz secret and never shown to the model)", nil)
 	if err != nil {
@@ -626,7 +626,7 @@ func (w *Workspace) cmdEvalRun(ctx context.Context, c api.BlitzCommand, args map
 		return nil, err
 	}
 	go func() { _, _ = w.RunEval(context.WithoutCancel(ctx), name, api.EvalOptions{}) }()
-	return map[string]any{"started": name, "note": "It runs in the background; eval results reads it once done (Studio › Evals shows it as it goes)."}, nil
+	return map[string]any{"started": name, "note": "It runs in the background; eval results reads it once done (Studio › Resources › Agents › Evals shows it as it goes)."}, nil
 }
 
 func (w *Workspace) cmdEvalResults(_ context.Context, _ api.BlitzCommand, args map[string]any) (any, error) {
@@ -845,7 +845,7 @@ func (w *Workspace) cmdAgentSave(ctx context.Context, c api.BlitzCommand, args m
 	}
 	w.RefreshAgents(ctx)
 	rel, _ = filepath.Rel(w.Dir(), path)
-	return map[string]any{"saved": rel, "note": "Its evals run when the person runs them (Studio › Evals): never in this turn."}, nil
+	return map[string]any{"saved": rel, "note": "Its evals run when the person runs them (Studio › Resources › Agents › Evals): never in this turn."}, nil
 }
 
 func (w *Workspace) cmdSkillList(context.Context, api.BlitzCommand, map[string]any) (any, error) {

@@ -16,7 +16,7 @@
 // the Apache License 2.0, the NOTICE (Blitz's copyright and Code Puppy's
 // MIT notice) and the notices of the third-party software the programs
 // include. The CLI shows them with `blitz license` and /license, the
-// service with `blitzd --license`, the desktop app in Settings › About.
+// service with `blitzd --license`, the desktop app in Settings › System › About.
 //
 // The texts are the repository's own LICENSE, NOTICE and
 // THIRD_PARTY_NOTICES, copied in by Bazel when the package is built.

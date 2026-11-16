@@ -94,6 +94,32 @@ func TestRemoteRunEval(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// A git hook's workflows run through the service (spec_043 WF-32): each
+// one's result; an unknown hook is api.ErrUnknownHook.
+func TestRemoteRunGitHook(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("gemini-3.8-flash")})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "workflows"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.md"), []byte("hi"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "workflows", "notes.flow.yaml"), []byte("triggers: [git.pre_commit]\nnodes: [{id: a, type: read_file, path: notes.md}]\n"), 0o644))
+	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, dir, func(string) {})
+	require.NoError(t, err)
+	got, err := r.RunGitHook(context.Background(), "pre-commit", "+ x")
+	require.NoError(t, err)
+	assert.Equal(t, []api.HookResult{{Workflow: "notes", Passed: true, Output: got[0].Output}}, got)
+	_, err = r.RunGitHook(context.Background(), "post-merge", "")
+	assert.ErrorIs(t, err, api.ErrUnknownHook)
+}
+
 // With the service gone, the calls that return an error return one.
 func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 	r, _ := gone(t)
@@ -105,6 +131,8 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		},
 		"Steer":                func() error { return r.Steer(ctx, "s", "x") },
 		"RunEval":              func() error { _, err := r.RunEval(ctx, "x", api.EvalOptions{}); return err },
+		"RunGitHook":           func() error { _, err := r.RunGitHook(ctx, "pre-commit", ""); return err },
+		"ValidateAssets":       func() error { _, err := r.ValidateAssets(ctx); return err },
 		"OpenSession":          func() error { _, _, err := r.OpenSession("", false); return err },
 		"ListSessions":         func() error { _, err := r.ListSessions(true); return err },
 		"NewSession":           func() error { _, err := r.NewSession(); return err },

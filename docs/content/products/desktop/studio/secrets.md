@@ -3,13 +3,13 @@ title: Secrets
 weight: 90
 ---
 
-**Studio › Secrets** keeps tokens and passwords for this workspace in your system's keychain, so they never land in a prompt, a file, a conversation or a log. You name a secret where it's needed, such as `{secrets:staging_token}` in a workflow's API call, and Blitz puts the value in only as it's used.
+**Studio › Resources › Secrets** keeps tokens and passwords for this workspace in your system's keychain, so they never land in a prompt, a file, a conversation or a log. You name a secret where it's needed, such as `{secrets:staging_token}` in a workflow's API call, and Blitz puts the value in only as it's used.
 
 ## Open it
 
-Choose **Studio › Secrets**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
+Choose **Studio › Resources › Secrets**. Studio's menu shows once **Show advanced** is on, in the Settings title bar.
 
-![Studio › Secrets: add a secret by name and value](../../../../images/desktop/studio-secrets.png)
+![Studio › Resources › Secrets: add a secret by name and value](../../../../images/desktop/studio-secrets.png)
 
 ## Add a secret
 
@@ -23,6 +23,6 @@ The list shows each secret's name and when it was set, never its value. Replace 
 
 Write `{secrets:name}` in an agent's instructions, a workflow, or an MCP server's settings. This workspace's secret is used first, then a global one of the same name. The value goes in only when it's used: the transcript, the audit log and the file keep the placeholder, and a value a model echoes back is shown masked.
 
-Global secrets, for every workspace, are in **Settings › Library › Secrets**.
+Global secrets, for every workspace, are in **Settings › Resources › Secrets**.
 
 More: [Workflows](../../../guide/workflows.md) (secrets in API calls) and [Safety](../../../guide/safety.md#secrets).

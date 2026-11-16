@@ -176,6 +176,12 @@ type Backend interface {
 	// RunEval runs the workspace's eval name (spec_042_evals) and records
 	// the run.
 	RunEval(ctx context.Context, name string, o EvalOptions) (EvalRun, error)
+	// RunGitHook runs the workflows that run on the git hook event
+	// (pre-commit, pre-push) on input, the changes (spec_043 WF-32).
+	RunGitHook(ctx context.Context, event, input string) ([]HookResult, error)
+	// ValidateAssets checks the workspace's assets (.agents) as Blitz reads
+	// them, and what's worth fixing (spec_065 PK-14).
+	ValidateAssets(ctx context.Context) ([]AssetFinding, error)
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)

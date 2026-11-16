@@ -17,6 +17,6 @@ Linux's OS sandbox, from outside the engine. Source: [`pkg/sandboxsetup`](https:
 
 ## Used by
 
-apps/cli (`blitz security`), pkg/pagehost (the desktop app's Settings › Service).
+apps/cli (`blitz security`), pkg/pagehost (the desktop app's Settings › System › Service).
 
 Spec: [shell](../about/specs/spec_007_shell.md) SH-20b.

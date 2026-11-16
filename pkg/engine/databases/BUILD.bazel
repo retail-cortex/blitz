@@ -24,6 +24,10 @@ go_library(
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/databases",
     visibility = [
+        # blitz-enterprise's shared connectors run Blitz's databases on
+        # its service (its spec_013_connectors; the root module's package
+        # when Blitz is built as its dependency).
+        "@@//internal/connectors:__pkg__",
         # The engine, the service, and the CLI's --local mode; the other
         # three only in tests (//tools:check_deps checks libraries).
         "//apps/cli:__pkg__",

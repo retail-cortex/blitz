@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -521,95 +522,105 @@ func TestEnterpriseJobsCommand(t *testing.T) {
 		assert.Contains(t, out, want)
 	}
 
-	// Publishing to the catalog (EN-36).
-	pubWS := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(pubWS, ".agents", "agents"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "writer.md"), []byte("---\nname: writer\ndescription: Writes briefs\n---\nWrite.\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "broken.md"), []byte("no front matter"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pubWS, ".agents", "agents", "helper.md"), []byte("---\nname: helper\ndescription: Helps\ngroups: [eng]\n---\nHelp.\n"), 0o644))
-	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS)
-	require.NoError(t, err)
-	assert.Contains(t, out, "agent/writer  (default)")
-	assert.Contains(t, out, "agent/broken  (default)\n    ! ")
-	assert.Contains(t, out, "agent/helper  (default, for eng)")
-	out, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/writer", "--lock", "locked", "--groups", "sales,eng")
-	require.NoError(t, err)
-	assert.Contains(t, out, "✓ In review: Publish agent writer")
-	org.Mu.Lock()
-	assert.Contains(t, org.Published["agents/writer.md"], "lock: locked\ngroups: [sales, eng]")
-	org.Mu.Unlock()
-	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "writer")
-	assert.ErrorContains(t, err, "<kind>/<name>")
-	_, err = runCLI(t, "enterprise", "publish", "-d", pubWS, "agent/broken")
-	assert.ErrorContains(t, err, "the catalog would refuse it")
-	out, err = runCLI(t, "enterprise", "reviews")
-	require.NoError(t, err)
-	assert.Contains(t, out, "open  by ana@acme.com: Publish agent writer")
-	out, err = runCLI(t, "enterprise", "reviews", "--state", "approved")
-	require.NoError(t, err)
-	assert.Contains(t, out, "No reviews.")
-	org.Mu.Lock()
-	org.Reviews = append(org.Reviews, map[string]any{"id": "rev-9", "title": "Publish rule style", "by_email": "bo@acme.com", "paths": []string{"rules/style.md"},
-		"problems": []string{"rules/style.md: no front matter"}, "state": "approved", "version": 7, "note": "Looks good.", "created": time.Now()})
-	org.Mu.Unlock()
-	out, err = runCLI(t, "enterprise", "reviews")
-	require.NoError(t, err)
-	assert.Contains(t, out, "rev-9  published in version 7  by bo@acme.com: Publish rule style\n    ! rules/style.md: no front matter\n    Looks good.")
-	empty := t.TempDir()
-	out, err = runCLI(t, "enterprise", "publish", "-d", empty)
-	require.NoError(t, err)
-	assert.Contains(t, out, "Nothing to publish")
-
 	org.Close()
-	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"}, {"reviews"}, {"publish", "-d", pubWS, "agent/writer"},
+	for _, args := range [][]string{{"jobs"}, {"jobs", "pending"}, {"jobs", "approve", run}, {"jobs", "files", set}, {"usage"},
 		{"jobs", "runs", "tidy"}, {"jobs", "run", "tidy"}, {"jobs", "on", "tidy"}, {"jobs", "push", "fresh"}, {"jobs", "take", "fresh"}} {
 		_, err := runCLI(t, append([]string{"enterprise"}, args...)...)
 		assert.Error(t, err, args)
 	}
 }
 
-// blitz enterprise catalog (EN-34): the organization's items with their
-// lock and groups, a default one copied into the workspace and then shown
-// as the workspace's own, a locked one refused, and a malformed name.
-func TestEnterpriseCatalogCommand(t *testing.T) {
+// blitz enterprise policy (EN-39; catalog as before): the person's
+// settings with who decided each, then the rules and guardrails it
+// applies to them; never the catalog's agents.
+func TestEnterprisePolicyCommand(t *testing.T) {
 	t.Cleanup(http.DefaultClient.CloseIdleConnections)
 	isolate(t)
 	secrets.SetDefault(&secrets.Memory{})
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
 	org.Catalog = map[string]enterprisetest.CatalogFile{
-		"agents/reviewer.md": {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
-		"rules/style.md":     {Kind: "rule", Name: "style", Lock: "default", Data: "Use Go."},
+		"agents/reviewer.md":   {Kind: "agent", Name: "reviewer", Lock: "locked", Groups: []string{"eng"}, Data: "---\nname: reviewer\n---\nReview."},
+		"rules/style.md":       {Kind: "rule", Name: "style", Lock: "locked", Data: "Use Go."},
+		"guardrails/no-pii.md": {Kind: "guardrail", Name: "no-pii", Lock: "locked", Groups: []string{"eng"}, Data: "---\nstage: output\n---\nNo personal data."},
+	}
+	org.Policy = map[string]any{
+		"schema": 2,
+		"policy": map[string]any{"refresh": "1h", "connectors": map[string]any{"own": true}},
+		"explain": map[string]any{
+			"connectors.own": map[string]any{"value": true, "level": "group", "by": []string{"Data"}},
+			"mcp.own":        map[string]any{"value": false, "level": "global", "locked": true},
+			"rules.style":    map[string]any{"value": true, "level": "person", "by": []string{"ana@acme.com"}},
+		},
+		"rules": []map[string]any{{"kind": "rule", "name": "style", "body": "Use Go."}},
 	}
 	ws := t.TempDir()
-	_, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	_, err := runCLI(t, "enterprise", "policy", "-d", ws)
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "consent")
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "consent", "--revoke")
 	assert.Error(t, err, "not connected")
 	_, err = runCLI(t, "enterprise", "connect", org.URL)
 	require.NoError(t, err)
-	out, err := runCLI(t, "enterprise", "catalog", "-d", ws)
+	out, err := runCLI(t, "enterprise", "policy", "-d", ws)
 	require.NoError(t, err)
-	assert.Contains(t, out, "nothing for you yet")
+	assert.Contains(t, out, "applies no rules or guardrails to you")
 	_, err = runCLI(t, "enterprise", "login")
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		out, err = runCLI(t, "enterprise", "catalog", "-d", ws)
-		return err == nil && strings.Contains(out, "rule/style")
+		out, err = runCLI(t, "enterprise", "policy", "-d", ws)
+		return err == nil && strings.Contains(out, "rule/style (")
 	}, 5*time.Second, 50*time.Millisecond)
-	assert.Contains(t, out, "agent/reviewer  (locked, for eng)")
-	assert.Contains(t, out, "rule/style  (default)\n")
-
-	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "agent/reviewer")
-	assert.ErrorContains(t, err, "locked")
-	_, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "style")
-	assert.ErrorContains(t, err, "<kind>/<name>")
-	out, err = runCLI(t, "enterprise", "catalog", "copy", "-d", ws, "rule/style")
+	assert.Contains(t, out, "connectors.own = true  (your group (Data))")
+	assert.Contains(t, out, "mcp.own = false  (your organization, locked)")
+	assert.Contains(t, out, "rule/style (the policy an admin set for you decides it)")
+	assert.NotContains(t, out, "guardrail/no-pii", "the retired catalog's items aren't the policy's")
+	out, err = runCLI(t, "enterprise", "refresh")
 	require.NoError(t, err)
-	assert.Contains(t, out, "✓ Copied to .agents/rules/style.md")
-	assert.FileExists(t, filepath.Join(ws, ".agents", "rules", "style.md"))
+	assert.Contains(t, out, "✓ Fetched: nothing changed.")
+	org.Mu.Lock()
+	org.Policy["rules"] = []map[string]any{}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "refresh")
+	require.NoError(t, err)
+	assert.Contains(t, out, "changed")
+	assert.NotContains(t, out, "reviewer", "the catalog's agents don't come to Blitz")
 	out, err = runCLI(t, "enterprise", "catalog", "-d", ws, "--kind", "rule")
+	require.NoError(t, err, "catalog, as before")
+	assert.NotContains(t, out, "connectors.own", "the rules alone")
+	assert.Contains(t, out, "applies no rules or guardrails", "the policy's rules gone, the retired catalog's don't stand in")
+
+	// Connectors that query as the person (EN-76).
+	out, err = runCLI(t, "enterprise", "consent")
 	require.NoError(t, err)
-	assert.Contains(t, out, "rule/style  (default)  this workspace has its own")
-	assert.NotContains(t, out, "reviewer")
+	assert.Contains(t, out, "None of your organization's connectors")
+	org.Mu.Lock()
+	org.Shared = []map[string]any{{"name": "warehouse", "kind": "bigquery", "auth": "person", "max_rows": 100}}
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "can't query as each person")
+	org.Mu.Lock()
+	org.ConsentURL = "https://accounts.google.com/x"
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "warehouse query as you")
+	assert.Contains(t, out, "https://accounts.google.com/x")
+	org.Mu.Lock()
+	org.Consented = true
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "consent")
+	require.NoError(t, err)
+	assert.Contains(t, out, "You've allowed warehouse")
+	out, err = runCLI(t, "enterprise", "consent", "--revoke")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Forgotten")
+	org.Mu.Lock()
+	assert.False(t, org.Consented)
+	org.Shared = nil
+	org.Mu.Unlock()
 
 	// How one hears of one's jobs' runs (JB-31).
 	out, err = runCLI(t, "enterprise", "notices")
@@ -676,4 +687,127 @@ func TestPrintOrgSync(t *testing.T) {
 			assert.Equal(t, tt.want, b.String())
 		})
 	}
+}
+
+// EN-80, EN-83: blitz enterprise items lists what the organization's
+// library offers, and switches an available one on and off; a required one
+// stays on.
+func TestEnterpriseItemsCommand(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	agentFiles := map[string]string{"agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews\n---\nReview."}
+	flow := map[string]string{"workflows/notes.flow.yaml": "nodes: [{id: a, type: read_file, path: x.md}]\n"}
+	org.Policy = map[string]any{
+		"schema": 2, "policy": map[string]any{"refresh": "1h"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{},
+		"items": []map[string]any{
+			{"kind": "agent", "name": "reviewer", "version": "1.2.0", "sha256": agentpkg.Digest(agentFiles), "state": "required", "on": true, "description": "Reviews", "files": agentFiles, "deps": []any{}},
+			{"kind": "workflow", "name": "notes", "version": "1.0.0", "sha256": agentpkg.Digest(flow), "state": "available", "on": false, "description": "Takes notes", "files": flow, "deps": []any{}},
+		},
+	}
+	_, err := runCLI(t, "enterprise", "items")
+	assert.Error(t, err, "not connected")
+	_, err = runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+	var out string
+	require.Eventually(t, func() bool {
+		out, err = runCLI(t, "enterprise", "items")
+		return err == nil && strings.Contains(out, "agent/reviewer")
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Contains(t, out, "agent/reviewer 1.2.0  required  Reviews")
+	assert.Contains(t, out, "workflow/notes 1.0.0  available, off  Takes notes")
+	out, err = runCLI(t, "enterprise", "items", "enable", "workflow/notes")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ On: workflow notes 1.0.0")
+	_, err = runCLI(t, "enterprise", "items", "disable", "agent/reviewer")
+	assert.ErrorContains(t, err, "requires it")
+	_, err = runCLI(t, "enterprise", "items", "enable", "notes")
+	assert.ErrorContains(t, err, "kind/name")
+	out, err = runCLI(t, "enterprise", "items", "disable", "workflow/notes")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ Off: workflow notes")
+	out, err = runCLI(t, "enterprise", "items", "--kind", "agent")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "workflow/notes")
+}
+
+// EN-93, EN-95: blitz enterprise items sync sends the person's own assets;
+// share submits one, which submissions lists; one they don't have, or
+// that the organization refuses, says why.
+func TestEnterpriseOwnItemsCommands(t *testing.T) {
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
+	home := isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	idp := enterprisetest.NewProvider(t)
+	org := enterprisetest.NewService(t, idp.URL)
+	org.Policy = map[string]any{"schema": 2, "policy": map[string]any{"refresh": "1h"}, "rules": []any{}, "guardrails": []any{},
+		"explain": map[string]any{"library.contribute.skills": map[string]any{"value": true, "level": "global"}}}
+	org.Personal, org.PersonalAllowed = map[string]*enterprisetest.PersonalAsset{}, map[string]bool{"skill": true}
+	skill := filepath.Join(home, ".blitz", "skills", "tone", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	require.NoError(t, os.WriteFile(skill, []byte("---\nname: tone\ndescription: Our tone\n---\nBe kind.\n"), 0o644))
+	big := filepath.Join(home, ".blitz", "skills", "Big Notes", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(big), 0o755))
+	require.NoError(t, os.WriteFile(big, []byte("x"), 0o644))
+	// Changed on another computer too: a conflict on the first sync.
+	org.Personal["skill/tone"] = &enterprisetest.PersonalAsset{Revision: 1, Files: map[string]string{"skills/tone/SKILL.md": "---\nname: tone\n---\nTheirs.\n"}}
+	for _, args := range [][]string{{"sync"}, {"share", "skill/tone"}, {"submissions"}} {
+		_, err := runCLI(t, append([]string{"enterprise", "items"}, args...)...)
+		assert.Error(t, err, "not connected: %v", args)
+	}
+	_, err := runCLI(t, "enterprise", "connect", org.URL)
+	require.NoError(t, err)
+	_, err = runCLI(t, "enterprise", "login")
+	require.NoError(t, err)
+
+	out, err := runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "haven't submitted anything")
+	org.Mu.Lock()
+	org.Personal["skill/tone"].Revision = 2 // changed again elsewhere: a conflict whichever sync is first
+	org.Personal["skill/tone"].Files["skills/tone/SKILL.md"] = "---\nname: tone\n---\nTheirs, again.\n"
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "items", "sync")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Synced with your organization")
+	assert.Contains(t, out, "skill/Big Notes isn't synced")
+	require.Eventually(t, func() bool {
+		org.Mu.Lock()
+		defer org.Mu.Unlock()
+		return org.Personal["skill/tone"] != nil
+	}, 5*time.Second, 20*time.Millisecond, "sent, by this sync or the one after the policy")
+
+	out, err = runCLI(t, "enterprise", "items", "share", "skill/tone", "--note", "for the team")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Submitted skill/tone")
+	out, err = runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "skill/tone · being judged")
+	org.Mu.Lock()
+	org.Submissions = append([]map[string]any{{"id": 9, "kind": "skill", "name": "tone", "state": "rejected", "reason": "security: it calls curl", "created_at": time.Now(), "decided_at": time.Now(),
+		"verdicts": []map[string]any{{"check": "audit", "score": 1, "passed": true, "reason": "reads well"}, {"check": "security", "score": 0.1, "passed": false, "reason": "it calls curl"}}},
+		{"id": 8, "kind": "agent", "name": "helper", "state": "accepted", "published_version": "1.0.0", "created_at": time.Now(), "verdicts": []any{}}}, org.Submissions...)
+	org.Mu.Unlock()
+	out, err = runCLI(t, "enterprise", "items", "submissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "skill/tone · rejected")
+	assert.Contains(t, out, "    security: it calls curl")
+	assert.Contains(t, out, "✓ audit 1.00: reads well")
+	assert.Contains(t, out, "✗ security 0.10: it calls curl")
+	assert.Contains(t, out, "agent/helper · accepted")
+	assert.Contains(t, out, " · 1.0.0")
+
+	_, err = runCLI(t, "enterprise", "items", "share", "skill/nope")
+	assert.ErrorContains(t, err, "you have no skill/nope of your own")
+	_, err = runCLI(t, "enterprise", "items", "share", "tone")
+	assert.ErrorContains(t, err, "kind/name")
+	org.Mu.Lock()
+	org.ShareRefusal = "no_evaluator"
+	org.Mu.Unlock()
+	_, err = runCLI(t, "enterprise", "items", "share", "skill/tone")
+	assert.ErrorContains(t, err, "no_evaluator")
 }

@@ -84,14 +84,15 @@ func (w *Workspace) connectorOn(dir string) func(key string) bool {
 }
 
 // withConnectors is servers with the workspace's connector servers, the
-// connections turned off left out.
+// connections turned off left out, and the organization's shared ones
+// (EN-71).
 func (w *Workspace) withConnectors(servers []config.MCPServerConfig, prefixDir, dir string, warn func(string)) []config.MCPServerConfig {
-	return connectors.With(servers, connectors.ServeOptions{
+	return withOrgConnectors(w.settings(), connectors.With(servers, connectors.ServeOptions{
 		Dirs:    connectors.Dirs{Prefix: prefixDir, Workspace: dir},
 		Trusted: w.connectorTrusted,
 		On:      w.connectorOn(dir),
 		Warn:    warn,
-	})
+	}))
 }
 
 // ConnectorCatalog is the categories and kinds of connectors there are

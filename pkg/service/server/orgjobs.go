@@ -574,11 +574,15 @@ func (h configService) ListServiceJobs(ctx context.Context, _ req[pb.ListService
 	folder, shared := h.s.orgFolder(c, cfg), sharedFor(c.URL())
 	out := &pb.ListServiceJobsResponse{}
 	for _, j := range jobs {
-		if !enterprise.ValidHandle(j.Workspace) {
+		if !j.Organization && !enterprise.ValidHandle(j.Workspace) {
 			continue
 		}
-		dir, _ := orgDir(shared, folder, j.Workspace)
-		m := &pb.ServiceJob{Id: j.ID, Urn: j.URN, Name: j.Name, Schedule: j.Schedule, Enabled: j.Enabled, Workspace: j.Workspace, Dir: dir}
+		dir := ""
+		if !j.Organization { // the organization's are in no clone of the person's (EN-45)
+			dir, _ = orgDir(shared, folder, j.Workspace)
+		}
+		m := &pb.ServiceJob{Id: j.ID, Urn: j.URN, Name: j.Name, Schedule: j.Schedule, Enabled: j.Enabled, Workspace: j.Workspace, Dir: dir,
+			Description: j.Description, Organization: j.Organization}
 		if j.Enabled {
 			m.NextRun = stamp(j.NextRun)
 		}
