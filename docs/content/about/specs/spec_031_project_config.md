@@ -50,7 +50,7 @@ This design lets a repository carry settings in three tiers:
 
 - **PRJ-10 Tier A, how it merges.** Deny and ask rules are added, labelled with the scope `project`. Blocked paths are added. A policy value or limit applies only when it is stricter than the user's; otherwise it is ignored and `doctor` says so.
 - **PRJ-11 Tier B, how it merges.** The user's settings keep precedence (PAR-CFG-01):
-- **PRJ-11** *2026-11-05 (scan N26-api-client-config#1, #18).* A provider is set up when it's the configured one, has an API key, or is signed in to (OAuth, ADC, an AWS profile, Entra). A trusted project's MCP servers, like a plugin's, go through one check of the organization's policy (`Config.AddMCPServer`): with `[mcp] own` false they're ignored, reason `org_policy` ("your organization's policy doesn't allow it"), as the person's own are (EN-35).
+- **PRJ-11** *2026-11-05 (scan N26-api-client-config#1, #18).* A provider is set up when it's the configured one, has an API key, or is signed in to (OAuth, ADC, an AWS profile, Entra). A trusted project's MCP servers, like a plugin's, go through one check of the organization's policy (`Config.AddMCPServer`): with `[mcp] own` false they're ignored, reason `org_policy` ("your organization's policy doesn't allow it"), as the person's own are.
   - Project hooks run after the user's hooks for the same event.
   - A project MCP server is added unless the user has one with the same name, which wins. It is never auto-approved and always sandboxed.
   - Allow rules are added with the scope `project`.

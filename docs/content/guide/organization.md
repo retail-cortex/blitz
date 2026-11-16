@@ -3,7 +3,7 @@ title: Your organization
 weight: 6
 ---
 
-Spec: [Blitz for organizations](../about/specs/spec_053_enterprise.md) (EN-10 to EN-22).
+Everything on this page comes with **Blitz Enterprise Server**, a licensed product your organization runs for itself.
 
 If your company runs Blitz Enterprise, connect Blitz to it: you sign in with your work account, and Blitz uses the models your organization offers you, under its limits, instead of keys of your own. Blitz itself stays the same, free and open source; the service is your organization's.
 

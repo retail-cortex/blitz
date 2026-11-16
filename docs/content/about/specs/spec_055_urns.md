@@ -7,10 +7,10 @@ weight: 55
 
 | | |
 |---|---|
-| Status | **Built** (2026-11-02: `pkg/urn`; the service answers every kind (workspaces to their members, people and groups as a company directory with no list of everyone, shared content to its maker and its shares' people), keeps artifacts in the spaces bucket, and names runs, jobs and artifacts in its API; Blitz lists and saves a run's files in Studio › Jobs (spec_053 EN-42). Drafted 2026-11-01, the owner: "by adopting and considering everything as a URN, it becomes both discoverable and unique", after asking how two people's workspaces named `home` would collide) |
-| Source | `pkg/urn` (`Name`, `Parse`, `New`, the kinds); `blitz-enterprise/internal/resources` (`Locator`: a name to its store's location; `GET /api/v1/resources/{urn}`) |
-| Tests | `pkg/urn/urn_test.go`; `blitz-enterprise/internal/resources` |
-| Depends on | [spec_053_enterprise](spec_053_enterprise.md) (Blitz and the organization's service), blitz-enterprise `spec_009_jobs` (runs and their artifacts), `spec_007_workspaces` (workspaces and their handles) |
+| Status | **Built** (2026-11-02: `pkg/urn`; Blitz lists and saves a run's files from an organization's service in Studio › Jobs. Drafted 2026-11-01, the owner: "by adopting and considering everything as a URN, it becomes both discoverable and unique", after asking how two people's workspaces named `home` would collide) |
+| Source | `pkg/urn` (`Name`, `Parse`, `New`, the kinds) |
+| Tests | `pkg/urn/urn_test.go` |
+| Depends on | Blitz Enterprise Server (the organization's service, its runs, artifacts and workspaces) |
 
 ## 1. Purpose
 
@@ -45,7 +45,7 @@ A resource name fixes that. Each thing has one name made only of IDs, which neve
   | `workspaces` | a workspace | `urn:blitz:workspaces:9b2f…` |
   | `jobs` | a job on the service | `urn:blitz:jobs:51aa…` |
   | `runs` | one run of a job | `urn:blitz:runs:e803…` |
-  | `content` | content someone shared: a chat's copy, a rendered page (blitz-enterprise `spec_008_sharing` SH-02, kept in its `artifacts` table) | `urn:blitz:content:4f19…` |
+  | `content` | content someone shared: a chat's copy, a rendered page | `urn:blitz:content:4f19…` |
 
   Shared content isn't `artifacts`: that kind is a run's (RN-12), and the two are kept, kept for and removed differently.
 
@@ -59,36 +59,8 @@ A resource name fixes that. Each thing has one name made only of IDs, which neve
   ```
 
   Without a path it's all of the run's artifacts; with one, one file.
-- **RN-13** A new kind is added here first, with how it's kept (RN-20). An unknown kind is refused by `Parse`, so a typo is an error, not a name nobody can find.
+- **RN-13** A new kind is added here first. An unknown kind is refused by `Parse`, so a typo is an error, not a name nobody can find.
 
-## 4. Where things are kept
-
-- **RN-20** A **locator** turns a name into its store's location. The service has one for each kind it keeps, chosen by its deployment:
-
-  | Kind | Store | Location |
-  |---|---|---|
-  | `users`, `groups`, `workspaces`, `jobs`, `runs`, `content` | Postgres | the row with that ID in `people`, `groups`, `workspaces`, `jobs`, `job_runs`, `artifacts` |
-  | `artifacts` (full and lite) | a Cloud Storage bucket | `gs://<bucket>/artifacts/<workspace-id>/<job-id>/<run-id>/<path>` |
-  | `artifacts` (a service on one machine, tests) | a folder | `<dir>/artifacts/<workspace-id>/<job-id>/<run-id>/<path>` |
-
-  A location is the locator's business: nothing else builds one, and nothing keeps one in place of the name. Moving a kind to another store changes its locator, not its names.
-- **RN-21** A name's IDs go into a location in the order the name has them, so a name's prefix is its location's prefix. Removing a workspace's artifacts is removing `artifacts/<workspace-id>/`.
-
-## 5. Asking about a name
-
-- **RN-30** `GET /api/v1/resources/{urn}` on the organization's service answers what a name is, for a caller who may see it:
-
-  ```json
-  {"urn": "urn:blitz:runs:e803…", "kind": "runs", "title": "nightly-sales, run 14",
-   "parent": "urn:blitz:jobs:51aa…", "created": "2026-11-01T06:00:04Z",
-   "links": {"artifacts": "urn:blitz:artifacts:9b2f…:51aa…:e803…"}}
-  ```
-
-  `title` is the thing's display name now, for showing, never for finding it again. A name the caller may not see, and one that doesn't exist, are both `404`, so a name doesn't tell anyone what exists.
-- **RN-31** A collection (RN-03), or a name with things under it, lists them: `GET /api/v1/resources/{urn}?children` answers `{"items": [ … ], "next": "…"}`, each item as in RN-30, newest first, 100 at a time.
-- **RN-32** An artifact file's content is `GET /api/v1/resources/{urn}?content`, with its media type, or a redirect to a signed URL that lasts 5 minutes when its store can make one.
-- **RN-33** Every other API that returns a thing also returns its `urn`, so a client can always ask about it later.
-
-## 6. On this computer
+## 4. On this computer
 
 - **RN-40** Blitz itself reads and writes names only for things it gets from an organization's service: a run's artifacts, a job, a workspace it syncs. It doesn't give names to things kept only on this computer; a local kind, if one is wanted, is added here first (RN-13).

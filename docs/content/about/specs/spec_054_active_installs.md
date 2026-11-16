@@ -66,7 +66,7 @@ What it must never become: a way to know who someone is, what they work on, what
   ```
 
   The service reads it at each use and the CLI at each command, so a change applies at once. Off, nothing is marked or sent, and the ID file isn't made or read. There's no switch in the window and no environment variable to turn it on; the Privacy page (AI-50) and `blitz config`'s template show it. It's a global setting: a workspace's settings can't change it.
-- **AI-31** *To come with spec_053_enterprise.* A Blitz Enterprise service may switch it off for its organization's people (its policy); their own service then counts their use for their license instead (Blitz Enterprise's heartbeat).
+- **AI-31** *To come with Blitz Enterprise Server.* A Blitz Enterprise service may switch it off for its organization's people (its policy); their own service then counts their use for their license instead (Blitz Enterprise's heartbeat).
 
 ## 6. The update check
 

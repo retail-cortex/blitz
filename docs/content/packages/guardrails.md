@@ -5,7 +5,7 @@ weight: 10
 
 Blitz's guardrails on a model's request and reply. Source: [`pkg/guardrails`](https://github.com/retail-cortex/blitz/tree/main/pkg/guardrails).
 
-`pkg/guardrails` runs the guardrails for a program that has a model's request and reply rather than an engine turn, such as a gateway between Blitz and the models ([spec_053_enterprise](../about/specs/spec_053_enterprise.md) EN-23). The rules and their checks are the engine's own (`pkg/engine/gates`), so a guardrail means the same there as on the desktop. The engine's packages stay private: this package names their types for other programs.
+`pkg/guardrails` runs the guardrails for a program that has a model's request and reply rather than an engine turn, such as a gateway between Blitz and the models (Blitz Enterprise Server). The rules and their checks are the engine's own (`pkg/engine/gates`), so a guardrail means the same there as on the desktop. The engine's packages stay private: this package names their types for other programs.
 
 ## API
 
@@ -27,4 +27,3 @@ Custom output guardrails judge a whole answer, which a gateway has only once it'
 
 The enterprise service's model gateway, and the engine (`Hold`).
 
-Spec: [enterprise](../about/specs/spec_053_enterprise.md).

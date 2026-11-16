@@ -165,5 +165,5 @@ Voice is a way of driving the agent you already have, not a second agent. The vo
 
 ## 11. Open questions
 
-- **VOX-90** VOX-52 assumes the organization's policy can lock a setting; the policy today switches off built-ins by name (spec_053 EN-31). If it can't lock `[voice]`, building VOX-52 adds that.
+- **VOX-90** VOX-52 assumes the organization's policy can lock a setting; the policy today switches off built-ins by name. If it can't lock `[voice]`, building VOX-52 adds that.
 - **VOX-91** Wake words ("Hey Blitz") are left out: they need the microphone open all the time. Not planned.
