@@ -407,7 +407,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		List:   w.ListWorkers,
 	})
 	w.tools.SetGlobalExperienceSaver(w.saveGlobalExperience)
-	w.tools.SetBrowserProfile(w.browserProfile)
+	w.tools.SetBrowserProfiles(w.browserProfiles)
 	w.tools.SetAgentBrowserHost(w.openAgentBrowser)
 	w.tools.SetPageOpener(w.openPage)
 	w.tools.SetFileOpener(w.openFile)
@@ -713,22 +713,30 @@ func (w *Workspace) instructions() string {
 // set), for opening a browser profile to sign in by hand (BP-05).
 func FindBrowser(path string) (string, error) { return browser.Find(path) }
 
-// browserProfile is the browser profile the workspace browses with, as the
-// person chose it (spec_049_browser_profiles BP-03): its name, its folder
-// and the sites it browses without asking. None ("") when none is chosen, or the
-// project's settings wait for trust or were declined, since a project the
-// person hasn't trusted could steer the agent into their sign-ins.
-func (w *Workspace) browserProfile() tools.BrowserProfile {
-	if !w.projectTrusted() {
-		return tools.BrowserProfile{}
-	}
+// browserProfiles are the person's browser profiles as the workspace
+// sees them (spec_049_browser_profiles BP-03, BP-03b): the one it browses
+// with, as the person chose it (its name, its folder and the sites it
+// browses without asking), and all of them, which the agent may ask to
+// browse with. The workspace's own isn't used while the project's
+// settings wait for trust or were declined (BP-03a: a project the person
+// hasn't trusted could steer the agent into their sign-ins); it's named
+// as withheld instead.
+func (w *Workspace) browserProfiles() tools.BrowserProfiles {
 	store := config.OpenBrowserProfiles(settingsDir(w.cfg))
-	name := store.ForWorkspace(w.Dir())
-	p, ok := store.Get(name)
-	if name == "" || !ok {
-		return tools.BrowserProfile{}
+	var out tools.BrowserProfiles
+	for _, p := range store.List() {
+		out.All = append(out.All, tools.BrowserProfile{Name: p.Name, Dir: store.Dir(p.Name), Allow: p.AllowDomains})
 	}
-	return tools.BrowserProfile{Name: name, Dir: store.Dir(name), Allow: p.AllowDomains}
+	name := store.ForWorkspace(w.Dir())
+	i := slices.IndexFunc(out.All, func(p tools.BrowserProfile) bool { return p.Name == name })
+	switch {
+	case name == "" || i < 0:
+	case !w.projectTrusted():
+		out.Withheld = name
+	default:
+		out.Current = out.All[i]
+	}
+	return out
 }
 
 // harnessFolders tells the agents about the harness's scratch folder and

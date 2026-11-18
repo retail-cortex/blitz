@@ -34,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -692,27 +693,36 @@ func TestHarnessFolders(t *testing.T) {
 }
 
 // The workspace browses with the profile the person chose for it, with
-// its sites, unless its project settings aren't trusted (BP-03).
-func TestWorkspaceBrowserProfile(t *testing.T) {
+// its sites, unless its project settings aren't trusted, when it's named
+// as withheld (BP-03, BP-03a); every profile is offered (BP-03b).
+func TestWorkspaceBrowserProfiles(t *testing.T) {
 	w := openTest(t)
 	store := config.OpenBrowserProfiles(filepath.Join(os.Getenv("HOME"), ".blitz"))
-	assert.Empty(t, w.browserProfile().Name, "none chosen")
+	assert.Equal(t, tools.BrowserProfiles{}, w.browserProfiles(), "no profiles")
 
-	_, err := store.Create("work", time.Now())
-	require.NoError(t, err)
+	for _, name := range []string{"work", "home"} {
+		_, err := store.Create(name, time.Now())
+		require.NoError(t, err)
+	}
 	require.NoError(t, store.SetAllowDomains("work", []string{"mail.example.com"}))
+	got := w.browserProfiles()
+	assert.Empty(t, got.Current.Name, "none chosen")
+	require.Len(t, got.All, 2, "but both offered")
+
 	require.NoError(t, store.SetWorkspace(w.Dir(), "work"))
-	got := w.browserProfile()
-	assert.Equal(t, "work", got.Name)
-	assert.Equal(t, store.Dir("work"), got.Dir)
-	assert.Equal(t, []string{"mail.example.com"}, got.Allow)
+	got = w.browserProfiles()
+	assert.Equal(t, tools.BrowserProfile{Name: "work", Dir: store.Dir("work"), Allow: []string{"mail.example.com"}}, got.Current)
+	assert.Empty(t, got.Withheld)
 
 	for _, state := range []string{"pending", "declined"} {
 		t.Run("project settings "+state, func(t *testing.T) {
 			old := w.project.State
 			w.project.State = state
 			t.Cleanup(func() { w.project.State = old })
-			assert.Empty(t, w.browserProfile().Name, "a project not trusted never reaches the sign-ins")
+			got := w.browserProfiles()
+			assert.Empty(t, got.Current.Name, "a project not trusted never reaches the sign-ins")
+			assert.Equal(t, "work", got.Withheld, "but the agent is told why")
+			assert.Len(t, got.All, 2)
 		})
 	}
 }

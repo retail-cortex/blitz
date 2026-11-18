@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ type BrowserInput struct {
 	Value    string `json:"value,omitempty" jsonschema:"select: the option's value or text"`
 	Script   string `json:"script,omitempty" jsonschema:"script: a JavaScript expression run in the page; its value (awaited) is returned"`
 	FullPage bool   `json:"full_page,omitempty" jsonschema:"screenshot: the whole page, not just the viewport"`
+	Profile  string `json:"profile,omitempty" jsonschema:"browse signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); none to browse signed out; empty: as before in this chat"`
 }
 
 // BrowserOutput is what it returns.
@@ -111,6 +113,11 @@ type browserTool struct {
 	// app's view, shown so.
 	shows map[string]string
 	inApp string
+	// chosen are the profiles each chat asked to browse with (BP-03b; ""
+	// for none), noted the notes already given each chat (BP-03c); actMu
+	// guards them.
+	chosen map[string]string
+	noted  map[string]bool
 }
 
 func newBrowserTool(r *Registry, cfg config.BrowserConfig, web WebFetchConfig, timeout time.Duration, dir string) *browserTool {
@@ -123,8 +130,8 @@ func NewBrowserTool(bt *browserTool) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name: "browser",
-			Description: "Drive a web browser (Chromium, its own profile): navigate to a page, click, type, select, read its text or HTML, take a screenshot (shown to you), read the console, run a script, and record a walkthrough. " +
-				"Use it for pages that need JavaScript or interaction, and to check a web app the user is building; for a plain page, web_fetch is faster. New sites need the user's approval.",
+			Description: "Drive a web browser: navigate to a page, click, type, select, read its text or HTML, take a screenshot (shown to you), read the console, run a script, and record a walkthrough. " +
+				"It can browse signed in to the user's sites with one of their browser profiles (profile: its name; a navigate's note lists them): use it for anything behind a sign-in, for pages that need JavaScript or interaction, and to check a web app the user is building; for a plain public page, web_fetch is faster. New sites need the user's approval.",
 		},
 		func(ctx agent.Context, in BrowserInput) (BrowserOutput, error) {
 			return bt.run(ctx, in), nil
@@ -147,7 +154,18 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		out.Note = "The browser is closed."
 		return out
 	}
-	bt.syncProfile()
+	p, all, err := bt.syncProfile(ctx, in.Profile)
+	if err != nil {
+		return fail(err)
+	}
+	if action == "navigate" {
+		// Told once the browser is up, so the note says where it browses.
+		defer func() {
+			if note := bt.profileNote(sessionOf(ctx), p, all); note != "" {
+				out.Note = strings.TrimSpace(out.Note + " " + note)
+			}
+		}()
+	}
 	if action == "stop_recording" {
 		if bt.rec == "" {
 			return fail(errors.New("not recording"))
@@ -402,14 +420,22 @@ func (bt *browserTool) webRules() WebFetchConfig {
 	return w
 }
 
-// syncProfile takes the workspace's browser profile as it is now (BP-03),
-// before an action is judged: a change of it closes the browser, so the
-// next one starts with it. bt.mu must be held.
-func (bt *browserTool) syncProfile() {
-	var p BrowserProfile
-	if f := bt.r.browserProfile(); f != nil {
-		p = f()
+// syncProfile takes the browser profile this chat browses with, before an
+// action is judged (BP-03): the one it asked for (name, BP-03b; "none"
+// for none), asked about first unless it's the workspace's own, else the
+// one it asked for before, else the workspace's. A change of profile
+// closes the browser, so the next one starts with it. It returns the
+// profile and all of them, for the agent's note (BP-03c). bt.mu must be
+// held.
+func (bt *browserTool) syncProfile(ctx context.Context, name string) (BrowserProfile, BrowserProfiles, error) {
+	all := bt.r.browserProfiles()
+	session := sessionOf(ctx)
+	if name = strings.TrimSpace(name); name != "" {
+		if err := bt.choose(ctx, session, name, all); err != nil {
+			return BrowserProfile{}, all, err
+		}
 	}
+	p := bt.effective(session, all)
 	bt.actMu.Lock()
 	changed := bt.profile != p.Dir
 	bt.profile, bt.profileName, bt.allow = p.Dir, p.Name, p.Allow
@@ -418,6 +444,123 @@ func (bt *browserTool) syncProfile() {
 		bt.b.Close()
 		bt.b = nil
 	}
+	return p, all, nil
+}
+
+// choose makes the chat browse with profile name ("none": none): the
+// user is asked first unless it's the workspace's own, or none.
+func (bt *browserTool) choose(ctx context.Context, session, name string, all BrowserProfiles) error {
+	if strings.EqualFold(name, "none") {
+		bt.setChosen(session, "")
+		return nil
+	}
+	i := slices.IndexFunc(all.All, func(p BrowserProfile) bool { return p.Name == name })
+	if i < 0 {
+		if len(all.All) == 0 {
+			return fmt.Errorf("no browser profile %q: the user has none (they make one in Settings › Browser)", name)
+		}
+		return fmt.Errorf("no browser profile %q; the user's profiles: %s", name, profileList(all.All))
+	}
+	if name != all.Current.Name {
+		p := all.All[i]
+		detail := fmt.Sprintf("browse signed in with your browser profile %q", name)
+		if len(p.Allow) > 0 {
+			detail += " (its sites: " + strings.Join(p.Allow, ", ") + ")"
+		}
+		if err := bt.r.hooks.Approve(ctx, api.ApprovalRequest{
+			Tool: "browser", Kind: api.ActionNetwork, Detail: detail,
+			Key: "browser:profile:" + name, KeyLabel: "browsing with your browser profile " + name, Targets: p.Allow,
+		}); err != nil {
+			return err
+		}
+	}
+	bt.setChosen(session, name)
+	return nil
+}
+
+func (bt *browserTool) setChosen(session, name string) {
+	bt.actMu.Lock()
+	defer bt.actMu.Unlock()
+	if bt.chosen == nil {
+		bt.chosen = map[string]string{}
+	}
+	bt.chosen[session] = name
+}
+
+// effective is the profile session browses with: the one it chose (if
+// it still exists), else the workspace's.
+func (bt *browserTool) effective(session string, all BrowserProfiles) BrowserProfile {
+	bt.actMu.Lock()
+	name, ok := bt.chosen[session]
+	bt.actMu.Unlock()
+	if !ok {
+		return all.Current
+	}
+	if i := slices.IndexFunc(all.All, func(p BrowserProfile) bool { return p.Name == name }); name != "" && i >= 0 {
+		return all.All[i]
+	}
+	return BrowserProfile{}
+}
+
+// profileNote is what the agent is told once a chat about its profile
+// (BP-03c): browsing signed out while the user has profiles, which ones;
+// the workspace's withheld, why; in Chrome's copy of one, that the app's
+// sign-ins aren't in it. bt.mu must be held.
+func (bt *browserTool) profileNote(session string, p BrowserProfile, all BrowserProfiles) string {
+	var key, note string
+	bt.actMu.Lock()
+	_, chose := bt.chosen[session]
+	inApp := bt.inApp != ""
+	bt.actMu.Unlock()
+	switch {
+	case p.Name == "" && all.Withheld != "" && !chose:
+		key = "withheld"
+		note = fmt.Sprintf("Browsing signed out: this workspace's browser profile %q isn't used until the user trusts the project's settings.", all.Withheld)
+		if len(all.All) > 0 {
+			note += " Pass profile to browse with one anyway (the user is asked); the user's profiles: " + profileList(all.All) + "."
+		}
+	case p.Name == "" && len(all.All) > 0 && !chose:
+		key = "signed-out"
+		note = "Browsing signed out. To browse signed in to the user's sites, pass profile with one of their browser profiles (the user is asked first): " + profileList(all.All) + "."
+	case p.Name != "" && bt.b != nil && !inApp:
+		key = "chrome:" + p.Name
+		note = fmt.Sprintf("Browsing with Chrome's copy of the browser profile %q: sites the user signed in to in the app (Settings › Browser › Sign in…) aren't signed in here; Sign in with Chrome… signs in to this copy.", p.Name)
+	default:
+		return ""
+	}
+	bt.actMu.Lock()
+	defer bt.actMu.Unlock()
+	if bt.noted == nil {
+		bt.noted = map[string]bool{}
+	}
+	if bt.noted[session+"\x00"+key] {
+		return ""
+	}
+	bt.noted[session+"\x00"+key] = true
+	return note
+}
+
+// profileList is the profiles by name, each with its sites.
+func profileList(ps []BrowserProfile) string {
+	parts := make([]string, 0, len(ps))
+	for _, p := range ps {
+		if len(p.Allow) > 0 {
+			parts = append(parts, p.Name+" ("+strings.Join(p.Allow, ", ")+")")
+		} else {
+			parts = append(parts, p.Name)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// signedInAs is the profile session browses with when its sites include
+// host ("": none), for web_fetch (BP-07).
+func (bt *browserTool) signedInAs(ctx context.Context, host string) string {
+	p := bt.effective(sessionOf(ctx), bt.r.browserProfiles())
+	if p.Name == "" || !matchDomain(p.Allow, host) {
+		return ""
+	}
+	return p.Name
 }
 
 // show is how the chat sees the agent browse in the app (AB-02):

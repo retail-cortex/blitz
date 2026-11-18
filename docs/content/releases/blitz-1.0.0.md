@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.0.0
-weight: 2
+weight: 3
 ---
 
 Talk to Blitz. Click the microphone in the chat bar, say what you want done, and your agent gets to work as if you'd typed it; when it's finished, Blitz tells you what changed and what's waiting for you. And Blitz now has a personality of your choosing: a patient mentor, a straight talker, a calm hand at 2 a.m., or one you write yourself.

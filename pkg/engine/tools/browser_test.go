@@ -288,7 +288,13 @@ func TestBrowserToolUsesTheWorkspacesProfile(t *testing.T) {
 		return browser.Attach(ctx, page.URL, o)
 	}
 	dir, allow := "/profiles/work", []string{"mail.example"}
-	bt.r.SetBrowserProfile(func() BrowserProfile { return BrowserProfile{Name: "work", Dir: dir, Allow: allow} })
+	bt.r.SetBrowserProfiles(func() BrowserProfiles {
+		if dir == "" {
+			return BrowserProfiles{}
+		}
+		p := BrowserProfile{Name: "work", Dir: dir, Allow: allow}
+		return BrowserProfiles{Current: p, All: []BrowserProfile{p}}
+	})
 	ctx := context.Background()
 
 	out := bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://mail.example/"})
@@ -349,7 +355,8 @@ func TestBrowserToolInTheApp(t *testing.T) {
 				return browser.Attach(ctx, page.URL, o)
 			}
 			var opened []AgentBrowserOptions
-			bt.r.SetBrowserProfile(func() BrowserProfile { return BrowserProfile{Name: "work", Dir: "/profiles/work"} })
+			work := BrowserProfile{Name: "work", Dir: "/profiles/work"}
+			bt.r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work}} })
 			bt.r.SetAgentBrowserHost(func(ctx context.Context, o AgentBrowserOptions) (browser.Transport, error) {
 				if tt.noWindow {
 					return nil, errors.New("no desktop window")
@@ -418,4 +425,129 @@ func TestBrowserToolViewThatWontConnect(t *testing.T) {
 	bt.r.SetAgentBrowserHost(func(context.Context, AgentBrowserOptions) (browser.Transport, error) { return deadTransport{}, nil })
 	out := bt.run(context.Background(), BrowserInput{Action: "navigate", URL: "https://shop.example/"})
 	assert.NotEmpty(t, out.Error)
+}
+
+// The agent may browse with any of the person's profiles (BP-03b): the
+// workspace's own without asking, another once the person allows it, and
+// none on asking; it's told once a chat what it could use or why the
+// workspace's isn't used (BP-03c).
+func TestBrowserToolProfiles(t *testing.T) {
+	work := BrowserProfile{Name: "work", Dir: "/profiles/work", Allow: []string{"mail.example"}}
+	home := BrowserProfile{Name: "home", Dir: "/profiles/home", Allow: []string{"mail.example"}}
+	tests := []struct {
+		name     string
+		profiles BrowserProfiles
+		refuse   bool     // the person refuses the profile question
+		steps    []string // each a navigate to mail.example with this profile
+		wantErr  string   // the last step's
+		wantDirs []string // the browsers' profile folders, in launch order
+		asked    []string // the profile questions
+		note     string   // in the first step's note
+	}{
+		{name: "the workspace's own, unasked", profiles: BrowserProfiles{Current: work, All: []BrowserProfile{work, home}},
+			steps: []string{"", "work"}, wantDirs: []string{"/profiles/work"}, note: "Chrome's copy of the browser profile \"work\""},
+		{name: "another, asked once and kept for the chat", profiles: BrowserProfiles{Current: work, All: []BrowserProfile{work, home}},
+			steps: []string{"home", ""}, wantDirs: []string{"/profiles/home"}, asked: []string{"browser:profile:home"}},
+		{name: "another, refused", profiles: BrowserProfiles{Current: work, All: []BrowserProfile{work, home}}, refuse: true,
+			steps: []string{"home"}, wantErr: "not approved", asked: []string{"browser:profile:home"}},
+		{name: "none chosen, the user's listed", profiles: BrowserProfiles{All: []BrowserProfile{work, home}},
+			steps: []string{"", ""}, wantDirs: []string{""}, note: "pass profile with one of their browser profiles (the user is asked first): work (mail.example), home (mail.example)"},
+		{name: "signed out on asking", profiles: BrowserProfiles{Current: work, All: []BrowserProfile{work}},
+			steps: []string{"none"}, wantDirs: []string{""}},
+		{name: "no such profile", profiles: BrowserProfiles{All: []BrowserProfile{work}},
+			steps: []string{"play"}, wantErr: "no browser profile \"play\"; the user's profiles: work (mail.example)"},
+		{name: "no profiles at all", steps: []string{"play"}, wantErr: "the user has none"},
+		{name: "the workspace's withheld until trusted", profiles: BrowserProfiles{All: []BrowserProfile{work}, Withheld: "work"},
+			steps: []string{""}, wantDirs: []string{""}, note: "\"work\" isn't used until the user trusts the project's settings"},
+		{name: "the withheld one, asked", profiles: BrowserProfiles{All: []BrowserProfile{work}, Withheld: "work"},
+			steps: []string{"work"}, wantDirs: []string{"/profiles/work"}, asked: []string{"browser:profile:work"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page := browsertest.New(t)
+			hooks, reqs := decisionHooks(api.DecisionOnce)
+			if tt.refuse {
+				hooks, reqs = decisionHooks(api.DecisionDeny)
+			}
+			bt := testBrowserTool(t, hooks, nil)
+			var dirs []string
+			bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
+				dirs = append(dirs, o.ProfileDir)
+				return browser.Attach(ctx, page.URL, o)
+			}
+			bt.r.SetBrowserProfiles(func() BrowserProfiles { return tt.profiles })
+			t.Cleanup(func() {
+				bt.mu.Lock()
+				bt.closeLocked()
+				bt.mu.Unlock()
+			})
+			var outs []BrowserOutput
+			for _, p := range tt.steps {
+				outs = append(outs, bt.run(context.Background(), BrowserInput{Action: "navigate", URL: "https://mail.example/", Profile: p}))
+			}
+			last := outs[len(outs)-1]
+			if tt.wantErr != "" {
+				assert.Contains(t, last.Error, tt.wantErr)
+			} else {
+				for _, o := range outs {
+					require.Empty(t, o.Error)
+				}
+			}
+			assert.Equal(t, tt.wantDirs, dirs)
+			var asked []string
+			for _, r := range *reqs {
+				if strings.HasPrefix(r.Key, "browser:profile:") {
+					asked = append(asked, r.Key)
+				}
+			}
+			assert.Equal(t, tt.asked, asked)
+			if tt.note != "" {
+				assert.Contains(t, outs[0].Note, tt.note)
+				if len(outs) > 1 {
+					assert.NotContains(t, outs[1].Note, tt.note, "once a chat")
+				}
+			}
+		})
+	}
+}
+
+// web_fetch loads a page of a site the profile in use signs in to in the
+// browser, signed in (BP-07); any other page, or one the browser can't
+// load, is a plain request.
+func TestWebFetchSignedIn(t *testing.T) {
+	tests := []struct {
+		name    string
+		as      string
+		pageErr error
+		want    bool
+	}{
+		{name: "signed in", as: "work", want: true},
+		{name: "no profile has the site", as: ""},
+		{name: "the browser can't load it", as: "work", pageErr: errors.New("no browser")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var hosts, loaded []string
+			f := newWebFetcher(WebFetchConfig{
+				AllowNetwork: true, MaxBytes: 1 << 20,
+				SignedInAs: func(_ context.Context, host string) string { hosts = append(hosts, host); return tt.as },
+				Page: func(_ context.Context, u string) (BrowserOutput, error) {
+					loaded = append(loaded, u)
+					return BrowserOutput{URL: u, Title: "Inbox", Text: "3 unread"}, tt.pageErr
+				},
+			})
+			u, err := url.Parse("https://Mail.Example/inbox")
+			require.NoError(t, err)
+			out, ok := f.signedIn(context.Background(), u)
+			assert.Equal(t, tt.want, ok)
+			assert.Equal(t, []string{"mail.example"}, hosts)
+			if !tt.want {
+				return
+			}
+			assert.Equal(t, []string{"https://Mail.Example/inbox"}, loaded)
+			assert.Equal(t, "browser", out.Via)
+			assert.Equal(t, "Inbox\n\n3 unread", out.Content)
+			assert.Contains(t, out.Note, `signed in with the user's browser profile "work"`)
+		})
+	}
 }

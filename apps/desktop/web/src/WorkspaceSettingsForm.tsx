@@ -436,36 +436,36 @@ export function WorkspaceSettingsForm({
           </Field>
         </Section>
 
+        {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Browser; shown in simple mode too, as the agent browses signed in only with one (BP-06). */}
+        <Section id="browser" icon={mdiWeb} title={t("desktop.rs.browser")} summary={browser.current || t("desktop.rs.browser_none")}>
+          <Field label={t("desktop.rs.browser_profile")} supporting={t("desktop.rs.browser_profile_help")}>
+            {(id) => (
+              <select
+                id={id}
+                className="select"
+                value={browser.current}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  void act(() => config.setWorkspaceBrowserProfile({ workspace: dir, name }), name ? t("desktop.rs.browser_set", { name }) : t("desktop.rs.browser_cleared")).then(() => setBrowser((b) => ({ ...b, current: name })));
+                }}
+              >
+                <option value="">{t("desktop.rs.browser_none")}</option>
+                {browser.names.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </Section>
+
         {/* Simple mode stops here: what follows has sensible defaults. */}
         {advanced && (
           <>
             <div className="panel-divider" role="separator">
               <span className="t-label">{t("desktop.rs.advanced")}</span>
             </div>
-
-            {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Resources › Browser. */}
-            <Section id="browser" icon={mdiWeb} title={t("desktop.rs.browser")} summary={browser.current || t("desktop.rs.browser_none")}>
-              <Field label={t("desktop.rs.browser_profile")} supporting={t("desktop.rs.browser_profile_help")}>
-                {(id) => (
-                  <select
-                    id={id}
-                    className="select"
-                    value={browser.current}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      void act(() => config.setWorkspaceBrowserProfile({ workspace: dir, name }), name ? t("desktop.rs.browser_set", { name }) : t("desktop.rs.browser_cleared")).then(() => setBrowser((b) => ({ ...b, current: name })));
-                    }}
-                  >
-                    <option value="">{t("desktop.rs.browser_none")}</option>
-                    {browser.names.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            </Section>
 
             <Section id="thinking" icon={mdiBrain} title={t("desktop.rs.thinking")} summary={efforts().find((e) => e.value === (settings?.effort ?? ""))?.label} pairs>
               <Field label={t("desktop.rs.effort")} supporting={t("desktop.rs.effort_help")}>

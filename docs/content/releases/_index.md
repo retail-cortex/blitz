@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 1.1.1](blitz-1.1.1.md): your agents browse signed in, with the browser profiles you sign in to.
 - [Blitz 1.1.0](blitz-1.1.0.md): Settings for every workspace, Studio for each one, evals beside every agent, and switches for agents and rules.
 - [Blitz 1.0.0](blitz-1.0.0.md): talk to Blitz, and give it a personality of your own.
 - [Blitz 0.9.13](blitz-0.9.13.md): language servers that understand Bazel, and keys and certificates your commands can use while the model never reads them.
