@@ -34,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/images"
@@ -55,6 +56,7 @@ type Server struct {
 	configDir string      // the settings directory (--config; \"\" for ~/.blitz)
 	started   time.Time   // when New ran
 	program   os.FileInfo // the executable as it was then (nil if unknown)
+	settings  string      // the global settings as they were then (config.SettingsStamp)
 	logDir    string      // where the diagnostic log is written ("": off)
 	shutdown  func()      // stops the service, for Shutdown (nil: it can't)
 	sched     *scheduler  // nil: workers aren't run
@@ -108,6 +110,7 @@ func New(open Opener, opts ...Option) *Server {
 	for _, o := range opts {
 		o(s)
 	}
+	s.settings = config.SettingsStamp(config.GlobalSettingsFiles(s.configDir))
 	return s
 }
 

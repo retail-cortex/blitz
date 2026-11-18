@@ -59,6 +59,8 @@ export interface WebPage {
   forward: boolean;
   /** The agent's view, which it drives (spec_050_agent_browser); false once the user takes it over. */
   agent?: boolean;
+  /** The browser profile it's signed in with (BP-08): an agent's open_page that named one. */
+  profile?: string;
 }
 
 /** Where to put the cursor when a tab is shown next. */
@@ -97,7 +99,7 @@ export interface EditorModel {
   /** A file was renamed or deleted in the shelf. */
   moved: (from: string, to: string | null) => void;
   /** Opens a web page in a tab of its own (spec_038_electron EL-100); returns the tab's path. */
-  openWeb: (url: string) => string;
+  openWeb: (url: string, profile?: string) => string;
   /** Shows the agent's watched view id as a tab (spec_050_agent_browser AB-03). */
   openAgentWeb: (id: string) => void;
   /** What a web tab's preview said of its page. */
@@ -296,9 +298,9 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [dir, patch],
   );
 
-  const openWeb = useCallback((url: string) => {
+  const openWeb = useCallback((url: string, profile?: string) => {
     const path = webPath(newWebId());
-    setTabs((ts) => [...ts, { path, name: webTabName(url, ""), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url, title: "", loading: true, back: false, forward: false } }]);
+    setTabs((ts) => [...ts, { path, name: webTabName(url, ""), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url, title: "", loading: true, back: false, forward: false, ...(profile ? { profile } : {}) } }]);
     setActive(path);
     setTarget(null);
     return path;

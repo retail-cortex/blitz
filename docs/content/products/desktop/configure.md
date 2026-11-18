@@ -91,7 +91,7 @@ What every workspace shares: the same tabs as a workspace's **Studio › Resourc
 
 Your organization's sign-in is under **Providers › Organization**, and **Voice** under **Personality**.
 
-- **Service**: the Blitz service holds your workspaces and runs jobs, also while the window is closed. **Restart** or **Stop** it, start it at login, and **Show in the system tray**. [The service](../service.md) explains what it does.
+- **Service**: the Blitz service holds your workspaces and runs jobs, also while the window is closed. It reads your settings when it starts, so when you close Settings after changing them, Blitz offers to restart it (**Restart now**), and shows it restarting until it's back. **Restart** or **Stop** it, start it at login, and **Show in the system tray**. [The service](../service.md) explains what it does.
 - **Logs**: the service's log by day, filtered by level (**All**, **Info**, **Warnings**, **Errors**) and text. The first place to look when something fails.
 - **About**: the version, the license and the third-party notices.
 

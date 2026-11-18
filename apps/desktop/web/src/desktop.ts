@@ -26,6 +26,7 @@ import { workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
 import { t } from "./i18n";
 import { defaultPrefs, normalizePrefs, type Prefs } from "./prefs";
+import { markRestarting, restartDone } from "./serviceRestart";
 
 /**
  * Whether the service answers, whether its login item is installed, where
@@ -110,7 +111,7 @@ type AppMethods = {
   PruneUpdateDownloads(keep: number): Promise<UpdateDownloads>;
   Quit(): Promise<void>;
   OpenApp(): Promise<void>;
-  PreviewOpen(id: string, url: string): Promise<string>;
+  PreviewOpen(id: string, url: string, profile?: string): Promise<string>;
   PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
   PreviewVisible(id: string, visible: boolean): Promise<void>;
   PreviewNavigate(id: string, step: string): Promise<void>;
@@ -306,7 +307,18 @@ export async function serviceStatus(): Promise<ServiceStatus> {
   return app().ServiceStatus();
 }
 /** Installs this app's blitzd as the login item and starts it. */
-export const installService = () => app().InstallService();
+/** Asks for f's restart or start, said while it's on its way (DSK-51d); a failure ends it. */
+async function onItsWay(what: "restart" | "start", f: () => Promise<void>) {
+  markRestarting(what);
+  try {
+    await f();
+  } catch (e) {
+    restartDone();
+    throw e;
+  }
+}
+/** Installs this app's blitzd as the login item and starts it. */
+export const installService = () => onItsWay("start", () => app().InstallService());
 
 /** Shows the service in the system tray at login and now, or stops that. */
 export const setTray = (on: boolean) => app().SetTray(on);
@@ -323,7 +335,7 @@ export const reinstallCLI = () => app().ReinstallCLI();
 /** Stops the running service: its login item, else process pid (0: unknown). */
 export const stopService = (pid: number) => app().StopService(pid);
 /** Stops the running service and starts the blitzd that goes with this app. */
-export const restartService = (pid: number) => app().RestartService(pid);
+export const restartService = (pid: number) => onItsWay("restart", () => app().RestartService(pid));
 
 /** Whether the file a running service started from is still there (true in a browser). */
 export const programExists = async (path: string) => (canCall("ProgramExists") && path ? app().ProgramExists(path) : true);
@@ -635,7 +647,7 @@ export const canPreview = () => windowHas("PreviewOpen");
  * Opens web preview id at an address (a bare host gets http:// or
  * https://), or points it there when it's open; resolves with the address.
  */
-export const previewOpen = (id: string, url: string) => app().PreviewOpen(id, url);
+export const previewOpen = (id: string, url: string, profile = "") => app().PreviewOpen(id, url, profile);
 /** Places web preview id over the page's placeholder. */
 export const previewBounds = (id: string, b: PreviewBounds) => (canPreview() ? app().PreviewBounds(id, b).catch(() => {}) : Promise.resolve());
 /** Shows or hides web preview id (hidden under a menu, a dialog, a drawer, or another tab). */

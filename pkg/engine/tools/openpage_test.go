@@ -115,7 +115,7 @@ func TestOpenPage(t *testing.T) {
 			r.page.open = tt.open
 			var window []string
 			if !tt.noWindow {
-				r.SetPageOpener(func(_ context.Context, u, where string) error {
+				r.SetPageOpener(func(_ context.Context, u, where, _ string) error {
 					assert.Equal(t, "https://github.com", u)
 					if tt.windowFail {
 						return errors.New("no desktop window")
@@ -129,7 +129,7 @@ func TestOpenPage(t *testing.T) {
 				ctx = Unattended(ctx, func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil })
 			}
 			for range 2 { // the same chat, twice
-				got, err := r.openPage(ctx, "https://github.com")
+				got, err := r.openPage(ctx, "https://github.com", "")
 				if tt.err != "" {
 					assert.ErrorContains(t, err, tt.err)
 					continue
@@ -148,7 +148,7 @@ func TestOpenPage(t *testing.T) {
 // won't open, or a system browser that won't start.
 func TestOpenPageTool(t *testing.T) {
 	r := &Registry{hooks: &Hooks{}}
-	r.SetPageOpener(func(context.Context, string, string) error { return nil })
+	r.SetPageOpener(func(context.Context, string, string, string) error { return nil })
 	r.page.open = PageEmbedded
 	open := toolOf(t)(NewOpenPageTool(r))
 	out := runTool(t, open, map[string]any{"url": "github.com"})
@@ -178,7 +178,7 @@ func TestOpenPageAskRuleAndSessionGone(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			hooks, reqs := decisionHooks(tc.decision)
 			r := &Registry{hooks: hooks, rules: rulesOf(t, nil, []string{"web(ask.example)"}, nil)}
-			r.SetPageOpener(func(context.Context, string, string) error { return nil })
+			r.SetPageOpener(func(context.Context, string, string, string) error { return nil })
 			r.page.open = PageEmbedded
 			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
 			if tc.wantErr != "" {
@@ -198,4 +198,59 @@ func TestOpenPageAskRuleAndSessionGone(t *testing.T) {
 	r.SessionGone("s1")
 	assert.Equal(t, map[string]string{"s2": PageEmbedded}, r.page.where)
 	assert.Equal(t, map[string]string{"s2": "silent"}, r.browser.shows)
+}
+
+// open_page shows a page signed in with a browser profile (BP-08): the one
+// named, asked first unless it's the workspace's own, else the one the
+// chat browses with; the system's browser has its own sign-ins.
+func TestOpenPageProfiles(t *testing.T) {
+	work := BrowserProfile{Name: "work", Dir: "/profiles/work"}
+	home := BrowserProfile{Name: "home", Dir: "/profiles/home", Allow: []string{"mail.example"}}
+	tests := []struct {
+		name    string
+		where   string
+		profile string
+		want    string // the profile the window got
+		asked   []string
+		note    string
+		err     string
+	}{
+		{name: "the chat's, the workspace's own", where: PageEmbedded, want: "work"},
+		{name: "the workspace's own, named", where: PageEmbedded, profile: "work", want: "work"},
+		{name: "another, asked", where: PageEmbedded, profile: "home", want: "home", asked: []string{"browser:profile:home"}},
+		{name: "none", where: PageEmbedded, profile: "none", want: ""},
+		{name: "no such profile", where: PageEmbedded, profile: "play", err: "no browser profile \"play\""},
+		{name: "the system's browser", where: PageSystem, profile: "work", want: "", note: "the browser profile \"work\" is only for the app's browser"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hooks, reqs := decisionHooks(api.DecisionOnce)
+			r := &Registry{hooks: hooks}
+			r.browser = &browserTool{r: r}
+			r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work, home}} })
+			r.page.open = tt.where
+			var got []string
+			r.SetPageOpener(func(_ context.Context, _, _, profile string) error { got = append(got, profile); return nil })
+			args := map[string]any{"url": "mail.example"}
+			if tt.profile != "" {
+				args["profile"] = tt.profile
+			}
+			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), args)
+			if tt.err != "" {
+				assert.Contains(t, errOf(out), tt.err)
+				assert.Empty(t, got, "nothing opened")
+				return
+			}
+			require.Empty(t, errOf(out))
+			assert.Equal(t, []string{tt.want}, got)
+			var asked []string
+			for _, q := range *reqs {
+				asked = append(asked, q.Key)
+			}
+			assert.Equal(t, tt.asked, asked)
+			if tt.note != "" {
+				assert.Contains(t, out["note"], tt.note)
+			}
+		})
+	}
 }

@@ -36,6 +36,8 @@ export interface ServiceInfo {
   pid: number;
   /** Its program file was replaced or removed since it started. */
   replaced?: boolean;
+  /** The global settings changed since it started: it uses them once restarted (SVC-06b). */
+  settingsChanged?: boolean;
 }
 
 /** Why the service should be restarted, or "" when it's the expected one. */
@@ -59,7 +61,7 @@ export function staleReason(appVersion: string, info: ServiceInfo | undefined, p
 export async function serviceInfo(): Promise<ServiceInfo | undefined> {
   try {
     const res = await workspaces.getServiceInfo({});
-    return { version: res.version, executable: res.executable, pid: res.pid, replaced: res.replaced };
+    return { version: res.version, executable: res.executable, pid: res.pid, replaced: res.replaced, settingsChanged: res.settingsChanged };
   } catch (e) {
     if (e instanceof ConnectError && (e.code === Code.Unimplemented || e.code === Code.NotFound)) return undefined;
     throw e;

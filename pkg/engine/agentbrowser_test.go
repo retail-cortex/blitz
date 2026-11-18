@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func (f *fakeWindow) serve(ctx context.Context) {
 			}
 		case "page", "external":
 			f.mu.Lock()
-			f.pages = append(f.pages, c.Kind+" "+c.URL)
+			f.pages = append(f.pages, strings.TrimSpace(c.Kind+" "+c.URL+" "+c.Profile))
 			f.mu.Unlock()
 		}
 		return nil
@@ -96,7 +97,7 @@ func (f *fakeWindow) serve(ctx context.Context) {
 func TestOpenPageInTheWindow(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	assert.ErrorIs(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded), ErrNoBrowserWindow)
+	assert.ErrorIs(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, ""), ErrNoBrowserWindow)
 
 	win := &fakeWindow{t: t, w: w}
 	wctx, stop := context.WithCancel(ctx)
@@ -107,14 +108,14 @@ func TestOpenPageInTheWindow(t *testing.T) {
 		defer w.browsers.mu.Unlock()
 		return len(w.browsers.windows) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.NoError(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded))
-	require.NoError(t, w.openPage(ctx, "https://example.com", tools.PageSystem))
+	require.NoError(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, "work"))
+	require.NoError(t, w.openPage(ctx, "https://example.com", tools.PageSystem, ""))
 	require.Eventually(t, func() bool {
 		win.mu.Lock()
 		defer win.mu.Unlock()
 		return len(win.pages) == 2
 	}, 2*time.Second, 5*time.Millisecond)
-	assert.Equal(t, []string{"page https://github.com", "external https://example.com"}, win.pages)
+	assert.Equal(t, []string{"page https://github.com work", "external https://example.com"}, win.pages, "a web tab signed in with the profile (BP-08)")
 	stop()
 	<-done
 
@@ -124,7 +125,7 @@ func TestOpenPageInTheWindow(t *testing.T) {
 	w.browsers.mu.Unlock()
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
-	assert.ErrorIs(t, w.openPage(cctx, "https://github.com", tools.PageEmbedded), context.Canceled)
+	assert.ErrorIs(t, w.openPage(cctx, "https://github.com", tools.PageEmbedded, ""), context.Canceled)
 }
 
 // The agent's browser in the app (AB-01): with a window watching, the

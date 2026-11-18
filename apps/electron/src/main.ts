@@ -633,7 +633,10 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       const id = previewId(a[0]);
       const url = addressURL(a[1]);
       if (!id || !url) throw new Error(`not opening ${JSON.stringify(a[1])}: only web addresses open in a preview`);
-      openPreview(id, url);
+      // Signed in with a browser profile (BP-08): an agent's open_page that named one.
+      const profile = a[2] === "" || a[2] === undefined ? undefined : profileName(a[2]);
+      if (a[2] && !profile) throw new Error(`not a browser profile: ${JSON.stringify(a[2])}`);
+      openPreview(id, url, profile);
       return url;
     }
     case "PreviewBounds": {
@@ -903,12 +906,13 @@ function preview(a: unknown[]) {
   return p;
 }
 
-/** Opens (or points) preview id at url, hidden until the page places and shows it. */
-function openPreview(id: string, url: string) {
+/** Opens (or points) preview id at url, hidden until the page places and shows it; in profile's session when given (BP-08). */
+function openPreview(id: string, url: string, profile?: string) {
   if (!win) return;
   let p = previews.get(id);
   if (!p) {
-    const view = new WebContentsView({ webPreferences: { session: previewSessionOf(), sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false } });
+    const ses = profile ? profileSessionOf(profile) : previewSessionOf();
+    const view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false } });
     view.setVisible(false);
     view.setBackgroundColor("#ffffff");
     win.contentView.addChildView(view);

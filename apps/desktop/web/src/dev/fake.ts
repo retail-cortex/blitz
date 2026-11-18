@@ -2747,8 +2747,10 @@ export function installFake() {
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
         // A file a model made (spec_056 CA-71): a 1×1 picture.
         readStoredFile: () => ({ data: Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0)), mimeType: "image/png" }),
-        // ?oldservice: a service older than the app (the stale banner).
-        getServiceInfo: () => ({ version: new URLSearchParams(location.search).has("oldservice") ? "0.6.1" : "dev", executable: "" }),
+        // ?oldservice: a service older than the app (the stale banner);
+        // ?settingschanged: the global settings changed since it started
+        // (closing Settings asks to restart it, DSK-51c).
+        getServiceInfo: () => ({ version: fakeParam("oldservice") ? "0.6.1" : "dev", executable: "", settingsChanged: fakeParam("settingschanged") }),
         listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),
         deleteLogDay: ({ day }) => {
           fakeLogDays = fakeLogDays.filter((d) => d !== day);
@@ -2770,7 +2772,11 @@ export function installFake() {
             .reverse();
           return { day: d, path: `~/.blitz/logs/blitz-${d}.jsonl`, entries, matched: entries.length };
         },
-        listWorkspaces: () => ({ workspaces: [...states.keys()] }),
+        // ?servicedown: the service doesn't answer (the start screen, DSK-50, DSK-51d).
+        listWorkspaces: () => {
+          if (fakeParam("servicedown")) throw new ConnectError("the service isn't running", Code.Unavailable);
+          return { workspaces: [...states.keys()] };
+        },
         getSuggestions: async ({ workspace }) => {
           await sleep(150);
           return fakeSuggestions(workspace);

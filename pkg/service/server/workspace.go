@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/secretscan"
@@ -45,7 +46,8 @@ func ok[T any](msg *T) (*connect.Response[T], error) { return connect.NewRespons
 
 func (h workspaceService) GetServiceInfo(context.Context, req[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
 	exe, _ := os.Executable()
-	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid()), Replaced: replaced(h.s.program, exe)})
+	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid()), Replaced: replaced(h.s.program, exe),
+		SettingsChanged: config.SettingsStamp(config.GlobalSettingsFiles(h.s.configDir)) != h.s.settings})
 }
 
 // WithShutdown is what Shutdown calls to stop the service; without it the

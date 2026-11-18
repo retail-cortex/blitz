@@ -214,7 +214,7 @@ export function Workspace({
     const onWeb = (e: Event) => {
       const d = (e as CustomEvent<OpenWebDetail>).detail;
       if (d.dir !== dir) return;
-      editorRef.current.openWeb(d.url);
+      editorRef.current.openWeb(d.url, d.profile);
       setWide((w) => (w === "chat" ? "" : w));
       setModal(null);
     };
