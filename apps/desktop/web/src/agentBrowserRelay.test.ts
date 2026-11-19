@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { AgentBrowserCommandSchema } from "./gen/blitz/v1/workspace_pb";
 import { openedMessage, runRelay, type RelayEnds } from "./agentBrowserRelay";
 
-const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[]; url: string; path: string; line: number }>) => ({ command: create(AgentBrowserCommandSchema, c) });
+const cmd = (c: Partial<{ browserId: string; kind: string; message: string; show: string; profile: string; allowLocal: boolean; denyDomains: string[]; privateSites: string[]; url: string; path: string; line: number }>) => ({ command: create(AgentBrowserCommandSchema, c) });
 
 /** Ends whose stream yields commands as they're pushed, recording what the relay did. */
 function fakeEnds(failOpen = false) {
@@ -175,6 +175,6 @@ describe("the agent's browser relay", () => {
     ctl.abort();
     f.push(null);
     await done;
-    expect(f.log[0]).toBe("open agent-5 silent - false ");
+    expect(f.log[0]).toBe("open agent-5 silent - false  ");
   });
 });
