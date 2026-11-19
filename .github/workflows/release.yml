@@ -257,6 +257,9 @@ jobs:
       - name: Smoke test
         if: runner.os == 'Linux'
         run: |
+          # The runner's package lists can name versions Ubuntu has since
+          # replaced (v1.1.1's ARM build: mesa 404): refresh them first.
+          sudo apt-get update -q
           sudo apt-get install -y ./dist/blitz-desktop_*.deb
           ldd /usr/lib/blitz-desktop/blitz-desktop > ldd.txt
           if grep 'not found' ldd.txt; then exit 1; fi
