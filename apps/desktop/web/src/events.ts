@@ -74,6 +74,8 @@ export const openWebEvent = "blitz:open-web";
 export interface OpenWebDetail {
   dir: string;
   url: string;
+  /** The browser profile it's signed in with (spec_049_browser_profiles BP-08); none: the app's own pages' session. */
+  profile?: string;
 }
 /** Opens a web page in a workspace's editor, in a tab of its own. */
 export function openWeb(detail: OpenWebDetail) {

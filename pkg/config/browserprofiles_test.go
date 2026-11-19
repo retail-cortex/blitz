@@ -121,3 +121,18 @@ func TestBrowserProfilesFailures(t *testing.T) {
 		assert.DirExists(t, s.Dir("work"), "kept when it can't be forgotten")
 	})
 }
+
+// Anonymous is reserved (BP-03e): no profile takes its name, or none's,
+// and a workspace that chooses it keeps that choice.
+func TestBrowserProfilesAnonymous(t *testing.T) {
+	store := OpenBrowserProfiles(t.TempDir())
+	for _, name := range []string{AnonymousBrowserProfile, "none"} {
+		_, err := store.Create(name, time.Now())
+		assert.ErrorContains(t, err, "not anonymous or none", name)
+	}
+	ws := t.TempDir()
+	require.NoError(t, store.SetWorkspace(ws, AnonymousBrowserProfile))
+	assert.Equal(t, AnonymousBrowserProfile, store.ForWorkspace(ws))
+	require.NoError(t, store.SetWorkspace(ws, ""))
+	assert.Empty(t, store.ForWorkspace(ws), "forgotten")
+}

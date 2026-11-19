@@ -193,8 +193,9 @@ func (w *Workspace) openAgentBrowser(ctx context.Context, o tools.AgentBrowserOp
 }
 
 // openPage has the newest window show u for the user (tools.PageOpener,
-// AB-10): in a web tab, or the system's browser.
-func (w *Workspace) openPage(ctx context.Context, u, where string) error {
+// AB-10): in a web tab, signed in with browser profile ("": none, BP-08),
+// or the system's browser.
+func (w *Workspace) openPage(ctx context.Context, u, where, profile string) error {
 	h := &w.browsers
 	h.mu.Lock()
 	if len(h.windows) == 0 {
@@ -208,7 +209,7 @@ func (w *Workspace) openPage(ctx context.Context, u, where string) error {
 		kind = "external"
 	}
 	select {
-	case win.send <- api.AgentBrowserCommand{Kind: kind, URL: u}:
+	case win.send <- api.AgentBrowserCommand{Kind: kind, URL: u, Profile: profile}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

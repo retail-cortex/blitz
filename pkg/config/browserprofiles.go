@@ -59,9 +59,17 @@ var ErrNoBrowserProfile = errors.New("no browser profile by that name")
 
 var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
+// AnonymousBrowserProfile is the reserved profile that browses signed out
+// (spec_049_browser_profiles BP-03e): a workspace that chooses it never
+// browses with the person's only profile by default, and no profile can
+// take its name, or none's.
+const AnonymousBrowserProfile = "anonymous"
+
 // ValidBrowserProfileName reports whether name can name a profile:
-// lowercase letters, digits, - and _, up to 32.
-func ValidBrowserProfileName(name string) bool { return profileName.MatchString(name) }
+// lowercase letters, digits, - and _, up to 32, and not anonymous or none.
+func ValidBrowserProfileName(name string) bool {
+	return profileName.MatchString(name) && name != AnonymousBrowserProfile && name != "none"
+}
 
 // OpenBrowserProfiles is the store in the settings directory dir.
 func OpenBrowserProfiles(dir string) *BrowserProfiles {
@@ -91,7 +99,7 @@ func (s *BrowserProfiles) Get(name string) (BrowserProfile, bool) {
 // Create makes profile name, empty; its folder is made owner-only.
 func (s *BrowserProfiles) Create(name string, now time.Time) (BrowserProfile, error) {
 	if !ValidBrowserProfileName(name) {
-		return BrowserProfile{}, fmt.Errorf("profile name %q: lowercase letters, digits, - and _, up to 32", name)
+		return BrowserProfile{}, fmt.Errorf("profile name %q: lowercase letters, digits, - and _, up to 32, and not anonymous or none", name)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,8 +161,9 @@ func (s *BrowserProfiles) SetAllowDomains(name string, domains []string) error {
 	return s.writeLocked(f)
 }
 
-// ForWorkspace is the profile workspace browses with ("": none, a
-// throwaway one each time).
+// ForWorkspace is the profile workspace browses with: a profile's name,
+// AnonymousBrowserProfile (signed out, chosen), or "" (none chosen: the
+// person's only profile, if they have one, BP-03e).
 func (s *BrowserProfiles) ForWorkspace(workspace string) string {
 	key, err := CanonicalWorkspace(workspace)
 	if err != nil {
@@ -165,7 +174,8 @@ func (s *BrowserProfiles) ForWorkspace(workspace string) string {
 	return s.readLocked().Workspaces[key]
 }
 
-// SetWorkspace makes workspace browse with profile name ("": none).
+// SetWorkspace makes workspace browse with profile name:
+// AnonymousBrowserProfile browses signed out, "" forgets the choice.
 func (s *BrowserProfiles) SetWorkspace(workspace, name string) error {
 	key, err := CanonicalWorkspace(workspace)
 	if err != nil {
@@ -176,6 +186,10 @@ func (s *BrowserProfiles) SetWorkspace(workspace, name string) error {
 	f := s.readLocked()
 	if name == "" {
 		delete(f.Workspaces, key)
+		return s.writeLocked(f)
+	}
+	if name == AnonymousBrowserProfile {
+		f.Workspaces[key] = name
 		return s.writeLocked(f)
 	}
 	if !slices.ContainsFunc(f.Profiles, func(p BrowserProfile) bool { return p.Name == name }) {

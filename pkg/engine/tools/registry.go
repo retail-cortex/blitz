@@ -102,11 +102,11 @@ type Registry struct {
 	// jobs makes and lists the workspace's jobs (create_job, list_jobs);
 	// nil: off. evidenceMu guards it.
 	jobs Jobs
-	// profile is the browser profile the workspace browses with; nil:
-	// none. agentBrowser opens a view of the desktop app's for the
-	// agent's browser (spec_050_agent_browser); nil: none. evidenceMu
+	// profiles are the person's browser profiles as the workspace sees
+	// them; nil: none. agentBrowser opens a view of the desktop app's for
+	// the agent's browser (spec_050_agent_browser); nil: none. evidenceMu
 	// guards them.
-	profile      func() BrowserProfile
+	profiles     func() BrowserProfiles
 	agentBrowser AgentBrowserHost
 }
 
@@ -118,17 +118,35 @@ type BrowserProfile struct {
 	Allow     []string
 }
 
-// SetBrowserProfile supplies the workspace's browser profile (BP-03).
-func (r *Registry) SetBrowserProfile(p func() BrowserProfile) {
-	r.evidenceMu.Lock()
-	defer r.evidenceMu.Unlock()
-	r.profile = p
+// BrowserProfiles are the person's browser profiles as a workspace sees
+// them: the one it browses with (BP-03; the zero value: none), all of
+// them, which the agent may ask to browse with (BP-03b), and the
+// workspace's own when it isn't used because the project's settings
+// aren't trusted (BP-03a; "": it is, or there's none).
+type BrowserProfiles struct {
+	Current  BrowserProfile
+	All      []BrowserProfile
+	Withheld string
+	// Anonymous says the workspace chose to browse signed out (BP-03e):
+	// no profile is offered for a site.
+	Anonymous bool
 }
 
-func (r *Registry) browserProfile() func() BrowserProfile {
+// SetBrowserProfiles supplies the person's browser profiles (BP-03).
+func (r *Registry) SetBrowserProfiles(p func() BrowserProfiles) {
 	r.evidenceMu.Lock()
 	defer r.evidenceMu.Unlock()
-	return r.profile
+	r.profiles = p
+}
+
+func (r *Registry) browserProfiles() BrowserProfiles {
+	r.evidenceMu.Lock()
+	f := r.profiles
+	r.evidenceMu.Unlock()
+	if f == nil {
+		return BrowserProfiles{}
+	}
+	return f()
 }
 
 // AgentBrowserOptions are what a view of the app's for the agent opens
@@ -381,6 +399,11 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			// The browser is made below, before this runs.
 			if cfg.Web.BrowserFallback && r.browser != nil {
 				wc.Browser = r.browser.pageText
+			}
+			// A page of a site the profile in use signs in to loads in the
+			// browser, signed in (BP-07).
+			if r.browser != nil {
+				wc.SignedInAs, wc.Page = r.browser.signedInAs, r.browser.pageText
 			}
 			return NewWebFetchTool(wc, r.hooks)
 		}})

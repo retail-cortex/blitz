@@ -655,6 +655,10 @@ message GetServiceInfoResponse {
   // The program file has been replaced or removed since the service
   // started (a new build or package installed): it runs the old program.
   bool replaced = 5;
+  // The global settings (the settings directory's .env.toml, device
+  // management's) have changed since the service started: it runs with
+  // the old ones until it restarts.
+  bool settings_changed = 6;
 }
 
 // Request message for WorkspaceService.ListLogDays.
@@ -4825,7 +4829,8 @@ message AgentBrowserCommand {
   string message = 3;
   // watch (a tab) or silent (off screen), for open.
   string show = 4;
-  // The browser profile whose sign-ins it uses ("": a throwaway session).
+  // The browser profile whose sign-ins it uses, for open and page ("": a
+  // throwaway session for open, the app's own pages' session for page).
   string profile = 5;
   // It may reach loopback and private addresses.
   bool allow_local = 6;

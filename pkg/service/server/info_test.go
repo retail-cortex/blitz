@@ -57,6 +57,38 @@ func TestGetServiceInfo(t *testing.T) {
 	}
 }
 
+// The service says when the global settings changed since it started
+// (SVC-06b), so a client can offer to restart it; writing them unchanged
+// isn't a change.
+func TestGetServiceInfoSettingsChanged(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(config.ManagedEnv, filepath.Join(t.TempDir(), "managed.toml"))
+	settings := filepath.Join(dir, ".env.toml")
+	require.NoError(t, os.WriteFile(settings, []byte("[web]\nenabled = true\n"), 0o600))
+	s := New(nil, WithConfigDir(dir))
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	c := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+	changed := func() bool {
+		res, err := c.GetServiceInfo(context.Background(), connect.NewRequest(&pb.GetServiceInfoRequest{}))
+		require.NoError(t, err)
+		return res.Msg.SettingsChanged
+	}
+	for _, tc := range []struct {
+		name, text string
+		want       bool
+	}{
+		{name: "as it started", text: "[web]\nenabled = true\n"},
+		{name: "a setting changed", text: "[web]\nenabled = false\n", want: true},
+		{name: "changed back", text: "[web]\nenabled = true\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(settings, []byte(tc.text), 0o600))
+			assert.Equal(t, tc.want, changed())
+		})
+	}
+}
+
 // A program file replaced (a new package or build installed) or removed
 // since the service started means it runs the old program.
 func TestReplaced(t *testing.T) {

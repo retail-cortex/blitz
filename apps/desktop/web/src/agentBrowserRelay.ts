@@ -36,7 +36,7 @@ export interface RelayEnds {
   /** Shows the watched view id as a tab. */
   showTab: (id: string) => void;
   /** Opens a page the user asked to see (AB-10): in a web tab, or the system's browser when external. */
-  openPage: (url: string, external: boolean) => unknown;
+  openPage: (url: string, external: boolean, profile: string) => unknown;
   /** Opens a workspace file in the editor, at a line (spec_060 DRV-31). */
   openFile: (path: string, line: number) => unknown;
   /** Opens a view: "studio:<section>", "settings:<section>", or changes, processes, pictures (DRV-31). */
@@ -55,7 +55,7 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     close: agentBrowser.close,
     on: agentBrowser.on,
     showTab,
-    openPage: (url, external) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url })),
+    openPage: (url, external, profile) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url, profile })),
     openFile: (path, line) => openFile({ dir, path, line: line || undefined }),
     openView: (view) => {
       const [where, section] = view.split(":", 2);
@@ -122,7 +122,7 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
               if (mine.delete(c.browserId)) void reply(c.browserId, [], true, e instanceof Error ? e.message : String(e));
             });
           } else if (c.kind === "page" || c.kind === "external") {
-            ends.openPage(c.url, c.kind === "external");
+            ends.openPage(c.url, c.kind === "external", c.profile);
           } else if (c.kind === "file") {
             ends.openFile(c.path, c.line);
           } else if (c.kind === "view") {

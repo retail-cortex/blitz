@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -40,9 +41,10 @@ const (
 )
 
 // PageOpener has the desktop window open url for the user, in a web tab
-// (PageEmbedded) or the system's browser (PageSystem); an error when no
-// window is watching the workspace.
-type PageOpener func(ctx context.Context, url, where string) error
+// (PageEmbedded) or the system's browser (PageSystem), a web tab signed
+// in with browser profile ("": the app's own pages' session, BP-08); an
+// error when no window is watching the workspace.
+type PageOpener func(ctx context.Context, url, where, profile string) error
 
 // openSystemBrowser opens u in the system's browser on this machine
 // (replaced in tests).
@@ -76,21 +78,24 @@ func (r *Registry) SetPageOpener(o PageOpener) {
 
 // OpenPageInput is what the open_page tool takes.
 type OpenPageInput struct {
-	URL string `json:"url" jsonschema:"The http(s) address to show the user (a bare host gets https://)"`
+	URL     string `json:"url" jsonschema:"The http(s) address to show the user (a bare host gets https://)"`
+	Profile string `json:"profile,omitempty" jsonschema:"show it signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); anonymous for signed out; empty: the profile this chat browses with"`
 }
 
 // OpenPageOutput is what it returns.
 type OpenPageOutput struct {
-	URL   string `json:"url,omitempty"`
-	Where string `json:"where,omitempty"` // embedded or system
-	Error string `json:"error,omitempty"`
+	URL     string `json:"url,omitempty"`
+	Where   string `json:"where,omitempty"`   // embedded or system
+	Profile string `json:"profile,omitempty"` // the browser profile it's signed in with (embedded only)
+	Note    string `json:"note,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // NewOpenPageTool is open_page: a page opened for the user to look at
 // (AB-10), in the app's embedded browser or the system's.
 func NewOpenPageTool(r *Registry) (tool.Tool, error) {
 	return functiontool.New(
-		functiontool.Config{Name: "open_page", Description: "Open a web page for the user to look at, when they ask to open, show or go to a site: in Blitz's embedded browser (a tab in the app) or their system browser, as they choose. Use this, never the shell's open, start or xdg-open. It doesn't read the page for you: for that, web_fetch or browser."},
+		functiontool.Config{Name: "open_page", Description: "Open a web page for the user to look at, when they ask to open, show or go to a site: in Blitz's embedded browser (a tab in the app) or their system browser, as they choose. Use this, never the shell's open, start or xdg-open. In the app's browser it can be signed in with one of the user's browser profiles (profile: its name). It doesn't read the page for you: for that, web_fetch or browser."},
 		func(ctx agent.Context, in OpenPageInput) (OpenPageOutput, error) {
 			u, err := r.pageURL(in.URL)
 			if err != nil {
@@ -99,11 +104,22 @@ func NewOpenPageTool(r *Registry) (tool.Tool, error) {
 			if err := r.askRulePage(ctx, u); err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
-			where, err := r.openPage(ctx, u)
+			profile, err := r.pageProfile(ctx, in.Profile, u)
 			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
-			return OpenPageOutput{URL: u, Where: where}, nil
+			where, err := r.openPage(ctx, u, profile)
+			if err != nil {
+				return OpenPageOutput{URL: u, Error: err.Error()}, nil
+			}
+			out := OpenPageOutput{URL: u, Where: where}
+			switch {
+			case where == PageEmbedded:
+				out.Profile = profile
+			case profile != "":
+				out.Note = fmt.Sprintf("Opened in the system's browser, which has its own sign-ins: the browser profile %q is only for the app's browser (browser.open).", profile)
+			}
+			return out, nil
 		})
 }
 
@@ -154,6 +170,33 @@ func (r *Registry) askRulePage(ctx context.Context, u string) error {
 	})
 }
 
+// pageProfile is the browser profile open_page shows a page signed in
+// with (BP-08): the one named (asked first unless it's the workspace's
+// own, as the browser's, BP-03b; "none": none), else the one this chat
+// browses with, else the one whose sites include the page's, offered
+// (BP-03d). "" without the browser tool.
+func (r *Registry) pageProfile(ctx context.Context, name, page string) (string, error) {
+	bt := r.browser
+	if bt == nil {
+		if n := strings.TrimSpace(name); n != "" && !strings.EqualFold(n, "none") && !strings.EqualFold(n, config.AnonymousBrowserProfile) {
+			return "", errors.New("browser profiles need the browser ([browser] enabled)")
+		}
+		return "", nil
+	}
+	all := r.browserProfiles()
+	session := sessionOf(ctx)
+	if name = strings.TrimSpace(name); name != "" {
+		if err := bt.choose(ctx, session, name, all); err != nil {
+			return "", err
+		}
+	} else if u, err := url.Parse(page); err == nil {
+		if err := bt.offerForSite(ctx, session, strings.ToLower(u.Hostname()), all); err != nil {
+			return "", err
+		}
+	}
+	return bt.effective(session, all).Name, nil
+}
+
 // SessionGone forgets what session's chat answered about pages and the
 // browser, once the session is deleted.
 func (r *Registry) SessionGone(session string) {
@@ -163,6 +206,12 @@ func (r *Registry) SessionGone(session string) {
 	if r.browser != nil {
 		r.browser.actMu.Lock()
 		delete(r.browser.shows, session)
+		delete(r.browser.chosen, session)
+		for k := range r.browser.noted {
+			if strings.HasPrefix(k, session+"\x00") {
+				delete(r.browser.noted, k)
+			}
+		}
 		r.browser.actMu.Unlock()
 	}
 }
@@ -171,7 +220,7 @@ func (r *Registry) SessionGone(session string) {
 // answers (asked once; the embedded browser if no one answers). No
 // desktop window: the system's browser on this machine. A run no one
 // watches (a job's) opens nothing.
-func (r *Registry) openPage(ctx context.Context, u string) (string, error) {
+func (r *Registry) openPage(ctx context.Context, u, profile string) (string, error) {
 	if isUnattended(ctx) {
 		return "", errors.New("nobody is watching this run to see the page")
 	}
@@ -181,7 +230,10 @@ func (r *Registry) openPage(ctx context.Context, u string) (string, error) {
 	p.mu.Unlock()
 	if opener != nil {
 		where := r.pageWhere(ctx, u)
-		err := opener(ctx, u, where)
+		if where != PageEmbedded {
+			profile = ""
+		}
+		err := opener(ctx, u, where, profile)
 		switch {
 		case err == nil:
 			return where, nil

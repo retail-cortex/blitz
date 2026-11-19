@@ -55,7 +55,7 @@ function fakeEnds(failOpen = false) {
       return () => delete listeners[event];
     },
     showTab: (id) => void log.push(`tab ${id}`),
-    openPage: (url, external) => void log.push(`${external ? "external" : "page"} ${url}`),
+    openPage: (url, external, profile) => void log.push(`${external ? "external" : "page"} ${url}${profile ? ` ${profile}` : ""}`),
     openFile: (path, line) => void log.push(`file ${path}:${line}`),
     openView: (view) => void log.push(`view ${view}`),
     openPicture: (json) => void log.push(`picture ${json}`),
@@ -128,13 +128,13 @@ describe("the agent's browser relay", () => {
     const f = fakeEnds();
     const ctl = new AbortController();
     const done = runRelay(f.ends, ctl.signal, 1);
-    f.push(cmd({ kind: "page", url: "https://github.com/" }));
+    f.push(cmd({ kind: "page", url: "https://github.com/", profile: "work" }));
     f.push(cmd({ kind: "external", url: "https://example.com/" }));
     await settle();
     ctl.abort();
     f.push(null);
     await done;
-    expect(f.log).toEqual(["page https://github.com/", "external https://example.com/"]);
+    expect(f.log).toEqual(["page https://github.com/ work", "external https://example.com/"]); // signed in with the profile (BP-08)
   });
 
   it("opens a workspace file the user asked to see, in the editor (spec_060 DRV-31)", async () => {

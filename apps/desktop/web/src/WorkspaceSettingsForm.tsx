@@ -129,6 +129,16 @@ function Section({
 const speechModels = ["gemini/gemini-2.5-flash-preview-tts", "gemini/gemini-2.5-pro-preview-tts", "openai/gpt-4o-mini-tts", "openai/tts-1-hd"];
 const imageModels = ["gemini/gemini-3.1-flash-image", "gemini/gemini-3.1-flash-lite-image", "gemini/gemini-3-pro-image"];
 
+/** The reserved browser profile that browses signed out (spec_049_browser_profiles BP-03e). */
+export const anonymousProfile = "anonymous";
+
+/** What a workspace browses with, in its Browser section's summary: the profile chosen, Anonymous, the only profile by default, or none (BP-03e). */
+export function browserSummary(b: { names: string[]; current: string }): string {
+  if (b.current === anonymousProfile) return t("desktop.rs.browser_anonymous");
+  if (b.current) return b.current;
+  return b.names.length === 1 ? t("desktop.rs.browser_default", { name: b.names[0] }) : t("desktop.rs.browser_unchosen");
+}
+
 /**
  * A workspace's settings as one form of folding cards (Settings ›
  * Workspaces, for an open workspace: from its pencil in the Workspaces
@@ -436,36 +446,38 @@ export function WorkspaceSettingsForm({
           </Field>
         </Section>
 
+        {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Browser; shown in simple mode too, as the agent browses signed in only with one (BP-06). */}
+        <Section id="browser" icon={mdiWeb} title={t("desktop.rs.browser")} summary={browserSummary(browser)}>
+          <Field label={t("desktop.rs.browser_profile")} supporting={t("desktop.rs.browser_profile_help")}>
+            {(id) => (
+              <select
+                id={id}
+                className="select"
+                value={browser.current}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const done = name === anonymousProfile ? t("desktop.rs.browser_cleared") : name ? t("desktop.rs.browser_set", { name }) : browser.names.length === 1 ? t("desktop.rs.browser_default_set") : t("desktop.rs.browser_cleared");
+                  void act(() => config.setWorkspaceBrowserProfile({ workspace: dir, name }), done).then(() => setBrowser((b) => ({ ...b, current: name })));
+                }}
+              >
+                <option value="">{browser.names.length === 1 ? t("desktop.rs.browser_default", { name: browser.names[0] }) : t("desktop.rs.browser_unchosen")}</option>
+                <option value={anonymousProfile}>{t("desktop.rs.browser_anonymous")}</option>
+                {browser.names.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </Section>
+
         {/* Simple mode stops here: what follows has sensible defaults. */}
         {advanced && (
           <>
             <div className="panel-divider" role="separator">
               <span className="t-label">{t("desktop.rs.advanced")}</span>
             </div>
-
-            {/* The browser profile the agents browse with here (BP-03): the person's, from Settings › Resources › Browser. */}
-            <Section id="browser" icon={mdiWeb} title={t("desktop.rs.browser")} summary={browser.current || t("desktop.rs.browser_none")}>
-              <Field label={t("desktop.rs.browser_profile")} supporting={t("desktop.rs.browser_profile_help")}>
-                {(id) => (
-                  <select
-                    id={id}
-                    className="select"
-                    value={browser.current}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      void act(() => config.setWorkspaceBrowserProfile({ workspace: dir, name }), name ? t("desktop.rs.browser_set", { name }) : t("desktop.rs.browser_cleared")).then(() => setBrowser((b) => ({ ...b, current: name })));
-                    }}
-                  >
-                    <option value="">{t("desktop.rs.browser_none")}</option>
-                    {browser.names.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            </Section>
 
             <Section id="thinking" icon={mdiBrain} title={t("desktop.rs.thinking")} summary={efforts().find((e) => e.value === (settings?.effort ?? ""))?.label} pairs>
               <Field label={t("desktop.rs.effort")} supporting={t("desktop.rs.effort_help")}>

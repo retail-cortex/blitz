@@ -18,10 +18,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
 import { useCountUse } from "./activity";
 import { appName, OrgBanner, OrgDocumentDialog, startBranding, TermsGate, useOrgBranding } from "./orgBranding";
-import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
+import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiRestart, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
-import { checkService, type ServiceCheck, shownVersion } from "./serviceVersion";
+import { checkService, type ServiceCheck, serviceInfo, shownVersion } from "./serviceVersion";
+import { loginStartWait, restartDone, useRestarting } from "./serviceRestart";
 import { useStopGuard } from "./stopGuard";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
@@ -77,6 +78,7 @@ function useServiceStatus() {
   const check = useCallback(async () => {
     try {
       const s = await serviceStatus();
+      if (s.running) restartDone(); // a restart or start the app asked for is over (DSK-51d)
       setService((cur) => (s.running ? (cur.state === "up" ? cur : { state: "up" }) : { state: "down", status: s }));
     } catch (e) {
       setError(String(e));
@@ -209,6 +211,7 @@ function Shell() {
   // The Settings dialog, open on a section, and for the settings file a
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string; connect?: string } | null>(null);
+  const [restartAsk, setRestartAsk] = useState<number | null>(null); // the service to restart for new settings (its pid)
   // A workspace's own settings are its Studio › Settings (STU-12): asked
   // for (the Workspaces menu's pencil, the status bar, the palette, an
   // older link), the workspace is shown with Studio open on them.
@@ -404,13 +407,7 @@ function Shell() {
     <DrawerProvider>
       <div className="shell">
         <main className="main">
-          {service.state === "lost" && (
-            <div className="banner">
-              <Icon path={mdiServerOff} />
-              <span>{t("desktop.app.lost")}</span>
-              <div className="progress spacer" />
-            </div>
-          )}
+          {service.state === "lost" && <LostBanner />}
           {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
           {service.state === "up" && <OrgBanner />}
           <div className="main-row">
@@ -452,7 +449,22 @@ function Shell() {
           />
         )}
         {docsAt && <DocsDrawer key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
-        {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} connect={settingsAt.connect} onClose={() => setSettingsAt(null)} />}
+        {settingsAt && (
+          <SettingsDrawer
+            initial={settingsAt.section}
+            scope={settingsAt.scope}
+            connect={settingsAt.connect}
+            onClose={() => {
+              setSettingsAt(null);
+              // Settings changed what the service started with: offer to restart it (DSK-51c).
+              serviceInfo().then(
+                (info) => info?.settingsChanged && setRestartAsk(info.pid),
+                () => undefined,
+              );
+            }}
+          />
+        )}
+        {restartAsk !== null && <RestartForSettings pid={restartAsk} onClose={() => setRestartAsk(null)} />}
         {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
         <TasksDialog />
         <TaskAlerts />
@@ -500,8 +512,66 @@ function Splash({ text }: { text: string }) {
   );
 }
 
+/** The service stopped answering: reconnecting, or restarting when the app asked it to (DSK-51, DSK-51d). */
+function LostBanner() {
+  const on = useRestarting();
+  return (
+    <div className="banner">
+      <Icon path={mdiServerOff} />
+      <span>{on === "restart" ? t("desktop.service.restarting_now") : t("desktop.app.lost")}</span>
+      <div className="progress spacer" role="progressbar" aria-label={on === "restart" ? t("desktop.service.restarting_now") : t("desktop.app.lost")} />
+    </div>
+  );
+}
+
+/**
+ * Settings closed after changing the global settings the service started
+ * with (SVC-06b): it asks to restart the service, which then uses them;
+ * runs going in it are asked about first (DSK-51b).
+ */
+function RestartForSettings({ pid, onClose }: { pid: number; onClose: () => void }) {
+  const snack = useSnackbar();
+  const { guard, dialog: stopping } = useStopGuard();
+  const restartNow = () =>
+    guard(() => {
+      onClose();
+      restartService(pid).catch((e: unknown) => snack(message(e), { error: true }));
+    });
+  return (
+    <>
+      <Dialog
+        title={t("desktop.service.settings_changed_title")}
+        icon={mdiRestart}
+        onClose={onClose}
+        footer={
+          <>
+            <Button onClick={onClose}>{t("desktop.service.later")}</Button>
+            <Button variant="filled" onClick={restartNow}>
+              {t("desktop.service.restart_now")}
+            </Button>
+          </>
+        }
+      >
+        <p>{t("desktop.service.settings_changed")}</p>
+      </Dialog>
+      {stopping}
+    </>
+  );
+}
+
 function ServiceDown({ status, onStarted, error, setError }: { status: ServiceStatus; onStarted: () => void; error: string; setError: (s: string) => void }) {
   const [busy, setBusy] = useState(false);
+  // On its way (DSK-51d): a restart or start the app asked for, or a
+  // service that starts at login given a moment to come up by itself.
+  const on = useRestarting();
+  const [since] = useState(() => Date.now());
+  const [fresh, setFresh] = useState(status.installed);
+  useEffect(() => {
+    if (!fresh) return;
+    const timer = setTimeout(() => setFresh(false), Math.max(0, since + loginStartWait - Date.now()));
+    return () => clearTimeout(timer);
+  }, [fresh, since]);
+  const coming = on === "restart" ? t("desktop.service.restarting_now") : on === "start" || busy || fresh ? t("desktop.service.starting_now") : "";
   const install = async () => {
     setError("");
     setBusy(true);
@@ -523,9 +593,14 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
         <Icon path={mdiLightningBolt} size="lg" className="brand-mark" />
         <h1 className="t-headline">{t("desktop.service.start_title")}</h1>
         <p className="muted">{t("desktop.service.explain")}</p>
-        {status.service ? (
+        {coming ? (
+          <div className="stack" style={{ gap: 8, alignItems: "center" }}>
+            <div className="progress" role="progressbar" aria-label={coming} style={{ width: 200 }} />
+            <p className="muted">{coming}</p>
+          </div>
+        ) : status.service ? (
           <Button variant="filled" onClick={install} disabled={busy}>
-            {busy ? t("desktop.app.starting") : status.installed ? t("desktop.service.start") : t("desktop.service.install")}
+            {status.installed ? t("desktop.service.start") : t("desktop.service.install")}
           </Button>
         ) : (
           <p className="error-text">{t("desktop.service.no_blitzd")}</p>

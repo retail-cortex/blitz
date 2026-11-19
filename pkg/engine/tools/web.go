@@ -63,6 +63,13 @@ type WebFetchConfig struct {
 	// web_fetch's fallback for a bot check or a page that needs
 	// JavaScript (WEB-09). nil: no fallback.
 	Browser func(ctx context.Context, u string) (BrowserOutput, error)
+	// SignedInAs, when set, is the browser profile in use whose sites
+	// include host ("": none), and Page loads a page in the browser: a
+	// page of a site the person is signed in to there loads in the
+	// browser, signed in, not as a plain request without their sign-ins
+	// (BP-07).
+	SignedInAs func(ctx context.Context, host string) string
+	Page       func(ctx context.Context, u string) (BrowserOutput, error)
 }
 
 // ErrBlockedAddress is returned when a request targets a non-public address.
@@ -321,6 +328,9 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 	if err := f.checkURL(u); err != nil {
 		return fail(err)
 	}
+	if out, ok := f.signedIn(ctx, u); ok {
+		return out
+	}
 	if err := approveWeb(ctx, hooks, f.cfg, "web_fetch", "GET "+u.String(), u); err != nil {
 		return fail(err)
 	}
@@ -393,6 +403,34 @@ func needsBrowser(status int, mediaType string, body []byte, text string) string
 		return "the page needs JavaScript"
 	}
 	return ""
+}
+
+// signedIn loads u in the browser when the browser profile in use signs
+// in to its site (BP-07), under the browser's own approvals (a profile's
+// sites go without asking, BP-04); ok false when no profile in use has
+// the site, or the browser couldn't load it (a plain request then).
+func (f *webFetcher) signedIn(ctx context.Context, u *url.URL) (WebFetchOutput, bool) {
+	if f.cfg.SignedInAs == nil || f.cfg.Page == nil {
+		return WebFetchOutput{}, false
+	}
+	profile := f.cfg.SignedInAs(ctx, strings.ToLower(u.Hostname()))
+	if profile == "" {
+		return WebFetchOutput{}, false
+	}
+	page, err := f.cfg.Page(ctx, u.String())
+	if err != nil {
+		return WebFetchOutput{}, false
+	}
+	out := WebFetchOutput{URL: u.String(), FinalURL: page.URL, ContentType: "text/html", Via: "browser", Truncated: page.Truncated}
+	out.Content = strings.TrimSpace(page.Title + "\n\n" + page.Text)
+	// The profile it was offered may have been refused on the way (BP-03d).
+	if profile = f.cfg.SignedInAs(ctx, strings.ToLower(u.Hostname())); profile != "" {
+		out.Note = fmt.Sprintf("Loaded in the browser, signed in with the user's browser profile %q.", profile)
+	} else {
+		out.Note = "Loaded in the browser, signed out."
+	}
+	out.Note = strings.TrimSpace(out.Note + " " + page.Note)
+	return out, true
 }
 
 // viaBrowser loads out's page in the browser instead, the URL already
