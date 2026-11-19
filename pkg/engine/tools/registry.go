@@ -127,6 +127,9 @@ type BrowserProfiles struct {
 	Current  BrowserProfile
 	All      []BrowserProfile
 	Withheld string
+	// Anonymous says the workspace chose to browse signed out (BP-03e):
+	// no profile is offered for a site.
+	Anonymous bool
 }
 
 // SetBrowserProfiles supplies the person's browser profiles (BP-03).

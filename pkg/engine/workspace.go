@@ -716,7 +716,8 @@ func FindBrowser(path string) (string, error) { return browser.Find(path) }
 // browserProfiles are the person's browser profiles as the workspace
 // sees them (spec_049_browser_profiles BP-03, BP-03b): the one it browses
 // with, as the person chose it (its name, its folder and the sites it
-// browses without asking), and all of them, which the agent may ask to
+// browses without asking; none chosen, their only profile, BP-03e;
+// Anonymous, none), and all of them, which the agent may ask to
 // browse with. The workspace's own isn't used while the project's
 // settings wait for trust or were declined (BP-03a: a project the person
 // hasn't trusted could steer the agent into their sign-ins); it's named
@@ -728,6 +729,11 @@ func (w *Workspace) browserProfiles() tools.BrowserProfiles {
 		out.All = append(out.All, tools.BrowserProfile{Name: p.Name, Dir: store.Dir(p.Name), Allow: p.AllowDomains})
 	}
 	name := store.ForWorkspace(w.Dir())
+	if name == "" && len(out.All) == 1 {
+		// None chosen: the person's only profile is the default (BP-03e).
+		name = out.All[0].Name
+	}
+	out.Anonymous = name == config.AnonymousBrowserProfile
 	i := slices.IndexFunc(out.All, func(p tools.BrowserProfile) bool { return p.Name == name })
 	switch {
 	case name == "" || i < 0:

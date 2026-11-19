@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -438,7 +439,8 @@ func TestBrowserToolProfiles(t *testing.T) {
 		name     string
 		profiles BrowserProfiles
 		refuse   bool     // the person refuses the profile question
-		steps    []string // each a navigate to mail.example with this profile
+		url      string   // where each step goes ("": https://mail.example/)
+		steps    []string // each a navigate to url with this profile
 		wantErr  string   // the last step's
 		wantDirs []string // the browsers' profile folders, in launch order
 		asked    []string // the profile questions
@@ -457,18 +459,30 @@ func TestBrowserToolProfiles(t *testing.T) {
 		{name: "no such profile", profiles: BrowserProfiles{All: []BrowserProfile{work}},
 			steps: []string{"play"}, wantErr: "no browser profile \"play\"; the user's profiles: work (mail.example)"},
 		{name: "no profiles at all", steps: []string{"play"}, wantErr: "the user has none"},
-		{name: "the workspace's withheld until trusted", profiles: BrowserProfiles{All: []BrowserProfile{work}, Withheld: "work"},
+		{name: "the workspace's withheld until trusted", profiles: BrowserProfiles{All: []BrowserProfile{work}, Withheld: "work"}, url: "https://shop.example/",
 			steps: []string{""}, wantDirs: []string{""}, note: "\"work\" isn't used until the user trusts the project's settings"},
+		{name: "the site's own profile, offered", profiles: BrowserProfiles{All: []BrowserProfile{work, {Name: "play", Dir: "/profiles/play"}}},
+			steps: []string{"", ""}, wantDirs: []string{"/profiles/work"}, asked: []string{"browser:profile:work"}},
+		{name: "an Anonymous workspace: no profile offered", profiles: BrowserProfiles{All: []BrowserProfile{work}, Anonymous: true},
+			steps: []string{"", "anonymous"}, wantDirs: []string{""}},
+		{name: "the site's own profile, refused: signed out, asked once", profiles: BrowserProfiles{All: []BrowserProfile{work}}, refuse: true,
+			steps: []string{"", ""}, wantDirs: []string{""}, asked: []string{"browser:profile:work"}},
 		{name: "the withheld one, asked", profiles: BrowserProfiles{All: []BrowserProfile{work}, Withheld: "work"},
 			steps: []string{"work"}, wantDirs: []string{"/profiles/work"}, asked: []string{"browser:profile:work"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			page := browsertest.New(t)
-			hooks, reqs := decisionHooks(api.DecisionOnce)
-			if tt.refuse {
-				hooks, reqs = decisionHooks(api.DecisionDeny)
-			}
+			// The person allows every site, and refuses the profile question when refuse says.
+			var reqs []api.ApprovalRequest
+			hooks := NewHooks(Policy{})
+			hooks.SetApprover(func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
+				reqs = append(reqs, req)
+				if tt.refuse && strings.HasPrefix(req.Key, "browser:profile:") {
+					return api.DecisionDeny, nil
+				}
+				return api.DecisionOnce, nil
+			})
 			bt := testBrowserTool(t, hooks, nil)
 			var dirs []string
 			bt.launch = func(ctx context.Context, o browser.Options) (*browser.Browser, error) {
@@ -482,8 +496,9 @@ func TestBrowserToolProfiles(t *testing.T) {
 				bt.mu.Unlock()
 			})
 			var outs []BrowserOutput
+			to := cmp.Or(tt.url, "https://mail.example/")
 			for _, p := range tt.steps {
-				outs = append(outs, bt.run(context.Background(), BrowserInput{Action: "navigate", URL: "https://mail.example/", Profile: p}))
+				outs = append(outs, bt.run(context.Background(), BrowserInput{Action: "navigate", URL: to, Profile: p}))
 			}
 			last := outs[len(outs)-1]
 			if tt.wantErr != "" {
@@ -495,7 +510,7 @@ func TestBrowserToolProfiles(t *testing.T) {
 			}
 			assert.Equal(t, tt.wantDirs, dirs)
 			var asked []string
-			for _, r := range *reqs {
+			for _, r := range reqs {
 				if strings.HasPrefix(r.Key, "browser:profile:") {
 					asked = append(asked, r.Key)
 				}
@@ -517,20 +532,25 @@ func TestBrowserToolProfiles(t *testing.T) {
 func TestWebFetchSignedIn(t *testing.T) {
 	tests := []struct {
 		name    string
-		as      string
+		as      []string // SignedInAs's answers, before and after the page loads
 		pageErr error
 		want    bool
+		note    string
 	}{
-		{name: "signed in", as: "work", want: true},
-		{name: "no profile has the site", as: ""},
-		{name: "the browser can't load it", as: "work", pageErr: errors.New("no browser")},
+		{name: "signed in", as: []string{"work", "work"}, want: true, note: `signed in with the user's browser profile "work"`},
+		{name: "offered, refused on the way", as: []string{"work", ""}, want: true, note: "Loaded in the browser, signed out."},
+		{name: "no profile has the site", as: []string{""}},
+		{name: "the browser can't load it", as: []string{"work"}, pageErr: errors.New("no browser")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var hosts, loaded []string
 			f := newWebFetcher(WebFetchConfig{
 				AllowNetwork: true, MaxBytes: 1 << 20,
-				SignedInAs: func(_ context.Context, host string) string { hosts = append(hosts, host); return tt.as },
+				SignedInAs: func(_ context.Context, host string) string {
+					hosts = append(hosts, host)
+					return tt.as[min(len(hosts), len(tt.as))-1]
+				},
 				Page: func(_ context.Context, u string) (BrowserOutput, error) {
 					loaded = append(loaded, u)
 					return BrowserOutput{URL: u, Title: "Inbox", Text: "3 unread"}, tt.pageErr
@@ -540,14 +560,15 @@ func TestWebFetchSignedIn(t *testing.T) {
 			require.NoError(t, err)
 			out, ok := f.signedIn(context.Background(), u)
 			assert.Equal(t, tt.want, ok)
-			assert.Equal(t, []string{"mail.example"}, hosts)
+			assert.Len(t, hosts, len(tt.as))
+			assert.Subset(t, []string{"mail.example"}, hosts)
 			if !tt.want {
 				return
 			}
 			assert.Equal(t, []string{"https://Mail.Example/inbox"}, loaded)
 			assert.Equal(t, "browser", out.Via)
 			assert.Equal(t, "Inbox\n\n3 unread", out.Content)
-			assert.Contains(t, out.Note, `signed in with the user's browser profile "work"`)
+			assert.Contains(t, out.Note, tt.note)
 		})
 	}
 }

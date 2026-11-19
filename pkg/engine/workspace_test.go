@@ -700,13 +700,21 @@ func TestWorkspaceBrowserProfiles(t *testing.T) {
 	store := config.OpenBrowserProfiles(filepath.Join(os.Getenv("HOME"), ".blitz"))
 	assert.Equal(t, tools.BrowserProfiles{}, w.browserProfiles(), "no profiles")
 
-	for _, name := range []string{"work", "home"} {
-		_, err := store.Create(name, time.Now())
-		require.NoError(t, err)
-	}
+	_, err := store.Create("work", time.Now())
+	require.NoError(t, err)
 	require.NoError(t, store.SetAllowDomains("work", []string{"mail.example.com"}))
+	assert.Equal(t, "work", w.browserProfiles().Current.Name, "none chosen: the only profile is the default (BP-03e)")
+	require.NoError(t, store.SetWorkspace(w.Dir(), config.AnonymousBrowserProfile))
 	got := w.browserProfiles()
-	assert.Empty(t, got.Current.Name, "none chosen")
+	assert.Empty(t, got.Current.Name, "Anonymous: signed out")
+	assert.True(t, got.Anonymous)
+	require.NoError(t, store.SetWorkspace(w.Dir(), ""))
+
+	_, err = store.Create("home", time.Now())
+	require.NoError(t, err)
+	got = w.browserProfiles()
+	assert.Empty(t, got.Current.Name, "two, none chosen: none by default")
+	assert.False(t, got.Anonymous)
 	require.Len(t, got.All, 2, "but both offered")
 
 	require.NoError(t, store.SetWorkspace(w.Dir(), "work"))

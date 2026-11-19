@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -78,7 +79,7 @@ func (r *Registry) SetPageOpener(o PageOpener) {
 // OpenPageInput is what the open_page tool takes.
 type OpenPageInput struct {
 	URL     string `json:"url" jsonschema:"The http(s) address to show the user (a bare host gets https://)"`
-	Profile string `json:"profile,omitempty" jsonschema:"show it signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); none for signed out; empty: the profile this chat browses with"`
+	Profile string `json:"profile,omitempty" jsonschema:"show it signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); anonymous for signed out; empty: the profile this chat browses with"`
 }
 
 // OpenPageOutput is what it returns.
@@ -103,7 +104,7 @@ func NewOpenPageTool(r *Registry) (tool.Tool, error) {
 			if err := r.askRulePage(ctx, u); err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
-			profile, err := r.pageProfile(ctx, in.Profile)
+			profile, err := r.pageProfile(ctx, in.Profile, u)
 			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
@@ -172,11 +173,12 @@ func (r *Registry) askRulePage(ctx context.Context, u string) error {
 // pageProfile is the browser profile open_page shows a page signed in
 // with (BP-08): the one named (asked first unless it's the workspace's
 // own, as the browser's, BP-03b; "none": none), else the one this chat
-// browses with. "" without the browser tool.
-func (r *Registry) pageProfile(ctx context.Context, name string) (string, error) {
+// browses with, else the one whose sites include the page's, offered
+// (BP-03d). "" without the browser tool.
+func (r *Registry) pageProfile(ctx context.Context, name, page string) (string, error) {
 	bt := r.browser
 	if bt == nil {
-		if strings.TrimSpace(name) != "" && !strings.EqualFold(strings.TrimSpace(name), "none") {
+		if n := strings.TrimSpace(name); n != "" && !strings.EqualFold(n, "none") && !strings.EqualFold(n, config.AnonymousBrowserProfile) {
 			return "", errors.New("browser profiles need the browser ([browser] enabled)")
 		}
 		return "", nil
@@ -185,6 +187,10 @@ func (r *Registry) pageProfile(ctx context.Context, name string) (string, error)
 	session := sessionOf(ctx)
 	if name = strings.TrimSpace(name); name != "" {
 		if err := bt.choose(ctx, session, name, all); err != nil {
+			return "", err
+		}
+	} else if u, err := url.Parse(page); err == nil {
+		if err := bt.offerForSite(ctx, session, strings.ToLower(u.Hostname()), all); err != nil {
 			return "", err
 		}
 	}

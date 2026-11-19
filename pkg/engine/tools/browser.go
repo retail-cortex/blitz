@@ -53,7 +53,7 @@ type BrowserInput struct {
 	Value    string `json:"value,omitempty" jsonschema:"select: the option's value or text"`
 	Script   string `json:"script,omitempty" jsonschema:"script: a JavaScript expression run in the page; its value (awaited) is returned"`
 	FullPage bool   `json:"full_page,omitempty" jsonschema:"screenshot: the whole page, not just the viewport"`
-	Profile  string `json:"profile,omitempty" jsonschema:"browse signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); none to browse signed out; empty: as before in this chat"`
+	Profile  string `json:"profile,omitempty" jsonschema:"browse signed in with one of the user's browser profiles, by name (the user is asked first, unless it's this workspace's own); anonymous to browse signed out; empty: as before in this chat"`
 }
 
 // BrowserOutput is what it returns.
@@ -154,7 +154,13 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		out.Note = "The browser is closed."
 		return out
 	}
-	p, all, err := bt.syncProfile(ctx, in.Profile)
+	var site string // the page asked for, whose site may have a profile (BP-03d)
+	if action == "navigate" {
+		if u, err := url.Parse(strings.TrimSpace(in.URL)); err == nil {
+			site = strings.ToLower(u.Hostname())
+		}
+	}
+	p, all, err := bt.syncProfile(ctx, in.Profile, site)
 	if err != nil {
 		return fail(err)
 	}
@@ -423,17 +429,20 @@ func (bt *browserTool) webRules() WebFetchConfig {
 // syncProfile takes the browser profile this chat browses with, before an
 // action is judged (BP-03): the one it asked for (name, BP-03b; "none"
 // for none), asked about first unless it's the workspace's own, else the
-// one it asked for before, else the workspace's. A change of profile
-// closes the browser, so the next one starts with it. It returns the
-// profile and all of them, for the agent's note (BP-03c). bt.mu must be
-// held.
-func (bt *browserTool) syncProfile(ctx context.Context, name string) (BrowserProfile, BrowserProfiles, error) {
+// one it asked for before, else the workspace's; with none of those, the
+// one profile whose sites include site, offered (BP-03d). A change of
+// profile closes the browser, so the next one starts with it. It returns
+// the profile and all of them, for the agent's note (BP-03c). bt.mu must
+// be held.
+func (bt *browserTool) syncProfile(ctx context.Context, name, site string) (BrowserProfile, BrowserProfiles, error) {
 	all := bt.r.browserProfiles()
 	session := sessionOf(ctx)
 	if name = strings.TrimSpace(name); name != "" {
 		if err := bt.choose(ctx, session, name, all); err != nil {
 			return BrowserProfile{}, all, err
 		}
+	} else if err := bt.offerForSite(ctx, session, site, all); err != nil {
+		return BrowserProfile{}, all, err
 	}
 	p := bt.effective(session, all)
 	bt.actMu.Lock()
@@ -447,10 +456,11 @@ func (bt *browserTool) syncProfile(ctx context.Context, name string) (BrowserPro
 	return p, all, nil
 }
 
-// choose makes the chat browse with profile name ("none": none): the
-// user is asked first unless it's the workspace's own, or none.
+// choose makes the chat browse with profile name (anonymous, or none:
+// signed out): the user is asked first unless it's the workspace's own,
+// or signed out.
 func (bt *browserTool) choose(ctx context.Context, session, name string, all BrowserProfiles) error {
-	if strings.EqualFold(name, "none") {
+	if strings.EqualFold(name, "none") || strings.EqualFold(name, config.AnonymousBrowserProfile) {
 		bt.setChosen(session, "")
 		return nil
 	}
@@ -476,6 +486,47 @@ func (bt *browserTool) choose(ctx context.Context, session, name string, all Bro
 	}
 	bt.setChosen(session, name)
 	return nil
+}
+
+// forSite is the one profile of the person's whose sites include host,
+// for a chat that browses with none it chose while the workspace has none
+// of its own (BP-03d); "" when no profile, or more than one, has it.
+func (bt *browserTool) forSite(session, host string, all BrowserProfiles) string {
+	if host == "" || all.Current.Name != "" || all.Anonymous {
+		return ""
+	}
+	bt.actMu.Lock()
+	_, chose := bt.chosen[session]
+	bt.actMu.Unlock()
+	if chose {
+		return ""
+	}
+	name := ""
+	for _, p := range all.All {
+		if matchDomain(p.Allow, host) {
+			if name != "" {
+				return ""
+			}
+			name = p.Name
+		}
+	}
+	return name
+}
+
+// offerForSite asks to browse with the profile whose sites include host
+// (forSite), as choose does; refused, the chat browses signed out and
+// isn't asked again (BP-03d).
+func (bt *browserTool) offerForSite(ctx context.Context, session, host string, all BrowserProfiles) error {
+	name := bt.forSite(session, host, all)
+	if name == "" {
+		return nil
+	}
+	err := bt.choose(ctx, session, name, all)
+	if errors.Is(err, ErrNotApproved) {
+		bt.setChosen(session, "")
+		return nil
+	}
+	return err
 }
 
 func (bt *browserTool) setChosen(session, name string) {
@@ -554,13 +605,18 @@ func profileList(ps []BrowserProfile) string {
 }
 
 // signedInAs is the profile session browses with when its sites include
-// host ("": none), for web_fetch (BP-07).
+// host, else the one profile whose sites do that it would be offered
+// (BP-03d); "": none, for web_fetch (BP-07).
 func (bt *browserTool) signedInAs(ctx context.Context, host string) string {
-	p := bt.effective(sessionOf(ctx), bt.r.browserProfiles())
-	if p.Name == "" || !matchDomain(p.Allow, host) {
-		return ""
+	session, all := sessionOf(ctx), bt.r.browserProfiles()
+	p := bt.effective(session, all)
+	if p.Name != "" && matchDomain(p.Allow, host) {
+		return p.Name
 	}
-	return p.Name
+	if p.Name == "" {
+		return bt.forSite(session, host, all)
+	}
+	return ""
 }
 
 // show is how the chat sees the agent browse in the app (AB-02):

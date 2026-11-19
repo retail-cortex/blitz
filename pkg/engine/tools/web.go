@@ -423,7 +423,13 @@ func (f *webFetcher) signedIn(ctx context.Context, u *url.URL) (WebFetchOutput, 
 	}
 	out := WebFetchOutput{URL: u.String(), FinalURL: page.URL, ContentType: "text/html", Via: "browser", Truncated: page.Truncated}
 	out.Content = strings.TrimSpace(page.Title + "\n\n" + page.Text)
-	out.Note = strings.TrimSpace(fmt.Sprintf("Loaded in the browser, signed in with the user's browser profile %q. %s", profile, page.Note))
+	// The profile it was offered may have been refused on the way (BP-03d).
+	if profile = f.cfg.SignedInAs(ctx, strings.ToLower(u.Hostname())); profile != "" {
+		out.Note = fmt.Sprintf("Loaded in the browser, signed in with the user's browser profile %q.", profile)
+	} else {
+		out.Note = "Loaded in the browser, signed out."
+	}
+	out.Note = strings.TrimSpace(out.Note + " " + page.Note)
 	return out, true
 }
 
