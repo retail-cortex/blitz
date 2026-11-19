@@ -667,12 +667,20 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 	}
 	bt.actMu.Lock()
 	profile, profileName := bt.profile, bt.profileName
+	// The profile's own sites may be on the user's private network (an
+	// intranet over VPN or split-horizon DNS): its sign-ins are for them
+	// (BP-04a). A change of profile closes the browser, so these last.
+	var sites []string
+	if profile != "" {
+		sites = slices.Clone(bt.allow)
+	}
 	bt.actMu.Unlock()
+	privateHost := func(host string) bool { return matchDomain(sites, host) }
 	// The desktop app's own view when a window is watching (AB-01),
 	// watched or silent as the chat chose; else Chrome, headless.
 	if host := bt.r.agentBrowserHost(); host != nil {
 		show := bt.show(ctx)
-		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains}); err == nil {
+		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains, PrivateSites: sites}); err == nil {
 			b, err := browser.AttachTransport(ctx, t, browser.Options{Width: bt.cfg.Width, Height: bt.cfg.Height, Timeout: bt.timeout, KeepViewport: show == "watch", Navigation: bt.navigation})
 			if err != nil {
 				return nil, err
@@ -684,7 +692,7 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 	bt.inApp = ""
 	b, err := bt.launch(ctx, browser.Options{
 		Path: bt.cfg.Path, Visible: bt.cfg.Visible, Width: bt.cfg.Width, Height: bt.cfg.Height,
-		AllowLocal: bt.cfg.AllowLocal, Timeout: bt.timeout, ProfileDir: profile,
+		AllowLocal: bt.cfg.AllowLocal, PrivateHost: privateHost, Timeout: bt.timeout, ProfileDir: profile,
 		Host: func(host string) error {
 			if matchDomain(bt.web.DenyDomains, host) {
 				return fmt.Errorf("blocked by web.deny_domains")

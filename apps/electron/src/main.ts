@@ -725,7 +725,7 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       if (!id || agents.has(id) || previews.has(id)) throw new Error("not a new view");
       const profile = a[2] === "" || a[2] === undefined ? undefined : profileName(a[2]);
       if (a[2] && !profile) throw new Error(`not a browser profile: ${JSON.stringify(a[2])}`);
-      await openAgentView(id, a[1] === "watch", profile, { allowLocal: a[3] === true, deny: stringList(a[4]) });
+      await openAgentView(id, a[1] === "watch", profile, { allowLocal: a[3] === true, deny: stringList(a[4]), sites: stringList(a[5]) });
       return;
     }
     case "AgentBrowserSend": {

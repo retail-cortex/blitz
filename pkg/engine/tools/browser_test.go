@@ -302,6 +302,9 @@ func TestBrowserToolUsesTheWorkspacesProfile(t *testing.T) {
 	require.Empty(t, out.Error)
 	require.Len(t, launches, 1)
 	assert.Equal(t, "/profiles/work", launches[0].ProfileDir)
+	require.NotNil(t, launches[0].PrivateHost)
+	assert.True(t, launches[0].PrivateHost("mail.example"), "the profile's own sites may be on a private network (BP-04a)")
+	assert.False(t, launches[0].PrivateHost("shop.example"), "others may not")
 	assert.Empty(t, *reqs, "the profile's own site isn't asked about")
 	out = bt.run(ctx, BrowserInput{Action: "navigate", URL: "https://shop.example/"})
 	require.Empty(t, out.Error)
@@ -312,6 +315,7 @@ func TestBrowserToolUsesTheWorkspacesProfile(t *testing.T) {
 	require.Empty(t, out.Error)
 	require.Len(t, launches, 2, "no profile now: a new browser")
 	assert.Empty(t, launches[1].ProfileDir)
+	assert.False(t, launches[1].PrivateHost("mail.example"), "no profile, no private sites")
 	assert.Len(t, *reqs, 1, "and web.allow_domains applies again")
 	bt.mu.Lock()
 	bt.closeLocked()
@@ -356,7 +360,7 @@ func TestBrowserToolInTheApp(t *testing.T) {
 				return browser.Attach(ctx, page.URL, o)
 			}
 			var opened []AgentBrowserOptions
-			work := BrowserProfile{Name: "work", Dir: "/profiles/work"}
+			work := BrowserProfile{Name: "work", Dir: "/profiles/work", Allow: []string{"*.corp.example"}}
 			bt.r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work}} })
 			bt.r.SetAgentBrowserHost(func(ctx context.Context, o AgentBrowserOptions) (browser.Transport, error) {
 				if tt.noWindow {
@@ -383,6 +387,7 @@ func TestBrowserToolInTheApp(t *testing.T) {
 			require.Len(t, opened, 2)
 			assert.Equal(t, tt.want, opened[0].Show)
 			assert.Equal(t, "work", opened[0].Profile, "the profile's partition")
+			assert.Equal(t, []string{"*.corp.example"}, opened[0].PrivateSites, "its sites may be on a private network (BP-04a)")
 			assert.Equal(t, asked, tt.asked, "asked once a chat")
 		})
 	}

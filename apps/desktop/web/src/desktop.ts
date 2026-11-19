@@ -124,7 +124,7 @@ type AppMethods = {
   DragOut(paths: string[]): Promise<boolean>;
   TrashDropped(paths: string[]): Promise<string[]>;
   SignInWindow(profile: string, url: string): Promise<void>;
-  AgentBrowserOpen(id: string, show: string, profile: string, allowLocal: boolean, deny: string[]): Promise<void>;
+  AgentBrowserOpen(id: string, show: string, profile: string, allowLocal: boolean, deny: string[], sites: string[]): Promise<void>;
   AgentBrowserSend(id: string, message: string): Promise<void>;
   AgentBrowserClose(id: string): Promise<void>;
   AgentBrowserTakeOver(id: string): Promise<void>;
@@ -475,7 +475,8 @@ export const trashDropped = (paths: string[]) => app().TrashDropped(paths);
  */
 export const agentBrowser = {
   supported: () => windowHas("AgentBrowserOpen"),
-  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[]) => app().AgentBrowserOpen(id, show, profile, allowLocal, deny),
+  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[], sites: string[]) =>
+    app().AgentBrowserOpen(id, show, profile, allowLocal, deny, sites),
   send: (id: string, message: string) => app().AgentBrowserSend(id, message),
   close: (id: string) => app().AgentBrowserClose(id),
   takeOver: (id: string) => app().AgentBrowserTakeOver(id),

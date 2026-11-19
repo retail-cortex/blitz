@@ -148,7 +148,7 @@ func TestAgentBrowserRelay(t *testing.T) {
 		return len(w.browsers.windows) == 1
 	}, 2*time.Second, 5*time.Millisecond)
 
-	tr, err := w.openAgentBrowser(ctx, tools.AgentBrowserOptions{Show: "silent", Profile: "work", AllowLocal: true, DenyDomains: []string{"*.blocked.example"}})
+	tr, err := w.openAgentBrowser(ctx, tools.AgentBrowserOptions{Show: "silent", Profile: "work", AllowLocal: true, DenyDomains: []string{"*.blocked.example"}, PrivateSites: []string{"*.corp.example"}})
 	require.NoError(t, err)
 	b, err := browser.AttachTransport(ctx, tr, browser.Options{KeepViewport: false})
 	require.NoError(t, err)
@@ -161,6 +161,7 @@ func TestAgentBrowserRelay(t *testing.T) {
 	assert.Equal(t, "silent", open.Show)
 	assert.Equal(t, "work", open.Profile)
 	assert.True(t, open.AllowLocal)
+	assert.Equal(t, []string{"*.corp.example"}, open.PrivateSites)
 	assert.Equal(t, []string{"*.blocked.example"}, open.DenyDomains)
 
 	// The window goes: its views close, and the browser says so.

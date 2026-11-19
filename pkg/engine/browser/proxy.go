@@ -51,7 +51,15 @@ type proxy struct {
 // public.
 var ErrBlockedAddress = errors.New("not a public address")
 
-func startProxy(allowAddr func(netip.Addr) bool, host func(string) error, refused func(string, error)) (*proxy, error) {
+// dialHostKey carries the host a dial is for, so the address it resolved
+// to can be judged by it (Options.PrivateHost).
+type dialHostKey struct{}
+
+func withDialHost(ctx context.Context, host string) context.Context {
+	return context.WithValue(ctx, dialHostKey{}, host)
+}
+
+func startProxy(allowAddr func(host string, a netip.Addr) bool, host func(string) error, refused func(string, error)) (*proxy, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
@@ -59,9 +67,10 @@ func startProxy(allowAddr func(netip.Addr) bool, host func(string) error, refuse
 	p := &proxy{ln: ln, host: host, refused: refused, conns: map[net.Conn]struct{}{}}
 	p.dialer = &net.Dialer{
 		Timeout: 15 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
+		ControlContext: func(ctx context.Context, _, address string, _ syscall.RawConn) error {
+			host, _ := ctx.Value(dialHostKey{}).(string)
 			ap, err := netip.ParseAddrPort(address)
-			if err != nil || !allowAddr(ap.Addr()) {
+			if err != nil || !allowAddr(host, ap.Addr()) {
 				return fmt.Errorf("%w: %s", ErrBlockedAddress, address)
 			}
 			return nil
@@ -114,7 +123,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	out := r.Clone(r.Context())
+	out := r.Clone(withDialHost(r.Context(), r.URL.Hostname()))
 	out.RequestURI = ""
 	for _, h := range []string{"Proxy-Connection", "Proxy-Authorization", "Connection", "Keep-Alive", "Te", "Trailer", "Upgrade"} {
 		out.Header.Del(h)
@@ -146,7 +155,7 @@ func (p *proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(withDialHost(r.Context(), host), 15*time.Second)
 	upstream, err := p.dialer.DialContext(ctx, "tcp", r.Host)
 	cancel()
 	if err != nil {
@@ -222,6 +231,23 @@ func PublicAddr(addr netip.Addr) bool {
 		!addr.IsLinkLocalMulticast() && !addr.IsInterfaceLocalMulticast() && !addr.IsMulticast() &&
 		!addr.IsUnspecified()
 }
+
+// PrivateAddr reports whether addr is on a private network: RFC 1918,
+// unique local IPv6 (fc00::/7) or carrier-grade NAT (100.64.0.0/10, which
+// VPNs such as Tailscale use), judged by the IPv4 address an IPv6 one
+// carries as PublicAddr does. Loopback and link-local aren't.
+func PrivateAddr(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	switch b := addr.As16(); {
+	case nat64.Contains(addr):
+		return PrivateAddr(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(addr):
+		return PrivateAddr(netip.AddrFrom4([4]byte(b[2:6])))
+	}
+	return addr.IsPrivate() || cgnat.Contains(addr)
+}
+
+var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
 // reserved are ranges netip doesn't flag that aren't public either:
 // carrier-grade NAT, "this network", IETF protocol assignments,

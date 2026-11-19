@@ -157,6 +157,9 @@ type AgentBrowserOptions struct {
 	Profile     string
 	AllowLocal  bool
 	DenyDomains []string
+	// PrivateSites are the profile's own sites: names among them may
+	// resolve to private addresses (BP-04a).
+	PrivateSites []string
 }
 
 // AgentBrowserHost opens a view of the desktop app's for the agent's

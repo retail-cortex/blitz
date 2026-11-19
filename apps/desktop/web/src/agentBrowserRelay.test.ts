@@ -44,9 +44,9 @@ function fakeEnds(failOpen = false) {
       }
     },
     reply: async (r) => void log.push(`reply ${r.browserId} ${r.messages.join("|")}${r.closed ? ` closed: ${r.reason}` : ""}`),
-    open: async (id, show, profile, allowLocal, deny) => {
+    open: async (id, show, profile, allowLocal, deny, sites) => {
       if (failOpen) throw new Error("no window");
-      log.push(`open ${id} ${show} ${profile || "-"} ${allowLocal} ${deny.join(",")}`);
+      log.push(`open ${id} ${show} ${profile || "-"} ${allowLocal} ${deny.join(",")} ${sites.join(",")}`);
     },
     send: async (id, m) => void log.push(`send ${id} ${m}`),
     close: async (id) => void log.push(`close ${id}`),
@@ -70,7 +70,7 @@ describe("the agent's browser relay", () => {
     const f = fakeEnds();
     const ctl = new AbortController();
     const done = runRelay(f.ends, ctl.signal, 1);
-    f.push(cmd({ browserId: "agent-1", kind: "open", show: "watch", profile: "work", allowLocal: true, denyDomains: ["evil.example"] }));
+    f.push(cmd({ browserId: "agent-1", kind: "open", show: "watch", profile: "work", allowLocal: true, denyDomains: ["evil.example"], privateSites: ["*.corp.example"] }));
     await settle();
     f.push(cmd({ browserId: "agent-1", kind: "message", message: '{"id":1,"method":"Page.navigate"}' }));
     await settle();
@@ -81,7 +81,7 @@ describe("the agent's browser relay", () => {
     f.emit("agentbrowser:closed", { id: "agent-1", reason: "the user took over the page" });
     await settle();
     expect(f.log).toEqual([
-      "open agent-1 watch work true evil.example",
+      "open agent-1 watch work true evil.example *.corp.example",
       "tab agent-1",
       `reply agent-1 ${openedMessage}`,
       'send agent-1 {"id":1,"method":"Page.navigate"}',

@@ -668,10 +668,15 @@ export function profileName(v: unknown): string | undefined {
 /** The Electron partition of browser profile name (EL-16): its own cookies and storage, kept. */
 export const profilePartition = (name: string) => `persist:profile-${name}`;
 
-/** What the agent's view may reach (EL-17): not denied, and private addresses only when allowed. */
+/**
+ * What the agent's view may reach (EL-17): not denied, and private
+ * addresses only when allowed, or for the browser profile's own sites
+ * (sites: an intranet over VPN or split-horizon DNS, EL-17b).
+ */
 export interface AgentReach {
   allowLocal: boolean;
   deny: string[];
+  sites?: string[];
 }
 
 /**
@@ -680,7 +685,15 @@ export interface AgentReach {
  * it (EL-17).
  */
 export function strictestReach(had: AgentReach | undefined, reach: AgentReach): AgentReach {
-  return { allowLocal: false, deny: [...new Set([...(had?.deny ?? []), ...reach.deny])] };
+  const deny = [...new Set([...(had?.deny ?? []), ...reach.deny])];
+  // Only the sites every view had: a session is one profile's, so these are its sites.
+  const sites = had ? (had.sites ?? []).filter((s) => (reach.sites ?? []).includes(s)) : (reach.sites ?? []);
+  return sites.length ? { allowLocal: false, deny, sites } : { allowLocal: false, deny };
+}
+
+/** Whether host, a name, is one of the reach's profile sites (EL-17b). */
+export function profileSite(host: string, reach: AgentReach): boolean {
+  return !isAddress(host) && (reach.sites ?? []).some((p) => matchDomain(host, p));
 }
 
 /** The list of strings in v, a list from the page; anything else is left out. */
@@ -744,10 +757,12 @@ function embeddedIPv4(g: number[]): number[] | undefined {
  * as a name resolved to), as the headless browser's proxy decides for
  * what it dials (WEB-32): link-local (cloud metadata), multicast and
  * unspecified addresses never, loopback and private ones only with
- * allowLocal. An IPv6 address carrying an IPv4 one (mapped, NAT64, 6to4)
- * is judged by that; what isn't an address isn't allowed.
+ * allowLocal. Private ones (not loopback) are also allowed when site: the
+ * name resolved is one of the profile's own sites (EL-17b). An IPv6
+ * address carrying an IPv4 one (mapped, NAT64, 6to4) is judged by that;
+ * what isn't an address isn't allowed.
  */
-export function agentAddressAllowed(address: string, reach: AgentReach): boolean {
+export function agentAddressAllowed(address: string, reach: AgentReach, site = false): boolean {
   let v4 = ipv4Bytes(address);
   const g = v4 ? undefined : ipv6Groups(address.replace(/^\[|\]$/g, ""));
   if (g) v4 = embeddedIPv4(g);
@@ -755,14 +770,16 @@ export function agentAddressAllowed(address: string, reach: AgentReach): boolean
     const [a, b] = v4;
     if (a === 169 && b === 254) return false; // link-local: never
     if (a === 0 || a >= 224) return false; // unspecified, multicast, reserved
-    const local = a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
-    return !local || reach.allowLocal;
+    const loopback = a === 127;
+    const private_ = a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    return (!loopback && !private_) || reach.allowLocal || (private_ && site);
   }
   if (!g) return false;
   if ((g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xff00) === 0xff00) return false; // link-local, multicast
   if (g.every((x) => x === 0)) return false; // unspecified
-  const local = (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) || (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfec0;
-  return !local || reach.allowLocal;
+  const loopback = g.slice(0, 7).every((x) => x === 0) && g[7] === 1;
+  const private_ = (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfec0;
+  return (!loopback && !private_) || reach.allowLocal || (private_ && site);
 }
 
 /** Whether host (a URL's hostname, brackets and all) is an IP address rather than a name. */
@@ -774,7 +791,8 @@ export function isAddress(host: string): boolean {
  * Whether the agent's view may request url (EL-17), as far as its text
  * tells: web and data addresses only, never a denied domain, an address
  * by agentAddressAllowed, and local names (localhost, .local, .internal)
- * only with allowLocal. A name's addresses are checked once resolved
+ * only with allowLocal (.local and .internal ones also when a profile
+ * site, EL-17b). A name's addresses are checked once resolved
  * (agentRequestResolved).
  */
 export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
@@ -789,8 +807,9 @@ export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
   const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (reach.deny.some((d) => matchDomain(host, d))) return false;
   if (isAddress(host)) return agentAddressAllowed(host, reach);
-  const localName = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal");
-  return !localName || reach.allowLocal;
+  if (host === "localhost" || host.endsWith(".localhost")) return reach.allowLocal;
+  const localName = host.endsWith(".local") || host.endsWith(".internal");
+  return !localName || reach.allowLocal || profileSite(host, reach);
 }
 
 /**
@@ -798,7 +817,8 @@ export function agentRequestAllowed(raw: string, reach: AgentReach): boolean {
  * browser's proxy decides for its pages (WEB-32): agentRequestAllowed,
  * then, for a name, every address it resolves to (resolve, the view's
  * session's resolver, so what's checked is what Chromium dials from its
- * cache) by agentAddressAllowed. A name that doesn't resolve is refused.
+ * cache) by agentAddressAllowed, private ones allowed for the profile's
+ * own sites (EL-17b). A name that doesn't resolve is refused.
  */
 export async function agentRequestResolved(raw: string, reach: AgentReach, resolve: (host: string) => Promise<string[]>): Promise<boolean> {
   if (!agentRequestAllowed(raw, reach)) return false;
@@ -808,7 +828,8 @@ export async function agentRequestResolved(raw: string, reach: AgentReach, resol
   if (isAddress(host)) return true;
   try {
     const addresses = await resolve(host);
-    return addresses.length > 0 && addresses.every((a) => agentAddressAllowed(a, reach));
+    const site = profileSite(host, reach);
+    return addresses.length > 0 && addresses.every((a) => agentAddressAllowed(a, reach, site));
   } catch {
     return false;
   }

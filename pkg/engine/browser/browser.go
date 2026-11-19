@@ -45,6 +45,11 @@ type Options struct {
 	// AllowLocal lets it reach loopback and private addresses (the user's
 	// own app); link-local ones (cloud metadata) never.
 	AllowLocal bool
+	// PrivateHost reports whether host is one of the browser profile's own
+	// sites, which may resolve to private addresses (an intranet over VPN
+	// or split-horizon DNS) without AllowLocal; loopback still needs
+	// AllowLocal, link-local never (BP-04a). Nil: none is.
+	PrivateHost func(host string) bool
 	// Host decides each host it would reach (deny_domains); nil allows all.
 	Host func(host string) error
 	// Navigation decides each top-level page it would load, other than
@@ -159,12 +164,8 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 	}
 	b := newBrowser(opts)
 	opts = b.opts
-	allowAddr := func(a netip.Addr) bool {
-		a = a.Unmap()
-		if PublicAddr(a) {
-			return true
-		}
-		return opts.AllowLocal && (a.IsLoopback() || a.IsPrivate())
+	allowAddr := func(host string, a netip.Addr) bool {
+		return addrAllowed(opts, host, a)
 	}
 	host := func(h string) error {
 		if opts.Host != nil {
@@ -220,6 +221,21 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+// addrAllowed reports whether the browser may dial a, an address host
+// resolved to: a public one; with AllowLocal, a loopback or private one;
+// or, for one of the profile's own sites (PrivateHost), a private one,
+// carrier-grade NAT and unique local IPv6 included. Link-local never.
+func addrAllowed(opts Options, host string, a netip.Addr) bool {
+	a = a.Unmap()
+	if PublicAddr(a) {
+		return true
+	}
+	if opts.AllowLocal && (a.IsLoopback() || a.IsPrivate()) {
+		return true
+	}
+	return host != "" && opts.PrivateHost != nil && opts.PrivateHost(normalHost(host)) && PrivateAddr(a)
 }
 
 func newBrowser(opts Options) *Browser {
