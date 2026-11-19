@@ -553,7 +553,14 @@ describe("the agent's view", () => {
     "rebind.example": ["93.184.216.34", "10.0.0.5"],
     "metadata.example": ["169.254.169.254"],
     "mapped.example": ["::ffff:192.168.1.1"],
+    "jira.corp.example": ["10.20.0.7"],
+    "vpn.corp.example": ["100.101.0.4", "fd7a:115c:a1e0::4"],
+    "loop.corp.example": ["127.0.0.1"],
+    "meta.corp.example": ["169.254.169.254"],
+    "wiki.corp.internal": ["192.168.4.4"],
   };
+  // The browser profile's own sites (EL-17b): an intranet over VPN or split-horizon DNS.
+  const work = { allowLocal: false, deny: ["evil.example"], sites: ["*.corp.example", "wiki.corp.internal"] };
   const resolve = (host: string) => (dns[host] ? Promise.resolve(dns[host]) : Promise.reject(new Error(`no such host ${host}`)));
   it.each([
     ["a public name", "https://shop.example/", open, true],
@@ -567,6 +574,14 @@ describe("the agent's view", () => {
     ["a literal address, not resolved", "http://8.8.8.8/", open, true],
     ["a denied domain, not resolved", "https://evil.example/", open, false],
     ["data", "data:text/plain,hi", open, true],
+    ["a profile site on a private address", "https://jira.corp.example/browse/PROJ-1", work, true],
+    ["a profile site over a CGNAT VPN and unique local IPv6", "https://vpn.corp.example/", work, true],
+    ["a private address, not a profile site", "https://jira.corp.example/", open, false],
+    ["a profile site on loopback", "http://loop.corp.example/", work, false],
+    ["a profile site on metadata", "http://meta.corp.example/", work, false],
+    ["a profile site named .internal", "https://wiki.corp.internal/", work, true],
+    ["a private literal address, not a site", "http://10.20.0.7/", work, false],
+    ["localhost, even a site", "http://localhost/", { ...work, sites: ["localhost"] }, false],
   ])("after DNS: %s", async (_name, url, reach, want) => expect(await agentRequestResolved(url, reach, resolve)).toBe(want));
 
   it.each([
@@ -587,6 +602,10 @@ describe("the agent's view", () => {
   it("holds a session's requests without a view to the strictest reach", () => {
     expect(strictestReach(undefined, local)).toEqual({ allowLocal: false, deny: open.deny });
     expect(strictestReach({ allowLocal: true, deny: ["a.example"] }, { allowLocal: true, deny: ["b.example", "a.example"] })).toEqual({ allowLocal: false, deny: ["a.example", "b.example"] });
+    const sites = { allowLocal: false, deny: [], sites: ["*.corp.example", "wiki.example"] };
+    expect(strictestReach(undefined, sites)).toEqual(sites);
+    expect(strictestReach(sites, { allowLocal: false, deny: [], sites: ["wiki.example"] })).toEqual({ allowLocal: false, deny: [], sites: ["wiki.example"] });
+    expect(strictestReach(sites, open)).toEqual({ allowLocal: false, deny: open.deny });
   });
 
   it("matches domains as web.deny_domains does", () => {

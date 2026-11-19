@@ -29,7 +29,7 @@ import type { AgentBrowserCommand } from "./gen/blitz/v1/workspace_pb";
 export interface RelayEnds {
   watch: (signal: AbortSignal) => AsyncIterable<{ command?: AgentBrowserCommand }>;
   reply: (r: { browserId: string; messages: string[]; closed: boolean; reason: string }) => Promise<unknown>;
-  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[]) => Promise<unknown>;
+  open: (id: string, show: string, profile: string, allowLocal: boolean, deny: string[], sites: string[]) => Promise<unknown>;
   send: (id: string, message: string) => Promise<unknown>;
   close: (id: string) => Promise<unknown>;
   on: (event: "agentbrowser:message" | "agentbrowser:closed", f: (arg: unknown) => void) => () => void;
@@ -110,7 +110,7 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
           if (!c) continue;
           if (c.kind === "open") {
             try {
-              await ends.open(c.browserId, c.show, c.profile, c.allowLocal, c.denyDomains);
+              await ends.open(c.browserId, c.show, c.profile, c.allowLocal, c.denyDomains, c.privateSites);
               mine.add(c.browserId);
               if (c.show === "watch") ends.showTab(c.browserId);
               void reply(c.browserId, [openedMessage]);

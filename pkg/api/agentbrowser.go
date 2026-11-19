@@ -36,6 +36,10 @@ type AgentBrowserCommand struct {
 	// DenyDomains are never reached (web.deny_domains), for "open".
 	AllowLocal  bool
 	DenyDomains []string
+	// PrivateSites are the profile's own sites, for "open": a name among
+	// them may resolve to a private address (an intranet) without
+	// AllowLocal; loopback still needs AllowLocal (BP-04a).
+	PrivateSites []string
 	// URL is the page to show, for "page" and "external".
 	URL string
 	// Path is the workspace file to open (relative to the workspace), and

@@ -4842,6 +4842,11 @@ message AgentBrowserCommand {
   // to put the cursor on (0: the top), for file.
   string path = 9;
   int32 line = 10;
+  // The browser profile's own sites (domains or globs, as *.example.com):
+  // a name among them may resolve to a private address (an intranet over
+  // VPN or split-horizon DNS) without allow_local, for open. Loopback
+  // still needs allow_local, link-local is never reached.
+  repeated string private_sites = 11;
 }
 
 // Response message for WorkspaceService.WatchAgentBrowser.

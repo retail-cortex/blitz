@@ -91,7 +91,7 @@ func TestLaunch(t *testing.T) {
 		want bool
 	}{{"8.8.8.8:443", true}, {"10.0.0.1:80", true}, {"169.254.169.254:80", false}} {
 		t.Run(tt.addr, func(t *testing.T) {
-			assert.Equal(t, tt.want, b.proxy.dialer.Control("tcp", tt.addr, nil) == nil)
+			assert.Equal(t, tt.want, b.proxy.dialer.ControlContext(context.Background(), "tcp", tt.addr, nil) == nil)
 		})
 	}
 	assert.ErrorContains(t, b.proxy.check("Denied.Example."), "denied")

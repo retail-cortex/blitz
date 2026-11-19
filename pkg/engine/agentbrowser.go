@@ -172,7 +172,7 @@ func (w *Workspace) openAgentBrowser(ctx context.Context, o tools.AgentBrowserOp
 	r := &browserRelay{id: fmt.Sprintf("agent-%d-%d", time.Now().UnixNano()%1e9, h.seq), w: win, in: make(chan json.RawMessage, 1024), opened: make(chan error, 1), closed: make(chan struct{}), hub: h}
 	h.relays[r.id] = r
 	h.mu.Unlock()
-	cmd := api.AgentBrowserCommand{BrowserID: r.id, Kind: "open", Show: o.Show, Profile: o.Profile, AllowLocal: o.AllowLocal, DenyDomains: o.DenyDomains}
+	cmd := api.AgentBrowserCommand{BrowserID: r.id, Kind: "open", Show: o.Show, Profile: o.Profile, AllowLocal: o.AllowLocal, DenyDomains: o.DenyDomains, PrivateSites: o.PrivateSites}
 	if err := r.push(ctx, cmd); err != nil {
 		r.shut(err)
 		return nil, err

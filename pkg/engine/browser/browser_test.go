@@ -63,6 +63,53 @@ func TestPublicAddr(t *testing.T) {
 	}
 }
 
+func TestPrivateAddr(t *testing.T) {
+	for _, tt := range []struct {
+		addr string
+		want bool
+	}{
+		{"10.1.2.3", true}, {"172.16.0.1", true}, {"192.168.0.1", true}, {"100.64.0.1", true}, {"100.127.255.254", true},
+		{"fd7a:115c:a1e0::4", true}, {"::ffff:10.0.0.1", true}, {"64:ff9b::a00:1", true}, {"2002:a00:1::1", true},
+		{"127.0.0.1", false}, {"::1", false}, {"169.254.169.254", false}, {"fe80::1", false},
+		{"8.8.8.8", false}, {"100.128.0.1", false}, {"0.0.0.0", false}, {"", false},
+	} {
+		t.Run(tt.addr, func(t *testing.T) {
+			a, _ := netip.ParseAddr(tt.addr)
+			assert.Equal(t, tt.want, PrivateAddr(a))
+		})
+	}
+}
+
+// TestAddrAllowed: a browser profile's own sites may be on the user's
+// private network (BP-04a), but never loopback or link-local without
+// browser.allow_local, and other names not at all.
+func TestAddrAllowed(t *testing.T) {
+	work := func(h string) bool { return h == "jira.corp.example" }
+	for _, tt := range []struct {
+		name string
+		opts Options
+		host string
+		addr string
+		want bool
+	}{
+		{"public", Options{}, "www.example.com", "93.184.216.34", true},
+		{"private, not allowed", Options{}, "jira.corp.example", "10.20.0.7", false},
+		{"private, allow_local", Options{AllowLocal: true}, "x.example", "10.20.0.7", true},
+		{"loopback, allow_local", Options{AllowLocal: true}, "x.example", "127.0.0.1", true},
+		{"a profile site, private", Options{PrivateHost: work}, "jira.corp.example", "10.20.0.7", true},
+		{"a profile site, as Chrome names it", Options{PrivateHost: work}, "JIRA.corp.example.", "10.20.0.7", true},
+		{"a profile site, CGNAT", Options{PrivateHost: work}, "jira.corp.example", "100.101.0.4", true},
+		{"a profile site, loopback", Options{PrivateHost: work}, "jira.corp.example", "127.0.0.1", false},
+		{"a profile site, link-local", Options{PrivateHost: work, AllowLocal: true}, "jira.corp.example", "169.254.169.254", false},
+		{"another name, private", Options{PrivateHost: work}, "evil.example", "10.20.0.7", false},
+		{"no host known", Options{PrivateHost: func(string) bool { return true }}, "", "10.20.0.7", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, addrAllowed(tt.opts, tt.host, netip.MustParseAddr(tt.addr)))
+		})
+	}
+}
+
 // proxyClient is an HTTP client going through p.
 func proxyClient(p *proxy) *http.Client {
 	u, _ := url.Parse("http://" + p.addr())
@@ -78,12 +125,14 @@ func TestProxy(t *testing.T) {
 	tests := []struct {
 		name       string
 		allowLocal bool
+		site       string // a host allowed whatever it resolves to (a profile's site)
 		deny       string
 		wantBody   string
 		wantStatus int
 		refused    string
 	}{
 		{name: "local allowed", allowLocal: true, wantBody: "hello"},
+		{name: "a profile site, judged by its host as dialled", site: "127.0.0.1", wantBody: "hello"},
 		{name: "local refused as dialled", wantStatus: http.StatusBadGateway, refused: "not a public address"},
 		{name: "denied host", allowLocal: true, deny: "127.0.0.1", wantStatus: http.StatusForbidden, refused: "denied"},
 	}
@@ -92,7 +141,7 @@ func TestProxy(t *testing.T) {
 			var mu sync.Mutex
 			var refused []string
 			p, err := startProxy(
-				func(a netip.Addr) bool { return tt.allowLocal || PublicAddr(a) },
+				func(h string, a netip.Addr) bool { return tt.allowLocal || PublicAddr(a) || (h != "" && h == tt.site) },
 				func(h string) error {
 					if h == tt.deny {
 						return errors.New("denied")
@@ -732,7 +781,7 @@ func TestProxyRequests(t *testing.T) {
 			go func() { io.Copy(c, c); c.Close() }()
 		}
 	}()
-	p, err := startProxy(func(netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+	p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
 	require.NoError(t, err)
 	defer p.close()
 
