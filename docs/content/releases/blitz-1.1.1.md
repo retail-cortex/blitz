@@ -9,7 +9,7 @@ Your agents browse signed in, and your settings take effect. Sign in to a site i
 
 1. Update Blitz. It updates itself, or run `sudo apt upgrade` or `brew upgrade --cask blitz`, or download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v1.1.1).
 2. In **Settings › Browser**, make a profile and **Sign in…** to the sites you want the agent to use.
-3. Ask the agent to do something on one of those sites. It asks once to browse with your profile; say yes, and it's signed in.
+3. Ask the agent to do something on one of those sites. With one profile, it's signed in right away; with several, it asks once which one to use.
 
 ### Fixed
 
