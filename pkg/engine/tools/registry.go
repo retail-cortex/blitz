@@ -49,8 +49,11 @@ import (
 // Registry manages initialized ADK tools and the resources they share.
 // Tools are registered once at construction and never mutated afterwards.
 type Registry struct {
-	tools        map[string]tool.Tool
-	workspace    *Workspace
+	tools     map[string]tool.Tool
+	workspace *Workspace
+	// orgActive is whether the settings connect to an organization: unsafe
+	// mode isn't offered then (APR-14e).
+	orgActive    bool
 	hooks        *Hooks
 	processes    *ProcessManager
 	policy       *CommandPolicy
@@ -315,6 +318,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if mode == api.ModeBypass && !osb.Active() {
 		mode, modeNote = api.ModeDefault, api.ErrBypassNeedsSandbox
 	}
+	orgActive := cfg.Enterprise.URL != ""
+	if mode == api.ModeUnsafe && orgActive {
+		mode, modeNote = api.ModeDefault, api.ErrUnsafeNotHere
+	}
 
 	r := &Registry{
 		tools:     make(map[string]tool.Tool),
@@ -324,6 +331,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			AutoApproveCommands: cfg.Tools.AutoApproveCommands,
 		}),
 		modeNote:  modeNote,
+		orgActive: orgActive,
 		rules:     rules,
 		processes: NewProcessManager(0, 0),
 		policy:    policy,

@@ -16,6 +16,7 @@
 
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "./studio/paneParts";
 import { createPortal } from "react-dom";
 import { useServiceApprovals, useServiceRuns } from "./serviceRuns";
 import { notify } from "./notify";
@@ -56,6 +57,7 @@ import {
   mdiTextBoxOutline,
   mdiTuneVariant,
   mdiVectorPolyline,
+  mdiAlertOctagonOutline,
 } from "@mdi/js";
 import { config, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
@@ -558,6 +560,8 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
     if (note && note !== noted.current) snack(note);
     noted.current = note;
   }, [note, snack]);
+  // Unsafe runs commands outside the sandbox: asked first (APR-14e).
+  const [confirmUnsafe, setConfirmUnsafe] = useState(false);
   const setMode = async (value: string) => {
     try {
       // Kept as the workspace's mode, as Studio › Settings keeps it (spec_005 APR-14).
@@ -713,12 +717,12 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
           placement="up end"
           className="wide-menu"
           trigger={(p) => (
-            <button className={`sb-item sb-button ${mode.value === "bypass" ? "sb-error" : note ? "sb-warn" : mode.value !== "default" ? "sb-accent" : ""}`} title={note || mode.detail} {...p}>
+            <button className={`sb-item sb-button ${mode.value === "bypass" || mode.value === "unsafe" ? "sb-error" : note ? "sb-warn" : mode.value !== "default" ? "sb-accent" : ""}`} title={note || mode.detail} {...p}>
               {note ? <Icon path={mdiAlertOutline} size="sm" /> : mode.icon && <Icon path={mode.icon} size="sm" />}
               <span className="sb-low">{mode.label}</span>
             </button>
           )}
-          items={[{ heading: t("desktop.composer.mode") }, ...(note ? [{ heading: note }] : []), ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
+          items={[{ heading: t("desktop.composer.mode") }, ...(note ? [{ heading: note }] : []), ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => (m.value === "unsafe" && mode.value !== "unsafe" ? setConfirmUnsafe(true) : void setMode(m.value)) }))]}
         />
       )}
       {s && (
@@ -756,6 +760,20 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
         <span className="sb-item sb-cost sb-low" title={[st.turn, t("desktop.status.session", { tokens: tokens(total.input + total.output) }), ...costByModel(st.byModel)].filter(Boolean).join("\n")}>
           {costText(total)}
         </span>
+      )}
+      {confirmUnsafe && (
+        <ConfirmDialog
+          title={t("desktop.mode.unsafe.confirm_title")}
+          icon={mdiAlertOctagonOutline}
+          confirm={t("desktop.mode.unsafe.confirm")}
+          onConfirm={() => {
+            setConfirmUnsafe(false);
+            void setMode("unsafe");
+          }}
+          onClose={() => setConfirmUnsafe(false)}
+        >
+          <p>{t("desktop.mode.unsafe.confirm_body")}</p>
+        </ConfirmDialog>
       )}
     </>
   );

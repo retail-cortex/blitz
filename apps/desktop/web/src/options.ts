@@ -16,7 +16,7 @@
 
 // The choices the run settings offer, with what each means (translated
 // when asked for, so a language change shows at once).
-import { mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiRobotOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
+import { mdiAlertOctagonOutline, mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiRobotOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
 import { t } from "./i18n";
 
 /** A choice in a settings menu: its value, name, explanation and icon. */
@@ -34,6 +34,8 @@ const modeIcons: Record<string, string> = {
   plan: mdiLockOutline,
   "dont-ask": mdiHandBackRight,
   bypass: mdiShieldOffOutline,
+  // Commands outside the OS sandbox (spec_005 APR-14e): asked to confirm.
+  unsafe: mdiAlertOctagonOutline,
 };
 
 /** The permission modes. */
@@ -46,7 +48,7 @@ export const modeOf = (v: string) => modes().find((m) => m.value === v) ?? modes
 /** The permission modes a workflow can run in, auto (its default) first: plan isn't one (WF-21). */
 export const flowModes = (): Option[] => ["auto", "accept-edits", "default", "dont-ask", "bypass"].map((v) => modeOf(v));
 
-const modeRank: Record<string, number> = { plan: 0, "dont-ask": 1, default: 2, "accept-edits": 3, auto: 3, bypass: 4 };
+const modeRank: Record<string, number> = { plan: 0, "dont-ask": 1, default: 2, "accept-edits": 3, auto: 3, bypass: 4, unsafe: 5 };
 
 /** Whether mode a lets more through than b (accept-edits and auto are level), as the service holds a workflow's mode back. */
 export const looser = (a: string, b: string) => (modeRank[a] ?? 2) > (modeRank[b] ?? 2);

@@ -49,6 +49,9 @@ func cmdMode(args []string, app *App) {
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("set.failed", "error", safe(err.Error())), Reset)
 	default:
 		fmt.Printf("%s%s%s\n", modeColor(mode), i18n.T("mode.set", "mode", mode), Reset)
+		if api.PermissionMode(mode) == api.ModeUnsafe {
+			fmt.Printf("%s%s%s\n", Red+Bold, i18n.T("mode.unsafe_warning"), Reset)
+		}
 		printModeNote(app)
 	}
 }
@@ -62,11 +65,12 @@ func printModeNote(app *App) {
 	}
 }
 
-// modeColor is how the prompt and messages show a mode: red for bypass,
+// modeColor is how the prompt and messages show a mode: red for bypass
+// and unsafe,
 // yellow for the others that change what asks, nothing for default.
 func modeColor(mode string) string {
 	switch api.PermissionMode(mode) {
-	case api.ModeBypass:
+	case api.ModeBypass, api.ModeUnsafe:
 		return Red + Bold
 	case api.ModeDefault, "":
 		return ""

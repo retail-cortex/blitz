@@ -319,6 +319,9 @@ func TestNextMode(t *testing.T) {
 		{api.ModePlan, true, api.ModeBypass},
 		{api.ModeBypass, true, api.ModeDefault},
 		{api.ModeDontAsk, false, api.ModeDefault},
+		// Unsafe is chosen by name, never reached by Shift+Tab; from it,
+		// Shift+Tab goes back to default (APR-14e).
+		{api.ModeUnsafe, true, api.ModeDefault},
 	} {
 		got := nextMode(string(c.from), c.bypass)
 		assert.Equal(t, string(c.want), got, "%s (bypass %v) -> %s, want %s", c.from, c.bypass, got, c.want)

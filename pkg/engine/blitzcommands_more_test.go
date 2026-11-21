@@ -148,6 +148,10 @@ func TestBlitzSettingsSetMore(t *testing.T) {
 	assert.Error(t, err)
 	_, err = runCmd(t, w, "settings set", map[string]any{"key": "mode", "value": "nonsense"})
 	assert.Error(t, err)
+	// The agent never takes itself outside the sandbox (APR-14e).
+	_, err = runCmd(t, w, "settings set", map[string]any{"key": "mode", "value": "unsafe"})
+	assert.Error(t, err)
+	assert.NotEqual(t, "unsafe", w.Settings().PermissionMode)
 }
 
 // Commands about things that aren't there say so and ask nothing.

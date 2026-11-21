@@ -427,6 +427,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	case policy.Mode == api.ModeBypass:
 		record("mode-bypass")
 		return nil
+	case policy.Mode == api.ModeUnsafe:
+		record("mode-unsafe")
+		return nil
 	case req.Kind == api.ActionCommand && req.Tool != "browser" && policy.AutoApproveCommands:
 		// Shell commands, not a page's JavaScript (its sign-ins included).
 		record("auto-policy")

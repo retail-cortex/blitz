@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -165,6 +166,15 @@ func TestOSSandboxEnforcement(t *testing.T) {
 	assert.Equal(t, 0, out.ExitCode, "git's other files are writable: %+v", out)
 	out = run("mkdir -p sub/.git && echo '[core]' > sub/.git/config")
 	assert.Equal(t, 0, out.ExitCode, "a repository made further down is the agent's: %+v", out)
+	// Unsafe mode runs the command outside the sandbox (APR-14e): the
+	// blocked file it couldn't read, it reads; back in bypass, it can't.
+	unsafe := NewHooks(Policy{Mode: api.ModeUnsafe})
+	unsafeCfg := cfg
+	unsafeCfg.Hooks = unsafe
+	out = runShellCommand(context.Background(), unsafeCfg, RunShellCommandInput{Command: "cat .env"})
+	assert.Contains(t, out.Output, "API_KEY", "unsafe mode ran the command in the sandbox: %+v", out)
+	out = run("cat .env")
+	assert.NotContains(t, out.Output, "API_KEY", "back in the sandbox")
 	// A read-only root nested in the writable workspace stays read-only.
 	out = run("echo pwned > vendor-ro/lib.go")
 	assert.NotEqual(t, 0, out.ExitCode, "shell wrote into a read-only root nested in the workspace")

@@ -372,6 +372,7 @@ func toAPI(err error) error {
 		{api.ErrBadRule, connect.CodeInvalidArgument, "BAD_RULE"},
 		{api.ErrUnknownCommand, connect.CodeNotFound, "UNKNOWN_COMMAND"},
 		{api.ErrBypassNeedsSandbox, connect.CodeFailedPrecondition, "BYPASS_NEEDS_SANDBOX"},
+		{api.ErrUnsafeNotHere, connect.CodeFailedPrecondition, "UNSAFE_NOT_HERE"},
 		{api.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
 		{api.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},
 		{api.ErrSnapshotNameTaken, connect.CodeAlreadyExists, "SNAPSHOT_NAME_TAKEN"},

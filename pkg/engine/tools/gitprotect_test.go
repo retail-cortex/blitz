@@ -170,3 +170,34 @@ func TestUserCopyIntoItselfBySpelling(t *testing.T) {
 	}
 	require.NoError(t, ws.UserCopy(ctx, "docs", "docs2"), "elsewhere is fine")
 }
+
+// Unsafe mode is the person's: refused while connected to an
+// organization, and a setting asking for it then opens in default with
+// the reason (APR-14e); without one it's taken.
+func TestUnsafeModeAndTheOrganization(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Blitz.PermissionMode = "unsafe"
+	r, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { r.Close() })
+	assert.Equal(t, api.ModeUnsafe, r.Hooks().Mode())
+	require.NoError(t, r.SetPermissionMode(api.ModeDefault))
+	require.NoError(t, r.SetPermissionMode(api.ModeUnsafe))
+
+	org := config.DefaultConfig()
+	org.Tools.WorkspaceDir = t.TempDir()
+	org.Blitz.PermissionMode = "unsafe"
+	org.Enterprise.URL = "https://blitz.example.com"
+	ro, err := NewRegistry(org, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { ro.Close() })
+	assert.Equal(t, api.ModeDefault, ro.Hooks().Mode())
+	assert.ErrorIs(t, ro.ModeNote(), api.ErrUnsafeNotHere)
+	assert.ErrorIs(t, ro.SetPermissionMode(api.ModeUnsafe), api.ErrUnsafeNotHere)
+	// Nothing asked in it, as in bypass.
+	h, reqs := decisionHooks(api.DecisionDeny)
+	h.policy.Mode = api.ModeUnsafe
+	require.NoError(t, h.Approve(context.Background(), api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "make"}))
+	assert.Empty(t, *reqs)
+}

@@ -443,6 +443,10 @@ func (w *Workspace) cmdSettingsSet(ctx context.Context, c api.BlitzCommand, args
 			return nil, err
 		}
 	case "mode":
+		// The agent can't take itself outside the sandbox (APR-14e).
+		if m, err := api.ParsePermissionMode(value); err == nil && m == api.ModeUnsafe {
+			return nil, api.ErrUnsafeNotHere
+		}
 		got, err := w.SetPermissionMode(value)
 		if err != nil {
 			return nil, err

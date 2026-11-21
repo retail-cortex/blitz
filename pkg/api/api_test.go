@@ -91,6 +91,7 @@ func TestParsePermissionMode(t *testing.T) {
 		"accept-edits": ModeAcceptEdits, "acceptEdits": ModeAcceptEdits, "edits": ModeAcceptEdits,
 		"plan": ModePlan, "dont-ask": ModeDontAsk, "dontAsk": ModeDontAsk, "deny": ModeDontAsk,
 		"auto": ModeAuto, " bypass ": ModeBypass, "bypassPermissions": ModeBypass,
+		"unsafe": ModeUnsafe, "FAFO": ModeUnsafe, "no-sandbox": ModeUnsafe,
 	}
 	for in, want := range cases {
 		t.Run(in, func(t *testing.T) {
@@ -134,6 +135,8 @@ func TestLooser(t *testing.T) {
 		{ModeAuto, ModeAcceptEdits, false},
 		{ModeAcceptEdits, ModeAuto, false},
 		{ModeBypass, ModeAuto, true},
+		{ModeUnsafe, ModeBypass, true},
+		{ModeBypass, ModeUnsafe, false},
 		{ModeDontAsk, ModeDefault, false},
 		{ModeDefault, ModePlan, true},
 	}
