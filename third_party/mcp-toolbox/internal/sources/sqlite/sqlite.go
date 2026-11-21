@@ -41,6 +41,14 @@ const SourceType string = "sqlite"
 // MaxRows bounds the rows a query returns (Blitz).
 var MaxRows = 1000
 
+// MaxBytes bounds what a query's rows hold together, and MaxValue one
+// value (Blitz; security review databases#3: SELECT randomblob(900000000)
+// over a few rows took the service's memory).
+var (
+	MaxBytes = 32 << 20
+	MaxValue = 16 << 20
+)
+
 // validate interface
 var _ sources.SourceConfig = Config{}
 
@@ -148,6 +156,7 @@ func (s *Source) RunSQL(ctx context.Context, statement string, params []any) (an
 
 	// Prepare the result slice
 	out := []any{}
+	size := 0
 	for rows.Next() {
 		// Blitz: rows past MaxRows aren't read, so a query over a big table
 		// doesn't load all of it; the last row says so.
@@ -159,6 +168,23 @@ func (s *Source) RunSQL(ctx context.Context, statement string, params []any) (an
 		}
 		if err := rows.Scan(values...); err != nil {
 			return nil, fmt.Errorf("unable to scan row: %w", err)
+		}
+		// Blitz: the rows kept so far, and this one, under MaxBytes.
+		for _, v := range rawValues {
+			switch x := v.(type) {
+			case string:
+				size += len(x)
+			case []byte:
+				size += len(x)
+			default:
+				size += 8
+			}
+		}
+		if size > MaxBytes {
+			note := orderedmap.Row{}
+			note.Add("note", fmt.Sprintf("only the rows that fit in %d MB: narrow the query (fewer or smaller columns, LIMIT) for the rest", MaxBytes>>20))
+			out = append(out, note)
+			break
 		}
 
 		// Create a map for this row
@@ -222,6 +248,7 @@ func initSQLiteConnection(ctx context.Context, tracer trace.Tracer, name, dbPath
 // authorizer refusing ATTACH and DETACH, and query_only on.
 func readOnlyConn(c *sqlite3.Conn) error {
 	c.Limit(sqlite3.LIMIT_ATTACHED, 0)
+	c.Limit(sqlite3.LIMIT_LENGTH, MaxValue) // no value past it is made
 	if err := c.SetAuthorizer(func(action sqlite3.AuthorizerActionCode, _, _, _, _ string) sqlite3.AuthorizerReturnCode {
 		switch action {
 		case sqlite3.AUTH_ATTACH, sqlite3.AUTH_DETACH:

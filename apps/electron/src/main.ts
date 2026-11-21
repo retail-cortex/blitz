@@ -436,7 +436,12 @@ async function relayPing(child: ChildProcess, p: RelayPing) {
   } catch (err) {
     answer = { pinged: p.id, error: err instanceof Error ? err.message : String(err) || "the ping failed" };
   }
-  if (child.stdin && !child.stdin.destroyed) child.stdin.write(JSON.stringify(answer) + "\n");
+  const stdin = child.stdin;
+  if (!stdin || stdin.destroyed || !stdin.writable) return;
+  // The host can exit while a ping is out: its stdin then fails with
+  // EPIPE, which unhandled would end the app (security review electron#4).
+  if (stdin.listenerCount("error") === 0) stdin.on("error", () => {});
+  stdin.write(JSON.stringify(answer) + "\n", () => {});
 }
 
 /** Points the open windows at the page served again (a new one-time link each). */

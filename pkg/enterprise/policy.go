@@ -50,6 +50,15 @@ type PolicyItem struct {
 	Files map[string]string `json:"files,omitempty"`
 }
 
+// PolicySchema is the newest policy envelope this client reads. A newer
+// one may hold restrictions it doesn't know, so it isn't taken: the policy
+// kept stays, and with none, the strictest applies (EN-33b; security
+// review enterprise#6). 0 is an envelope from before the field.
+const PolicySchema = 2
+
+// ErrPolicySchema is a policy envelope newer than this client reads.
+var ErrPolicySchema = errors.New("your organization's policy is newer than this version of Blitz reads: update Blitz")
+
 // PolicyEnvelope is what the service signs at /api/v1/policy (its
 // spec_012_policy PO-20): the person's effective policy, why each setting
 // is what it is, their rules and guardrails, and until when it holds.
@@ -131,6 +140,9 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 	}
 	if err != nil {
 		return false, err
+	}
+	if env.Schema > PolicySchema {
+		return false, fmt.Errorf("%w (schema %d; this reads %d)", ErrPolicySchema, env.Schema, PolicySchema)
 	}
 	next, err := stagePolicy(dir, env)
 	if err != nil {

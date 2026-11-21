@@ -700,7 +700,9 @@ func geminiProviderTools(o Origin, resp *model.LLMResponse) {
 			text = s.Segment.Text
 		}
 		for _, i := range s.GroundingChunkIndices {
-			if int(i) < len(g.GroundingChunks) && g.GroundingChunks[i] != nil && g.GroundingChunks[i].Web != nil {
+			// A negative index (int32 on the wire, a gateway's too) is no chunk
+			// (security review runtime#7: it panicked the call).
+			if i >= 0 && int(i) < len(g.GroundingChunks) && g.GroundingChunks[i] != nil && g.GroundingChunks[i].Web != nil {
 				w := g.GroundingChunks[i].Web
 				cites = append(cites, Citation{Title: w.Title, URL: w.URI, Text: text})
 			}

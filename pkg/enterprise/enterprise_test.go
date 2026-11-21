@@ -1320,3 +1320,29 @@ func TestPolicyItems(t *testing.T) {
 		assert.ErrorContains(t, err, "can't be a file")
 	})
 }
+
+// A policy newer than this client reads isn't taken: it may hold
+// restrictions it doesn't know, so the policy kept stays (EN-33b;
+// security review enterprise#6).
+func TestPolicyNewerSchemaRefused(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	s.Mu.Lock()
+	s.Policy = map[string]any{"schema": PolicySchema, "policy": map[string]any{"refresh": "5m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}}
+	s.Mu.Unlock()
+	_, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	kept, err := os.ReadFile(filepath.Join(dir, "policy.json"))
+	require.NoError(t, err)
+
+	s.Mu.Lock()
+	s.Policy = map[string]any{"schema": PolicySchema + 1, "policy": map[string]any{"refresh": "1m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}}
+	s.Mu.Unlock()
+	_, err = c.RefreshPolicy(ctx, dir)
+	require.ErrorIs(t, err, ErrPolicySchema)
+	now, err := os.ReadFile(filepath.Join(dir, "policy.json"))
+	require.NoError(t, err)
+	assert.Equal(t, string(kept), string(now), "the policy kept stays")
+}

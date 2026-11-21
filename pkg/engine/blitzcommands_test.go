@@ -254,3 +254,16 @@ func TestBlitzSkillNamesRealCommands(t *testing.T) {
 	}
 	assert.Greater(t, named, 10, "the skill names its commands")
 }
+
+// The model names no secrets in a connection's settings: a ${NAME} in a
+// field that isn't a secret's would be filled from every secret the person
+// has, and the test that follows would send it to the server the model
+// named (security review tools#4, databases#4). Nothing is asked or saved.
+func TestConnectorSaveRefusesSecretPlaceholders(t *testing.T) {
+	w, asked, _ := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	args := map[string]any{"kind": "sqlite", "name": "leak", "settings": map[string]any{"database": "${GITHUB_TOKEN}.db"}}
+	_, err := runCmd(t, w, "connector save", args)
+	require.ErrorContains(t, err, "can't name a secret")
+	assert.Empty(t, *asked, "nothing asked")
+	assert.NoFileExists(t, filepath.Join(w.Dir(), ".agents", "connectors", "databases", "leak.yaml"))
+}

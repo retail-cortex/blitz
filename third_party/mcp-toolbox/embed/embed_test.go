@@ -305,6 +305,12 @@ annotations:
 	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "SELECT count(*) AS n FROM recipes"})
 	assert.False(t, isErr, got)
 	assert.NotContains(t, got, `"n":0`, "the rows are still there")
+
+	// A value past MaxValue isn't made, so a query can't take the
+	// service's memory (databases#3).
+	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "SELECT randomblob(900000000) AS b"})
+	assert.True(t, isErr, got)
+	assert.Contains(t, strings.ToLower(got), "too big")
 }
 
 // A database that can't be reached fails Start; Close is safe twice.

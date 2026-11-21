@@ -253,6 +253,13 @@ func (w *Workspace) cmdConnectorSave(ctx context.Context, c api.BlitzCommand, ar
 			dropped = append(dropped, key)
 			continue
 		}
+		// A ${NAME} in a field that isn't a secret's would be filled from
+		// every secret the person has, and the test that follows would send
+		// it to the server the model named (security review tools#4,
+		// databases#4): the model names no secrets.
+		if text := fmt.Sprint(v); strings.Contains(text, "${") {
+			return nil, fmt.Errorf("%s's %s can't name a secret (${…}): secrets go in the secret fields, which are asked of the person", k.ID, key)
+		}
 		conn.Settings[key] = fmt.Sprint(v)
 	}
 	for _, q := range asSlice(args["queries"]) {

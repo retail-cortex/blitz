@@ -214,7 +214,7 @@ func TestAsClientCallsDropsGeminisGrounding(t *testing.T) {
 		GroundingMetadata: &genai.GroundingMetadata{
 			WebSearchQueries:  []string{"blitz"},
 			GroundingChunks:   []*genai.GroundingChunk{{Web: &genai.GroundingChunkWeb{URI: "https://b", Title: "Blitz"}}, nil},
-			GroundingSupports: []*genai.GroundingSupport{{Segment: &genai.Segment{Text: "Blitz is"}, GroundingChunkIndices: []int32{0, 7}}},
+			GroundingSupports: []*genai.GroundingSupport{{Segment: &genai.Segment{Text: "Blitz is"}, GroundingChunkIndices: []int32{0, 7, -1}}}, // past the end, and negative (runtime#7)
 		},
 	}
 	geminiProviderTools(geminiO, resp)

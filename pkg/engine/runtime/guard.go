@@ -141,9 +141,14 @@ func (e *Engine) guardOutput(ctx agent.Context, resp *model.LLMResponse) {
 		case p == nil || p.Text == "":
 		case p.Thought:
 			// Reasoning a provider signed goes back to it unchanged (spec_056
-			// CA-29): it's masked where it's shown (pkg/engine events).
-			if e.secrets != nil && !signedState(p.ThoughtSignature) {
-				p.Text = redact.Mask(p.Text)
+			// CA-29): it's masked where it's shown (pkg/engine events). But a
+			// signed thought holding a secret's value would be stored with
+			// it: masked, it loses its signature, and the provider gets it
+			// as reasoning it didn't sign (CA-29a; security review runtime#2).
+			if e.secrets != nil {
+				if masked := redact.Mask(p.Text); masked != p.Text {
+					p.Text, p.ThoughtSignature = masked, nil
+				}
 			}
 		case resp.Partial && hold != nil:
 			p.Text = hold.Write(p.Text)

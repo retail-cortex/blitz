@@ -113,3 +113,22 @@ func TestSettingsBlockedWhereverTheyAre(t *testing.T) {
 	assert.True(t, blocked)
 	assert.Empty(t, settingsBlocked(""))
 }
+
+// A profile's own sites reach the private network by name only: never a
+// literal address, never a site that names no domain (BP-04a; security
+// review electron#1).
+func TestProfileSiteHost(t *testing.T) {
+	is := profileSiteHost([]string{"*", "10.*", "192.168.1.5", "intranet", "*.corp.example", "wiki.example.org"})
+	for host, want := range map[string]bool{
+		"wiki.example.org":  true,
+		"git.corp.example":  true,
+		"attacker.example":  false,
+		"192.168.1.5":       false,
+		"10.0.0.1":          false,
+		"[fd00::1]":         false,
+		"intranet":          false,
+		"anything.anywhere": false,
+	} {
+		assert.Equal(t, want, is(host), host)
+	}
+}

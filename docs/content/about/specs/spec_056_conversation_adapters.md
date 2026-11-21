@@ -215,6 +215,7 @@ Each wire API has one adapter (`Adapter.Request`). It runs at every call, inside
   
   Cache reads and writes are recorded with each call (CA-120).
 - **CA-29** **Secrets** in the conversation are expanded for the call as today (`expandContents`), in neutral text only, never inside provider state. A secret a model writes is masked in what's shown, logged and kept in the transcript (spec_039_secrets). Signed reasoning isn't edited: reasoning with a secret in it is hidden from view and kept unchanged for the model that wrote it.
+- **CA-29a** *2026-11-21 (security review runtime#2: a signed thought was stored as the provider signed it, a secret's value in it too).* A signed thought holding a secret's value is masked and loses its signature: the provider gets it as reasoning it didn't sign. Thoughts without one are kept as signed.
 
 ## 6. Responses
 

@@ -33,6 +33,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 // orgService is the organization's service as Blitz meets it after
@@ -416,4 +418,24 @@ func TestOwnProvidersOffForPicturesSpeechAndVoice(t *testing.T) {
 	cfg.Enterprise.URL = "https://blitz.example.com"
 	assert.NoError(t, ownProviderOff(cfg, "ollama"), "the local provider stays")
 	assert.NoError(t, ownProviderOff(cfg, "enterprise"))
+}
+
+// A signed thought is kept as the provider signed it, unless it holds a
+// secret's value: masked, it drops its signature rather than be stored
+// with the secret (CA-29a; security review runtime#2).
+func TestSignedThoughtWithASecretIsMasked(t *testing.T) {
+	redact.Remember("sk-thought-secret-29a")
+	e := &Engine{secrets: func(s string) (string, []string) { return s, nil }}
+	sig := []byte("signed-by-the-provider")
+	resp := &model.LLMResponse{Content: &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{
+		{Thought: true, Text: "the key is sk-thought-secret-29a", ThoughtSignature: sig},
+		{Thought: true, Text: "nothing secret here", ThoughtSignature: sig},
+	}}}
+	e.guardOutput(nil, resp)
+	leaked := resp.Content.Parts[0]
+	assert.NotContains(t, leaked.Text, "sk-thought-secret-29a")
+	assert.Nil(t, leaked.ThoughtSignature, "a masked thought isn't the one signed")
+	clean := resp.Content.Parts[1]
+	assert.Equal(t, "nothing secret here", clean.Text)
+	assert.Equal(t, sig, clean.ThoughtSignature, "kept as signed")
 }

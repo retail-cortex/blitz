@@ -82,6 +82,7 @@ Phase 1 is the tool, its rules, connections, settings, doctor, the organization'
 
   It's what the agent reads first, so it never guesses a kind's fields.
 - **DRV-11** `connector save` takes `kind`, `name`, `description`, `settings` (the kind's fields; a secret field as `${NAME}`), `read_only`, and `queries` (name, description, statement, parameters, as Studio's **Your queries**). Before asking, it checks the connection as Studio's form does (`Workspace.SaveConnector`'s checks: the kind, the fields, a path that names no file, a name already taken by another connection): a problem comes back to the agent with nothing asked or written. Then the approval shows:
+- **DRV-11a** *2026-11-21 (security review tools#4, databases#4: `${GITHUB_TOKEN}` in a host was filled from the vault, and the test sent it to the server named).* A connection the model saves names no secret: a `${…}` in a field that isn't a secret's is refused before anything is asked; secret fields are asked of the person, as before.
   - the file as it will be written, its folder (`.agents/connectors/<category>/`) and whether it replaces one;
   - read-only or not, and its queries, each marked if it may write;
   - a password field for each `${NAME}` that isn't set.
