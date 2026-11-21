@@ -1924,6 +1924,7 @@
     "desktop.palette.group.chats": "Chats",
     "desktop.palette.group.commands": "Comandos",
     "desktop.palette.group.files": "Archivos",
+    "desktop.palette.files_truncated": "Más archivos de los que Blitz lista (50 000): uno más allá no se encuentra aquí. Abre una carpeta más pequeña para encontrarlos todos.",
     "desktop.palette.group.settings": "Ajustes",
     "desktop.palette.group.text": "En el espacio de trabajo",
     "desktop.palette.search_for": "Buscar «{query}» en el espacio de trabajo",

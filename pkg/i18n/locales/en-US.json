@@ -1924,6 +1924,7 @@
     "desktop.palette.group.chats": "Chats",
     "desktop.palette.group.commands": "Commands",
     "desktop.palette.group.files": "Files",
+    "desktop.palette.files_truncated": "More files than Blitz lists (50,000): a file past them isn't found here. Open a smaller folder to find them all.",
     "desktop.palette.group.settings": "Settings",
     "desktop.palette.group.text": "In the workspace",
     "desktop.palette.search_for": "Search the workspace for “{query}”",

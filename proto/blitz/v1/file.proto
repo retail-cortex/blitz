@@ -458,6 +458,9 @@ message FindFilesRequest {
 // Response message for FileService.FindFiles.
 message FindFilesResponse {
   repeated string paths = 1;
+  // The workspace has more files than Blitz lists (50,000): one past them
+  // isn't found (FIL-17a).
+  bool truncated = 2;
 }
 
 // Request message for FileService.StatFiles.

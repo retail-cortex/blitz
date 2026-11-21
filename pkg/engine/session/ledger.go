@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 	"os"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -50,12 +51,10 @@ func (s *Storage) AppendCall(id string, c api.Call) error {
 			return nil
 		}
 	}
-	f, err := os.OpenFile(s.path(id, usageSuffix), os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerm)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(append(line, '\n'))
-	return errors.Join(err, f.Close())
+	// Through the shared appender, which ends a torn last line first, so
+	// a write cut short doesn't take the next call's record with it (N26
+	// engine-sub-2#8).
+	return jsonl.Append(s.path(id, usageSuffix), filePerm, line)
 }
 
 // Calls returns session id's ledger, oldest first: none for a session

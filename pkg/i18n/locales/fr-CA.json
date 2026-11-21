@@ -1924,6 +1924,7 @@
     "desktop.palette.group.chats": "Conversations",
     "desktop.palette.group.commands": "Commandes",
     "desktop.palette.group.files": "Fichiers",
+    "desktop.palette.files_truncated": "Plus de fichiers que Blitz n’en liste (50 000) : un fichier au-delà n’est pas trouvé ici. Ouvrez un dossier plus petit pour tous les trouver.",
     "desktop.palette.group.settings": "Paramètres",
     "desktop.palette.group.text": "Dans l'espace de travail",
     "desktop.palette.search_for": "Chercher « {query} » dans l'espace de travail",

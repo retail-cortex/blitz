@@ -94,7 +94,9 @@ func TestBigQuerySchema(t *testing.T) {
 	t.Cleanup(func() { MaxSchemaTables = old })
 	tables, err = bigquerySchema(ctx, cs, "acme")
 	require.NoError(t, err)
-	assert.Len(t, tables, 1, "at most MaxSchemaTables")
+	require.Len(t, tables, 2, "at most MaxSchemaTables, and a last entry saying so (N26 engine-sub-1#23)")
+	assert.Equal(t, "…", tables[1].Name)
+	assert.Contains(t, tables[1].About, "the dataset has more")
 	MaxSchemaTables = old
 
 	tools[schemaTool+"_tables"] = func(map[string]any) answer { return answer{parts: []string{"access denied"}, isErr: true} }

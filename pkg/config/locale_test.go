@@ -15,9 +15,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -89,4 +91,27 @@ func TestDefaultLocale(t *testing.T) {
 	c := DefaultConfig()
 	assert.Equal(t, "en-US", c.UI.Locale, "defaults: %q %q", c.UI.Locale, c.UI.LocalesDir)
 	assert.True(t, strings.HasSuffix(c.UI.LocalesDir, "locales"), "defaults: %q %q", c.UI.Locale, c.UI.LocalesDir)
+}
+
+// Settings edits at once each keep their change: one at a time across
+// processes, each reading what the last wrote (N26 api-client-config#20).
+func TestEditConfigFileConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	const n = 16
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			key := fmt.Sprintf("k%d", i)
+			_, err := editConfigFile(dir, func(doc string) string { return setTOMLKey(doc, "concurrent", key, "1") }, func(map[string]any) error { return nil })
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	b, err := os.ReadFile(filepath.Join(dir, ".env.toml"))
+	require.NoError(t, err)
+	for i := range n {
+		assert.Contains(t, string(b), fmt.Sprintf("k%d = 1", i), "an edit was lost")
+	}
 }

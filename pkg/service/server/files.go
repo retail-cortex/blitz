@@ -319,7 +319,7 @@ func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) 
 	if err != nil {
 		return nil, fileError(err)
 	}
-	return ok(&pb.FindFilesResponse{Paths: paths})
+	return ok(&pb.FindFilesResponse{Paths: paths, Truncated: w.FilesTruncated()})
 }
 
 func (h fileService) ReadTable(ctx context.Context, r req[pb.ReadTableRequest]) (*connect.Response[pb.ReadTableResponse], error) {

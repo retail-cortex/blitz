@@ -205,7 +205,9 @@ func bigquerySchema(ctx context.Context, cs *mcp.ClientSession, project string) 
 		}
 		for _, id := range ids {
 			if len(tables) >= MaxSchemaTables {
-				return tables, nil
+				// The rest exist: said, not left out without a word (N26
+				// engine-sub-1#23).
+				return append(tables, connectors.Table{Name: "…", About: fmt.Sprintf("only the first %d tables are described here; the dataset has more", MaxSchemaTables)}), nil
 			}
 			parts, isErr, err := call(ctx, cs, schemaTool+"_table", map[string]any{"project": proj, "dataset": ds, "table": id})
 			t := connectors.Table{Name: prefix + ds + "." + id}

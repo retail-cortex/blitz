@@ -30,6 +30,7 @@ import {
   mdiFolderOpenOutline,
   mdiFolderOutline,
   mdiHistory,
+  mdiInformationOutline,
   mdiMagnify,
   mdiMonitor,
   mdiTuneVariant,
@@ -74,6 +75,9 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   const [custom, setCustom] = useState<CommandSpec[]>([]);
   const [chats, setChats] = useState<{ id: string; title: string; detail: string }[]>([]);
   const [found, setFound] = useState<string[]>([]);
+  // The workspace has more files than Blitz lists: say a file may be
+  // missed (FIL-17a).
+  const [truncated, setTruncated] = useState(false);
   const [passages, setPassages] = useState<SearchHit[]>([]);
   // The user docs' pages (DSK-103), by title.
   const [docPages, setDocPages] = useState<{ path: string; title: string }[]>([]);
@@ -114,7 +118,11 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     let live = true;
     const timer = setTimeout(() => {
       files.findFiles({ workspace: dir, query: fileQuery, limit: 8 }).then(
-        (r) => live && setFound(r.paths),
+        (r) => {
+          if (!live) return;
+          setFound(r.paths);
+          setTruncated(r.truncated);
+        },
         () => live && setFound([]),
       );
     }, 60);
@@ -168,8 +176,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     return out;
   }, [passages, dir, query, onClose]);
   const fileItems = useMemo<PaletteItem[]>(
-    () =>
-      found.map((path) => ({
+    () => [
+      ...found.map((path) => ({
         group: t("desktop.palette.group.files"),
         label: nameOf(path),
         detail: parentOf(path),
@@ -179,7 +187,11 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
           if (dir) openFile({ dir, path, line, column });
         },
       })),
-    [found, dir, line, column, onClose],
+      ...(truncated && found.length > 0
+        ? [{ group: t("desktop.palette.group.files"), label: t("desktop.palette.files_truncated"), detail: "", icon: mdiInformationOutline, run: () => {} }]
+        : []),
+    ],
+    [found, truncated, dir, line, column, onClose],
   );
 
   const conversation = useConversation();
