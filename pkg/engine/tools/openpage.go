@@ -18,14 +18,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -153,21 +157,55 @@ func (r *Registry) pageURL(raw string) (string, error) {
 }
 
 // askRulePage puts u to the person when an ask web(…) rule names its
-// host: open_page otherwise needs no approval (AB-10), but an ask rule is
-// the person saying they want to see it.
+// host, or when the host is (or resolves to) a private, loopback or
+// link-local address (AB-10a): a public page needs no approval (AB-10),
+// but a page on this computer or its network opens with the person's own
+// browser and sign-ins, where a page the agent read could send it.
 func (r *Registry) askRulePage(ctx context.Context, u string) error {
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return err
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if effect, _ := r.rules.Decide(RuleWeb, []string{host}); effect != EffectAsk {
+	effect, _ := r.rules.Decide(RuleWeb, []string{host})
+	private := privateHost(ctx, host)
+	if effect != EffectAsk && !private {
 		return nil
 	}
+	detail := "open " + u + " in a browser"
+	if private {
+		detail += " (an address on this computer or its network)"
+	}
 	return r.hooks.Approve(ctx, api.ApprovalRequest{
-		Tool: "open_page", Kind: api.ActionNetwork, Detail: "open " + u + " in a browser",
+		Tool: "open_page", Kind: api.ActionNetwork, Detail: detail,
 		Targets: []string{host}, MustAsk: true,
 	})
+}
+
+// pageLookup resolves a page's host (a variable for tests).
+var pageLookup = func(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
+
+// privateHost reports whether host is an address that isn't public
+// (browser.PublicAddr), or a name any of whose addresses isn't: a name
+// that doesn't resolve isn't one (the page won't load either).
+func privateHost(ctx context.Context, host string) bool {
+	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return !browser.PublicAddr(a.Unmap())
+	}
+	lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	addrs, err := pageLookup(lctx, host)
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if !browser.PublicAddr(a.Unmap()) {
+			return true
+		}
+	}
+	return false
 }
 
 // pageProfile is the browser profile open_page shows a page signed in

@@ -96,10 +96,14 @@ func TestCheck(t *testing.T) {
 		"mcp/notoml.toml":         {"= x", "toml"},
 		// N26 safety-enterprise#15: a secret anywhere in what every
 		// person gets.
-		"mcp/arg.toml":            {"command = \"x\"\nargs = [\"--api-key\", \"opaque-value-123\"]\n", "args[1], after --api-key, holds a secret"},
-		"mcp/argeq.toml":          {"command = \"x\"\nargs = [\"--token=glpat-" + strings.Repeat("a1", 12) + "\"]\n", "holds a secret"},
-		"mcp/userinfo.toml":       {"url = \"https://ana:hunter22@mcp.example.com/\"\n", "url holds a password"},
-		"mcp/query.toml":          {"url = \"https://mcp.example.com/?token=abc123\"\n", "url's token holds a secret"},
+		"mcp/arg.toml":      {"command = \"x\"\nargs = [\"--api-key\", \"opaque-value-123\"]\n", "args[1], after --api-key, holds a secret"},
+		"mcp/argeq.toml":    {"command = \"x\"\nargs = [\"--token=glpat-" + strings.Repeat("a1", 12) + "\"]\n", "holds a secret"},
+		"mcp/userinfo.toml": {"url = \"https://ana:hunter22@mcp.example.com/\"\n", "url holds a password"},
+		"mcp/query.toml":    {"url = \"https://mcp.example.com/?token=abc123\"\n", "url's token holds a secret"},
+		// An opaque value under a credential's name matches no key format.
+		"mcp/bearer.toml":         {"url = \"https://x\"\n[headers]\nAuthorization = \"Bearer 9f8e7d6c5b4a\"\n", "header authorization holds a secret"},
+		"mcp/apikey.toml":         {"url = \"https://x\"\n[headers]\nX-Api-Key = \"opaque\"\n", "header x-api-key holds a secret"},
+		"mcp/envtok.toml":         {"command = \"x\"\n[env]\nSERVICE_API_TOKEN = \"abc\"\n", "env service_api_token holds a secret"},
 		"connectors/db/prod.yaml": {"kind: source\nname: prod\npassword: Zq8" + "rT4vL2mN7pX1wK9s\n", "line 3 holds what looks like a secret"},
 		"agents/leaky.md":         {"---\nname: leaky\n---\nUse AKIA" + "Q3EXAMPLEZ7Y4WXN for S3.", "line 4 holds what looks like a secret (AWS access key"},
 		"connectors/x/bad.yaml":   {"a: [", "connectors/x/bad.yaml"},
@@ -112,6 +116,7 @@ func TestCheck(t *testing.T) {
 		{"mcp/ref.toml", "command = \"x\"\nargs = [\"--api-key\", \"{secrets:key}\"]\n"},
 		{"mcp/qref.toml", "url = \"https://mcp.example.com/?token={secrets:t}\"\n"},
 		{"connectors/db/ok.yaml", "kind: source\nname: ok\npassword: \"{secrets:db_password_2}\"\n"},
+		{"mcp/names.toml", "command = \"x\"\n[env]\nMONKEY = \"banana\"\nAUTHOR = \"ana\"\nGITHUB_TOKEN = \"{secrets:gh}\"\nNO_TOKEN = \"\"\n[headers]\nAccept = \"application/json\"\n"},
 	} {
 		_, problems := Check(ok.path, []byte(ok.data))
 		assert.Empty(t, problems, ok.path)

@@ -32,7 +32,8 @@ import (
 	// extensions: every SQLite source has vec0 tables and the vec_*
 	// functions.
 	_ "github.com/asg017/sqlite-vec-go-bindings/ncruces"
-	_ "github.com/ncruces/go-sqlite3/driver"
+	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/driver"
 )
 
 const SourceType string = "sqlite"
@@ -195,8 +196,16 @@ func initSQLiteConnection(ctx context.Context, tracer trace.Tracer, name, dbPath
 	ctx, span := sources.InitConnectionSpan(ctx, tracer, SourceType, name)
 	defer span.End()
 
-	// Open database connection
-	db, err := sql.Open("sqlite3", sqliteDSN(dbPath, readOnly))
+	// Open database connection. Blitz: mode=ro covers the main file only;
+	// a read-only source also can't ATTACH a file (the same one writable,
+	// or another the person can read, past hidden_paths) or VACUUM INTO
+	// one, and query_only refuses writes to anything (databases#1).
+	db, err := driver.Open(sqliteDSN(dbPath, readOnly), func(c *sqlite3.Conn) error {
+		if !readOnly {
+			return nil
+		}
+		return readOnlyConn(c)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("sql.Open: %w", err)
 	}
@@ -206,6 +215,23 @@ func initSQLiteConnection(ctx context.Context, tracer trace.Tracer, name, dbPath
 	db.SetMaxIdleConns(1)
 
 	return db, nil
+}
+
+// readOnlyConn holds a read-only source's connection to its one file
+// (Blitz): no attached databases (VACUUM INTO attaches its target), an
+// authorizer refusing ATTACH and DETACH, and query_only on.
+func readOnlyConn(c *sqlite3.Conn) error {
+	c.Limit(sqlite3.LIMIT_ATTACHED, 0)
+	if err := c.SetAuthorizer(func(action sqlite3.AuthorizerActionCode, _, _, _, _ string) sqlite3.AuthorizerReturnCode {
+		switch action {
+		case sqlite3.AUTH_ATTACH, sqlite3.AUTH_DETACH:
+			return sqlite3.AUTH_DENY
+		}
+		return sqlite3.AUTH_OK
+	}); err != nil {
+		return err
+	}
+	return c.Exec("PRAGMA query_only = ON")
 }
 
 // sqliteDSN is the driver's name for a database file (Blitz): a file: URI

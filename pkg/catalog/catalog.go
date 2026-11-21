@@ -279,6 +279,11 @@ var keyParam = regexp.MustCompile(`(?i)token|key|secret|password|passwd|sig|auth
 // secretRef is a value that names a secret rather than holding one.
 var secretRef = regexp.MustCompile(`^\{secrets:[A-Za-z0-9_.-]+\}$`)
 
+// credentialName is an env variable's or a header's name that says its
+// value is a credential (Authorization, X-Api-Key, GITHUB_TOKEN,
+// DB_PASSWORD): whole parts of the name, so MONKEY or AUTHOR aren't.
+var credentialName = regexp.MustCompile(`(?i)(^|[_-])(api[_-]?key|key|token|secret|password|passwd|auth|authorization|credentials?|bearer)($|[_-])`)
+
 // checkMCP checks an MCP server's file: [mcp.servers]'s fields, and no
 // secret written in it.
 func checkMCP(p string, data []byte) []string {
@@ -301,11 +306,21 @@ func checkMCP(p string, data []byte) []string {
 		problems = append(problems, p+": a command or a url, not both")
 	}
 	values := map[string]string{}
+	// A value under a credential's name is a secret whatever it looks like
+	// (an opaque bearer token matches no key format): it's named in Secret
+	// Manager (N26 safety-enterprise#15).
+	named := func(where, name, v string) {
+		if credentialName.MatchString(name) && strings.TrimSpace(v) != "" && !strings.Contains(v, "{secrets:") {
+			problems = append(problems, fmt.Sprintf("%s: %s holds a secret (its name says it's a credential): name one in Secret Manager instead, as {secrets:name}", p, where))
+			return
+		}
+		values[where] = v
+	}
 	for k, v := range s.Env {
-		values["env "+k] = v
+		named("env "+k, k, v)
 	}
 	for k, v := range s.Headers {
-		values["header "+k] = v
+		named("header "+k, k, v)
 	}
 	for i, a := range s.Args {
 		if name, v, ok := strings.Cut(a, "="); ok && keyFlag.MatchString(name) {

@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -251,6 +252,71 @@ func TestOpenPageProfiles(t *testing.T) {
 			if tt.note != "" {
 				assert.Contains(t, out["note"], tt.note)
 			}
+		})
+	}
+}
+
+// The tests never ask DNS: names resolve from this table, others to a
+// public address.
+func init() {
+	pageLookup = func(_ context.Context, host string) ([]netip.Addr, error) {
+		fake := map[string][]string{
+			"localhost":      {"127.0.0.1", "::1"},
+			"router.lan":     {"192.168.1.1"},
+			"rebind.example": {"93.184.216.34", "10.0.0.5"},
+		}
+		if host == "gone.example" {
+			return nil, errors.New("no such host")
+		}
+		list, ok := fake[host]
+		if !ok {
+			list = []string{"93.184.216.34"}
+		}
+		var out []netip.Addr
+		for _, a := range list {
+			out = append(out, netip.MustParseAddr(a))
+		}
+		return out, nil
+	}
+}
+
+// A page on this computer or its network is put to the person first,
+// whatever the mode, as it opens with their own browser and sign-ins
+// (AB-10a); a public one isn't.
+func TestOpenPagePrivateHosts(t *testing.T) {
+	for _, tc := range []struct {
+		url   string
+		asked bool
+	}{
+		{"https://example.com", false},
+		{"http://localhost:8080/admin", true},
+		{"http://127.0.0.1:3000", true},
+		{"http://[::1]/", true},
+		{"http://[::ffff:127.0.0.1]/", true},
+		{"http://169.254.169.254/latest/meta-data", true},
+		{"http://10.1.2.3", true},
+		{"https://router.lan", true},
+		{"https://rebind.example", true},
+		{"https://gone.example", false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			hooks, reqs := decisionHooks(api.DecisionDeny)
+			r := &Registry{hooks: hooks}
+			opened := 0
+			r.SetPageOpener(func(context.Context, string, string, string) error { opened++; return nil })
+			r.page.open = PageEmbedded
+			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
+			if !tc.asked {
+				assert.Empty(t, *reqs)
+				assert.Empty(t, errOf(out))
+				assert.Equal(t, 1, opened)
+				return
+			}
+			require.Len(t, *reqs, 1)
+			assert.True(t, (*reqs)[0].MustAsk, "asked in every mode")
+			assert.Contains(t, (*reqs)[0].Detail, "on this computer or its network")
+			assert.Contains(t, errOf(out), "declined")
+			assert.Zero(t, opened, "opened though declined")
 		})
 	}
 }

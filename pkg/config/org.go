@@ -100,10 +100,18 @@ func (o OrgLayer) ItemDir(state, sub string) string {
 // VersionDir is where version of the skill name is laid out (EN-82); ""
 // without an organization.
 func (o OrgLayer) VersionDir(name, version string) string {
-	if o.PolicyDir == "" {
+	// Both name a folder under the policy's: never a path out of it
+	// (packages#2), whatever an asset's dependency says.
+	if o.PolicyDir == "" || !folderPart(name) || !folderPart(version) {
 		return ""
 	}
 	return filepath.Join(o.PolicyDir, OrgVersions, "skills", name+"@"+version)
+}
+
+// folderPart reports whether s can be one folder name's part: not empty,
+// no separator, not "." or "..", no "..".
+func folderPart(s string) bool {
+	return s != "" && !strings.ContainsAny(s, `/\`) && !strings.Contains(s, "..") && s != "."
 }
 
 // around is dirs with the organization's available assets of sub before

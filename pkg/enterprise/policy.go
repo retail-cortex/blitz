@@ -237,6 +237,10 @@ func layOutItems(next string, items []PolicyItem) error {
 		if !entryName.MatchString(it.Name) || len(it.Name) > 64 {
 			return fmt.Errorf("the organization offers a %s that can't be a file: %q", it.Kind, it.Name)
 		}
+		// A skill's version names its folder under versions/ (packages#2).
+		if it.Kind == "skill" && !agentpkg.ValidVersion(it.Version) {
+			return fmt.Errorf("the organization offers skill %s with a version that can't be a folder: %q", it.Name, it.Version)
+		}
 		if got := agentpkg.Digest(it.Files); got != it.SHA256 {
 			return fmt.Errorf("the organization's %s %s %s doesn't match its digest", it.Kind, it.Name, it.Version)
 		}

@@ -279,6 +279,32 @@ annotations:
 	assert.Contains(t, got, "readonly")
 	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "SELECT count(*) AS n FROM recipes"})
 	assert.False(t, isErr, got)
+
+	// mode=ro holds the main file only: attaching it again (or another
+	// file) and VACUUM INTO are refused too, and nothing changed
+	// (databases#1).
+	copyTo := filepath.Join(t.TempDir(), "copy.db")
+	for _, sql := range []string{
+		"ATTACH '" + db + "' AS rw",
+		"ATTACH '" + filepath.Join(t.TempDir(), "new.db") + "' AS fresh",
+		"VACUUM INTO '" + copyTo + "'",
+		"PRAGMA query_only = OFF",
+	} {
+		got, isErr := call(t, cs, "run_sql", map[string]any{"sql": sql})
+		if sql == "PRAGMA query_only = OFF" {
+			// Allowed, but the connection's authorizer and limit still hold.
+			_ = got
+			continue
+		}
+		assert.True(t, isErr, "%s: %s", sql, got)
+	}
+	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "ATTACH '" + db + "' AS rw2"})
+	assert.True(t, isErr, "after query_only = OFF: %s", got)
+	assert.NoFileExists(t, copyTo)
+	assert.NoFileExists(t, filepath.Join(filepath.Dir(copyTo), "new.db"))
+	got, isErr = call(t, cs, "run_sql", map[string]any{"sql": "SELECT count(*) AS n FROM recipes"})
+	assert.False(t, isErr, got)
+	assert.NotContains(t, got, `"n":0`, "the rows are still there")
 }
 
 // A database that can't be reached fails Start; Close is safe twice.
