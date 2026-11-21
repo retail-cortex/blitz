@@ -198,7 +198,8 @@ export function ReasoningDrawer({
         </select>
         <IconButton icon={mdiChevronRight} small label={t("desktop.reasoning.next")} disabled={shownTurn === undefined || shownTurn >= turns.length - 1} onClick={() => choose((shownTurn ?? 0) + 1)} />
       </div>
-      <span className="rsn-head-line" aria-hidden="true" />
+      {/* The turn by the title; the view's controls with ✕, on the right. */}
+      <span className="spacer" aria-hidden="true" />
       <IconButton icon={mdiLightbulbOnOutline} small selected={kinds.thoughts} label={t("desktop.reasoning.show_thoughts")} onClick={() => setKind("thoughts")} />
       <IconButton icon={mdiWrenchOutline} small selected={kinds.tools} label={t("desktop.reasoning.show_tools")} onClick={() => setKind("tools")} />
       <IconButton icon={mdiMessageTextOutline} small selected={kinds.words} label={t("desktop.reasoning.show_words")} onClick={() => setKind("words")} />
@@ -206,6 +207,7 @@ export function ReasoningDrawer({
       <IconButton icon={mdiArrowExpandAll} small label={t("desktop.reasoning.expand_all")} onClick={() => foldAll(true)} />
       <IconButton icon={mdiArrowCollapseAll} small label={t("desktop.reasoning.collapse_all")} onClick={() => foldAll(false)} />
       <IconButton icon={mdiCrosshairsGps} small selected={follow} label={t("desktop.reasoning.follow")} onClick={() => (follow ? setFollow(false) : choose(turns.length - 1))} disabled={!turns.length} />
+      <span className="rsn-head-line" aria-hidden="true" />
     </>
   );
 

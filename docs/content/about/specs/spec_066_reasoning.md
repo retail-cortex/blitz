@@ -7,9 +7,9 @@ weight: 66
 
 | | |
 |---|---|
-| Status | **RSN-01 to RSN-15 built** (2026-11-21, the owner's ask: "a graphical view to show the model reasoning … a complete pane with an icon next to the chat history"; choices: calls with their reasoning and tools, a node graph first, past chats too). |
-| Source | `pkg/api/reasoning.go` (the graph's types); `pkg/engine/reasoning.go` (built from a session's event log and its sub-agents' log); `pkg/engine/session/adkstore.go` (`ReadSubagentEvents`); `proto/blitz/v1/session.proto` (`SessionService.GetReasoning`); `pkg/service/server/session.go`, `convert.go`; `apps/desktop/web/src/reasoning/` (the layout, the cards, the drawer, the detail panel, the chat link); `apps/desktop/web/src/dev/fakeReasoning.ts` |
-| Tests | `pkg/engine`: `TestWorkspaceReasoning`, `TestBuildReasoning`, `TestReasoningMasksSecrets`, `TestReasoningCut`, `TestThoughtSteps`; `pkg/service/server`: `TestSessionToolsAndSuggestions`; the page: `reasoningGraph.test.ts` (no two cards overlap, whatever is shown or open), `reasoningParts.test.ts`, `css.lint.test.ts` (the top menu) |
+| Status | **RSN-01 to RSN-15 built**, with **RSN-06** (Gemini's thoughts asked for) (2026-11-21, the owner's ask: "a graphical view to show the model reasoning … a complete pane with an icon next to the chat history"; choices: calls with their reasoning and tools, a node graph first, past chats too). |
+| Source | `pkg/api/reasoning.go` (the graph's types); `pkg/engine/runtime/settings.go` (`withThoughts`, RSN-06); `pkg/engine/reasoning.go` (built from a session's event log and its sub-agents' log); `pkg/engine/session/adkstore.go` (`ReadSubagentEvents`); `proto/blitz/v1/session.proto` (`SessionService.GetReasoning`); `pkg/service/server/session.go`, `convert.go`; `apps/desktop/web/src/reasoning/` (the layout, the cards, the drawer, the detail panel, the chat link); `apps/desktop/web/src/dev/fakeReasoning.ts` |
+| Tests | `pkg/engine`: `TestWorkspaceReasoning`, `TestBuildReasoning`, `TestReasoningMasksSecrets`, `TestReasoningCut`, `TestThoughtSteps`; `pkg/engine/runtime`: `TestGeminiThoughtsAsked`, `TestGeminiModelAsksForThoughts`; `pkg/service/server`: `TestSessionToolsAndSuggestions`; the page: `reasoningGraph.test.ts` (no two cards overlap, whatever is shown or open), `reasoningParts.test.ts`, `css.lint.test.ts` (the top menu) |
 | Depends on | [spec_056_conversation_adapters](spec_056_conversation_adapters.md) (how each provider's reasoning arrives, CA-29), [spec_032_background_agents](spec_032_background_agents.md) (sub-agents), [spec_052_processes](spec_052_processes.md) |
 
 ## 1. Purpose
@@ -26,6 +26,8 @@ A model's answer is the end of a path: what it read, what it thought, what it tr
 - **RSN-04** A foreground **sub-agent** (`invoke_agent`) is a node whose children are its own calls, read from the session's sub-agent log: its events by its name, between the call and its result; nested up to 3 deep. A background one is a node without children.
 - **RSN-05** The reasoning, the words and the prompt are masked as the conversation's are (CA-29a); arguments and results are cut as a reopened chat's are (4 KiB per string), each node's text at 16 KiB, and a turn at 1,500 nodes (**cut**, said).
 
+- **RSN-06** **Gemini's reasoning is asked for.** Gemini sends its thought summaries only when a request sets `thinkingConfig.includeThoughts`; Blitz sets it on every call to a Gemini model (the Gemini API or Vertex AI) that thinks, unless thinking is turned off (`thinking_budget = 0`). The summaries cost nothing more: the thinking is billed as output either way. A model that refuses it is learned and asked again without it (CA-13). Claude's thinking comes back when thinking is on (`thinking_budget`, or a model that always thinks); OpenAI's reasoning models send at most a summary. Text a local model wraps in `<think>` isn't yet split from its answer (§3).
+
 ### The view (desktop)
 
 - **RSN-10** An icon in the chat's bar, beside **History**, opens **Reasoning**: a drawer view under the top menu, to the status bar. The turn reads top to bottom as the chat does: its calls on a **spine**, each call's steps of reasoning to its left, its tools, sub-agents and words to its right; a sub-agent opened draws its own spine further right. Cards have one shape, each kind its colour (theme tokens, light, dark and glass alike); a failed tool is red, its link dashed.
@@ -38,5 +40,6 @@ A model's answer is the end of a path: what it read, what it thought, what it tr
 ## 3. Not yet
 
 - An outline view of the same graph, and `/reasoning` in the CLI.
+- A local model's `<think>` text read as its reasoning.
 - Workflow runs' steps in the graph (they have their receipts, spec_043).
 - Costs from the session's ledger rather than today's prices.

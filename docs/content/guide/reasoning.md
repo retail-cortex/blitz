@@ -30,4 +30,4 @@ Use the arrows and the turn picker to move between turns. The lightbulb, wrench 
 
 ## What it shows
 
-The reasoning is the model's own summary, as its provider sends it: Claude's thinking, Gemini's thought summaries, local models' `<think>` text. Secrets Blitz knows are masked, as they are in the chat. Very large turns are drawn up to their first 1,500 cards.
+The reasoning is the model's own summary, as its provider sends it. Blitz asks Gemini models that think for their thought summaries on every call (they cost nothing extra: the thinking is billed either way); turn thinking off with `thinking_budget = 0` and there's none to show. Claude shares its thinking when thinking is on (set a `thinking_budget` for the model, or use one that always thinks). OpenAI's reasoning models share at most a summary. Other models, local ones included, show their calls, tools and words; their reasoning appears only when the provider sends it apart from the answer. Secrets Blitz knows are masked, as they are in the chat. Very large turns are drawn up to their first 1,500 cards.
