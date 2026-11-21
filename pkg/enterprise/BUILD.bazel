@@ -42,6 +42,7 @@ go_library(
         "//pkg/i18n",
         "//pkg/netutil",
         "//pkg/secrets",
+        "//pkg/secretscan",
         "//pkg/signedin",
         "@org_golang_x_oauth2//:oauth2",
     ],

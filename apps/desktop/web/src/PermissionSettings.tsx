@@ -233,7 +233,7 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
                   label={t("desktop.rs.remove")}
                   small
                   disabled={busy}
-                  onClick={() => act(() => workspaces.removePermissionRule({ workspace, rule: r.rule }), t("desktop.perm.removed", { rule: r.rule }))}
+                  onClick={() => act(() => workspaces.removePermissionRule({ workspace, rule: r.rule, effect: r.effect }), t("desktop.perm.removed", { rule: r.rule }))}
                 />
               </div>
             ))}

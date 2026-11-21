@@ -94,19 +94,34 @@ func (w *Workspace) AddPermissionRule(effect, rule string, save api.Scope) (api.
 // built-in one isn't removed: it's refused, naming where it's changed
 // (spec_031 PRJ-41).
 func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.PermissionChange, error) {
+	return w.RemovePermissionRuleOf(rule, "", save)
+}
+
+// RemovePermissionRuleOf is RemovePermissionRule for the rule with one
+// effect ("allow", "ask" or "deny"; "" every effect), so removing a
+// session's ask leaves a deny of the same text (N26 desktop-1#15).
+func (w *Workspace) RemovePermissionRuleOf(rule, effect string, save api.Scope) (api.PermissionChange, error) {
 	out := api.PermissionChange{Rule: strings.TrimSpace(rule)}
+	switch tools.Effect(effect) {
+	case "", tools.EffectAllow, tools.EffectAsk, tools.EffectDeny:
+	default:
+		return out, fmt.Errorf("%w: effect %q is none of allow, ask and deny", api.ErrBadRule, effect)
+	}
 	if r, err := tools.ParsePermissionRule(tools.EffectDeny, rule, ""); err == nil {
 		out.Rule = r.String()
 	}
 	// The organization's tools.off are merged into the deny rules: removing
 	// one would switch an org-disabled tool back on (N26 engine-top-2#3).
 	for _, off := range w.cfg.Org.Policy.Tools.Off {
+		if effect != "" && tools.Effect(effect) != tools.EffectDeny {
+			break
+		}
 		if c, err := tools.ParsePermissionRule(tools.EffectDeny, off, ""); err == nil && c.String() == out.Rule {
 			return out, fmt.Errorf("%s is turned off by your organization's policy: it can't be removed", out.Rule)
 		}
 	}
 	for _, r := range w.tools.Rules().List() {
-		if r.String() != out.Rule {
+		if r.String() != out.Rule || (effect != "" && string(r.Effect) != effect) {
 			continue
 		}
 		switch r.Source {
@@ -116,7 +131,7 @@ func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.Permi
 			return out, fmt.Errorf("%s is one of the built-in read-only rules: turn them off with read_only_defaults = false under [permissions]", out.Rule)
 		}
 	}
-	out.Removed = w.tools.Rules().Remove(rule, "", tools.SourceConfig, tools.SourceFlag, tools.SourceSession)
+	out.Removed = w.tools.Rules().Remove(rule, tools.Effect(effect), tools.SourceConfig, tools.SourceFlag, tools.SourceSession)
 	if save != api.ScopeSession {
 		var n int
 		out.Saved.Path, n, out.Saved.Err = config.RemovePermissionRule("", w.scopeDir(save), out.Rule)

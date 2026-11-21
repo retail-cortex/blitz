@@ -69,11 +69,15 @@ func TestSyncPersonal(t *testing.T) {
 	write(t, root, "skills/Big Notes/SKILL.md", "x")
 	write(t, root, "workflows/w.flow.yaml", "nodes: []\n")
 	write(t, root, "rules/r.md", "Be brief.\n")
+	write(t, root, "skills/keyed/SKILL.md", "---\nname: keyed\n---\nUse AKIAIOSFODNN7EXAMPLE.\n")
+	write(t, root, "skills/allowed/SKILL.md", "---\nname: allowed\n---\nAn example: AKIAIOSFODNN7EXAMPLE blitz:allow-secret\n")
 	require.NoError(t, os.Symlink(filepath.Join(root, "skills", "s"), filepath.Join(root, "skills", "linked")))
 
 	rep, err := SyncPersonal(ctx, c, root, state)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"agent/a", "skill/s", "workflow/w"}, rep.Sent)
+	assert.Equal(t, []string{"agent/a", "skill/allowed", "skill/s", "workflow/w"}, rep.Sent, "a false alarm marked on its line goes")
+	// What looks like a secret never leaves the computer (EN-36a).
+	assert.Contains(t, rep.Skipped["skill/keyed"], "skills/keyed/SKILL.md:4 (AWS access key")
 	assert.Contains(t, rep.Skipped["rule/r"], "doesn't keep")
 	assert.Contains(t, rep.Skipped["skill/bin"], "isn't text")
 	assert.Contains(t, rep.Skipped["skill/Big Notes"], "its name")
@@ -81,6 +85,7 @@ func TestSyncPersonal(t *testing.T) {
 	assert.NotContains(t, rep.Sent, "skill/linked", "a linked folder is someone else's")
 	s.Mu.Lock()
 	assert.NotContains(t, s.Personal["skill/s"].Files, "skills/s/.DS_Store")
+	assert.NotContains(t, s.Personal, "skill/keyed")
 	assert.Equal(t, "echo hi\n", s.Personal["skill/s"].Files["skills/s/scripts/x.sh"])
 	s.Mu.Unlock()
 

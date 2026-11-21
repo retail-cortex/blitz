@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -150,6 +151,39 @@ func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	assert.Equal(t, "built-in", rules["shell(ls)"], "the built-in rule stays")
 	assert.Contains(t, rules, "web_search", "the organization's rule stays")
 	assert.NotContains(t, rules, "shell(make deploy)")
+}
+
+// Removing a rule with its effect removes only that one: a session's ask
+// leaves the settings' deny of the same text (N26 desktop-1#15); "" still
+// removes every effect, and an unknown effect is refused.
+func TestRemovePermissionRuleOfOneEffect(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Permissions.Deny = []string{"shell(rm -rf *)"} })
+	_, err := w.AddPermissionRule("ask", "shell(rm -rf *)", api.ScopeSession)
+	require.NoError(t, err)
+	effects := func() []string {
+		var out []string
+		for _, r := range w.ListPermissionRules() {
+			if r.Rule == "shell(rm -rf *)" {
+				out = append(out, r.Effect)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	require.Equal(t, []string{"ask", "deny"}, effects())
+
+	res, err := w.RemovePermissionRuleOf("shell(rm -rf *)", "ask", api.ScopeSession)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Removed)
+	assert.Equal(t, []string{"deny"}, effects(), "the deny went with the ask")
+	assert.Equal(t, tools.VerdictDeny, w.tools.CommandPolicy().Evaluate("rm -rf build").Verdict)
+
+	_, err = w.RemovePermissionRuleOf("shell(rm -rf *)", "block", api.ScopeSession)
+	assert.ErrorIs(t, err, api.ErrBadRule)
+	res, err = w.RemovePermissionRule("shell(rm -rf *)", api.ScopeSession)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Removed, "no effect: every one")
+	assert.Empty(t, effects())
 }
 
 // A deny rule naming a tool refuses the call before it runs.

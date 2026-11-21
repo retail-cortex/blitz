@@ -415,8 +415,12 @@ func NewMCPResourceTools(r *Registry) ([]tool.Tool, error) {
 			var errs []error
 			for _, name := range servers {
 				// Every server is approved as its tools are, listed together
-				// or not (N26 engine-tools-1#26).
+				// or not (N26 engine-tools-1#26); those the agent isn't
+				// offered aren't its to list.
 				if in.Server == "" {
+					if srv, err := r.mcp.server(name); err == nil && !offeredHere(ctx, srv) {
+						continue
+					}
 					if err := r.approveMCPServer(ctx, name, "list_mcp_resources", nil); err != nil {
 						errs = append(errs, fmt.Errorf("MCP server %q: %w", name, err))
 						continue
@@ -462,6 +466,9 @@ func (r *Registry) approveMCPServer(ctx context.Context, server, action string, 
 	if err != nil {
 		return err
 	}
+	if !offeredHere(ctx, s) {
+		return fmt.Errorf("MCP server %q isn't offered to this agent (its agents setting)", server)
+	}
 	req := mcpApproval(server, action, args)
 	if s.cfg.AutoApprove {
 		if effect, _ := r.hooks.Rules().Decide(RuleMCP, req.Targets); effect != EffectDeny && effect != EffectAsk {
@@ -469,6 +476,28 @@ func (r *Registry) approveMCPServer(ctx context.Context, server, action string, 
 		}
 	}
 	return r.hooks.Approve(ctx, req)
+}
+
+type primaryAgentKey struct{}
+
+// WithPrimaryAgent says which agent is the turn's own (the one MCP
+// servers without an agents list go to); "" in a sub-agent's run.
+func WithPrimaryAgent(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, primaryAgentKey{}, name)
+}
+
+// offeredHere reports whether the agent making the call is offered s, as
+// its toolsets are (ToolsetsFor): the resource tools read only the servers
+// whose tools the agent has. A call outside a turn (no WithPrimaryAgent)
+// isn't limited.
+func offeredHere(ctx context.Context, s *mcpServer) bool {
+	primary, ok := ctx.Value(primaryAgentKey{}).(string)
+	named, isAgent := ctx.(interface{ AgentName() string })
+	if !ok || !isAgent {
+		return true
+	}
+	name := named.AgentName()
+	return s.offeredTo(name, primary != "" && name == primary)
 }
 
 // askUser asks the user a question as ask_user_question does: a

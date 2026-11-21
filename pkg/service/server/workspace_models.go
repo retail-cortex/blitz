@@ -242,7 +242,7 @@ func (h workspaceService) RemovePermissionRule(ctx context.Context, r req[pb.Rem
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.RemovePermissionRule(r.Msg.Rule, saveScope(r.Msg.Save, r.Msg.Scope))
+	res, err := w.RemovePermissionRuleOf(r.Msg.Rule, r.Msg.Effect, saveScope(r.Msg.Save, r.Msg.Scope))
 	if err != nil {
 		return nil, toAPI(err)
 	}

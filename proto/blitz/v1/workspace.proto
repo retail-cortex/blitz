@@ -1202,6 +1202,10 @@ message RemovePermissionRuleRequest {
   bool save = 3;
   // With save: "global" ("" too) or "workspace".
   string scope = 4;
+  // "allow", "ask" or "deny": only the rule with that effect is removed
+  // (a session's ask leaves a deny of the same text); "" removes it under
+  // every effect.
+  string effect = 5;
 }
 
 // Response message for WorkspaceService.RemovePermissionRule.

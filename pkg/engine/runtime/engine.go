@@ -306,6 +306,8 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	}
 	ctx = context.WithValue(ctx, runStateKey{}, st)
 	ctx = audit.WithSession(ctx, sessionID)
+	// MCP servers without an agents list are the turn's own agent's.
+	ctx = tools.WithPrimaryAgent(ctx, agentName)
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
 	ctx = WithProviderToolPolicy(ctx, e.providerToolPolicy())
 	if n := e.cfg.Tools.MaxParallel; n > 0 {
@@ -520,6 +522,8 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 
 	subCtx := WithProviderToolPolicy(withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings), e.providerToolPolicy())
 	subCtx = e.agentRun(subCtx, spec)
+	// A sub-agent is never the primary one: only servers naming it are its.
+	subCtx = tools.WithPrimaryAgent(subCtx, "")
 	// Its shells and tasks count for the session that started it.
 	subCtx = tools.WithOwnerSession(subCtx, e.sessionOf(ctx))
 	observe, _ := ctx.Value(subagentEventKey{}).(func(*session.Event))

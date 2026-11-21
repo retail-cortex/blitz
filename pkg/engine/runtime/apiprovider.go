@@ -400,6 +400,7 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 		p.source.Invalidate()
 		if fresh, ferr := p.source.AccessToken(ctx); ferr == nil {
 			discardResponse(res)
+			redact.Remember(fresh) // kept out of the logs as the first one is
 			token = fresh
 			res, err = send("the organization's token renewed after 401", p.sign(req, body, fresh))
 		}

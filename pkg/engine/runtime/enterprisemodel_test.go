@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -360,4 +361,36 @@ func TestEnterpriseTokenIsMasked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "org-access-token-27", tok)
 	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-access-token-27"), "org-access-token-27")
+}
+
+// rotatingSource gives a new access token after each Invalidate.
+type rotatingSource struct {
+	toks []string
+	at   int
+}
+
+func (r *rotatingSource) AccessToken(context.Context) (string, error) { return r.toks[r.at], nil }
+func (r *rotatingSource) Invalidate()                                 { r.at = min(r.at+1, len(r.toks)-1) }
+
+// The token fetched again after a 401 is remembered by the redactor too,
+// not only the first (N26 engine-runtime#27's remainder).
+func TestEnterpriseTokenRenewedAfter401IsMasked(t *testing.T) {
+	src := &rotatingSource{toks: []string{"org-first-token-0001", "org-fresh-token-0002"}}
+	p := &apiProvider{source: src}
+	calls := 0
+	next := func(r *http.Request) (*http.Response, error) {
+		calls++
+		status := http.StatusOK
+		if calls == 1 {
+			status = http.StatusUnauthorized
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("{}")), Header: http.Header{}, Request: r}, nil
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://gateway.example/v1/responses", strings.NewReader("{}"))
+	require.NoError(t, err)
+	res, err := p.middleware(req, next)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, 2, calls, "renewed once after the 401")
+	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-fresh-token-0002"), "org-fresh-token-0002")
 }

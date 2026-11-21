@@ -31,6 +31,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/atomicfile"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 )
 
 // PersonalItem is one of the person's own assets as the organization's
@@ -137,6 +138,42 @@ func (c *Client) Share(ctx context.Context, kind, name string, files map[string]
 	var out Submission
 	err := c.signedCall(ctx, http.MethodPost, "/api/v1/me/library/"+url.PathEscape(kind)+"/"+url.PathEscape(name)+"/share", map[string]any{"files": files, "note": note}, &out)
 	return out, err
+}
+
+// PersonalSecrets are what look like secrets in one of the person's own
+// assets, by file and line, before it leaves the computer (shared or
+// synced): what's published is read for secrets first, as a shared folder
+// is (spec_053 EN-36a, EN-66). A line marked secretscan.AllowMarker is a
+// false alarm.
+func PersonalSecrets(files map[string]string) []secretscan.Finding {
+	var out []secretscan.Finding
+	for _, name := range slices.Sorted(func(yield func(string) bool) {
+		for k := range files {
+			if !yield(k) {
+				return
+			}
+		}
+	}) {
+		out = append(out, secretscan.Scan(name, []byte(files[name]))...)
+	}
+	return out
+}
+
+// SecretsSummary names what a secret scan found, each by file and line,
+// the first ten.
+func SecretsSummary(found []secretscan.Finding) string {
+	var b strings.Builder
+	for i, f := range found {
+		if i == 10 {
+			fmt.Fprintf(&b, "; and %d more", len(found)-10)
+			break
+		}
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		fmt.Fprintf(&b, "%s:%d (%s %s)", f.Path, f.Line, f.Kind, f.Masked)
+	}
+	return b.String()
 }
 
 // Submissions are the person's submissions, the newest first.
@@ -256,6 +293,10 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 			sum = agentpkg.Digest(files)
 		}
 		send := func(base int) {
+			if found := PersonalSecrets(files); len(found) > 0 {
+				rep.Skipped[key] = fmt.Sprintf("not sent: it holds what look like secrets: %s. Remove them, or mark a false alarm with %s on its line", SecretsSummary(found), secretscan.AllowMarker)
+				return
+			}
 			got, err := c.PutPersonal(ctx, kind, name, files, base)
 			if err != nil {
 				if ref, ok := errors.AsType[*Refusal](err); ok && ref.Status == http.StatusUnprocessableEntity {
