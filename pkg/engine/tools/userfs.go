@@ -208,6 +208,14 @@ func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
 	if err := mkdirParent(r, to); err != nil {
 		return err
 	}
+	// Into itself by another spelling (a case variant, a linked parent)
+	// would copy for ever (security review files#9): the real places are
+	// compared.
+	if src, err := filepath.EvalSymlinks(filepath.Join(w.roots[0].dir, from)); err == nil {
+		if parent, err := filepath.EvalSymlinks(filepath.Join(w.roots[0].dir, filepath.Dir(to))); err == nil && within(src, parent) {
+			return fmt.Errorf("%s: can't copy a folder into itself", filepath.ToSlash(to))
+		}
+	}
 	err = fs.WalkDir(r.FS(), filepath.ToSlash(from), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -410,4 +418,13 @@ func (w *Workspace) UserRemove(ctx context.Context, rel string) error {
 		return err
 	}
 	return w.userRoot().RemoveAll(rel)
+}
+
+// within reports whether p is dir or inside it, without case on a disk
+// that ignores it.
+func within(dir, p string) bool {
+	if caseInsensitiveFS {
+		dir, p = strings.ToLower(dir), strings.ToLower(p)
+	}
+	return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }

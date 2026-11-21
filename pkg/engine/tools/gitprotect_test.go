@@ -155,3 +155,18 @@ func TestUserFilesGitSpellingAndUploadMode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "kept, not 0644")
 }
+
+// A folder copied into itself by another spelling (a case variant on a
+// disk that ignores case, a linked parent) is refused, not copied for
+// ever (security review files#9).
+func TestUserCopyIntoItselfBySpelling(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	ctx := context.Background()
+	writeFile(t, filepath.Join(dir, "docs", "a.md"), "a")
+	require.NoError(t, os.Symlink("docs", filepath.Join(dir, "alias")))
+	assert.ErrorContains(t, ws.UserCopy(ctx, "docs", filepath.Join("alias", "copy")), "into itself")
+	if caseInsensitiveFS {
+		assert.ErrorContains(t, ws.UserCopy(ctx, "docs", filepath.Join("DOCS", "copy")), "into itself")
+	}
+	require.NoError(t, ws.UserCopy(ctx, "docs", "docs2"), "elsewhere is fine")
+}

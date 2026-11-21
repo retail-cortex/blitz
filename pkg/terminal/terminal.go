@@ -175,13 +175,19 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 		in: make(chan []byte, inputQueue),
 	}
 	m.mu.Lock()
-	if m.closed { // closed while it started
+	// Counted again as it's kept: opens at once each passed the check
+	// before any was kept (security review terminal#5).
+	tooMany := len(m.terms) >= m.max
+	if m.closed || tooMany { // closed while it started, or the limit reached meanwhile
 		m.mu.Unlock()
 		// Its reader and waiter aren't started, so t.close() would wait for
 		// them for ever (security review terminal#2): ended here instead.
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		_ = f.Close()
+		if tooMany {
+			return nil, fmt.Errorf("%w (%d)", ErrTooMany, m.max)
+		}
 		return nil, ErrClosed
 	}
 	m.terms[t.info.ID] = t

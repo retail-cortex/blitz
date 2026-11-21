@@ -446,7 +446,10 @@ func (bt *browserTool) syncProfile(ctx context.Context, name, site string) (Brow
 	}
 	p := bt.effective(session, all)
 	bt.actMu.Lock()
-	changed := bt.profile != p.Dir
+	// A change of the profile's sites restarts the browser too: its reach
+	// to the private network is fixed as it starts (BP-04b; security
+	// review electron#3: a site removed kept it).
+	changed := bt.profile != p.Dir || !slices.Equal(bt.allow, p.Allow)
 	bt.profile, bt.profileName, bt.allow = p.Dir, p.Name, p.Allow
 	bt.actMu.Unlock()
 	if changed && bt.b != nil {
