@@ -339,3 +339,40 @@ func TestDiskSweepIsRefused(t *testing.T) {
 		})
 	}
 }
+
+// FuzzCommandPolicy: any script is decided without a panic, the same way
+// twice, and a denied command stays denied behind a wrapper or in a list
+// (seeds run in every test; go test -fuzz explores).
+func FuzzCommandPolicy(f *testing.F) {
+	for _, s := range []string{"rm -rf /", "ls; rm -rf /", "sudo rm -rf /", "env X=1 rm -rf /", "echo $(rm -rf /)", "bash -c 'rm -rf /'", `find . -exec rm -rf / \;`, "a | b && c || d", "'unterminated", "$((1+", "x=$(", "cat <<EOF\nrm -rf /\nEOF", "for i in 1; do rm -rf /; done"} {
+		f.Add(s)
+	}
+	p, err := NewCommandPolicy(CommandPolicyConfig{Deny: []string{"rm -rf /"}, AutoApprove: []string{"ls", "echo *"}})
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Fuzz(func(t *testing.T, script string) {
+		a, b := p.Evaluate(script), p.Evaluate(script)
+		if a.Verdict != b.Verdict {
+			t.Fatalf("%q: %v then %v", script, a.Verdict, b.Verdict)
+		}
+		if a.Verdict == VerdictDeny {
+			for _, wrap := range []string{"nohup ", "env A=1 ", "time "} {
+				if v := p.Evaluate(wrap + script).Verdict; v == VerdictAutoApprove {
+					t.Fatalf("%q denied, %q auto-approved", script, wrap+script)
+				}
+			}
+		}
+	})
+}
+
+// FuzzParsePatch: any patch text is read or refused, never a panic, and
+// no file it names leaves the workspace's relative paths.
+func FuzzParsePatch(f *testing.F) {
+	for _, s := range []string{"*** Begin Patch\n*** Add File: a.txt\n+hi\n*** End Patch\n", "*** Begin Patch\n*** Update File: a\n@@\n-x\n+y\n*** End Patch", "*** Begin Patch\n*** Delete File: ../x\n*** End Patch", "", "*** Begin Patch"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		_, _ = parsePatch(text)
+	})
+}
