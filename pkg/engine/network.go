@@ -23,9 +23,11 @@ import (
 // the system's, in every client built via netutil (the model SDKs, MCP,
 // web search, web_fetch) without mutating http.DefaultTransport in place
 // (spec_027_parity PAR-MOD-05). Proxies come from the environment already.
+// The authorities are the process's, as before netutil: a workspace
+// without ca_file leaves them be, so opening it in the service doesn't
+// take another workspace's away.
 func SetupNetwork(cfg *config.Config) error {
 	if cfg == nil || cfg.Network.CAFile == "" {
-		netutil.ResetExtraCAs()
 		return nil
 	}
 	return netutil.SetExtraCAs(config.ExpandHome(cfg.Network.CAFile))

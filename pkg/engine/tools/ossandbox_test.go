@@ -138,6 +138,13 @@ func TestOSSandboxEnforcement(t *testing.T) {
 	// workspace. (Seatbelt denies the read; bubblewrap shows an empty file.)
 	out = run("cat .env")
 	assert.NotContains(t, out.Output, "API_KEY", "shell read a blocked file: %+v", out)
+	if caseInsensitiveFS {
+		// Another spelling of the same file, as read_file refuses it too.
+		// Seatbelt matches its regexes without case on such disks, so the
+		// profile needs no (?i) (checked for N26 engine-tools-2#10).
+		out = run("cat .ENV")
+		assert.NotContains(t, out.Output, "API_KEY", "shell read a blocked file by another case: %+v", out)
+	}
 	run("cp .env leaked.txt")
 	b, _ = os.ReadFile(filepath.Join(f.work, "leaked.txt"))
 	assert.NotContains(t, string(b), "API_KEY", "shell copied a blocked file's contents")

@@ -59,6 +59,9 @@ func TestSetupNetwork(t *testing.T) {
 	require.NoError(t, SetupNetwork(cfg))
 	assert.Equal(t, beforeTLS, http.DefaultTransport.(*http.Transport).TLSClientConfig, "http.DefaultTransport is never mutated")
 	assert.NoError(t, get())
+	// Another workspace opening without ca_file keeps the authorities.
+	require.NoError(t, SetupNetwork(config.DefaultConfig()))
+	assert.NoError(t, get(), "a workspace without ca_file took them away")
 
 	cfg.Network.CAFile = filepath.Join(t.TempDir(), "none.pem")
 	assert.ErrorContains(t, SetupNetwork(cfg), "ca_file")

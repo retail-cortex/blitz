@@ -114,6 +114,10 @@ func TestPermissionRuleSavedForTheWorkspace(t *testing.T) {
 func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) {
 		c.ProjectPermissions = config.PermissionsConfig{Deny: []string{"shell(git push*)"}}
+		// The organization's tools.off, merged into the deny rules as
+		// loading the policy does.
+		c.Org.Policy.Tools.Off = []string{"web_search"}
+		c.Permissions.Deny = append(c.Permissions.Deny, "web_search")
 	})
 	_, err := w.AddPermissionRule("deny", "shell(make deploy)", api.ScopeSession)
 	require.NoError(t, err)
@@ -123,6 +127,7 @@ func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	}{
 		{name: "a project file's rule", rule: "shell(git push*)", refused: filepath.Join(".blitz", "settings.toml")},
 		{name: "a built-in rule", rule: "shell(ls)", refused: "read_only_defaults"},
+		{name: "an organization-disabled tool", rule: "web_search", refused: "organization's policy"},
 		{name: "a session rule", rule: "Bash(make deploy)", removed: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,6 +148,7 @@ func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	}
 	assert.Equal(t, "project", rules["shell(git push*)"], "the project's rule stays")
 	assert.Equal(t, "built-in", rules["shell(ls)"], "the built-in rule stays")
+	assert.Contains(t, rules, "web_search", "the organization's rule stays")
 	assert.NotContains(t, rules, "shell(make deploy)")
 }
 

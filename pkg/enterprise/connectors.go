@@ -20,6 +20,8 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
 // SharedMCP is a shared connector's kind when it's a remote MCP server.
@@ -144,7 +146,7 @@ func (t signedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	base := t.base
 	if base == nil {
-		base = http.DefaultTransport
+		base = netutil.CloneDefaultTransport() // with [network] ca_file
 	}
 	return base.RoundTrip(req)
 }

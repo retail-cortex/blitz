@@ -98,6 +98,13 @@ func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.Permi
 	if r, err := tools.ParsePermissionRule(tools.EffectDeny, rule, ""); err == nil {
 		out.Rule = r.String()
 	}
+	// The organization's tools.off are merged into the deny rules: removing
+	// one would switch an org-disabled tool back on (N26 engine-top-2#3).
+	for _, off := range w.cfg.Org.Policy.Tools.Off {
+		if c, err := tools.ParsePermissionRule(tools.EffectDeny, off, ""); err == nil && c.String() == out.Rule {
+			return out, fmt.Errorf("%s is turned off by your organization's policy: it can't be removed", out.Rule)
+		}
+	}
 	for _, r := range w.tools.Rules().List() {
 		if r.String() != out.Rule {
 			continue

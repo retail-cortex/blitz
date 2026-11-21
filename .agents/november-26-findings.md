@@ -1,10 +1,24 @@
 # november-26-patches: the findings ledger
 
-From the scan planned in `november-26-scan.md`: 19 readers, 789 files, each read completely (one file was partly skimmed: `pkg/enterprise/enterprisetest/enterprisetest.go` lines 700-980, a test fake). Phase 0 checks were run by the lead. Nothing here is fixed yet except N26-000.
+From the scan planned in `november-26-scan.md`: 19 readers, 789 files, each read completely (one file was partly skimmed: `pkg/enterprise/enterprisetest/enterprisetest.go` lines 700-980, a test fake). Phase 0 checks were run by the lead. The status columns below are as the scan left them: see the re-check that follows for what is fixed now.
 
 **579 findings:** 63 high, 179 medium, 337 low. By kind: S 98, B 140, D 19, I 47, L 39, X 31, U 61, M 145, P 7.
 
 Kinds: S safety/fail-open, B behaviour vs spec, D docs that don't work, I silent ignores, L hard-coded limits, X dead code, U duplicate code, M smells, P CLI/desktop parity. Status: **confirmed** (the lead checked it in the code, or by a test), reported (a reader's, with evidence, not yet checked by the lead: each is checked before it's fixed), or corrected.
+
+## Re-checked 2026-11-21 (branch dry-clean)
+
+Every high finding and every one the lead confirmed was checked against the code again. The status columns further down weren't changed: this list wins over them. Mediums and lows weren't re-checked.
+
+- **Fixed before this branch (0.9.1 and later):** all 17 the lead confirmed (engine-tools-2#1, engine-runtime#1, engine-tools-1#1, engine-top-1#1 = safety-enterprise#11, desktop-1#10, desktop-4#1, pkg-small-2#2, pkg-small-2#1 + engine-sub-2#1, cli-2#1, apps-other#1, engine-top-2#1, pkg-small-1#1, desktop-3#6, desktop-2#6, cli-1#1, cli-2#2, the copylocks), and safety-enterprise#1, #2, #4, #12; engine-tools-1#2, #20; engine-tools-2#2-#9, #11; api-client-config#1, #3, #5; engine-top-1#2; engine-top-2#2; engine-sub-1#1, #12, #17, #19, #27; engine-sub-2#2, #3, #7, #21; pkg-small-1#2, #3; pkg-small-2#4, #10; cli-1#2; cli-2#3, #4; desktop-1#2; desktop-2#1, #7, #31; desktop-3#12.
+- **Fixed on this branch:**
+  - engine-top-2#3: the organization's `tools.off` can't be removed with `/permissions remove` (they were merged into the settings' deny rules); PRJ-41b.
+  - api-client-config#2: the registry now hands `sandbox.scrub_env` to the hooks, so an http hook's header never carries a withheld variable (the expansion was tested alone, and the registry passed an empty list).
+  - safety-enterprise#3: `xargs` is dropped like `sudo` and `env` (`… | xargs -0 rm -rf ~` passed); GT-30.
+  - cli-2#2's sibling: `release/install.sh` said `Next: blitz setup`.
+  - From the netutil change on this branch: a workspace opened without `ca_file` no longer takes another workspace's authorities away, and the key-command and organization-connector fallbacks clone netutil's transport, not `http.DefaultTransport`.
+- **Not a bug:** engine-tools-2#10. Seatbelt matches its regexes without case on a case-insensitive disk (checked with `sandbox-exec`: a `/\.env$` rule refuses `cat .ENV`, and a `\.pem$` rule refuses a file stored as `Server.PEM`), so the profile needs no `(?i)`; TestOSSandboxEnforcement now reads `.ENV` there.
+- **Still open, owner's call:** the service socket has no peer check or token (pkg-small-2#4's remainder): sandboxed commands can't reach it, but an unsandboxed child of the service can drive it.
 
 ## For you to decide
 

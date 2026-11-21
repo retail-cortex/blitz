@@ -595,6 +595,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.Close()
 		return nil, err
 	}
+	// What commands aren't given, an HTTP hook's headers don't carry
+	// either (N26 api-client-config#2).
+	r.scripts.HeaderScrub = sb.ScrubEnv
 	scripts := r.scripts
 	r.hooks.SetEventHooks(
 		func(ctx context.Context, req api.ApprovalRequest) Outcome {

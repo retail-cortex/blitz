@@ -154,6 +154,10 @@ const maxHookFailures = 5
 type ScriptHooks struct {
 	hooks map[string][]config.HookConfig // by event
 	exec  *ExecEnv
+	// HeaderScrub are the variables (sandbox.scrub_env's globs) an HTTP
+	// hook's headers never carry, even when its allowed_env_vars name them;
+	// command hooks keep the full environment.
+	HeaderScrub []string
 	// Info adds session context (prompt ID, transcript, mode, agent) to
 	// events; nil adds none.
 	Info      func(ctx context.Context, session string) HookInfo
@@ -690,9 +694,9 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "blitz-hooks")
-	var scrub []string
+	scrub := slices.Clone(s.HeaderScrub)
 	if s.exec != nil {
-		scrub = s.exec.ScrubEnv
+		scrub = append(scrub, s.exec.ScrubEnv...)
 	}
 	for k, v := range h.Headers {
 		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars, scrub))

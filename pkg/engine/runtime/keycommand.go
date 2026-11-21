@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/redact"
 )
 
@@ -115,7 +116,7 @@ func withKeyCommand(client *http.Client, key *commandKey, header string, bearer 
 	c := *client
 	base := c.Transport
 	if base == nil {
-		base = http.DefaultTransport
+		base = netutil.CloneDefaultTransport() // with [network] ca_file
 	}
 	c.Transport = &keyTransport{base: base, key: key, header: header, bearer: bearer}
 	return &c
